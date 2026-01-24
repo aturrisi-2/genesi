@@ -43,20 +43,27 @@ async def synthesize(text: str) -> str:
         # Esegui il comando piper
         process = await asyncio.create_subprocess_exec(
             "python", "-m", "piper",
+
             "--model", MODEL_PATH,
             "--config", MODEL_CONFIG_PATH,
             "--output_file", str(output_file),
 
-            # 🔊 PARAMETRI DI STABILIZZAZIONE VOCE
-            "--length-scale", "1.08",
-            "--noise-scale", "0.25",
-            "--noise-w-scale", "0.7",
-            "--sentence-silence", "0.8",
+            # 🧠 STABILITÀ TEMPORALE
+            "--length-scale", "1.0",
+
+            # 🎧 RIDUCE METALLICITÀ
+            "--noise-scale", "0.20",
+            "--noise-w-scale", "0.6",
+
+            # ⏱️ QUESTI DUE SONO LA CHIAVE
+            "--sentence-silence", "1.0",   # silenzio DOPO la frase
+            "--sentence-gap", "0.15",      # buffer di chiusura
 
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
+
         
         # Invia il testo a piper
         try:
