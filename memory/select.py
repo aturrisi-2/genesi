@@ -1,8 +1,15 @@
+from datetime import datetime
 from typing import List
 from .episodic import EpisodicEvent, load_events
+from .decay import apply_affect_decay
 
 def select_relevant_events(user_id: str, limit: int = 10) -> List[EpisodicEvent]:
     events = load_events(user_id)
+    now = datetime.utcnow()
+
+    for event in events:
+        event.decayed_affect = apply_affect_decay(event, now)
+
     sorted_events = sorted(
         events,
         key=lambda e: (e.salience, e.timestamp),
