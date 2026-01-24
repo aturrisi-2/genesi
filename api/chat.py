@@ -4,6 +4,7 @@ from typing import Dict, Any
 
 from core.state import CognitiveState
 from memory.episodic import store_event
+from memory.salience import compute_salience
 
 router = APIRouter(prefix="/chat")
 
@@ -17,22 +18,32 @@ async def chat_endpoint(request: ChatRequest):
     state = CognitiveState.build(request.user_id)
     
     # 2. Salva l'evento del messaggio utente
+    user_salience = compute_salience(
+        event_type="user_message",
+        content={"text": request.message},
+        past_events=[e.to_dict() for e in state.recent_events]
+    )
     user_event = store_event(
         user_id=request.user_id,
         type="user_message",
         content={"text": request.message},
-        salience=0.5
+        salience=user_salience
     )
     
     # 3. Genera risposta echo
     response_text = f"Hai detto: {request.message}"
     
     # 4. Salva l'evento di risposta del sistema
+    system_salience = compute_salience(
+        event_type="system_response",
+        content={"text": response_text},
+        past_events=[e.to_dict() for e in state.recent_events]
+    )
     system_event = store_event(
         user_id=request.user_id,
         type="system_response",
         content={"text": response_text},
-        salience=0.5
+        salience=system_salience
     )
     
     # 5. Restituisci la risposta
