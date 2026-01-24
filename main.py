@@ -12,9 +12,15 @@ app.include_router(chat_router)
 @app.get("/state/{user_id}")
 async def get_state(user_id: str):
     state = CognitiveState.build(user_id)
+    def serialize_event(event):
+        event_dict = event.to_dict()
+        if hasattr(event, 'decayed_affect'):
+            event_dict['decayed_affect'] = event.decayed_affect
+        return event_dict
+        
     return {
         "user": state.user.to_dict(),
-        "recent_events": [e.to_dict() for e in state.recent_events],
+        "recent_events": [serialize_event(e) for e in state.recent_events],
         "context": state.context
     }
 
