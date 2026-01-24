@@ -1,3 +1,7 @@
+// Stato globale per TTS
+let isSpeaking = false;
+let currentAudio = null;
+
 // Seleziona gli elementi DOM
 const app = document.getElementById('genesi-app');
 const dialogue = document.getElementById('dialogue');
@@ -16,6 +20,35 @@ const STATES = {
 };
 
 let currentState = STATES.IDLE;
+
+// Funzione per la sintesi vocale
+async function playTTS(text) {
+  if (isSpeaking || !text) return;
+  try {
+    isSpeaking = true;
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
+    const res = await fetch('/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    if (!res.ok) throw new Error('TTS error');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    currentAudio = new Audio(url);
+    currentAudio.onended = () => {
+      isSpeaking = false;
+      currentAudio = null;
+    };
+    await currentAudio.play();
+  } catch (e) {
+    console.error('TTS failed', e);
+    isSpeaking = false;
+  }
+}
 
 // Aggiorna lo stato del pulsante di invio
 function updateSendButtonState() {
@@ -98,7 +131,10 @@ function addUserMessage(text) {
 }
 
 function addGenesiMessage(text) {
-  addMessage(text, 'genesi');
+  const messageEl = addMessage(text, 'genesi');
+  // Riproduci la risposta vocale
+  playTTS(text);
+  return messageEl;
 }
 
 function addMessage(text, sender) {
@@ -116,22 +152,21 @@ function scrollToBottom() {
   dialogue.scrollTop = dialogue.scrollHeight;
 }
 
-// Funzione di invio unica
+// Funzione di invio
 function sendMessage() {
   const text = textInput.value.trim();
   if (!text) return;
 
   addUserMessage(text);
-  textInput.value = "";
-  updateSendButtonState();
+  textInput.value = '';
 
   setState(STATES.THINKING);
 
+  // Simula elaborazione
   setTimeout(() => {
     setState(STATES.SPEAKING);
-    addGenesiMessage("Sono qui. Dimmi pure.");
-    setTimeout(() => setState(STATES.IDLE), 800);
-  }, 1200);
+    addGenesiMessage("Ho ricevuto il tuo messaggio. Come posso aiutarti?");
+  }, 1000);
 }
 
 // Gestione microfono
@@ -163,14 +198,13 @@ function stopRecording() {
   
   // Simula trascrizione
   setTimeout(() => {
-    const transcript = "Questo è un messaggio dettato di esempio. Puoi modificarlo come preferisci.";
+    const transcript = "Questo è un messaggio dettato di esempio.";
     addUserMessage(transcript);
     
     // Simula risposta
     setTimeout(() => {
       setState(STATES.SPEAKING);
       addGenesiMessage("Ho capito il tuo messaggio vocale.");
-      setTimeout(() => setState(STATES.IDLE), 1000);
     }, 800);
   }, 800);
 }
