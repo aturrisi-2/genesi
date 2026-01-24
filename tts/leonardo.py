@@ -42,7 +42,7 @@ async def synthesize(text: str) -> str:
     try:
         # Esegui il comando piper
         process = await asyncio.create_subprocess_exec(
-            "python", "-m", "piper",
+            "python3", "-m", "piper",
 
             "--model", MODEL_PATH,
             "--config", MODEL_CONFIG_PATH,
