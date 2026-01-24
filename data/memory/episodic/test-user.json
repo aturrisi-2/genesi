@@ -100,5 +100,49 @@
     },
     "salience": 0.2,
     "affect": 0.4
+  },
+  {
+    "event_id": "a5b42769-272b-4d2c-b247-9eed51b51d7e",
+    "user_id": "test-user",
+    "timestamp": "2026-01-24T10:51:28.380612",
+    "type": "user_message",
+    "content": {
+      "text": "grazie mille, davvero ottimo"
+    },
+    "salience": 0.4,
+    "affect": 0.3
+  },
+  {
+    "event_id": "f0062884-0f82-44c7-bedf-5ea1740f387a",
+    "user_id": "test-user",
+    "timestamp": "2026-01-24T10:51:28.381444",
+    "type": "system_response",
+    "content": {
+      "text": "Hai detto: grazie mille, davvero ottimo. Capisco cosa intendi."
+    },
+    "salience": 0.2,
+    "affect": 0.3
+  },
+  {
+    "event_id": "620cd24e-9bfa-451e-8003-6d9aed8b9fef",
+    "user_id": "test-user",
+    "timestamp": "2026-01-24T10:51:35.486655",
+    "type": "user_message",
+    "content": {
+      "text": "ok"
+    },
+    "salience": 0.4,
+    "affect": 0.0
+  },
+  {
+    "event_id": "61b532ca-5fff-497a-92bd-3d2f0b2dba27",
+    "user_id": "test-user",
+    "timestamp": "2026-01-24T10:51:35.487297",
+    "type": "system_response",
+    "content": {
+      "text": "Hai detto: ok"
+    },
+    "salience": 0.2,
+    "affect": 0.0
   }
 ]

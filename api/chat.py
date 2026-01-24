@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Dict, Any
 
 from core.state import CognitiveState
+from core.tone import compute_tone
 from memory.episodic import store_event
 from memory.salience import compute_salience
 from memory.affective import compute_affect
@@ -33,10 +34,27 @@ async def chat_endpoint(request: ChatRequest):
         affect=user_affect
     )
     
-    # 3. Genera risposta echo
-    response_text = f"Hai detto: {request.message}"
+    # 3. Calcola il tono basato sugli eventi recenti
+    tone = compute_tone(state.recent_events)
     
-    # 4. Salva l'evento di risposta del sistema
+    # 4. Genera risposta basata sul tono
+    base_response = f"Hai detto: {request.message}"
+    
+    if tone.directness > 0.7:
+        response_text = base_response
+    else:
+        response_text = base_response + ". Capisco cosa intendi." if "grazie" in request.message.lower() else base_response
+    
+    if tone.empathy > 0.7 and tone.directness <= 0.7:
+        if "grazie" in request.message.lower():
+            response_text += " È stato un piacere aiutarti!"
+        elif any(word in request.message.lower() for word in ["triste", "preoccupato", "preoccupata"]):
+            response_text = "Mi dispiace sentire che non ti senti bene. " + response_text
+    
+    if tone.verbosity < 0.4:
+        response_text = response_text.replace("Hai detto: ", "")
+    
+    # 5. Salva l'evento di risposta del sistema
     system_salience = compute_salience(
         event_type="system_response",
         content={"text": response_text},
@@ -51,9 +69,10 @@ async def chat_endpoint(request: ChatRequest):
         affect=system_affect
     )
     
-    # 5. Restituisci la risposta
+    # 6. Restituisci la risposta con il tono
     return {
         "response": response_text,
+        "tone": tone.to_dict(),
         "state": {
             "user": state.user.to_dict(),
             "recent_events": [e.to_dict() for e in state.recent_events],
