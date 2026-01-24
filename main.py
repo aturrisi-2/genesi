@@ -1,19 +1,48 @@
-import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-
+import uvicorn
+from pydantic import BaseModel
+from typing import Dict, Any
 from core.state import CognitiveState
 from api.user import router as user_router
 from api.chat import router as chat_router
+from tts.leonardo import synthesize
 
 app = FastAPI()
 
-# Serve i file frontend
+# Modello per la richiesta TTS
+class TTSRequest(BaseModel):
+    text: str
+
+# Serve i file statici
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # API
 app.include_router(user_router)
 app.include_router(chat_router)
+
+@app.post("/tts")
+async def text_to_speech(request: TTSRequest):
+    """Endpoint per la sintesi vocale"""
+    if not request.text or not isinstance(request.text, str) or not request.text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Il campo 'text' è obbligatorio e non può essere vuoto"
+        )
+
+    try:
+        wav_path = await synthesize(request.text.strip())
+        return FileResponse(
+            wav_path,
+            media_type="audio/wav",
+            filename="sintesi_vocale.wav"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Errore durante la sintesi vocale: {str(e)}"
+        )
 
 @app.get("/state/{user_id}")
 async def get_state(user_id: str):
