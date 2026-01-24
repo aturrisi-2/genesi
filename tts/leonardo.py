@@ -1,111 +1,99 @@
-import os
 import asyncio
-import uuid
+import json
 import shutil
+import uuid
 from pathlib import Path
 from typing import Optional
 
 # Configurazione
 MODEL_PATH = "/opt/leonardo/models/leonardo.onnx"
 MODEL_CONFIG_PATH = "/opt/leonardo/models/leonardo.onnx.json"
-OUTPUT_DIR = "data/tts"
-DEFAULT_TIMEOUT = 30
+OUTPUT_DIR = Path("data/tts")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Crea la directory di output se non esiste
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+# Verifica che il modello esista
+if not Path(MODEL_PATH).exists():
+    raise FileNotFoundError(f"Modello non trovato in {MODEL_PATH}")
+
+if not Path(MODEL_CONFIG_PATH).exists():
+    raise FileNotFoundError(f"Configurazione modello non trovata in {MODEL_CONFIG_PATH}")
+
+class TTSError(Exception):
+    """Eccezione personalizzata per errori di sintesi vocale"""
+    pass
 
 async def synthesize(text: str) -> str:
     """
-    Genera un file WAV con la voce Leonardo usando Piper
-    e restituisce il path assoluto del file.
+    Sintetizza il testo in parlato usando Piper TTS.
     
     Args:
-        text: Testo da sintetizzare (massimo 1000 caratteri)
+        text: Testo da sintetizzare (max 1000 caratteri)
         
     Returns:
-        str: Path assoluto del file WAV generato
+        Percorso assoluto del file WAV generato
         
     Raises:
-        ValueError: Se il testo non è valido
-        RuntimeError: Se la sintesi vocale fallisce
+        ValueError: Se il testo è vuoto o troppo lungo
+        TTSError: In caso di errore durante la sintesi
     """
-    # Validazione input
-    if not isinstance(text, str) or not text.strip():
+    if not text or not isinstance(text, str):
         raise ValueError("Il testo non può essere vuoto")
-    
+        
+    text = text.strip()
+    if not text:
+        raise ValueError("Il testo non può contenere solo spazi vuoti")
+        
     if len(text) > 1000:
         raise ValueError("Il testo non può superare i 1000 caratteri")
     
     # Genera un nome file univoco
-    output_file = Path(OUTPUT_DIR) / f"tts_{uuid.uuid4()}.wav"
+    output_file = OUTPUT_DIR / f"tts_{uuid.uuid4()}.wav"
     
     try:
         # Esegui il comando piper
         process = await asyncio.create_subprocess_exec(
-            "python3", "-m", "piper",
-
+            "python", "-m", "piper",
             "--model", MODEL_PATH,
             "--config", MODEL_CONFIG_PATH,
             "--output_file", str(output_file),
-
-            # 🧠 STABILITÀ TEMPORALE
             "--length-scale", "1.0",
-
-            # 🎧 RIDUCE METALLICITÀ
             "--noise-scale", "0.20",
             "--noise-w-scale", "0.6",
-
-            # ⏱️ QUESTI DUE SONO LA CHIAVE
-            "--sentence-silence", "1.0",   # silenzio DOPO la frase
-            "--sentence-gap", "0.15",      # buffer di chiusura
-
+            "--sentence-silence", "1.0",
+            "--sentence-gap", "0.15",
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-
         
         # Invia il testo a piper
-        try:
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(input=text.encode('utf-8')),
-                timeout=DEFAULT_TIMEOUT
-            )
+        stdout, stderr = await process.communicate(input=text.encode('utf-8'))
+        
+        # Verifica lo stato di uscita
+        if process.returncode != 0:
+            error_msg = stderr.decode('utf-8', errors='replace')
+            raise TTSError(f"Errore durante la sintesi: {error_msg}")
             
-            # Verifica l'uscita
-            if process.returncode != 0:
-                error_msg = stderr.decode('utf-8', errors='replace') if stderr else "Errore sconosciuto"
-                raise RuntimeError(f"Errore durante la sintesi vocale: {error_msg}")
-                
-            if not output_file.exists():
-                raise RuntimeError("Il file di output non è stato generato correttamente")
-                
-            return str(output_file.absolute())
+        # Verifica che il file sia stato creato
+        if not output_file.exists():
+            raise TTSError("Il file audio non è stato generato correttamente")
             
-        except asyncio.TimeoutError:
-            process.kill()
-            await process.wait()
-            raise RuntimeError(f"Timeout durante la sintesi vocale (limite: {DEFAULT_TIMEOUT}s)")
-            
-    except FileNotFoundError as e:
-        if "No such file or directory: 'python'" in str(e):
-            raise RuntimeError("Impossibile trovare il comando 'python'. Assicurati che Python sia installato e nel PATH.")
-        raise RuntimeError(f"Errore durante l'esecuzione di Piper: {str(e)}")
+        return str(output_file.absolute())
+        
+    except asyncio.TimeoutError:
+        raise TTSError("Timeout durante la sintesi vocale")
     except Exception as e:
-        raise RuntimeError(f"Errore durante la sintesi vocale: {str(e)}")
+        raise TTSError(f"Errore durante la sintesi vocale: {str(e)}")
 
 async def main():
     """Funzione di test per la sintesi vocale"""
     try:
         test_text = "Ciao, questo è un test di sintesi vocale con la voce di Leonardo."
-        print(f"Generazione sintesi vocale per: {test_text}")
-        wav_path = await synthesize(test_text)
-        print(f"File generato con successo: {wav_path}")
+        print(f"Sintetizzando: {test_text}")
+        output_file = await synthesize(test_text)
+        print(f"File generato: {output_file}")
     except Exception as e:
-        print(f"Errore durante il test: {str(e)}")
-        return 1
-    return 0
+        print(f"Errore: {str(e)}")
 
 if __name__ == "__main__":
-    import sys
-    sys.exit(asyncio.run(main()))
+    asyncio.run(main())
