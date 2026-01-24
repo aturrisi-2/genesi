@@ -1,0 +1,274 @@
+/* Reset e stili globali */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --bg-color: #0a0a0f;
+    --text-color: rgba(255, 255, 245, 0.9);
+    --text-muted: rgba(255, 255, 245, 0.6);
+    --primary: rgba(100, 120, 200, 0.1);
+    --border-radius: 12px;
+    --transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@font-face {
+    font-family: 'System Font';
+    src: local('-apple-system'), 
+         local('BlinkMacSystemFont'), 
+         local('Segoe UI'), 
+         local('Roboto'), 
+         local('Helvetica Neue'), 
+         local('Arial'), 
+         sans-serif;
+}
+
+body {
+    font-family: 'System Font', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-image: 
+        radial-gradient(circle at 25% 25%, rgba(100, 120, 200, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 75% 75%, rgba(200, 120, 100, 0.05) 0%, transparent 50%);
+    min-height: 100vh;
+}
+
+/* Layout principale */
+#genesi-app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 8rem;
+    position: relative;
+}
+
+/* Presence */
+#presence {
+    opacity: 0.7;
+    text-align: center;
+    margin-bottom: 4rem;
+    transition: var(--transition);
+}
+
+#presence p {
+    font-size: 1.1rem;
+    color: var(--text-muted);
+}
+
+/* Dialogue */
+#dialogue {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    padding: 1rem 0;
+    overflow-y: auto;
+    max-width: 100%;
+}
+
+.message {
+    font-size: 1.2rem;
+    line-height: 1.6;
+    max-width: 85%;
+    padding: 1rem 1.25rem;
+    border-radius: var(--border-radius);
+    position: relative;
+    opacity: 0;
+    animation: fadeIn 0.5s ease-out forwards;
+    transition: var(--transition);
+}
+
+.message.genesi {
+    align-self: flex-start;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    color: #f0f0ff;
+}
+
+.message.user {
+    align-self: flex-end;
+    background: rgba(100, 120, 200, 0.1);
+    border: 1px solid rgba(100, 120, 200, 0.2);
+    color: #e0e8ff;
+}
+
+/* Status */
+#status {
+    font-size: 0.8rem;
+    text-align: center;
+    margin: 1rem 0;
+    color: var(--text-muted);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+#status.visible {
+    opacity: 0.5;
+}
+
+/* Input container */
+#input-container {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 600px;
+    background: rgba(20, 20, 30, 0.8);
+    backdrop-filter: blur(10px);
+    border-radius: 2rem;
+    padding: 0.75rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: var(--transition);
+    pointer-events: auto;
+}
+
+#input-container button {
+    pointer-events: auto;
+    cursor: pointer;
+    z-index: 2;
+}
+
+#input-container::before,
+#input-container::after {
+    pointer-events: none;
+}
+
+/* Plus button */
+#plus-button {
+    order: 1;
+    width: 2.5rem;
+    height: 2.5rem;
+    opacity: 0.4;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    cursor: default;
+}
+
+#plus-button:hover {
+    opacity: 0.6;
+}
+
+/* Text input */
+#text-input {
+    order: 2;
+    flex-grow: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-color);
+    font-size: 1rem;
+    padding: 0.75rem 0;
+    outline: none;
+    caret-color: var(--text-color);
+}
+
+#text-input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.6;
+}
+
+/* Mic button */
+#mic-button {
+    order: 3;
+    margin-left: auto;
+    width: 2.5rem;
+    height: 2.5rem;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+    background: rgba(100, 120, 200, 0.1);
+    border: 1px solid rgba(100, 120, 200, 0.2);
+    color: var(--text-muted);
+    animation: pulse 8s infinite ease-in-out;
+}
+
+/* Send button */
+#send-button {
+    order: 4;
+    width: 2.5rem;
+    height: 2.5rem;
+    opacity: 0.4;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+    pointer-events: auto;
+}
+
+#send-button:disabled {
+    pointer-events: none;
+    opacity: 0.3;
+}
+
+/* SVG in buttons */
+button svg {
+    width: 18px;
+    height: 18px;
+    stroke: rgba(255, 255, 255, 0.6);
+    stroke-width: 1.5;
+    fill: none;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Hover state for buttons */
+button:hover svg {
+    opacity: 0.9;
+}
+
+/* Recording state for mic button */
+#mic-button.recording svg {
+    opacity: 1;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.02); opacity: 1; }
+    100% { transform: scale(1); opacity: 0.8; }
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    #genesi-app {
+        padding: 1.5rem 1rem 7rem;
+    }
+    
+    .message {
+        max-width: 90%;
+        font-size: 1.1rem;
+    }
+    
+    #input-container {
+        width: 95%;
+        padding: 0.6rem 1rem;
+    }
+}
