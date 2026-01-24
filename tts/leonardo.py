@@ -46,6 +46,13 @@ async def synthesize(text: str) -> str:
             "--model", MODEL_PATH,
             "--config", MODEL_CONFIG_PATH,
             "--output_file", str(output_file),
+
+            # 🔊 PARAMETRI DI STABILIZZAZIONE VOCE
+            "--length-scale", "1.08",
+            "--noise-scale", "0.25",
+            "--noise-w-scale", "0.7",
+            "--sentence-silence", "0.8",
+
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
