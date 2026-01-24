@@ -3,29 +3,53 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 from pydantic import BaseModel
-from typing import Dict, Any
+from pathlib import Path
+
 from core.state import CognitiveState
 from api.user import router as user_router
 from api.chat import router as chat_router
 from tts.leonardo import synthesize
 
+# ======================================================
+# Setup base
+# ======================================================
+
+BASE_DIR = Path(__file__).resolve().parent
+
 app = FastAPI()
 
-# Modello per la richiesta TTS
+# ======================================================
+# Modelli
+# ======================================================
+
 class TTSRequest(BaseModel):
     text: str
 
-# Serve i file statici
+# ======================================================
+# Static files
+# ======================================================
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Root → index.html
+@app.get("/")
+async def serve_index():
+    return FileResponse(BASE_DIR / "static" / "index.html")
+
+# ======================================================
 # API
+# ======================================================
+
 app.include_router(user_router)
 app.include_router(chat_router)
 
+# ======================================================
+# TTS
+# ======================================================
+
 @app.post("/tts")
 async def text_to_speech(request: TTSRequest):
-    """Endpoint per la sintesi vocale"""
-    if not request.text or not isinstance(request.text, str) or not request.text.strip():
+    if not request.text or not request.text.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Il campo 'text' è obbligatorio e non può essere vuoto"
@@ -41,8 +65,12 @@ async def text_to_speech(request: TTSRequest):
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Errore durante la sintesi vocale: {str(e)}"
+            detail=str(e)
         )
+
+# ======================================================
+# State
+# ======================================================
 
 @app.get("/state/{user_id}")
 async def get_state(user_id: str):
@@ -59,6 +87,10 @@ async def get_state(user_id: str):
         "recent_events": [serialize_event(e) for e in state.recent_events],
         "context": state.context
     }
+
+# ======================================================
+# Run
+# ======================================================
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
