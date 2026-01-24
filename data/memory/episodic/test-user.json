@@ -1,0 +1,42 @@
+[
+  {
+    "event_id": "bc4963c8-7d32-4710-87b1-8eb625ae08b6",
+    "user_id": "test-user",
+    "timestamp": "2026-01-24T10:08:06.677318",
+    "type": "user_message",
+    "content": {
+      "text": "ciao genesi"
+    },
+    "salience": 0.5
+  },
+  {
+    "event_id": "a42c9a8a-c0cf-41fe-b065-91e4bdd549cc",
+    "user_id": "test-user",
+    "timestamp": "2026-01-24T10:08:06.677846",
+    "type": "system_response",
+    "content": {
+      "text": "Hai detto: ciao genesi"
+    },
+    "salience": 0.5
+  },
+  {
+    "event_id": "749c37df-3a17-42b0-a2af-b5b5e1801c73",
+    "user_id": "test-user",
+    "timestamp": "2026-01-24T10:08:56.228393",
+    "type": "user_message",
+    "content": {
+      "text": "secondo messaggio"
+    },
+    "salience": 0.5
+  },
+  {
+    "event_id": "4e431fdf-8a8b-484f-bc8b-b36cbbe6c7dd",
+    "user_id": "test-user",
+    "timestamp": "2026-01-24T10:08:56.228761",
+    "type": "system_response",
+    "content": {
+      "text": "Hai detto: secondo messaggio"
+    },
+    "salience": 0.5
+  }
+]
