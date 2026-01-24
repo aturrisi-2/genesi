@@ -1,187 +1,129 @@
-// Stato globale per TTS
-let isSpeaking = false;
-let currentAudio = null;
+// Stati dell'applicazione
+const STATES = {
+  IDLE: 'idle',
+  THINKING: 'thinking',
+  SPEAKING: 'speaking',
+  RECORDING: 'recording'
+};
 
 // Seleziona gli elementi DOM
 const app = document.getElementById('genesi-app');
 const dialogue = document.getElementById('dialogue');
-const statusEl = document.getElementById('status');
-const micButton = document.getElementById('mic-button');
-const sendButton = document.getElementById('send-button');
-const plusButton = document.getElementById('plus-button');
 const textInput = document.getElementById('text-input');
+const sendButton = document.getElementById('send-button');
+const micButton = document.getElementById('mic-button');
 
-// Stati dell'applicazione
-const STATES = {
-  IDLE: 'idle',
-  RECORDING: 'recording',
-  THINKING: 'thinking',
-  SPEAKING: 'speaking'
-};
-
+// Stato globale
 let currentState = STATES.IDLE;
+let currentAudio = null;
 
-// Funzione per la sintesi vocale
-async function playTTS(text) {
-  if (isSpeaking || !text) return;
-  try {
-    isSpeaking = true;
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio = null;
-    }
-    const res = await fetch('/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
-    });
-    if (!res.ok) throw new Error('TTS error');
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    currentAudio = new Audio(url);
-    currentAudio.onended = () => {
-      isSpeaking = false;
-      currentAudio = null;
-    };
-    await currentAudio.play();
-  } catch (e) {
-    console.error('TTS failed', e);
-    isSpeaking = false;
-  }
-}
-
-// Aggiorna lo stato del pulsante di invio
-function updateSendButtonState() {
-  const hasText = textInput.value.trim().length > 0;
-  sendButton.disabled = !hasText;
-  sendButton.style.opacity = hasText ? "1" : "0.3";
-}
-
-// Inizializzazione
-function init() {
-  // Aggiungi messaggio di benvenuto
-  addGenesiMessage("Ciao, sono Genesi. Come posso aiutarti oggi?");
-  
-  // Gestione input
-  textInput.addEventListener('input', updateSendButtonState);
-  
-  // Eventi di invio
-  sendButton.addEventListener('click', sendMessage);
-  textInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      sendMessage();
-    }
-  });
-  
-  // Gestione microfono
-  micButton.addEventListener('click', toggleRecording);
-  
-  // Inizializza lo stato e il pulsante di invio
-  setState(STATES.IDLE);
-  updateSendButtonState();
-}
-
-// Gestione stati
+// Imposta lo stato corrente
 function setState(newState) {
   currentState = newState;
-  statusEl.textContent = getStatusText(newState);
-  
-  // Mostra/nascondi lo stato
-  if (newState === STATES.IDLE) {
-    statusEl.classList.remove('visible');
-  } else {
-    statusEl.classList.add('visible');
-  }
-  
-  // Aggiorna UI in base allo stato
-  updateUIForState(newState);
+  app.dataset.state = currentState;
 }
 
-function getStatusText(state) {
-  const statusTexts = {
-    [STATES.IDLE]: '',
-    [STATES.RECORDING]: 'Ti ascolto…',
-    [STATES.THINKING]: 'Genesi sta pensando…',
-    [STATES.SPEAKING]: 'Genesi sta parlando…'
-  };
-  return statusTexts[state] || '';
-}
-
-function updateUIForState(state) {
-  // Disabilita input durante gli stati attivi
-  textInput.disabled = state !== STATES.IDLE && state !== STATES.RECORDING;
-  
-  // Aggiorna stato del pulsante microfono
-  micButton.style.background = state === STATES.RECORDING 
-    ? 'rgba(200, 100, 100, 0.2)' 
-    : 'rgba(100, 120, 200, 0.1)';
-  
-  // Aggiorna stato del pulsante invio
-  if (state !== STATES.IDLE) {
-    sendButton.disabled = true;
-  } else {
-    updateSendButtonState();
-  }
-}
-
-// Gestione messaggi
-function addUserMessage(text) {
-  addMessage(text, 'user');
-}
-
-function addGenesiMessage(text) {
-  const messageEl = addMessage(text, 'genesi');
-  // Riproduci la risposta vocale
-  playTTS(text);
-  return messageEl;
-}
-
+// Aggiunge un messaggio alla chat
 function addMessage(text, sender) {
   const messageEl = document.createElement('div');
   messageEl.className = `message ${sender}`;
   messageEl.textContent = text;
-  
   dialogue.appendChild(messageEl);
-  scrollToBottom();
+  dialogue.scrollTop = dialogue.scrollHeight;
+  return messageEl;
+}
+
+// Aggiunge un messaggio dell'utente
+function addUserMessage(text) {
+  addMessage(text, 'user');
+}
+
+// Aggiunge un messaggio di Genesi
+async function addGenesiMessage(text) {
+  const messageEl = addMessage(text, 'genesi');
+  
+  try {
+    setState(STATES.SPEAKING);
+    
+    // Richiedi la sintesi vocale
+    const response = await fetch('/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+
+    if (!response.ok) {
+      throw new Error('TTS request failed');
+    }
+
+    const audioBlob = await response.blob();
+    const audioUrl = URL.createObjectURL(audioBlob);
+    
+    // Riproduci l'audio
+    currentAudio = new Audio(audioUrl);
+    
+    currentAudio.onended = () => {
+      currentAudio = null;
+      if (currentState === STATES.SPEAKING) {
+        setState(STATES.IDLE);
+      }
+    };
+    
+    await currentAudio.play();
+  } catch (error) {
+    console.error('TTS Error:', error);
+    // Continua normalmente anche in caso di errore
+    if (currentState === STATES.SPEAKING) {
+      setState(STATES.IDLE);
+    }
+  }
   
   return messageEl;
 }
 
-function scrollToBottom() {
-  dialogue.scrollTop = dialogue.scrollHeight;
-}
-
-// Funzione di invio
-function sendMessage() {
+// Gestisce l'invio del messaggio
+async function sendMessage() {
   const text = textInput.value.trim();
-  if (!text) return;
+  if (!text || currentState !== STATES.IDLE) return;
 
+  // Mostra il messaggio dell'utente
   addUserMessage(text);
   textInput.value = '';
-
+  
+  // Imposta lo stato di attesa
   setState(STATES.THINKING);
 
-  // Simula elaborazione
-  setTimeout(() => {
-    setState(STATES.SPEAKING);
-    addGenesiMessage("Ho ricevuto il tuo messaggio. Come posso aiutarti?");
-  }, 1000);
-}
-
-// Gestione microfono
-function toggleRecording() {
-  if (currentState === STATES.IDLE) {
-    startRecording();
-  } else if (currentState === STATES.RECORDING) {
-    stopRecording();
+  try {
+    // Simula il tempo di elaborazione
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Simula la risposta di Genesi
+    const response = "Ho ricevuto il tuo messaggio. Come posso aiutarti?";
+    await addGenesiMessage(response);
+    
+  } catch (error) {
+    console.error('Error:', error);
+    setState(STATES.IDLE);
   }
 }
 
+// Gestione input da tastiera
+textInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// Gestione click sul pulsante di invio
+sendButton.addEventListener('click', sendMessage);
+
+// Gestione microfono (solo UI)
 function startRecording() {
+  if (currentState !== STATES.IDLE) return;
   setState(STATES.RECORDING);
   micButton.classList.add('recording');
-  
+
   // Simula registrazione per 2-4 secondi
   setTimeout(() => {
     if (currentState === STATES.RECORDING) {
@@ -202,12 +144,36 @@ function stopRecording() {
     addUserMessage(transcript);
     
     // Simula risposta
-    setTimeout(() => {
-      setState(STATES.SPEAKING);
-      addGenesiMessage("Ho capito il tuo messaggio vocale.");
-    }, 800);
-  }, 800);
+    setTimeout(async () => {
+      const response = "Ho capito il tuo messaggio vocale.";
+      await addGenesiMessage(response);
+    }, 500);
+  }, 500);
 }
 
-// Avvia l'applicazione
-document.addEventListener('DOMContentLoaded', init);
+// Gestione click sul pulsante microfono
+micButton.addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  startRecording();
+});
+
+micButton.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  startRecording();
+});
+
+document.addEventListener('mouseup', () => {
+  if (currentState === STATES.RECORDING) {
+    stopRecording();
+  }
+});
+
+document.addEventListener('touchend', (e) => {
+  if (currentState === STATES.RECORDING) {
+    e.preventDefault();
+    stopRecording();
+  }
+});
+
+// Aggiorna lo stato iniziale
+setState(STATES.IDLE);
