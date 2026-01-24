@@ -7,13 +7,15 @@ from typing import Dict, List, Any
 
 class EpisodicEvent:
     def __init__(self, event_id: str, user_id: str, timestamp: str, 
-                 type: str, content: Dict[str, Any], salience: float):
+                 type: str, content: Dict[str, Any], salience: float, 
+                 affect: float = 0.0):
         self.event_id = event_id
         self.user_id = user_id
         self.timestamp = timestamp
         self.type = type
         self.content = content
         self.salience = salience
+        self.affect = affect
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -22,7 +24,8 @@ class EpisodicEvent:
             'timestamp': self.timestamp,
             'type': self.type,
             'content': self.content,
-            'salience': self.salience
+            'salience': self.salience,
+            'affect': self.affect
         }
 
     @classmethod
@@ -33,7 +36,8 @@ class EpisodicEvent:
             timestamp=data['timestamp'],
             type=data['type'],
             content=data['content'],
-            salience=data['salience']
+            salience=data['salience'],
+            affect=data.get('affect', 0.0)
         )
 
 def _get_user_events_path(user_id: str) -> Path:
@@ -41,14 +45,16 @@ def _get_user_events_path(user_id: str) -> Path:
     base_dir.mkdir(parents=True, exist_ok=True)
     return base_dir / f'{user_id}.json'
 
-def store_event(user_id: str, type: str, content: Dict[str, Any], salience: float) -> EpisodicEvent:
+def store_event(user_id: str, type: str, content: Dict[str, Any], 
+                salience: float, affect: float = 0.0) -> EpisodicEvent:
     event = EpisodicEvent(
         event_id=str(uuid.uuid4()),
         user_id=user_id,
         timestamp=datetime.utcnow().isoformat(),
         type=type,
         content=content,
-        salience=salience
+        salience=salience,
+        affect=affect
     )
     
     file_path = _get_user_events_path(user_id)

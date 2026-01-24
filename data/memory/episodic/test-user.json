@@ -78,5 +78,27 @@
       "text": "Hai detto: ciao"
     },
     "salience": 0.2
+  },
+  {
+    "event_id": "09c88459-fda8-472e-adca-c13800ad5117",
+    "user_id": "test-user",
+    "timestamp": "2026-01-24T10:29:20.242842",
+    "type": "user_message",
+    "content": {
+      "text": "grazie! \u00e8 stato ottimo"
+    },
+    "salience": 0.4,
+    "affect": 0.4
+  },
+  {
+    "event_id": "f1d95f2f-d874-407d-b296-ebd2a537176d",
+    "user_id": "test-user",
+    "timestamp": "2026-01-24T10:29:20.243663",
+    "type": "system_response",
+    "content": {
+      "text": "Hai detto: grazie! \u00e8 stato ottimo"
+    },
+    "salience": 0.2,
+    "affect": 0.4
   }
 ]

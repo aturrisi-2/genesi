@@ -5,6 +5,7 @@ from typing import Dict, Any
 from core.state import CognitiveState
 from memory.episodic import store_event
 from memory.salience import compute_salience
+from memory.affective import compute_affect
 
 router = APIRouter(prefix="/chat")
 
@@ -23,11 +24,13 @@ async def chat_endpoint(request: ChatRequest):
         content={"text": request.message},
         past_events=[e.to_dict() for e in state.recent_events]
     )
+    user_affect = compute_affect("user_message", {"text": request.message})
     user_event = store_event(
         user_id=request.user_id,
         type="user_message",
         content={"text": request.message},
-        salience=user_salience
+        salience=user_salience,
+        affect=user_affect
     )
     
     # 3. Genera risposta echo
@@ -39,11 +42,13 @@ async def chat_endpoint(request: ChatRequest):
         content={"text": response_text},
         past_events=[e.to_dict() for e in state.recent_events]
     )
+    system_affect = compute_affect("system_response", {"text": response_text})
     system_event = store_event(
         user_id=request.user_id,
         type="system_response",
         content={"text": response_text},
-        salience=system_salience
+        salience=system_salience,
+        affect=system_affect
     )
     
     # 5. Restituisci la risposta
