@@ -38,5 +38,45 @@
       "text": "Hai detto: secondo messaggio"
     },
     "salience": 0.5
+  },
+  {
+    "event_id": "60ec6528-90e7-4714-9622-f7ab52d0bddb",
+    "user_id": "test-user",
+    "timestamp": "2026-01-24T10:19:31.297609",
+    "type": "user_message",
+    "content": {
+      "text": "questo \u00e8 molto importante"
+    },
+    "salience": 0.6000000000000001
+  },
+  {
+    "event_id": "edcd7cca-77b2-4bc6-849f-23fd79ac8d5d",
+    "user_id": "test-user",
+    "timestamp": "2026-01-24T10:19:31.298381",
+    "type": "system_response",
+    "content": {
+      "text": "Hai detto: questo \u00e8 molto importante"
+    },
+    "salience": 0.4
+  },
+  {
+    "event_id": "e6f7cb3b-9d32-404c-b670-56db548dee1b",
+    "user_id": "test-user",
+    "timestamp": "2026-01-24T10:19:39.090893",
+    "type": "user_message",
+    "content": {
+      "text": "ciao"
+    },
+    "salience": 0.4
+  },
+  {
+    "event_id": "4f787ceb-2a22-4c73-9050-e0acd4ebee25",
+    "user_id": "test-user",
+    "timestamp": "2026-01-24T10:19:39.091307",
+    "type": "system_response",
+    "content": {
+      "text": "Hai detto: ciao"
+    },
+    "salience": 0.2
   }
 ]
