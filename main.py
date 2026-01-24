@@ -3,9 +3,11 @@ from fastapi import FastAPI
 
 from core.state import CognitiveState
 from api.user import router as user_router
+from api.chat import router as chat_router
 
 app = FastAPI()
 app.include_router(user_router)
+app.include_router(chat_router)
 
 @app.get("/state/{user_id}")
 async def get_state(user_id: str):
