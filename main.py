@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import uvicorn
@@ -8,11 +8,13 @@ from pydantic import BaseModel
 from core.state import CognitiveState
 from api.user import router as user_router
 from api.chat import router as chat_router
-from tts.coqui import synthesize
+# from tts.coqui import synthesize  # ❌ VOCE DISABILITATA
 
 # ======================================================
-# Setup base
+# Config
 # ======================================================
+
+ENABLE_TTS = False  # 🔒 BLOCCO TOTALE VOCE
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -31,7 +33,6 @@ class TTSRequest(BaseModel):
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Root → index.html
 @app.get("/")
 async def serve_index():
     return FileResponse(BASE_DIR / "static" / "index.html")
@@ -44,48 +45,30 @@ app.include_router(user_router)
 app.include_router(chat_router)
 
 # ======================================================
-# TTS
+# TTS (DISABILITATO)
 # ======================================================
 
 @app.post("/tts")
 async def text_to_speech(request: TTSRequest):
     """
-    Endpoint per la sintesi vocale.
-    Riceve testo e restituisce audio WAV.
-    Compatibile con Safari/iOS.
+    Endpoint TTS TEMPORANEAMENTE DISABILITATO.
+    Ritorna sempre TTS off, senza errori.
     """
-    if not request.text or not request.text.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Il campo 'text' è obbligatorio e non può essere vuoto"
-        )
 
-    try:
-        # Genera il file audio
-        audio_path = synthesize(request.text)
-        
-        # Imposta gli header per la riproduzione su tutti i browser, inclusi Safari/iOS
-        return FileResponse(
-            audio_path,
-            media_type='audio/wav',
-            headers={
-                'Accept-Ranges': 'bytes',
-                'Content-Disposition': 'inline',
-                'Cache-Control': 'no-cache',
-                'Content-Transfer-Encoding': 'binary'
+    if not ENABLE_TTS:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "enabled": False,
+                "message": "TTS temporaneamente disabilitato"
             }
         )
-        
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Errore durante la sintesi vocale: {str(e)}"
-        )
+
+    # --- codice futuro (non eseguito) ---
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="TTS disabilitato"
+    )
 
 # ======================================================
 # State
