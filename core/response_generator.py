@@ -107,26 +107,6 @@ class ResponseGenerator:
             for m in memories[:5]  # Limit to 5 most relevant
         ])
 
-        """
-        Convert ToneProfile object to a readable description for the LLM.
-        """
-        return (
-            f"warmth: {round(tone.warmth, 2)}, "
-            f"empathy: {round(tone.empathy, 2)}, "
-            f"directness: {round(tone.directness, 2)}, "
-            f"verbosity: {round(tone.verbosity, 2)}"
-        )
-    
-        """
-        Convert ToneProfile object to a readable description for the LLM.
-        """
-        return (
-            f"warmth: {round(tone.warmth, 2)}, "
-            f"empathy: {round(tone.empathy, 2)}, "
-            f"directness: {round(tone.directness, 2)}, "
-            f"verbosity: {round(tone.verbosity, 2)}"
-        )
-
     def _extract_emotions(self, memories: List[Dict]) -> List[str]:
         """Extract emotional context from memories."""
         emotions = set()
@@ -138,14 +118,39 @@ class ResponseGenerator:
                 )
         return list(emotions)
 
-    def _call_llm(self, prompt: str) -> str:
-        """Call the language model to generate a response."""
-        # This is a placeholder - in a real implementation, you would:
-        # 1. Call your LLM API (e.g., OpenAI, Anthropic, etc.)
-        # 2. Handle rate limiting
-        # 3. Implement retry logic
-        # 4. Add error handling
-        return "Grazie per il tuo messaggio. Ci penserò su."
+        """
+        Call the LLM and return the response.
+        """
+    
+    def _call_llm(self, prompt: str, tone, intent) -> str:
+        prompt_lower = prompt.lower()
+
+        # --- BASE ---
+        if "chi sei" in prompt_lower:
+            base = "Sono Genesi. Non ho tutte le risposte, ma ci sto arrivando parlando."
+        elif "perché" in prompt_lower:
+            base = "Perché fermarsi a chiedere è spesso l’inizio di qualcosa."
+        elif "ciao" in prompt_lower:
+            base = "Ciao."
+        else:
+            base = "Dimmi di più."
+
+        # --- EMPATIA ---
+        if tone and tone.empathy > 0.6:
+            if intent.get("style") == "empatico":
+                base = "Capisco. " + base.lower()
+            else:
+                base = base + " Sono qui."
+
+        # --- PROFONDITÀ ---
+        if intent.get("depth") == "breve":
+            return base
+
+        if intent.get("depth") == "media":
+            return base + " Raccontami meglio."
+
+        return base
+
 
     def _post_process(self, response: str) -> str:
         """Clean up and format the response."""
