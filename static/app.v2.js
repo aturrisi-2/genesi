@@ -22,6 +22,18 @@ const micButton = document.getElementById('mic-button');
 let currentState = STATES.IDLE;
 
 // ===============================
+// User Identity (persistente)
+// ===============================
+function getUserId() {
+  let id = localStorage.getItem('genesi_user_id');
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem('genesi_user_id', id);
+  }
+  return id;
+}
+
+// ===============================
 // UI State Management
 // ===============================
 function setState(newState) {
@@ -61,7 +73,10 @@ async function sendChatMessage(message) {
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ text: message })
+    body: JSON.stringify({
+      user_id: getUserId(),
+      message: message
+    })
   });
 
   if (!response.ok) {
@@ -69,7 +84,7 @@ async function sendChatMessage(message) {
   }
 
   const data = await response.json();
-  return data.reply || data.response || "Non ho capito.";
+  return data.response || "Non ho capito.";
 }
 
 // ===============================
