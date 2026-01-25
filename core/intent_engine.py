@@ -43,9 +43,10 @@ class IntentEngine:
             intent["focus"] = "connessione"
 
         # Se il tono è emotivo
-        if tone.get("valence", 0) < -0.3:
+        if tone.get("empathy", 0) < 0.3:
             intent["style"] = "empatico"
             intent["emotional_weight"] = 0.7
+
 
         # Se Genesi è già molto attiva (conversazione lunga)
         if len(recent_memories) > 10:

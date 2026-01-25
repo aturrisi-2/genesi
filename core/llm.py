@@ -15,7 +15,7 @@ def generate_response(prompt_payload: dict) -> str:
     tone = prompt_payload.get("tone", {})
     
     # Aggiungi empatia se richiesto
-    if tone.get("empathy", 0) > 0.7:
+    if tone("empathy", 0) > 0.7:
         if "grazie" in prompt_payload["user_message"].lower():
             response += " È stato un piacere aiutarti!"
         elif any(word in prompt_payload["user_message"].lower() 
@@ -23,7 +23,7 @@ def generate_response(prompt_payload: dict) -> str:
             response = "Mi dispiace sentirlo. " + response
     
     # Rendi la risposta più diretta se richiesto
-    if tone.get("directness", 0) > 0.7:
+    if tone("directness", 0) > 0.7:
         # Rimuove prefissi comuni per rendere la risposta più diretta
         for prefix in ["Ho capito, ", "Capisco, ", "Vedo che ", "Sì, "]:
             if response.startswith(prefix):

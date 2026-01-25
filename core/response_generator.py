@@ -90,7 +90,7 @@ class ResponseGenerator:
         """Build a rich context from available data."""
         return {
             "current_time": datetime.now().isoformat(),
-            "user_mood": state.get("user_mood", "neutral"),
+            "user_mood": getattr(cognitive_state, "user_mood", "neutral"),
             "conversation_depth": len(recent_memories),
             "tone": tone,
             "salient_topics": [m.get("topic") for m in recent_memories if m.get("topic")],
