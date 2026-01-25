@@ -1,14 +1,14 @@
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 import uvicorn
 from pydantic import BaseModel
-from pathlib import Path
 
 from core.state import CognitiveState
 from api.user import router as user_router
 from api.chat import router as chat_router
-from tts.leonardo import synthesize
+from tts.coqui import synthesize
 
 # ======================================================
 # Setup base
@@ -49,6 +49,11 @@ app.include_router(chat_router)
 
 @app.post("/tts")
 async def text_to_speech(request: TTSRequest):
+    """
+    Endpoint per la sintesi vocale.
+    Riceve testo e restituisce audio WAV.
+    Compatibile con Safari/iOS.
+    """
     if not request.text or not request.text.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -56,16 +61,30 @@ async def text_to_speech(request: TTSRequest):
         )
 
     try:
-        wav_path = synthesize(request.text.strip())
+        # Genera il file audio
+        audio_path = synthesize(request.text)
+        
+        # Imposta gli header per la riproduzione su tutti i browser, inclusi Safari/iOS
         return FileResponse(
-            wav_path,
-            media_type="audio/wav",
-            filename="sintesi_vocale.wav"
+            audio_path,
+            media_type='audio/wav',
+            headers={
+                'Accept-Ranges': 'bytes',
+                'Content-Disposition': 'inline',
+                'Cache-Control': 'no-cache',
+                'Content-Transfer-Encoding': 'binary'
+            }
+        )
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=f"Errore durante la sintesi vocale: {str(e)}"
         )
 
 # ======================================================
@@ -75,16 +94,9 @@ async def text_to_speech(request: TTSRequest):
 @app.get("/state/{user_id}")
 async def get_state(user_id: str):
     state = CognitiveState.build(user_id)
-
-    def serialize_event(event):
-        event_dict = event.to_dict()
-        if hasattr(event, "decayed_affect"):
-            event_dict["decayed_affect"] = event.decayed_affect
-        return event_dict
-
     return {
         "user": state.user.to_dict(),
-        "recent_events": [serialize_event(e) for e in state.recent_events],
+        "recent_events": [e.to_dict() for e in state.recent_events],
         "context": state.context
     }
 
