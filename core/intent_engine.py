@@ -43,7 +43,7 @@ class IntentEngine:
             intent["focus"] = "connessione"
 
         # Se il tono è emotivo
-        if tone.get("empathy", 0) < 0.3:
+        if tone("empathy", 0) < 0.3:
             intent["style"] = "empatico"
             intent["emotional_weight"] = 0.7
 
