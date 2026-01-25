@@ -122,34 +122,19 @@ class ResponseGenerator:
         Call the LLM and return the response.
         """
     
+    from core.llm import generate_response as llm_generate
+
+
     def _call_llm(self, prompt: str, tone, intent) -> str:
-        prompt_lower = prompt.lower()
-
-        # --- BASE ---
-        if "chi sei" in prompt_lower:
-            base = "Sono Genesi. Non ho tutte le risposte, ma ci sto arrivando parlando."
-        elif "perché" in prompt_lower:
-            base = "Perché fermarsi a chiedere è spesso l’inizio di qualcosa."
-        elif "ciao" in prompt_lower:
-            base = "Ciao."
-        else:
-            base = "Dimmi di più."
-
-        # --- EMPATIA ---
-        if tone and tone.empathy > 0.6:
-            if intent.get("style") == "empatico":
-                base = "Capisco. " + base.lower()
-            else:
-                base = base + " Sono qui."
-
-        # --- PROFONDITÀ ---
-        if intent.get("depth") == "breve":
-            return base
-
-        if intent.get("depth") == "media":
-            return base + " Raccontami meglio."
-
-        return base
+        """
+        Call the LLM and return the response.
+        """
+        payload = {
+            "prompt": prompt,
+            "tone": tone,
+            "intent": intent
+        }
+        return llm_generate(payload)
 
 
     def _post_process(self, response: str) -> str:

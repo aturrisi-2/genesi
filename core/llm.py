@@ -1,41 +1,26 @@
-def generate_response(prompt_payload: dict) -> str:
-    """
-    Genera una risposta basata sul prompt fornito, adattandosi al ToneProfile.
-    
-    Args:
-        prompt_payload: Dizionario contenente:
-            - user_message: str
-            - base_response: str
-            - tone: ToneProfile (warmth, empathy, directness, verbosity)
-    
-    Returns:
-        str: Risposta generata
-    """
-    response = prompt_payload.get("base_response", "")
-    tone = prompt_payload.get("tone")
+import os
+from openai import OpenAI
 
-    if tone is None:
-        return response
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    user_message = prompt_payload.get("user_message", "").lower()
+def generate_response(payload: dict) -> str:
+    prompt = payload["prompt"]
+    tone = payload.get("tone")
+    intent = payload.get("intent", {})
 
-    # --- EMPATIA ---
-    if tone.empathy > 0.7:
-        if "grazie" in user_message:
-            response += " È stato un piacere aiutarti."
-        elif any(word in user_message for word in [
-            "triste", "preoccupato", "preoccupata", "arrabbiato", "arrabbiata"
-        ]):
-            response = "Mi dispiace sentirlo. " + response
+    system_prompt = (
+        "Sei GENESI. Non sei un assistente. "
+        "Rispondi in modo naturale, umano, non ripetitivo. "
+        "Non usare frasi standard."
+    )
 
-    # --- DIRETTEZZA ---
-    if tone.directness > 0.7:
-        for prefix in ["Ho capito, ", "Capisco, ", "Vedo che ", "Sì, "]:
-            if response.startswith(prefix):
-                response = response[len(prefix):]
-                break
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.7
+    )
 
-    # --- STILE ---
-    response = response.replace("?", ".")
-
-    return response
+    return response.choices[0].message.content.strip()
