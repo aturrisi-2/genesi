@@ -1,101 +1,97 @@
-# == LEONARDO VERSIONE WINDSURF TEST 001 ==
-
-import asyncio
-import json
-import shutil
+import os
 import uuid
+import subprocess
 from pathlib import Path
-from typing import Optional
 
-# Configurazione
-MODEL_PATH = "/opt/leonardo/models/leonardo.onnx"
-MODEL_CONFIG_PATH = "/opt/leonardo/models/leonardo.onnx.json"
-OUTPUT_DIR = Path("data/tts")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+# =========================
+# CONFIGURAZIONE GOLD
+# =========================
 
-# Verifica che il modello esista
-if not Path(MODEL_PATH).exists():
-    raise FileNotFoundError(f"Modello non trovato in {MODEL_PATH}")
+BASE_DIR = Path("/opt/genesi")
+TTS_DIR = BASE_DIR / "data" / "tts"
+MODEL_PATH = BASE_DIR / "models" / "leonardo-epoch=2024-step=996300.onnx"
 
-if not Path(MODEL_CONFIG_PATH).exists():
-    raise FileNotFoundError(f"Configurazione modello non trovata in {MODEL_CONFIG_PATH}")
+PIPER_BIN = BASE_DIR / "venv" / "bin" / "piper"
+FFMPEG_BIN = "/usr/bin/ffmpeg"
 
-class TTSError(Exception):
-    """Eccezione personalizzata per errori di sintesi vocale"""
-    pass
+# Parametri voce (GOLD)
+PIPER_ARGS = [
+    "--sentence-silence", "0.9",
+    "--sentence-gap", "0.3",
+    "--noise-scale", "0.35",
+    "--noise-w-scale", "0.8",
+    "--length-scale", "1.0",
+]
 
-async def synthesize(text: str) -> str:
-    """
-    Sintetizza il testo in parlato usando Piper TTS.
-    
-    Args:
-        text: Testo da sintetizzare (max 1000 caratteri)
-        
-    Returns:
-        Percorso assoluto del file WAV generato
-        
-    Raises:
-        ValueError: Se il testo è vuoto o troppo lungo
-        TTSError: In caso di errore durante la sintesi
-    """
-    if not text or not isinstance(text, str):
-        raise ValueError("Il testo non può essere vuoto")
-        
-    text = text.strip()
-    if not text:
-        raise ValueError("Il testo non può contenere solo spazi vuoti")
-        
-    if len(text) > 1000:
-        raise ValueError("Il testo non può superare i 1000 caratteri")
-    
-    # Genera un nome file univoco
-    output_file = OUTPUT_DIR / f"tts_{uuid.uuid4()}.wav"
-    
-    try:
-        # Esegui il comando piper
-        process = await asyncio.create_subprocess_exec(
-            "python", "-m", "piper",
-            "--model", MODEL_PATH,
-            "--config", MODEL_CONFIG_PATH,
-            "--output_file", str(output_file),
-            "--length-scale", "1.0",
-            "--noise-scale", "0.20",
-            "--noise-w-scale", "0.6",
-            "--sentence-silence", "1.0",
-            "--sentence-gap", "0.15",
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        
-        # Invia il testo a piper
-        stdout, stderr = await process.communicate(input=text.encode('utf-8'))
-        
-        # Verifica lo stato di uscita
-        if process.returncode != 0:
-            error_msg = stderr.decode('utf-8', errors='replace')
-            raise TTSError(f"Errore durante la sintesi: {error_msg}")
-            
-        # Verifica che il file sia stato creato
-        if not output_file.exists():
-            raise TTSError("Il file audio non è stato generato correttamente")
-            
-        return str(output_file.absolute())
-        
-    except asyncio.TimeoutError:
-        raise TTSError("Timeout durante la sintesi vocale")
-    except Exception as e:
-        raise TTSError(f"Errore durante la sintesi vocale: {str(e)}")
+# Post-processing
+PAD_SECONDS = "0.6"
+TRIM_START = "0.12"
 
-async def main():
-    """Funzione di test per la sintesi vocale"""
-    try:
-        test_text = "Ciao, questo è un test di sintesi vocale con la voce di Leonardo."
-        print(f"Sintetizzando: {test_text}")
-        output_file = await synthesize(test_text)
-        print(f"File generato: {output_file}")
-    except Exception as e:
-        print(f"Errore: {str(e)}")
+os.makedirs(TTS_DIR, exist_ok=True)
 
-if __name__ == "__main__":
-    asyncio.run(main())
+
+def synthesize(text: str) -> str:
+    if not text or not text.strip():
+        raise ValueError("Testo vuoto")
+
+    uid = uuid.uuid4().hex
+
+    raw_wav = TTS_DIR / f"raw_{uid}.wav"
+    pad_wav = TTS_DIR / f"pad_{uid}.wav"
+    final_wav = TTS_DIR / f"final_{uid}.wav"
+
+    # =========================
+    # 1. PIPER → raw.wav
+    # =========================
+    piper_cmd = [
+        str(PIPER_BIN),
+        "--model", str(MODEL_PATH),
+        "--output_file", str(raw_wav),
+        *PIPER_ARGS,
+    ]
+
+    piper = subprocess.Popen(
+        piper_cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    stdout, stderr = piper.communicate(text.encode("utf-8"))
+
+    if piper.returncode != 0 or not raw_wav.exists():
+        raise RuntimeError(f"Piper error: {stderr.decode()}")
+
+    # =========================
+    # 2. Padding finale
+    # =========================
+    subprocess.run(
+        [
+            FFMPEG_BIN,
+            "-y",
+            "-i", str(raw_wav),
+            "-af", f"apad=pad_dur={PAD_SECONDS}",
+            str(pad_wav),
+        ],
+        check=True,
+    )
+
+    # =========================
+    # 3. Trim iniziale controllato
+    # =========================
+    subprocess.run(
+        [
+            FFMPEG_BIN,
+            "-y",
+            "-i", str(pad_wav),
+            "-af", f"atrim=start={TRIM_START}",
+            str(final_wav),
+        ],
+        check=True,
+    )
+
+    # Cleanup (opzionale ma consigliato)
+    raw_wav.unlink(missing_ok=True)
+    pad_wav.unlink(missing_ok=True)
+
+    return str(final_wav)
