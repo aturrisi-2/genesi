@@ -104,9 +104,15 @@ class ResponseGenerator:
             for m in memories[:5]  # Limit to 5 most relevant
         ])
 
-    def _describe_tone(self, tone: Dict) -> str:
-        """Convert tone dictionary to natural language description."""
-        return ", ".join([f"{k}: {v}" for k, v in tone.items()])
+        """
+        Convert ToneProfile object to a readable description for the LLM.
+        """
+        return (
+            f"warmth: {round(tone.warmth, 2)}, "
+            f"empathy: {round(tone.empathy, 2)}, "
+            f"directness: {round(tone.directness, 2)}, "
+            f"verbosity: {round(tone.verbosity, 2)}"
+        )
 
     def _extract_emotions(self, memories: List[Dict]) -> List[str]:
         """Extract emotional context from memories."""
