@@ -15,6 +15,7 @@ class IntentEngine:
         relevant_memories: List[Dict],
         tone: Dict
     ) -> Dict:
+        print("🔥 INTENT ENGINE ATTIVO 🔥", flush=True)
         """
         Returns an intent object that describes HOW to respond.
         """
