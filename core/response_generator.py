@@ -34,6 +34,14 @@ class ResponseGenerator:
         Ultimo messaggio: {user_message}
         La tua risposta (solo testo, niente prefissi, niente markdown):
         """
+    def _describe_tone(self, tone) -> str:
+        """Convert ToneProfile object to a readable description for the LLM."""
+        return (
+            f"warmth: {round(tone.warmth, 2)}, "
+            f"empathy: {round(tone.empathy, 2)}, "
+            f"directness: {round(tone.directness, 2)}, "
+            f"verbosity: {round(tone.verbosity, 2)}"
+        )
 
     def generate_response(
             self,
