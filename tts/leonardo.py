@@ -16,11 +16,11 @@ FFMPEG_BIN = "/usr/bin/ffmpeg"
 
 # Parametri voce (GOLD)
 PIPER_ARGS = [
-    "--sentence-silence", "0.9",
-    "--sentence-gap", "0.3",
-    "--noise-scale", "0.35",
-    "--noise-w-scale", "0.8",
-    "--length-scale", "1.0",
+    "--sentence-silence", "0.5",
+    "--sentence-gap", "0.15",
+    "--noise-scale", "0.12",
+    "--noise-w-scale", "0.35",
+    "--length-scale", "1.08",
 ]
 
 # Post-processing
