@@ -1,7 +1,6 @@
 import uuid
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from TTS.api import TTS
 
@@ -50,15 +49,10 @@ class TTSModel:
         Sintetizza il testo in parlato e restituisce il path del WAV finale.
 
         Pipeline:
-        1. Coqui raw wav
-        2. Pulizia anti-metallo / anti-caverna (sox)
-        3. Micro-silenzio iniziale e finale
-
-        Args:
-            text (str): testo da sintetizzare
-
-        Returns:
-            str: percorso assoluto del file WAV finale
+        1. Coqui raw wav (con pre-buffer testuale)
+        2. Pulizia anti-metallo / anti-caverna
+        3. Pitch down leggero (calore)
+        4. Micro-silenzio umano iniziale e finale
         """
         if not text or not isinstance(text, str) or not text.strip():
             raise ValueError("Il testo non può essere vuoto")
@@ -66,10 +60,11 @@ class TTSModel:
         # File temporanei
         raw_file = self.output_dir / f"tts_{uuid.uuid4().hex}_raw.wav"
         clean_file = self.output_dir / f"{raw_file.stem}_clean.wav"
+        warm_file = self.output_dir / f"{raw_file.stem}_warm.wav"
         final_file = self.output_dir / f"{raw_file.stem}_final.wav"
 
         try:
-            # 1️⃣ Sintesi raw
+            # 1️⃣ Pre-buffer per evitare inizio mangiato
             safe_text = "… " + text.strip()
 
             self.tts.tts_to_file(
@@ -77,27 +72,37 @@ class TTSModel:
                 file_path=str(raw_file)
             )
 
-
-            # 2️⃣ De-metal + anti-caverna (EQ + compand leggero)
+            # 2️⃣ Pulizia anti-metallo / anti-caverna
             subprocess.run(
                 [
                     "sox",
                     str(raw_file),
                     str(clean_file),
-                    "highpass", "80",
-                    "lowpass", "7200",
-                    "compand", "0.3,1", "6:-70,-60,-20", "-5", "-90", "0.2"
+                    "highpass", "70",
+                    "lowpass", "6800",
+                    "compand", "0.4,1", "6:-65,-55,-25", "-3", "-80", "0.15"
                 ],
                 check=True
             )
 
-            # 3️⃣ Micro-silenzio umano (respiro)
+            # 3️⃣ Calore: pitch leggermente più basso (voce più profonda)
             subprocess.run(
                 [
                     "sox",
                     str(clean_file),
+                    str(warm_file),
+                    "pitch", "-40"
+                ],
+                check=True
+            )
+
+            # 4️⃣ Micro-silenzio umano (respiro)
+            subprocess.run(
+                [
+                    "sox",
+                    str(warm_file),
                     str(final_file),
-                    "pad", "0.05", "0.05"
+                    "pad", "0.06", "0.06"
                 ],
                 check=True
             )
@@ -114,6 +119,8 @@ class TTSModel:
                     raw_file.unlink()
                 if clean_file.exists():
                     clean_file.unlink()
+                if warm_file.exists():
+                    warm_file.unlink()
             except Exception:
                 pass
 
@@ -125,17 +132,13 @@ _tts_model = TTSModel()
 def synthesize(text: str) -> str:
     """
     Funzione pubblica per la sintesi vocale.
-
-    Args:
-        text (str): testo da sintetizzare
-
-    Returns:
-        str: percorso assoluto del file WAV finale
     """
     return _tts_model.synthesize(text)
 
 
 # Test locale manuale
 if __name__ == "__main__":
-    audio = synthesize("Ciao. Questa voce ora è più naturale e meno metallica.")
+    audio = synthesize(
+        "Questa voce è più profonda, calda e naturale, senza effetto robotico."
+    )
     print("Audio generato:", audio)
