@@ -1,18 +1,14 @@
-//è lui ===
 // ===============================
 // Stati dell'applicazione
 // ===============================
 const STATES = {
   IDLE: 'idle',
   THINKING: 'thinking',
-  SPEAKING: 'speaking',
   RECORDING: 'recording'
 };
 
-const ENABLE_TTS = false;
-
 // ===============================
-// DOM
+// DOM Elements
 // ===============================
 const app = document.getElementById('genesi-app');
 const dialogue = document.getElementById('dialogue');
@@ -26,15 +22,18 @@ const micButton = document.getElementById('mic-button');
 let currentState = STATES.IDLE;
 
 // ===============================
-// Stato UI
+// UI State Management
 // ===============================
 function setState(newState) {
   currentState = newState;
   app.dataset.state = currentState;
+
+  // input sempre attivo, blocchiamo solo il send
+  sendButton.disabled = currentState !== STATES.IDLE;
 }
 
 // ===============================
-// Messaggi
+// Message Handling
 // ===============================
 function addMessage(text, sender) {
   const messageEl = document.createElement('div');
@@ -42,21 +41,41 @@ function addMessage(text, sender) {
   messageEl.textContent = text;
   dialogue.appendChild(messageEl);
   dialogue.scrollTop = dialogue.scrollHeight;
+  return messageEl;
 }
 
 function addUserMessage(text) {
-  addMessage(text, 'user');
+  return addMessage(text, 'user');
 }
 
 function addGenesiMessage(text) {
-  addMessage(text, 'genesi');
-  setState(STATES.IDLE);
+  return addMessage(text, 'genesi');
 }
 
 // ===============================
-// INVIO MESSAGGIO (INPUT)
+// API Communication
 // ===============================
-function sendMessage() {
+async function sendChatMessage(message) {
+  const response = await fetch('/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ text: message })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Chat error ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.reply || data.response || "Non ho capito.";
+}
+
+// ===============================
+// Message Sending
+// ===============================
+async function sendMessage() {
   const text = textInput.value.trim();
   if (!text || currentState !== STATES.IDLE) return;
 
@@ -65,14 +84,19 @@ function sendMessage() {
 
   setState(STATES.THINKING);
 
-  // risposta mock (per ora)
-  setTimeout(() => {
-    addGenesiMessage("Ho ricevuto il tuo messaggio. Come posso aiutarti?");
-  }, 400);
+  try {
+    const reply = await sendChatMessage(text);
+    addGenesiMessage(reply);
+  } catch (err) {
+    console.error(err);
+    addGenesiMessage("C'è stato un errore. Riprova.");
+  } finally {
+    setState(STATES.IDLE);
+  }
 }
 
 // ===============================
-// Event listener input
+// Event Listeners
 // ===============================
 textInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -84,14 +108,12 @@ textInput.addEventListener('keydown', (e) => {
 sendButton.addEventListener('click', sendMessage);
 
 // ===============================
-// Microfono (solo UI, mock)
+// Microfono (solo UI, non logica)
 // ===============================
 function startRecording() {
   if (currentState !== STATES.IDLE) return;
   setState(STATES.RECORDING);
   micButton.classList.add('recording');
-
-  setTimeout(stopRecording, 2000);
 }
 
 function stopRecording() {
@@ -100,24 +122,17 @@ function stopRecording() {
   micButton.classList.remove('recording');
   setState(STATES.THINKING);
 
+  // simulazione: trascrizione finta
   setTimeout(() => {
-    addUserMessage("Questo è un messaggio dettato di esempio.");
-    setTimeout(() => {
-      addGenesiMessage("Ho capito il tuo messaggio vocale.");
-    }, 500);
-  }, 500);
+    const transcript = "Questo è un messaggio dettato di esempio.";
+    textInput.value = transcript;
+    setState(STATES.IDLE);
+    sendMessage();
+  }, 600);
 }
 
-micButton.addEventListener('mousedown', (e) => {
-  e.preventDefault();
-  startRecording();
-});
-
-micButton.addEventListener('touchstart', (e) => {
-  e.preventDefault();
-  startRecording();
-});
-
+micButton.addEventListener('mousedown', startRecording);
+micButton.addEventListener('touchstart', startRecording);
 document.addEventListener('mouseup', stopRecording);
 document.addEventListener('touchend', stopRecording);
 
