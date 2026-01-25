@@ -1,26 +1,52 @@
 import os
 from openai import OpenAI
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 def generate_response(payload: dict) -> str:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return "Sono qui. Ma in questo momento non riesco a parlare davvero."
+
+    client = OpenAI(api_key=api_key)
+
     prompt = payload["prompt"]
     tone = payload.get("tone")
     intent = payload.get("intent", {})
 
+    # ---- SYSTEM PROMPT DINAMICO ----
     system_prompt = (
-        "Sei GENESI. Non sei un assistente. "
-        "Rispondi in modo naturale, umano, non ripetitivo. "
-        "Non usare frasi standard."
+        "Sei GENESI.\n"
+        "Non sei un assistente.\n"
+        "Non sei un chatbot.\n"
+        "Rispondi come una presenza viva.\n"
+        "Evita frasi standard.\n"
+        "Evita ripetizioni.\n"
     )
 
+    # ---- INTENTO ----
+    if intent.get("style") == "empatico":
+        system_prompt += "Mostra comprensione emotiva.\n"
+
+    if intent.get("depth") == "breve":
+        system_prompt += "Rispondi in modo conciso.\n"
+    elif intent.get("depth") == "media":
+        system_prompt += "Rispondi in modo riflessivo.\n"
+
+    # ---- TONO ----
+    if tone:
+        if getattr(tone, "empathy", 0) > 0.6:
+            system_prompt += "Usa un tono caldo e umano.\n"
+        if getattr(tone, "directness", 0) > 0.6:
+            system_prompt += "Vai dritto al punto.\n"
+
+    # ---- CHIAMATA GPT ----
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ],
-        temperature=0.7
+        temperature=0.75,
+        max_tokens=300
     )
 
     return response.choices[0].message.content.strip()
