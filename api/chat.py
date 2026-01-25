@@ -21,7 +21,7 @@ class ChatRequest(BaseModel):
     user_id: str
     message: str
 
-@router.post("")
+@router.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     # 1. Build cognitive state
     state = CognitiveState.build(request.user_id)
