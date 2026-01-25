@@ -8,10 +8,12 @@ import json
 
 from core.state import CognitiveState
 from core.response_generator import ResponseGenerator
+
 from memory.episodic import store_event, get_recent_events, search_events
 from memory.affective import compute_affect
+from memory.salience import compute_salience
+
 from core.tone import compute_tone
-from core.salience import compute_salience
 
 router = APIRouter()
 
