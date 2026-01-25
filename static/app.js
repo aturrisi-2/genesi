@@ -5,6 +5,7 @@ const STATES = {
   SPEAKING: 'speaking',
   RECORDING: 'recording'
 };
+const ENABLE_TTS = false;
 
 // Seleziona gli elementi DOM
 const app = document.getElementById('genesi-app');
@@ -38,74 +39,16 @@ function addUserMessage(text) {
   addMessage(text, 'user');
 }
 
-// Aggiunge un messaggio di Genesi
+// Gestisce l'invio del messaggio
 async function addGenesiMessage(text) {
   const messageEl = addMessage(text, 'genesi');
-  
-  try {
-    setState(STATES.SPEAKING);
-    
-    // Richiedi la sintesi vocale
-    const response = await fetch('/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
-    });
 
-    if (!response.ok) {
-      throw new Error('TTS request failed');
-    }
+  // 🔒 TTS DISABILITATO: niente speaking, niente audio
+  setState(STATES.IDLE);
 
-    const audioBlob = await response.blob();
-    const audioUrl = URL.createObjectURL(audioBlob);
-    
-    // Riproduci l'audio
-    currentAudio = new Audio(audioUrl);
-    
-    currentAudio.onended = () => {
-      currentAudio = null;
-      if (currentState === STATES.SPEAKING) {
-        setState(STATES.IDLE);
-      }
-    };
-    
-    await currentAudio.play();
-  } catch (error) {
-    console.error('TTS Error:', error);
-    // Continua normalmente anche in caso di errore
-    if (currentState === STATES.SPEAKING) {
-      setState(STATES.IDLE);
-    }
-  }
-  
   return messageEl;
 }
 
-// Gestisce l'invio del messaggio
-async function sendMessage() {
-  const text = textInput.value.trim();
-  if (!text || currentState !== STATES.IDLE) return;
-
-  // Mostra il messaggio dell'utente
-  addUserMessage(text);
-  textInput.value = '';
-  
-  // Imposta lo stato di attesa
-  setState(STATES.THINKING);
-
-  try {
-    // Simula il tempo di elaborazione
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Simula la risposta di Genesi
-    const response = "Ho ricevuto il tuo messaggio. Come posso aiutarti?";
-    await addGenesiMessage(response);
-    
-  } catch (error) {
-    console.error('Error:', error);
-    setState(STATES.IDLE);
-  }
-}
 
 // Gestione input da tastiera
 textInput.addEventListener('keydown', (e) => {
