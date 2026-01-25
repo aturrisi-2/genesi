@@ -56,29 +56,24 @@ class ResponseGenerator:
         )
         
         # Generate response using LLM
-        prompt = """
-        {state_summary}
-        Memoria recente: {recent_memories}
-        Memoria rilevante: {relevant_memories}
-        Tono della conversazione: {tone_description}
+        prompt = (
+            self.prompt_template.format(
+                state_summary=json.dumps({
+                    "user": cognitive_state.user.to_dict(),
+                    "context": cognitive_state.context
+                }, indent=2),
+                recent_memories=self._format_memories(recent_memories),
+                relevant_memories=self._format_memories(relevant_memories),
+                tone_description=self._describe_tone(tone),
+                user_message=user_message,
+                intent_style=intent.get("style"),
+                intent_depth=intent.get("depth"),
+                intent_focus=intent.get("focus"),
+                intent_use_memory=intent.get("use_memory"),
+                intent_emotional_weight=intent.get("emotional_weight")
+            )
+        ).strip()  # Remove leading and trailing whitespace
 
-        Ultimo messaggio: {user_message}
-        La tua risposta (solo testo, niente prefissi, niente markdown):
-        """.format(
-            state_summary=json.dumps({
-                "user": cognitive_state.user.to_dict(),
-                "context": cognitive_state.context
-            }, indent=2),
-            recent_memories=self._format_memories(recent_memories),
-            relevant_memories=self._format_memories(relevant_memories),
-            tone_description=self._describe_tone(tone),
-            user_message=user_message,
-            intent_style=intent.get("style"),
-            intent_depth=intent.get("depth"),
-            intent_focus=intent.get("focus"),
-            intent_use_memory=intent.get("use_memory"),
-            intent_emotional_weight=intent.get("emotional_weight")
-        )
         
         # In a real implementation, this would call an LLM
         # For now, we'll use a placeholder
@@ -86,7 +81,7 @@ class ResponseGenerator:
         
         return self._post_process(response)
 
-    def _build_context(self, state, recent_memories, relevant_memories, tone):
+    def _build_context(self, cognitive_state, recent_memories, relevant_memories, tone):
         """Build a rich context from available data."""
         return {
             "current_time": datetime.now().isoformat(),
@@ -104,6 +99,16 @@ class ResponseGenerator:
             for m in memories[:5]  # Limit to 5 most relevant
         ])
 
+        """
+        Convert ToneProfile object to a readable description for the LLM.
+        """
+        return (
+            f"warmth: {round(tone.warmth, 2)}, "
+            f"empathy: {round(tone.empathy, 2)}, "
+            f"directness: {round(tone.directness, 2)}, "
+            f"verbosity: {round(tone.verbosity, 2)}"
+        )
+    
         """
         Convert ToneProfile object to a readable description for the LLM.
         """
