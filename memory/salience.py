@@ -1,34 +1,40 @@
-from typing import Dict, List, Any
+# core/salience.py
+from typing import Dict, List
 
-def compute_salience(event_type: str, content: Dict[str, Any], past_events: List[Dict[str, Any]]) -> float:
-    # Salience base in base al tipo di evento
-    base_salience = {
-        "user_message": 0.4,
-        "system_response": 0.2,
-        "decision": 0.6,
-        "error": 0.7
-    }.get(event_type, 0.3)
 
-    salience = base_salience
-    text = content.get("text", "")
+def compute_salience(
+    event_type: str,
+    content: Dict,
+    past_events: List[Dict]
+) -> float:
+    """
+    Compute how important (salient) an event is.
+    Base implementation for Genesi.
+    """
 
-    # Bonus per testo lungo
-    if len(text) > 120:
-        salience += 0.1
+    # Default low salience
+    salience = 0.3
 
-    # Bonus per presenza di numeri
-    if any(c.isdigit() for c in text):
-        salience += 0.1
+    text = content.get("text", "").lower()
 
-    # Bonus per parole chiave
-    keywords = ["sempre", "mai", "importante"]
-    if any(keyword in text.lower() for keyword in keywords):
-        salience += 0.2
+    # Direct questions are more salient
+    if "?" in text:
+        salience += 0.3
 
-    # Bonus per duplicati
-    if any(e.get("content", {}).get("text") == text for e in past_events):
-        salience += 0.1
+    # Emotional keywords increase salience
+    emotional_keywords = [
+        "paura", "ansia", "felice", "triste",
+        "odio", "amore", "confuso", "perso"
+    ]
 
-        # Clamp tra 0.0 e 1.0
-    salience = max(0.0, min(1.0, salience))
-    return salience
+    if any(word in text for word in emotional_keywords):
+        salience += 0.3
+
+    # Repeated topics increase salience
+    for ev in past_events[-5:]:
+        ev_text = str(ev.get("content", "")).lower()
+        if ev_text and ev_text in text:
+            salience += 0.1
+
+    # Clamp between 0 and 1
+    return min(salience, 1.0)
