@@ -16,15 +16,20 @@ async def bootstrap_user(request: BootstrapRequest):
         user = load_user(request.user_id)
         if user:
             user.touch()
-            save_user(user)
         else:
             user = User(user_id=request.user_id)
-            save_user(user)
     else:
         user = create_storage_user()
-    
+
+    # 🔒 GARANZIA STRUTTURALE: identity esiste sempre
+    if not hasattr(user, "identity") or user.identity is None:
+        user.identity = {}
+
+    save_user(user)
+
     return {
         "user_id": user.user_id,
+        "identity": user.identity,        # ⬅️ QUESTO È IL FIX
         "created_at": user.created_at,
         "last_seen": user.last_seen
     }
