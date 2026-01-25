@@ -1,4 +1,4 @@
-# == LEONARDO VERSIONE WINDSURF TEST 001 ===
+# == LEONARDO VERSIONE WINDSURF TEST 001 ==
 
 import asyncio
 import json
