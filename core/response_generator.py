@@ -1,4 +1,6 @@
 # core/response_generator.py
+from core.llm import generate_response as llm_generate
+
 from typing import Dict, List, Optional
 import json
 from datetime import datetime, timedelta
@@ -85,13 +87,12 @@ class ResponseGenerator:
         
         # In a real implementation, this would call an LLM
         # For now, we'll use a placeholder
-        response = generate_response({
+        response = llm_generate({
             "prompt": prompt,
             "tone": tone,
             "intent": intent
         })
 
-        
         return self._post_process(response)
 
     def _build_context(self, cognitive_state, recent_memories, relevant_memories, tone):
@@ -126,19 +127,6 @@ class ResponseGenerator:
         """
         Call the LLM and return the response.
         """
-    
-    from core.llm import generate_response
-
-    def _call_llm(self, prompt: str, tone, intent) -> str:
-        """
-        Call the LLM and return the response.
-        """
-        payload = {
-            "prompt": prompt,
-            "tone": tone,
-            "intent": intent
-        }
-        return llm_generate(payload)
 
 
     def _post_process(self, response: str) -> str:
