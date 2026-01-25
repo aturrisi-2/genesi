@@ -41,6 +41,31 @@ function getUserId() {
 }
 
 // ===============================
+// User Bootstrap
+// ===============================
+let userIdentity = {};
+
+async function bootstrapUser() {
+  const userId = getUserId();
+
+  const res = await fetch("/user/bootstrap", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId })
+  });
+
+  if (!res.ok) {
+    console.error("Bootstrap failed");
+    return;
+  }
+
+  const data = await res.json();
+
+  // 🔒 Salviamo identity lato client
+  userIdentity = data.identity || {};
+}
+
+// ===============================
 // UI State Management
 // ===============================
 function setState(newState) {
@@ -168,6 +193,13 @@ document.addEventListener('touchend', stopRecording);
 // Initialize
 let currentState = STATES.IDLE;
 setState(STATES.IDLE);
+
+// ===============================
+// App Init
+// ===============================
+(async () => {
+  await bootstrapUser();
+})();
 
 // Initial scroll to bottom
 scrollToBottom();
