@@ -81,3 +81,29 @@ def load_events(user_id: str) -> List[EpisodicEvent]:
         events_data = json.load(f)
     
     return [EpisodicEvent.from_dict(event_data) for event_data in events_data]
+
+    
+    
+def get_recent_events(user_id: str, limit: int = 5) -> List[Dict[str, Any]]:
+    """
+    Return the most recent episodic events for a user.
+    """
+    events = load_events(user_id)
+    events = sorted(events, key=lambda e: e.timestamp, reverse=True)
+    return [e.to_dict() for e in events[:limit]]
+
+
+def search_events(user_id: str, query: str, limit: int = 3) -> List[Dict[str, Any]]:
+    """
+    Simple keyword-based search in episodic memory.
+    """
+    events = load_events(user_id)
+    query_lower = query.lower()
+
+    matched = [
+        e for e in events
+        if query_lower in json.dumps(e.content).lower()
+    ]
+
+    matched = sorted(matched, key=lambda e: e.salience, reverse=True)
+    return [e.to_dict() for e in matched[:limit]]
