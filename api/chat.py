@@ -56,11 +56,13 @@ async def chat_endpoint(request: ChatRequest):
 
         intent = intent_engine.decide(
             user_message=request.message,
+            user=state.user,
             cognitive_state=state,
             recent_memories=recent_memories,
             relevant_memories=relevant_memories,
             tone=tone
         )
+
 
         if not intent["should_respond"]:
             response_text = ""
