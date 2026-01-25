@@ -38,12 +38,13 @@ class ResponseGenerator:
     def generate_response(
             self,
             user_message: str,
-            cognitive_state: Dict,
+            cognitive_state,  # CognitiveState object
             recent_memories: List[Dict],
             relevant_memories: List[Dict],
             tone: Dict,
             intent: Dict
     ) -> str:
+
 
         """Generate a response using cognitive context and memories."""
         # Build context
@@ -55,8 +56,19 @@ class ResponseGenerator:
         )
         
         # Generate response using LLM
-        prompt = self.prompt_template.format(
-            state_summary=json.dumps(cognitive_state, indent=2),
+        prompt = """
+        {state_summary}
+        Memoria recente: {recent_memories}
+        Memoria rilevante: {relevant_memories}
+        Tono della conversazione: {tone_description}
+
+        Ultimo messaggio: {user_message}
+        La tua risposta (solo testo, niente prefissi, niente markdown):
+        """.format(
+            state_summary=json.dumps({
+                "user": cognitive_state.user.to_dict(),
+                "context": cognitive_state.context
+            }, indent=2),
             recent_memories=self._format_memories(recent_memories),
             relevant_memories=self._format_memories(relevant_memories),
             tone_description=self._describe_tone(tone),
