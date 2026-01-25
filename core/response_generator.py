@@ -85,7 +85,7 @@ class ResponseGenerator:
         
         # In a real implementation, this would call an LLM
         # For now, we'll use a placeholder
-        response = self._call_llm(prompt)
+        response = self._call_llm(prompt, tone, intent)
         
         return self._post_process(response)
 
