@@ -56,7 +56,7 @@ async def chat_endpoint(request: ChatRequest):
 
         intent = intent_engine.decide(
             user_message=request.message,
-            cognitive_state=state.to_dict(),
+            cognitive_state=state,
             recent_memories=recent_memories,
             relevant_memories=relevant_memories,
             tone=tone
@@ -68,7 +68,7 @@ async def chat_endpoint(request: ChatRequest):
             generator = ResponseGenerator()
             response_text = generator.generate_response(
                 user_message=request.message,
-                cognitive_state=state.to_dict(),
+                cognitive_state=state,
                 recent_memories=recent_memories if intent["use_memory"] else [],
                 relevant_memories=relevant_memories if intent["use_memory"] else [],
                 tone=tone,
