@@ -70,10 +70,13 @@ class TTSModel:
 
         try:
             # 1️⃣ Sintesi raw
+            safe_text = "… " + text.strip()
+
             self.tts.tts_to_file(
-                text=text,
+                text=safe_text,
                 file_path=str(raw_file)
             )
+
 
             # 2️⃣ De-metal + anti-caverna (EQ + compand leggero)
             subprocess.run(
