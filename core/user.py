@@ -1,29 +1,44 @@
-from datetime import datetime
-from typing import Dict, Any
+# api/user.py
 
-class User:
-    def __init__(self, user_id: str, created_at: str = None, last_seen: str = None, profile: Dict[str, Any] = None):
-        self.user_id = user_id
-        self.created_at = created_at or datetime.utcnow().isoformat()
-        self.last_seen = last_seen or self.created_at
-        self.profile = profile or {}
+from fastapi import APIRouter
+from pydantic import BaseModel
+from typing import Optional
 
-    def touch(self) -> None:
-        self.last_seen = datetime.utcnow().isoformat()
+from core.user import User
+from storage.users import load_user, save_user, create_user as create_storage_user
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            'user_id': self.user_id,
-            'created_at': self.created_at,
-            'last_seen': self.last_seen,
-            'profile': self.profile
-        }
+router = APIRouter()
 
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'User':
-        return cls(
-            user_id=data['user_id'],
-            created_at=data.get('created_at'),
-            last_seen=data.get('last_seen'),
-            profile=data.get('profile', {})
-        )
+
+class BootstrapRequest(BaseModel):
+    user_id: Optional[str] = None
+
+
+@router.post("/user/bootstrap")
+async def bootstrap_user(request: BootstrapRequest):
+    """
+    Inizializza o ricarica l'utente.
+    Restituisce SEMPRE lo stato persistente reale.
+    """
+
+    if request.user_id:
+        user = load_user(request.user_id)
+        if user:
+            user.touch()
+        else:
+            user = User(user_id=request.user_id)
+    else:
+        user = create_storage_user()
+
+    # 🔒 GARANZIA STRUTTURALE
+    if not hasattr(user, "profile") or user.profile is None:
+        user.profile = {}
+
+    save_user(user)
+
+    return {
+        "user_id": user.user_id,
+        "profile": user.profile,          # ✅ UNICA FONTE DI VERITÀ
+        "created_at": user.created_at,
+        "last_seen": user.last_seen
+    }
