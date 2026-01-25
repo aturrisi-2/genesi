@@ -78,16 +78,16 @@ def synthesize(text: str) -> str:
     # =========================
     # 3. Trim iniziale controllato
     # =========================
-    subprocess.run(
-        [
-            FFMPEG_BIN,
-            "-y",
-            "-i", str(pad_wav),
-            "-af", f"atrim=start={TRIM_START}",
-            str(final_wav),
-        ],
-        check=True,
-    )
+    # subprocess.run(
+#     [
+#         FFMPEG_BIN,
+#         "-y",
+#         "-i", str(pad_wav),
+#         "-af", f"atrim=start={TRIM_START}",
+#         str(final_wav),
+#     ],
+#     check=True,
+# )
 
     # Cleanup (opzionale ma consigliato)
     raw_wav.unlink(missing_ok=True)
