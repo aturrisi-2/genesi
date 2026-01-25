@@ -85,7 +85,12 @@ class ResponseGenerator:
         
         # In a real implementation, this would call an LLM
         # For now, we'll use a placeholder
-        response = self._call_llm(prompt, tone, intent)
+        response = generate_response({
+            "prompt": prompt,
+            "tone": tone,
+            "intent": intent
+        })
+
         
         return self._post_process(response)
 
@@ -122,8 +127,7 @@ class ResponseGenerator:
         Call the LLM and return the response.
         """
     
-    from core.llm import generate_response as llm_generate
-
+    from core.llm import generate_response
 
     def _call_llm(self, prompt: str, tone, intent) -> str:
         """
