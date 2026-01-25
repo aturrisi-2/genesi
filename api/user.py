@@ -30,10 +30,6 @@ async def bootstrap_user(request: BootstrapRequest):
     else:
         user = create_storage_user()
 
-    # 🔒 GARANZIA STRUTTURALE
-    if not hasattr(user, "profile") or user.profile is None:
-        user.profile = {}
-
     save_user(user)
 
     return {
