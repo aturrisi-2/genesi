@@ -16,11 +16,9 @@ FFMPEG_BIN = "/usr/bin/ffmpeg"
 
 # Parametri voce (GOLD)
 PIPER_ARGS = [
-    "--sentence-silence", "0.5",
-    "--sentence-gap", "0.15",
-    "--noise-scale", "0.12",
-    "--noise-w-scale", "0.35",
-    "--length-scale", "1.08",
+    "--noise-scale", "0.45",
+    "--noise-w-scale", "0.9",
+    "--length-scale", "1.0",
 ]
 
 # Post-processing
@@ -65,16 +63,17 @@ def synthesize(text: str) -> str:
     # =========================
     # 2. Padding finale
     # =========================
-    subprocess.run(
-        [
-            FFMPEG_BIN,
-            "-y",
-            "-i", str(raw_wav),
-            "-af", f"apad=pad_dur={PAD_SECONDS}",
-            str(pad_wav),
-        ],
-        check=True,
-    )
+   # subprocess.run(
+#     [
+#         FFMPEG_BIN,
+#         "-y",
+#         "-i", str(pad_wav),
+#         "-af", f"atrim=start={TRIM_START}",
+#         str(final_wav),
+#     ],
+#     check=True,
+# )
+
 
     # =========================
     # 3. Trim iniziale controllato
