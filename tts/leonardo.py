@@ -1,3 +1,5 @@
+# === LEONARDO VERSIONE WINDSURF TEST 001 ===
+
 import asyncio
 import json
 import shutil
