@@ -38,17 +38,21 @@ body {
     min-height: 100vh;
 }
 
+
 /* Layout principale */
 #genesi-app {
-    height: 100vh;      /* ← NON min-height */
+    height: 100vh;
     display: flex;
     flex-direction: column;
     max-width: 800px;
     margin: 0 auto;
     padding: 2rem 1.5rem;
-    position: relative;
 }
 
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
 
 /* Presence */
 #presence {
@@ -66,13 +70,9 @@ body {
 /* Dialogue */
 #dialogue {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 2rem;
-    padding: 1rem 0 10rem; /* ← SPAZIO PER INPUT */
     overflow-y: auto;
+    padding-bottom: 9rem; /* spazio input fisso */
 }
-
 
 .message {
     font-size: 1.2rem;
