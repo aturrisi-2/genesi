@@ -47,13 +47,12 @@ app.include_router(chat_router)
 # ======================================================
 # TTS (DISABILITATO)
 # ======================================================
-
+"""
 @app.post("/tts")
 async def text_to_speech(request: TTSRequest):
-    """
+    
     Endpoint TTS TEMPORANEAMENTE DISABILITATO.
     Ritorna sempre TTS off, senza errori.
-    """
 
     if not ENABLE_TTS:
         return JSONResponse(
@@ -69,7 +68,7 @@ async def text_to_speech(request: TTSRequest):
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail="TTS disabilitato"
     )
-
+"""
 # ======================================================
 # State
 # ======================================================
