@@ -40,14 +40,15 @@ body {
 
 /* Layout principale */
 #genesi-app {
+    height: 100vh;      /* ← NON min-height */
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
     max-width: 800px;
     margin: 0 auto;
-    padding: 2rem 1.5rem 8rem;
+    padding: 2rem 1.5rem;
     position: relative;
 }
+
 
 /* Presence */
 #presence {
@@ -68,10 +69,10 @@ body {
     display: flex;
     flex-direction: column;
     gap: 2rem;
-    padding: 1rem 0;
+    padding: 1rem 0 10rem; /* ← SPAZIO PER INPUT */
     overflow-y: auto;
-    max-width: 100%;
 }
+
 
 .message {
     font-size: 1.2rem;
