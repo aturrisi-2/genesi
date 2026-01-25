@@ -20,25 +20,12 @@ const micButton = document.getElementById('mic-button');
 // Auto-scroll Utility
 // ===============================
 function scrollToBottom() {
-  // Use a small timeout to ensure DOM is updated
-  setTimeout(() => {
-    try {
-      // Smooth scroll to bottom
-      dialogue.scrollTo({
-        top: dialogue.scrollHeight,
-        behavior: 'smooth'
-      });
-      
-      // Fallback for browsers that don't support smooth scrolling
-      if ('scrollBehavior' in document.documentElement.style === false) {
-        dialogue.scrollTop = dialogue.scrollHeight;
-      }
-    } catch (e) {
-      console.error('Scroll error:', e);
-      // Last resort
-      dialogue.scrollTop = dialogue.scrollHeight;
-    }
-  }, 40); // 40ms timeout for reliable DOM updates
+  requestAnimationFrame(() => {
+    window.scrollTo({
+      top: document.body.scrollHeight,
+      behavior: "auto"
+    });
+  });
 }
 
 // ===============================
