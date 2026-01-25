@@ -56,7 +56,7 @@ async def text_to_speech(request: TTSRequest):
         )
 
     try:
-        wav_path = await synthesize(request.text.strip())
+        wav_path = synthesize(request.text.strip())
         return FileResponse(
             wav_path,
             media_type="audio/wav",
