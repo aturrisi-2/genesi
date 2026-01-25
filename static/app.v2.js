@@ -17,12 +17,32 @@ const sendButton = document.getElementById('send-button');
 const micButton = document.getElementById('mic-button');
 
 // ===============================
-// Stato globale
+// Auto-scroll Utility
 // ===============================
-let currentState = STATES.IDLE;
+function scrollToBottom() {
+  // Use a small timeout to ensure DOM is updated
+  setTimeout(() => {
+    try {
+      // Smooth scroll to bottom
+      dialogue.scrollTo({
+        top: dialogue.scrollHeight,
+        behavior: 'smooth'
+      });
+      
+      // Fallback for browsers that don't support smooth scrolling
+      if ('scrollBehavior' in document.documentElement.style === false) {
+        dialogue.scrollTop = dialogue.scrollHeight;
+      }
+    } catch (e) {
+      console.error('Scroll error:', e);
+      // Last resort
+      dialogue.scrollTop = dialogue.scrollHeight;
+    }
+  }, 40); // 40ms timeout for reliable DOM updates
+}
 
 // ===============================
-// User Identity (persistente)
+// User Identity
 // ===============================
 function getUserId() {
   let id = localStorage.getItem('genesi_user_id');
@@ -39,8 +59,6 @@ function getUserId() {
 function setState(newState) {
   currentState = newState;
   app.dataset.state = currentState;
-
-  // input sempre attivo, blocchiamo solo il send
   sendButton.disabled = currentState !== STATES.IDLE;
 }
 
@@ -52,39 +70,49 @@ function addMessage(text, sender) {
   messageEl.className = `message ${sender}`;
   messageEl.textContent = text;
   dialogue.appendChild(messageEl);
-  dialogue.scrollTop = dialogue.scrollHeight;
+  scrollToBottom(); // Auto-scroll after adding message
   return messageEl;
 }
 
 function addUserMessage(text) {
-  return addMessage(text, 'user');
+  const msg = addMessage(text, 'user');
+  scrollToBottom(); // Ensure scroll after message is added
+  return msg;
 }
 
 function addGenesiMessage(text) {
-  return addMessage(text, 'genesi');
+  const msg = addMessage(text, 'genesi');
+  scrollToBottom(); // Ensure scroll after message is added
+  return msg;
 }
 
 // ===============================
 // API Communication
 // ===============================
 async function sendChatMessage(message) {
-  const response = await fetch('/chat', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      user_id: getUserId(),
-      message: message
-    })
-  });
+  try {
+    const response = await fetch('/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        user_id: getUserId(),
+        message: message
+      })
+    });
 
-  if (!response.ok) {
-    throw new Error(`Chat error ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.response || "Non ho capito.";
+
+  } catch (error) {
+    console.error('Error sending message:', error);
+    return "C'è stato un errore di connessione.";
   }
-
-  const data = await response.json();
-  return data.response || "Non ho capito.";
 }
 
 // ===============================
@@ -94,9 +122,9 @@ async function sendMessage() {
   const text = textInput.value.trim();
   if (!text || currentState !== STATES.IDLE) return;
 
+  // Add user message and clear input
   addUserMessage(text);
   textInput.value = '';
-
   setState(STATES.THINKING);
 
   try {
@@ -111,19 +139,7 @@ async function sendMessage() {
 }
 
 // ===============================
-// Event Listeners
-// ===============================
-textInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
-});
-
-sendButton.addEventListener('click', sendMessage);
-
-// ===============================
-// Microfono (solo UI, non logica)
+// Microphone (UI Only)
 // ===============================
 function startRecording() {
   if (currentState !== STATES.IDLE) return;
@@ -137,7 +153,7 @@ function stopRecording() {
   micButton.classList.remove('recording');
   setState(STATES.THINKING);
 
-  // simulazione: trascrizione finta
+  // Simulate voice input
   setTimeout(() => {
     const transcript = "Questo è un messaggio dettato di esempio.";
     textInput.value = transcript;
@@ -146,12 +162,25 @@ function stopRecording() {
   }, 600);
 }
 
+// ===============================
+// Event Listeners
+// ===============================
+textInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+sendButton.addEventListener('click', sendMessage);
 micButton.addEventListener('mousedown', startRecording);
 micButton.addEventListener('touchstart', startRecording);
 document.addEventListener('mouseup', stopRecording);
 document.addEventListener('touchend', stopRecording);
 
-// ===============================
-// Init
-// ===============================
+// Initialize
+let currentState = STATES.IDLE;
 setState(STATES.IDLE);
+
+// Initial scroll to bottom
+scrollToBottom();
