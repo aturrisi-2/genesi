@@ -1,14 +1,19 @@
-from fastapi import APIRouter, HTTPException
+# api/chat.py
+from core.intent_engine import IntentEngine
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
-from typing import Dict, Any
+from datetime import datetime
+from typing import Dict, List, Optional
+import json
 
 from core.state import CognitiveState
-from core.tone import compute_tone
-from memory.episodic import store_event
-from memory.salience import compute_salience
+from core.response_generator import ResponseGenerator
+from memory.episodic import store_event, get_recent_events, search_events
 from memory.affective import compute_affect
+from core.tone import compute_tone
+from core.salience import compute_salience
 
-router = APIRouter(prefix="/chat")
+router = APIRouter()
 
 class ChatRequest(BaseModel):
     user_id: str
@@ -16,16 +21,18 @@ class ChatRequest(BaseModel):
 
 @router.post("")
 async def chat_endpoint(request: ChatRequest):
-    # 1. Costruisci lo stato cognitivo
+    # 1. Build cognitive state
     state = CognitiveState.build(request.user_id)
     
-    # 2. Salva l'evento del messaggio utente
+    # 2. Compute message salience and affect
     user_salience = compute_salience(
         event_type="user_message",
         content={"text": request.message},
         past_events=[e.to_dict() for e in state.recent_events]
     )
     user_affect = compute_affect("user_message", {"text": request.message})
+    
+    # 3. Store the user's message event
     user_event = store_event(
         user_id=request.user_id,
         type="user_message",
@@ -34,48 +41,58 @@ async def chat_endpoint(request: ChatRequest):
         affect=user_affect
     )
     
-    # 3. Calcola il tono basato sugli eventi recenti
-    tone = compute_tone(state.recent_events)
+    # 4. Get relevant context
+    recent_memories = get_recent_events(request.user_id, limit=5)
+    relevant_memories = search_events(request.user_id, request.message, limit=3)
     
-    # 4. Genera risposta basata sul tono
-    base_response = f"Hai detto: {request.message}"
+    # 5. Compute conversation tone
+    tone = compute_tone([e.to_dict() for e in state.recent_events])
     
-    if tone.directness > 0.7:
-        response_text = base_response
-    else:
-        response_text = base_response + ". Capisco cosa intendi." if "grazie" in request.message.lower() else base_response
-    
-    if tone.empathy > 0.7 and tone.directness <= 0.7:
-        if "grazie" in request.message.lower():
-            response_text += " È stato un piacere aiutarti!"
-        elif any(word in request.message.lower() for word in ["triste", "preoccupato", "preoccupata"]):
-            response_text = "Mi dispiace sentire che non ti senti bene. " + response_text
-    
-    if tone.verbosity < 0.4:
-        response_text = response_text.replace("Hai detto: ", "")
-    
-    # 5. Salva l'evento di risposta del sistema
-    system_salience = compute_salience(
-        event_type="system_response",
-        content={"text": response_text},
-        past_events=[e.to_dict() for e in state.recent_events]
-    )
-    system_affect = compute_affect("system_response", {"text": response_text})
-    system_event = store_event(
-        user_id=request.user_id,
-        type="system_response",
-        content={"text": response_text},
-        salience=system_salience,
-        affect=system_affect
-    )
-    
-    # 6. Restituisci la risposta con il tono
-    return {
-        "response": response_text,
-        "tone": tone.to_dict(),
-        "state": {
-            "user": state.user.to_dict(),
-            "recent_events": [e.to_dict() for e in state.recent_events],
-            "context": state.context
+    # 6. Generate response
+    try:
+        intent_engine = IntentEngine()
+
+        intent = intent_engine.decide(
+            user_message=request.message,
+            cognitive_state=state.to_dict(),
+            recent_memories=recent_memories,
+            relevant_memories=relevant_memories,
+            tone=tone
+        )
+
+        if not intent["should_respond"]:
+            response_text = ""
+        else:
+            generator = ResponseGenerator()
+            response_text = generator.generate_response(
+                user_message=request.message,
+                cognitive_state=state.to_dict(),
+                recent_memories=recent_memories if intent["use_memory"] else [],
+                relevant_memories=relevant_memories if intent["use_memory"] else [],
+                tone=tone,
+                intent=intent
+            )
+        # 7. Store system response
+        system_affect = compute_affect("system_response", {"text": response_text})
+        system_event = store_event(
+            user_id=request.user_id,
+            type="system_response",
+            content={"text": response_text},
+            salience=1.0,  # System responses are always salient
+            affect=system_affect
+        )
+        
+        return {
+            "response": response_text,
+            "state": {
+                "user": state.user.to_dict(),
+                "recent_events": [e.to_dict() for e in state.recent_events[-5:]],
+                "context": state.context
+            }
         }
-    }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating response: {str(e)}"
+        )
