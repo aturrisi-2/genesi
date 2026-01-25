@@ -48,7 +48,7 @@ async def chat_endpoint(request: ChatRequest):
     relevant_memories = search_events(request.user_id, request.message, limit=3)
     
     # 5. Compute conversation tone
-    tone = compute_tone([e.to_dict() for e in state.recent_events])
+    tone = compute_tone(state.recent_events)
     
     # 6. Generate response
     try:
