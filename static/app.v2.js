@@ -42,6 +42,24 @@ function addUserMessage(text) {
 // Gestisce l'invio del messaggio
 async function addGenesiMessage(text) {
   const messageEl = addMessage(text, 'genesi');
+  
+// Gestisce l'invio del messaggio dall'input
+function sendMessage() {
+  const text = textInput.value.trim();
+  if (!text || currentState !== STATES.IDLE) return;
+
+  // messaggio utente
+  addUserMessage(text);
+  textInput.value = '';
+
+  // stato thinking
+  setState(STATES.THINKING);
+
+  // risposta (per ora statica / mock)
+  setTimeout(() => {
+    addGenesiMessage("Ho ricevuto il tuo messaggio. Come posso aiutarti?");
+  }, 400);
+}
 
   // 🔒 TTS DISABILITATO: niente speaking, niente audio
   setState(STATES.IDLE);
