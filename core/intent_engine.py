@@ -83,6 +83,35 @@ class IntentEngine:
                 "use_memory": False,
                 "emotional_weight": 0.6
             }
+        # ===============================
+        # REGOLA IDENTITÀ: PROFESSIONE
+        # ===============================
+
+        PROFESSION_PATTERN = re.compile(
+            r"\b(?:faccio|lavoro come|sono un|sono una)\s+([a-zA-Z\s]+)",
+            re.IGNORECASE
+        )
+
+        profession_match = PROFESSION_PATTERN.search(user_message)
+
+        if profession_match:
+            profession = profession_match.group(1).strip().lower()
+
+            if not hasattr(user, "profile") or user.profile is None:
+                user.profile = {}
+
+            if user.profile.get("profession") != profession:
+                user.profile["profession"] = profession
+                save_user(user)
+
+            return {
+                "should_respond": True,
+                "style": "naturale",
+                "depth": "breve",
+                "focus": "identità",
+                "use_memory": False,
+                "emotional_weight": 0.4
+            }
 
         # ===============================
         # REGOLE COGNITIVE GENERICHE
