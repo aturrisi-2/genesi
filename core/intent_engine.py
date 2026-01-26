@@ -40,7 +40,7 @@ class IntentEngine:
     # ===============================
 
     NAME_PATTERN = re.compile(
-        r"\b(?:mi chiamo|il mio nome è|sono)\s+([A-Z][a-zA-Z]+)",
+        r"\b(?:mi chiamo|il mio nome è)\s+([A-Z][a-zA-Z]+)",
         re.IGNORECASE
     )
 
