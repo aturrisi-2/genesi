@@ -12,6 +12,8 @@ from core.response_generator import ResponseGenerator
 from memory.episodic import store_event, get_recent_events, search_events
 from memory.affective import compute_affect
 from memory.salience import compute_salience
+from core.relational_interpreter import RelationalInterpreter
+
 
 from core.tone import compute_tone
 
@@ -33,7 +35,18 @@ async def chat_endpoint(request: ChatRequest):
         past_events=[e.to_dict() for e in state.recent_events]
     )
     user_affect = compute_affect("user_message", {"text": request.message})
-    
+    # 2b. Interpretazione relazionale (osservazione)
+    interpreter = RelationalInterpreter()
+
+    relational_signal = interpreter.interpret(
+        text=request.message,
+        affect=user_affect,
+        salience=user_salience
+    )
+
+    if relational_signal:
+        print("🧠 RELATIONAL SIGNAL:", relational_signal, flush=True)
+
     # 3. Store the user's message event
     user_event = store_event(
         user_id=request.user_id,
