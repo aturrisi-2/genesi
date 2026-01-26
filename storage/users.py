@@ -18,9 +18,13 @@ def load_user(user_id: str) -> Optional[User]:
         return User.from_dict(json.load(f))
 
 def save_user(user: User) -> None:
+    print("DEBUG SAVE_USER user.profile:", user.profile, flush=True)
+    print("DEBUG SAVE_USER to_dict:", user.to_dict(), flush=True)
+
     file_path = BASE_DIR / f"{user.user_id}.json"
     with open(file_path, 'w') as f:
         json.dump(user.to_dict(), f, indent=2)
+
 
 def create_user() -> User:
     user_id = str(uuid.uuid4())
