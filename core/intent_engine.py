@@ -61,10 +61,18 @@ class IntentEngine:
             if not hasattr(user, "profile") or user.profile is None:
                 user.profile = {}
 
+            
             # Scrittura persistente solo se cambia
+            print("DEBUG 1 - profile PRIMA:", user.profile, flush=True)
+            
             if user.profile.get("name") != name:
                 user.profile["name"] = name
+                print("DEBUG 2 - profile DOPO SET:", user.profile, flush=True)
+                
                 save_user(user)
+                print("DEBUG 3 - save_user CHIAMATO", flush=True)
+            else:
+                print("DEBUG 2b - name già presente, nessun save", flush=True)
 
             # Intent dedicato alla conferma identità
             return {
