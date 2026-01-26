@@ -6,6 +6,27 @@ import re
 from storage.users import save_user
 
 
+# ===============================
+# NORMALIZZAZIONI SEMANTICHE
+# ===============================
+
+def normalize_profession(raw: str) -> str:
+    """
+    Normalizza una professione in forma umana stabile.
+    Esempi:
+    - 'il construction manager' -> 'construction manager'
+    - 'un muratore' -> 'muratore'
+    - 'una designer' -> 'designer'
+    """
+    raw = raw.lower().strip()
+
+    for prefix in ["il ", "lo ", "la ", "un ", "uno ", "una ", "l'"]:
+        if raw.startswith(prefix):
+            raw = raw[len(prefix):]
+
+    return raw.strip()
+
+
 class IntentEngine:
     """
     Decide COME Genesi deve rispondere.
@@ -15,10 +36,16 @@ class IntentEngine:
     """
 
     # ===============================
-    # REGEX CENTRALI (estendibili)
+    # REGEX CENTRALI (ESTENDIBILI)
     # ===============================
+
     NAME_PATTERN = re.compile(
         r"\b(?:mi chiamo|il mio nome è|sono)\s+([A-Z][a-zA-Z]+)",
+        re.IGNORECASE
+    )
+
+    PROFESSION_PATTERN = re.compile(
+        r"\b(?:faccio|lavoro come|sono un|sono una)\s+([a-zA-Z\s]+)",
         re.IGNORECASE
     )
 
@@ -35,8 +62,6 @@ class IntentEngine:
         Ritorna un intent object che descrive COME rispondere.
         """
 
-        print("🔥 INTENT ENGINE ATTIVO 🔥", flush=True)
-
         # ===============================
         # INTENT DI DEFAULT
         # ===============================
@@ -50,31 +75,20 @@ class IntentEngine:
         }
 
         # ===============================
-        # REGOLA IDENTITÀ: NOME UTENTE
+        # REGOLA IDENTITÀ: NOME
         # ===============================
         name_match = self.NAME_PATTERN.search(user_message)
 
         if name_match:
             name = name_match.group(1).capitalize()
 
-            # Inizializzazione sicura del profilo
             if not hasattr(user, "profile") or user.profile is None:
                 user.profile = {}
 
-            
-            # Scrittura persistente solo se cambia
-            print("DEBUG 1 - profile PRIMA:", user.profile, flush=True)
-            
             if user.profile.get("name") != name:
                 user.profile["name"] = name
-                print("DEBUG 2 - profile DOPO SET:", user.profile, flush=True)
-                
                 save_user(user)
-                print("DEBUG 3 - save_user CHIAMATO", flush=True)
-            else:
-                print("DEBUG 2b - name già presente, nessun save", flush=True)
 
-            # Intent dedicato alla conferma identità
             return {
                 "should_respond": True,
                 "style": "caldo",
@@ -83,19 +97,15 @@ class IntentEngine:
                 "use_memory": False,
                 "emotional_weight": 0.6
             }
+
         # ===============================
         # REGOLA IDENTITÀ: PROFESSIONE
         # ===============================
-
-        PROFESSION_PATTERN = re.compile(
-            r"\b(?:faccio|lavoro come|sono un|sono una)\s+([a-zA-Z\s]+)",
-            re.IGNORECASE
-        )
-
-        profession_match = PROFESSION_PATTERN.search(user_message)
+        profession_match = self.PROFESSION_PATTERN.search(user_message)
 
         if profession_match:
-            profession = profession_match.group(1).strip().lower()
+            profession_raw = profession_match.group(1)
+            profession = normalize_profession(profession_raw)
 
             if not hasattr(user, "profile") or user.profile is None:
                 user.profile = {}
