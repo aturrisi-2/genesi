@@ -39,3 +39,5 @@ class RelationalAccumulator:
 
     def get_state(self, user_id: str) -> Dict:
         return self.state[user_id]
+# Singleton globale
+relational_accumulator = RelationalAccumulator()

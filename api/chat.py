@@ -51,10 +51,10 @@ async def chat_endpoint(request: ChatRequest):
     interpreter = RelationalInterpreter()
     relational_eval = interpreter.interpret(user_event.to_dict())
 
-    from core.relational.accumulator import RelationalAccumulator
-    accumulator = RelationalAccumulator()
+    # ✅ Accumulatore relazionale persistente (singleton)
+    from core.relational.accumulator import relational_accumulator
 
-    relational_state = accumulator.update(
+    relational_state = relational_accumulator.update(
         user_id=request.user_id,
         relational_eval=relational_eval
     )
