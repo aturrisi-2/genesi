@@ -66,8 +66,12 @@ html, body {
 }
 
 #presence p {
-    font-size: 1.1rem;
-    color: var(--text-muted);
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.25rem;
+    font-weight: 400;
+    font-style: italic;
+    letter-spacing: 0.02em;
+    color: rgba(255, 255, 245, 0.75);
 }
 
 /* Dialogue */
