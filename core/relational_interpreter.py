@@ -4,44 +4,46 @@ from typing import Dict
 
 class RelationalInterpreter:
     """
-    Valuta se un evento ha POTENZIALE relazionale.
-    NON salva.
-    NON modifica il profilo.
-    NON prende decisioni definitive.
+    Osserva segnali relazionali latenti.
+    NON decide, NON salva, NON risponde.
     """
 
-    def interpret(self, event: Dict) -> Dict:
-        """
-        Ritorna una valutazione relazionale dell'evento.
-        """
+    def interpret(self, event: dict) -> dict:
+        text = event.get("content", {}).get("text", "")
+        salience = event.get("salience", 0.0)
+        affect = event.get("affect", 0.0)  # 🔧 È UN FLOAT
 
         score = 0.0
         reasons = []
 
-        text = event.get("content", {}).get("text", "").lower()
-        affect = event.get("affect", {})
-        salience = event.get("salience", 0.0)
-
-        # 1️⃣ Carico emotivo
-        if any(v > 0.6 for v in affect.values()):
+        # Intensità emotiva
+        if affect > 0.6:
             score += 0.4
-            reasons.append("emozione_intensa")
+            reasons.append("emotional_intensity")
 
-        # 2️⃣ Forma personale
-        if any(p in text for p in ["io ", "mi ", "per me", "mi sento"]):
-            score += 0.3
-            reasons.append("coinvolgimento_personale")
-
-        # 3️⃣ Peso dell'evento
+        # Salienza alta
         if salience > 0.6:
-            score += 0.2
-            reasons.append("evento_saliente")
+            score += 0.3
+            reasons.append("high_salience")
 
-        # Clamp
-        score = min(score, 1.0)
+        # Frasi introspettive / relazionali
+        if any(
+            phrase in text.lower()
+            for phrase in [
+                "mi sento",
+                "non mi fido",
+                "per me",
+                "ho paura",
+                "sono stanco",
+                "mi pesa",
+                "mi fa sentire"
+            ]
+        ):
+            score += 0.3
+            reasons.append("introspective_language")
 
         return {
             "relational_score": round(score, 2),
             "reasons": reasons,
-            "candidate": score >= 0.5
+            "candidate": score >= 0.6
         }
