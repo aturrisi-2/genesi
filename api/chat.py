@@ -56,6 +56,11 @@ async def chat_endpoint(request: ChatRequest):
         affect=user_affect
     )
     
+    interpreter = RelationalInterpreter()
+    relational_eval = interpreter.interpret(user_event.to_dict())
+
+    print("🧠 RELATIONAL EVAL:", relational_eval, flush=True)
+
     # 4. Get relevant context
     recent_memories = get_recent_events(request.user_id, limit=5)
     relevant_memories = search_events(request.user_id, request.message, limit=3)

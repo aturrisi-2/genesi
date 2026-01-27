@@ -2,57 +2,46 @@
 
 from typing import Dict
 
-
 class RelationalInterpreter:
     """
-    Decide se un evento contiene informazioni
-    rilevanti per la relazione umana.
+    Valuta se un evento ha POTENZIALE relazionale.
+    NON salva.
+    NON modifica il profilo.
+    NON prende decisioni definitive.
     """
 
-    def interpret(self, text: str, affect: Dict, salience: float) -> Dict:
+    def interpret(self, event: Dict) -> Dict:
         """
-        Ritorna un relational signal oppure None.
+        Ritorna una valutazione relazionale dell'evento.
         """
-
-        # Soglia minima: se non è saliente, non conta
-        if salience < 0.6:
-            return None
-
-        signal = {
-            "text": text,
-            "weight": salience,
-            "emotional_intensity": max(affect.values()) if affect else 0.0,
-            "stability": self._estimate_stability(text),
-        }
-
-        # Se non è stabile, non va nel profilo
-        if signal["stability"] < 0.5:
-            return None
-
-        return signal
-
-    def _estimate_stability(self, text: str) -> float:
-        """
-        Stima quanto è probabile che questa informazione
-        sia stabile nel tempo.
-        """
-        text = text.lower()
-
-        stable_markers = [
-            "sono",
-            "faccio",
-            "lavoro",
-            "mi chiamo",
-            "amo",
-            "odio",
-            "mi piace",
-            "sono sempre",
-            "non sopporto"
-        ]
 
         score = 0.0
-        for marker in stable_markers:
-            if marker in text:
-                score += 0.15
+        reasons = []
 
-        return min(score, 1.0)
+        text = event.get("content", {}).get("text", "").lower()
+        affect = event.get("affect", {})
+        salience = event.get("salience", 0.0)
+
+        # 1️⃣ Carico emotivo
+        if any(v > 0.6 for v in affect.values()):
+            score += 0.4
+            reasons.append("emozione_intensa")
+
+        # 2️⃣ Forma personale
+        if any(p in text for p in ["io ", "mi ", "per me", "mi sento"]):
+            score += 0.3
+            reasons.append("coinvolgimento_personale")
+
+        # 3️⃣ Peso dell'evento
+        if salience > 0.6:
+            score += 0.2
+            reasons.append("evento_saliente")
+
+        # Clamp
+        score = min(score, 1.0)
+
+        return {
+            "relational_score": round(score, 2),
+            "reasons": reasons,
+            "candidate": score >= 0.5
+        }
