@@ -17,24 +17,28 @@ class BootstrapRequest(BaseModel):
 @router.post("/user/bootstrap")
 async def bootstrap_user(request: BootstrapRequest):
     """
-    Inizializza o ricarica l'utente.
-    Restituisce SEMPRE lo stato persistente reale.
+    Bootstrap = carica stato persistente.
+    NON interpreta.
+    NON normalizza.
+    NON scrive identità.
     """
 
     if request.user_id:
         user = load_user(request.user_id)
-        if user:
-            user.touch()
-        else:
+        if not user:
             user = User(user_id=request.user_id)
     else:
         user = create_storage_user()
+
+    # solo touch temporale
+    user.touch()
 
     save_user(user)
 
     return {
         "user_id": user.user_id,
-        "profile": user.profile,          # ✅ UNICA FONTE DI VERITÀ
+        "profile": user.profile or {},
         "created_at": user.created_at,
         "last_seen": user.last_seen
     }
+
