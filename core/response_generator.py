@@ -72,13 +72,18 @@ class ResponseGenerator:
     # ===============================
     def _select_model(self, intent: Dict) -> str:
         """
-        Regola semplice e stabile:
-        - tecnico → GPT-4o mini
-        - relazionale → GPT-4o
+        Routing cognitivo stabile:
+        - tecnico / spiegazione / analisi → GPT-4o mini
+        - relazionale / identità / emotivo → GPT-4o
         """
-        if intent.get("focus") == "risposta" and intent.get("depth") in ("media", "lunga"):
+
+        focus = intent.get("focus")
+
+        if focus in ("tecnico", "spiegazione", "analisi"):
             return "gpt-4o-mini"
+
         return "gpt-4o"
+
 
     # ===============================
     # GENERAZIONE RISPOSTA
@@ -94,6 +99,7 @@ class ResponseGenerator:
     ) -> str:
 
         model = self._select_model(intent)
+        print(f"🤖 LLM_USED: {model} | focus={intent.get('focus')}", flush=True)
 
         # Stato sintetico
         state_summary = json.dumps(
