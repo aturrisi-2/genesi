@@ -48,5 +48,6 @@ class CognitiveState:
 
         # 5. Carattere DERIVATO (non salvato)
         state.character = CharacterState().compute(relational_state)
+        print("🧬 CHARACTER STATE:", state.character, flush=True)
 
         return state
