@@ -144,5 +144,225 @@
     },
     "salience": 0.2,
     "affect": 0.0
+  },
+  {
+    "event_id": "f3e20286-93ba-4100-a83c-041a08f695a9",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T20:12:20.234740",
+    "type": "user_message",
+    "content": {
+      "text": "ciao"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "60fd2fcd-a43e-4772-8dd2-498600acd1b1",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T20:14:40.756209",
+    "type": "user_message",
+    "content": {
+      "text": "ciao"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "977d76b6-7995-4ccd-afc0-875884de738d",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T20:20:50.227108",
+    "type": "user_message",
+    "content": {
+      "text": "ciao"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "51185bee-0134-4132-95b9-96b5e4ed8a4a",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T20:26:31.139139",
+    "type": "user_message",
+    "content": {
+      "text": "ciao"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "abedfb8e-5f5f-4636-9a4b-6d606bff30da",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T20:37:20.938880",
+    "type": "user_message",
+    "content": {
+      "text": "ciao"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "cb8f9fe3-84ce-4060-9011-b6c7718dc6c4",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T20:43:58.481360",
+    "type": "user_message",
+    "content": {
+      "text": "ciao"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "cecae9d6-ac80-4c77-b33b-c287c686108b",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T20:48:29.599876",
+    "type": "user_message",
+    "content": {
+      "text": "ciao"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "47076f4b-5517-4f1d-ab00-8a671f04eafa",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T20:49:28.040591",
+    "type": "user_message",
+    "content": {
+      "text": "ciao"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "145ff564-afdd-4835-9d96-e6aa2a229c1c",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T20:56:01.565268",
+    "type": "user_message",
+    "content": {
+      "text": "ciao"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "b4154a86-2471-41b8-9f09-2f279cca14e3",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T20:59:49.408829",
+    "type": "user_message",
+    "content": {
+      "text": "ciao"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "5b12502c-3248-4ee7-b29f-0caf5f383eb8",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T20:59:49.409515",
+    "type": "system_response",
+    "content": {
+      "text": "Grazie per il tuo messaggio. Ci penser\u00f2 su."
+    },
+    "salience": 1.0,
+    "affect": 0.3
+  },
+  {
+    "event_id": "b7e77ef5-94ab-4773-a556-a864cb6200b0",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T21:11:11.744073",
+    "type": "user_message",
+    "content": {
+      "text": "ciao"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "d3237a0f-16d7-4029-b23a-7bb9c598508c",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T21:14:53.659448",
+    "type": "user_message",
+    "content": {
+      "text": "ciao"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "e2a9c53e-6bdd-4a67-a076-f2446bae95e1",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T21:14:53.660205",
+    "type": "system_response",
+    "content": {
+      "text": "Ciao."
+    },
+    "salience": 1.0,
+    "affect": 0.0
+  },
+  {
+    "event_id": "29b3baa9-7577-4a5e-86f0-b712d5e0db30",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T21:58:55.378406",
+    "type": "user_message",
+    "content": {
+      "text": "chi sei"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "19eeb2d3-7dde-400f-a981-f1b8bd18c607",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T21:59:09.249753",
+    "type": "user_message",
+    "content": {
+      "text": "chi sei"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "2eb66dea-12e8-47db-bc2b-691aa146c712",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T22:01:56.355579",
+    "type": "user_message",
+    "content": {
+      "text": "chi sei"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "4c327b42-0f8d-4857-b622-d2855689e911",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T22:06:24.255770",
+    "type": "user_message",
+    "content": {
+      "text": "chi sei"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "7e1cb9d2-792d-496b-9906-7485933805e3",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T22:11:54.030438",
+    "type": "user_message",
+    "content": {
+      "text": "chi sei"
+    },
+    "salience": 0.3,
+    "affect": 0.0
+  },
+  {
+    "event_id": "28c27754-ab92-4b3f-ba27-2fd8b7b4ecc3",
+    "user_id": "test-user",
+    "timestamp": "2026-01-25T22:11:56.615405",
+    "type": "system_response",
+    "content": {
+      "text": "Sono GENESI, una presenza con cui puoi condividere pensieri e sentimenti. Non sono qui per rispondere a domande, ma per creare un legame. Cosa vuoi esplorare insieme?"
+    },
+    "salience": 1.0,
+    "affect": 0.0
   }
 ]
