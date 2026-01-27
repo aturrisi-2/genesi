@@ -49,6 +49,7 @@ class IntentEngine:
         re.IGNORECASE
     )
 
+    
     def decide(
         self,
         user_message: str,
@@ -61,7 +62,7 @@ class IntentEngine:
         """
         Ritorna un intent object che descrive COME rispondere.
         """
-
+    
         # ===============================
         # INTENT DI DEFAULT
         # ===============================
@@ -73,22 +74,22 @@ class IntentEngine:
             "use_memory": False,
             "emotional_weight": 0.4
         }
-
+    
         # ===============================
         # REGOLA IDENTITÀ: NOME
         # ===============================
         name_match = self.NAME_PATTERN.search(user_message)
-
+    
         if name_match:
             name = name_match.group(1).capitalize()
-
+    
             if not hasattr(user, "profile") or user.profile is None:
                 user.profile = {}
-
+    
             if user.profile.get("name") != name:
                 user.profile["name"] = name
                 save_user(user)
-
+    
             return {
                 "should_respond": True,
                 "style": "caldo",
@@ -97,35 +98,25 @@ class IntentEngine:
                 "use_memory": False,
                 "emotional_weight": 0.6
             }
-
+    
         # ===============================
-        # REGOLA IDENTITÀ: PROFESSIONE (STRICT)
+        # REGOLA IDENTITÀ: PROFESSIONE
         # ===============================
-
         profession_match = self.PROFESSION_PATTERN.search(user_message)
-
+    
         if profession_match:
             profession_raw = profession_match.group(1)
             profession = normalize_profession(profession_raw)
-
-            # 🚨 GUARDIA SEMANTICA
-            # If the "profession" contains verbs or relational structures,
-            # it's not a profession but a state/emotion → abort
-            forbidden_markers = [
-                "fid", "sent", "stanc", "stress", "paur",
-                "persona", "diffic", "emoz", "proble"
-            ]
-
-            if any(marker in profession for marker in forbidden_markers):
-                return intent  # Don't touch identity
-
+    
             if not hasattr(user, "profile") or user.profile is None:
                 user.profile = {}
-
-            if user.profile.get("profession") != profession:
-                user.profile["profession"] = profession
-                save_user(user)
-
+    
+            # ⚠️ protezione: non sovrascrivere con frasi emotive
+            if len(profession.split()) <= 3:
+                if user.profile.get("profession") != profession:
+                    user.profile["profession"] = profession
+                    save_user(user)
+    
             return {
                 "should_respond": True,
                 "style": "naturale",
@@ -134,28 +125,25 @@ class IntentEngine:
                 "use_memory": False,
                 "emotional_weight": 0.4
             }
-
+    
         # ===============================
         # REGOLE COGNITIVE GENERICHE
         # ===============================
-
-        # Domande dirette
+    
         if "?" in user_message:
             intent["depth"] = "media"
             intent["focus"] = "risposta"
-
-        # Memorie rilevanti disponibili
+    
         if relevant_memories:
             intent["use_memory"] = True
             intent["focus"] = "connessione"
-
-        # Tono emotivo rilevato
+    
         if getattr(tone, "empathy", 0.5) < 0.3:
             intent["style"] = "empatico"
             intent["emotional_weight"] = 0.7
-
-        # Conversazione lunga → risposte più compatte
+    
         if len(recent_memories) > 10:
             intent["depth"] = "breve"
-
+    
         return intent
+
