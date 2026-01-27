@@ -2,9 +2,10 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-RELATIONAL_DIR = Path("data/relational")
+# 🔒 PATH ASSOLUTO, NON RELATIVO
+BASE_DIR = Path("/opt/genesi")
+RELATIONAL_DIR = BASE_DIR / "data" / "relational"
 RELATIONAL_DIR.mkdir(parents=True, exist_ok=True)
-
 
 class RelationalAccumulator:
     def __init__(self):
