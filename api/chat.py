@@ -13,6 +13,7 @@ from memory.episodic import store_event, get_recent_events, search_events
 from memory.affective import compute_affect
 from memory.salience import compute_salience
 from core.relational_interpreter import RelationalInterpreter
+from core.relational.accumulator import RelationalAccumulator
 
 
 from core.tone import compute_tone
@@ -50,7 +51,16 @@ async def chat_endpoint(request: ChatRequest):
     interpreter = RelationalInterpreter()
     relational_eval = interpreter.interpret(user_event.to_dict())
 
+    from core.relational.accumulator import RelationalAccumulator
+    accumulator = RelationalAccumulator()
+
+    relational_state = accumulator.update(
+        user_id=request.user_id,
+        relational_eval=relational_eval
+    )
+
     print("🧠 RELATIONAL EVAL:", relational_eval, flush=True)
+    print("🧠 RELATIONAL STATE:", relational_state, flush=True)
 
     # 4. Get relevant context
     recent_memories = get_recent_events(request.user_id, limit=5)
