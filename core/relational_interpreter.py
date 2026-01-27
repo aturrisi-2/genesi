@@ -7,75 +7,84 @@ import json
 RELATIONAL_DIR = Path("data/relational")
 RELATIONAL_DIR.mkdir(parents=True, exist_ok=True)
 
+# Soglie umane (non rigide)
+ACCUMULATION_THRESHOLD = 1.0
+DECAY = 0.9  # dimenticanza naturale
+
 
 class RelationalInterpreter:
     """
-    Interpreta segnali relazionali nel tempo.
-    NON decide risposte.
-    NON modifica il tono.
-    OSSERVA e, se necessario, registra.
+    Osserva segnali relazionali nel tempo.
+    NON parla.
+    NON influenza la risposta.
+    Accumula lentamente come un essere umano.
     """
 
     def interpret(self, event: dict) -> dict:
-        """
-        Valuta se un evento contiene un segnale relazionale.
-        """
-
-        content = event.get("content", {})
+        user_id = event["user_id"]
+        text = event.get("content", {}).get("text", "").lower()
         affect = event.get("affect", {})
-        text = content.get("text", "").lower()
 
-        score = 0.0
-        reasons = []
+        signals = {}
 
         # ===============================
-        # SEGNALI BASE (GLOBALI)
+        # ESTRAZIONE SEGNALI GREZZI
         # ===============================
 
-        if any(k in text for k in ["mi sento", "sono stanco", "sono sotto pressione"]):
-            score += 0.3
-            reasons.append("emotional_disclosure")
+        if any(k in text for k in ["mi sento", "stanco", "sotto pressione"]):
+            signals["emotional_load"] = 0.3
 
         if any(k in text for k in ["non mi fido", "non mi fido facilmente"]):
-            score += 0.4
-            reasons.append("trust_difficulty")
+            signals["trust_difficulty"] = 0.4
 
         if isinstance(affect, dict):
             if any(v > 0.6 for v in affect.values()):
-                score += 0.3
-                reasons.append("strong_affect")
+                signals["strong_affect"] = 0.3
 
-        candidate = score >= 0.6
+        if not signals:
+            return {
+                "relational_score": 0.0,
+                "reasons": [],
+                "candidate": False
+            }
 
-        result = {
-            "relational_score": round(score, 2),
-            "reasons": reasons,
-            "candidate": candidate
+        state = self._load_state(user_id)
+
+        reasons = []
+        for key, value in signals.items():
+            previous = state.get(key, 0.0)
+            updated = previous * DECAY + value
+            state[key] = round(updated, 3)
+
+            if updated >= ACCUMULATION_THRESHOLD:
+                reasons.append(key)
+
+        self._save_state(user_id, state)
+
+        return {
+            "relational_score": round(sum(signals.values()), 2),
+            "reasons": list(signals.keys()),
+            "candidate": bool(reasons)
         }
 
-        if candidate:
-            self._persist(event["user_id"], result)
-
-        return result
-
     # ===============================
-    # PERSISTENZA GREZZA
+    # STATO RELAZIONALE PERSISTENTE
     # ===============================
-    def _persist(self, user_id: str, data: dict):
+
+    def _load_state(self, user_id: str) -> dict:
         file_path = RELATIONAL_DIR / f"{user_id}.json"
+        if not file_path.exists():
+            return {}
 
+        with open(file_path, "r") as f:
+            return json.load(f)
+
+    def _save_state(self, user_id: str, state: dict):
+        file_path = RELATIONAL_DIR / f"{user_id}.json"
         payload = {
-            "timestamp": datetime.utcnow().isoformat(),
-            "signal": data
+            "last_update": datetime.utcnow().isoformat(),
+            "signals": state
         }
-
-        if file_path.exists():
-            with open(file_path, "r") as f:
-                history = json.load(f)
-        else:
-            history = []
-
-        history.append(payload)
 
         with open(file_path, "w") as f:
-            json.dump(history, f, indent=2)
+            json.dump(payload, f, indent=2)
