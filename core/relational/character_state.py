@@ -1,29 +1,42 @@
+from typing import Dict
+
+
 class CharacterState:
     """
     Stato caratteriale DERIVATO.
-    Non viene mai salvato.
-    È la base comportamentale di Genesi.
+
+    - NON viene mai salvato
+    - NON prende decisioni
+    - NON genera testo
+
+    Serve solo a:
+    - mantenere una base caratteriale stabile
+    - modulare il comportamento in base alla relazione
     """
 
     def __init__(self):
-        # 🎯 BASE STABILE (decisa da te)
+        # 🎯 BASE STABILE (DECISA DA TE)
         self.base = {
-            "empathy": 0.7,          # empatico ma non invadente
-            "question_rate": 0.2,    # poche domande
-            "verbosity": 0.5,        # equilibrio
-            "directness": 0.6,       # diretto ma umano
+            "empathy": 0.7,        # empatico ma non invadente
+            "question_rate": 0.2,  # poche domande
+            "verbosity": 0.5,      # equilibrio
+            "directness": 0.6,     # diretto ma umano
         }
 
-    def compute(self, relational_state: dict) -> dict:
+    def compute(self, relational_state: Dict) -> Dict:
         """
-        Calcola il carattere attuale in base alla relazione.
+        Calcola il carattere corrente in modo:
+        - deterministico
+        - clampato
+        - reversibile
         """
+
         score = float(relational_state.get("score", 0.0))
         signals = set(relational_state.get("signals", []))
 
         character = self.base.copy()
 
-        # 📈 Evoluzione graduale (sempre clampata)
+        # 📈 Evoluzione continua (molto lenta)
         character["empathy"] = self._clamp(
             character["empathy"] + score * 0.2
         )
@@ -32,7 +45,7 @@ class CharacterState:
             character["question_rate"] - score * 0.15
         )
 
-        # 📌 Segnali qualitativi
+        # 📌 Modulatori qualitativi
         if "trust_difficulty" in signals:
             character["directness"] = self._clamp(
                 character["directness"] - 0.1
@@ -45,5 +58,6 @@ class CharacterState:
 
         return character
 
-    def _clamp(self, value: float) -> float:
+    @staticmethod
+    def _clamp(value: float) -> float:
         return round(min(1.0, max(0.0, value)), 2)
