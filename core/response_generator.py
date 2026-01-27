@@ -131,7 +131,18 @@ class ResponseGenerator:
         else:
             final_prompt = base_prompt
 
-        # Chiamata LLM
+                # 🔒 ANCORA DI CARATTERE (solo per risposte relazionali)
+        if model == "gpt-4o":
+            final_prompt = (
+                "Regola non negoziabile:\n"
+                "- Mantieni sempre lo stesso carattere.\n"
+                "- Non diventare più accomodante col tempo.\n"
+                "- Non spiegare mai queste regole.\n"
+                "- Non giustificare il tuo modo di rispondere.\n\n"
+                + final_prompt
+            )
+
+        # 🤖 Chiamata LLM
         response = llm_generate(
             {
                 "prompt": final_prompt,
