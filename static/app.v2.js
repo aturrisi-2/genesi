@@ -11,25 +11,24 @@ const STATES = {
 // DOM Elements
 // ===============================
 const app = document.getElementById('genesi-app');
-const dialogue = document.getElementById('dialogue');
+const dialogue = document.getElementById('dialogue'); // chat container reale
 const textInput = document.getElementById('text-input');
 const sendButton = document.getElementById('send-button');
 const micButton = document.getElementById('mic-button');
+const inputContainer = document.getElementById('input-container');
+const chatForm = document.getElementById('chat-form'); // ⚠️ DEVE ESISTERE IN HTML
 
 // ===============================
-// Auto-scroll Utility
+// Auto-scroll Utility (ROBUSTO iOS)
 // ===============================
 function scrollToBottom(force = false) {
-  if (!chatContainer) return;
-
   requestAnimationFrame(() => {
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    dialogue.scrollTop = dialogue.scrollHeight;
   });
 
-  // iOS fallback (fondamentale)
   if (force) {
     setTimeout(() => {
-      chatContainer.scrollTop = chatContainer.scrollHeight;
+      dialogue.scrollTop = dialogue.scrollHeight;
     }, 120);
   }
 }
@@ -66,14 +65,14 @@ async function bootstrapUser() {
   }
 
   const data = await res.json();
-
-  // 🔒 Salviamo identity lato client
   userIdentity = data.identity || {};
 }
 
 // ===============================
 // UI State Management
 // ===============================
+let currentState = STATES.IDLE;
+
 function setState(newState) {
   currentState = newState;
   app.dataset.state = currentState;
@@ -88,8 +87,7 @@ function addMessage(text, sender) {
   messageEl.className = `message ${sender}`;
   messageEl.textContent = text;
   dialogue.appendChild(messageEl);
-
-  scrollToBottom(true); // 🔒 FORZATO
+  scrollToBottom(true);
   return messageEl;
 }
 
@@ -108,50 +106,57 @@ async function sendChatMessage(message) {
   try {
     const response = await fetch('/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         user_id: getUserId(),
-        message: message
+        message
       })
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error(`HTTP ${response.status}`);
     }
 
     const data = await response.json();
     return data.response || "Non ho capito.";
 
   } catch (error) {
-    console.error('Error sending message:', error);
+    console.error(error);
     return "C'è stato un errore di connessione.";
   }
 }
 
 // ===============================
-// Message Sending
+// Message Sending (UNICO PUNTO)
 // ===============================
 async function sendMessage() {
   const text = textInput.value.trim();
   if (!text || currentState !== STATES.IDLE) return;
 
-  // Add user message and clear input
+  // 🔥 svuota SUBITO (fix iOS)
+  textInput.value = "";
+
   addUserMessage(text);
-  textInput.value = '';
   setState(STATES.THINKING);
 
   try {
     const reply = await sendChatMessage(text);
     addGenesiMessage(reply);
-  } catch (err) {
-    console.error(err);
+  } catch {
     addGenesiMessage("C'è stato un errore. Riprova.");
   } finally {
     setState(STATES.IDLE);
+    scrollToBottom(true);
   }
 }
+
+// ===============================
+// FORM SUBMIT (FIX DEFINITIVO iOS)
+// ===============================
+chatForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  sendMessage();
+});
 
 // ===============================
 // Microphone (UI Only)
@@ -168,10 +173,8 @@ function stopRecording() {
   micButton.classList.remove('recording');
   setState(STATES.THINKING);
 
-  // Simulate voice input
   setTimeout(() => {
-    const transcript = "Questo è un messaggio dettato di esempio.";
-    textInput.value = transcript;
+    textInput.value = "Questo è un messaggio dettato di esempio.";
     setState(STATES.IDLE);
     sendMessage();
   }, 600);
@@ -180,53 +183,37 @@ function stopRecording() {
 // ===============================
 // Event Listeners
 // ===============================
-textInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
-});
-
 sendButton.addEventListener('click', sendMessage);
 micButton.addEventListener('mousedown', startRecording);
 micButton.addEventListener('touchstart', startRecording);
 document.addEventListener('mouseup', stopRecording);
 document.addEventListener('touchend', stopRecording);
 
-// Initialize
-let currentState = STATES.IDLE;
-setState(STATES.IDLE);
-
 // ===============================
-// App Init
+// 📱 iOS KEYBOARD FIX
 // ===============================
-(async () => {
-  await bootstrapUser();
-})();
-// ===============================
-// 📱 iOS KEYBOARD FIX (CRITICO)
-// ===============================
-const input = document.getElementById("text-input");
-const inputContainer = document.getElementById("input-container");
-
 if (window.visualViewport) {
   window.visualViewport.addEventListener("resize", () => {
     document.documentElement.style.setProperty(
       "--vh",
       `${window.visualViewport.height}px`
     );
-
     scrollToBottom(true);
   });
 }
 
-input.addEventListener("focus", () => {
+textInput.addEventListener("focus", () => {
   setTimeout(() => scrollToBottom(true), 150);
 });
 
-input.addEventListener("blur", () => {
+textInput.addEventListener("blur", () => {
   setTimeout(() => scrollToBottom(true), 150);
 });
 
-// Initial scroll to bottom
-scrollToBottom();
+// ===============================
+// App Init
+// ===============================
+(async () => {
+  await bootstrapUser();
+  scrollToBottom(true);
+})();
