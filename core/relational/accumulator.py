@@ -1,43 +1,50 @@
-from collections import defaultdict
-from typing import Dict, List
+import json
+from pathlib import Path
 from datetime import datetime
 
+RELATIONAL_DIR = Path("data/relational")
+RELATIONAL_DIR.mkdir(parents=True, exist_ok=True)
 
 class RelationalAccumulator:
-    """
-    Accumula segnali relazionali nel tempo.
-    NON scrive su disco.
-    Simula la sedimentazione umana della relazione.
-    """
-
     def __init__(self):
-        # user_id -> stato relazionale
-        self.state: Dict[str, Dict] = defaultdict(self._initial_state)
+        pass
 
-    def _initial_state(self) -> Dict:
-        return {
-            "score": 0.0,
-            "signals": [],
-            "last_update": None
-        }
+    def _get_path(self, user_id: str) -> Path:
+        return RELATIONAL_DIR / f"{user_id}.json"
 
-    def update(self, user_id: str, relational_eval: Dict) -> Dict:
-        """
-        Aggiorna lo stato relazionale dell'utente.
-        """
-        state = self.state[user_id]
+    def load(self, user_id: str) -> dict:
+        path = self._get_path(user_id)
+        if not path.exists():
+            return {
+                "score": 0.0,
+                "signals": [],
+                "last_update": None
+            }
+        return json.loads(path.read_text())
 
-        increment = relational_eval.get("relational_score", 0.0)
+    def save(self, user_id: str, state: dict):
+        path = self._get_path(user_id)
+        path.write_text(json.dumps(state, indent=2))
+
+    def update(self, user_id: str, relational_eval: dict) -> dict:
+        state = self.load(user_id)
+
+        score = state.get("score", 0.0)
+        signals = set(state.get("signals", []))
+
+        delta = relational_eval.get("relational_score", 0.0)
         reasons = relational_eval.get("reasons", [])
 
-        # accumulo lento
-        state["score"] += increment
-        state["signals"].extend(reasons)
-        state["last_update"] = datetime.utcnow().isoformat()
+        score = min(1.0, max(0.0, score + delta))
 
-        return state
+        for r in reasons:
+            signals.add(r)
 
-    def get_state(self, user_id: str) -> Dict:
-        return self.state[user_id]
-# Singleton globale
-relational_accumulator = RelationalAccumulator()
+        new_state = {
+            "score": round(score, 2),
+            "signals": list(signals),
+            "last_update": datetime.now().isoformat()
+        }
+
+        self.save(user_id, new_state)
+        return new_state

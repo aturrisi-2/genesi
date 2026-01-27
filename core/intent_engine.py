@@ -103,28 +103,33 @@ class IntentEngine:
         # REGOLA IDENTITÀ: PROFESSIONE
         # ===============================
         profession_match = self.PROFESSION_PATTERN.search(user_message)
-    
+
         if profession_match:
             profession_raw = profession_match.group(1)
             profession = normalize_profession(profession_raw)
-    
+
             if not hasattr(user, "profile") or user.profile is None:
                 user.profile = {}
-    
-            # ⚠️ protezione: non sovrascrivere con frasi emotive
-            if len(profession.split()) <= 3:
+
+            # ✅ accettiamo SOLO professioni corte e nominali
+            if (
+                profession
+                and len(profession.split()) <= 3
+                and all(word.isalpha() for word in profession.split())
+            ):
                 if user.profile.get("profession") != profession:
                     user.profile["profession"] = profession
                     save_user(user)
-    
-            return {
-                "should_respond": True,
-                "style": "naturale",
-                "depth": "breve",
-                "focus": "identità",
-                "use_memory": False,
-                "emotional_weight": 0.4
-            }
+
+                return {
+                    "should_respond": True,
+                    "style": "naturale",
+                    "depth": "breve",
+                    "focus": "identità",
+                    "use_memory": False,
+                    "emotional_weight": 0.4
+                }
+
     
         # ===============================
         # REGOLE COGNITIVE GENERICHE
