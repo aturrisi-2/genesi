@@ -36,17 +36,7 @@ async def chat_endpoint(request: ChatRequest):
     )
     user_affect = compute_affect("user_message", {"text": request.message})
     # 2b. Interpretazione relazionale (osservazione)
-    interpreter = RelationalInterpreter()
-
-    relational_signal = interpreter.interpret(
-        text=request.message,
-        affect=user_affect,
-        salience=user_salience
-    )
-
-    if relational_signal:
-        print("🧠 RELATIONAL SIGNAL:", relational_signal, flush=True)
-
+    
     # 3. Store the user's message event
     user_event = store_event(
         user_id=request.user_id,
@@ -56,6 +46,7 @@ async def chat_endpoint(request: ChatRequest):
         affect=user_affect
     )
     
+    # 🔍 Interpretazione relazionale (FASE OSSERVATIVA)
     interpreter = RelationalInterpreter()
     relational_eval = interpreter.interpret(user_event.to_dict())
 
