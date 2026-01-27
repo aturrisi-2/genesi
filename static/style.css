@@ -52,7 +52,10 @@ body {
 html, body {
     height: 100%;
     overflow: hidden;
+    position: fixed; /* 🔥 BLOCCA lo scroll Safari */
+    width: 100%;
 }
+
 
 /* Presence */
 #presence {
@@ -118,7 +121,7 @@ html, body {
 /* Input container */
 #input-container {
     position: fixed;
-    bottom: 2rem;
+    bottom: env(safe-area-inset-bottom, 2rem); /* 🔥 FIX iPhone */
     left: 50%;
     transform: translateX(-50%);
     width: 90%;
@@ -134,7 +137,9 @@ html, body {
     border: 1px solid rgba(255, 255, 255, 0.05);
     transition: var(--transition);
     pointer-events: auto;
+    will-change: transform;
 }
+
 
 #input-container button {
     pointer-events: auto;
@@ -263,14 +268,14 @@ button:hover svg {
     #genesi-app {
         padding: 1.5rem 1rem 7rem;
     }
-    
+    #genesi-app {
+        height: calc(var(--vh, 100vh));
+    }
+
     .message {
         max-width: 90%;
         font-size: 1.1rem;
     }
     
-    #input-container {
-        width: 95%;
-        padding: 0.6rem 1rem;
-    }
+    
 }

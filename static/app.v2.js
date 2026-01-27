@@ -200,6 +200,40 @@ setState(STATES.IDLE);
 (async () => {
   await bootstrapUser();
 })();
+// ===============================
+// 📱 iOS KEYBOARD FIX (CRITICO)
+// ===============================
+const input = document.getElementById("text-input");
+const inputContainer = document.getElementById("input-container");
+
+if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", () => {
+        const vh = window.visualViewport.height;
+        document.documentElement.style.setProperty(
+            "--vh",
+            `${vh}px`
+        );
+
+        // forza scroll all'ultimo messaggio
+        setTimeout(() => {
+            dialogue.scrollTop = dialogue.scrollHeight;
+        }, 50);
+    });
+}
+
+// quando clicchi l’input → resta visibile
+input.addEventListener("focus", () => {
+    setTimeout(() => {
+        dialogue.scrollTop = dialogue.scrollHeight;
+    }, 100);
+});
+
+// quando chiudi tastiera → reset naturale
+input.addEventListener("blur", () => {
+    setTimeout(() => {
+        dialogue.scrollTop = dialogue.scrollHeight;
+    }, 100);
+});
 
 // Initial scroll to bottom
 scrollToBottom();
