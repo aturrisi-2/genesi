@@ -19,13 +19,19 @@ const micButton = document.getElementById('mic-button');
 // ===============================
 // Auto-scroll Utility
 // ===============================
-function scrollToBottom() {
+function scrollToBottom(force = false) {
+  if (!chatContainer) return;
+
   requestAnimationFrame(() => {
-    window.scrollTo({
-      top: document.body.scrollHeight,
-      behavior: "auto"
-    });
+    chatContainer.scrollTop = chatContainer.scrollHeight;
   });
+
+  // iOS fallback (fondamentale)
+  if (force) {
+    setTimeout(() => {
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }, 120);
+  }
 }
 
 // ===============================
@@ -82,20 +88,17 @@ function addMessage(text, sender) {
   messageEl.className = `message ${sender}`;
   messageEl.textContent = text;
   dialogue.appendChild(messageEl);
-  scrollToBottom(); // Auto-scroll after adding message
+
+  scrollToBottom(true); // 🔒 FORZATO
   return messageEl;
 }
 
 function addUserMessage(text) {
-  const msg = addMessage(text, 'user');
-  scrollToBottom(); // Ensure scroll after message is added
-  return msg;
+  return addMessage(text, 'user');
 }
 
 function addGenesiMessage(text) {
-  const msg = addMessage(text, 'genesi');
-  scrollToBottom(); // Ensure scroll after message is added
-  return msg;
+  return addMessage(text, 'genesi');
 }
 
 // ===============================
@@ -207,32 +210,22 @@ const input = document.getElementById("text-input");
 const inputContainer = document.getElementById("input-container");
 
 if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", () => {
-        const vh = window.visualViewport.height;
-        document.documentElement.style.setProperty(
-            "--vh",
-            `${vh}px`
-        );
+  window.visualViewport.addEventListener("resize", () => {
+    document.documentElement.style.setProperty(
+      "--vh",
+      `${window.visualViewport.height}px`
+    );
 
-        // forza scroll all'ultimo messaggio
-        setTimeout(() => {
-            dialogue.scrollTop = dialogue.scrollHeight;
-        }, 50);
-    });
+    scrollToBottom(true);
+  });
 }
 
-// quando clicchi l’input → resta visibile
 input.addEventListener("focus", () => {
-    setTimeout(() => {
-        dialogue.scrollTop = dialogue.scrollHeight;
-    }, 100);
+  setTimeout(() => scrollToBottom(true), 150);
 });
 
-// quando chiudi tastiera → reset naturale
 input.addEventListener("blur", () => {
-    setTimeout(() => {
-        dialogue.scrollTop = dialogue.scrollHeight;
-    }, 100);
+  setTimeout(() => scrollToBottom(true), 150);
 });
 
 // Initial scroll to bottom
