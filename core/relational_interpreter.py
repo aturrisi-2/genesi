@@ -1,49 +1,81 @@
 # core/relational_interpreter.py
 
-from typing import Dict
+from pathlib import Path
+from datetime import datetime
+import json
+
+RELATIONAL_DIR = Path("data/relational")
+RELATIONAL_DIR.mkdir(parents=True, exist_ok=True)
+
 
 class RelationalInterpreter:
     """
-    Osserva segnali relazionali latenti.
-    NON decide, NON salva, NON risponde.
+    Interpreta segnali relazionali nel tempo.
+    NON decide risposte.
+    NON modifica il tono.
+    OSSERVA e, se necessario, registra.
     """
 
     def interpret(self, event: dict) -> dict:
-        text = event.get("content", {}).get("text", "")
-        salience = event.get("salience", 0.0)
-        affect = event.get("affect", 0.0)  # 🔧 È UN FLOAT
+        """
+        Valuta se un evento contiene un segnale relazionale.
+        """
+
+        content = event.get("content", {})
+        affect = event.get("affect", {})
+        text = content.get("text", "").lower()
 
         score = 0.0
         reasons = []
 
-        # Intensità emotiva
-        if affect > 0.6:
+        # ===============================
+        # SEGNALI BASE (GLOBALI)
+        # ===============================
+
+        if any(k in text for k in ["mi sento", "sono stanco", "sono sotto pressione"]):
+            score += 0.3
+            reasons.append("emotional_disclosure")
+
+        if any(k in text for k in ["non mi fido", "non mi fido facilmente"]):
             score += 0.4
-            reasons.append("emotional_intensity")
+            reasons.append("trust_difficulty")
 
-        # Salienza alta
-        if salience > 0.6:
-            score += 0.3
-            reasons.append("high_salience")
+        if isinstance(affect, dict):
+            if any(v > 0.6 for v in affect.values()):
+                score += 0.3
+                reasons.append("strong_affect")
 
-        # Frasi introspettive / relazionali
-        if any(
-            phrase in text.lower()
-            for phrase in [
-                "mi sento",
-                "non mi fido",
-                "per me",
-                "ho paura",
-                "sono stanco",
-                "mi pesa",
-                "mi fa sentire"
-            ]
-        ):
-            score += 0.3
-            reasons.append("introspective_language")
+        candidate = score >= 0.6
 
-        return {
+        result = {
             "relational_score": round(score, 2),
             "reasons": reasons,
-            "candidate": score >= 0.6
+            "candidate": candidate
         }
+
+        if candidate:
+            self._persist(event["user_id"], result)
+
+        return result
+
+    # ===============================
+    # PERSISTENZA GREZZA
+    # ===============================
+    def _persist(self, user_id: str, data: dict):
+        file_path = RELATIONAL_DIR / f"{user_id}.json"
+
+        payload = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "signal": data
+        }
+
+        if file_path.exists():
+            with open(file_path, "r") as f:
+                history = json.load(f)
+        else:
+            history = []
+
+        history.append(payload)
+
+        with open(file_path, "w") as f:
+            json.dump(history, f, indent=2)
