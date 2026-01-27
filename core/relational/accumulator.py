@@ -5,6 +5,7 @@ from datetime import datetime
 RELATIONAL_DIR = Path("data/relational")
 RELATIONAL_DIR.mkdir(parents=True, exist_ok=True)
 
+
 class RelationalAccumulator:
     def __init__(self):
         pass
@@ -29,22 +30,29 @@ class RelationalAccumulator:
     def update(self, user_id: str, relational_eval: dict) -> dict:
         state = self.load(user_id)
 
-        score = state.get("score", 0.0)
+        score = float(state.get("score", 0.0))
         signals = set(state.get("signals", []))
 
-        delta = relational_eval.get("relational_score", 0.0)
+        delta = float(relational_eval.get("relational_score", 0.0))
         reasons = relational_eval.get("reasons", [])
 
+        # clamp score
         score = min(1.0, max(0.0, score + delta))
 
+        # add ONLY valid relational reasons
         for r in reasons:
-            signals.add(r)
+            if isinstance(r, str) and r.strip():
+                signals.add(r)
 
         new_state = {
             "score": round(score, 2),
-            "signals": list(signals),
+            "signals": sorted(signals),
             "last_update": datetime.now().isoformat()
         }
 
         self.save(user_id, new_state)
         return new_state
+
+
+# ✅ SINGLETON CONDIVISO (FONDAMENTALE)
+relational_accumulator = RelationalAccumulator()
