@@ -99,13 +99,25 @@ class IntentEngine:
             }
 
         # ===============================
-        # REGOLA IDENTITÀ: PROFESSIONE
+        # REGOLA IDENTITÀ: PROFESSIONE (STRICT)
         # ===============================
+
         profession_match = self.PROFESSION_PATTERN.search(user_message)
 
         if profession_match:
             profession_raw = profession_match.group(1)
             profession = normalize_profession(profession_raw)
+
+            # 🚨 GUARDIA SEMANTICA
+            # If the "profession" contains verbs or relational structures,
+            # it's not a profession but a state/emotion → abort
+            forbidden_markers = [
+                "fid", "sent", "stanc", "stress", "paur",
+                "persona", "diffic", "emoz", "proble"
+            ]
+
+            if any(marker in profession for marker in forbidden_markers):
+                return intent  # Don't touch identity
 
             if not hasattr(user, "profile") or user.profile is None:
                 user.profile = {}
