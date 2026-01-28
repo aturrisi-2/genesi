@@ -1,6 +1,27 @@
 import os
 from pathlib import Path
 
+def extract_pdf_text(file_path: str) -> tuple[bool, str]:
+    try:
+        import PyPDF2
+        with open(file_path, 'rb') as f:
+            reader = PyPDF2.PdfReader(f)
+            text = ""
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text.strip():
+                    text += page_text + "\n"
+            
+            if text.strip():
+                return True, text.strip()
+            else:
+                return False, ""
+    except ImportError:
+        # Fallback se PyPDF2 non disponibile
+        return False, ""
+    except Exception:
+        return False, ""
+
 def analyze_file(file_path: str, filename: str, content_type: str) -> dict:
     ext = Path(filename).suffix.lower()
     size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
@@ -42,9 +63,18 @@ def analyze_file(file_path: str, filename: str, content_type: str) -> dict:
     # Processability check
     processable = kind in ["text", "image", "document"] and size_cat != "large"
     
-    return {
+    result = {
         "kind": kind,
         "subtype": subtype,
         "size": size_cat,
         "processable": processable
     }
+    
+    # PDF text extraction
+    if ext == '.pdf':
+        has_text, text_content = extract_pdf_text(file_path)
+        result["has_text"] = has_text
+        if has_text:
+            result["text"] = text_content
+    
+    return result
