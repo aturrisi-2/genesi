@@ -51,13 +51,19 @@ async def speech_to_text(audio: UploadFile = File(...)):
         "audio/ogg"
     ]
     
+    # =========================================================================
     # PULIZIA TIPO MIME (Modifica Chirurgica)
-    # Prende solo la parte prima del punto e virgola (es. "audio/webm" da "audio/webm;codecs=opus")
-    content_type_clean = audio.content_type.split(";")[0].strip()
+    # =========================================================================
+    # Prende solo la parte prima del punto e virgola 
+    # (es. trasforma "audio/webm;codecs=opus" in "audio/webm")
+    try:
+        content_type_clean = audio.content_type.split(";")[0].strip()
+    except Exception:
+        content_type_clean = audio.content_type
 
     if content_type_clean not in allowed_types:
         logger.warning(f"Unsupported content type: {audio.content_type} (cleaned: {content_type_clean})")
-        # Non bloccare, ma logga il warning
+        # Non blocchiamo l'esecuzione, proviamo comunque a trascrivere
     
     # Crea file temporaneo
     temp_dir = tempfile.gettempdir()
