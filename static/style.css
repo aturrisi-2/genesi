@@ -33,7 +33,7 @@ body {
     -moz-osx-font-smoothing: grayscale;
 
     /* SFONDO CHAT */
-    background-image: url("/static/assets/chat-bg.jpg");
+    background-image: url("/static/assets/wood-bg-v2.jpg");
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
