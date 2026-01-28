@@ -18,7 +18,18 @@ async def route_response(file_analysis: dict, file_path: str, context: dict = No
                 model=model,
                 messages=[
                     {"role": "system", "content": "Analizza il contenuto testuale fornito e rispondi in modo utile."},
-                    {"role": "user", "content": f"Contenuto del file:\n\n{content}"}
+                    {
+                        "role": "user",
+                        "content": f"""
+L'utente ha caricato il seguente documento:
+
+---
+{content}
+---
+
+Rispondi analizzando direttamente il contenuto.
+"""
+                    }
                 ],
                 max_tokens=1000
             )
@@ -32,7 +43,18 @@ async def route_response(file_analysis: dict, file_path: str, context: dict = No
                 model=model,
                 messages=[
                     {"role": "system", "content": "Analizza il codice sorgente fornito, spiegalo e suggerisci miglioramenti."},
-                    {"role": "user", "content": f"Codice:\n\n{content}"}
+                    {
+                        "role": "user",
+                        "content": f"""
+L'utente ha caricato il seguente codice sorgente:
+
+---
+{content}
+---
+
+Analizza il codice, spiegalo e suggerisci miglioramenti.
+"""
+                    }
                 ],
                 max_tokens=1500
             )
@@ -50,11 +72,25 @@ async def route_response(file_analysis: dict, file_path: str, context: dict = No
             return response.choices[0].message.content
         
         elif strategy == "document_analysis":
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
             response = client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": "Analizza il documento e fornisci un riassunto o le informazioni richieste."},
-                    {"role": "user", "content": f"Analizza il documento: {file_path}"}
+                    {
+                        "role": "user",
+                        "content": f"""
+L'utente ha caricato il seguente documento:
+
+---
+{content}
+---
+
+Rispondi analizzando direttamente il contenuto del documento.
+"""
+                    }
                 ],
                 max_tokens=1200
             )
