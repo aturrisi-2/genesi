@@ -247,10 +247,13 @@ async function startRecording() {
 function stopRecording() {
   if (!isRecording || !mediaRecorder) return;
 
-  // 🛡️ iOS Safari: ignora stop troppo rapido
-  const elapsed = Date.now() - recordingStartedAt;
-  if (elapsed < 300) {
-    return;
+  try {
+    // 🔥 Chrome Desktop FIX: forza flush del buffer
+    if (mediaRecorder.state === "recording") {
+      mediaRecorder.requestData();
+    }
+  } catch (e) {
+    // Safari ignora requestData, ed è OK
   }
 
   mediaRecorder.stop();
@@ -258,7 +261,6 @@ function stopRecording() {
   micButton.classList.remove('recording');
   setState(STATES.THINKING);
 }
-
 
 // 🔄 Fallback per iOS/vecchi browser
 function fallbackRecording() {
