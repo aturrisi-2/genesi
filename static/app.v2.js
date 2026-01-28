@@ -229,7 +229,7 @@ async function startRecording() {
       }
     };
     
-    // Handle recording stop
+        // Handle recording stop
     mediaRecorder.onstop = async () => {
       // Ferma tutti i track audio
       stream.getTracks().forEach(track => track.stop());
@@ -242,11 +242,21 @@ async function startRecording() {
       // Resetta stato microfono
       resetMicrophoneState();
       
-      // Verifica che il blob non sia vuoto
+      // Verifica che il blob non sia vuoto - se troppo piccolo, riprova subito
       if (audioBlob.size < 1024) {
-        console.warn(`Audio too small: ${audioBlob.size} bytes`);
-        setState(STATES.IDLE);
-        addGenesiMessage("Audio troppo corto. Riprova a parlare più a lungo.");
+        console.warn(`Audio too small: ${audioBlob.size} bytes - retrying...`);
+        
+        // Riprova immediatamente con una nuova registrazione
+        setTimeout(() => {
+          startRecording();
+          // Auto-stop dopo 2 secondi per garantire audio sufficiente
+          setTimeout(() => {
+            if (isRecording) {
+              stopRecording();
+            }
+          }, 2000);
+        }, 500);
+        
         return;
       }
       
