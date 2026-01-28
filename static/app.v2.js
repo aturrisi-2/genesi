@@ -210,22 +210,24 @@ async function startRecording() {
     };
     
     mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach(track => track.stop());
-  
-      // 🔒 attesa di sicurezza per Chrome desktop
-      setTimeout(async () => {
-        const audioBlob = new Blob(audioChunks, { type: mimeType });
-  
-        if (audioBlob.size < 1000) {
-          console.warn("Audio troppo corto, scartato");
-          resetMicState();
-          return;
-        }
-  
-        await transcribeAudio(audioBlob);
-        resetMicState();
-      }, 150);
-    };
+  stream.getTracks().forEach(track => track.stop());
+
+  setTimeout(async () => {
+    const audioBlob = new Blob(audioChunks, { type: mimeType });
+
+    if (audioBlob.size < 1000) {
+      console.warn("Audio troppo corto, scartato");
+      setState(STATES.IDLE);
+      micButton.classList.remove('recording');
+      return;
+    }
+
+    await transcribeAudio(audioBlob);
+
+    setState(STATES.IDLE);
+    micButton.classList.remove('recording');
+  }, 150);
+};
 
     // Inizia registrazione
     mediaRecorder.start();
