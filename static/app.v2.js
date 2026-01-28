@@ -243,11 +243,11 @@ async function startRecording() {
       // Resetta stato microfono
       resetMicrophoneState();
       
-      // Verifica che il blob non sia vuoto
-      if (audioBlob.size < 1024) {
+      // Verifica che il blob non sia vuoto (soglia più bassa per Chrome desktop)
+      if (audioBlob.size < 500) {
         console.warn(`Audio too small: ${audioBlob.size} bytes`);
         setState(STATES.IDLE);
-        addGenesiMessage("Audio troppo corto. Tieni premuto il pulsante mentre parli.");
+        addGenesiMessage("Audio non rilevato. Riprova a parlare più chiaramente.");
         return;
       }
       
@@ -271,17 +271,6 @@ async function startRecording() {
 // Ferma registrazione
 function stopRecording() {
   if (!isRecording || !mediaRecorder) return;
-  
-  const recordingDuration = Date.now() - recordingStartTime;
-  
-  // Richiedi almeno 1 secondo di registrazione
-  if (recordingDuration < 1000) {
-    console.warn(`Recording too short: ${recordingDuration}ms`);
-    setState(STATES.IDLE);
-    addGenesiMessage("Registra per almeno 1 secondo.");
-    mediaRecorder.stop();
-    return;
-  }
   
   setState(STATES.THINKING);
   mediaRecorder.stop();
