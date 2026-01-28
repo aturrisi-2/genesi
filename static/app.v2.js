@@ -172,22 +172,22 @@ function getSupportedMimeType() {
     navigator.userAgent.includes("Chrome") &&
     !navigator.userAgent.includes("Android");
 
-  const types = isChromeDesktop
-    ? [
-        // 🔧 Chrome desktop: prova WAV prima, poi webm
-        'audio/wav',
-        'audio/webm;codecs=opus',
-        'audio/webm'
-      ]
-    : [
-        // 📱 iOS / Android: ordine originale che funziona
-        'audio/webm;codecs=opus',
-        'audio/webm'
-      ];
-
-  for (const type of types) {
-    if (window.MediaRecorder && MediaRecorder.isTypeSupported(type)) {
-      return type;
+  if (isChromeDesktop) {
+    // 🔧 Chrome desktop: forza webm senza opus (più compatibile)
+    if (MediaRecorder.isTypeSupported('audio/webm')) {
+      return 'audio/webm';
+    }
+    // Fallback a opus se necessario
+    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+      return 'audio/webm;codecs=opus';
+    }
+  } else {
+    // 📱 iOS / Android: ordine originale che funziona
+    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+      return 'audio/webm;codecs=opus';
+    }
+    if (MediaRecorder.isTypeSupported('audio/webm')) {
+      return 'audio/webm';
     }
   }
 
