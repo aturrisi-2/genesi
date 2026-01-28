@@ -165,10 +165,8 @@ chatForm.addEventListener("submit", (e) => {
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
-let recordingStartedAt = 0;
-const MIN_RECORDING_MS = 400; // 🔥 fondamentale per Chrome
 
-// 🎯 MIME types per compatibilità cross-browser
+// MIME types per compatibilità cross-browser
 function getSupportedMimeType() {
   const types = [
     'audio/webm;codecs=opus',
@@ -182,10 +180,18 @@ function getSupportedMimeType() {
       return type;
     }
   }
-  return 'audio/webm'; // fallback
+  return 'audio/webm';
 }
 
-// 🎤 Inizia registrazione reale
+// Reset completo stato microfono
+function resetMicrophoneState() {
+  mediaRecorder = null;
+  audioChunks = [];
+  isRecording = false;
+  micButton.classList.remove('recording');
+}
+
+// Inizia registrazione
 async function startRecording() {
   if (currentState !== STATES.IDLE || isRecording) return;
   
@@ -204,72 +210,49 @@ async function startRecording() {
     mediaRecorder = new MediaRecorder(stream, { mimeType });
     audioChunks = [];
     
+    // Collect audio data
     mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
         audioChunks.push(event.data);
       }
     };
     
+    // Handle recording stop
     mediaRecorder.onstop = async () => {
-  stream.getTracks().forEach(track => track.stop());
-
-  setTimeout(async () => {
-    const audioBlob = new Blob(audioChunks, { type: mimeType });
-
-    if (audioBlob.size < 1000) {
-      console.warn("Audio troppo corto, scartato");
-      setState(STATES.IDLE);
-      micButton.classList.remove('recording');
-      return;
-    }
-
-    await transcribeAudio(audioBlob);
-
-    setState(STATES.IDLE);
-    micButton.classList.remove('recording');
-  }, 150);
-};
-
+      // Ferma tutti i track audio
+      stream.getTracks().forEach(track => track.stop());
+      
+      // Crea blob audio
+      const audioBlob = new Blob(audioChunks, { type: mimeType });
+      
+      // Resetta stato microfono
+      resetMicrophoneState();
+      
+      // Invia a STT
+      await transcribeAudio(audioBlob);
+    };
+    
     // Inizia registrazione
     mediaRecorder.start();
-    recordingStartedAt = Date.now(); // ⬅️ AGGIUNTA
     isRecording = true;
     setState(STATES.RECORDING);
     micButton.classList.add('recording');
     
   } catch (error) {
     console.error('Microphone access denied:', error);
-    // Fallback a comportamento precedente se permessi negati
     fallbackRecording();
   }
 }
 
-// 🛑 Ferma registrazione
+// Ferma registrazione
 function stopRecording() {
   if (!isRecording || !mediaRecorder) return;
-
-  const elapsed = Date.now() - recordingStartedAt;
-
-  // 🔒 Chrome Desktop FIX: garantisce audio valido
-  if (elapsed < MIN_RECORDING_MS) {
-    setTimeout(stopRecording, MIN_RECORDING_MS - elapsed);
-    return;
-  }
-
-  try {
-    if (mediaRecorder.state === "recording") {
-      mediaRecorder.requestData();
-    }
-  } catch {}
-
-  mediaRecorder.stop();
-  isRecording = false;
-  micButton.classList.remove('recording');
+  
   setState(STATES.THINKING);
+  mediaRecorder.stop();
 }
 
-
-// 🔄 Fallback per iOS/vecchi browser
+// Fallback per browser senza MediaRecorder
 function fallbackRecording() {
   setState(STATES.RECORDING);
   micButton.classList.add('recording');
@@ -285,14 +268,12 @@ function fallbackRecording() {
   }, 1500);
 }
 
-// 📤 Trascrizione audio via STT
+// Trascrizione audio via STT
 async function transcribeAudio(audioBlob) {
   try {
-    // Converti blob in formato compatibile
     const formData = new FormData();
     formData.append('audio', audioBlob, 'recording.webm');
     
-    // Invia a endpoint STT (esistente o nuovo)
     const response = await fetch('/stt', {
       method: 'POST',
       body: formData
@@ -306,7 +287,6 @@ async function transcribeAudio(audioBlob) {
     const transcribedText = result.text?.trim() || '';
     
     if (transcribedText) {
-      // Inserisci testo nell'input e invia
       textInput.value = transcribedText;
       setState(STATES.IDLE);
       sendMessage();
