@@ -165,6 +165,7 @@ chatForm.addEventListener("submit", (e) => {
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
+let recordingStartTime = 0;
 
 // MIME types per compatibilità cross-browser
 function getSupportedMimeType() {
@@ -242,21 +243,11 @@ async function startRecording() {
       // Resetta stato microfono
       resetMicrophoneState();
       
-      // Verifica che il blob non sia vuoto - se troppo piccolo, riprova subito
+      // Verifica che il blob non sia vuoto
       if (audioBlob.size < 1024) {
-        console.warn(`Audio too small: ${audioBlob.size} bytes - retrying...`);
-        
-        // Riprova immediatamente con una nuova registrazione
-        setTimeout(() => {
-          startRecording();
-          // Auto-stop dopo 2 secondi per garantire audio sufficiente
-          setTimeout(() => {
-            if (isRecording) {
-              stopRecording();
-            }
-          }, 2000);
-        }, 500);
-        
+        console.warn(`Audio too small: ${audioBlob.size} bytes`);
+        setState(STATES.IDLE);
+        addGenesiMessage("Audio troppo corto. Tieni premuto il pulsante mentre parli.");
         return;
       }
       
@@ -266,6 +257,7 @@ async function startRecording() {
     
     // Inizia registrazione
     mediaRecorder.start();
+    recordingStartTime = Date.now();
     isRecording = true;
     setState(STATES.RECORDING);
     micButton.classList.add('recording');
@@ -279,6 +271,17 @@ async function startRecording() {
 // Ferma registrazione
 function stopRecording() {
   if (!isRecording || !mediaRecorder) return;
+  
+  const recordingDuration = Date.now() - recordingStartTime;
+  
+  // Richiedi almeno 1 secondo di registrazione
+  if (recordingDuration < 1000) {
+    console.warn(`Recording too short: ${recordingDuration}ms`);
+    setState(STATES.IDLE);
+    addGenesiMessage("Registra per almeno 1 secondo.");
+    mediaRecorder.stop();
+    return;
+  }
   
   setState(STATES.THINKING);
   mediaRecorder.stop();
