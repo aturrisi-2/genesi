@@ -168,18 +168,28 @@ let isRecording = false;
 
 // MIME types per compatibilità cross-browser
 function getSupportedMimeType() {
-  const types = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/mp4',
-    'audio/wav'
-  ];
-  
+  const isChromeDesktop =
+    navigator.userAgent.includes("Chrome") &&
+    !navigator.userAgent.includes("Android");
+
+  const types = isChromeDesktop
+    ? [
+        // 🔧 Chrome desktop: formato più stabile per ffmpeg
+        'audio/webm',
+        'audio/webm;codecs=opus'
+      ]
+    : [
+        // 📱 iOS / Android: lascia tutto com’è
+        'audio/webm;codecs=opus',
+        'audio/webm'
+      ];
+
   for (const type of types) {
-    if (MediaRecorder.isTypeSupported(type)) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(type)) {
       return type;
     }
   }
+
   return 'audio/webm';
 }
 
