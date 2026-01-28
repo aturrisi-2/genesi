@@ -11,25 +11,26 @@ const STATES = {
 // DOM Elements
 // ===============================
 const app = document.getElementById('genesi-app');
-const dialogue = document.getElementById('dialogue'); // chat container reale
+const dialogue = document.getElementById('dialogue');
 const textInput = document.getElementById('text-input');
 const sendButton = document.getElementById('send-button');
 const micButton = document.getElementById('mic-button');
 const inputContainer = document.getElementById('input-container');
-const chatForm = document.getElementById('chat-form'); // ⚠️ DEVE ESISTERE IN HTML
+const chatForm = document.getElementById('chat-form');
 
 // ===============================
-// Auto-scroll Utility (ROBUSTO iOS)
+// 📱 iOS Safari Auto-scroll ROBUSTO
 // ===============================
 function scrollToBottom(force = false) {
-  requestAnimationFrame(() => {
+  const scroll = () => {
     dialogue.scrollTop = dialogue.scrollHeight;
-  });
-
+  };
+  
+  requestAnimationFrame(scroll);
+  
   if (force) {
-    setTimeout(() => {
-      dialogue.scrollTop = dialogue.scrollHeight;
-    }, 120);
+    setTimeout(scroll, 100);
+    setTimeout(scroll, 300);
   }
 }
 
@@ -127,14 +128,14 @@ async function sendChatMessage(message) {
 }
 
 // ===============================
-// Message Sending (UNICO PUNTO)
+// 📱 iOS Message Sending (FIX DEFINITIVO)
 // ===============================
 async function sendMessage() {
   const text = textInput.value.trim();
   if (!text || currentState !== STATES.IDLE) return;
 
-  // 🔥 svuota SUBITO (fix iOS)
   textInput.value = "";
+  textInput.blur();
 
   addUserMessage(text);
   setState(STATES.THINKING);
@@ -151,7 +152,7 @@ async function sendMessage() {
 }
 
 // ===============================
-// FORM SUBMIT (FIX DEFINITIVO iOS)
+// 📱 iOS Form Submit (ENTER FIX)
 // ===============================
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();
@@ -190,24 +191,33 @@ document.addEventListener('mouseup', stopRecording);
 document.addEventListener('touchend', stopRecording);
 
 // ===============================
-// 📱 iOS KEYBOARD FIX
+// 📱 iOS Safari Keyboard & Viewport FIX
 // ===============================
+let viewportHeight = window.innerHeight;
+
 if (window.visualViewport) {
   window.visualViewport.addEventListener("resize", () => {
-    document.documentElement.style.setProperty(
-      "--vh",
-      `${window.visualViewport.height}px`
-    );
-    scrollToBottom(true);
+    const newHeight = window.visualViewport.height;
+    document.documentElement.style.setProperty("--vh", `${newHeight}px`);
+    
+    if (Math.abs(newHeight - viewportHeight) > 100) {
+      setTimeout(() => scrollToBottom(true), 150);
+    }
+    viewportHeight = newHeight;
+  });
+} else {
+  window.addEventListener("resize", () => {
+    document.documentElement.style.setProperty("--vh", `${window.innerHeight}px`);
+    setTimeout(() => scrollToBottom(true), 150);
   });
 }
 
 textInput.addEventListener("focus", () => {
-  setTimeout(() => scrollToBottom(true), 150);
+  setTimeout(() => scrollToBottom(true), 200);
 });
 
 textInput.addEventListener("blur", () => {
-  setTimeout(() => scrollToBottom(true), 150);
+  setTimeout(() => scrollToBottom(true), 200);
 });
 
 // ===============================
