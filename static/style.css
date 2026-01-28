@@ -27,20 +27,27 @@
 
 body {
     font-family: 'System Font', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: var(--bg-color);
     color: var(--text-color);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-image: 
-        radial-gradient(circle at 25% 25%, rgba(100, 120, 200, 0.05) 0%, transparent 50%),
-        radial-gradient(circle at 75% 75%, rgba(200, 120, 100, 0.05) 0%, transparent 50%);
+
+    /* SFONDO CHAT */
+    background-image: url("/static/assets/chat-bg.jpg");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+
     min-height: 100vh;
 }
 
 
 /* Layout principale */
 #genesi-app {
+    position: relative;   /* 🔴 AGGIUNGI */
+    z-index: 1;           /* 🔴 AGGIUNGI */
+    
     height: 100vh;
     display: flex;
     flex-direction: column;
@@ -385,4 +392,28 @@ html, body {
         bottom: env(safe-area-inset-bottom, 0.5rem);
         padding: 0.5rem 0.8rem;
     }
+}
+
+/* ===============================
+   Cerchio centrale (sostituisce la mela)
+   =============================== */
+
+body::after {
+    content: "";
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 120px;
+    height: 120px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+
+    background: radial-gradient(
+        circle,
+        rgba(255, 255, 255, 0.18),
+        rgba(255, 255, 255, 0.02)
+    );
+
+    pointer-events: none;
+    z-index: 0;
 }
