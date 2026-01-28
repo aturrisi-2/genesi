@@ -398,7 +398,7 @@ html, body {
    Cerchio centrale (sostituisce la mela)
    =============================== */
 
-body::after {
+body::before {
     content: "";
     position: fixed;
     inset: 0;
@@ -407,12 +407,15 @@ body::after {
 
     background:
         radial-gradient(
-            circle at 50% 45%,
-            rgba(255, 255, 255, 0.12) 0%,
-            rgba(255, 255, 255, 0.06) 18%,
-            rgba(255, 255, 255, 0.025) 32%,
-            rgba(255, 255, 255, 0.01) 45%,
-            rgba(0, 0, 0, 0) 60%
+            circle at 50% 55%,
+            rgba(58, 66, 70, 0.85) 0%,
+            rgba(58, 66, 70, 0.85) 9%,
+            rgba(58, 66, 70, 0.75) 14%,
+            rgba(58, 66, 70, 0.55) 18%,
+            rgba(0, 0, 0, 0) 26%
         );
+
+    filter: blur(0.3px);
 }
+
 
