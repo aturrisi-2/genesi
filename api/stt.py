@@ -109,7 +109,7 @@ async def speech_to_text(audio: UploadFile = File(...)):
         # Pulizia file temporaneo
         if temp_file_path and os.path.exists(temp_file_path):
             try:
-                os.unlink(temp_file_path)
+                # os.unlink(temp_file_path)
                 logger.info(f"Temporary file cleaned: {temp_file_path}")
             except Exception as e:
                 logger.warning(f"Failed to clean temp file {temp_file_path}: {e}")
