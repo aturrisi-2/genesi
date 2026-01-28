@@ -165,6 +165,7 @@ chatForm.addEventListener("submit", (e) => {
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
+let recordingStartedAt = 0;
 
 // 🎯 MIME types per compatibilità cross-browser
 function getSupportedMimeType() {
@@ -228,6 +229,7 @@ async function startRecording() {
 
     // Inizia registrazione
     mediaRecorder.start();
+    recordingStartedAt = Date.now(); // ⬅️ AGGIUNTA
     isRecording = true;
     setState(STATES.RECORDING);
     micButton.classList.add('recording');
@@ -242,12 +244,19 @@ async function startRecording() {
 // 🛑 Ferma registrazione
 function stopRecording() {
   if (!isRecording || !mediaRecorder) return;
-  
+
+  // 🛡️ iOS Safari: ignora stop troppo rapido
+  const elapsed = Date.now() - recordingStartedAt;
+  if (elapsed < 300) {
+    return;
+  }
+
   mediaRecorder.stop();
   isRecording = false;
   micButton.classList.remove('recording');
   setState(STATES.THINKING);
 }
+
 
 // 🔄 Fallback per iOS/vecchi browser
 function fallbackRecording() {
