@@ -15,6 +15,38 @@ def safe_read_file(file_path: str) -> str:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 return f.read()
 
+def prepare_content_for_model(file_path: str) -> str:
+    MAX_CHARS = 12000
+    HARD_LIMIT = 200000
+    
+    content = safe_read_file(file_path)
+    
+    if len(content) > HARD_LIMIT:
+        preview = content[:1000]
+        return f"""
+Il contenuto completo non è stato incluso per limiti di dimensione.
+Rispondi spiegando cosa puoi fare con questo tipo di file e chiedi all'utente come procedere.
+
+Anteprima del file (primi 1000 caratteri):
+---
+{preview}
+---
+"""
+    
+    if len(content) > MAX_CHARS:
+        truncated = content[:MAX_CHARS]
+        return f"""
+⚠️ Il documento è più lungo del limite massimo.
+⚠️ Di seguito viene fornito solo un estratto iniziale del contenuto.
+⚠️ Rispondi tenendo conto che il testo è parziale.
+
+---
+{truncated}
+---
+"""
+    
+    return content
+
 async def route_response(file_analysis: dict, file_path: str, context: dict = None) -> str:
     decision = decide_response_strategy(file_analysis, context)
     strategy = decision.get("strategy", "text_analysis")
@@ -23,7 +55,7 @@ async def route_response(file_analysis: dict, file_path: str, context: dict = No
     
     try:
         if strategy == "text_analysis":
-            content = safe_read_file(file_path)
+            content = prepare_content_for_model(file_path)
             
             response = client.chat.completions.create(
                 model=model,
@@ -47,7 +79,7 @@ Rispondi analizzando direttamente il contenuto.
             return response.choices[0].message.content
         
         elif strategy == "code_analysis":
-            content = safe_read_file(file_path)
+            content = prepare_content_for_model(file_path)
             
             response = client.chat.completions.create(
                 model=model,
@@ -82,7 +114,7 @@ Analizza il codice, spiegalo e suggerisci miglioramenti.
             return response.choices[0].message.content
         
         elif strategy == "document_analysis":
-            content = safe_read_file(file_path)
+            content = prepare_content_for_model(file_path)
             
             response = client.chat.completions.create(
                 model=model,
