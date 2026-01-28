@@ -165,7 +165,7 @@ chatForm.addEventListener("submit", (e) => {
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
-let recordingStartTime = 0;
+let currentStream = null;
 
 // MIME types per compatibilità cross-browser
 function getSupportedMimeType() {
@@ -173,26 +173,27 @@ function getSupportedMimeType() {
     navigator.userAgent.includes("Chrome") &&
     !navigator.userAgent.includes("Android");
 
+  // 🎙️ Chrome Desktop → CLICK (non mousedown)
   if (isChromeDesktop) {
-    // 🔧 Chrome desktop: forza webm senza opus (più compatibile)
-    if (MediaRecorder.isTypeSupported('audio/webm')) {
-      return 'audio/webm';
-    }
-    // Fallback a opus se necessario
-    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-      return 'audio/webm;codecs=opus';
-    }
+    micButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (isRecording) {
+        stopRecording();
+      } else {
+        startRecording();
+      }
+    });
   } else {
-    // 📱 iOS / Android: ordine originale che funziona
-    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-      return 'audio/webm;codecs=opus';
-    }
-    if (MediaRecorder.isTypeSupported('audio/webm')) {
-      return 'audio/webm';
-    }
+    // 📱 Mobile / iOS → touchstart
+    micButton.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (isRecording) {
+        stopRecording();
+      } else {
+        startRecording();
+      }
+    });
   }
-
-  return 'audio/webm';
 }
 
 // Reset completo stato microfono
@@ -200,6 +201,7 @@ function resetMicrophoneState() {
   mediaRecorder = null;
   audioChunks = [];
   isRecording = false;
+  currentStream = null;
   micButton.classList.remove('recording');
 }
 
@@ -217,7 +219,7 @@ async function startRecording() {
       } 
     });
     
-    // Setup MediaRecorder
+    currentStream = stream;
     const mimeType = getSupportedMimeType();
     mediaRecorder = new MediaRecorder(stream, { mimeType });
     audioChunks = [];
@@ -230,34 +232,38 @@ async function startRecording() {
       }
     };
     
-        // Handle recording stop
+    // Handle recording stop
     mediaRecorder.onstop = async () => {
-      // Ferma tutti i track audio
-      stream.getTracks().forEach(track => track.stop());
-      
-      // Crea blob audio
-      const audioBlob = new Blob(audioChunks, { type: mimeType });
-      
-      console.log(`Final blob: ${audioBlob.size} bytes, chunks: ${audioChunks.length}, type: ${audioBlob.type}`);
-      
-      // Resetta stato microfono
-      resetMicrophoneState();
-      
-      // Verifica che il blob non sia vuoto (soglia più bassa per Chrome desktop)
-      if (audioBlob.size < 500) {
-        console.warn(`Audio too small: ${audioBlob.size} bytes`);
-        setState(STATES.IDLE);
-        addGenesiMessage("Audio non rilevato. Riprova a parlare più chiaramente.");
-        return;
-      }
-      
-      // Invia a STT
-      await transcribeAudio(audioBlob);
+      // Breve delay per Chrome desktop flush
+      setTimeout(async () => {
+        // Ferma tutti i track audio
+        if (currentStream) {
+          currentStream.getTracks().forEach(track => track.stop());
+        }
+        
+        // Crea blob audio
+        const audioBlob = new Blob(audioChunks, { type: mimeType });
+        
+        console.log(`Final blob: ${audioBlob.size} bytes, chunks: ${audioChunks.length}, type: ${audioBlob.type}`);
+        
+        // Resetta stato microfono DOPO aver creato il blob
+        resetMicrophoneState();
+        
+        // Verifica che il blob non sia vuoto
+        if (audioBlob.size < 500) {
+          console.warn(`Audio too small: ${audioBlob.size} bytes`);
+          setState(STATES.IDLE);
+          addGenesiMessage("Audio non rilevato. Riprova a parlare più chiaramente.");
+          return;
+        }
+        
+        // Invia a STT
+        await transcribeAudio(audioBlob);
+      }, 150); // 150ms delay per Chrome desktop
     };
     
     // Inizia registrazione
     mediaRecorder.start();
-    recordingStartTime = Date.now();
     isRecording = true;
     setState(STATES.RECORDING);
     micButton.classList.add('recording');
@@ -352,18 +358,22 @@ micButton.addEventListener('touchstart', (e) => {
   }
 });
 
-// Previeni comportamento default globale
-document.addEventListener('mouseup', (e) => {
-  if (e.target !== micButton && isRecording) {
-    stopRecording();
-  }
-});
+// Previeni comportamento default globale - SOLO per iOS/Android
+const isChromeDesktop = navigator.userAgent.includes("Chrome") && !navigator.userAgent.includes("Android");
 
-document.addEventListener('touchend', (e) => {
-  if (e.target !== micButton && isRecording) {
-    stopRecording();
-  }
-});
+if (!isChromeDesktop) {
+  document.addEventListener('mouseup', (e) => {
+    if (e.target !== micButton && isRecording) {
+      stopRecording();
+    }
+  });
+
+  document.addEventListener('touchend', (e) => {
+    if (e.target !== micButton && isRecording) {
+      stopRecording();
+    }
+  });
+}
 
 // ===============================
 // 📱 iOS Safari Keyboard & Viewport FIX
