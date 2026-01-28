@@ -242,9 +242,12 @@ async function startRecording() {
 // 🛑 Ferma registrazione
 function stopRecording() {
   if (!isRecording || !mediaRecorder) return;
+  
   mediaRecorder.stop();
+  isRecording = false;
+  micButton.classList.remove('recording');
+  setState(STATES.THINKING);
 }
-
 
 // 🔄 Fallback per iOS/vecchi browser
 function fallbackRecording() {
