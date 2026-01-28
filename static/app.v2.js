@@ -54,19 +54,23 @@ let userIdentity = {};
 async function bootstrapUser() {
   const userId = getUserId();
 
-  const res = await fetch("/user/bootstrap", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: userId })
-  });
+  try {
+    const res = await fetch("/user/bootstrap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId })
+    });
 
-  if (!res.ok) {
-    console.error("Bootstrap failed");
-    return;
+    if (!res.ok) {
+      console.error("Bootstrap failed");
+      return;
+    }
+
+    const data = await res.json();
+    userIdentity = data.identity || {};
+  } catch (e) {
+    console.error("Connection error during bootstrap", e);
   }
-
-  const data = await res.json();
-  userIdentity = data.identity || {};
 }
 
 // ===============================
@@ -128,7 +132,7 @@ async function sendChatMessage(message) {
 }
 
 // ===============================
-// 📱 iOS Message Sending (FIX DEFINITIVO)
+// 📱 iOS Message Sending
 // ===============================
 async function sendMessage() {
   const text = textInput.value.trim();
@@ -151,9 +155,6 @@ async function sendMessage() {
   }
 }
 
-// ===============================
-// 📱 iOS Form Submit (ENTER FIX)
-// ===============================
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();
   sendMessage();
@@ -167,36 +168,24 @@ let audioChunks = [];
 let isRecording = false;
 let currentStream = null;
 
-// MIME types per compatibilità cross-browser
+// Funzione PURA per ottenere il tipo MIME supportato
 function getSupportedMimeType() {
-  const isChromeDesktop =
-    navigator.userAgent.includes("Chrome") &&
-    !navigator.userAgent.includes("Android");
-
-  // 🎙️ Chrome Desktop → CLICK (non mousedown)
-  if (isChromeDesktop) {
-    micButton.addEventListener('click', (e) => {
-      e.preventDefault();
-      if (isRecording) {
-        stopRecording();
-      } else {
-        startRecording();
-      }
-    });
-  } else {
-    // 📱 Mobile / iOS → touchstart
-    micButton.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      if (isRecording) {
-        stopRecording();
-      } else {
-        startRecording();
-      }
-    });
+  const types = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/mp4',
+    'audio/wav'
+  ];
+  
+  for (const type of types) {
+    if (MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
   }
+  return ''; // Browser default
 }
 
-// Reset completo stato microfono
 function resetMicrophoneState() {
   mediaRecorder = null;
   audioChunks = [];
@@ -205,12 +194,10 @@ function resetMicrophoneState() {
   micButton.classList.remove('recording');
 }
 
-// Inizia registrazione
 async function startRecording() {
   if (currentState !== STATES.IDLE || isRecording) return;
   
   try {
-    // Richiesta permessi microfono
     const stream = await navigator.mediaDevices.getUserMedia({ 
       audio: {
         echoCancellation: true,
@@ -221,10 +208,11 @@ async function startRecording() {
     
     currentStream = stream;
     const mimeType = getSupportedMimeType();
-    mediaRecorder = new MediaRecorder(stream, { mimeType });
+    const options = mimeType ? { mimeType } : {};
+    
+    mediaRecorder = new MediaRecorder(stream, options);
     audioChunks = [];
     
-    // Collect audio data
     mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
         audioChunks.push(event.data);
@@ -232,37 +220,32 @@ async function startRecording() {
       }
     };
     
-    // Handle recording stop
     mediaRecorder.onstop = async () => {
-      // Breve delay per Chrome desktop flush
+      // Delay critico per Windows/Chrome flush
       setTimeout(async () => {
-        // Ferma tutti i track audio
         if (currentStream) {
           currentStream.getTracks().forEach(track => track.stop());
         }
         
-        // Crea blob audio
-        const audioBlob = new Blob(audioChunks, { type: mimeType });
+        const blobType = mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunks, { type: blobType });
         
-        console.log(`Final blob: ${audioBlob.size} bytes, chunks: ${audioChunks.length}, type: ${audioBlob.type}`);
+        console.log(`Final blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
         
-        // Resetta stato microfono DOPO aver creato il blob
         resetMicrophoneState();
         
-        // Verifica che il blob non sia vuoto
+        // Verifica blob vuoto (alzo soglia sicurezza a 500 byte)
         if (audioBlob.size < 500) {
           console.warn(`Audio too small: ${audioBlob.size} bytes`);
           setState(STATES.IDLE);
-          addGenesiMessage("Audio non rilevato. Riprova a parlare più chiaramente.");
+          // Opzionale: puoi mostrare un messaggio se vuoi, ma spesso è meglio ignorare i click accidentali
           return;
         }
         
-        // Invia a STT
         await transcribeAudio(audioBlob);
-      }, 150); // 150ms delay per Chrome desktop
+      }, 200);
     };
     
-    // Inizia registrazione
     mediaRecorder.start();
     isRecording = true;
     setState(STATES.RECORDING);
@@ -274,15 +257,12 @@ async function startRecording() {
   }
 }
 
-// Ferma registrazione
 function stopRecording() {
   if (!isRecording || !mediaRecorder) return;
-  
-  setState(STATES.THINKING);
+  // Non forziamo THINKING qui, aspettiamo che onstop finisca
   mediaRecorder.stop();
 }
 
-// Fallback per browser senza MediaRecorder
 function fallbackRecording() {
   setState(STATES.RECORDING);
   micButton.classList.add('recording');
@@ -298,14 +278,15 @@ function fallbackRecording() {
   }, 1500);
 }
 
-// Trascrizione audio via STT
 async function transcribeAudio(audioBlob) {
   try {
     const formData = new FormData();
-    // Usa estensione corretta basata sul MIME type
     const fileExtension = audioBlob.type.includes('wav') ? '.wav' : '.webm';
     formData.append('audio', audioBlob, `recording${fileExtension}`);
     
+    // Stato intermedio mentre invia
+    setState(STATES.THINKING);
+
     const response = await fetch('/stt', {
       method: 'POST',
       body: formData
@@ -335,44 +316,44 @@ async function transcribeAudio(audioBlob) {
 }
 
 // ===============================
-// Event Listeners
+// Event Listeners (FIX UNIFICATO)
 // ===============================
+
+// 1. Send Button
 sendButton.addEventListener('click', sendMessage);
 
-// 🎙️ Microphone events (tap singolo/doppio)
-micButton.addEventListener('mousedown', (e) => {
-  e.preventDefault();
+// 2. Microphone Logic Unificata
+const handleMicToggle = (e) => {
+  // Previene comportamenti default (zoom, selezione, ecc)
+  if (e.type === 'touchstart') {
+     e.preventDefault(); 
+  }
+  
   if (isRecording) {
     stopRecording();
   } else {
     startRecording();
   }
-});
+};
 
-micButton.addEventListener('touchstart', (e) => {
-  e.preventDefault();
-  if (isRecording) {
-    stopRecording();
-  } else {
-    startRecording();
-  }
-});
+// Rilevamento capacità Touch
+const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
-// Previeni comportamento default globale - SOLO per iOS/Android
-const isChromeDesktop = navigator.userAgent.includes("Chrome") && !navigator.userAgent.includes("Android");
+if (isTouchDevice) {
+  // Mobile / Tablet: Usa touchstart per reattività istantanea
+  micButton.addEventListener('touchstart', handleMicToggle, { passive: false });
+} else {
+  // Desktop: Usa click per stabilità (evita conflitti mousedown su Windows)
+  micButton.addEventListener('click', handleMicToggle);
+}
 
-if (!isChromeDesktop) {
-  document.addEventListener('mouseup', (e) => {
-    if (e.target !== micButton && isRecording) {
-      stopRecording();
-    }
-  });
-
-  document.addEventListener('touchend', (e) => {
-    if (e.target !== micButton && isRecording) {
-      stopRecording();
-    }
-  });
+// 3. Prevenzione chiusura accidentale registrazione (solo mobile)
+if (isTouchDevice) {
+    document.addEventListener('touchend', (e) => {
+        if (e.target !== micButton && isRecording) {
+            stopRecording();
+        }
+    });
 }
 
 // ===============================
