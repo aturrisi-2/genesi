@@ -199,7 +199,10 @@ html, body {
     opacity: 0.6;
 }
 
-/* Text input */
+/* ===============================
+   Text input (UX migliorata iOS / Desktop)
+   =============================== */
+
 #text-input {
     order: 2;
     flex-grow: 1;
@@ -209,13 +212,46 @@ html, body {
     font-size: 1rem;
     padding: 0.75rem 0;
     outline: none;
-    caret-color: var(--text-color);
+    caret-color: #4da3ff; /* caret più leggibile */
+    -webkit-appearance: none;
+    appearance: none;
+    transition: background 0.3s ease;
 }
 
+/* Placeholder */
 #text-input::placeholder {
     color: var(--text-muted);
     opacity: 0.6;
+    transition: opacity 0.25s ease;
 }
+
+/* Quando l’input è attivo */
+#text-input:focus::placeholder {
+    opacity: 0.35;
+}
+
+/* Micro-feedback visivo: pronto a inviare */
+#text-input:focus {
+    background-image: linear-gradient(
+        to right,
+        rgba(77, 163, 255, 0.18),
+        rgba(77, 163, 255, 0.05)
+    );
+    background-size: 0% 100%;
+    background-repeat: no-repeat;
+    animation: inputReady 0.4s ease forwards;
+}
+
+/* Animazione discreta, non teatrale */
+@keyframes inputReady {
+    from {
+        background-size: 0% 100%;
+    }
+    to {
+        background-size: 100% 100%;
+    }
+}
+
 
 /* Mic button */
 #mic-button {
