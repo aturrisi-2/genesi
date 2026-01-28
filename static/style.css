@@ -277,16 +277,16 @@ html, body {
     order: 4;
     width: 2.5rem;
     height: 2.5rem;
-    opacity: 0.4;
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(100, 120, 200, 0.12); /* 🔥 non trasparente */
+    border: 1px solid rgba(255, 255, 255, 0.3);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: var(--transition);
+    transition: all 0.2s ease;
     pointer-events: auto;
+    opacity: 1; /* 🔥 mai spento */
 }
 
 #send-button:disabled {
@@ -295,19 +295,30 @@ html, body {
 }
 
 /* SVG in buttons */
-button svg {
+#send-button svg {
     width: 18px;
     height: 18px;
-    stroke: rgba(255, 255, 255, 0.6);
-    stroke-width: 1.5;
+    stroke: rgba(255, 255, 255, 0.9); /* 🔥 più presente */
+    stroke-width: 2;
     fill: none;
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
-/* Hover state for buttons */
-button:hover svg {
-    opacity: 0.9;
+/* Hover */
+#send-button:hover {
+    background: rgba(100, 120, 200, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
 }
+
+/* Click / tap (feedback fisico) */
+#send-button:active {
+    transform: scale(0.92);
+}
+
+#send-button:active svg {
+    transform: translateX(2px);
+}
+
 
 /* Recording state for mic button */
 #mic-button.recording svg {
