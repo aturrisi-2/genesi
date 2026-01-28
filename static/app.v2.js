@@ -158,6 +158,7 @@ chatForm.addEventListener("submit", (e) => {
   e.preventDefault();
   sendMessage();
 });
+
 // ===============================
 // 🎙️ Microphone Recording System
 // ===============================
@@ -165,8 +166,7 @@ let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
 let recordingStartedAt = 0;
-
-const MIN_RECORDING_MS = 400;
+const MIN_RECORDING_MS = 400; // 🔥 fondamentale per Chrome
 
 // 🎯 MIME types per compatibilità cross-browser
 function getSupportedMimeType() {
@@ -176,80 +176,70 @@ function getSupportedMimeType() {
     'audio/mp4',
     'audio/wav'
   ];
-
+  
   for (const type of types) {
-    if (window.MediaRecorder && MediaRecorder.isTypeSupported(type)) {
+    if (MediaRecorder.isTypeSupported(type)) {
       return type;
     }
   }
-  return 'audio/webm';
+  return 'audio/webm'; // fallback
 }
 
-// 🔄 reset STATO MIC (UNICO PUNTO)
-function resetMicState() {
-  isRecording = false;
-  recordingStartedAt = 0;
-  micButton.classList.remove('recording');
-  setState(STATES.IDLE);
-}
-
-// 🎤 Inizia registrazione
+// 🎤 Inizia registrazione reale
 async function startRecording() {
   if (currentState !== STATES.IDLE || isRecording) return;
-
+  
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
+    // Richiesta permessi microfono
+    const stream = await navigator.mediaDevices.getUserMedia({ 
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true
-      }
+      } 
     });
-
+    
+    // Setup MediaRecorder
     const mimeType = getSupportedMimeType();
     mediaRecorder = new MediaRecorder(stream, { mimeType });
     audioChunks = [];
-
+    
     mediaRecorder.ondataavailable = (event) => {
-      if (event.data && event.data.size > 0) {
+      if (event.data.size > 0) {
         audioChunks.push(event.data);
       }
     };
-
+    
     mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach(track => track.stop());
+  stream.getTracks().forEach(track => track.stop());
 
-      const duration = Date.now() - recordingStartedAt;
+  setTimeout(async () => {
+    const audioBlob = new Blob(audioChunks, { type: mimeType });
 
-      // ⛔ Chrome desktop: stop troppo rapido
-      if (duration < MIN_RECORDING_MS) {
-        console.warn("Registrazione troppo corta:", duration);
-        resetMicState();
-        return;
-      }
+    if (audioBlob.size < 1000) {
+      console.warn("Audio troppo corto, scartato");
+      setState(STATES.IDLE);
+      micButton.classList.remove('recording');
+      return;
+    }
 
-      const audioBlob = new Blob(audioChunks, { type: mimeType });
+    await transcribeAudio(audioBlob);
 
-      if (audioBlob.size < 1000) {
-        console.warn("Blob audio troppo piccolo");
-        resetMicState();
-        return;
-      }
+    setState(STATES.IDLE);
+    micButton.classList.remove('recording');
+  }, 150);
+};
 
-      await transcribeAudio(audioBlob);
-      resetMicState();
-    };
-
-    // ▶️ AVVIO UNICO (QUI PRIMA AVEVI IL DOPPIONE)
+    // Inizia registrazione
     mediaRecorder.start();
-    recordingStartedAt = Date.now();
+    recordingStartedAt = Date.now(); // ⬅️ AGGIUNTA
     isRecording = true;
-
     setState(STATES.RECORDING);
     micButton.classList.add('recording');
-
+    
   } catch (error) {
     console.error('Microphone access denied:', error);
+    // Fallback a comportamento precedente se permessi negati
     fallbackRecording();
   }
 }
@@ -258,28 +248,78 @@ async function startRecording() {
 function stopRecording() {
   if (!isRecording || !mediaRecorder) return;
 
-  try {
-    mediaRecorder.stop();
-  } catch (e) {
-    console.warn("Stop recorder error", e);
-    resetMicState();
+  const elapsed = Date.now() - recordingStartedAt;
+
+  // 🔒 Chrome Desktop FIX: garantisce audio valido
+  if (elapsed < MIN_RECORDING_MS) {
+    setTimeout(stopRecording, MIN_RECORDING_MS - elapsed);
+    return;
   }
+
+  try {
+    if (mediaRecorder.state === "recording") {
+      mediaRecorder.requestData();
+    }
+  } catch {}
+
+  mediaRecorder.stop();
+  isRecording = false;
+  micButton.classList.remove('recording');
+  setState(STATES.THINKING);
 }
 
-// 🔄 Fallback (browser non supportati)
+
+// 🔄 Fallback per iOS/vecchi browser
 function fallbackRecording() {
   setState(STATES.RECORDING);
   micButton.classList.add('recording');
-
+  
   setTimeout(() => {
     micButton.classList.remove('recording');
     setState(STATES.THINKING);
-
+    
     setTimeout(() => {
       textInput.value = "Microfono non supportato. Scrivi il messaggio.";
       setState(STATES.IDLE);
     }, 600);
-  }, 1200);
+  }, 1500);
+}
+
+// 📤 Trascrizione audio via STT
+async function transcribeAudio(audioBlob) {
+  try {
+    // Converti blob in formato compatibile
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.webm');
+    
+    // Invia a endpoint STT (esistente o nuovo)
+    const response = await fetch('/stt', {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) {
+      throw new Error(`STT Error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    const transcribedText = result.text?.trim() || '';
+    
+    if (transcribedText) {
+      // Inserisci testo nell'input e invia
+      textInput.value = transcribedText;
+      setState(STATES.IDLE);
+      sendMessage();
+    } else {
+      setState(STATES.IDLE);
+      addGenesiMessage("Non ho capito. Riprova a parlare.");
+    }
+    
+  } catch (error) {
+    console.error('STT Error:', error);
+    setState(STATES.IDLE);
+    addGenesiMessage("Errore trascrizione audio. Riprova.");
+  }
 }
 
 // ===============================
