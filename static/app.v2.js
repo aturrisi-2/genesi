@@ -166,134 +166,139 @@ let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
 
+/**
+ * 🔁 Reset centrale e autoritativo dello stato microfono
+ * - ferma animazione
+ * - resetta flag
+ * - riporta UI a idle
+ */
+function resetMicState() {
+  isRecording = false;
+  micButton.classList.remove("recording");
+  setState(STATES.IDLE);
+}
+
 // 🎯 MIME types per compatibilità cross-browser
 function getSupportedMimeType() {
   const types = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/mp4',
-    'audio/wav'
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/wav"
   ];
-  
+
   for (const type of types) {
-    if (MediaRecorder.isTypeSupported(type)) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(type)) {
       return type;
     }
   }
-  return 'audio/webm'; // fallback
+  return "audio/webm"; // fallback sicuro
 }
 
-// 🎤 Inizia registrazione reale
+// 🎤 Avvio registrazione reale
 async function startRecording() {
   if (currentState !== STATES.IDLE || isRecording) return;
-  
+
   try {
-    // Richiesta permessi microfono
-    const stream = await navigator.mediaDevices.getUserMedia({ 
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true
-      } 
+      }
     });
-    
-    // Setup MediaRecorder
+
     const mimeType = getSupportedMimeType();
     mediaRecorder = new MediaRecorder(stream, { mimeType });
     audioChunks = [];
-    
+
     mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
+      if (event.data && event.data.size > 0) {
         audioChunks.push(event.data);
       }
     };
-    
+
     mediaRecorder.onstop = async () => {
-      // Ferma tutti i track audio
+      // chiude sempre i track
       stream.getTracks().forEach(track => track.stop());
-      
-      // Crea blob audio
-      const audioBlob = new Blob(audioChunks, { type: mimeType });
-      
-      // Invia a STT
-      await transcribeAudio(audioBlob);
+
+      // 🛡️ delay necessario (Chrome desktop)
+      setTimeout(async () => {
+        try {
+          const audioBlob = new Blob(audioChunks, { type: mimeType });
+
+          if (audioBlob.size < 1000) {
+            console.warn("🎙️ Audio troppo corto, scartato");
+            resetMicState();
+            return;
+          }
+
+          await transcribeAudio(audioBlob);
+        } finally {
+          resetMicState();
+        }
+      }, 150);
     };
-    
-    // Inizia registrazione
+
     mediaRecorder.start();
     isRecording = true;
     setState(STATES.RECORDING);
-    micButton.classList.add('recording');
-    
+    micButton.classList.add("recording");
+
   } catch (error) {
-    console.error('Microphone access denied:', error);
-    // Fallback a comportamento precedente se permessi negati
+    console.error("🎙️ Accesso microfono negato:", error);
     fallbackRecording();
   }
 }
 
-// 🛑 Ferma registrazione
+// 🛑 Stop registrazione
 function stopRecording() {
   if (!isRecording || !mediaRecorder) return;
-  
   mediaRecorder.stop();
-  isRecording = false;
-  micButton.classList.remove('recording');
-  setState(STATES.THINKING);
 }
 
-// 🔄 Fallback per iOS/vecchi browser
+// 🔄 Fallback per browser non compatibili
 function fallbackRecording() {
   setState(STATES.RECORDING);
-  micButton.classList.add('recording');
-  
+  micButton.classList.add("recording");
+
   setTimeout(() => {
-    micButton.classList.remove('recording');
-    setState(STATES.THINKING);
-    
-    setTimeout(() => {
-      textInput.value = "Microfono non supportato. Scrivi il messaggio.";
-      setState(STATES.IDLE);
-    }, 600);
-  }, 1500);
+    resetMicState();
+    textInput.value = "Microfono non supportato. Scrivi il messaggio.";
+  }, 1200);
 }
 
 // 📤 Trascrizione audio via STT
 async function transcribeAudio(audioBlob) {
   try {
-    // Converti blob in formato compatibile
     const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.webm');
-    
-    // Invia a endpoint STT (esistente o nuovo)
-    const response = await fetch('/stt', {
-      method: 'POST',
+    formData.append("audio", audioBlob, "recording.webm");
+
+    const response = await fetch("/stt", {
+      method: "POST",
       body: formData
     });
-    
+
     if (!response.ok) {
-      throw new Error(`STT Error: ${response.status}`);
+      throw new Error(`STT Error ${response.status}`);
     }
-    
+
     const result = await response.json();
-    const transcribedText = result.text?.trim() || '';
-    
-    if (transcribedText) {
-      // Inserisci testo nell'input e invia
-      textInput.value = transcribedText;
-      setState(STATES.IDLE);
+    const text = result.text?.trim();
+
+    if (text) {
+      textInput.value = text;
       sendMessage();
     } else {
-      setState(STATES.IDLE);
       addGenesiMessage("Non ho capito. Riprova a parlare.");
     }
-    
+
   } catch (error) {
-    console.error('STT Error:', error);
-    setState(STATES.IDLE);
+    console.error("🎙️ STT Error:", error);
     addGenesiMessage("Errore trascrizione audio. Riprova.");
   }
 }
+
 
 // ===============================
 // Event Listeners
