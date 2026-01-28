@@ -225,10 +225,10 @@ html, body {
     transition: opacity 0.25s ease;
 }
 
-/* Quando l’input è attivo 
+/* Quando l’input è attivo */
 #text-input:focus::placeholder {
     opacity: 0.35;
-}*/
+}
 
 /* Micro-feedback visivo: pronto a inviare */
 #text-input:focus {
