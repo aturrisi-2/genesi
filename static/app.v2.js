@@ -174,7 +174,9 @@ function getSupportedMimeType() {
 
   const types = isChromeDesktop
     ? [
-        // 🔧 Chrome desktop: usa solo webm senza opus per evitare file corrotti
+        // 🔧 Chrome desktop: prova WAV prima, poi webm
+        'audio/wav',
+        'audio/webm;codecs=opus',
         'audio/webm'
       ]
     : [
@@ -216,13 +218,21 @@ async function startRecording() {
     
     // Setup MediaRecorder
     const mimeType = getSupportedMimeType();
-    mediaRecorder = new MediaRecorder(stream, { mimeType });
+    const isChromeDesktop = navigator.userAgent.includes("Chrome") && !navigator.userAgent.includes("Android");
+    
+    // Per Chrome desktop usa timeslice più piccolo per garantire dati
+    const mediaRecorderOptions = isChromeDesktop 
+      ? { mimeType, timeslice: 100 } // 100ms chunks
+      : { mimeType };
+    
+    mediaRecorder = new MediaRecorder(stream, mediaRecorderOptions);
     audioChunks = [];
     
     // Collect audio data
     mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
         audioChunks.push(event.data);
+        console.log(`Audio chunk: ${event.data.size} bytes`);
       }
     };
     
@@ -236,6 +246,14 @@ async function startRecording() {
       
       // Resetta stato microfono
       resetMicrophoneState();
+      
+      // Verifica che il blob non sia vuoto
+      if (audioBlob.size < 1024) {
+        console.warn(`Audio too small: ${audioBlob.size} bytes`);
+        setState(STATES.IDLE);
+        addGenesiMessage("Audio troppo corto. Riprova a parlare più a lungo.");
+        return;
+      }
       
       // Invia a STT
       await transcribeAudio(audioBlob);
@@ -281,7 +299,9 @@ function fallbackRecording() {
 async function transcribeAudio(audioBlob) {
   try {
     const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.webm');
+    // Usa estensione corretta basata sul MIME type
+    const fileExtension = audioBlob.type.includes('wav') ? '.wav' : '.webm';
+    formData.append('audio', audioBlob, `recording${fileExtension}`);
     
     const response = await fetch('/stt', {
       method: 'POST',
