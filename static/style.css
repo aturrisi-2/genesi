@@ -274,37 +274,90 @@ html, body {
 }
 
 
-/* Mic button */
+/* ===============================
+   🎙️ MIC BUTTON — STATO BASE
+   =============================== */
+/*
+   Stato di riposo:
+   - Nessuna animazione
+   - Presenza visiva chiara ma calma
+   - Non distrae quando non è in uso
+*/
 #mic-button {
     order: 3;
     margin-left: auto;
+
     width: 2.5rem;
     height: 2.5rem;
     border-radius: 50%;
+
     display: flex;
     align-items: center;
     justify-content: center;
+
     cursor: pointer;
-    transition: var(--transition);
-    background: rgba(100, 120, 200, 0.14); /* 🔧 più visibile */
-    border: 1px solid rgba(255, 255, 255, 0.28); /* 🔧 coerente col send */
-    animation: pulse 8s infinite ease-in-out;
+    pointer-events: auto;
+
+    background: rgba(100, 120, 200, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+
+    transition: 
+        background 0.25s ease,
+        border-color 0.25s ease,
+        transform 0.15s ease;
+
+    /* 🔒 IMPORTANTISSIMO:
+       nessuna animazione nello stato base */
+    animation: none;
 }
 
+/* Icona mic */
 #mic-button svg {
-    stroke: rgba(255, 255, 255, 0.9); /* 🔧 pienamente leggibile */
+    stroke: rgba(255, 255, 255, 0.9);
     stroke-width: 2;
 }
 
+/* Hover (desktop / mouse) */
 #mic-button:hover {
     background: rgba(100, 120, 200, 0.22);
     border-color: rgba(255, 255, 255, 0.45);
 }
 
+/* Press (feedback immediato) */
 #mic-button:active {
     transform: scale(0.94);
 }
 
+/* ===============================
+   🔴 MIC BUTTON — REGISTRAZIONE
+   =============================== */
+/*
+   Stato recording:
+   - Pulsazione visibile
+   - Comunica chiaramente “sto ascoltando”
+   - Reversibile al 100% (quando la classe sparisce)
+*/
+#mic-button.recording {
+    animation: mic-pulse 1.2s infinite ease-in-out;
+    background: rgba(100, 120, 255, 0.25);
+    border-color: rgba(140, 160, 255, 0.8);
+}
+
+/* Animazione di registrazione */
+@keyframes mic-pulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(120, 140, 255, 0.6);
+    }
+    50% {
+        transform: scale(1.08);
+        box-shadow: 0 0 0 10px rgba(120, 140, 255, 0);
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(120, 140, 255, 0);
+    }
+}
 
 /* Send button */
 #send-button {
