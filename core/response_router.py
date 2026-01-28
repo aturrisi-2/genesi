@@ -3,6 +3,18 @@ from core.decision_engine import decide_response_strategy
 
 client = OpenAI()
 
+def safe_read_file(file_path: str) -> str:
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except UnicodeDecodeError:
+        try:
+            with open(file_path, 'r', encoding='latin-1') as f:
+                return f.read()
+        except UnicodeDecodeError:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                return f.read()
+
 async def route_response(file_analysis: dict, file_path: str, context: dict = None) -> str:
     decision = decide_response_strategy(file_analysis, context)
     strategy = decision.get("strategy", "text_analysis")
@@ -11,8 +23,7 @@ async def route_response(file_analysis: dict, file_path: str, context: dict = No
     
     try:
         if strategy == "text_analysis":
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            content = safe_read_file(file_path)
             
             response = client.chat.completions.create(
                 model=model,
@@ -36,8 +47,7 @@ Rispondi analizzando direttamente il contenuto.
             return response.choices[0].message.content
         
         elif strategy == "code_analysis":
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            content = safe_read_file(file_path)
             
             response = client.chat.completions.create(
                 model=model,
@@ -72,8 +82,7 @@ Analizza il codice, spiegalo e suggerisci miglioramenti.
             return response.choices[0].message.content
         
         elif strategy == "document_analysis":
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            content = safe_read_file(file_path)
             
             response = client.chat.completions.create(
                 model=model,
