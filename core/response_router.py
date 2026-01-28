@@ -1,5 +1,7 @@
-import openai
+from openai import OpenAI
 from core.decision_engine import decide_response_strategy
+
+client = OpenAI()
 
 async def route_response(file_analysis: dict, file_path: str, context: dict = None) -> str:
     decision = decide_response_strategy(file_analysis, context)
@@ -12,7 +14,7 @@ async def route_response(file_analysis: dict, file_path: str, context: dict = No
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            response = await openai.ChatCompletion.acreate(
+            response = client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": "Analizza il contenuto testuale fornito e rispondi in modo utile."},
@@ -26,7 +28,7 @@ async def route_response(file_analysis: dict, file_path: str, context: dict = No
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            response = await openai.ChatCompletion.acreate(
+            response = client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": "Analizza il codice sorgente fornito, spiegalo e suggerisci miglioramenti."},
@@ -37,7 +39,7 @@ async def route_response(file_analysis: dict, file_path: str, context: dict = No
             return response.choices[0].message.content
         
         elif strategy == "image_analysis":
-            response = await openai.ChatCompletion.acreate(
+            response = client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": "Descrivi l'immagine fornita in dettaglio."},
@@ -48,7 +50,7 @@ async def route_response(file_analysis: dict, file_path: str, context: dict = No
             return response.choices[0].message.content
         
         elif strategy == "document_analysis":
-            response = await openai.ChatCompletion.acreate(
+            response = client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": "Analizza il documento e fornisci un riassunto o le informazioni richieste."},
