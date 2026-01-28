@@ -174,12 +174,11 @@ function getSupportedMimeType() {
 
   const types = isChromeDesktop
     ? [
-        // 🔧 Chrome desktop: formato più stabile per ffmpeg
-        'audio/webm',
-        'audio/webm;codecs=opus'
+        // 🔧 Chrome desktop: usa solo webm senza opus per evitare file corrotti
+        'audio/webm'
       ]
     : [
-        // 📱 iOS / Android: lascia tutto com’è
+        // 📱 iOS / Android: ordine originale che funziona
         'audio/webm;codecs=opus',
         'audio/webm'
       ];
