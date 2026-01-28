@@ -333,6 +333,10 @@ async function handleFileUpload() {
     const file = e.target.files[0];
     if (!file) return;
     
+    // Mostra messaggio upload in corso
+    addGenesiMessage("Sto analizzando il file...");
+    setState(STATES.THINKING);
+    
     const formData = new FormData();
     formData.append('file', file);
     formData.append('user_id', getUserId());
@@ -348,10 +352,30 @@ async function handleFileUpload() {
       }
       
       const result = await response.json();
-      console.log('File uploaded:', result);
+      
+      // Rimuovi messaggio "analizzando" e aggiungi risposta reale
+      const messages = document.querySelectorAll('.message.genesi');
+      if (messages.length > 0) {
+        messages[messages.length - 1].remove();
+      }
+      
+      // Aggiungi risposta di Genesi
+      if (result.response) {
+        addGenesiMessage(result.response);
+      } else {
+        addGenesiMessage("File ricevuto, ma non sono riuscito ad analizzarlo.");
+      }
       
     } catch (error) {
       console.error('Upload error:', error);
+      // Rimuovi messaggio "analizzando" e aggiungi errore
+      const messages = document.querySelectorAll('.message.genesi');
+      if (messages.length > 0) {
+        messages[messages.length - 1].remove();
+      }
+      addGenesiMessage("Errore durante il caricamento del file. Riprova.");
+    } finally {
+      setState(STATES.IDLE);
     }
   };
   
