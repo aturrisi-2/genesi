@@ -72,6 +72,13 @@ html, body {
     font-style: italic;
     letter-spacing: 0.02em;
     color: rgba(255, 255, 245, 0.75);
+
+    /* 🔥 QUESTO RISOLVE TUTTO */
+    max-width: 22ch;
+    margin: 0 auto;
+    line-height: 1.4;
+    text-align: center;
+    white-space: normal;
 }
 
 /* Dialogue */
