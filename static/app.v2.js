@@ -218,14 +218,7 @@ async function startRecording() {
     
     // Setup MediaRecorder
     const mimeType = getSupportedMimeType();
-    const isChromeDesktop = navigator.userAgent.includes("Chrome") && !navigator.userAgent.includes("Android");
-    
-    // Per Chrome desktop usa timeslice più piccolo per garantire dati
-    const mediaRecorderOptions = isChromeDesktop 
-      ? { mimeType, timeslice: 100 } // 100ms chunks
-      : { mimeType };
-    
-    mediaRecorder = new MediaRecorder(stream, mediaRecorderOptions);
+    mediaRecorder = new MediaRecorder(stream, { mimeType });
     audioChunks = [];
     
     // Collect audio data
@@ -243,6 +236,8 @@ async function startRecording() {
       
       // Crea blob audio
       const audioBlob = new Blob(audioChunks, { type: mimeType });
+      
+      console.log(`Final blob: ${audioBlob.size} bytes, chunks: ${audioChunks.length}, type: ${audioBlob.type}`);
       
       // Resetta stato microfono
       resetMicrophoneState();
