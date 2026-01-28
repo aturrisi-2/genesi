@@ -184,20 +184,32 @@ html, body {
     order: 1;
     width: 2.5rem;
     height: 2.5rem;
-    opacity: 0.4;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    opacity: 1; /* 🔧 visibile come gli altri */
+    background: rgba(255, 255, 255, 0.08); /* 🔧 leggermente più presente */
+    border: 1px solid rgba(255, 255, 255, 0.25); /* 🔧 contorno leggibile */
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     pointer-events: auto;
-    cursor: default;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+#plus-button svg {
+    stroke: rgba(255, 255, 255, 0.85); /* 🔧 non spento */
+    stroke-width: 2;
 }
 
 #plus-button:hover {
-    opacity: 0.6;
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.4);
 }
+
+#plus-button:active {
+    transform: scale(0.94);
+}
+
 
 /* ===============================
    Text input (UX migliorata iOS / Desktop)
@@ -212,7 +224,7 @@ html, body {
     font-size: 1rem;
     padding: 0.75rem 0;
     outline: none;
-    caret-color: #4da3ff; /* caret più leggibile */
+    caret-color: #4da3ff;
     -webkit-appearance: none;
     appearance: none;
     transition: background 0.3s ease;
@@ -230,7 +242,7 @@ html, body {
     opacity: 0.35;
 }
 
-/* Micro-feedback visivo: pronto a inviare */
+/* Micro-feedback visivo */
 #text-input:focus {
     background-image: linear-gradient(
         to right,
@@ -242,14 +254,9 @@ html, body {
     animation: inputReady 0.4s ease forwards;
 }
 
-/* Animazione discreta, non teatrale */
 @keyframes inputReady {
-    from {
-        background-size: 0% 100%;
-    }
-    to {
-        background-size: 100% 100%;
-    }
+    from { background-size: 0% 100%; }
+    to   { background-size: 100% 100%; }
 }
 
 
@@ -259,25 +266,38 @@ html, body {
     margin-left: auto;
     width: 2.5rem;
     height: 2.5rem;
-    border: none;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     transition: var(--transition);
-    background: rgba(100, 120, 200, 0.1);
-    border: 1px solid rgba(100, 120, 200, 0.2);
-    color: var(--text-muted);
+    background: rgba(100, 120, 200, 0.14); /* 🔧 più visibile */
+    border: 1px solid rgba(255, 255, 255, 0.28); /* 🔧 coerente col send */
     animation: pulse 8s infinite ease-in-out;
 }
+
+#mic-button svg {
+    stroke: rgba(255, 255, 255, 0.9); /* 🔧 pienamente leggibile */
+    stroke-width: 2;
+}
+
+#mic-button:hover {
+    background: rgba(100, 120, 200, 0.22);
+    border-color: rgba(255, 255, 255, 0.45);
+}
+
+#mic-button:active {
+    transform: scale(0.94);
+}
+
 
 /* Send button */
 #send-button {
     order: 4;
     width: 2.5rem;
     height: 2.5rem;
-    background: rgba(100, 120, 200, 0.12); /* 🔥 non trasparente */
+    background: rgba(100, 120, 200, 0.12);
     border: 1px solid rgba(255, 255, 255, 0.3);
     border-radius: 50%;
     display: flex;
@@ -286,7 +306,7 @@ html, body {
     cursor: pointer;
     transition: all 0.2s ease;
     pointer-events: auto;
-    opacity: 1; /* 🔥 mai spento */
+    opacity: 1;
 }
 
 #send-button:disabled {
@@ -294,23 +314,20 @@ html, body {
     opacity: 0.3;
 }
 
-/* SVG in buttons */
 #send-button svg {
     width: 18px;
     height: 18px;
-    stroke: rgba(255, 255, 255, 0.9); /* 🔥 più presente */
+    stroke: rgba(255, 255, 255, 0.9);
     stroke-width: 2;
     fill: none;
     transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
-/* Hover */
 #send-button:hover {
     background: rgba(100, 120, 200, 0.2);
     border-color: rgba(255, 255, 255, 0.5);
 }
 
-/* Click / tap (feedback fisico) */
 #send-button:active {
     transform: scale(0.92);
 }
@@ -320,10 +337,11 @@ html, body {
 }
 
 
-/* Recording state for mic button */
+/* Recording state */
 #mic-button.recording svg {
     opacity: 1;
 }
+
 
 /* Animations */
 @keyframes fadeIn {
