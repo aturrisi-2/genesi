@@ -160,35 +160,177 @@ chatForm.addEventListener("submit", (e) => {
 });
 
 // ===============================
-// Microphone (UI Only)
+// 🎙️ Microphone Recording System
 // ===============================
-function startRecording() {
-  if (currentState !== STATES.IDLE) return;
-  setState(STATES.RECORDING);
-  micButton.classList.add('recording');
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+
+// 🎯 MIME types per compatibilità cross-browser
+function getSupportedMimeType() {
+  const types = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/wav'
+  ];
+  
+  for (const type of types) {
+    if (MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
+  }
+  return 'audio/webm'; // fallback
 }
 
-function stopRecording() {
-  if (currentState !== STATES.RECORDING) return;
+// 🎤 Inizia registrazione reale
+async function startRecording() {
+  if (currentState !== STATES.IDLE || isRecording) return;
+  
+  try {
+    // Richiesta permessi microfono
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      } 
+    });
+    
+    // Setup MediaRecorder
+    const mimeType = getSupportedMimeType();
+    mediaRecorder = new MediaRecorder(stream, { mimeType });
+    audioChunks = [];
+    
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunks.push(event.data);
+      }
+    };
+    
+    mediaRecorder.onstop = async () => {
+      // Ferma tutti i track audio
+      stream.getTracks().forEach(track => track.stop());
+      
+      // Crea blob audio
+      const audioBlob = new Blob(audioChunks, { type: mimeType });
+      
+      // Invia a STT
+      await transcribeAudio(audioBlob);
+    };
+    
+    // Inizia registrazione
+    mediaRecorder.start();
+    isRecording = true;
+    setState(STATES.RECORDING);
+    micButton.classList.add('recording');
+    
+  } catch (error) {
+    console.error('Microphone access denied:', error);
+    // Fallback a comportamento precedente se permessi negati
+    fallbackRecording();
+  }
+}
 
+// 🛑 Ferma registrazione
+function stopRecording() {
+  if (!isRecording || !mediaRecorder) return;
+  
+  mediaRecorder.stop();
+  isRecording = false;
   micButton.classList.remove('recording');
   setState(STATES.THINKING);
+}
 
+// 🔄 Fallback per iOS/vecchi browser
+function fallbackRecording() {
+  setState(STATES.RECORDING);
+  micButton.classList.add('recording');
+  
   setTimeout(() => {
-    textInput.value = "Questo è un messaggio dettato di esempio.";
+    micButton.classList.remove('recording');
+    setState(STATES.THINKING);
+    
+    setTimeout(() => {
+      textInput.value = "Microfono non supportato. Scrivi il messaggio.";
+      setState(STATES.IDLE);
+    }, 600);
+  }, 1500);
+}
+
+// 📤 Trascrizione audio via STT
+async function transcribeAudio(audioBlob) {
+  try {
+    // Converti blob in formato compatibile
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.webm');
+    
+    // Invia a endpoint STT (esistente o nuovo)
+    const response = await fetch('/stt', {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) {
+      throw new Error(`STT Error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    const transcribedText = result.text?.trim() || '';
+    
+    if (transcribedText) {
+      // Inserisci testo nell'input e invia
+      textInput.value = transcribedText;
+      setState(STATES.IDLE);
+      sendMessage();
+    } else {
+      setState(STATES.IDLE);
+      addGenesiMessage("Non ho capito. Riprova a parlare.");
+    }
+    
+  } catch (error) {
+    console.error('STT Error:', error);
     setState(STATES.IDLE);
-    sendMessage();
-  }, 600);
+    addGenesiMessage("Errore trascrizione audio. Riprova.");
+  }
 }
 
 // ===============================
 // Event Listeners
 // ===============================
 sendButton.addEventListener('click', sendMessage);
-micButton.addEventListener('mousedown', startRecording);
-micButton.addEventListener('touchstart', startRecording);
-document.addEventListener('mouseup', stopRecording);
-document.addEventListener('touchend', stopRecording);
+
+// 🎙️ Microphone events (tap singolo/doppio)
+micButton.addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  if (isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+});
+
+micButton.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+});
+
+// Previeni comportamento default globale
+document.addEventListener('mouseup', (e) => {
+  if (e.target !== micButton && isRecording) {
+    stopRecording();
+  }
+});
+
+document.addEventListener('touchend', (e) => {
+  if (e.target !== micButton && isRecording) {
+    stopRecording();
+  }
+});
 
 // ===============================
 // 📱 iOS Safari Keyboard & Viewport FIX
