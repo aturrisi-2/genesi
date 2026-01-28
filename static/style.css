@@ -341,6 +341,17 @@ html, body {
 #mic-button.recording svg {
     opacity: 1;
 }
+/* ===============================
+   Uniforma dimensione icone (plus + mic)
+   all'aeroplanino
+   =============================== */
+
+#plus-button svg,
+#mic-button svg {
+    width: 16px;
+    height: 16px;
+    stroke-width: 1.8;
+}
 
 
 /* Animations */
