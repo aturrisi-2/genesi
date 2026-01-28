@@ -23,93 +23,40 @@ except Exception as e:
 
 @router.post("/stt")
 async def speech_to_text(audio: UploadFile = File(...)):
-    """
-    Endpoint Speech-to-Text usando Whisper.
-    Accetta file audio (webm/mp4/wav) e restituisce trascrizione.
-    """
-    
-    # Verifica che il modello Whisper sia caricato
     if whisper_model is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="STT service unavailable - Whisper model not loaded"
-        )
-    
-    # Verifica che il file sia stato fornito
-    if not audio or not audio.filename:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Audio file is required"
-        )
-    
-    # Verifica content type
-    allowed_types = [
-        "audio/webm", 
-        "audio/mp4", 
-        "audio/wav", 
-        "audio/mpeg",
-        "audio/ogg"
-    ]
-    
-    # =========================================================================
-    # PULIZIA TIPO MIME (Modifica Chirurgica)
-    # =========================================================================
-    # Prende solo la parte prima del punto e virgola 
-    # (es. trasforma "audio/webm;codecs=opus" in "audio/webm")
-    try:
-        content_type_clean = audio.content_type.split(";")[0].strip()
-    except Exception:
-        content_type_clean = audio.content_type
+        raise HTTPException(status_code=503, detail="Model not loaded")
 
-    if content_type_clean not in allowed_types:
-        logger.warning(f"Unsupported content type: {audio.content_type} (cleaned: {content_type_clean})")
-        # Non blocchiamo l'esecuzione, proviamo comunque a trascrivere
-    
-    # Crea file temporaneo
-    temp_dir = tempfile.gettempdir()
-    temp_file_path = None
+    # 1. Nome file FISSO per debug facile
+    temp_file_path = "/tmp/debug_audio_test.webm"
     
     try:
-        # Salva file temporaneo con estensione appropriata
-        file_extension = Path(audio.filename).suffix or ".webm"
-        temp_file_path = os.path.join(temp_dir, f"stt_temp_{os.getpid()}{file_extension}")
-        
-        # Scrivi file su disco
+        # Pulisce eventuali residui precedenti manualmente
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+
+        # 2. Scrive il file
+        content = await audio.read()
         with open(temp_file_path, "wb") as temp_file:
-            content = await audio.read()
-            temp_file.write(content)
+            file_size = temp_file.write(content)
         
-        logger.info(f"Audio saved temporarily: {temp_file_path}")
-        
-        # Trascrivi con Whisper
+        # LOG DELLA VERITÀ
+        logger.info(f"!!! FILE SALVATO QUI: {temp_file_path} !!!")
+        logger.info(f"!!! DIMENSIONE: {file_size} bytes !!!")
+
+        # 3. Trascrizione
         result = whisper_model.transcribe(
             temp_file_path,
-            language="it",  # Italiano automatico
-            task="transcribe",  # Solo trascrizione, non traduzione
-            fp16=False,  # Compatibilità massima
-            verbose=False
+            language="it",
+            task="transcribe",
+            fp16=False
         )
         
-        # Estrai testo
-        transcribed_text = result.get("text", "").strip()
-        
-        logger.info(f"Transcription completed: '{transcribed_text[:50]}...'")
-        
-        # Ritorna risposta nel formato atteso dal frontend
-        return {"text": transcribed_text}
-        
+        text = result.get("text", "").strip()
+        logger.info(f"Trascrizione: '{text}'")
+        return {"text": text}
+
     except Exception as e:
-        logger.error(f"STT Error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Speech-to-text error: {str(e)}"
-        )
+        logger.error(f"Errore: {e}")
+        return {"text": ""}
     
-    finally:
-        # Pulizia file temporaneo
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                # os.unlink(temp_file_path)
-                logger.info(f"Temporary file cleaned: {temp_file_path}")
-            except Exception as e:
-                logger.warning(f"Failed to clean temp file {temp_file_path}: {e}")
+    # 4. NESSUN 'FINALLY'. IL FILE RIMANE LÌ PER FORZA.
