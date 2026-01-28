@@ -15,6 +15,7 @@ const dialogue = document.getElementById('dialogue');
 const textInput = document.getElementById('text-input');
 const sendButton = document.getElementById('send-button');
 const micButton = document.getElementById('mic-button');
+const plusButton = document.getElementById('plus-button');
 const inputContainer = document.getElementById('input-container');
 const chatForm = document.getElementById('chat-form');
 
@@ -322,7 +323,42 @@ async function transcribeAudio(audioBlob) {
 // 1. Send Button
 sendButton.addEventListener('click', sendMessage);
 
-// 2. Microphone Logic Unificata
+// 2. File Upload Function
+async function handleFileUpload() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '*/*';
+  
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('user_id', getUserId());
+    
+    try {
+      const response = await fetch('/upload', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('File uploaded:', result);
+      
+    } catch (error) {
+      console.error('Upload error:', error);
+    }
+  };
+  
+  input.click();
+}
+
+// 3. Microphone Logic Unificata
 const handleMicToggle = (e) => {
   // Previene comportamenti default (zoom, selezione, ecc)
   if (e.type === 'touchstart') {
@@ -347,7 +383,10 @@ if (isTouchDevice) {
   micButton.addEventListener('click', handleMicToggle);
 }
 
-// 3. Prevenzione chiusura accidentale registrazione (solo mobile)
+// 4. Plus Button Upload
+plusButton.addEventListener('click', handleFileUpload);
+
+// 5. Prevenzione chiusura accidentale registrazione (solo mobile)
 if (isTouchDevice) {
     document.addEventListener('touchend', (e) => {
         if (e.target !== micButton && isRecording) {
