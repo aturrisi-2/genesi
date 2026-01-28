@@ -51,8 +51,12 @@ async def speech_to_text(audio: UploadFile = File(...)):
         "audio/ogg"
     ]
     
-    if audio.content_type not in allowed_types:
-        logger.warning(f"Unsupported content type: {audio.content_type}")
+    # PULIZIA TIPO MIME (Modifica Chirurgica)
+    # Prende solo la parte prima del punto e virgola (es. "audio/webm" da "audio/webm;codecs=opus")
+    content_type_clean = audio.content_type.split(";")[0].strip()
+
+    if content_type_clean not in allowed_types:
+        logger.warning(f"Unsupported content type: {audio.content_type} (cleaned: {content_type_clean})")
         # Non bloccare, ma logga il warning
     
     # Crea file temporaneo

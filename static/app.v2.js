@@ -246,7 +246,7 @@ async function startRecording() {
       }, 200);
     };
     
-    mediaRecorder.start();
+    mediaRecorder.start(1000);
     isRecording = true;
     setState(STATES.RECORDING);
     micButton.classList.add('recording');
