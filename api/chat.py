@@ -55,17 +55,15 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     # Prima controlla il context persistente da upload
     if request.user_id and request.user_id in last_document_context:
         persistent_doc = last_document_context[request.user_id]
-        # Check per domande generiche sul documento
-        vague_questions = ["cosa contiene", "che dice", "riassumi", "spiegami questo", "di cosa parla", "cosa c'è scritto", "descrivimi", "cosa vedi", "che c'è"]
-        is_vague_question = any(q in request.message.lower() for q in vague_questions)
         
+        # REGOLA NON NEGOZIABILE: se esiste document_context, usalo SEMPRE
         document_context = persistent_doc.get('content', '')
         force_document_focus = True
 
         print(f"[CHAT] document_context_attached = True | user_id={request.user_id}", flush=True)
         print(f"[CHAT] document_context_length = {len(document_context)}", flush=True)
 
-        # one-shot: rimuovi dopo l’uso
+        # one-shot: rimuovi dopo l'uso
         del last_document_context[request.user_id]
         print(f"[CHAT] document_context_cleared | user_id={request.user_id}", flush=True)
 
