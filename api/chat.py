@@ -1,5 +1,5 @@
 from core.intent_engine import IntentEngine
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Request
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -26,13 +26,37 @@ class ChatRequest(BaseModel):
 
 
 @router.post("/chat")
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(request: ChatRequest, http_request: Request):
     print(f"[CHAT_ENDPOINT] incoming_message = '{request.message}'", flush=True)
     print(f"[CHAT_ENDPOINT] user_id = {request.user_id}", flush=True)
     
     # 🔍 DIAGNOSI MEMORIA: check per frasi dichiarative
     is_declarative = any(keyword in request.message.lower() for keyword in ["memorizza", "ricorda", "salva", "ricordati", "tieni a mente"])
     print(f"[CHAT_ENDPOINT] is_declarative = {is_declarative}", flush=True)
+    
+    # ===============================
+    # DOCUMENT CONTEXT TEMPORANEO
+    # ===============================
+    document_context = None
+    force_document_focus = False
+    
+    # Check per document context attivo (in session state)
+    if hasattr(http_request, 'state') and hasattr(http_request.state, 'active_document'):
+        active_doc = http_request.state.active_document
+        if active_doc and active_doc.get('user_id') == request.user_id:
+            # Check per domande generiche sul documento
+            vague_questions = ["cosa contiene", "che dice", "riassumi", "spiegami questo", "di cosa parla", "cosa c'è scritto"]
+            is_vague_question = any(q in request.message.lower() for q in vague_questions)
+            
+            if is_vague_question:
+                document_context = active_doc.get('content', '')
+                force_document_focus = True
+                print(f"[CHAT_ENDPOINT] active_document_detected = True", flush=True)
+                print(f"[CHAT_ENDPOINT] document_context_used = True", flush=True)
+                
+                # Rimuovi context dopo uso (one-shot)
+                delattr(http_request.state, 'active_document')
+                print(f"[CHAT_ENDPOINT] document_context_cleared = True", flush=True)
     
     # 1. Build cognitive state
     state = CognitiveState.build(request.user_id)
@@ -82,14 +106,36 @@ async def chat_endpoint(request: ChatRequest):
     try:
         intent_engine = IntentEngine()
 
-        intent = intent_engine.decide(
-            user_message=request.message,
-            user=state.user,
-            cognitive_state=state,
-            recent_memories=recent_memories,
-            relevant_memories=relevant_memories,
-            tone=tone
-        )
+        # Se c'è document context, forza focus su documento
+        if force_document_focus:
+            # Sovrascrivi temporaneamente le memorie con document context
+            document_memories = [{
+                "content": document_context,
+                "type": "document_context",
+                "timestamp": datetime.now().isoformat()
+            }]
+            
+            intent = intent_engine.decide(
+                user_message=request.message,
+                user=state.user,
+                cognitive_state=state,
+                recent_memories=[],  # Disabilita memoria personale per questa risposta
+                relevant_memories=document_memories,
+                tone=tone
+            )
+            
+            # Forza focus su documento
+            intent["focus"] = "documento"
+            print(f"[CHAT_ENDPOINT] document_focus_forced = True", flush=True)
+        else:
+            intent = intent_engine.decide(
+                user_message=request.message,
+                user=state.user,
+                cognitive_state=state,
+                recent_memories=recent_memories,
+                relevant_memories=relevant_memories,
+                tone=tone
+            )
 
         print(f"[CHAT_ENDPOINT] intent_decided = {intent}", flush=True)
         print(f"[CHAT_ENDPOINT] use_memory = {intent.get('use_memory')}", flush=True)
