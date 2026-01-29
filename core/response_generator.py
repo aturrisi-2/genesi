@@ -195,7 +195,41 @@ class ResponseGenerator:
     # POST-PROCESS
     # ===============================
     def _post_process(self, response: str) -> str:
+        """
+        Post-process NON NEGOZIABILE.
+        Genesi NON fa domande se non esplicitamente autorizzata.
+        """
+
         response = response.strip()
-        if not response.endswith(('.', '!', '?', '…')):
+
+        # 🔒 BLOCCO DOMANDE (hard)
+        response = response.replace("?", ".")
+        
+        # 🔒 Rimuovi frasi interrogative comuni
+        forbidden_starts = [
+            "cosa",
+            "perché",
+            "vuoi",
+            "ti va",
+            "ti senti",
+            "come va",
+            "che cosa",
+            "puoi"
+        ]
+
+        lines = response.splitlines()
+        cleaned = []
+
+        for line in lines:
+            lower = line.lower().strip()
+            if any(lower.startswith(fs) for fs in forbidden_starts):
+                continue
+            cleaned.append(line)
+
+        response = " ".join(cleaned).strip()
+
+        # 🔒 chiusura obbligatoria
+        if not response.endswith(('.', '!', '…')):
             response += '.'
+
         return response
