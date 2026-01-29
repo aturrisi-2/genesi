@@ -145,7 +145,26 @@ class ResponseGenerator:
 
         # Carattere SOLO per risposte relazionali
         if model == "gpt-4o":
-            final_prompt = self.relational_character.strip() + "\n\n" + base_prompt
+            # 🔍 DISTINZIONE PRESENZA basata su focus
+            focus = intent.get("focus", "presente")
+            if focus == "presenza":
+                presence_rule = (
+                    "PRESENZA COMPAGNA:\n"
+                    "- Linguaggio caldo, vicino, umano\n"
+                    "- Riconosci lo stato emotivo\n"
+                    "- Chiudi la frase restando 'accanto'\n"
+                    "- Esempio: 'Capisco. È pesante. Ci sto.'\n\n"
+                )
+            else:  # presente, identità
+                presence_rule = (
+                    "ROCCIA CALMA:\n"
+                    "- Linguaggio essenziale, stabile, verticale\n"
+                    "- Nessun accompagnamento emotivo\n"
+                    "- Frase breve e conclusiva\n"
+                    "- Esempio: 'Va bene.'\n\n"
+                )
+            
+            final_prompt = self.relational_character.strip() + "\n\n" + presence_rule + base_prompt
             
             # 🔒 ANCORA DI CARATTERE (solo per risposte relazionali)
             question_rate = intent.get("question_rate", 0.0)
