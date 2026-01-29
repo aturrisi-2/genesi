@@ -250,7 +250,7 @@ class ResponseGenerator:
                 
                 # Salva evento in memoria
                 memory_event = store_event(
-                    user_id=cognitive_state.user.id if hasattr(cognitive_state, 'user') else "unknown",
+                    user_id=cognitive_state.user.user_id if hasattr(cognitive_state, 'user') else "unknown",
                     type="user_memory",
                     content={"text": user_message},
                     salience=user_salience,
