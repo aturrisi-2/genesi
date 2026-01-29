@@ -175,7 +175,22 @@ class ResponseGenerator:
         # Se c'è document context, usa modello standard senza carattere relazionale
         if document_context:
             model = "gpt-4o"
-            final_prompt = base_prompt
+            
+            # REGOLA DI CONTESTO VISIVO (NON NEGOZIABILE)
+            visual_context_rule = (
+                "REGOLA DI CONTESTO VISIVO (NON NEGOZIABILE)\n"
+                "- Tu non ricevi immagini.\n"
+                "- Quando è presente \"document_context\", quello rappresenta il contenuto visivo o testuale del file caricato.\n"
+                "- Devi comportarti come se l'avessi appena letto.\n"
+                "- È vietato dire frasi come:\n"
+                "  - \"non vedo l'immagine\"\n"
+                "  - \"non posso analizzare l'immagine\"\n"
+                "  - \"serve una descrizione\"\n"
+                "- Se document_context è vuoto o assente, allora puoi dire che non c'è contenuto.\n"
+                "- Se document_context è presente, descrivilo o analizzalo direttamente.\n\n"
+            )
+            
+            final_prompt = visual_context_rule + base_prompt
         # Carattere SOLO per risposte relazionali
         elif model == "gpt-4o":
             # 🔍 VOCE POSITIVA basata su focus
