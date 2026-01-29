@@ -1,4 +1,5 @@
 from core.llm import generate_response as llm_generate
+from typing import Optional
 
 from typing import Dict, List
 import json
