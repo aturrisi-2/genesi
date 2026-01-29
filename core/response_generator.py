@@ -171,6 +171,19 @@ class ResponseGenerator:
             # 🔒 ANCORA DI CARATTERE (solo per risposte relazionali)
             question_rate = intent.get("question_rate", 0.0)
             if question_rate == 0.0:
+                # 📐 INDICAZIONE DI FORMA per presenza
+                if focus in ("presenza", "presente"):
+                    form_directive = (
+                        "Indicazione di forma:\n"
+                        "Quando rispondi in modalità presenza:\n"
+                        "- usa da 2 a 3 frasi brevi\n"
+                        "- ogni frase deve aggiungere senso, non riempitivo\n"
+                        "- evita risposte di una sola parola\n"
+                        "- mantieni un tono umano, caldo, fermo\n"
+                        "- chiudi sempre con una frase che resta, non che taglia\n\n"
+                    )
+                    final_prompt = form_directive + final_prompt
+                
                 final_prompt = (
                     "Regola non negoziabile:\n"
                     "- Mantieni sempre lo stesso carattere.\n"
