@@ -172,9 +172,10 @@ class ResponseGenerator:
                 user_message=user_message
             ).strip()
 
-        # Se c'è document context, usa modello standard senza carattere relazionale
+        # 🔒 DOCUMENT CONTEXT → MODELLO FORZATO
         if document_context:
-            model = "gpt-4o-mini"
+            model = "gpt-4o"   # NON negoziabile
+
             
             # REGOLA DI CONTESTO VISIVO (NON NEGOZIABILE)
             visual_context_rule = (
