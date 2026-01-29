@@ -1,4 +1,5 @@
 import os
+import logging
 from pathlib import Path
 
 def extract_pdf_text(file_path: str) -> tuple[bool, str]:
@@ -76,5 +77,20 @@ def analyze_file(file_path: str, filename: str, content_type: str) -> dict:
         result["has_text"] = has_text
         if has_text:
             result["text"] = text_content
+    
+    # OCR fallback for images and scanned PDFs
+    if not result.get("has_text", False) and kind in ["image", "document"]:
+        try:
+            from core.ocr.ocr_engine import extract_text_with_ocr
+            ocr_text = extract_text_with_ocr(file_path)
+            if ocr_text.strip():
+                result["has_text"] = True
+                result["text"] = ocr_text
+                result["ocr_used"] = True
+                logging.info(f"OCR fallback used for {filename}")
+        except ImportError:
+            logging.warning("OCR module not available")
+        except Exception as e:
+            logging.error(f"OCR failed for {filename}: {str(e)}")
     
     return result
