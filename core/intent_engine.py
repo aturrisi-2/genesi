@@ -68,11 +68,12 @@ class IntentEngine:
         # ===============================
         intent = {
             "should_respond": True,
-            "style": "naturale",
+            "style": "assertive_presence",
             "depth": "breve",
             "focus": "presente",
             "use_memory": False,
-            "emotional_weight": 0.4
+            "emotional_weight": 0.4,
+            "question_rate": 0.0
         }
     
         # ===============================
@@ -92,11 +93,12 @@ class IntentEngine:
     
             return {
                 "should_respond": True,
-                "style": "caldo",
+                "style": "assertive_presence",
                 "depth": "breve",
                 "focus": "identità",
                 "use_memory": False,
-                "emotional_weight": 0.6
+                "emotional_weight": 0.6,
+                "question_rate": 0.0
             }
     
         # ===============================
@@ -135,16 +137,21 @@ class IntentEngine:
         # REGOLE COGNITIVE GENERICHE
         # ===============================
     
+        # Domande esplicite → permetti question rate > 0
         if "?" in user_message:
             intent["depth"] = "media"
             intent["focus"] = "risposta"
+            intent["question_rate"] = 0.3
+        # Ambiguità forte → permetti domande
+        elif any(ambig in user_message.lower() for ambig in ["non so", "forse", "boh", "non sono sicuro"]):
+            intent["question_rate"] = 0.2
     
         if relevant_memories:
             intent["use_memory"] = True
             intent["focus"] = "connessione"
     
         if getattr(tone, "empathy", 0.5) < 0.3:
-            intent["style"] = "empatico"
+            intent["style"] = "assertive_presence"
             intent["emotional_weight"] = 0.7
     
         if len(recent_memories) > 10:

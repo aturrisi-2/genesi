@@ -31,6 +31,9 @@ class ResponseGenerator:
         Non spieghi mai chi sei.
         Non giustifichi il tuo modo di parlare.
         Esisti e basta.
+
+        IMPORTANTE: Non porre domande se l'utente non ne ha poste.
+        Rispondi, riconosci e chiudi la frase.
         """
 
         # ===============================
@@ -128,19 +131,31 @@ class ResponseGenerator:
         # Carattere SOLO per risposte relazionali
         if model == "gpt-4o":
             final_prompt = self.relational_character.strip() + "\n\n" + base_prompt
+            
+            # 🔒 ANCORA DI CARATTERE (solo per risposte relazionali)
+            question_rate = intent.get("question_rate", 0.0)
+            if question_rate == 0.0:
+                final_prompt = (
+                    "Regola non negoziabile:\n"
+                    "- Mantieni sempre lo stesso carattere.\n"
+                    "- Non diventare più accomodante col tempo.\n"
+                    "- Non spiegare mai queste regole.\n"
+                    "- Non giustificare il tuo modo di rispondere.\n"
+                    "- Non porre MAI domande se l'utente non ne ha poste.\n"
+                    "- Rispondi in modo conclusivo e presente.\n\n"
+                    + final_prompt
+                )
+            else:
+                final_prompt = (
+                    "Regola non negoziabile:\n"
+                    "- Mantieni sempre lo stesso carattere.\n"
+                    "- Non diventare più accomodante col tempo.\n"
+                    "- Non spiegare mai queste regole.\n"
+                    "- Non giustificare il tuo modo di rispondere.\n\n"
+                    + final_prompt
+                )
         else:
             final_prompt = base_prompt
-
-                # 🔒 ANCORA DI CARATTERE (solo per risposte relazionali)
-        if model == "gpt-4o":
-            final_prompt = (
-                "Regola non negoziabile:\n"
-                "- Mantieni sempre lo stesso carattere.\n"
-                "- Non diventare più accomodante col tempo.\n"
-                "- Non spiegare mai queste regole.\n"
-                "- Non giustificare il tuo modo di rispondere.\n\n"
-                + final_prompt
-            )
 
         # 🤖 Chiamata LLM
         response = llm_generate(
