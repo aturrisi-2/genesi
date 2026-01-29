@@ -227,8 +227,45 @@ class ResponseGenerator:
         processed_response = self._post_process(response)
         print(f"[RESPONSE_GENERATOR.generate_response] final_response = '{processed_response}'", flush=True)
         
-        # 🔍 DIAGNOSI MEMORIA: check se viene chiamata qualche funzione di salvataggio
-        print(f"[RESPONSE_GENERATOR.generate_response] memory_save_call = NONE", flush=True)
+        # ===============================
+        # SALVATAGGIO MEMORIA SE RICHIESTO
+        # ===============================
+        if intent.get("use_memory") and user_message.strip() and processed_response.strip():
+            try:
+                from memory.episodic import store_event
+                from memory.affective import compute_affect
+                from memory.salience import compute_salience
+                
+                # Calcola salience e affect per il messaggio utente
+                user_salience = compute_salience(
+                    event_type="user_memory",
+                    content={"text": user_message},
+                    past_events=[]
+                )
+                
+                user_affect = compute_affect(
+                    "user_memory",
+                    {"text": user_message}
+                )
+                
+                # Salva evento in memoria
+                memory_event = store_event(
+                    user_id=cognitive_state.user.id if hasattr(cognitive_state, 'user') else "unknown",
+                    type="user_memory",
+                    content={"text": user_message},
+                    salience=user_salience,
+                    affect=user_affect
+                )
+                
+                if memory_event:
+                    print(f"[RESPONSE_GENERATOR.generate_response] MEMORY SAVE CALLED | content='{user_message}'", flush=True)
+                else:
+                    print(f"[RESPONSE_GENERATOR.generate_response] MEMORY SAVE FAILED", flush=True)
+                    
+            except Exception as e:
+                print(f"[RESPONSE_GENERATOR.generate_response] MEMORY SAVE FAILED | error={str(e)}", flush=True)
+        else:
+            print(f"[RESPONSE_GENERATOR.generate_response] MEMORY NOT NEEDED", flush=True)
         
         return processed_response
 
