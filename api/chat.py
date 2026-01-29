@@ -86,7 +86,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                 delattr(http_request.state, 'active_document')
                 print(f"[CHAT_ENDPOINT] document_context_cleared = True", flush=True)
     else:
-        logger.info(f"[CHAT] document_context_attached = False | user_id={request.user_id}")
+        print(f"[CHAT] document_context_attached = False | user_id={request.user_id}", flush=True)
     
     # 1. Build cognitive state
     state = CognitiveState.build(request.user_id)

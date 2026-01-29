@@ -176,39 +176,16 @@ class ResponseGenerator:
         if document_context:
             model = "gpt-4o"   # NON negoziabile
 
-            
-            # REGOLA DI CONTESTO VISIVO (NON NEGOZIABILE)
-            visual_context_rule = (
-                "    - Tu non ricevi immagini direttamente.\n"
-                "    - Quando è presente \"document_context\", quello rappresenta il testo estratto\n"
-                "      da un'immagine o da un documento caricato.\n"
-                "\n"
-                "    - Devi comportarti come se avessi appena osservato il contenuto visivo\n"
-                "      a partire dal testo estratto.\n"
-                "\n"
-                "    - È vietato dire frasi come:\n"
-                "      - \"non vedo l'immagine\"\n"
-                "      - \"non posso analizzare l'immagine\"\n"
-                "      - \"serve una descrizione\"\n"
-                "\n"
-                "    - Se document_context è vuoto o assente, puoi dire che non c'è contenuto.\n"
-                "\n"
-                "    - Se document_context è presente:\n"
-                "      - analizza il testo\n"
-                "      - se il testo è frammentato, incompleto o tipico di un'interfaccia,\n"
-                "        puoi ricostruire il contesto funzionale dell'immagine\n"
-                "        (es. screenshot, pannello software, schermata di errore, interfaccia tecnica).\n"
-                "\n"
-                "    VINCOLI ASSOLUTI\n"
-                "    - È vietato inventare persone, ambienti fisici o scene reali\n"
-                "      non giustificate dal contenuto testuale.\n"
-                "    - È vietato descrivere folle, manifestazioni, paesaggi o soggetti umani\n"
-                "      se non esplicitamente presenti nel testo.\n"
-                "    - È consentito inferire la **natura tecnica o strutturale** dell'immagine\n"
-                "      quando il testo lo suggerisce.\n"
+            # VINCOLO ASSOLUTO:
+            absolute_rule = (
+                "VINCOLO ASSOLUTO:\n"
+                "- Tu NON dichiari mai di non vedere immagini.\n"
+                "- Il testo seguente rappresenta ESATTAMENTE il contenuto dell'immagine caricata.\n"
+                "- Devi descrivere o analizzare SOLO questo contenuto.\n"
+                "- È vietato chiedere ulteriori informazioni.\n\n"
             )
             
-            final_prompt = visual_context_rule + base_prompt
+            final_prompt = absolute_rule + base_prompt
         # Carattere SOLO per risposte relazionali
         elif model == "gpt-4o":
             # 🔍 VOCE POSITIVA basata su focus
