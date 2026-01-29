@@ -188,6 +188,13 @@ class ResponseGenerator:
                 "  - \"serve una descrizione\"\n"
                 "- Se document_context è vuoto o assente, allora puoi dire che non c'è contenuto.\n"
                 "- Se document_context è presente, descrivilo o analizzalo direttamente.\n\n"
+                "VINCOLO ASSOLUTO SUL CONTENUTO\n"
+                "- Quando è presente \"document_context\", esso rappresenta il contenuto reale del file caricato (immagine o documento).\n"
+                "- Devi basarti ESCLUSIVAMENTE su document_context.\n"
+                "- È vietato inferire, immaginare o descrivere scene non presenti nel document_context.\n"
+                "- Se document_context descrive un'interfaccia, una tabella, un modulo o testo strutturato, devi dirlo esplicitamente.\n"
+                "- È vietato usare descrizioni generiche (es. persone, folle, manifestazioni) se non compaiono nel document_context.\n"
+                "- Se il document_context contiene solo testo o UI, non parlare di persone o ambienti.\n\n"
             )
             
             final_prompt = visual_context_rule + base_prompt
