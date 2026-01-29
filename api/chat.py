@@ -27,6 +27,9 @@ class ChatRequest(BaseModel):
 
 @router.post("/chat")
 async def chat_endpoint(request: ChatRequest):
+    print(f"[CHAT_ENDPOINT] incoming_message = '{request.message}'", flush=True)
+    print(f"[CHAT_ENDPOINT] user_id = {request.user_id}", flush=True)
+    
     # 1. Build cognitive state
     state = CognitiveState.build(request.user_id)
 
@@ -111,6 +114,8 @@ async def chat_endpoint(request: ChatRequest):
             affect=system_affect
         )
 
+        print(f"[CHAT_ENDPOINT] final_response = '{response_text}'", flush=True)
+        
         return {
             "response": response_text,
             "state": {

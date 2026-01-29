@@ -62,6 +62,7 @@ class IntentEngine:
         """
         Ritorna un intent object che descrive COME rispondere.
         """
+        print(f"[INTENT_ENGINE.decide] incoming_message = '{user_message}'", flush=True)
     
         # ===============================
         # INTENT DI DEFAULT
@@ -91,6 +92,9 @@ class IntentEngine:
                 user.profile["name"] = name
                 save_user(user)
     
+            print(f"[INTENT_ENGINE.decide] name_identity_match = True", flush=True)
+            print(f"[INTENT_ENGINE.decide] question_rate = {intent['question_rate']}", flush=True)
+            print(f"[INTENT_ENGINE.decide] focus = {intent['focus']}", flush=True)
             return {
                 "should_respond": True,
                 "style": "assertive_presence",
@@ -123,13 +127,17 @@ class IntentEngine:
                     user.profile["profession"] = profession
                     save_user(user)
 
+                print(f"[INTENT_ENGINE.decide] profession_identity_match = True", flush=True)
+                print(f"[INTENT_ENGINE.decide] question_rate = {intent['question_rate']}", flush=True)
+                print(f"[INTENT_ENGINE.decide] focus = {intent['focus']}", flush=True)
                 return {
                     "should_respond": True,
-                    "style": "naturale",
+                    "style": "assertive_presence",
                     "depth": "breve",
                     "focus": "identità",
                     "use_memory": False,
-                    "emotional_weight": 0.4
+                    "emotional_weight": 0.4,
+                    "question_rate": 0.0
                 }
 
         # ===============================
@@ -150,7 +158,11 @@ class IntentEngine:
             intent["question_rate"] = 0.0
             intent["focus"] = "presenza"
             intent["depth"] = "breve"
+            print(f"[INTENT_ENGINE.decide] emotional_match = True", flush=True)
+            print(f"[INTENT_ENGINE.decide] question_rate = {intent['question_rate']}", flush=True)
+            print(f"[INTENT_ENGINE.decide] focus = {intent['focus']}", flush=True)
     
+        print(f"[INTENT_ENGINE.decide] final_intent = {intent}", flush=True)
         return intent
         
         # ===============================
@@ -162,9 +174,13 @@ class IntentEngine:
             intent["depth"] = "media"
             intent["focus"] = "risposta"
             intent["question_rate"] = 0.3
+            print(f"[INTENT_ENGINE.decide] explicit_question_detected = True", flush=True)
+            print(f"[INTENT_ENGINE.decide] question_rate = {intent['question_rate']}", flush=True)
         # Ambiguità forte → permetti domande
         elif any(ambig in user_message.lower() for ambig in ["non so", "forse", "boh", "non sono sicuro"]):
             intent["question_rate"] = 0.2
+            print(f"[INTENT_ENGINE.decide] ambiguity_detected = True", flush=True)
+            print(f"[INTENT_ENGINE.decide] question_rate = {intent['question_rate']}", flush=True)
     
         if relevant_memories:
             intent["use_memory"] = True

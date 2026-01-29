@@ -111,9 +111,13 @@ class ResponseGenerator:
         tone,
         intent: Dict
     ) -> str:
+        print(f"[RESPONSE_GENERATOR.generate_response] intent_received = {intent}", flush=True)
 
         model = self._select_model(intent)
-        print(f"🤖 LLM_USED: {model} | focus={intent.get('focus')}", flush=True)
+        print(f"[RESPONSE_GENERATOR.generate_response] selected_model = {model}", flush=True)
+        print(f"[RESPONSE_GENERATOR.generate_response] question_rate = {intent.get('question_rate')}", flush=True)
+        print(f"[RESPONSE_GENERATOR.generate_response] focus = {intent.get('focus')}", flush=True)
+        print(f"[RESPONSE_GENERATOR.generate_response] style = {intent.get('style')}", flush=True)
 
         # Stato sintetico
         state_summary = json.dumps(
@@ -177,8 +181,13 @@ class ResponseGenerator:
                 "tone": tone
             }
         )
+        
+        print(f"[RESPONSE_GENERATOR.generate_response] raw_response = '{response[:300]}...'", flush=True)
 
-        return self._post_process(response)
+        processed_response = self._post_process(response)
+        print(f"[RESPONSE_GENERATOR.generate_response] final_response = '{processed_response}'", flush=True)
+
+        return processed_response
 
     # ===============================
     # FORMAT MEMORIE
@@ -199,6 +208,7 @@ class ResponseGenerator:
         Post-process NON NEGOZIABILE.
         Genesi NON fa domande se non esplicitamente autorizzata.
         """
+        print(f"[POST_PROCESS] raw_input = '{response}'", flush=True)
 
         response = response.strip()
 
@@ -232,4 +242,5 @@ class ResponseGenerator:
         if not response.endswith(('.', '!', '…')):
             response += '.'
 
+        print(f"[POST_PROCESS] cleaned_response = '{response}'", flush=True)
         return response

@@ -11,6 +11,12 @@ def generate_response(payload: dict) -> str:
     prompt = payload["prompt"]
     tone = payload.get("tone")
     intent = payload.get("intent", {})
+    
+    model = payload.get("model", "gpt-4o")
+    
+    print(f"[LLM.generate_response] model = {model}", flush=True)
+    print(f"[LLM.generate_response] prompt_preview = '{prompt[:500]}...'", flush=True)
+    print(f"[LLM.generate_response] intent_question_rate = {intent.get('question_rate')}", flush=True)
 
     # ---- SYSTEM PROMPT DINAMICO ----
     system_prompt = (
@@ -40,13 +46,16 @@ def generate_response(payload: dict) -> str:
 
     # ---- CHIAMATA GPT ----
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=model,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ],
-        temperature=0.75,
-        max_tokens=300
+        max_tokens=150,
+        temperature=0.7
     )
-
-    return response.choices[0].message.content.strip()
+    
+    raw_response = response.choices[0].message.content.strip()
+    print(f"[LLM.generate_response] raw_gpt_response = '{raw_response[:300]}...'", flush=True)
+    
+    return raw_response
