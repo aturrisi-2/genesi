@@ -33,6 +33,15 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     print(f"[CHAT_ENDPOINT] incoming_message = '{request.message}'", flush=True)
     print(f"[CHAT_ENDPOINT] user_id = {request.user_id}", flush=True)
     
+    # ===============================
+    # VALIDAZIONE USER_ID
+    # ===============================
+    if not request.user_id:
+        # Prova a recuperare user_id da header
+        request.user_id = http_request.headers.get("X-User-ID", "")
+        if not request.user_id:
+            print(f"[CHAT_ENDPOINT] missing user_id - cannot use document_context", flush=True)
+    
     # 🔍 DIAGNOSI MEMORIA: check per frasi dichiarative
     is_declarative = any(keyword in request.message.lower() for keyword in ["memorizza", "ricorda", "salva", "ricordati", "tieni a mente"])
     print(f"[CHAT_ENDPOINT] is_declarative = {is_declarative}", flush=True)
@@ -44,7 +53,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     force_document_focus = False
     
     # Prima controlla il context persistente da upload
-    if request.user_id in last_document_context:
+    if request.user_id and request.user_id in last_document_context:
         persistent_doc = last_document_context[request.user_id]
         # Check per domande generiche sul documento
         vague_questions = ["cosa contiene", "che dice", "riassumi", "spiegami questo", "di cosa parla", "cosa c'è scritto", "descrivimi", "cosa vedi", "che c'è"]

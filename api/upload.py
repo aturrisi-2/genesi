@@ -22,6 +22,18 @@ async def upload_file(file: UploadFile = File(...), user_id: str = "", http_requ
     if not file or not file.filename:
         raise HTTPException(status_code=400, detail="File required")
     
+    # ===============================
+    # VALIDAZIONE USER_ID OBBLIGATORIA
+    # ===============================
+    if not user_id:
+        # Prova a recuperare user_id da header o da altre fonti
+        user_id = http_request.headers.get("X-User-ID", "")
+        if not user_id:
+            logger.warning(f"[UPLOAD] missing user_id - document_context will not be saved")
+            raise HTTPException(status_code=400, detail="user_id required for document context")
+    
+    logger.info(f"[UPLOAD] processing file for user_id={user_id}", flush=True)
+    
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     
     file_id = str(uuid.uuid4())
@@ -71,15 +83,18 @@ async def upload_file(file: UploadFile = File(...), user_id: str = "", http_requ
                     
                     logger.info(f"OCR accepted as document_context")
                     
-                    # Salva document context per user_id
-                    last_document_context[user_id] = {
-                        "content": ocr_text.strip(),
-                        "source": "image_ocr",
-                        "filename": file.filename,
-                        "timestamp": str(uuid.uuid4())
-                    }
-                    
-                    logger.info(f"[UPLOAD] document_context_saved | user_id={user_id} | length={len(ocr_text.strip())}")
+                    # Salva document context per user_id SOLO se user_id valido
+                    if user_id:
+                        last_document_context[user_id] = {
+                            "content": ocr_text.strip(),
+                            "source": "image_ocr",
+                            "filename": file.filename,
+                            "timestamp": str(uuid.uuid4())
+                        }
+                        
+                        logger.info(f"[UPLOAD] document_context_saved | user_id={user_id} | length={len(ocr_text.strip())}")
+                    else:
+                        logger.warning(f"[UPLOAD] cannot save document_context - missing user_id")
                     
                     # Aggiorna analysis per riflettere il testo trovato
                     analysis["has_text"] = True
