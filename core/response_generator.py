@@ -112,6 +112,12 @@ class ResponseGenerator:
         intent: Dict
     ) -> str:
         print(f"[RESPONSE_GENERATOR.generate_response] intent_received = {intent}", flush=True)
+        
+        # 🔍 DIAGNOSI MEMORIA: check se memoria viene passata
+        use_memory = intent.get('use_memory', False)
+        print(f"[RESPONSE_GENERATOR.generate_response] use_memory_passed = {use_memory}", flush=True)
+        print(f"[RESPONSE_GENERATOR.generate_response] recent_memories_count = {len(recent_memories)}", flush=True)
+        print(f"[RESPONSE_GENERATOR.generate_response] relevant_memories_count = {len(relevant_memories)}", flush=True)
 
         model = self._select_model(intent)
         print(f"[RESPONSE_GENERATOR.generate_response] selected_model = {model}", flush=True)
@@ -220,7 +226,10 @@ class ResponseGenerator:
 
         processed_response = self._post_process(response)
         print(f"[RESPONSE_GENERATOR.generate_response] final_response = '{processed_response}'", flush=True)
-
+        
+        # 🔍 DIAGNOSI MEMORIA: check se viene chiamata qualche funzione di salvataggio
+        print(f"[RESPONSE_GENERATOR.generate_response] memory_save_call = NONE", flush=True)
+        
         return processed_response
 
     # ===============================

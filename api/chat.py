@@ -30,6 +30,10 @@ async def chat_endpoint(request: ChatRequest):
     print(f"[CHAT_ENDPOINT] incoming_message = '{request.message}'", flush=True)
     print(f"[CHAT_ENDPOINT] user_id = {request.user_id}", flush=True)
     
+    # 🔍 DIAGNOSI MEMORIA: check per frasi dichiarative
+    is_declarative = any(keyword in request.message.lower() for keyword in ["memorizza", "ricorda", "salva", "ricordati", "tieni a mente"])
+    print(f"[CHAT_ENDPOINT] is_declarative = {is_declarative}", flush=True)
+    
     # 1. Build cognitive state
     state = CognitiveState.build(request.user_id)
 
@@ -87,9 +91,13 @@ async def chat_endpoint(request: ChatRequest):
             tone=tone
         )
 
+        print(f"[CHAT_ENDPOINT] intent_decided = {intent}", flush=True)
+        print(f"[CHAT_ENDPOINT] use_memory = {intent.get('use_memory')}", flush=True)
+        
         if not intent["should_respond"]:
             response_text = ""
         else:
+            print(f"[CHAT_ENDPOINT] memory_passed_to_generator = {intent.get('use_memory')}", flush=True)
             generator = ResponseGenerator()
             response_text = generator.generate_response(
                 user_message=request.message,

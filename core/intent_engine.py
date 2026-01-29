@@ -63,6 +63,11 @@ class IntentEngine:
         Ritorna un intent object che descrive COME rispondere.
         """
         print(f"[INTENT_ENGINE.decide] incoming_message = '{user_message}'", flush=True)
+        
+        # 🔍 DIAGNOSI MEMORIA: check per richieste di memorizzazione
+        memory_keywords = ["memorizza", "ricorda", "salva", "ricordati", "tieni a mente"]
+        has_memory_request = any(keyword in user_message.lower() for keyword in memory_keywords)
+        print(f"[INTENT_ENGINE.decide] has_memory_request = {has_memory_request}", flush=True)
     
         # ===============================
         # INTENT DI DEFAULT
@@ -76,6 +81,29 @@ class IntentEngine:
             "emotional_weight": 0.4,
             "question_rate": 0.0
         }
+        
+        # ===============================
+        # REGOLA MEMORIA: Atto dichiarativo
+        # ===============================
+        memory_patterns = [
+            "memorizza", "ricorda", "salva", "tieni a mente", "tienilo a mente",
+            "mia moglie si chiama", "mio marito si chiama", "il nome è", "si chiama",
+            "il mio nome è", "mi chiamo", "lavoro come", "faccio"
+        ]
+        
+        memory_triggered = False
+        matched_pattern = None
+        
+        for pattern in memory_patterns:
+            if pattern in user_message.lower():
+                memory_triggered = True
+                matched_pattern = pattern
+                break
+        
+        if memory_triggered:
+            intent["use_memory"] = True
+            intent["focus"] = "memoria"
+            print(f"[INTENT_ENGINE.decide] memory_triggered = True | reason = {matched_pattern}", flush=True)
     
         # ===============================
         # REGOLA IDENTITÀ: NOME
@@ -163,6 +191,7 @@ class IntentEngine:
             print(f"[INTENT_ENGINE.decide] focus = {intent['focus']}", flush=True)
     
         print(f"[INTENT_ENGINE.decide] final_intent = {intent}", flush=True)
+        print(f"[INTENT_ENGINE.decide] use_memory_final = {intent.get('use_memory')}", flush=True)
         return intent
         
         # ===============================
