@@ -59,14 +59,14 @@ async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), ht
             try:
                 from core.ocr.ocr_engine import extract_text_with_ocr
                 
-                logger.info(f"OCR applied to image {file.filename}")
+                logger.info(f"[UPLOAD][OCR] image_detected")
                 ocr_text = extract_text_with_ocr(file_path)
                 text_length = len(ocr_text.strip())
                 
-                logger.info(f"OCR text length = {text_length}")
+                logger.info(f"[UPLOAD][OCR] text_length={text_length}")
                 
-                # Soglia minima per considerare testo rilevante
-                if text_length >= 30:
+                # Soglia minima per considerare testo rilevante (20 caratteri reali)
+                if text_length >= 20:
                     document_context = {
                         "content": ocr_text.strip(),
                         "source": "image_ocr",
@@ -83,7 +83,7 @@ async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), ht
                             "timestamp": str(uuid.uuid4())
                         }
                     
-                    logger.info(f"OCR accepted as document_context")
+                    logger.info(f"[UPLOAD][OCR] accepted")
                     
                     # Salva document context per user_id SOLO se user_id valido
                     if user_id:
@@ -103,7 +103,7 @@ async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), ht
                     analysis["text"] = ocr_text.strip()
                     analysis["ocr_used"] = True
                 else:
-                    logger.info(f"OCR text too short, ignoring")
+                    logger.info(f"[UPLOAD][OCR] rejected")
                     
             except Exception as e:
                 logger.error(f"OCR processing failed for {file.filename}: {e}")
