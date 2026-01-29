@@ -62,12 +62,12 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
         if is_vague_question:
             document_context = persistent_doc.get('content', '')
             force_document_focus = True
-            print(f"[CHAT] document_context_attached = True | user_id={request.user_id}", flush=True)
-            print(f"[CHAT] document_context_used = True", flush=True)
+            logger.info(f"[CHAT] document_context_attached = True | user_id={request.user_id}")
+            logger.info(f"[CHAT] document_context_used = True")
             
             # Rimuovi context dopo uso (one-shot)
             del last_document_context[request.user_id]
-            print(f"[CHAT] document_context_cleared = True", flush=True)
+            logger.info(f"[CHAT] document_context_cleared | user_id={request.user_id}")
     
     # Fallback: check per document context attivo (in session state)
     elif hasattr(http_request, 'state') and hasattr(http_request.state, 'active_document'):
@@ -87,7 +87,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                 delattr(http_request.state, 'active_document')
                 print(f"[CHAT_ENDPOINT] document_context_cleared = True", flush=True)
     else:
-        print(f"[CHAT] document_context_attached = False | user_id={request.user_id}", flush=True)
+        logger.info(f"[CHAT] document_context_attached = False | user_id={request.user_id}")
     
     # 1. Build cognitive state
     state = CognitiveState.build(request.user_id)
@@ -185,6 +185,10 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                 intent=intent,
                 document_context=document_context
             )
+            
+            # Subito dopo la risposta → elimina il document_context (one-shot)
+            # NOTA: il context viene già eliminato prima della chiamata a generate_response
+            # quindi non serve eliminarlo di nuovo qui
 
         # 7. Store system response
         system_affect = compute_affect(
