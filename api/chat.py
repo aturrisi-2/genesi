@@ -59,15 +59,16 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
         vague_questions = ["cosa contiene", "che dice", "riassumi", "spiegami questo", "di cosa parla", "cosa c'è scritto", "descrivimi", "cosa vedi", "che c'è"]
         is_vague_question = any(q in request.message.lower() for q in vague_questions)
         
-        if is_vague_question:
-            document_context = persistent_doc.get('content', '')
-            force_document_focus = True
-            logger.info(f"[CHAT] document_context_attached = True | user_id={request.user_id}")
-            logger.info(f"[CHAT] document_context_used = True")
-            
-            # Rimuovi context dopo uso (one-shot)
-            del last_document_context[request.user_id]
-            logger.info(f"[CHAT] document_context_cleared | user_id={request.user_id}")
+        document_context = persistent_doc.get('content', '')
+        force_document_focus = True
+
+        print(f"[CHAT] document_context_attached = True | user_id={request.user_id}", flush=True)
+        print(f"[CHAT] document_context_length = {len(document_context)}", flush=True)
+
+        # one-shot: rimuovi dopo l’uso
+        del last_document_context[request.user_id]
+        print(f"[CHAT] document_context_cleared | user_id={request.user_id}", flush=True)
+
     
     # Fallback: check per document context attivo (in session state)
     elif hasattr(http_request, 'state') and hasattr(http_request.state, 'active_document'):
