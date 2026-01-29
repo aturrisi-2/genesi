@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, status, Request
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status, Request
 import os
 import uuid
 import logging
@@ -18,19 +18,21 @@ router = APIRouter(prefix="/upload")
 UPLOAD_DIR = "/tmp/genesi_uploads"
 
 @router.post("/")
-async def upload_file(file: UploadFile = File(...), user_id: str = "", http_request: Request = None):
+async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), http_request: Request = None):
     if not file or not file.filename:
         raise HTTPException(status_code=400, detail="File required")
+    
+    # ===============================
+    # LOG DIAGNOSTICO USER_ID RICEVUTO
+    # ===============================
+    logger.info(f"[UPLOAD] received user_id={user_id}", flush=True)
     
     # ===============================
     # VALIDAZIONE USER_ID OBBLIGATORIA
     # ===============================
     if not user_id:
-        # Prova a recuperare user_id da header o da altre fonti
-        user_id = http_request.headers.get("X-User-ID", "")
-        if not user_id:
-            logger.warning(f"[UPLOAD] missing user_id - document_context will not be saved")
-            raise HTTPException(status_code=400, detail="user_id required for document context")
+        logger.warning(f"[UPLOAD] missing user_id - document_context will not be saved")
+        raise HTTPException(status_code=400, detail="user_id required for document context")
     
     logger.info(f"[UPLOAD] processing file for user_id={user_id}", flush=True)
     
