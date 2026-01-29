@@ -157,5 +157,24 @@ class IntentEngine:
         if len(recent_memories) > 10:
             intent["depth"] = "breve"
     
+        # ===============================
+        # REGOLA EMOTIVA: FORZA question_rate = 0.0
+        # ===============================
+        emotional_phrases = [
+            "stress", "stressato", "stressata", "stanco", "stanca", "stanchissimo",
+            "pressione", "sotto pressione", "confuso", "confusa", "confusione",
+            "ansia", "ansioso", "ansiosa", "preoccupato", "preoccupata", "preoccupazione",
+            "nervoso", "nervosa", "tensione", "teso", "tesa", "frustrato", "frustrata",
+            "deluso", "delusa", "delusione", "triste", "tristezza", "giù", "abbattuto",
+            "sopraffatto", "sopraffatta", "sovraccarico", "sovraccarica", "esaurito",
+            "esaurita", "burnout", "crollo", "in crisi", "disperato", "disperata"
+        ]
+        
+        # Se c'è contenuto emotivo MA NESSUNA domanda esplicita
+        if any(phrase in user_message.lower() for phrase in emotional_phrases) and "?" not in user_message:
+            intent["question_rate"] = 0.0
+            intent["focus"] = "presenza"
+            intent["depth"] = "breve"
+    
         return intent
 
