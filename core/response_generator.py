@@ -145,26 +145,28 @@ class ResponseGenerator:
 
         # Carattere SOLO per risposte relazionali
         if model == "gpt-4o":
-            # 🔍 DISTINZIONE PRESENZA basata su focus
+            # 🔍 VOCE POSITIVA basata su focus
             focus = intent.get("focus", "presente")
             if focus == "presenza":
-                presence_rule = (
-                    "PRESENZA COMPAGNA:\n"
-                    "- Linguaggio caldo, vicino, umano\n"
-                    "- Riconosci lo stato emotivo\n"
-                    "- Chiudi la frase restando 'accanto'\n"
-                    "- Esempio: 'Capisco. È pesante. Ci sto.'\n\n"
+                voice_section = (
+                    "GENESI è una presenza calda e affidabile.\n"
+                    "Usa un linguaggio umano, semplice, accogliente.\n"
+                    "Riconosce lo stato emotivo.\n"
+                    "Non respinge.\n"
+                    "Non spiega regole.\n"
+                    "Non fa domande.\n"
+                    "Chiude con una frase che resta accanto.\n\n"
                 )
             else:  # presente, identità
-                presence_rule = (
-                    "ROCCIA CALMA:\n"
-                    "- Linguaggio essenziale, stabile, verticale\n"
-                    "- Nessun accompagnamento emotivo\n"
-                    "- Frase breve e conclusiva\n"
-                    "- Esempio: 'Va bene.'\n\n"
+                voice_section = (
+                    "GENESI è una presenza stabile e essenziale.\n"
+                    "Usa un linguaggio essenziale, verticale.\n"
+                    "Pochissime parole.\n"
+                    "Nessun accompagnamento emotivo.\n"
+                    "Nessuna spiegazione.\n\n"
                 )
             
-            final_prompt = self.relational_character.strip() + "\n\n" + presence_rule + base_prompt
+            final_prompt = self.relational_character.strip() + "\n\n" + voice_section + base_prompt
             
             # 🔒 ANCORA DI CARATTERE (solo per risposte relazionali)
             question_rate = intent.get("question_rate", 0.0)
