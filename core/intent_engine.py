@@ -64,10 +64,18 @@ class IntentEngine:
         """
         print(f"[INTENT_ENGINE.decide] incoming_message = '{user_message}'", flush=True)
         
-        # 🔍 DIAGNOSI MEMORIA: check per richieste di memorizzazione
-        memory_keywords = ["memorizza", "ricorda", "salva", "ricordati", "tieni a mente"]
+        # ===============================
+        # REGOLA COGNITIVA PRIORITARIA: MEMORIA
+        # ===============================
+        memory_keywords = ["memorizza", "memorizzalo", "ricorda", "ricordalo", "salva", "salvalo"]
         has_memory_request = any(keyword in user_message.lower() for keyword in memory_keywords)
         print(f"[INTENT_ENGINE.decide] has_memory_request = {has_memory_request}", flush=True)
+        
+        if has_memory_request:
+            print(
+                "[INTENT_ENGINE.decide] MEMORY RULE TRIGGERED | message='{}'".format(user_message),
+                flush=True
+            )
     
         # ===============================
         # INTENT DI DEFAULT
@@ -77,31 +85,11 @@ class IntentEngine:
             "style": "assertive_presence",
             "depth": "breve",
             "focus": "presente",
-            "use_memory": False,
+            "use_memory": has_memory_request,
             "emotional_weight": 0.4,
             "question_rate": 0.0
         }
         
-        # ===============================
-        # REGOLA DICHIARATIVA: MEMORIA
-        # ===============================
-        memory_triggers = [
-            "memorizza",
-            "ricorda",
-            "salva",
-            "tienilo a mente",
-            "annota"
-        ]
-
-        if any(trigger in user_message.lower() for trigger in memory_triggers):
-            intent["use_memory"] = True
-            intent["focus"] = "memoria"
-
-            print(
-                "[INTENT_ENGINE.decide] MEMORY RULE TRIGGERED | message='{}'".format(user_message),
-                flush=True
-            )
-    
         # ===============================
         # REGOLA IDENTITÀ: NOME
         # ===============================
@@ -125,7 +113,7 @@ class IntentEngine:
                 "style": "assertive_presence",
                 "depth": "breve",
                 "focus": "identità",
-                "use_memory": False,
+                "use_memory": has_memory_request,
                 "emotional_weight": 0.6,
                 "question_rate": 0.0
             }
@@ -133,37 +121,38 @@ class IntentEngine:
         # ===============================
         # REGOLA IDENTITÀ: PROFESSIONE
         # ===============================
-        profession_match = self.PROFESSION_PATTERN.search(user_message)
+        if "lavoro come" in user_message.lower():
+            import re
+            profession_match = re.search(r"lavoro come\s+([a-zA-Z\s]{2,20})", user_message, re.IGNORECASE)
+    
+            if profession_match:
+                profession = profession_match.group(1).strip().title()
+    
+                if not hasattr(user, "profile") or user.profile is None:
+                    user.profile = {}
+    
+                # ✅ accettiamo SOLO professioni corte e nominali
+                if (
+                    profession
+                    and len(profession.split()) <= 3
+                    and all(word.isalpha() for word in profession.split())
+                ):
+                    if user.profile.get("profession") != profession:
+                        user.profile["profession"] = profession
+                        save_user(user)
 
-        if profession_match:
-            profession_raw = profession_match.group(1)
-            profession = normalize_profession(profession_raw)
-
-            if not hasattr(user, "profile") or user.profile is None:
-                user.profile = {}
-
-            # ✅ accettiamo SOLO professioni corte e nominali
-            if (
-                profession
-                and len(profession.split()) <= 3
-                and all(word.isalpha() for word in profession.split())
-            ):
-                if user.profile.get("profession") != profession:
-                    user.profile["profession"] = profession
-                    save_user(user)
-
-                print(f"[INTENT_ENGINE.decide] profession_identity_match = True", flush=True)
-                print(f"[INTENT_ENGINE.decide] question_rate = {intent['question_rate']}", flush=True)
-                print(f"[INTENT_ENGINE.decide] focus = {intent['focus']}", flush=True)
-                return {
-                    "should_respond": True,
-                    "style": "assertive_presence",
-                    "depth": "breve",
-                    "focus": "identità",
-                    "use_memory": False,
-                    "emotional_weight": 0.4,
-                    "question_rate": 0.0
-                }
+                    print(f"[INTENT_ENGINE.decide] profession_identity_match = True", flush=True)
+                    print(f"[INTENT_ENGINE.decide] question_rate = {intent['question_rate']}", flush=True)
+                    print(f"[INTENT_ENGINE.decide] focus = {intent['focus']}", flush=True)
+                    return {
+                        "should_respond": True,
+                        "style": "assertive_presence",
+                        "depth": "breve",
+                        "focus": "identità",
+                        "use_memory": has_memory_request,
+                        "emotional_weight": 0.4,
+                        "question_rate": 0.0
+                    }
 
         # ===============================
         # REGOLA EMOTIVA: FORZA question_rate = 0.0
@@ -187,12 +176,6 @@ class IntentEngine:
             print(f"[INTENT_ENGINE.decide] question_rate = {intent['question_rate']}", flush=True)
             print(f"[INTENT_ENGINE.decide] focus = {intent['focus']}", flush=True)
     
-        print(
-            "[INTENT_ENGINE.decide] FINAL use_memory = {}".format(intent.get("use_memory")),
-            flush=True
-        )
-        return intent
-        
         # ===============================
         # REGOLE COGNITIVE GENERICHE
         # ===============================
@@ -221,5 +204,9 @@ class IntentEngine:
         if len(recent_memories) > 10:
             intent["depth"] = "breve"
     
-       
-
+        print(f"[INTENT_ENGINE.decide] final_intent = {intent}", flush=True)
+        print(
+            "[INTENT_ENGINE.decide] FINAL use_memory = {}".format(intent.get("use_memory")),
+            flush=True
+        )
+        return intent
