@@ -83,16 +83,20 @@ class IntentEngine:
         }
         
         # ===============================
-        # REGOLA MEMORIA ESPPLICITA
+        # REGOLA DICHIARATIVA: MEMORIA
         # ===============================
-        memory_keywords = [
-            "memorizza", "ricorda", "salva", "tienilo a mente",
-            "mia moglie si chiama", "mio marito si chiama", "si chiama"
+        memory_triggers = [
+            "memorizza",
+            "ricorda",
+            "salva",
+            "tienilo a mente",
+            "annota"
         ]
-        
-        if any(keyword in user_message.lower() for keyword in memory_keywords):
+
+        if any(trigger in user_message.lower() for trigger in memory_triggers):
             intent["use_memory"] = True
             intent["focus"] = "memoria"
+
             print(
                 "[INTENT_ENGINE.decide] MEMORY RULE TRIGGERED | message='{}'".format(user_message),
                 flush=True
