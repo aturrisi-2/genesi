@@ -75,16 +75,27 @@ class ResponseGenerator:
     # ===============================
     def _select_model(self, intent: Dict) -> str:
         """
-        Routing cognitivo stabile:
-        - tecnico / spiegazione / analisi → GPT-4o mini
-        - relazionale / identità / emotivo → GPT-4o
+        Routing cognitivo NON negoziabile.
+        GPT-4o-mini è VIETATO per risposte emotive o relazionali.
         """
 
         focus = intent.get("focus")
+        style = intent.get("style")
+        emotional_weight = intent.get("emotional_weight", 0.0)
 
+        # BLOCCO ASSOLUTO: SOLO GPT-4o
+        if (
+            focus in ("presenza", "connessione", "identità", "presente")
+            or style == "assertive_presence"
+            or emotional_weight >= 0.4
+        ):
+            return "gpt-4o"
+
+        # SOLO tecnico puro
         if focus in ("tecnico", "spiegazione", "analisi"):
             return "gpt-4o-mini"
 
+        # default sicuro
         return "gpt-4o"
 
 
