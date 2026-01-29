@@ -7,6 +7,11 @@ from core.file_analyzer import analyze_file
 from core.decision_engine import decide_response_strategy
 from core.response_router import route_response
 
+# ===============================
+# DOCUMENT CONTEXT TEMPORANEO PER USER
+# ===============================
+last_document_context = {}  # {user_id: {"content": text, "timestamp": time}}
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/upload")
 
@@ -66,6 +71,16 @@ async def upload_file(file: UploadFile = File(...), user_id: str = "", http_requ
                     
                     logger.info(f"OCR accepted as document_context")
                     
+                    # Salva document context per user_id
+                    last_document_context[user_id] = {
+                        "content": ocr_text.strip(),
+                        "source": "image_ocr",
+                        "filename": file.filename,
+                        "timestamp": str(uuid.uuid4())
+                    }
+                    
+                    logger.info(f"[UPLOAD] document_context_saved | user_id={user_id} | length={len(ocr_text.strip())}")
+                    
                     # Aggiorna analysis per riflettere il testo trovato
                     analysis["has_text"] = True
                     analysis["text"] = ocr_text.strip()
@@ -94,6 +109,10 @@ async def upload_file(file: UploadFile = File(...), user_id: str = "", http_requ
         # Aggiungi document context se presente
         if document_context:
             result["document_context"] = document_context
+        
+        # Aggiungi anche il context persistente per user_id
+        if user_id in last_document_context:
+            result["persistent_context"] = last_document_context[user_id]
         
         return result
     
