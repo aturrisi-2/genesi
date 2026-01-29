@@ -83,27 +83,20 @@ class IntentEngine:
         }
         
         # ===============================
-        # REGOLA MEMORIA: Atto dichiarativo
+        # REGOLA MEMORIA ESPPLICITA
         # ===============================
-        memory_patterns = [
-            "memorizza", "ricorda", "salva", "tieni a mente", "tienilo a mente",
-            "mia moglie si chiama", "mio marito si chiama", "il nome è", "si chiama",
-            "il mio nome è", "mi chiamo", "lavoro come", "faccio"
+        memory_keywords = [
+            "memorizza", "ricorda", "salva", "tienilo a mente",
+            "mia moglie si chiama", "mio marito si chiama", "si chiama"
         ]
         
-        memory_triggered = False
-        matched_pattern = None
-        
-        for pattern in memory_patterns:
-            if pattern in user_message.lower():
-                memory_triggered = True
-                matched_pattern = pattern
-                break
-        
-        if memory_triggered:
+        if any(keyword in user_message.lower() for keyword in memory_keywords):
             intent["use_memory"] = True
             intent["focus"] = "memoria"
-            print(f"[INTENT_ENGINE.decide] memory_triggered = True | reason = {matched_pattern}", flush=True)
+            print(
+                "[INTENT_ENGINE.decide] MEMORY RULE TRIGGERED | message='{}'".format(user_message),
+                flush=True
+            )
     
         # ===============================
         # REGOLA IDENTITÀ: NOME
@@ -190,8 +183,10 @@ class IntentEngine:
             print(f"[INTENT_ENGINE.decide] question_rate = {intent['question_rate']}", flush=True)
             print(f"[INTENT_ENGINE.decide] focus = {intent['focus']}", flush=True)
     
-        print(f"[INTENT_ENGINE.decide] final_intent = {intent}", flush=True)
-        print(f"[INTENT_ENGINE.decide] use_memory_final = {intent.get('use_memory')}", flush=True)
+        print(
+            "[INTENT_ENGINE.decide] FINAL use_memory = {}".format(intent.get("use_memory")),
+            flush=True
+        )
         return intent
         
         # ===============================
