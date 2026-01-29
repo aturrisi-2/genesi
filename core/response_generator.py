@@ -174,7 +174,7 @@ class ResponseGenerator:
 
         # Se c'è document context, usa modello standard senza carattere relazionale
         if document_context:
-            model = "gpt-4o"
+            model = "gpt-4o-mini"
             
             # REGOLA DI CONTESTO VISIVO (NON NEGOZIABILE)
             visual_context_rule = (
