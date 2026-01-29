@@ -25,7 +25,7 @@ async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), ht
     # ===============================
     # LOG DIAGNOSTICO USER_ID RICEVUTO
     # ===============================
-    logger.info(f"[UPLOAD] received user_id={user_id}", flush=True)
+    logger.info(f"[UPLOAD] received user_id={user_id}")
     
     # ===============================
     # VALIDAZIONE USER_ID OBBLIGATORIA
@@ -34,7 +34,7 @@ async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), ht
         logger.warning(f"[UPLOAD] missing user_id - document_context will not be saved")
         raise HTTPException(status_code=400, detail="user_id required for document context")
     
-    logger.info(f"[UPLOAD] processing file for user_id={user_id}", flush=True)
+    logger.info(f"[UPLOAD] processing file for user_id={user_id}")
     
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     
