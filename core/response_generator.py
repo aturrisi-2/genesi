@@ -109,48 +109,74 @@ class ResponseGenerator:
         recent_memories: List[Dict],
         relevant_memories: List[Dict],
         tone,
-        intent: Dict
+        intent: Dict,
+        document_context: Optional[str] = None
     ) -> str:
         print(f"[RESPONSE_GENERATOR.generate_response] intent_received = {intent}", flush=True)
         
-        # 🔍 DIAGNOSI MEMORIA: check se memoria viene passata
-        use_memory = intent.get('use_memory', False)
-        print(f"[RESPONSE_GENERATOR.generate_response] use_memory_passed = {use_memory}", flush=True)
-        print(f"[RESPONSE_GENERATOR.generate_response] recent_memories_count = {len(recent_memories)}", flush=True)
-        print(f"[RESPONSE_GENERATOR.generate_response] relevant_memories_count = {len(relevant_memories)}", flush=True)
+        # ===============================
+        # DOCUMENT CONTEXT TEMPORANEO
+        # ===============================
+        if document_context:
+            print(f"[RESPONSE_GENERATOR] document_context_received = True", flush=True)
+            print(f"[RESPONSE_GENERATOR] document_context_length = {len(document_context)}", flush=True)
+            print(f"[RESPONSE_GENERATOR] document_context_used = True", flush=True)
+            
+            # Costruisci prompt con document context prioritario
+            document_section = f"CONTENUTO DOCUMENTO (da analizzare):\n{document_context}\n\n"
+            user_section = f"Domanda utente: {user_message}"
+            
+            base_prompt = document_section + user_section
+            
+            # Ignora memorie personali quando c'è document context
+            recent_memories = []
+            relevant_memories = []
+            
+        else:
+            print(f"[RESPONSE_GENERATOR] document_context_received = False", flush=True)
+            
+            # 🔍 DIAGNOSI MEMORIA: check se memoria viene passata
+            use_memory = intent.get('use_memory', False)
+            print(f"[RESPONSE_GENERATOR.generate_response] use_memory_passed = {use_memory}", flush=True)
+            print(f"[RESPONSE_GENERATOR.generate_response] recent_memories_count = {len(recent_memories)}", flush=True)
+            print(f"[RESPONSE_GENERATOR.generate_response] relevant_memories_count = {len(relevant_memories)}", flush=True)
 
-        model = self._select_model(intent)
-        print(f"[RESPONSE_GENERATOR.generate_response] selected_model = {model}", flush=True)
-        print(f"[RESPONSE_GENERATOR.generate_response] question_rate = {intent.get('question_rate')}", flush=True)
-        print(f"[RESPONSE_GENERATOR.generate_response] focus = {intent.get('focus')}", flush=True)
-        print(f"[RESPONSE_GENERATOR.generate_response] style = {intent.get('style')}", flush=True)
+            model = self._select_model(intent)
+            print(f"[RESPONSE_GENERATOR.generate_response] selected_model = {model}", flush=True)
+            print(f"[RESPONSE_GENERATOR.generate_response] question_rate = {intent.get('question_rate')}", flush=True)
+            print(f"[RESPONSE_GENERATOR.generate_response] focus = {intent.get('focus')}", flush=True)
+            print(f"[RESPONSE_GENERATOR.generate_response] style = {intent.get('style')}", flush=True)
 
-        # Stato sintetico
-        state_summary = json.dumps(
-            {
-                "user": cognitive_state.user.to_dict(),
-                "context": cognitive_state.context,
-                "time": datetime.now().isoformat()
-            },
-            ensure_ascii=False
-        )
+            # Stato sintetico
+            state_summary = json.dumps(
+                {
+                    "user": cognitive_state.user.to_dict(),
+                    "context": cognitive_state.context,
+                    "time": datetime.now().isoformat()
+                },
+                ensure_ascii=False
+            )
 
-        # Prompt base
-        base_prompt = self.prompt_template.format(
-            intent_style=intent.get("style"),
-            intent_depth=intent.get("depth"),
-            intent_focus=intent.get("focus"),
-            intent_use_memory=intent.get("use_memory"),
-            intent_emotional_weight=intent.get("emotional_weight"),
-            state_summary=state_summary,
-            recent_memories=self._format_memories(recent_memories),
-            relevant_memories=self._format_memories(relevant_memories),
-            tone_description=self._describe_tone(tone),
-            user_message=user_message
-        ).strip()
+            # Prompt base
+            base_prompt = self.prompt_template.format(
+                intent_style=intent.get("style"),
+                intent_depth=intent.get("depth"),
+                intent_focus=intent.get("focus"),
+                intent_use_memory=intent.get("use_memory"),
+                intent_emotional_weight=intent.get("emotional_weight"),
+                state_summary=state_summary,
+                recent_memories=self._format_memories(recent_memories),
+                relevant_memories=self._format_memories(relevant_memories),
+                tone_description=self._describe_tone(tone),
+                user_message=user_message
+            ).strip()
 
+        # Se c'è document context, usa modello standard senza carattere relazionale
+        if document_context:
+            model = "gpt-4o"
+            final_prompt = base_prompt
         # Carattere SOLO per risposte relazionali
-        if model == "gpt-4o":
+        elif model == "gpt-4o":
             # 🔍 VOCE POSITIVA basata su focus
             focus = intent.get("focus", "presente")
             if focus == "presenza":
@@ -230,7 +256,8 @@ class ResponseGenerator:
         # ===============================
         # SALVATAGGIO MEMORIA SE RICHIESTO
         # ===============================
-        if intent.get("use_memory") and user_message.strip() and processed_response.strip():
+        # NON salvare in memoria quando c'è document context
+        if not document_context and intent.get("use_memory") and user_message.strip() and processed_response.strip():
             try:
                 from memory.episodic import store_event
                 from memory.affective import compute_affect
@@ -265,7 +292,10 @@ class ResponseGenerator:
             except Exception as e:
                 print(f"[RESPONSE_GENERATOR.generate_response] MEMORY SAVE FAILED | error={str(e)}", flush=True)
         else:
-            print(f"[RESPONSE_GENERATOR.generate_response] MEMORY NOT NEEDED", flush=True)
+            if document_context:
+                print(f"[RESPONSE_GENERATOR.generate_response] MEMORY SKIPPED (document_context_active)", flush=True)
+            else:
+                print(f"[RESPONSE_GENERATOR.generate_response] MEMORY NOT NEEDED", flush=True)
         
         return processed_response
 

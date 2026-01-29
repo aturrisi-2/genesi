@@ -151,7 +151,8 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                 recent_memories=recent_memories if intent["use_memory"] else [],
                 relevant_memories=relevant_memories if intent["use_memory"] else [],
                 tone=tone,
-                intent=intent
+                intent=intent,
+                document_context=document_context
             )
 
         # 7. Store system response
