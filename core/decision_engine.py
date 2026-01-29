@@ -9,20 +9,23 @@ def decide_response_strategy(file_analysis: dict, context: dict = None) -> dict:
             return {
                 "strategy": "code_analysis",
                 "model": "gpt-4o",
-                "tools": ["reasoning", "code_interpreter"]
+                "tools": ["reasoning", "code_interpreter"],
+                "response_mode": "direct"
             }
         else:
             return {
                 "strategy": "text_analysis",
                 "model": "gpt-4o",
-                "tools": ["reasoning"]
+                "tools": ["reasoning"],
+                "response_mode": "direct"
             }
     
     elif kind == "image":
         return {
             "strategy": "image_analysis",
             "model": "gpt-4o",
-            "tools": ["vision", "reasoning"]
+            "tools": ["vision", "reasoning"],
+            "response_mode": "direct"
         }
     
     elif kind == "document":
@@ -30,32 +33,37 @@ def decide_response_strategy(file_analysis: dict, context: dict = None) -> dict:
             return {
                 "strategy": "document_analysis",
                 "model": "gpt-4o",
-                "tools": ["pdf_reader", "reasoning"]
+                "tools": ["pdf_reader", "reasoning"],
+                "response_mode": "direct"
             }
         else:
             return {
                 "strategy": "document_analysis",
                 "model": "gpt-4o",
-                "tools": ["reasoning"]
+                "tools": ["reasoning"],
+                "response_mode": "direct"
             }
     
     elif kind == "audio":
         return {
             "strategy": "audio_transcription",
             "model": "whisper",
-            "tools": ["transcription"]
+            "tools": ["transcription"],
+            "response_mode": "direct"
         }
     
     elif kind == "video":
         return {
             "strategy": "video_analysis",
             "model": "gpt-4o",
-            "tools": ["video_frame_analysis", "reasoning"]
+            "tools": ["video_frame_analysis", "reasoning"],
+            "response_mode": "direct"
         }
     
     else:
         return {
             "strategy": "binary_info",
             "model": "gpt-4o",
-            "tools": ["file_info"]
+            "tools": ["file_info"],
+            "response_mode": "direct"
         }

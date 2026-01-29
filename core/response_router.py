@@ -23,7 +23,7 @@ def prepare_content_for_model_text(text: str) -> str:
         preview = text[:1000]
         return f"""
 Il contenuto completo non è stato incluso per limiti di dimensione.
-Rispondi spiegando cosa puoi fare con questo tipo di file e chiedi all'utente come procedere.
+Ecco cosa posso fare con questo tipo di file e come procedere.
 
 Anteprima del file (primi 1000 caratteri):
 ---
@@ -55,7 +55,7 @@ def prepare_content_for_model(file_path: str) -> str:
         preview = content[:1000]
         return f"""
 Il contenuto completo non è stato incluso per limiti di dimensione.
-Rispondi spiegando cosa puoi fare con questo tipo di file e chiedi all'utente come procedere.
+Ecco cosa posso fare con questo tipo di file e come procedere.
 
 Anteprima del file (primi 1000 caratteri):
 ---
@@ -77,6 +77,20 @@ Anteprima del file (primi 1000 caratteri):
     
     return content
 
+def get_response_policy(decision: dict, content: str) -> str:
+    response_mode = decision.get("response_mode", "direct")
+    
+    if response_mode == "direct" and content and len(content.strip()) > 50:
+        return """
+REGOLE COMPORTAMENTALI:
+- Rispondi direttamente, non fare domande
+- Chiudi la risposta con una conclusione chiara
+- Sii presente e risolutivo
+- Massimo 1 domanda solo se strettamente necessaria
+- Non chiedere conferme inutili
+"""
+    return ""
+
 async def route_response(file_analysis: dict, file_path: str, context: dict = None) -> str:
     decision = decide_response_strategy(file_analysis, context)
     strategy = decision.get("strategy", "text_analysis")
@@ -86,11 +100,12 @@ async def route_response(file_analysis: dict, file_path: str, context: dict = No
     try:
         if strategy == "text_analysis":
             content = prepare_content_for_model(file_path)
+            policy = get_response_policy(decision, content)
             
             response = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "Analizza il contenuto testuale fornito e rispondi in modo utile."},
+                    {"role": "system", "content": f"Analizza il contenuto testuale fornito e rispondi in modo utile.{policy}"},
                     {
                         "role": "user",
                         "content": f"""
@@ -110,11 +125,12 @@ Rispondi analizzando direttamente il contenuto.
         
         elif strategy == "code_analysis":
             content = prepare_content_for_model(file_path)
+            policy = get_response_policy(decision, content)
             
             response = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "Analizza il codice sorgente fornito, spiegalo e suggerisci miglioramenti."},
+                    {"role": "system", "content": f"Analizza il codice sorgente fornito, spiegalo e suggerisci miglioramenti.{policy}"},
                     {
                         "role": "user",
                         "content": f"""
@@ -133,10 +149,12 @@ Analizza il codice, spiegalo e suggerisci miglioramenti.
             return response.choices[0].message.content
         
         elif strategy == "image_analysis":
+            policy = get_response_policy(decision, "")
+            
             response = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "Descrivi l'immagine fornita in dettaglio."},
+                    {"role": "system", "content": f"Descrivi l'immagine fornita in dettaglio.{policy}"},
                     {"role": "user", "content": "Analizza questa immagine.", "image_url": file_path}
                 ],
                 max_tokens=800
@@ -150,11 +168,12 @@ Analizza il codice, spiegalo e suggerisci miglioramenti.
                     # PDF with extractable text
                     pdf_text = file_analysis.get("text", "")
                     content = prepare_content_for_model_text(pdf_text)
+                    policy = get_response_policy(decision, content)
                     
                     response = client.chat.completions.create(
                         model=model,
                         messages=[
-                            {"role": "system", "content": "Analizza il documento e fornisci un riassunto o le informazioni richieste."},
+                            {"role": "system", "content": f"Analizza il documento e fornisci un riassunto o le informazioni richieste.{policy}"},
                             {
                                 "role": "user",
                                 "content": f"""
@@ -174,18 +193,22 @@ Rispondi analizzando direttamente il contenuto del documento.
                     return response.choices[0].message.content
                 else:
                     # PDF without text (scanned)
+                    policy = get_response_policy(decision, "")
+                    
                     response = client.chat.completions.create(
                         model=model,
                         messages=[
-                            {"role": "system", "content": "Analizza il documento e fornisci un riassunto o le informazioni richieste."},
+                            {"role": "system", "content": f"Analizza il documento e fornisci un riassunto o le informazioni richieste.{policy}"},
                             {
                                 "role": "user",
                                 "content": """
 Il file PDF sembra essere una scansione o non contiene testo selezionabile.
-Posso:
-- aiutarti a interpretarlo se lo descrivi
-- suggerire OCR
-- spiegare come estrarre il testo
+Ecco cosa posso fare:
+- interpretarlo se mi descrivi il contenuto
+- suggerire strumenti OCR per estrarre il testo
+- spiegare come convertire scansioni in documenti testuali
+
+Scegli l'opzione che preferisci o fornisci dettagli sul contenuto.
 """
                             }
                         ],
@@ -195,11 +218,12 @@ Posso:
             else:
                 # Other document types (non-PDF)
                 content = prepare_content_for_model(file_path)
+                policy = get_response_policy(decision, content)
                 
                 response = client.chat.completions.create(
                     model=model,
                     messages=[
-                        {"role": "system", "content": "Analizza il documento e fornisci un riassunto o le informazioni richieste."},
+                        {"role": "system", "content": f"Analizza il documento e fornisci un riassunto o le informazioni richieste.{policy}"},
                         {
                             "role": "user",
                             "content": f"""
