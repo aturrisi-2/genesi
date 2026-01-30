@@ -57,6 +57,10 @@ class ResponseGenerator:
         Ultimo messaggio dell'utente:
         {user_message}
 
+        IMPORTANTE: Se il focus è "consiglio", l'utente ha chiesto esplicitamente un consiglio.
+        Usa le informazioni disponibili (contesto, memoria recente, stato emotivo) per formulare una risposta specifica e situata.
+        Evita frasi generiche come "ascolta il tuo corpo" o "segui il tuo istinto".
+
         Rispondi solo con il testo della risposta:
         """
 
