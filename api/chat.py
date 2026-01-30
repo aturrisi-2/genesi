@@ -20,12 +20,35 @@ from core.tone import compute_tone
 # Import per document context persistente
 from api.upload import last_document_context
 
+# Import per image handler
+from core.image_handler import handle_image
+
 router = APIRouter()
 
 
 class ChatRequest(BaseModel):
     user_id: str
     message: str
+
+
+def is_relational_message(message: str) -> bool:
+    """Verifica se il messaggio è relazionale (non tecnico)"""
+    relational_keywords = [
+        "ciao", "buongiorno", "buonasera", "grazie", "ok", "va bene", 
+        "perfetto", "bene", "capito", "ho capito", "certo", "sicuro",
+        "scusa", "scusami", "prego", "di nulla", "figurati"
+    ]
+    emotional_keywords = [
+        "mi sento", "sono felice", "sono triste", "sono preoccupato",
+        "sono arrabbiato", "mi dispiace", "mi piace", "non mi piace"
+    ]
+    
+    message_lower = message.lower().strip()
+    return (
+        any(keyword in message_lower for keyword in relational_keywords) or
+        any(keyword in message_lower for keyword in emotional_keywords) or
+        len(message_lower.split()) <= 2  # Messaggi molto brevi spesso relazionali
+    )
 
 
 @router.post("/chat")
@@ -41,6 +64,38 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
         request.user_id = http_request.headers.get("X-User-ID", "")
         if not request.user_id:
             print(f"[CHAT_ENDPOINT] missing user_id - cannot use document_context", flush=True)
+    
+    # ===============================
+    # BIFURCAZIONE: IMMAGINI vs CHAT NORMALE
+    # ===============================
+    # Controlla se c'è un'immagine attiva per questo user_id
+    image_context = None
+    if request.user_id and request.user_id in last_document_context:
+        persistent_doc = last_document_context[request.user_id]
+        if persistent_doc.get('document_mode') == 'image':
+            image_context = persistent_doc
+            print(f"[CHAT] active_image_context_found | user_id={request.user_id}", flush=True)
+    
+    # Se c'è un'immagine attiva e il messaggio non è puramente relazionale
+    if image_context and not is_relational_message(request.message):
+        print(f"[CHAT] routing_to_image_handler | user_id={request.user_id}", flush=True)
+        
+        # Bypassa tutto il flusso chat standard
+        response_text = await handle_image(
+            image_context=image_context,
+            user_message=request.message,
+            user_id=request.user_id
+        )
+        
+        # Non eliminare il context dell'immagine dopo una richiesta
+        # L'immagine rimane attiva per richieste successive
+        
+        return {
+            "response": response_text,
+            "user_id": request.user_id,
+            "timestamp": datetime.now().isoformat(),
+            "image_mode": True
+        }
     
     # 🔍 DIAGNOSI MEMORIA: check per frasi dichiarative
     is_declarative = any(keyword in request.message.lower() for keyword in ["memorizza", "ricorda", "salva", "ricordati", "tieni a mente"])
