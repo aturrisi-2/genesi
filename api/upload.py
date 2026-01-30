@@ -129,11 +129,21 @@ async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), ht
             except Exception as e:
                 logger.error(f"OCR processing failed for {file.filename}: {e}")
         
-        # Decisione strategia
-        decision = decide_response_strategy(analysis)
-        
-        # Generazione risposta
-        response_text = await route_response(analysis, file_path, {"user_id": user_id})
+        # BIFURCAZIONE: Immagini vs Documenti testuali
+        if analysis.get("kind") == "image" and document_context:
+            # FLUSSO IMMAGINI: usa image_handler dedicato
+            from core.image_handler import handle_image
+            
+            response_text = await handle_image(
+                image_context=document_context,
+                user_message="descrivimi l'immagine",  # Default per upload automatico
+                user_id=user_id
+            )
+            decision = "image_handled"
+        else:
+            # FLUSSO DOCUMENTALE: usa pipeline esistente
+            decision = decide_response_strategy(analysis)
+            response_text = await route_response(analysis, file_path, {"user_id": user_id})
         
         result = {
             "file_id": file_id,
