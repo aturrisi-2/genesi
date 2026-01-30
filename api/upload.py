@@ -65,45 +65,58 @@ async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), ht
                 
                 logger.info(f"[UPLOAD][OCR] text_length={text_length}")
                 
-                # Soglia minima per considerare testo rilevante (20 caratteri reali)
-                if text_length >= 20:
-                    document_context = {
-                        "content": ocr_text.strip(),
+                # FASE 1: DESCRIZIONE OBBLIGATORIA DEL CONTENUTO
+                # Valuta qualità e affidabilità dell'estrazione
+                ocr_quality = "buona" if text_length >= 100 else "media" if text_length >= 50 else "bassa"
+                has_clear_text = text_length >= 20 and any(char.isalpha() for char in ocr_text.strip())
+                
+                # Genera descrizione oggettiva del contenuto
+                if has_clear_text:
+                    content_description = f"Immagine con testo estratto via OCR. Qualità: {ocr_quality}. Testo rilevato: {len(ocr_text.strip())} caratteri."
+                    extracted_content = ocr_text.strip()
+                else:
+                    content_description = f"Immagine senza testo chiaro rilevabile. Qualità OCR: {ocr_quality}. Possibile contenuto visivo non testuale."
+                    extracted_content = ""
+                
+                # Crea document context completo con metadati di qualità
+                document_context = {
+                    "content": extracted_content,
+                    "description": content_description,
+                    "file_type": "image",
+                    "source": "image_ocr",
+                    "quality": ocr_quality,
+                    "has_clear_text": has_clear_text,
+                    "filename": file.filename,
+                    "timestamp": str(uuid.uuid4())
+                }
+                
+                # Imposta active_document per il chat context
+                if http_request:
+                    http_request.state.active_document = {
+                        "user_id": user_id,
+                        "content": extracted_content,
+                        "description": content_description,
+                        "file_type": "image",
                         "source": "image_ocr",
-                        "filename": file.filename,
+                        "quality": ocr_quality,
+                        "has_clear_text": has_clear_text,
                         "timestamp": str(uuid.uuid4())
                     }
-                    
-                    # Imposta active_document per il chat context
-                    if http_request:
-                        http_request.state.active_document = {
-                            "user_id": user_id,
-                            "content": ocr_text.strip(),
-                            "source": "image_ocr",
-                            "timestamp": str(uuid.uuid4())
-                        }
-                    
-                    logger.info(f"[UPLOAD][OCR] accepted")
-                    
-                    # Salva document context per user_id SOLO se user_id valido
-                    if user_id:
-                        last_document_context[user_id] = {
-                            "content": ocr_text.strip(),
-                            "source": "image_ocr",
-                            "filename": file.filename,
-                            "timestamp": str(uuid.uuid4())
-                        }
-                        
-                        logger.info(f"[UPLOAD] document_context_saved | user_id={user_id} | length={len(ocr_text.strip())}")
-                    else:
-                        logger.warning(f"[UPLOAD] cannot save document_context - missing user_id")
-                    
-                    # Aggiorna analysis per riflettere il testo trovato
-                    analysis["has_text"] = True
-                    analysis["text"] = ocr_text.strip()
-                    analysis["ocr_used"] = True
+                
+                logger.info(f"[UPLOAD][OCR] processed | quality={ocr_quality} | has_text={has_clear_text}")
+                
+                # Salva document context per user_id SOLO se user_id valido
+                if user_id:
+                    last_document_context[user_id] = document_context
+                    logger.info(f"[UPLOAD] document_context_saved | user_id={user_id} | quality={ocr_quality}")
                 else:
-                    logger.info(f"[UPLOAD][OCR] rejected")
+                    logger.warning(f"[UPLOAD] cannot save document_context - missing user_id")
+                
+                # Aggiorna analysis per riflettere il testo trovato
+                analysis["has_text"] = has_clear_text
+                analysis["text"] = extracted_content
+                analysis["ocr_used"] = True
+                analysis["quality"] = ocr_quality
                     
             except Exception as e:
                 logger.error(f"OCR processing failed for {file.filename}: {e}")

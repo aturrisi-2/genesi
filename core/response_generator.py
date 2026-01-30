@@ -180,39 +180,46 @@ class ResponseGenerator:
                 user_message=user_message
             ).strip()
 
-        # 🔒 DOCUMENT CONTEXT → MODELLO FORZATO
+        # DOCUMENT CONTEXT → MODELLO FORZATO
         if document_context:
             model = "gpt-4o"   # NON negoziabile
 
-            # REGOLA MADRE - GESTIONE AUTOMATICA DOCUMENTI
+            # FLUSO GESTIONE FILE - DESCRIZIONE + AZIONE CONTROLLATA
             document_rule = (
-                "REGOLA MADRE (NON NEGOZIABILE):\n"
-                "- Quando esiste document_context, agisci come se avessi davanti il contenuto reale del file caricato.\n"
-                "- È VIETATO chiedere descrizioni all'utente.\n"
-                "- È VIETATO dichiarare di non poter vedere immagini o file.\n"
-                "- È VIETATO ignorare il contenuto estratto dall'OCR.\n"
-                "- È VIETATO rispondere in modo generico.\n\n"
+                "FLUSSO GESTIONE FILE (NON NEGOZIABILE):\n\n"
                 
-                "COMPORTAMENTO OBBLIGATORIO:\n"
-                "- Se document_context contiene testo significativo: analizza, trascrivi o riassumi secondo la richiesta.\n"
-                "- Se document_context è vuoto o descrittivo (immagine pura): descrivi automaticamente l'immagine.\n"
-                "- Non mescolare descrizione inventata con testo non presente.\n"
-                "- Per PDF lunghi: avvisa, spezza, ma NON rifiutare.\n\n"
+                "FASE 1 - DESCRIZIONE OBBLIGATORIA:\n"
+                "- Usa sempre la description del document_context per descrivere il contenuto.\n"
+                "- Riporta tipo di file, contenuto rilevato e qualità dell'estrazione.\n"
+                "- Se la qualità è bassa, dichiaralo esplicitamente.\n\n"
                 
-                "DISAMBIGUAZIONE AUTOMATICA:\n"
-                "- \"descrivi\", \"cosa vedi\", \"cosa contiene\", \"dimmi cosa c'è\", \"leggilo\" → tutti attivano il comportamento corretto.\n"
-                "- Non dipendere dalla forma della richiesta, ma dal tipo di contenuto.\n\n"
+                "FASE 2 - AZIONE SU RICHIESTA:\n"
+                "- Esegui azioni (trascrivi, riassumi, spiega) SOLO con dati disponibili.\n"
+                "- Se l'OCR è rumoroso o ambiguo, dichiaralo esplicitamente.\n"
+                "- NON inventare testo non chiaramente presente.\n\n"
                 
-                "FRASI ASSOLUTAMENTE VIETATE:\n"
-                "- \"Non posso vedere l'immagine\"\n"
-                "- \"Non ho accesso al file\"\n"
-                "- \"Serve una descrizione\"\n"
-                "- \"Non posso analizzarlo\"\n\n"
+                "DIVIETI ASSOLUTI:\n"
+                "- È vietato trattare l'OCR come verità assoluta.\n"
+                "- È vietato inventare testo non chiaramente presente.\n"
+                "- È vietato forzare ricostruzioni di contenuti non affidabili.\n"
+                "- È vietato chiedere descrizioni all'utente.\n"
+                "- È vietato dichiarare di non poter vedere il file.\n\n"
+                
+                "PRINCIPIO GUIDA:\n"
+                "- Preferisci l'accuratezza alla completezza.\n"
+                "- In caso di dubbio, descrivi il limite invece di riempirlo.\n\n"
+                
+                "METADATI DISPONIBILI:\n"
+                f"- Tipo file: {document_context.get('file_type', 'sconosciuto')}\n"
+                f"- Qualità estrazione: {document_context.get('quality', 'sconosciuta')}\n"
+                f"- Testo chiaro: {document_context.get('has_clear_text', False)}\n"
+                f"- Descrizione: {document_context.get('description', 'Nessuna')}\n\n"
             )
             
             final_prompt = document_rule + base_prompt
         # Carattere SOLO per risposte relazionali
         elif model == "gpt-4o":
+            # VOCE POSITIVA basata su focus
             # 🔍 VOCE POSITIVA basata su focus
             focus = intent.get("focus", "presente")
             if focus == "presenza":
