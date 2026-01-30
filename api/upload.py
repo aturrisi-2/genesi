@@ -66,23 +66,22 @@ async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), ht
                 logger.info(f"[UPLOAD][OCR] text_length={text_length}")
                 
                 # FASE 1: ANALISI CONTENUTO E DETERMINAZIONE MODALITÀ
-                # Valuta qualità e affidabilità dell'estrazione
-                ocr_reliability = "high" if text_length >= 100 else "medium" if text_length >= 50 else "low"
+                # REGOLA D'ORO: Le immagini sono SEMPRE mode="image", OCR non cambia il tipo di documento
                 has_clear_text = text_length >= 20 and any(char.isalpha() for char in ocr_text.strip())
                 
-                # Determina document_mode in base al contenuto
-                if has_clear_text and text_length >= 50:
-                    document_mode = "mixed"  # Immagine con testo significativo
-                    content_description = f"Immagine mista: contenuto visivo con testo OCR (affidabilità: {ocr_reliability}). Testo estratto: {len(ocr_text.strip())} caratteri."
-                    extracted_content = ocr_text.strip()
-                elif has_clear_text:
-                    document_mode = "text"   # Immagine prevalentemente testuale
-                    content_description = f"Immagine testuale: principalmente testo OCR (affidabilità: {ocr_reliability}). Testo estratto: {len(ocr_text.strip())} caratteri."
-                    extracted_content = ocr_text.strip()
+                # Per immagini: document_mode è SEMPRE "image"
+                document_mode = "image"
+                
+                # Per immagini: affidabilità OCR è sempre "low" per default
+                ocr_reliability = "low" if has_clear_text else "none"
+                
+                # Descrizione appropriata per immagini
+                if has_clear_text:
+                    content_description = f"Immagine (screenshot) con testo OCR rilevato (affidabilità: {ocr_reliability}). Testo estratto disponibile su richiesta esplicita."
+                    extracted_content = ocr_text.strip()  # Tenere per trascrizioni esplicite
                 else:
-                    document_mode = "image"  # Immagine pura o con testo non affidabile
-                    content_description = f"Immagine pura: contenuto prevalentemente visivo. OCR non affidabile (affidabilità: {ocr_reliability})."
-                    extracted_content = ""  # Non usare OCR non affidabile
+                    content_description = f"Immagine (screenshot) senza testo chiaro rilevabile. Contenuto prevalentemente visivo."
+                    extracted_content = ""
                 
                 # Crea document context completo con modalità e affidabilità
                 document_context = {

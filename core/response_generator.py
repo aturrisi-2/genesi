@@ -195,9 +195,10 @@ class ResponseGenerator:
                 
                 "REGOLE PER document_mode == 'image':\n"
                 "- È VIETATO trattare l'OCR come descrizione visiva\n"
-                "- Alla richiesta 'descrivimi immagine', descrivi solo: tipo file, contesto generale, presenza/assenza testo OCR\n"
-                "- L'OCR deve includere valutazione affidabilità (low/medium/high)\n"
-                "- Se OCR è low: NON trascrivere come testo affidabile\n"
+                "- Alla richiesta 'descrivimi immagine', descrivi solo: tipo immagine (es. screenshot), contesto generale, presenza/assenza testo OCR\n"
+                "- L'OCR su immagini ha affidabilità 'low' o 'none' - NON è contenuto principale\n"
+                "- NON usare testo OCR come contenuto principale per descrizioni visive\n"
+                "- Il testo OCR è disponibile SOLO per azioni esplicite ('trascrivi il testo')\n"
                 "- È VIETATO forzare l'LLM a 'ricostruire' contenuti mancanti\n"
                 "- È VIETATO fingere visione diretta delle immagini\n\n"
                 
