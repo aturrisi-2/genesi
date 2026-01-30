@@ -18,7 +18,39 @@ TESSERACT_LANG = 'ita'
 TESSERACT_CONFIG_BASE = '--psm 6'
 TESSERACT_CONFIG_SCREENSHOT = '--psm 11'
 
+# Limiti di sicurezza per resize deterministico
+MAX_IMAGE_PIXELS_SAFE = 120_000_000   # soglia sotto il limite Pillow
+TARGET_MAX_EDGE = 4096               # max lato lungo dopo resize
+
 logger = logging.getLogger(__name__)
+
+
+def resize_image_if_needed(img: Image.Image) -> Image.Image:
+    """
+    Riduce l'immagine in modo deterministico se supera soglie di sicurezza.
+    NON disabilita le protezioni Pillow.
+    """
+    width, height = img.size
+    total_pixels = width * height
+
+    # Caso 1: immagine entro limiti → ritorna invariata
+    if total_pixels <= MAX_IMAGE_PIXELS_SAFE and max(width, height) <= TARGET_MAX_EDGE:
+        return img
+
+    # Calcolo fattore di scala
+    scale_factor = min(
+        (MAX_IMAGE_PIXELS_SAFE / total_pixels) ** 0.5,
+        TARGET_MAX_EDGE / max(width, height)
+    )
+
+    new_width = int(width * scale_factor)
+    new_height = int(height * scale_factor)
+
+    logger.warning(
+        f"OCR[IMAGE]: resizing image {width}x{height} → {new_width}x{new_height}"
+    )
+
+    return img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
 
 def extract_text_from_image(image_path: str) -> str:
@@ -40,6 +72,9 @@ def extract_text_from_image(image_path: str) -> str:
             # Converti in RGB per compatibilità
             if img.mode != 'RGB':
                 img = img.convert('RGB')
+            
+            # Resize deterministico se necessario (PRIMA di qualsiasi OCR)
+            img = resize_image_if_needed(img)
             
             # OCR base
             text_base = _ocr_base(img)
