@@ -194,11 +194,13 @@ class ResponseGenerator:
                 "- document_mode == 'mixed': Contenuto visivo + testo significativo\n\n"
                 
                 "REGOLE PER document_mode == 'image':\n"
-                "- È VIETATO trattare l'OCR come descrizione visiva\n"
-                "- Alla richiesta 'descrivimi immagine', descrivi solo: tipo immagine (es. screenshot), contesto generale, presenza/assenza testo OCR\n"
+                "- È VIETATO rispondere con 'non posso vedere immagini' o 'fornisci una descrizione'\n"
+                "- Alla richiesta 'descrivimi immagine', descrivi: tipo file (immagine, screenshot, scansione), contesto generale deducibile, limiti OCR\n"
+                "- Esempio: 'L'immagine è uno screenshot di sistema. Posso rilevare testo parziale via OCR, ma non ho visione diretta del contenuto visivo.'\n"
                 "- L'OCR su immagini ha affidabilità 'low' o 'none' - NON è contenuto principale\n"
-                "- NON usare testo OCR come contenuto principale per descrizioni visive\n"
-                "- Il testo OCR è disponibile SOLO per azioni esplicite ('trascrivi il testo')\n"
+                "- NON usare testo OCR come sostituto della descrizione visiva\n"
+                "- Il testo OCR è usato SOLO se l'utente chiede esplicitamente 'trascrivi'\n"
+                "- È VIETATO chiedere descrizioni all'utente quando un file è già caricato\n"
                 "- È VIETATO forzare l'LLM a 'ricostruire' contenuti mancanti\n"
                 "- È VIETATO fingere visione diretta delle immagini\n\n"
                 
