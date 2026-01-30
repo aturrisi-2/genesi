@@ -13,7 +13,7 @@ except ImportError as e:
     raise ImportError("Install image classifier dependencies: pip install pillow")
 
 # Limiti di sicurezza per resize deterministico
-MAX_IMAGE_PIXELS_SAFE = 120_000_000
+MAX_IMAGE_PIXELS_SAFE = 100_000_000
 TARGET_MAX_EDGE = 4096
 
 logger = logging.getLogger(__name__)
@@ -25,28 +25,26 @@ def safe_open_image(path: str) -> Image.Image:
     PRIMA che Pillow sollevi decompression bomb errors.
     """
     img = Image.open(path)
-    width, height = img.size
-    total_pixels = width * height
+    w, h = img.size
+    pixels = w * h
 
-    if total_pixels <= MAX_IMAGE_PIXELS_SAFE and max(width, height) <= TARGET_MAX_EDGE:
-        logger.info("IMAGE_CLASSIFIER: image opened safely")
+    if pixels <= MAX_IMAGE_PIXELS_SAFE and max(w, h) <= TARGET_MAX_EDGE:
+        logger.info(f"IMAGE_CLASSIFIER: image safe {w}x{h}")
         return img
 
     scale = min(
-        math.sqrt(MAX_IMAGE_PIXELS_SAFE / total_pixels),
-        TARGET_MAX_EDGE / max(width, height)
+        math.sqrt(MAX_IMAGE_PIXELS_SAFE / pixels),
+        TARGET_MAX_EDGE / max(w, h)
     )
 
-    new_w = int(width * scale)
-    new_h = int(height * scale)
+    new_w = int(w * scale)
+    new_h = int(h * scale)
 
     logger.warning(
-        f"IMAGE_CLASSIFIER: resizing image {width}x{height} → {new_w}x{new_h}"
+        f"IMAGE_CLASSIFIER: resizing image {w}x{h} → {new_w}x{new_h}"
     )
 
-    resized_img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-    logger.info("IMAGE_CLASSIFIER: image opened safely after resize")
-    return resized_img
+    return img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
 
 def classify_image_for_ocr(image_path: str) -> Dict:
@@ -74,41 +72,43 @@ def classify_image_for_ocr(image_path: str) -> Dict:
         return _get_default_classification()
     
     try:
-        with safe_open_image(image_path) as img:
-            # Converti in RGB per analisi consistente
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
-            
-            # Analisi base
-            width, height = img.size
-            resolution = f"{width}x{height}"
-            aspect_ratio = f"{width/height:.2f}"
-            
-            # Calcola segnali
-            color_variance = _calculate_color_variance(img)
-            text_density = _estimate_text_density(img, width, height)
-            brightness_distribution = _analyze_brightness_distribution(img)
-            structural_signals = _detect_structural_patterns(img, width, height)
-            
-            # Classificazione
-            image_kind, confidence = _classify_image_type(
-                width, height, aspect_ratio, color_variance, 
-                text_density, brightness_distribution, structural_signals
-            )
-            
-            logger.debug(f"Image classifier: {image_path} -> {image_kind} ({confidence})")
-            
-            return {
-                "image_kind": image_kind,
-                "confidence": confidence,
-                "signals": {
-                    "resolution": resolution,
-                    "aspect_ratio": aspect_ratio,
-                    "estimated_text_density": text_density,
-                    "color_variance": color_variance
-                }
+        img = safe_open_image(image_path)
+        logger.info("IMAGE_CLASSIFIER: image opened via safe_open_image")
+        
+        # Converti in RGB per analisi consistente
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        # Analisi base
+        width, height = img.size
+        resolution = f"{width}x{height}"
+        aspect_ratio = f"{width/height:.2f}"
+        
+        # Calcola segnali
+        color_variance = _calculate_color_variance(img)
+        text_density = _estimate_text_density(img, width, height)
+        brightness_distribution = _analyze_brightness_distribution(img)
+        structural_signals = _detect_structural_patterns(img, width, height)
+        
+        # Classificazione
+        image_kind, confidence = _classify_image_type(
+            width, height, aspect_ratio, color_variance, 
+            text_density, brightness_distribution, structural_signals
+        )
+        
+        logger.debug(f"Image classifier: {image_path} -> {image_kind} ({confidence})")
+        
+        return {
+            "image_kind": image_kind,
+            "confidence": confidence,
+            "signals": {
+                "resolution": resolution,
+                "aspect_ratio": aspect_ratio,
+                "estimated_text_density": text_density,
+                "color_variance": color_variance
             }
-            
+        }
+        
     except Exception as e:
         logger.error(f"Image classifier failed for {image_path}: {str(e)}")
         return _get_default_classification()
