@@ -228,6 +228,15 @@ class ResponseGenerator:
                     final_prompt = form_directive + final_prompt
                 
                 final_prompt = (
+                    "AUTORIZZAZIONE AL CONSIGLIO (CONDIZIONALE)\n"
+                    "Quando l'utente chiede esplicitamente un consiglio, un suggerimento o cosa fare:\n"
+                    "- sei autorizzato a formulare un consiglio umano e concreto\n"
+                    "- il consiglio deve basarsi esclusivamente sulle informazioni disponibili (stato emotivo, contesto, memoria recente)\n"
+                    "- evita frasi vaghe o rifugi neutri\n"
+                    "- non essere prescrittivo né medico\n"
+                    "- proponi un'azione possibile, semplice, proporzionata\n"
+                    "- mantieni il tono sobrio, sincero, non consolatorio\n"
+                    "- non delegare la decisione con frasi come \"segui il tuo istinto\"\n\n"
                     "Regole di presenza non negoziabili:\n"
                     "- Non usare frasi generiche o di chiusura automatica.\n"
                     "- Non delegare all'utente la responsabilità emotiva della risposta.\n"
@@ -250,6 +259,15 @@ class ResponseGenerator:
                 )
             else:
                 final_prompt = (
+                    "AUTORIZZAZIONE AL CONSIGLIO (CONDIZIONALE)\n"
+                    "Quando l'utente chiede esplicitamente un consiglio, un suggerimento o cosa fare:\n"
+                    "- sei autorizzato a formulare un consiglio umano e concreto\n"
+                    "- il consiglio deve basarsi esclusivamente sulle informazioni disponibili (stato emotivo, contesto, memoria recente)\n"
+                    "- evita frasi vaghe o rifugi neutri\n"
+                    "- non essere prescrittivo né medico\n"
+                    "- proponi un'azione possibile, semplice, proporzionata\n"
+                    "- mantieni il tono sobrio, sincero, non consolatorio\n"
+                    "- non delegare la decisione con frasi come \"segui il tuo istinto\"\n\n"
                     "Regole di presenza non negoziabili:\n"
                     "- Non usare frasi generiche o di chiusura automatica.\n"
                     "- Non delegare all'utente la responsabilità emotiva della risposta.\n"
