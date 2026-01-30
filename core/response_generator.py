@@ -129,10 +129,37 @@ class ResponseGenerator:
         if document_context:
             print(f"[RESPONSE_GENERATOR] document_context_received = True", flush=True)
             print(f"[RESPONSE_GENERATOR] document_context_length = {len(document_context)}", flush=True)
-            print(f"[RESPONSE_GENERATOR] document_context_used = True", flush=True)
+            
+            # Controlla se document_context è un dizionario con metadati
+            if isinstance(document_context, dict):
+                document_mode = document_context.get('document_mode', 'unknown')
+                ocr_reliability = document_context.get('ocr_reliability', 'unknown')
+                content = document_context.get('content', '')
+                
+                # Se è un'immagine con OCR a bassa affidabilità, non usare il contenuto OCR
+                if document_mode == "image" and ocr_reliability == "low":
+                    print(f"[RESPONSE_GENERATOR] document_context_used = False (image + low reliability)", flush=True)
+                    document_context_used = False
+                else:
+                    print(f"[RESPONSE_GENERATOR] document_context_used = True", flush=True)
+                    document_context_used = True
+            else:
+                # Compatibilità con vecchio formato (stringa)
+                print(f"[RESPONSE_GENERATOR] document_context_used = True (legacy format)", flush=True)
+                document_context_used = True
             
             # Costruisci prompt con document context prioritario
-            document_section = f"CONTENUTO DOCUMENTO (da analizzare):\n{document_context}\n\n"
+            if isinstance(document_context, dict):
+                # Formato nuovo con metadati
+                document_section = f"FILE CARICATO: {document_context.get('description', 'Nessuna descrizione')}\n\n"
+                if document_context_used:
+                    document_section += f"CONTENUTO TESTUALE DISPONIBILE:\n{document_context.get('content', '')}\n\n"
+                else:
+                    document_section += "NESSUN CONTENUTO TESTUALE AFFIDABILE DISPONIBILE\n\n"
+            else:
+                # Compatibilità con vecchio formato
+                document_section = f"CONTENUTO DOCUMENTO (da analizzare):\n{document_context}\n\n"
+            
             user_section = f"Domanda utente: {user_message}"
             
             base_prompt = document_section + user_section
@@ -194,14 +221,12 @@ class ResponseGenerator:
                 "- document_mode == 'mixed': Contenuto visivo + testo significativo\n\n"
                 
                 "REGOLE PER document_mode == 'image':\n"
-                "- È VIETATO scusarti MAI dicendo 'non posso vedere l'immagine' se è presente testo estratto (document_context)\n"
-                "- Se l'utente chiede 'descrivi l'immagine' e hai solo testo OCR: 'Non posso vedere i dettagli grafici, ma analizzando il testo estratto sembra essere uno screenshot che contiene...'\n"
-                "- Riassumi SEMPRE il testo trovato nel document_context quando descrivi\n"
-                "- Se l'OCR è segnato come 'reliability=low': aggiungi premessa 'Il testo estratto dall'immagine è frammentato, ecco cosa riesco a decifrare: ...'\n"
-                "- Usa il testo OCR come 'occhi' per descrivere il contenuto, invece di rifiutare l'azione\n"
-                "- L'OCR su immagini ha affidabilità 'low' o 'none' - usalo come guida, non come verità assoluta\n"
-                "- NON usare testo OCR come sostituto della descrizione visiva, ma come complemento informativo\n"
-                "- Il testo OCR è usato SOLO se l'utente chiede esplicitamente 'trascrivi' o per descrizioni contestuali\n"
+                "- È VIETATO rispondere con frasi tipo 'non posso vedere immagini' quando un file è caricato\n"
+                "- Il prompt include SEMPRE: che un'immagine è stata caricata, che l'LLM non vede direttamente l'immagine\n"
+                "- Alla richiesta 'descrivimi l'immagine': descrivi tipo file, contesto generale deducibile, dichiara limiti OCR\n"
+                "- Esempio: 'L'immagine è uno screenshot. Non vedo i dettagli grafici ma posso analizzare il contesto generale.'\n"
+                "- Il testo OCR deve essere usato SOLO se l'utente chiede esplicitamente 'trascrivi'\n"
+                "- Se reliability=low: NON usare il testo OCR per descrizioni, solo per trascrizioni esplicite\n"
                 "- È VIETATO chiedere descrizioni all'utente quando un file è già caricato\n"
                 "- È VIETATO forzare l'LLM a 'ricostruire' contenuti mancanti\n"
                 "- È VIETATO fingere visione diretta dei pixel\n\n"
