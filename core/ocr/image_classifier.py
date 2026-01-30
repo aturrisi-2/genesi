@@ -12,7 +12,38 @@ except ImportError as e:
     logging.error(f"Image classifier dependencies missing: {e}")
     raise ImportError("Install image classifier dependencies: pip install pillow")
 
+# Limiti di sicurezza per resize deterministico
+MAX_IMAGE_PIXELS_SAFE = 120_000_000
+TARGET_MAX_EDGE = 4096
+
 logger = logging.getLogger(__name__)
+
+
+def safe_open_image(path: str) -> Image.Image:
+    """
+    Apre un'immagine in modo sicuro, ridimensionandola
+    PRIMA che Pillow sollevi decompression bomb errors.
+    """
+    img = Image.open(path)
+    width, height = img.size
+    total_pixels = width * height
+
+    if total_pixels <= MAX_IMAGE_PIXELS_SAFE and max(width, height) <= TARGET_MAX_EDGE:
+        return img
+
+    scale = min(
+        math.sqrt(MAX_IMAGE_PIXELS_SAFE / total_pixels),
+        TARGET_MAX_EDGE / max(width, height)
+    )
+
+    new_w = int(width * scale)
+    new_h = int(height * scale)
+
+    logger.warning(
+        f"IMAGE_CLASSIFIER: resizing image {width}x{height} → {new_w}x{new_h}"
+    )
+
+    return img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
 
 def classify_image_for_ocr(image_path: str) -> Dict:
@@ -40,7 +71,7 @@ def classify_image_for_ocr(image_path: str) -> Dict:
         return _get_default_classification()
     
     try:
-        with Image.open(image_path) as img:
+        with safe_open_image(image_path) as img:
             # Converti in RGB per analisi consistente
             if img.mode != 'RGB':
                 img = img.convert('RGB')
