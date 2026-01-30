@@ -60,6 +60,10 @@ class ResponseGenerator:
         IMPORTANTE: Se il focus è "consiglio", l'utente ha chiesto esplicitamente un consiglio.
         Usa le informazioni disponibili (contesto, memoria recente, stato emotivo) per formulare una risposta specifica e situata.
         Evita frasi generiche come "ascolta il tuo corpo" o "segui il tuo istinto".
+        
+        Se il focus è "interpretazione", l'utente chiede di capire o ipotizzare.
+        Formula 1-3 ipotesi plausibili usando linguaggio probabilistico ("potrebbe essere", "spesso", "a volte").
+        Basati solo su informazioni disponibili, evitando diagnosi mediche ma accettando inferenze generali.
 
         Rispondi solo con il testo della risposta:
         """

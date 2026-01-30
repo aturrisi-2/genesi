@@ -198,6 +198,17 @@ class IntentEngine:
             intent["question_rate"] = 0.0
             print(f"[INTENT_ENGINE.decide] advice_request_detected = True", flush=True)
             print(f"[INTENT_ENGINE.decide] question_rate = {intent['question_rate']}", flush=True)
+        # Richieste interpretative → permetti ipotesi e inferenze
+        elif any(phrase in user_message.lower() for phrase in [
+            "cosa potrebbe essere", "secondo te cos'", "da cosa può dipendere", 
+            "cosa pensi sia", "perché mi fa male", "che cosa sarà", 
+            "può essere", "secondo te è", "cosa mi succede"
+        ]):
+            intent["depth"] = "media"
+            intent["focus"] = "interpretazione"
+            intent["question_rate"] = 0.0
+            print(f"[INTENT_ENGINE.decide] interpretation_request_detected = True", flush=True)
+            print(f"[INTENT_ENGINE.decide] question_rate = {intent['question_rate']}", flush=True)
         # Ambiguità forte → permetti domande
         elif any(ambig in user_message.lower() for ambig in ["non so", "forse", "boh", "non sono sicuro"]):
             intent["question_rate"] = 0.2
