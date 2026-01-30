@@ -184,16 +184,33 @@ class ResponseGenerator:
         if document_context:
             model = "gpt-4o"   # NON negoziabile
 
-            # VINCOLO ASSOLUTO:
-            absolute_rule = (
-                "VINCOLO ASSOLUTO:\n"
-                "- Tu NON dichiari mai di non vedere immagini.\n"
-                "- Il testo seguente rappresenta ESATTAMENTE il contenuto dell'immagine caricata.\n"
-                "- Devi descrivere o analizzare SOLO questo contenuto.\n"
-                "- È vietato chiedere ulteriori informazioni.\n\n"
+            # REGOLA MADRE - GESTIONE AUTOMATICA DOCUMENTI
+            document_rule = (
+                "REGOLA MADRE (NON NEGOZIABILE):\n"
+                "- Quando esiste document_context, agisci come se avessi davanti il contenuto reale del file caricato.\n"
+                "- È VIETATO chiedere descrizioni all'utente.\n"
+                "- È VIETATO dichiarare di non poter vedere immagini o file.\n"
+                "- È VIETATO ignorare il contenuto estratto dall'OCR.\n"
+                "- È VIETATO rispondere in modo generico.\n\n"
+                
+                "COMPORTAMENTO OBBLIGATORIO:\n"
+                "- Se document_context contiene testo significativo: analizza, trascrivi o riassumi secondo la richiesta.\n"
+                "- Se document_context è vuoto o descrittivo (immagine pura): descrivi automaticamente l'immagine.\n"
+                "- Non mescolare descrizione inventata con testo non presente.\n"
+                "- Per PDF lunghi: avvisa, spezza, ma NON rifiutare.\n\n"
+                
+                "DISAMBIGUAZIONE AUTOMATICA:\n"
+                "- \"descrivi\", \"cosa vedi\", \"cosa contiene\", \"dimmi cosa c'è\", \"leggilo\" → tutti attivano il comportamento corretto.\n"
+                "- Non dipendere dalla forma della richiesta, ma dal tipo di contenuto.\n\n"
+                
+                "FRASI ASSOLUTAMENTE VIETATE:\n"
+                "- \"Non posso vedere l'immagine\"\n"
+                "- \"Non ho accesso al file\"\n"
+                "- \"Serve una descrizione\"\n"
+                "- \"Non posso analizzarlo\"\n\n"
             )
             
-            final_prompt = absolute_rule + base_prompt
+            final_prompt = document_rule + base_prompt
         # Carattere SOLO per risposte relazionali
         elif model == "gpt-4o":
             # 🔍 VOCE POSITIVA basata su focus
