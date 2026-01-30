@@ -184,34 +184,41 @@ class ResponseGenerator:
         if document_context:
             model = "gpt-4o"   # NON negoziabile
 
-            # FLUSO GESTIONE FILE - DESCRIZIONE + AZIONE CONTROLLATA
+            # FLUSSO GESTIONE FILE - IMAGE vs OCR DISTINCTION
             document_rule = (
                 "FLUSSO GESTIONE FILE (NON NEGOZIABILE):\n\n"
                 
-                "FASE 1 - DESCRIZIONE OBBLIGATORIA:\n"
-                "- Usa sempre la description del document_context per descrivere il contenuto.\n"
-                "- Riporta tipo di file, contenuto rilevato e qualità dell'estrazione.\n"
-                "- Se la qualità è bassa, dichiaralo esplicitamente.\n\n"
+                "CONCETTO DI MODALITÀ DOCUMENTO:\n"
+                "- document_mode == 'image': Contenuto prevalentemente visivo, OCR non affidabile\n"
+                "- document_mode == 'text': Contenuto prevalentemente testuale, OCR affidabile\n"
+                "- document_mode == 'mixed': Contenuto visivo + testo significativo\n\n"
                 
-                "FASE 2 - AZIONE SU RICHIESTA:\n"
-                "- Esegui azioni (trascrivi, riassumi, spiega) SOLO con dati disponibili.\n"
-                "- Se l'OCR è rumoroso o ambiguo, dichiaralo esplicitamente.\n"
-                "- NON inventare testo non chiaramente presente.\n\n"
+                "REGOLE PER document_mode == 'image':\n"
+                "- È VIETATO trattare l'OCR come descrizione visiva\n"
+                "- Alla richiesta 'descrivimi immagine', descrivi solo: tipo file, contesto generale, presenza/assenza testo OCR\n"
+                "- L'OCR deve includere valutazione affidabilità (low/medium/high)\n"
+                "- Se OCR è low: NON trascrivere come testo affidabile\n"
+                "- È VIETATO forzare l'LLM a 'ricostruire' contenuti mancanti\n"
+                "- È VIETATO fingere visione diretta delle immagini\n\n"
                 
-                "DIVIETI ASSOLUTI:\n"
-                "- È vietato trattare l'OCR come verità assoluta.\n"
-                "- È vietato inventare testo non chiaramente presente.\n"
-                "- È vietato forzare ricostruzioni di contenuti non affidabili.\n"
-                "- È vietato chiedere descrizioni all'utente.\n"
-                "- È vietato dichiarare di non poter vedere il file.\n\n"
+                "REGOLE PER document_mode == 'text':\n"
+                "- OCR affidabile, può essere usato per trascrizione\n"
+                "- Rispondi a 'trascrivi', 'leggimi', 'cosa c'è scritto' con il testo estratto\n\n"
                 
-                "PRINCIPIO GUIDA:\n"
-                "- Preferisci l'accuratezza alla completezza.\n"
-                "- In caso di dubbio, descrivi il limite invece di riempirlo.\n\n"
+                "REGOLE PER document_mode == 'mixed':\n"
+                "- Usa sia descrizione visiva che testo OCR (se affidabile)\n"
+                "- Distingui chiaramente tra contenuto visivo e testo estratto\n\n"
+                
+                "DIVIETI ASSOLUTI (tutte le modalità):\n"
+                "- È vietato trattare l'OCR come verità assoluta\n"
+                "- È vietato inventare testo non chiaramente presente\n"
+                "- È vietato forzare ricostruzioni di contenuti non affidabili\n"
+                "- È vietato chiedere descrizioni all'utente\n"
+                "- È vietato dichiarare di non poter vedere il file\n\n"
                 
                 "METADATI DISPONIBILI:\n"
-                f"- Tipo file: {document_context.get('file_type', 'sconosciuto')}\n"
-                f"- Qualità estrazione: {document_context.get('quality', 'sconosciuta')}\n"
+                f"- Modalità documento: {document_context.get('document_mode', 'sconosciuta')}\n"
+                f"- Affidabilità OCR: {document_context.get('ocr_reliability', 'sconosciuta')}\n"
                 f"- Testo chiaro: {document_context.get('has_clear_text', False)}\n"
                 f"- Descrizione: {document_context.get('description', 'Nessuna')}\n\n"
             )

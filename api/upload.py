@@ -65,26 +65,33 @@ async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), ht
                 
                 logger.info(f"[UPLOAD][OCR] text_length={text_length}")
                 
-                # FASE 1: DESCRIZIONE OBBLIGATORIA DEL CONTENUTO
+                # FASE 1: ANALISI CONTENUTO E DETERMINAZIONE MODALITÀ
                 # Valuta qualità e affidabilità dell'estrazione
-                ocr_quality = "buona" if text_length >= 100 else "media" if text_length >= 50 else "bassa"
+                ocr_reliability = "high" if text_length >= 100 else "medium" if text_length >= 50 else "low"
                 has_clear_text = text_length >= 20 and any(char.isalpha() for char in ocr_text.strip())
                 
-                # Genera descrizione oggettiva del contenuto
-                if has_clear_text:
-                    content_description = f"Immagine con testo estratto via OCR. Qualità: {ocr_quality}. Testo rilevato: {len(ocr_text.strip())} caratteri."
+                # Determina document_mode in base al contenuto
+                if has_clear_text and text_length >= 50:
+                    document_mode = "mixed"  # Immagine con testo significativo
+                    content_description = f"Immagine mista: contenuto visivo con testo OCR (affidabilità: {ocr_reliability}). Testo estratto: {len(ocr_text.strip())} caratteri."
+                    extracted_content = ocr_text.strip()
+                elif has_clear_text:
+                    document_mode = "text"   # Immagine prevalentemente testuale
+                    content_description = f"Immagine testuale: principalmente testo OCR (affidabilità: {ocr_reliability}). Testo estratto: {len(ocr_text.strip())} caratteri."
                     extracted_content = ocr_text.strip()
                 else:
-                    content_description = f"Immagine senza testo chiaro rilevabile. Qualità OCR: {ocr_quality}. Possibile contenuto visivo non testuale."
-                    extracted_content = ""
+                    document_mode = "image"  # Immagine pura o con testo non affidabile
+                    content_description = f"Immagine pura: contenuto prevalentemente visivo. OCR non affidabile (affidabilità: {ocr_reliability})."
+                    extracted_content = ""  # Non usare OCR non affidabile
                 
-                # Crea document context completo con metadati di qualità
+                # Crea document context completo con modalità e affidabilità
                 document_context = {
                     "content": extracted_content,
                     "description": content_description,
                     "file_type": "image",
+                    "document_mode": document_mode,
                     "source": "image_ocr",
-                    "quality": ocr_quality,
+                    "ocr_reliability": ocr_reliability,
                     "has_clear_text": has_clear_text,
                     "filename": file.filename,
                     "timestamp": str(uuid.uuid4())
@@ -97,18 +104,19 @@ async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), ht
                         "content": extracted_content,
                         "description": content_description,
                         "file_type": "image",
+                        "document_mode": document_mode,
                         "source": "image_ocr",
-                        "quality": ocr_quality,
+                        "ocr_reliability": ocr_reliability,
                         "has_clear_text": has_clear_text,
                         "timestamp": str(uuid.uuid4())
                     }
                 
-                logger.info(f"[UPLOAD][OCR] processed | quality={ocr_quality} | has_text={has_clear_text}")
+                logger.info(f"[UPLOAD][OCR] processed | mode={document_mode} | reliability={ocr_reliability} | has_text={has_clear_text}")
                 
                 # Salva document context per user_id SOLO se user_id valido
                 if user_id:
                     last_document_context[user_id] = document_context
-                    logger.info(f"[UPLOAD] document_context_saved | user_id={user_id} | quality={ocr_quality}")
+                    logger.info(f"[UPLOAD] document_context_saved | user_id={user_id} | mode={document_mode} | reliability={ocr_reliability}")
                 else:
                     logger.warning(f"[UPLOAD] cannot save document_context - missing user_id")
                 
@@ -116,7 +124,8 @@ async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), ht
                 analysis["has_text"] = has_clear_text
                 analysis["text"] = extracted_content
                 analysis["ocr_used"] = True
-                analysis["quality"] = ocr_quality
+                analysis["document_mode"] = document_mode
+                analysis["ocr_reliability"] = ocr_reliability
                     
             except Exception as e:
                 logger.error(f"OCR processing failed for {file.filename}: {e}")
