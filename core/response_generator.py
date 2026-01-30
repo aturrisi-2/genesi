@@ -136,10 +136,10 @@ class ResponseGenerator:
                 ocr_reliability = document_context.get('ocr_reliability', 'unknown')
                 content = document_context.get('content', '')
                 
-                # Se è un'immagine con OCR a bassa affidabilità, non usare il contenuto OCR
-                if document_mode == "image" and ocr_reliability == "low":
-                    print(f"[RESPONSE_GENERATOR] document_context_used = False (image + low reliability)", flush=True)
-                    document_context_used = False
+                # Per immagini, usa SEMPRE il testo OCR anche se a bassa affidabilità
+                if document_mode == "image":
+                    print(f"[RESPONSE_GENERATOR] document_context_used = True (image with OCR)", flush=True)
+                    document_context_used = True
                 else:
                     print(f"[RESPONSE_GENERATOR] document_context_used = True", flush=True)
                     document_context_used = True
@@ -152,10 +152,10 @@ class ResponseGenerator:
             if isinstance(document_context, dict):
                 # Formato nuovo con metadati
                 document_section = f"FILE CARICATO: {document_context.get('description', 'Nessuna descrizione')}\n\n"
-                if document_context_used:
-                    document_section += f"CONTENUTO TESTUALE DISPONIBILE:\n{document_context.get('content', '')}\n\n"
+                if document_context_used and document_context.get('content', '').strip():
+                    document_section += f"CONTENUTO TESTUALE ESTRATTO (da usare come 'occhi' per descrivere):\n{document_context.get('content', '')}\n\n"
                 else:
-                    document_section += "NESSUN CONTENUTO TESTUALE AFFIDABILE DISPONIBILE\n\n"
+                    document_section += "NESSUN CONTENUTO TESTUALE ESTRATTO\n\n"
             else:
                 # Compatibilità con vecchio formato
                 document_section = f"CONTENUTO DOCUMENTO (da analizzare):\n{document_context}\n\n"
@@ -221,12 +221,13 @@ class ResponseGenerator:
                 "- document_mode == 'mixed': Contenuto visivo + testo significativo\n\n"
                 
                 "REGOLE PER document_mode == 'image':\n"
-                "- È VIETATO rispondere con frasi tipo 'non posso vedere immagini' quando un file è caricato\n"
-                "- Il prompt include SEMPRE: che un'immagine è stata caricata, che l'LLM non vede direttamente l'immagine\n"
-                "- Alla richiesta 'descrivimi l'immagine': descrivi tipo file, contesto generale deducibile, dichiara limiti OCR\n"
-                "- Esempio: 'L'immagine è uno screenshot. Non vedo i dettagli grafici ma posso analizzare il contesto generale.'\n"
-                "- Il testo OCR deve essere usato SOLO se l'utente chiede esplicitamente 'trascrivi'\n"
-                "- Se reliability=low: NON usare il testo OCR per descrizioni, solo per trascrizioni esplicite\n"
+                "- È VIETATO scusarti MAI dicendo 'non posso vedere l'immagine' se è presente testo estratto (document_context), anche se poco\n"
+                "- Se l'utente chiede 'descrivi l'immagine' e hai solo testo OCR: 'Non posso vedere i dettagli grafici, ma analizzando il testo estratto sembra essere un'immagine che contiene...'\n"
+                "- Riassumi SEMPRE il testo trovato nel document_context quando descrivi\n"
+                "- Se l'OCR è segnato come 'reliability=low': aggiungi premessa onesta 'Il testo estratto dall'immagine è frammentato/parziale, ecco cosa riesco a decifrare: ...'\n"
+                "- E poi elenca il testo trovato\n"
+                "- Usa il testo OCR come 'occhi' per descrivere il contenuto, invece di rifiutare l'azione\n"
+                "- Il testo OCR deve essere usato per descrizioni anche se reliability=low\n"
                 "- È VIETATO chiedere descrizioni all'utente quando un file è già caricato\n"
                 "- È VIETATO forzare l'LLM a 'ricostruire' contenuti mancanti\n"
                 "- È VIETATO fingere visione diretta dei pixel\n\n"
