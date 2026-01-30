@@ -15,6 +15,7 @@ except ImportError as e:
 
 # Import per OCR immagini
 from .image_ocr import extract_text_from_image
+from .image_classifier import classify_image_for_ocr
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,19 @@ def extract_text_with_ocr(file_path: str) -> str:
         file_ext = Path(file_path).suffix.lower()
         
         if file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']:
-            logger.info(f"OCR[ENGINE]: routing=image")
+            # Classifica l'immagine PRIMA di fare OCR
+            classification = classify_image_for_ocr(file_path)
+            
+            logger.info(
+                f"OCR[ENGINE]: routing=image kind={classification['image_kind']} confidence={classification['confidence']}"
+            )
+            
+            # Se è un'immagine pura, salta OCR completamente
+            if classification["image_kind"] == "pure-image":
+                logger.info("OCR[ENGINE]: skipped pure-image")
+                return ""
+            
+            # Procedi con OCR per screenshot e testo pesante
             return extract_text_from_image(file_path)
         elif file_ext == '.pdf':
             logger.info(f"OCR[ENGINE]: routing=pdf")
