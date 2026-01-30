@@ -16,7 +16,8 @@ except ImportError as e:
 
 # Configurazione Tesseract per lingua italiana
 TESSERACT_LANG = 'ita'
-TESSERACT_CONFIG = '--psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzàèéìòùÀÈÉÌÒÙ ,.;:!?\n'
+TESSERACT_CONFIG_BASE = '--psm 6'
+TESSERACT_CONFIG_SCREENSHOT = '--psm 11'  # Migliore per screenshot e testo sparso
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +56,38 @@ def extract_text_with_ocr(file_path: str) -> str:
         return ""
 
 
+def _preprocess_image_for_ocr(img: Image.Image) -> Image.Image:
+    """
+    Preprocessa l'immagine per migliorare l'OCR su screenshot.
+    """
+    # 1. Conversione in scala di grigi
+    gray = img.convert('L')
+    
+    # 2. Aumento contrasto
+    from PIL import ImageEnhance
+    enhancer = ImageEnhance.Contrast(gray)
+    contrasted = enhancer.enhance(2.0)
+    
+    # 3. Binarizzazione con threshold adattivo
+    import numpy as np
+    img_array = np.array(contrasted)
+    
+    # Calcola threshold locale (semplice ma efficace)
+    threshold = np.mean(img_array) + np.std(img_array) * 0.5
+    binary = np.where(img_array > threshold, 255, 0).astype(np.uint8)
+    
+    # 4. Ridimensionamento (2x per migliorare lettura testo piccolo)
+    from PIL import Image
+    binary_img = Image.fromarray(binary)
+    width, height = binary_img.size
+    resized = binary_img.resize((width * 2, height * 2), Image.Resampling.LANCZOS)
+    
+    return resized.convert('RGB')
+
+
 def _extract_from_image(image_path: str) -> str:
     """
-    Estrae testo da un'immagine singola.
+    Estrae testo da un'immagine singola con preprocessing migliorato per screenshot.
     """
     try:
         with Image.open(image_path) as img:
@@ -65,14 +95,39 @@ def _extract_from_image(image_path: str) -> str:
             if img.mode != 'RGB':
                 img = img.convert('RGB')
             
-            # Estrai testo con Tesseract
-            text = pytesseract.image_to_string(
+            # OCR base senza preprocessing
+            text_base = pytesseract.image_to_string(
                 img,
                 lang=TESSERACT_LANG,
-                config=TESSERACT_CONFIG
+                config=TESSERACT_CONFIG_BASE
             )
             
-            return text.strip()
+            # OCR con preprocessing per screenshot
+            try:
+                preprocessed_img = _preprocess_image_for_ocr(img)
+                text_preprocessed = pytesseract.image_to_string(
+                    preprocessed_img,
+                    lang=TESSERACT_LANG,
+                    config=TESSERACT_CONFIG_SCREENSHOT
+                )
+                
+                # Fallback intelligente: scegli la versione migliore
+                base_alpha = sum(c.isalpha() for c in text_base)
+                prep_alpha = sum(c.isalpha() for c in text_preprocessed)
+                base_len = len(text_base.strip())
+                prep_len = len(text_preprocessed.strip())
+                
+                # Scegli il preprocessato se ha più caratteri alfabetici o è più lungo
+                if (prep_alpha > base_alpha) or (prep_len > base_len * 1.2):
+                    logger.info(f"OCR: Using preprocessed version (alpha: {prep_alpha} vs {base_alpha}, len: {prep_len} vs {base_len})")
+                    return text_preprocessed.strip()
+                else:
+                    logger.info(f"OCR: Using base version (alpha: {base_alpha} vs {prep_alpha}, len: {base_len} vs {prep_len})")
+                    return text_base.strip()
+                    
+            except Exception as e:
+                logger.warning(f"Preprocessed OCR failed, using base: {str(e)}")
+                return text_base.strip()
             
     except Exception as e:
         logger.error(f"Failed to extract text from image {image_path}: {str(e)}")
@@ -101,7 +156,7 @@ def _extract_from_pdf(pdf_path: str) -> str:
                     text = pytesseract.image_to_string(
                         image,
                         lang=TESSERACT_LANG,
-                        config=TESSERACT_CONFIG
+                        config=TESSERACT_CONFIG_BASE
                     )
                     
                     if text.strip():
