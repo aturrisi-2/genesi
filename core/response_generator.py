@@ -153,7 +153,10 @@ class ResponseGenerator:
                 # Formato nuovo con metadati
                 document_section = f"FILE CARICATO: {document_context.get('description', 'Nessuna descrizione')}\n\n"
                 if document_context_used and document_context.get('content', '').strip():
-                    document_section += f"CONTENUTO TESTUALE ESTRATTO (da usare come 'occhi' per descrivere):\n{document_context.get('content', '')}\n\n"
+                    if ocr_reliability == "low":
+                        document_section += f"CONTENUTO TESTUALE RILEVATO (AFFIDABILITÀ BASSA/FRAMMENTARIO):\n{document_context.get('content', '')}\n\n"
+                    else:
+                        document_section += f"CONTENUTO TESTUALE ESTRATTO (da usare come 'occhi' per descrivere):\n{document_context.get('content', '')}\n\n"
                 else:
                     document_section += "NESSUN CONTENUTO TESTUALE ESTRATTO\n\n"
             else:
