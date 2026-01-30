@@ -29,6 +29,7 @@ def safe_open_image(path: str) -> Image.Image:
     total_pixels = width * height
 
     if total_pixels <= MAX_IMAGE_PIXELS_SAFE and max(width, height) <= TARGET_MAX_EDGE:
+        logger.info("IMAGE_CLASSIFIER: image opened safely")
         return img
 
     scale = min(
@@ -43,7 +44,9 @@ def safe_open_image(path: str) -> Image.Image:
         f"IMAGE_CLASSIFIER: resizing image {width}x{height} → {new_w}x{new_h}"
     )
 
-    return img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    resized_img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    logger.info("IMAGE_CLASSIFIER: image opened safely after resize")
+    return resized_img
 
 
 def classify_image_for_ocr(image_path: str) -> Dict:
