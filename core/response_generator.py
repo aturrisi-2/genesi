@@ -370,16 +370,14 @@ class ResponseGenerator:
         # 🔒 BLOCCO DOMANDE (hard)
         response = response.replace("?", ".")
         
-        # 🔒 Rimuovi frasi interrogative comuni
-        forbidden_starts = [
-            "cosa",
+        # 🔒 Rimuovi SOLO domande dirette, non consigli
+        # NOTA: non eliminiamo frasi che iniziano con "puoi", "cosa", "come" 
+        # perché potrebbero essere parti di consigli validi
+        forbidden_question_starts = [
             "perché",
-            "vuoi",
             "ti va",
             "ti senti",
-            "come va",
-            "che cosa",
-            "puoi"
+            "come va"
         ]
 
         lines = response.splitlines()
@@ -387,7 +385,8 @@ class ResponseGenerator:
 
         for line in lines:
             lower = line.lower().strip()
-            if any(lower.startswith(fs) for fs in forbidden_starts):
+            # Rimuovi solo se è chiaramente una domanda, non un consiglio
+            if any(lower.startswith(fq) for fq in forbidden_question_starts) and "?" in line:
                 continue
             cleaned.append(line)
 
