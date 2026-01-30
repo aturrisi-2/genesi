@@ -66,36 +66,31 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
             print(f"[CHAT_ENDPOINT] missing user_id - cannot use document_context", flush=True)
     
     # ===============================
-    # BIFURCAZIONE: IMMAGINI vs CHAT NORMALE
+    # BLOCCO IMMAGINI: PRIORITÀ ASSOLUTA
     # ===============================
-    # Controlla se c'è un'immagine attiva per questo user_id
-    image_context = None
+    # Se esiste un'immagine attiva, TUTTO va a image_handler
     if request.user_id and request.user_id in last_document_context:
         persistent_doc = last_document_context[request.user_id]
         if persistent_doc.get('document_mode') == 'image':
-            image_context = persistent_doc
             print(f"[CHAT] active_image_context_found | user_id={request.user_id}", flush=True)
-    
-    # Se c'è un'immagine attiva e il messaggio non è puramente relazionale
-    if image_context and not is_relational_message(request.message):
-        print(f"[CHAT] routing_to_image_handler | user_id={request.user_id}", flush=True)
-        
-        # Bypassa tutto il flusso chat standard
-        response_text = await handle_image(
-            image_context=image_context,
-            user_message=request.message,
-            user_id=request.user_id
-        )
-        
-        # Non eliminare il context dell'immagine dopo una richiesta
-        # L'immagine rimane attiva per richieste successive
-        
-        return {
-            "response": response_text,
-            "user_id": request.user_id,
-            "timestamp": datetime.now().isoformat(),
-            "image_mode": True
-        }
+            print(f"[CHAT] routing_to_image_handler | message='{request.message}'", flush=True)
+            
+            # Bypassa COMPLETAMENTE il flusso chat standard
+            response_text = await handle_image(
+                image_context=persistent_doc,
+                user_message=request.message,
+                user_id=request.user_id
+            )
+            
+            # NON cancellare l'immagine - rimane attiva per richieste successive
+            # NON usare document_context, IntentEngine, ResponseGenerator
+            
+            return {
+                "response": response_text,
+                "user_id": request.user_id,
+                "timestamp": datetime.now().isoformat(),
+                "image_mode": True
+            }
     
     # 🔍 DIAGNOSI MEMORIA: check per frasi dichiarative
     is_declarative = any(keyword in request.message.lower() for keyword in ["memorizza", "ricorda", "salva", "ricordati", "tieni a mente"])
