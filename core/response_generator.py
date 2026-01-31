@@ -197,6 +197,17 @@ Rispondi solo con il testo della risposta:
         # ===============================
         if model == "gpt-4o" and not document_context:
             final_prompt = self.relational_character.strip() + "\n\n" + base_prompt
+            
+            # AGGIUNTA CRITICA PER CONSIGLI
+            if intent.get("focus") == "consiglio":
+                final_prompt += "\n\n" + (
+                    "IMPORTANTE: L'utente ti chiede un consiglio concreto. "
+                    "NON fare domande di ritorno. "
+                    "NON usare frasi come 'hai pensato a...', 'potrebbe essere utile...', 'ascolta il tuo istinto'. "
+                    "Fornisci un parere chiaro, diretto e basato sul contesto disponibile. "
+                    "Usa la memoria fornita per personalizzare il consiglio. "
+                    "Sii assertivo, non interrogativo."
+                )
         else:
             final_prompt = base_prompt
 

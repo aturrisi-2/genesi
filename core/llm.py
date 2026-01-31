@@ -39,6 +39,17 @@ def generate_response(payload: dict) -> str:
     elif intent.get("depth") == "media":
         system_prompt += "Rispondi in modo riflessivo.\n"
 
+    # ---- REGOLA CRITICA: CONSIGLI ----
+    if intent.get("focus") == "consiglio":
+        system_prompt += (
+            "L'utente ti chiede un consiglio concreto. "
+            "NON fare domande di ritorno. "
+            "NON usare frasi come 'hai pensato a...', 'potrebbe essere utile...', 'ascolta il tuo istinto'. "
+            "Fornisci un parere chiaro, diretto e basato sul contesto disponibile. "
+            "Usa la memoria se disponibile per personalizzare il consiglio. "
+            "Sii assertivo, non interrogativo.\n"
+        )
+
     # ---- TONO ----
     if tone:
         if getattr(tone, "empathy", 0) > 0.6:
