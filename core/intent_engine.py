@@ -184,7 +184,7 @@ class IntentEngine:
             intent["question_rate"] = 0.3
             print(f"[INTENT_ENGINE.decide] explicit_question_detected = True", flush=True)
             print(f"[INTENT_ENGINE.decide] question_rate = {intent['question_rate']}", flush=True)
-        # Richieste di consiglio → permetti profondità media e focus su consiglio
+        # Richieste di consiglio → FORZA uso memoria e blocca domande
         elif any(phrase in user_message.lower() for phrase in [
             "consiglio", "consigliami", "mi consigli", "cosa mi consigli", 
             "secondo te", "secondo voi", "cosa dovrei", "come posso", 
@@ -192,9 +192,11 @@ class IntentEngine:
         ]):
             intent["depth"] = "media"
             intent["focus"] = "consiglio"
-            intent["question_rate"] = 0.0
+            intent["question_rate"] = 0.0  # BLOCCO ASSOLUTO DOMANDE
+            intent["use_memory"] = True  # FORZA uso memoria
             print(f"[INTENT_ENGINE.decide] advice_request_detected = True", flush=True)
             print(f"[INTENT_ENGINE.decide] question_rate = {intent['question_rate']}", flush=True)
+            print(f"[INTENT_ENGINE.decide] use_memory FORCED = True", flush=True)
         # Richieste interpretative → permetti ipotesi e inferenze
         elif any(phrase in user_message.lower() for phrase in [
             "cosa potrebbe essere", "secondo te cos'", "da cosa può dipendere", 

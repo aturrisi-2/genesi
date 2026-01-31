@@ -106,6 +106,9 @@ Rispondi solo con il testo della risposta:
     ) -> str:
 
         print(f"[RESPONSE_GENERATOR] intent_received = {intent}", flush=True)
+        
+        # Salva intent per post-processing
+        self._last_intent = intent
 
         # ===============================
         # GESTIONE DOCUMENTI / FILE
@@ -269,6 +272,20 @@ Rispondi solo con il testo della risposta:
     # ===============================
     def _post_process(self, response: str) -> str:
         response = response.strip()
-        # Mantiene le domande naturali, non le forza a diventare affermazioni
-        # Non aggiunge punteggiatura forzata
+        
+        # BLOCCO CRITICO: Rimuovi domande da risposte a consigli
+        if "?" in response and hasattr(self, '_last_intent') and self._last_intent.get("focus") == "consiglio":
+            # Sostituisci domande con affermazioni dove possibile
+            response = response.replace("?", ".")
+            # Rimuovi frasi interrogative tipiche
+            for phrase in [
+                "hai pensato a",
+                "potrebbe essere utile",
+                "ascolta il tuo istinto",
+                "cosa senti che",
+                "come ti senti riguardo",
+                "secondo te cosa"
+            ]:
+                response = response.replace(phrase, phrase.replace("?", ""))
+        
         return response
