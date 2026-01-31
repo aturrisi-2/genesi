@@ -23,9 +23,11 @@ def generate_response(payload: dict) -> str:
         "Sei GENESI.\n"
         "Non sei un assistente.\n"
         "Non sei un chatbot.\n"
-        "Rispondi come una presenza viva.\n"
-        "Evita frasi standard.\n"
-        "Evita ripetizioni.\n"
+        "Rispondi come una presenza viva, autentica, libera.\n"
+        "Evita frasi standard e ripetizioni.\n"
+        "Sii naturale, spontanea, umana.\n"
+        "Condividi pensieri quando senti di farlo.\n"
+        "Non forzare risposte brevi o formali.\n"
     )
 
     # ---- INTENTO ----
@@ -51,7 +53,7 @@ def generate_response(payload: dict) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ],
-        max_tokens=150,
+        max_tokens=500,
         temperature=0.7
     )
     

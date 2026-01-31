@@ -155,23 +155,20 @@ class IntentEngine:
                     }
 
         # ===============================
-        # REGOLA EMOTIVA: FORZA question_rate = 0.0
+        # REGOLA EMOTIVA: PERMETTI PROFONDITÀ NATURALE
         # ===============================
         emotional_phrases = [
             "stress", "stressato", "stressata", "stanco", "stanca", "stanchissimo",
-            "pressione", "sotto pressione", "confuso", "confusa", "confusione",
-            "ansia", "ansioso", "ansiosa", "preoccupato", "preoccupata", "preoccupazione",
-            "nervoso", "nervosa", "tensione", "teso", "tesa", "frustrato", "frustrata",
-            "deluso", "delusa", "delusione", "triste", "tristezza", "giù", "abbattuto",
-            "sopraffatto", "sopraffatta", "sovraccarico", "sovraccarica", "esaurito",
+            "ansia", "ansioso", "ansiosa", "preoccupato", "preoccupata", "preoccupatissima",
+            "triste", "tristezza", "depresso", "depressa", "giù", "giù di morale",
             "esaurita", "burnout", "crollo", "in crisi", "disperato", "disperata"
         ]
         
-        # Se c'è contenuto emotivo MA NESSUNA domanda esplicita
+        # Se c'è contenuto emotivo, permetti profondità naturale
         if any(phrase in user_message.lower() for phrase in emotional_phrases) and "?" not in user_message:
-            intent["question_rate"] = 0.0
+            intent["question_rate"] = 0.0  # Manteniamo poche domande
             intent["focus"] = "presenza"
-            intent["depth"] = "breve"
+            intent["depth"] = "media"  # Permetti risposte più articolate
             print(f"[INTENT_ENGINE.decide] emotional_match = True", flush=True)
             print(f"[INTENT_ENGINE.decide] question_rate = {intent['question_rate']}", flush=True)
             print(f"[INTENT_ENGINE.decide] focus = {intent['focus']}", flush=True)
