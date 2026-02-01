@@ -310,47 +310,55 @@ Rispondi solo con il testo della risposta:
     def _post_process(self, response: str) -> str:
         response = response.strip()
         
-        # BLOCCO AGGRESSIVO: Rimuovi TUTTE le domande da risposte a consigli
-        if hasattr(self, '_last_intent') and self._last_intent.get("focus") == "consiglio":
-            # Sostituisci TUTTE le domande con affermazioni
-            response = response.replace("?", ".")
-            
-            # Rimuovi frasi interrogative tipiche
-            for phrase in [
-                "hai pensato a",
-                "potrebbe essere utile",
-                "ascolta il tuo istinto",
-                "cosa senti che",
-                "come ti senti riguardo",
-                "secondo te cosa",
-                "hai trovato",
-                "c'è qualcosa",
-                "hai fatto",
-                "potrebbe essere",
-                "su cosa ti serve",
-                "cosa pensi che ti serva",
-                "come lo stai",
-                "cosa ti ha causato",
-                "hai già provato",
-                "hai considerato",
-                "ti sei mai chiesto",
-                "secondo te",
-                "perché non",
-                "non pensi che"
-            ]:
-                response = response.replace(phrase, "")
-            
-            # Rimuovi domande rimanenti con regex
-            import re
-            # Rimuovi frasi che iniziano con parole interrogative
-            response = re.sub(r'\b(cosa|come|quando|dove|perché|chi|quale|quanti)\s+[^.]*\.', '', response)
-            # Rimuovi frasi che contengono pattern interrogativi
-            response = re.sub(r'[^.]*\?(?:[^.]*\.)?', '', response)
-            # Pulisci spazi multipli
-            response = re.sub(r'\s+', ' ', response).strip()
-            
-            # Se la risposta è ora vuota o troppo corta, fornisci un default
-            if len(response) < 10:
-                response = "Applica riposo e osserva l'evoluzione."
+        # BLOCCO TOTALE: Rimuovi TUTTE le domande da TUTTE le risposte
+        # NON solo per consigli, ma per tutto
+        response = response.replace("?", ".")
+        
+        # Rimuovi frasi interrogative tipiche
+        for phrase in [
+            "hai pensato a",
+            "potrebbe essere utile",
+            "ascolta il tuo istinto",
+            "cosa senti che",
+            "come ti senti riguardo",
+            "secondo te cosa",
+            "hai trovato",
+            "c'è qualcosa",
+            "hai fatto",
+            "potrebbe essere",
+            "su cosa ti serve",
+            "cosa pensi che ti serva",
+            "come lo stai",
+            "cosa ti ha causato",
+            "hai già provato",
+            "hai considerato",
+            "ti sei mai chiesto",
+            "secondo te",
+            "perché non",
+            "non pensi che",
+            "mi parli un po'",
+            "mi racconti",
+            "dimmi di più",
+            "come vi siete trovati",
+            "come ti senti ora",
+            "succede spesso",
+            "hai idea di"
+        ]:
+            response = response.replace(phrase, "")
+        
+        # Rimuovi domande rimanenti con regex aggressive
+        import re
+        # Rimuovi frasi che iniziano con parole interrogative
+        response = re.sub(r'\b(cosa|come|quando|dove|perché|chi|quale|quanti)\s+[^.]*\.', '', response)
+        # Rimuovi frasi che contengono pattern interrogativi
+        response = re.sub(r'[^.]*\?(?:[^.]*\.)?', '', response)
+        # Rimuovi frasi che finiscono con invito a parlare
+        response = re.sub(r'\b(ma|e|quindi|allora|però|cioè)\s+[^.]*\.', '', response)
+        # Pulisci spazi multipli
+        response = re.sub(r'\s+', ' ', response).strip()
+        
+        # Se la risposta è ora vuota o troppo corta, fornisci un default
+        if len(response) < 10:
+            response = "Va bene."
         
         return response
