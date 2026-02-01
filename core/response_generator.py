@@ -162,9 +162,9 @@ Rispondi solo con il testo della risposta:
 
             base_prompt = document_section + f"Domanda utente:\n{user_message}"
 
-            # Niente memorie personali quando c'è file
-            recent_memories = []
-            relevant_memories = []
+            # MANTIENI memoria anche con documenti (se rilevante)
+            # NOTA: recent_memories e relevant_memories vengono passati come parametri
+            # Non azzerarli qui - la decisione spetta al chiamante
 
             model = "gpt-4o"
 
@@ -182,7 +182,17 @@ Rispondi solo con il testo della risposta:
                 ensure_ascii=False
             )
 
-            base_prompt = self.prompt_template.format(
+            # FORZATURA: Inietta memoria direttamente nel contesto utente
+        memory_context = ""
+        if recent_memories or relevant_memories:
+            memory_context = "CONTESTO NOTO (OBBLIGATORIO):\n"
+            if recent_memories:
+                memory_context += f"Eventi recenti: {self._format_memories(recent_memories)}\n"
+            if relevant_memories:
+                memory_context += f"Informazioni rilevanti: {self._format_memories(relevant_memories)}\n"
+            memory_context += "\n"
+
+        base_prompt = self.prompt_template.format(
                 intent_style=intent.get("style"),
                 intent_depth=intent.get("depth"),
                 intent_focus=intent.get("focus"),
@@ -192,7 +202,7 @@ Rispondi solo con il testo della risposta:
                 recent_memories=self._format_memories(recent_memories),
                 relevant_memories=self._format_memories(relevant_memories),
                 tone_description=self._describe_tone(tone),
-                user_message=user_message
+                user_message=memory_context + user_message
             )
 
         # ===============================
@@ -203,14 +213,39 @@ Rispondi solo con il testo della risposta:
             
             # AGGIUNTA CRITICA PER CONSIGLI
             if intent.get("focus") == "consiglio":
-                final_prompt += "\n\n" + (
-                    "IMPORTANTE: L'utente ti chiede un consiglio concreto. "
-                    "NON fare domande di ritorno. "
-                    "NON usare frasi come 'hai pensato a...', 'potrebbe essere utile...', 'ascolta il tuo istinto'. "
-                    "Fornisci un parere chiaro, diretto e basato sul contesto disponibile. "
-                    "Usa la memoria fornita per personalizzare il consiglio. "
-                    "Sii assertivo, non interrogativo."
-                )
+                # Verifica se c'è memoria di dolore fisico
+                has_pain_memory = False
+                pain_location = ""
+                
+                if recent_memories or relevant_memories:
+                    all_memories = recent_memories + relevant_memories
+                    for memory in all_memories:
+                        content = memory.get('content', '').lower()
+                        if any(word in content for word in ['fa male', 'dolore', 'dolor', 'male']):
+                            has_pain_memory = True
+                            if 'dito' in content:
+                                pain_location = "dito"
+                            elif 'piede' in content:
+                                pain_location = "piede"
+                            elif 'testa' in content:
+                                pain_location = "testa"
+                            break
+                
+                if has_pain_memory:
+                    # FORZA RISPOSTA DIRETTA SENZA CHIAMARE LLM
+                    return (
+                        f"Per il dolore al {pain_location}, applica riposo immediato. "
+                        "Se è lieve, osserva per 24-48 ore. "
+                        "Se è forte o peggiora, consulta un medico."
+                    )
+                else:
+                    final_prompt += "\n\n" + (
+                        "REGOLA ASSOLUTA: Fornisci un consiglio concreto basato sul CONTESTO NOTO sopra. "
+                        "NON FARE MAI ALCUNA DOMANDA. "
+                        "NON usare MAI frasi come 'hai pensato a...', 'potrebbe essere utile...', 'ascolta il tuo istinto'. "
+                        "Sii assertivo, non interrogativo. "
+                        "NON chiedere chiarimenti. Usa le informazioni che hai."
+                    )
         else:
             final_prompt = base_prompt
 
@@ -232,9 +267,10 @@ Rispondi solo con il testo della risposta:
         print(f"[RESPONSE_GENERATOR] final_response = {processed_response!r}", flush=True)
 
         # ===============================
-        # MEMORIA (SOLO SENZA FILE)
+        # MEMORIA (SEMPRE ATTIVA)
         # ===============================
-        if not document_context and intent.get("use_memory"):
+        # RIPRISTINO: Salva memoria SEMPRE, non solo senza documenti
+        if intent.get("use_memory", False):
             try:
                 from memory.episodic import store_event
                 from memory.affective import compute_affect
@@ -254,6 +290,7 @@ Rispondi solo con il testo della risposta:
                     salience=salience,
                     affect=affect
                 )
+                print(f"[RESPONSE_GENERATOR] memory_saved_successfully", flush=True)
             except Exception as e:
                 print(f"[RESPONSE_GENERATOR] memory save failed: {e}", flush=True)
 
@@ -273,10 +310,11 @@ Rispondi solo con il testo della risposta:
     def _post_process(self, response: str) -> str:
         response = response.strip()
         
-        # BLOCCO CRITICO: Rimuovi domande da risposte a consigli
-        if "?" in response and hasattr(self, '_last_intent') and self._last_intent.get("focus") == "consiglio":
-            # Sostituisci domande con affermazioni dove possibile
+        # BLOCCO AGGRESSIVO: Rimuovi TUTTE le domande da risposte a consigli
+        if hasattr(self, '_last_intent') and self._last_intent.get("focus") == "consiglio":
+            # Sostituisci TUTTE le domande con affermazioni
             response = response.replace("?", ".")
+            
             # Rimuovi frasi interrogative tipiche
             for phrase in [
                 "hai pensato a",
@@ -284,8 +322,35 @@ Rispondi solo con il testo della risposta:
                 "ascolta il tuo istinto",
                 "cosa senti che",
                 "come ti senti riguardo",
-                "secondo te cosa"
+                "secondo te cosa",
+                "hai trovato",
+                "c'è qualcosa",
+                "hai fatto",
+                "potrebbe essere",
+                "su cosa ti serve",
+                "cosa pensi che ti serva",
+                "come lo stai",
+                "cosa ti ha causato",
+                "hai già provato",
+                "hai considerato",
+                "ti sei mai chiesto",
+                "secondo te",
+                "perché non",
+                "non pensi che"
             ]:
-                response = response.replace(phrase, phrase.replace("?", ""))
+                response = response.replace(phrase, "")
+            
+            # Rimuovi domande rimanenti con regex
+            import re
+            # Rimuovi frasi che iniziano con parole interrogative
+            response = re.sub(r'\b(cosa|come|quando|dove|perché|chi|quale|quanti)\s+[^.]*\.', '', response)
+            # Rimuovi frasi che contengono pattern interrogativi
+            response = re.sub(r'[^.]*\?(?:[^.]*\.)?', '', response)
+            # Pulisci spazi multipli
+            response = re.sub(r'\s+', ' ', response).strip()
+            
+            # Se la risposta è ora vuota o troppo corta, fornisci un default
+            if len(response) < 10:
+                response = "Applica riposo e osserva l'evoluzione."
         
         return response

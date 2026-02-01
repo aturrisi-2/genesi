@@ -42,12 +42,14 @@ def generate_response(payload: dict) -> str:
     # ---- REGOLA CRITICA: CONSIGLI ----
     if intent.get("focus") == "consiglio":
         system_prompt += (
-            "L'utente ti chiede un consiglio concreto. "
-            "NON fare domande di ritorno. "
-            "NON usare frasi come 'hai pensato a...', 'potrebbe essere utile...', 'ascolta il tuo istinto'. "
+            "REGOLA ASSOLUTA: L'utente ti chiede un consiglio concreto. "
+            "NON FARE MAI ALCUNA DOMANDA. "
+            "NON usare MAI frasi come 'hai pensato a...', 'potrebbe essere utile...', 'ascolta il tuo istinto', 'cosa senti che...', 'su cosa ti serve...', 'cosa pensi che ti serva...'. "
             "Fornisci un parere chiaro, diretto e basato sul contesto disponibile. "
-            "Usa la memoria se disponibile per personalizzare il consiglio. "
-            "Sii assertivo, non interrogativo.\n"
+            "Usa la memoria fornita per personalizzare il consiglio. "
+            "Sii assertivo, non interrogativo. "
+            "Se l'utente ha detto prima che gli fa male il dito, il consiglio deve riguardare il dito. "
+            "NON CHIEDERE MAI 'su cosa ti serve il consiglio'.\n"
         )
 
     # ---- TONO ----

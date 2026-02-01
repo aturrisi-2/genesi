@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from core.state import CognitiveState
 from api.user import router as user_router
 from api.chat import router as chat_router
-from api.stt import router as stt_router
+# from api.stt import router as stt_router  # ❌ STT DISABILITATO
 from api.upload import router as upload_router
 # from tts.coqui import synthesize  # ❌ VOCE DISABILITATA
 
@@ -45,7 +45,7 @@ async def serve_index():
 
 app.include_router(user_router)
 app.include_router(chat_router)
-app.include_router(stt_router)
+# app.include_router(stt_router)  # ❌ STT DISABILITATO
 app.include_router(upload_router)
 
 # ======================================================

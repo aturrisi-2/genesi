@@ -186,27 +186,32 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     try:
         intent_engine = IntentEngine()
 
-        # Se c'è document context, forza focus su documento
+        # Se c'è document context, integra memoria personale + documento
         if force_document_focus:
-            # Sovrascrivi temporaneamente le memorie con document context
+            # Combina memoria personale con context documento
             document_memories = [{
                 "content": document_context,
                 "type": "document_context",
                 "timestamp": datetime.now().isoformat()
             }]
             
+            # MANTIENI memoria personale anche con documenti
+            combined_relevant = relevant_memories + document_memories
+            
             intent = intent_engine.decide(
                 user_message=request.message,
                 user=state.user,
                 cognitive_state=state,
-                recent_memories=[],  # Disabilita memoria personale per questa risposta
-                relevant_memories=document_memories,
+                recent_memories=recent_memories,  # MANTIENI memoria recente
+                relevant_memories=combined_relevant,  # Combina memoria + documento
                 tone=tone
             )
             
-            # Forza focus su documento
+            # Forza focus su documento ma mantieni memoria attiva
             intent["focus"] = "documento"
+            intent["use_memory"] = True  # FORZA uso memoria anche con documenti
             print(f"[CHAT_ENDPOINT] document_focus_forced = True", flush=True)
+            print(f"[CHAT_ENDPOINT] memory_preserved_with_document = True", flush=True)
         else:
             intent = intent_engine.decide(
                 user_message=request.message,
@@ -224,12 +229,15 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
             response_text = ""
         else:
             print(f"[CHAT_ENDPOINT] memory_passed_to_generator = {intent.get('use_memory')}", flush=True)
+            
+            # RIPRISTINO: Passa SEMPRE le memorie recuperate
+            # La decisione su usarle spetta al prompt, non al bypass
             generator = ResponseGenerator()
             response_text = generator.generate_response(
                 user_message=request.message,
                 cognitive_state=state,
-                recent_memories=recent_memories if intent["use_memory"] else [],
-                relevant_memories=relevant_memories if intent["use_memory"] else [],
+                recent_memories=recent_memories,  # SEMPRE passato
+                relevant_memories=relevant_memories,  # SEMPRE passato
                 tone=tone,
                 intent=intent,
                 document_context=document_context
