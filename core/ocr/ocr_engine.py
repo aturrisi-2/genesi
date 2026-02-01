@@ -9,9 +9,35 @@ import logging
 try:
     import pdf2image
     import pytesseract
+    OCR_AVAILABLE = True
+    
+    # Configure Tesseract path for Windows
+    if os.name == 'nt':
+        tesseract_path = r"C:\Users\TURRISIA\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
+        if os.path.exists(tesseract_path):
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            logging.info(f"OCR Engine: Configured Tesseract path: {tesseract_path}")
+        else:
+            logging.warning("OCR Engine: Tesseract not found at expected path")
+            
+        # Configure Poppler path for Windows
+        poppler_path = r"C:\Users\TURRISIA\AppData\Local\Microsoft\WinGet\packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin"
+        if os.path.exists(poppler_path):
+            os.environ['PATH'] = os.environ.get('PATH', '') + os.pathsep + poppler_path
+            logging.info(f"OCR Engine: Configured Poppler path: {poppler_path}")
+        else:
+            logging.warning("OCR Engine: Poppler not found at expected path")
+    else:
+        # For non-Windows, ensure tesseract is in PATH
+        try:
+            pytesseract.get_tesseract_version()
+            logging.info("OCR Engine: Tesseract found in PATH")
+        except Exception as e:
+            logging.warning(f"OCR Engine: Tesseract not found in PATH: {e}")
+    
 except ImportError as e:
     logging.error(f"OCR dependencies missing: {e}")
-    raise ImportError("Install OCR dependencies: pip install pdf2image pytesseract")
+    OCR_AVAILABLE = False
 
 # Import per OCR immagini
 from .image_ocr import extract_text_from_image
@@ -34,6 +60,10 @@ def extract_text_with_ocr(file_path: str) -> str:
     - Immagini: jpg, jpeg, png, bmp, tiff (gestite da image_ocr)
     - PDF: scansionati (gestito internamente)
     """
+    if not OCR_AVAILABLE:
+        logger.warning("OCR[ENGINE]: OCR dependencies not available")
+        return ""
+    
     if not os.path.exists(file_path):
         logger.error(f"OCR[ENGINE]: File not found: {file_path}")
         return ""
@@ -89,7 +119,7 @@ def _extract_from_pdf(pdf_path: str) -> str:
                     # Estrai testo da ogni pagina
                     text = pytesseract.image_to_string(
                         image,
-                        lang='ita',
+                        lang='eng',
                         config='--psm 6'
                     )
                     
@@ -111,6 +141,9 @@ def check_tesseract_available() -> bool:
     """
     Verifica se Tesseract è installato e funzionante.
     """
+    if not OCR_AVAILABLE:
+        return False
+    
     try:
         pytesseract.get_tesseract_version()
         return True

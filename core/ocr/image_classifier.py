@@ -8,9 +8,10 @@ import math
 
 try:
     from PIL import Image, ImageStat
+    CLASSIFIER_AVAILABLE = True
 except ImportError as e:
     logging.error(f"Image classifier dependencies missing: {e}")
-    raise ImportError("Install image classifier dependencies: pip install pillow")
+    CLASSIFIER_AVAILABLE = False
 
 # Limiti di sicurezza per resize deterministico
 MAX_IMAGE_PIXELS_SAFE = 100_000_000
@@ -19,11 +20,15 @@ TARGET_MAX_EDGE = 4096
 logger = logging.getLogger(__name__)
 
 
-def safe_open_image(path: str) -> Image.Image:
+def safe_open_image(path):
     """
     Apre un'immagine in modo sicuro, ridimensionandola
     PRIMA che Pillow sollevi decompression bomb errors.
     """
+    if not CLASSIFIER_AVAILABLE:
+        logger.warning("IMAGE_CLASSIFIER: dependencies not available")
+        return None
+        
     img = Image.open(path)
     w, h = img.size
     pixels = w * h
@@ -71,8 +76,16 @@ def classify_image_for_ocr(image_path: str) -> Dict:
         logger.error(f"Image classifier: File not found: {image_path}")
         return _get_default_classification()
     
+    if not CLASSIFIER_AVAILABLE:
+        logger.warning("Image classifier: dependencies not available")
+        return _get_default_classification()
+    
     try:
         img = safe_open_image(image_path)
+        if img is None:
+            logger.warning("IMAGE_CLASSIFIER: safe_open_image returned None")
+            return _get_default_classification()
+            
         logger.info("IMAGE_CLASSIFIER: image opened via safe_open_image")
         
         # Converti in RGB per analisi consistente
@@ -114,7 +127,7 @@ def classify_image_for_ocr(image_path: str) -> Dict:
         return _get_default_classification()
 
 
-def _calculate_color_variance(img: Image.Image) -> float:
+def _calculate_color_variance(img):
     """Calcola la varianza dei colori nell'immagine."""
     try:
         stat = ImageStat.Stat(img)
@@ -125,7 +138,7 @@ def _calculate_color_variance(img: Image.Image) -> float:
         return 0.0
 
 
-def _estimate_text_density(img: Image.Image, width: int, height: int) -> float:
+def _estimate_text_density(img, width: int, height: int) -> float:
     """
     Stima la densità di testo basandosi su segnali visivi.
     Valore tra 0.0 (nessun testo) e 1.0 (tutto testo).
@@ -153,7 +166,7 @@ def _estimate_text_density(img: Image.Image, width: int, height: int) -> float:
         return 0.0
 
 
-def _analyze_brightness_distribution(img: Image.Image) -> Dict:
+def _analyze_brightness_distribution(img) -> dict:
     """Analizza la distribuzione della luminosità."""
     try:
         gray = img.convert('L')
@@ -182,7 +195,7 @@ def _analyze_brightness_distribution(img: Image.Image) -> Dict:
         return {"mean": 128, "std": 50, "light_ratio": 0.3, "dark_ratio": 0.3}
 
 
-def _detect_structural_patterns(img: Image.Image, width: int, height: int) -> Dict:
+def _detect_structural_patterns(img, width: int, height: int) -> Dict:
     """Rileva pattern strutturali tipici di UI/documenti."""
     try:
         gray = img.convert('L')

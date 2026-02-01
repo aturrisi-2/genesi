@@ -9,12 +9,30 @@ try:
     import pytesseract
     from PIL import Image, ImageEnhance
     import numpy as np
+    IMAGE_OCR_AVAILABLE = True
+    
+    # Configure Tesseract path for Windows
+    if os.name == 'nt':
+        tesseract_path = r"C:\Users\TURRISIA\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
+        if os.path.exists(tesseract_path):
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            logging.info(f"Configured Tesseract path: {tesseract_path}")
+        else:
+            logging.warning("Tesseract not found at expected path")
+    else:
+        # For non-Windows, ensure tesseract is in PATH
+        try:
+            pytesseract.get_tesseract_version()
+            logging.info("Tesseract found in PATH")
+        except Exception as e:
+            logging.warning(f"Tesseract not found in PATH: {e}")
+    
 except ImportError as e:
     logging.error(f"Image OCR dependencies missing: {e}")
-    raise ImportError("Install image OCR dependencies: pip install pytesseract pillow numpy")
+    IMAGE_OCR_AVAILABLE = False
 
 # Configurazione Tesseract per immagini
-TESSERACT_LANG = 'ita'
+TESSERACT_LANG = 'eng'
 TESSERACT_CONFIG_BASE = '--psm 6'
 TESSERACT_CONFIG_SCREENSHOT = '--psm 11'
 
@@ -25,7 +43,7 @@ TARGET_MAX_EDGE = 4096               # max lato lungo dopo resize
 logger = logging.getLogger(__name__)
 
 
-def resize_image_if_needed(img: Image.Image) -> Image.Image:
+def resize_image_if_needed(img):
     """
     Riduce l'immagine in modo deterministico se supera soglie di sicurezza.
     NON disabilita le protezioni Pillow.
@@ -50,12 +68,15 @@ def resize_image_if_needed(img: Image.Image) -> Image.Image:
         f"OCR[IMAGE]: resizing image {width}x{height} → {new_width}x{new_height}"
     )
 
-    return img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    if IMAGE_OCR_AVAILABLE:
+        return img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    else:
+        return img
 
 
 def extract_text_from_image(image_path: str) -> str:
     """
-    Estrae testo da un'immagine con preprocessing multi-pass.
+    Estrae testo da un'immagine usando Tesseract con preprocessing.
     
     Args:
         image_path: Percorso del file immagine
@@ -63,11 +84,19 @@ def extract_text_from_image(image_path: str) -> str:
     Returns:
         Testo estratto o stringa vuota
     """
+    if not IMAGE_OCR_AVAILABLE:
+        logger.warning("OCR[IMAGE]: Image OCR dependencies not available")
+        return ""
+    
     if not os.path.exists(image_path):
         logger.error(f"OCR[IMAGE]: File not found: {image_path}")
         return ""
     
     try:
+        if not IMAGE_OCR_AVAILABLE:
+            logger.warning("OCR[IMAGE]: Image OCR dependencies not available")
+            return ""
+            
         with Image.open(image_path) as img:
             # Converti in RGB per compatibilità
             if img.mode != 'RGB':
@@ -92,7 +121,7 @@ def extract_text_from_image(image_path: str) -> str:
         return ""
 
 
-def _ocr_base(img: Image.Image) -> str:
+def _ocr_base(img):
     """OCR base senza preprocessing."""
     try:
         text = pytesseract.image_to_string(
@@ -106,7 +135,7 @@ def _ocr_base(img: Image.Image) -> str:
         return ""
 
 
-def _ocr_preprocessed(img: Image.Image) -> str:
+def _ocr_preprocessed(img):
     """OCR con preprocessing per screenshot."""
     try:
         preprocessed_img = _preprocess_image_for_ocr(img)
@@ -121,10 +150,13 @@ def _ocr_preprocessed(img: Image.Image) -> str:
         return ""
 
 
-def _preprocess_image_for_ocr(img: Image.Image) -> Image.Image:
+def _preprocess_image_for_ocr(img):
     """
     Preprocessa l'immagine per migliorare l'OCR su screenshot.
     """
+    if not IMAGE_OCR_AVAILABLE:
+        return img
+    
     # 1. Conversione in scala di grigi
     gray = img.convert('L')
     
@@ -140,11 +172,14 @@ def _preprocess_image_for_ocr(img: Image.Image) -> Image.Image:
     binary = np.where(img_array > threshold, 255, 0).astype(np.uint8)
     
     # 4. Ridimensionamento (2x per migliorare lettura testo piccolo)
-    binary_img = Image.fromarray(binary)
-    width, height = binary_img.size
-    resized = binary_img.resize((width * 2, height * 2), Image.Resampling.LANCZOS)
-    
-    return resized.convert('RGB')
+    if IMAGE_OCR_AVAILABLE:
+        scaled = Image.fromarray(binary).resize(
+            (binary.shape[1] * 2, binary.shape[0] * 2), 
+            Image.Resampling.NEAREST
+        )
+        return scaled.convert('RGB')
+    else:
+        return img
 
 
 def _select_best_ocr(text_base: str, text_preprocessed: str) -> str:
