@@ -76,16 +76,19 @@ def extract_text_with_ocr(file_path: str) -> str:
             classification = classify_image_for_ocr(file_path)
             
             logger.info(
-                f"OCR[ENGINE]: routing=image kind={classification['image_kind']} confidence={classification['confidence']}"
+                f"OCR[ENGINE]: routing=image kind={classification['image_kind']} confidence={classification['confidence']} text_density={classification['signals']['estimated_text_density']}"
             )
             
-            # Se è un'immagine pura, salta OCR completamente
-            if classification["image_kind"] == "pure-image":
-                logger.info("OCR[ENGINE]: skipped pure-image")
-                return ""
+            # Nuova logica: esegui OCR se c'è testo rilevato sopra soglia minima
+            text_density = classification['signals']['estimated_text_density']
+            min_text_threshold = 0.15  # Soglia minima per considerare testo presente
             
-            # Procedi con OCR per screenshot e testo pesante
-            return extract_text_from_image(file_path)
+            if text_density >= min_text_threshold:
+                logger.info(f"OCR[ENGINE]: text_detected={text_density:.3f} >= threshold={min_text_threshold} -> executing OCR")
+                return extract_text_from_image(file_path)
+            else:
+                logger.info(f"OCR[ENGINE]: text_detected={text_density:.3f} < threshold={min_text_threshold} -> skipping OCR (pure image)")
+                return ""
         elif file_ext == '.pdf':
             logger.info(f"OCR[ENGINE]: routing=pdf")
             return _extract_from_pdf(file_path)
