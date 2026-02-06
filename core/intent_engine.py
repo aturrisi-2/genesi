@@ -64,12 +64,20 @@ class IntentEngine:
         "paracetamolo", "antibiotico", "antibiotici", "dose", "dosaggio",
         "sintomo", "sintomi", "diagnosi", "effetti collaterali",
         "febbre", "mal di testa", "mal di stomaco", "pressione",
+        "dolore", "dolore al petto", "dolore al braccio", "dolore alla schiena",
+        "tosse", "raffreddore", "influenza", "allergia", "allergie",
+        "infezione", "infiammazione", "gonfiore", "nausea", "vomito", "diarrea",
+        "vertigini", "capogiro", "svenimento", "tachicardia", "respiro",
         "ricetta", "ingredienti", "calorie", "proteine",
         "capitale", "popolazione", "distanza", "altitudine",
         "chi è", "chi era", "chi ha inventato", "chi ha scritto",
         "traduzione", "traduci", "tradurre",
         "calcola", "calcolo", "formula", "equazione",
         "legge", "normativa", "codice civile", "codice penale",
+        "economia", "economica", "economico", "inflazione", "pil", "spread",
+        "borsa", "azioni", "mercato", "mercati", "tasso", "tassi",
+        "politica", "governo", "elezioni", "parlamento",
+        "guerra", "conflitto", "terremoto", "alluvione",
     ]
 
     FACTUAL_PATTERNS = [
