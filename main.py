@@ -3,7 +3,15 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import uvicorn
+import os
 from pydantic import BaseModel
+
+# === DIAGNOSTICA TEMPORANEA — RIMUOVERE DOPO VERIFICA ===
+print("🔐 ENV CHECK")
+print("OPENAI_API_KEY:", "OK" if os.getenv("OPENAI_API_KEY") else "MISSING")
+print("OPENWEATHER_API_KEY:", "OK" if os.getenv("OPENWEATHER_API_KEY") else "MISSING")
+print("GNEWS_API_KEY:", "OK" if os.getenv("GNEWS_API_KEY") else "MISSING")
+# =========================================================
 
 from core.state import CognitiveState
 from api.user import router as user_router
