@@ -2,7 +2,7 @@ from core.llm import generate_response as llm_generate
 from core.tools import resolve_tools
 from typing import Optional, Dict, List
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class ResponseGenerator:
@@ -34,7 +34,25 @@ class ResponseGenerator:
         elif intent.get("brain_mode") == "fatti":
             # 1. Chiama API esterne per dati reali
             tool_result = await resolve_tools(user_message)
-            # 2. Costruisci prompt arricchito con dati reali
+            has_real_data = (
+                tool_result
+                and tool_result.get("data")
+                and not tool_result["data"].get("error")
+            )
+
+            # 2. BYPASS LLM: meteo e news con dati reali → template diretto
+            if has_real_data and tool_result["tool_type"] in ("meteo", "news"):
+                direct = self._direct_template(tool_result)
+                if direct:
+                    print(f"[FATTI][FORCED_REAL_DATA_RESPONSE] type={tool_result['tool_type']} bypass_llm=True", flush=True)
+                    print(f"[RESPONSE_GENERATOR] response='{direct[:200]}...'", flush=True)
+                    return direct
+
+            # 3. Segnala al LLM che ci sono dati reali (per system prompt RIFORMULATORE)
+            if has_real_data:
+                intent["_has_real_data"] = True
+
+            # 4. Costruisci prompt arricchito con dati reali
             prompt = self._build_facts_prompt(user_message, tool_result)
 
         else:
@@ -245,10 +263,13 @@ class ResponseGenerator:
 
         if tool_result and tool_result.get("data") and not tool_result["data"].get("error"):
             sections.append(
-                "ISTRUZIONE: Usa i DATI REALI forniti sopra per rispondere. "
-                "Sintetizza in modo chiaro e naturale in italiano. "
-                "Non inventare dati aggiuntivi. Solo il testo della risposta."
+                "ISTRUZIONE OBBLIGATORIA: Riformula ESCLUSIVAMENTE i dati reali forniti sopra. "
+                "I dati sono verificati e aggiornati. NON puoi ignorarli. "
+                "NON dire che non hai accesso a dati. NON menzionare limiti o fonti. "
+                "NON aggiungere contesto temporale inventato. "
+                "Riscrivi i dati in italiano naturale, come un notiziario. Solo il testo."
             )
+            print(f"[FATTI][FORCED_REAL_DATA_RESPONSE] type={tool_result.get('tool_type','?')} prompt_mode=RIFORMULAZIONE_OBBLIGATORIA", flush=True)
         else:
             sections.append(
                 "Rispondi con le informazioni più accurate che conosci. "
@@ -256,6 +277,89 @@ class ResponseGenerator:
             )
 
         return "\n\n".join(sections)
+
+    # ===============================
+    # BYPASS LLM — TEMPLATE DIRETTO
+    # ===============================
+    def _direct_template(self, tool_result: dict) -> str:
+        """Genera risposta diretta da dati API senza passare per LLM."""
+        tool_type = tool_result.get("tool_type")
+        data = tool_result.get("data", {})
+
+        if tool_type == "meteo":
+            return self._direct_weather(data)
+        elif tool_type == "news":
+            return self._direct_news(data)
+        return ""
+
+    def _direct_weather(self, data: dict) -> str:
+        city = data.get("city", "la tua zona")
+        current = data.get("current", {})
+        forecast = data.get("forecast", [])
+
+        if not current:
+            return ""
+
+        temp = current.get("temp", "")
+        feels = current.get("feels_like", "")
+        desc = current.get("description", "")
+        humidity = current.get("humidity", "")
+        wind = current.get("wind_speed", "")
+        t_min = current.get("temp_min", "")
+        t_max = current.get("temp_max", "")
+
+        parts = []
+        parts.append(f"A {city} adesso ci sono {temp}°C con {desc}, percepiti come {feels}°C.")
+        parts.append(f"La minima è {t_min}°C e la massima {t_max}°C, con umidità al {humidity}% e vento a {wind} m/s.")
+
+        # Previsioni prossime ore
+        if forecast:
+            # Raggruppa per domani
+            tomorrow_entries = []
+            now = datetime.now()
+            tomorrow_date = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+            for f in forecast:
+                dt_str = f.get("datetime", "")
+                if tomorrow_date in dt_str:
+                    tomorrow_entries.append(f)
+
+            if tomorrow_entries:
+                temps = [f.get("temp", 0) for f in tomorrow_entries]
+                descs = [f.get("description", "") for f in tomorrow_entries]
+                t_min_f = min(temps) if temps else ""
+                t_max_f = max(temps) if temps else ""
+                # Descrizione più frequente
+                desc_f = max(set(descs), key=descs.count) if descs else ""
+                parts.append(f"Domani si prevedono temperature tra {t_min_f}°C e {t_max_f}°C, con {desc_f}.")
+            elif len(forecast) >= 3:
+                # Prossime ore
+                next_f = forecast[2]  # ~9h avanti
+                parts.append(f"Nelle prossime ore: {next_f.get('temp', '')}°C, {next_f.get('description', '')}.")
+
+        return " ".join(parts)
+
+    def _direct_news(self, data: dict) -> str:
+        articles = data.get("articles", [])
+        if not articles:
+            return ""
+
+        parts = ["Ecco le notizie principali di oggi."]
+        for i, art in enumerate(articles[:5]):
+            title = art.get("title", "").strip()
+            desc = art.get("description", "").strip()
+            source = art.get("source", "").strip()
+            if title:
+                entry = title
+                if desc and len(desc) > 30:
+                    # Prendi solo la prima frase della descrizione
+                    first_sentence = desc.split(".")[0].strip()
+                    if first_sentence and first_sentence != title:
+                        entry += f". {first_sentence}."
+                if source:
+                    entry += f" ({source})"
+                parts.append(entry)
+
+        return " ".join(parts)
 
     def _format_weather_data(self, data: dict) -> str:
         lines = ["DATI METEO REALI (fonte: OpenWeatherMap):"]

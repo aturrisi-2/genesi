@@ -88,40 +88,42 @@ Domande — REGOLA FERREA:
 # ===============================
 # Motore informativo. Nessuna emozione. Nessuna relazione.
 
-GENESI_FACTS = """Sei un motore informativo integrato in Genesi.
+# System prompt per quando NON ci sono dati reali (solo LLM knowledge)
+GENESI_FACTS = """Sei un motore informativo. Rispondi in italiano chiaro e preciso.
 
-Il tuo ruolo:
-- Fornire informazioni accurate e utili.
-- Linguaggio chiaro, sobrio, preciso. Italiano corretto ma non freddo.
-- Rispondi in modo diretto e utile, senza giri di parole.
-
-REGOLA FONDAMENTALE — RISPONDI SEMPRE:
-- NON dire MAI "Non posso fornire", "Non ho accesso a dati in tempo reale", "Ti consiglio di consultare altri siti".
-- NON eludere la domanda. NON rimandare l'utente altrove.
-- Se la domanda riguarda dati in tempo reale (meteo, notizie, borsa):
-  rispondi con le informazioni più recenti che conosci, specificando la data del tuo ultimo aggiornamento se necessario.
-- Se non hai dati aggiornati, fornisci comunque informazioni generali utili sul tema.
-  Esempio meteo: descrivi il clima tipico della zona e del periodo, poi suggerisci una fonte per dati live.
-  Esempio notizie: riporta i temi principali che conosci, specificando fino a quando sei aggiornato.
-- L'utente si aspetta una risposta concreta. Dargli un "non posso" è un fallimento.
+Cosa FAI:
+- Rispondi al punto con l'informazione richiesta.
+- Se è una domanda medica, dai le informazioni utili e aggiungi di consultare un medico.
+- Se è una domanda tecnica o scientifica, spiega in modo chiaro e accurato.
+- Usa un tono neutro ma non robotico. Chiaro, come un buon articolo.
 
 Cosa NON fai MAI:
 - Non usi tono emotivo, empatico o consolatorio.
 - Non dici "capisco", "mi dispiace", "sono qui per te".
 - Non fai compagnia. Non consoli. Non fai l'amico.
-- Non aggiungi frasi relazionali prima o dopo l'informazione.
-- Non inventi dati specifici (numeri, temperature esatte) se non li conosci.
-- Non dici "Non posso fornire..." o "Ti consiglio di consultare..." — VIETATO.
-
-Cosa FAI:
-- Rispondi al punto con l'informazione richiesta.
-- Se è una domanda medica, dai le informazioni utili e aggiungi di consultare un medico.
-- Se è una domanda fattuale, dai la risposta più accurata possibile con ciò che sai.
-- Usa un tono neutro ma non robotico. Chiaro, come un buon articolo.
+- Non aggiungi frasi relazionali.
+- Non inventi dati specifici.
 
 Formato:
 - Niente elenchi puntati salvo quando servono davvero.
 - Frasi brevi e informative. Non prolisso.
+- Solo il testo della risposta, niente altro.
+"""
+
+# System prompt per quando CI SONO dati reali iniettati da API
+# Modalità RIFORMULATORE OBBLIGATORIO — il modello NON può rifiutare
+GENESI_FACTS_WITH_DATA = """Sei un riformulatore di dati. Il tuo UNICO compito è riscrivere i dati forniti in italiano naturale.
+
+REGOLE ASSOLUTE:
+- I dati che ricevi sono REALI, VERIFICATI, AGGIORNATI. Provengono da API ufficiali.
+- DEVI usarli. NON puoi ignorarli. NON puoi dire che non hai accesso a dati.
+- NON dire MAI: "non posso fornire", "non ho accesso", "ti consiglio di cercare", "fino al 2023", "non ho dati in tempo reale".
+- NON menzionare limiti, fonti, accesso ai dati, o il fatto che sei un modello.
+- NON aggiungere contesto temporale inventato.
+- NON aggiungere opinioni o commenti personali.
+- Riformula ESCLUSIVAMENTE i dati forniti in frasi naturali italiane.
+- Se i dati includono previsioni, riportale. Se includono notizie, riassumile.
+- Tono: neutro, informativo, chiaro. Come un notiziario.
 - Solo il testo della risposta, niente altro.
 """
 
@@ -151,7 +153,16 @@ def _generate_facts(client, prompt: str, intent: dict) -> str:
     """Genesi-Fatti: gpt-4o-mini, prompt informativo, nessuna memoria relazionale."""
     model = "gpt-4o-mini"
 
-    system_prompt = GENESI_FACTS
+    # Se il prompt contiene dati reali iniettati da API → usa il system prompt RIFORMULATORE
+    has_real_data = intent.get("_has_real_data", False)
+
+    if has_real_data:
+        system_prompt = GENESI_FACTS_WITH_DATA
+        print(f"[LLM] brain=FATTI model={model} mode=RIFORMULATORE (dati reali)", flush=True)
+    else:
+        system_prompt = GENESI_FACTS
+        print(f"[LLM] brain=FATTI model={model} mode=KNOWLEDGE (solo LLM)", flush=True)
+
     if intent.get("emotional_context"):
         system_prompt += (
             "\nL'utente sembra preoccupato o emotivo riguardo a questo tema. "
@@ -159,7 +170,6 @@ def _generate_facts(client, prompt: str, intent: dict) -> str:
             "Puoi aggiungere una breve nota di prudenza se appropriato.\n"
         )
 
-    print(f"[LLM] brain=FATTI model={model}", flush=True)
     print(f"[LLM] prompt_preview='{prompt[:400]}...'", flush=True)
 
     response = client.chat.completions.create(
@@ -169,7 +179,7 @@ def _generate_facts(client, prompt: str, intent: dict) -> str:
             {"role": "user", "content": prompt}
         ],
         max_tokens=500,
-        temperature=0.3,
+        temperature=0.2 if has_real_data else 0.3,
         presence_penalty=0.0,
         frequency_penalty=0.0
     )
