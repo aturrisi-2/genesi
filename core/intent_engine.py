@@ -55,6 +55,8 @@ class IntentEngine:
     FACTUAL_KEYWORDS = [
         "meteo", "tempo fa", "temperatura", "previsioni", "piove", "pioverà",
         "notizie", "notizia", "news", "cronaca", "attualità",
+        "successo oggi", "successo ieri", "cosa è successo", "cos'è successo",
+        "cosa sta succedendo", "cosa succede", "ultime ore", "ultima ora",
         "quanto costa", "quanto pesa", "quanto dura", "quanto è",
         "quando è", "quando nasce", "quando muore", "quando inizia", "quando finisce",
         "dove si trova", "dove è", "dov'è",
