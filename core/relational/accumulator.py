@@ -3,8 +3,12 @@ from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, List
 
-# 🔒 PATH ASSOLUTO, NON RELATIVO
-BASE_DIR = Path("/opt/genesi")
+# Path: usa /opt/genesi su VPS, altrimenti directory locale
+_vps_path = Path("/opt/genesi")
+if _vps_path.exists():
+    BASE_DIR = _vps_path
+else:
+    BASE_DIR = Path(__file__).resolve().parent.parent.parent
 RELATIONAL_DIR = BASE_DIR / "data" / "relational"
 RELATIONAL_DIR.mkdir(parents=True, exist_ok=True)
 

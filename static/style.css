@@ -1,5 +1,7 @@
-/* Reset e stili globali */
-* {
+/* ===============================
+   RESET
+   =============================== */
+*, *::before, *::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
@@ -9,73 +11,57 @@
     --bg-color: #0a0a0f;
     --text-color: rgba(255, 255, 245, 0.9);
     --text-muted: rgba(255, 255, 245, 0.6);
-    --primary: rgba(100, 120, 200, 0.1);
-    --border-radius: 12px;
+    --app-height: 100vh;
     --transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@font-face {
-    font-family: 'System Font';
-    src: local('-apple-system'), 
-         local('BlinkMacSystemFont'), 
-         local('Segoe UI'), 
-         local('Roboto'), 
-         local('Helvetica Neue'), 
-         local('Arial'), 
-         sans-serif;
+html {
+    height: 100%;
+    overflow: hidden;
 }
 
 body {
-    font-family: 'System Font', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     color: var(--text-color);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-
-    /* SFONDO CHAT */
-    background-image: url("/static/assets/wood-bg-v2.jpg");
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
-
-    min-height: 100vh;
+    background: var(--bg-color);
+    height: 100%;
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    top: 0;
+    left: 0;
 }
 
-
-/* Layout principale */
+/* ===============================
+   APP LAYOUT — FLEX COLUMN, NO FIXED
+   =============================== */
 #genesi-app {
     position: relative;
     z-index: 1;
-
-    height: 100vh;
+    height: var(--app-height);
     display: flex;
     flex-direction: column;
     max-width: 800px;
     margin: 0 auto;
-    padding: 2rem 1.5rem;
+    overflow: hidden;
 
-    /* 🔥 SFONDO UNICO DELLA CHAT */
-    background-image: url("/static/assets/wood-bg.jpg");
+    background-image: url("/static/assets/wood-bg-v2.jpg");
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
 }
 
-html, body {
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    background: #0a0a0f;
-}
-
-
-
-/* Presence */
+/* ===============================
+   PRESENCE HEADER
+   =============================== */
 #presence {
+    flex-shrink: 0;
     opacity: 0.7;
     text-align: center;
-    margin-bottom: 4rem;
+    padding: 1.5rem 1rem 1rem;
     transition: var(--transition);
 }
 
@@ -86,70 +72,67 @@ html, body {
     font-style: italic;
     letter-spacing: 0.02em;
     color: rgba(255, 255, 245, 0.75);
-
-    /* 🔥 QUESTO RISOLVE TUTTO */
     max-width: 22ch;
     margin: 0 auto;
     line-height: 1.4;
-    text-align: center;
-    white-space: normal;
 }
 
-/* Dialogue */
+/* ===============================
+   DIALOGUE — SCROLL AREA
+   =============================== */
 #dialogue {
-    flex: 1;
+    flex: 1 1 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow-y: auto;
-    padding: 1rem 0;
-    min-height: 0;
-    scroll-behavior: smooth;
+    overflow-x: hidden;
+    padding: 0.5rem 0;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
 }
 
+/* ===============================
+   MESSAGES
+   =============================== */
 .message {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     line-height: 1.5;
-
-    /* 🔥 QUESTE SONO LE CHIAVI */
     width: fit-content;
-    max-width: 50%;
-
-    padding: 0.8rem 1.1rem;
-    margin: 0.4rem 0.8rem;
-
-    border-radius: 1.3rem;
+    max-width: 75%;
+    padding: 0.7rem 1rem;
+    margin: 0.25rem 0.8rem;
+    border-radius: 1.2rem;
     position: relative;
-
     opacity: 0;
-    animation: fadeIn 0.3s ease-out forwards;
-    transition: all 0.2s ease;
-
+    animation: fadeIn 0.25s ease-out forwards;
     word-wrap: break-word;
+    overflow-wrap: break-word;
     white-space: pre-wrap;
 }
-
 
 .message.genesi {
     align-self: flex-start;
     background: #0066CC;
     color: white;
-    border-bottom-left-radius: 0.3rem;
+    border-bottom-left-radius: 0.25rem;
 }
 
 .message.user {
     align-self: flex-end;
     background: rgba(255, 255, 255, 0.15);
     color: white;
-    border-bottom-right-radius: 0.3rem;
+    border-bottom-right-radius: 0.25rem;
 }
 
-
-/* Status */
+/* ===============================
+   STATUS
+   =============================== */
 #status {
+    flex-shrink: 0;
     font-size: 0.8rem;
     text-align: center;
-    margin: 1rem 0;
+    padding: 0.3rem 0;
     color: var(--text-muted);
     opacity: 0;
     transition: opacity 0.3s ease;
@@ -159,60 +142,52 @@ html, body {
     opacity: 0.5;
 }
 
-/* Input container */
+/* ===============================
+   INPUT AREA — STAYS AT BOTTOM VIA FLEX
+   =============================== */
+#chat-form {
+    flex-shrink: 0;
+    padding: 0.4rem 0.6rem;
+    padding-bottom: calc(0.4rem + env(safe-area-inset-bottom, 0px));
+}
+
 #input-container {
-    position: fixed;
-    bottom: env(safe-area-inset-bottom, 1rem);
-    left: 50%;
-    transform: translateX(-50%);
-    width: 90%;
-    max-width: 600px;
     background: rgba(20, 20, 30, 0.95);
     backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border-radius: 1.5rem;
-    padding: 0.6rem 1rem;
+    padding: 0.5rem 0.8rem;
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    gap: 0.5rem;
+    box-shadow: 0 -2px 20px rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    transition: all 0.3s ease;
-    pointer-events: auto;
-    will-change: transform;
-    z-index: 1000;
 }
 
-#input-container button {
-    pointer-events: auto;
-    cursor: pointer;
-    z-index: 2;
-}
-
-#input-container::before,
-#input-container::after {
-    pointer-events: none;
-}
-
-/* Plus button */
+/* ===============================
+   PLUS BUTTON
+   =============================== */
 #plus-button {
     order: 1;
-    width: 2.5rem;
-    height: 2.5rem;
-    opacity: 1; /* 🔧 visibile come gli altri */
-    background: rgba(255, 255, 255, 0.08); /* 🔧 leggermente più presente */
-    border: 1px solid rgba(255, 255, 255, 0.25); /* 🔧 contorno leggibile */
+    flex-shrink: 0;
+    width: 2.2rem;
+    height: 2.2rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.25);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    pointer-events: auto;
     cursor: pointer;
     transition: var(--transition);
 }
 
 #plus-button svg {
-    stroke: rgba(255, 255, 255, 0.85); /* 🔧 non spento */
+    width: 15px;
+    height: 15px;
+    stroke: rgba(255, 255, 255, 0.85);
     stroke-width: 2;
+    fill: none;
 }
 
 #plus-button:hover {
@@ -224,146 +199,89 @@ html, body {
     transform: scale(0.94);
 }
 
-
 /* ===============================
-   Text input (UX migliorata iOS / Desktop)
+   TEXT INPUT
    =============================== */
-
 #text-input {
     order: 2;
-    flex-grow: 1;
+    flex: 1 1 auto;
+    min-width: 0;
     background: transparent;
     border: none;
     color: var(--text-color);
     font-size: 1rem;
-    padding: 0.75rem 0;
+    padding: 0.6rem 0;
     outline: none;
     caret-color: #4da3ff;
     -webkit-appearance: none;
     appearance: none;
-    transition: background 0.3s ease;
 }
 
-/* Placeholder */
 #text-input::placeholder {
     color: var(--text-muted);
     opacity: 0.6;
-    transition: opacity 0.25s ease;
 }
 
-/* Quando l’input è attivo */
 #text-input:focus::placeholder {
     opacity: 0.35;
 }
 
-/* Micro-feedback visivo */
-#text-input:focus {
-    background-image: linear-gradient(
-        to right,
-        rgba(77, 163, 255, 0.18),
-        rgba(77, 163, 255, 0.05)
-    );
-    background-size: 0% 100%;
-    background-repeat: no-repeat;
-    animation: inputReady 0.4s ease forwards;
-}
-
-@keyframes inputReady {
-    from { background-size: 0% 100%; }
-    to   { background-size: 100% 100%; }
-}
-
-
 /* ===============================
-   🎙️ MIC BUTTON — STATO BASE
+   MIC BUTTON
    =============================== */
-/*
-   Stato di riposo:
-   - Nessuna animazione
-   - Presenza visiva chiara ma calma
-   - Non distrae quando non è in uso
-*/
 #mic-button {
     order: 3;
-    margin-left: auto;
-
-    width: 2.5rem;
-    height: 2.5rem;
+    flex-shrink: 0;
+    width: 2.2rem;
+    height: 2.2rem;
     border-radius: 50%;
-
     display: flex;
     align-items: center;
     justify-content: center;
-
     cursor: pointer;
-    pointer-events: auto;
-
     background: rgba(100, 120, 200, 0.14);
     border: 1px solid rgba(255, 255, 255, 0.28);
-
-    transition: 
-        background 0.25s ease,
-        border-color 0.25s ease,
-        transform 0.15s ease;
-
-    /* 🔒 IMPORTANTISSIMO:
-       nessuna animazione nello stato base */
+    transition: background 0.25s ease, border-color 0.25s ease, transform 0.15s ease;
     animation: none;
 }
 
-/* Icona mic */
 #mic-button svg {
+    width: 15px;
+    height: 15px;
     stroke: rgba(255, 255, 255, 0.9);
     stroke-width: 2;
+    fill: none;
 }
 
-/* Hover (desktop / mouse) */
 #mic-button:hover {
     background: rgba(100, 120, 200, 0.22);
     border-color: rgba(255, 255, 255, 0.45);
 }
 
-/* Press (feedback immediato) */
 #mic-button:active {
     transform: scale(0.94);
 }
 
-/* ===============================
-   🔴 MIC BUTTON — REGISTRAZIONE
-   =============================== */
-/*
-   Stato recording:
-   - Pulsazione visibile
-   - Comunica chiaramente “sto ascoltando”
-   - Reversibile al 100% (quando la classe sparisce)
-*/
 #mic-button.recording {
     animation: mic-pulse 1.2s infinite ease-in-out;
     background: rgba(100, 120, 255, 0.25);
     border-color: rgba(140, 160, 255, 0.8);
 }
 
-/* Animazione di registrazione */
 @keyframes mic-pulse {
-    0% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(120, 140, 255, 0.6);
-    }
-    50% {
-        transform: scale(1.08);
-        box-shadow: 0 0 0 10px rgba(120, 140, 255, 0);
-    }
-    100% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(120, 140, 255, 0);
-    }
+    0%   { transform: scale(1);    box-shadow: 0 0 0 0 rgba(120, 140, 255, 0.6); }
+    50%  { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(120, 140, 255, 0); }
+    100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(120, 140, 255, 0); }
 }
 
-/* Send button */
+/* ===============================
+   SEND BUTTON
+   =============================== */
 #send-button {
     order: 4;
-    width: 2.5rem;
-    height: 2.5rem;
+    flex-shrink: 0;
+    width: 2.2rem;
+    height: 2.2rem;
     background: rgba(100, 120, 200, 0.12);
     border: 1px solid rgba(255, 255, 255, 0.3);
     border-radius: 50%;
@@ -372,8 +290,6 @@ html, body {
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
-    pointer-events: auto;
-    opacity: 1;
 }
 
 #send-button:disabled {
@@ -382,12 +298,11 @@ html, body {
 }
 
 #send-button svg {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     stroke: rgba(255, 255, 255, 0.9);
     stroke-width: 2;
     fill: none;
-    transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
 #send-button:hover {
@@ -399,83 +314,58 @@ html, body {
     transform: scale(0.92);
 }
 
-#send-button:active svg {
-    transform: translateX(2px);
-}
-
-
-/* Recording state */
-#mic-button.recording svg {
-    opacity: 1;
-}
 /* ===============================
-   Uniforma dimensione icone (plus + mic)
-   all'aeroplanino
+   ANIMATIONS
    =============================== */
-
-#plus-button svg,
-#mic-button svg {
-    width: 16px;
-    height: 16px;
-    stroke-width: 1.8;
-}
-
-
-/* Animations */
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes pulse {
-    0% { transform: scale(1); opacity: 0.8; }
-    50% { transform: scale(1.02); opacity: 1; }
-    100% { transform: scale(1); opacity: 0.8; }
-}
-
-/* Responsive */
+/* ===============================
+   MOBILE
+   =============================== */
 @media (max-width: 600px) {
-    #genesi-app {
-        padding: 1rem 0.5rem 6rem;
-        height: calc(var(--vh, 100vh));
+    #presence {
+        padding: 0.8rem 0.5rem 0.5rem;
+    }
+
+    #presence p {
+        font-size: 1.1rem;
     }
 
     .message {
-        max-width: 80%;
-        font-size: 1rem;
-        margin: 0.4rem 0.8rem;
-        padding: 0.7rem 1rem;
+        max-width: 85%;
+        font-size: 0.95rem;
+        margin: 0.2rem 0.6rem;
+        padding: 0.6rem 0.9rem;
     }
-    
+
+    #chat-form {
+        padding: 0.3rem 0.4rem;
+        padding-bottom: calc(0.3rem + env(safe-area-inset-bottom, 0px));
+    }
+
     #input-container {
-        width: 95%;
-        bottom: env(safe-area-inset-bottom, 0.5rem);
-        padding: 0.5rem 0.8rem;
+        padding: 0.4rem 0.6rem;
+        border-radius: 1.2rem;
     }
 }
 
 /* ===============================
-   Cerchio centrale (sostituisce la mela)
+   AMBIENT GLOW
    =============================== */
-
 body::after {
     content: "";
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: 0;
-
-    background:
-        radial-gradient(
-            circle at 50% 45%,
-            rgba(255, 255, 255, 0.12) 0%,
-            rgba(255, 255, 255, 0.06) 18%,
-            rgba(255, 255, 255, 0.025) 32%,
-            rgba(255, 255, 255, 0.01) 45%,
-            rgba(0, 0, 0, 0) 60%
-        );
+    background: radial-gradient(
+        circle at 50% 45%,
+        rgba(255, 255, 255, 0.10) 0%,
+        rgba(255, 255, 255, 0.04) 20%,
+        rgba(255, 255, 255, 0.01) 40%,
+        rgba(0, 0, 0, 0) 60%
+    );
 }
-
-
-
-

@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import uvicorn
@@ -8,15 +8,14 @@ from pydantic import BaseModel
 from core.state import CognitiveState
 from api.user import router as user_router
 from api.chat import router as chat_router
-# from api.stt import router as stt_router  # ❌ STT DISABILITATO
 from api.upload import router as upload_router
-# from tts.coqui import synthesize  # ❌ VOCE DISABILITATA
+from tts.coqui import synthesize_bytes_async
 
 # ======================================================
 # Config
 # ======================================================
 
-ENABLE_TTS = False  # 🔒 BLOCCO TOTALE VOCE
+ENABLE_TTS = True
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -45,34 +44,32 @@ async def serve_index():
 
 app.include_router(user_router)
 app.include_router(chat_router)
-# app.include_router(stt_router)  # ❌ STT DISABILITATO
 app.include_router(upload_router)
 
 # ======================================================
-# TTS (DISABILITATO)
+# TTS — Edge TTS (Microsoft Neural, gratuito)
 # ======================================================
-"""
+
 @app.post("/tts")
 async def text_to_speech(request: TTSRequest):
-    
-    Endpoint TTS TEMPORANEAMENTE DISABILITATO.
-    Ritorna sempre TTS off, senza errori.
-
     if not ENABLE_TTS:
-        return JSONResponse(
-            status_code=200,
-            content={
-                "enabled": False,
-                "message": "TTS temporaneamente disabilitato"
-            }
-        )
+        return JSONResponse(status_code=200, content={"enabled": False})
 
-    # --- codice futuro (non eseguito) ---
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="TTS disabilitato"
-    )
-"""
+    text = (request.text or "").strip()
+    if not text:
+        return JSONResponse(status_code=400, content={"error": "Testo vuoto"})
+
+    try:
+        audio_bytes = await synthesize_bytes_async(text)
+        return Response(
+            content=audio_bytes,
+            media_type="audio/mpeg",
+            headers={"Content-Disposition": "inline"}
+        )
+    except Exception as e:
+        print(f"[TTS] error: {e}", flush=True)
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 # ======================================================
 # State
 # ======================================================

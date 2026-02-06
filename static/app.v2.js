@@ -1,14 +1,10 @@
 // ===============================
-// Stati dell'applicazione
+// STATES
 // ===============================
-const STATES = {
-  IDLE: 'idle',
-  THINKING: 'thinking',
-  RECORDING: 'recording'
-};
+const STATES = { IDLE: 'idle', THINKING: 'thinking', RECORDING: 'recording' };
 
 // ===============================
-// DOM Elements
+// DOM
 // ===============================
 const app = document.getElementById('genesi-app');
 const dialogue = document.getElementById('dialogue');
@@ -16,27 +12,115 @@ const textInput = document.getElementById('text-input');
 const sendButton = document.getElementById('send-button');
 const micButton = document.getElementById('mic-button');
 const plusButton = document.getElementById('plus-button');
-const inputContainer = document.getElementById('input-container');
 const chatForm = document.getElementById('chat-form');
 
 // ===============================
-// 📱 iOS Safari Auto-scroll ROBUSTO
+// VIEWPORT HEIGHT — iOS KEYBOARD FIX
 // ===============================
-function scrollToBottom(force = false) {
-  const scroll = () => {
+// iOS Safari: 100vh doesn't shrink when keyboard opens.
+// We track visualViewport.height and set --app-height.
+// The CSS flex layout then naturally shrinks #dialogue.
+
+function updateAppHeight() {
+  const h = window.visualViewport
+    ? window.visualViewport.height
+    : window.innerHeight;
+  document.documentElement.style.setProperty('--app-height', h + 'px');
+}
+
+updateAppHeight();
+
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    updateAppHeight();
+    // After keyboard open/close, scroll to bottom if user was near bottom
+    if (isNearBottom()) {
+      requestAnimationFrame(() => scrollToBottom());
+    }
+  });
+  window.visualViewport.addEventListener('scroll', updateAppHeight);
+} else {
+  window.addEventListener('resize', updateAppHeight);
+}
+
+// ===============================
+// SMART AUTOSCROLL
+// ===============================
+// Only auto-scroll if user is near the bottom.
+// If user scrolled up to read history, don't force them down.
+
+function isNearBottom(threshold = 80) {
+  const gap = dialogue.scrollHeight - dialogue.scrollTop - dialogue.clientHeight;
+  return gap < threshold;
+}
+
+function scrollToBottom() {
+  dialogue.scrollTop = dialogue.scrollHeight;
+}
+
+function scrollToBottomSmooth() {
+  // Use instant scroll — smooth causes delays on keyboard open
+  dialogue.scrollTop = dialogue.scrollHeight;
+  // Fallback for iOS rendering delay
+  requestAnimationFrame(() => {
     dialogue.scrollTop = dialogue.scrollHeight;
-  };
-  
-  requestAnimationFrame(scroll);
-  
-  if (force) {
-    setTimeout(scroll, 100);
-    setTimeout(scroll, 300);
+  });
+}
+
+// ===============================
+// TTS AUDIO
+// ===============================
+let currentAudio = null;
+let ttsEnabled = true;
+
+function stopAudio() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+    currentAudio = null;
+  }
+}
+
+async function playTTS(text) {
+  if (!ttsEnabled || !text) return;
+
+  stopAudio();
+
+  try {
+    const res = await fetch('/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+
+    if (!res.ok) return;
+
+    const blob = await res.blob();
+    if (blob.size < 100) return;
+
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    currentAudio = audio;
+
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      currentAudio = null;
+    };
+
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      currentAudio = null;
+    };
+
+    await audio.play();
+  } catch (e) {
+    console.warn('TTS playback failed:', e);
+    currentAudio = null;
   }
 }
 
 // ===============================
-// User Identity
+// USER IDENTITY
 // ===============================
 function getUserId() {
   let id = localStorage.getItem('genesi_user_id');
@@ -47,35 +131,26 @@ function getUserId() {
   return id;
 }
 
-// ===============================
-// User Bootstrap
-// ===============================
 let userIdentity = {};
 
 async function bootstrapUser() {
-  const userId = getUserId();
-
   try {
-    const res = await fetch("/user/bootstrap", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId })
+    const res = await fetch('/user/bootstrap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: getUserId() })
     });
-
-    if (!res.ok) {
-      console.error("Bootstrap failed");
-      return;
+    if (res.ok) {
+      const data = await res.json();
+      userIdentity = data.identity || {};
     }
-
-    const data = await res.json();
-    userIdentity = data.identity || {};
   } catch (e) {
-    console.error("Connection error during bootstrap", e);
+    console.error('Bootstrap error:', e);
   }
 }
 
 // ===============================
-// UI State Management
+// UI STATE
 // ===============================
 let currentState = STATES.IDLE;
 
@@ -86,105 +161,80 @@ function setState(newState) {
 }
 
 // ===============================
-// Message Handling
+// MESSAGES
 // ===============================
 function addMessage(text, sender) {
-  const messageEl = document.createElement('div');
-  messageEl.className = `message ${sender}`;
-  messageEl.textContent = text;
-  dialogue.appendChild(messageEl);
-  scrollToBottom(true);
-  return messageEl;
+  const el = document.createElement('div');
+  el.className = `message ${sender}`;
+  el.textContent = text;
+  dialogue.appendChild(el);
+
+  // Always scroll on new message (user just sent or received)
+  requestAnimationFrame(() => scrollToBottom());
+  return el;
 }
 
-function addUserMessage(text) {
-  return addMessage(text, 'user');
-}
-
-function addGenesiMessage(text) {
-  return addMessage(text, 'genesi');
-}
+function addUserMessage(text) { return addMessage(text, 'user'); }
+function addGenesiMessage(text) { return addMessage(text, 'genesi'); }
 
 // ===============================
-// API Communication
+// CHAT API
 // ===============================
 async function sendChatMessage(message) {
-  try {
-    const response = await fetch('/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: getUserId(),
-        message
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.response || "Non ho capito.";
-
-  } catch (error) {
-    console.error(error);
-    return "C'è stato un errore di connessione.";
-  }
+  const res = await fetch('/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: getUserId(), message })
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return data.response || '';
 }
 
 // ===============================
-// 📱 iOS Message Sending
+// SEND MESSAGE
 // ===============================
 async function sendMessage() {
   const text = textInput.value.trim();
   if (!text || currentState !== STATES.IDLE) return;
 
-  textInput.value = "";
-  textInput.blur();
+  textInput.value = '';
 
   addUserMessage(text);
   setState(STATES.THINKING);
 
   try {
     const reply = await sendChatMessage(text);
-    addGenesiMessage(reply);
-  } catch {
-    addGenesiMessage("C'è stato un errore. Riprova.");
+    if (reply) {
+      addGenesiMessage(reply);
+      playTTS(reply);
+    }
+  } catch (e) {
+    console.error('Chat error:', e);
+    addGenesiMessage("Errore di connessione. Riprova.");
   } finally {
     setState(STATES.IDLE);
-    scrollToBottom(true);
   }
 }
 
-chatForm.addEventListener("submit", (e) => {
+chatForm.addEventListener('submit', (e) => {
   e.preventDefault();
   sendMessage();
 });
 
 // ===============================
-// 🎙️ Microphone Recording System
+// MICROPHONE
 // ===============================
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
 let currentStream = null;
 
-// Funzione PURA per ottenere il tipo MIME supportato
 function getSupportedMimeType() {
-  const types = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/ogg;codecs=opus',
-    'audio/mp4',
-    'audio/wav'
-  ];
-  
-  for (const type of types) {
-    if (MediaRecorder.isTypeSupported(type)) {
-      return type;
-    }
+  for (const t of ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/wav']) {
+    if (MediaRecorder.isTypeSupported(t)) return t;
   }
-  return ''; // Browser default
+  return '';
 }
 
 function resetMicrophoneState() {
@@ -197,262 +247,154 @@ function resetMicrophoneState() {
 
 async function startRecording() {
   if (currentState !== STATES.IDLE || isRecording) return;
-  
+
+  // Stop any playing TTS
+  stopAudio();
+
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ 
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
-      } 
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
     });
-    
+
     currentStream = stream;
     const mimeType = getSupportedMimeType();
-    const options = mimeType ? { mimeType } : {};
-    
-    mediaRecorder = new MediaRecorder(stream, options);
+    mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
     audioChunks = [];
-    
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        audioChunks.push(event.data);
-        console.log(`Audio chunk: ${event.data.size} bytes`);
-      }
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunks.push(e.data);
     };
-    
+
     mediaRecorder.onstop = async () => {
-      // Delay critico per Windows/Chrome flush
       setTimeout(async () => {
-        if (currentStream) {
-          currentStream.getTracks().forEach(track => track.stop());
-        }
-        
+        if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+
         const blobType = mimeType || 'audio/webm';
-        const audioBlob = new Blob(audioChunks, { type: blobType });
-        
-        console.log(`Final blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
-        
+        const blob = new Blob(audioChunks, { type: blobType });
         resetMicrophoneState();
-        
-        // Verifica blob vuoto (alzo soglia sicurezza a 500 byte)
-        if (audioBlob.size < 500) {
-          console.warn(`Audio too small: ${audioBlob.size} bytes`);
+
+        if (blob.size < 500) {
           setState(STATES.IDLE);
-          // Opzionale: puoi mostrare un messaggio se vuoi, ma spesso è meglio ignorare i click accidentali
           return;
         }
-        
-        await transcribeAudio(audioBlob);
+        await transcribeAudio(blob);
       }, 200);
     };
-    
+
     mediaRecorder.start(1000);
     isRecording = true;
     setState(STATES.RECORDING);
     micButton.classList.add('recording');
-    
-  } catch (error) {
-    console.error('Microphone access denied:', error);
-    fallbackRecording();
+
+  } catch (e) {
+    console.error('Mic denied:', e);
+    setState(STATES.IDLE);
   }
 }
 
 function stopRecording() {
   if (!isRecording || !mediaRecorder) return;
-  // Non forziamo THINKING qui, aspettiamo che onstop finisca
   mediaRecorder.stop();
 }
 
-function fallbackRecording() {
-  setState(STATES.RECORDING);
-  micButton.classList.add('recording');
-  
-  setTimeout(() => {
-    micButton.classList.remove('recording');
-    setState(STATES.THINKING);
-    
-    setTimeout(() => {
-      textInput.value = "Microfono non supportato. Scrivi il messaggio.";
-      setState(STATES.IDLE);
-    }, 600);
-  }, 1500);
-}
-
-async function transcribeAudio(audioBlob) {
+async function transcribeAudio(blob) {
+  setState(STATES.THINKING);
   try {
-    const formData = new FormData();
-    const fileExtension = audioBlob.type.includes('wav') ? '.wav' : '.webm';
-    formData.append('audio', audioBlob, `recording${fileExtension}`);
-    
-    // Stato intermedio mentre invia
-    setState(STATES.THINKING);
-
-    const response = await fetch('/stt', {
-      method: 'POST',
-      body: formData
-    });
-    
-    if (!response.ok) {
-      throw new Error(`STT Error: ${response.status}`);
-    }
-    
-    const result = await response.json();
-    const transcribedText = result.text?.trim() || '';
-    
-    if (transcribedText) {
-      textInput.value = transcribedText;
+    const fd = new FormData();
+    fd.append('audio', blob, `rec${blob.type.includes('wav') ? '.wav' : '.webm'}`);
+    const res = await fetch('/stt', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(`STT ${res.status}`);
+    const result = await res.json();
+    const text = result.text?.trim() || '';
+    if (text) {
+      textInput.value = text;
       setState(STATES.IDLE);
       sendMessage();
     } else {
       setState(STATES.IDLE);
-      addGenesiMessage("Non ho capito. Riprova a parlare.");
     }
-    
-  } catch (error) {
-    console.error('STT Error:', error);
+  } catch (e) {
+    console.error('STT error:', e);
     setState(STATES.IDLE);
-    addGenesiMessage("Errore trascrizione audio. Riprova.");
   }
 }
 
 // ===============================
-// Event Listeners (FIX UNIFICATO)
+// FILE UPLOAD
 // ===============================
-
-// 1. Send Button
-sendButton.addEventListener('click', sendMessage);
-
-// 2. File Upload Function
-async function handleFileUpload() {
+function handleFileUpload() {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '*/*';
-  
+
   input.onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
-    // Mostra messaggio upload in corso
-    addGenesiMessage("Sto analizzando il file...");
+
+    const loadingMsg = addGenesiMessage("Sto analizzando il file...");
     setState(STATES.THINKING);
-    
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('user_id', getUserId());
-    
+
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('user_id', getUserId());
+
     try {
-      const response = await fetch('/upload', {
-        method: 'POST',
-        body: formData
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status}`);
-      }
-      
-      const result = await response.json();
-      
-      // Rimuovi messaggio "analizzando" e aggiungi risposta reale
-      const messages = document.querySelectorAll('.message.genesi');
-      if (messages.length > 0) {
-        messages[messages.length - 1].remove();
-      }
-      
-      // Aggiungi risposta di Genesi
-      if (result.response) {
-        addGenesiMessage(result.response);
-      } else {
-        addGenesiMessage("File ricevuto, ma non sono riuscito ad analizzarlo.");
-      }
-      
-    } catch (error) {
-      console.error('Upload error:', error);
-      // Rimuovi messaggio "analizzando" e aggiungi errore
-      const messages = document.querySelectorAll('.message.genesi');
-      if (messages.length > 0) {
-        messages[messages.length - 1].remove();
-      }
-      addGenesiMessage("Errore durante il caricamento del file. Riprova.");
+      const res = await fetch('/upload', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(`Upload ${res.status}`);
+      const result = await res.json();
+      loadingMsg.remove();
+      addGenesiMessage(result.response || "File ricevuto.");
+    } catch (e) {
+      console.error('Upload error:', e);
+      loadingMsg.remove();
+      addGenesiMessage("Errore nel caricamento. Riprova.");
     } finally {
       setState(STATES.IDLE);
     }
   };
-  
   input.click();
 }
 
-// 3. Microphone Logic Unificata
+// ===============================
+// EVENT LISTENERS
+// ===============================
+sendButton.addEventListener('click', sendMessage);
+plusButton.addEventListener('click', handleFileUpload);
+
 const handleMicToggle = (e) => {
-  // Previene comportamenti default (zoom, selezione, ecc)
-  if (e.type === 'touchstart') {
-     e.preventDefault(); 
-  }
-  
-  if (isRecording) {
-    stopRecording();
-  } else {
-    startRecording();
-  }
+  if (e.type === 'touchstart') e.preventDefault();
+  isRecording ? stopRecording() : startRecording();
 };
 
-// Rilevamento capacità Touch
 const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
 if (isTouchDevice) {
-  // Mobile / Tablet: Usa touchstart per reattività istantanea
   micButton.addEventListener('touchstart', handleMicToggle, { passive: false });
 } else {
-  // Desktop: Usa click per stabilità (evita conflitti mousedown su Windows)
   micButton.addEventListener('click', handleMicToggle);
 }
 
-// 4. Plus Button Upload
-plusButton.addEventListener('click', handleFileUpload);
-
-// 5. Prevenzione chiusura accidentale registrazione (solo mobile)
 if (isTouchDevice) {
-    document.addEventListener('touchend', (e) => {
-        if (e.target !== micButton && isRecording) {
-            stopRecording();
-        }
-    });
-}
-
-// ===============================
-// 📱 iOS Safari Keyboard & Viewport FIX
-// ===============================
-let viewportHeight = window.innerHeight;
-
-if (window.visualViewport) {
-  window.visualViewport.addEventListener("resize", () => {
-    const newHeight = window.visualViewport.height;
-    document.documentElement.style.setProperty("--vh", `${newHeight}px`);
-    
-    if (Math.abs(newHeight - viewportHeight) > 100) {
-      setTimeout(() => scrollToBottom(true), 150);
-    }
-    viewportHeight = newHeight;
-  });
-} else {
-  window.addEventListener("resize", () => {
-    document.documentElement.style.setProperty("--vh", `${window.innerHeight}px`);
-    setTimeout(() => scrollToBottom(true), 150);
+  document.addEventListener('touchend', (e) => {
+    if (e.target !== micButton && isRecording) stopRecording();
   });
 }
 
-textInput.addEventListener("focus", () => {
-  setTimeout(() => scrollToBottom(true), 200);
-});
-
-textInput.addEventListener("blur", () => {
-  setTimeout(() => scrollToBottom(true), 200);
+// ===============================
+// INPUT FOCUS — KEYBOARD HANDLING
+// ===============================
+textInput.addEventListener('focus', () => {
+  // Wait for keyboard animation to complete, then scroll
+  setTimeout(() => {
+    updateAppHeight();
+    scrollToBottom();
+  }, 300);
 });
 
 // ===============================
-// App Init
+// INIT
 // ===============================
 (async () => {
   await bootstrapUser();
-  scrollToBottom(true);
+  scrollToBottom();
 })();

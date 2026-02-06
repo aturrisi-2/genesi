@@ -1,14 +1,13 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
     <title>Genesi</title>
-    <link rel="stylesheet" href="/static/style.css?v=1">
+    <link rel="stylesheet" href="/static/style.css?v=3">
 </head>
 <body>
     <div id="genesi-app">
@@ -22,7 +21,6 @@
 
         <div id="status" aria-live="polite"></div>
 
-        <!-- 🔥 FORM OBBLIGATORIO PER iOS -->
         <form id="chat-form" autocomplete="off">
             <div id="input-container">
 
@@ -39,6 +37,7 @@
                     placeholder="Scrivi un messaggio..."
                     aria-label="Scrivi un messaggio"
                     autocomplete="off"
+                    enterkeyhint="send"
                 >
 
                 <button id="mic-button" type="button" aria-label="Usa microfono">
@@ -50,7 +49,6 @@
                     </svg>
                 </button>
 
-                <!-- 🔥 type submit -->
                 <button id="send-button" type="submit" aria-label="Invia messaggio">
                     <svg viewBox="0 0 24 24">
                         <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -62,6 +60,6 @@
         </form>
     </div>
 
-    <script src="/static/app.v2.js"></script>
+    <script src="/static/app.v2.js?v=3"></script>
 </body>
 </html>

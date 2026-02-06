@@ -1,7 +1,14 @@
+import os
 from openai import OpenAI
 from core.decision_engine import decide_response_strategy
 
-client = OpenAI()
+_client = None
+
+def _get_client():
+    global _client
+    if _client is None:
+        _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
+    return _client
 
 def safe_read_file(file_path: str) -> str:
     try:
@@ -102,7 +109,7 @@ async def route_response(file_analysis: dict, file_path: str, context: dict = No
             content = prepare_content_for_model(file_path)
             policy = get_response_policy(decision, content)
             
-            response = client.chat.completions.create(
+            response = _get_client().chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": f"Analizza il contenuto testuale fornito e rispondi in modo utile.{policy}"},
@@ -127,7 +134,7 @@ Rispondi analizzando direttamente il contenuto.
             content = prepare_content_for_model(file_path)
             policy = get_response_policy(decision, content)
             
-            response = client.chat.completions.create(
+            response = _get_client().chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": f"Analizza il codice sorgente fornito, spiegalo e suggerisci miglioramenti.{policy}"},
@@ -151,7 +158,7 @@ Analizza il codice, spiegalo e suggerisci miglioramenti.
         elif strategy == "image_analysis":
             policy = get_response_policy(decision, "")
             
-            response = client.chat.completions.create(
+            response = _get_client().chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": f"Descrivi l'immagine fornita in dettaglio.{policy}"},
@@ -170,7 +177,7 @@ Analizza il codice, spiegalo e suggerisci miglioramenti.
                     content = prepare_content_for_model_text(pdf_text)
                     policy = get_response_policy(decision, content)
                     
-                    response = client.chat.completions.create(
+                    response = _get_client().chat.completions.create(
                         model=model,
                         messages=[
                             {"role": "system", "content": f"Analizza il documento e fornisci un riassunto o le informazioni richieste.{policy}"},
@@ -195,7 +202,7 @@ Rispondi analizzando direttamente il contenuto del documento.
                     # PDF without text (scanned)
                     policy = get_response_policy(decision, "")
                     
-                    response = client.chat.completions.create(
+                    response = _get_client().chat.completions.create(
                         model=model,
                         messages=[
                             {"role": "system", "content": f"Analizza il documento e fornisci un riassunto o le informazioni richieste.{policy}"},
@@ -220,7 +227,7 @@ Scegli l'opzione che preferisci o fornisci dettagli sul contenuto.
                 content = prepare_content_for_model(file_path)
                 policy = get_response_policy(decision, content)
                 
-                response = client.chat.completions.create(
+                response = _get_client().chat.completions.create(
                     model=model,
                     messages=[
                         {"role": "system", "content": f"Analizza il documento e fornisci un riassunto o le informazioni richieste.{policy}"},
