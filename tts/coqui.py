@@ -1,68 +1,152 @@
 import asyncio
 import uuid
 import io
+import re
 from pathlib import Path
 
 import edge_tts
 
 
-# Voce: Isabella — italiana, femminile, calda, naturale
+# ===============================
+# VOICE CONFIG
+# ===============================
 VOICE = "it-IT-IsabellaNeural"
-
-# Rate e pitch per voce calma e rassicurante
-RATE = "-5%"
-PITCH = "-2Hz"
 
 OUTPUT_DIR = Path("data/tts_cache")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+# ===============================
+# EMOTIONAL DETECTION
+# ===============================
+_EMO_HEAVY = frozenset({
+    "dolore", "paura", "ansia", "triste", "piango", "solo", "sola",
+    "perso", "persa", "male", "morto", "morta", "morte", "soffro",
+    "soffrire", "abbandono", "vuoto", "buio", "stanco", "stanca",
+    "pesante", "difficile", "fatica", "non ce la faccio", "non riesco",
+    "aiuto", "disperato", "disperata", "panico", "terrore", "angoscia",
+    "lacrime", "piangere", "ferita", "ferito", "depresso", "depressa",
+})
 
-async def _synthesize_async(text: str) -> bytes:
-    """
-    Genera audio MP3 da testo usando Edge TTS (Microsoft Neural).
-    Ritorna i bytes MP3 direttamente.
-    """
-    communicate = edge_tts.Communicate(
-        text=text,
-        voice=VOICE,
-        rate=RATE,
-        pitch=PITCH
+_EMO_LIGHT = frozenset({
+    "bene", "felice", "contento", "contenta", "bello", "bella",
+    "ridere", "gioia", "grazie", "fantastico", "fantastica", "forte",
+    "energia", "sorriso", "amore", "sereno", "serena", "divertente",
+    "ridendo", "allegro", "allegra",
+})
+
+
+def _detect_emotional_weight(text: str) -> float:
+    low = text.lower()
+    heavy = sum(1 for w in _EMO_HEAVY if w in low)
+    light = sum(1 for w in _EMO_LIGHT if w in low)
+    if heavy >= 2:
+        return 0.9
+    if heavy >= 1:
+        return 0.7
+    if light >= 2:
+        return 0.2
+    if light >= 1:
+        return 0.35
+    return 0.5
+
+
+# ===============================
+# TEXT PREPROCESSING
+# ===============================
+def _preprocess(text: str) -> str:
+    text = re.sub(r"\s+", " ", text.strip())
+    # Breathing comma before conjunctions after long words
+    text = re.sub(
+        r"(\w{12,})\s+(e|ma|però|perché|quando|dove|come)\s",
+        r"\1, \2 ",
+        text,
     )
+    # Period → ellipsis only for sentences >20 chars (creates natural pause)
+    def _period_to_ellipsis(m):
+        before, after = m.group(1), m.group(2)
+        if len(before) > 20:
+            return before + "... " + after
+        return before + ". " + after
 
-    buffer = io.BytesIO()
-    async for chunk in communicate.stream():
+    text = re.sub(r"([^.]{5,})\.\s+(\S)", _period_to_ellipsis, text)
+    # Soften exclamation marks
+    text = text.replace("!", ".")
+    return text.strip()
+
+
+def _split_sentences(text: str) -> list:
+    parts = re.split(r"(?<=\.\.\.)\s+|(?<=[.!?])\s+", text)
+    return [p.strip() for p in parts if p.strip() and len(p.strip()) > 2]
+
+
+# ===============================
+# PROSODY — MICRO-VARIED PER SEGMENT
+# ===============================
+_VARIATION_CYCLE = [0, -1.5, +1, -0.5, +0.8, -1]
+
+
+def _format_val(val: float, suffix: str, lo: int, hi: int) -> str:
+    v = max(lo, min(hi, int(round(val))))
+    if v == 0:
+        v = -1
+    return f"{v}{suffix}"
+
+
+def _get_prosody(emo: float, idx: int) -> tuple:
+    # Emotional → slower, deeper. Light → slightly faster, brighter.
+    base_rate = -4 - (emo * 6)    # light≈-5, neutral≈-7, heavy≈-9
+    base_pitch = -1 - (emo * 2)   # light≈-1, neutral≈-2, heavy≈-3
+    v = _VARIATION_CYCLE[idx % len(_VARIATION_CYCLE)]
+    rate = base_rate + v
+    pitch = base_pitch + (v * 0.3)
+    return _format_val(rate, "%", -14, -2), _format_val(pitch, "Hz", -5, -1)
+
+
+# ===============================
+# SEGMENT SYNTHESIS
+# ===============================
+async def _synth_segment(text: str, rate: str, pitch: str) -> bytes:
+    c = edge_tts.Communicate(text=text, voice=VOICE, rate=rate, pitch=pitch)
+    buf = io.BytesIO()
+    async for chunk in c.stream():
         if chunk["type"] == "audio":
-            buffer.write(chunk["data"])
+            buf.write(chunk["data"])
+    return buf.getvalue()
 
-    return buffer.getvalue()
+
+# ===============================
+# MAIN PIPELINE
+# ===============================
+async def _synthesize_async(text: str) -> bytes:
+    emo = _detect_emotional_weight(text)
+    processed = _preprocess(text)
+    sentences = _split_sentences(processed)
+
+    if not sentences:
+        sentences = [processed]
+
+    all_audio = io.BytesIO()
+    for i, sent in enumerate(sentences):
+        rate, pitch = _get_prosody(emo, i)
+        audio = await _synth_segment(sent, rate, pitch)
+        all_audio.write(audio)
+
+    return all_audio.getvalue()
 
 
 def synthesize_bytes(text: str) -> bytes:
-    """
-    Sincrono wrapper — ritorna bytes MP3.
-    Usato dall'endpoint FastAPI.
-    """
     if not text or not isinstance(text, str) or not text.strip():
         raise ValueError("Testo vuoto")
-
     return asyncio.run(_synthesize_async(text.strip()))
 
 
 async def synthesize_bytes_async(text: str) -> bytes:
-    """
-    Async wrapper — ritorna bytes MP3.
-    Usato dall'endpoint FastAPI async.
-    """
     if not text or not isinstance(text, str) or not text.strip():
         raise ValueError("Testo vuoto")
-
     return await _synthesize_async(text.strip())
 
 
 def synthesize(text: str) -> str:
-    """
-    Compatibilità: genera file MP3 e ritorna il path.
-    """
     audio_bytes = synthesize_bytes(text)
     out_file = OUTPUT_DIR / f"tts_{uuid.uuid4().hex}.mp3"
     out_file.write_bytes(audio_bytes)
