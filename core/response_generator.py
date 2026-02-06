@@ -26,21 +26,26 @@ class ResponseGenerator:
             prompt = self._build_document_prompt(
                 user_message, document_context, recent_memories, relevant_memories
             )
-            model = "gpt-4o"
+
+        # ===============================
+        # DUAL BRAIN ROUTING
+        # ===============================
+        elif intent.get("brain_mode") == "fatti":
+            # Genesi-Fatti: solo il messaggio, niente memoria/tono/contesto relazionale
+            prompt = self._build_facts_prompt(user_message)
 
         else:
+            # Genesi-Relazione: prompt completo con memoria, tono, contesto
             prompt = self._build_conversation_prompt(
                 user_message, cognitive_state, recent_memories,
                 relevant_memories, tone, intent
             )
-            model = self._select_model(intent)
 
         # ===============================
-        # CHIAMATA LLM
+        # CHIAMATA LLM (il routing modello avviene in llm.py)
         # ===============================
         response = llm_generate({
             "prompt": prompt,
-            "model": model,
             "intent": intent,
             "tone": tone
         })
@@ -210,16 +215,7 @@ class ResponseGenerator:
         return " ".join(parts) if parts else ""
 
     # ===============================
-    # SCELTA MODELLO
+    # PROMPT FATTUALE (GENESI-FATTI)
     # ===============================
-    def _select_model(self, intent: Dict) -> str:
-        emotional_weight = intent.get("emotional_weight", 0.3)
-        focus = intent.get("focus", "")
-
-        if emotional_weight >= 0.5 or focus in ("presenza", "connessione", "identità"):
-            return "gpt-4o"
-
-        if focus in ("tecnico", "spiegazione", "analisi"):
-            return "gpt-4o-mini"
-
-        return "gpt-4o"
+    def _build_facts_prompt(self, user_message: str) -> str:
+        return f"DOMANDA:\n{user_message}\n\nRispondi con informazioni accurate. Solo il testo della risposta."

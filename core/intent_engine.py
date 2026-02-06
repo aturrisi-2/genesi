@@ -48,6 +48,37 @@ class IntentEngine:
         "piango", "ho pianto", "voglio piangere"
     ]
 
+    # ===============================
+    # DUAL BRAIN — FACTUAL SIGNALS
+    # ===============================
+    # Se il messaggio contiene questi pattern → Genesi-Fatti (gpt-4o-mini)
+    FACTUAL_KEYWORDS = [
+        "meteo", "tempo fa", "temperatura", "previsioni", "piove", "pioverà",
+        "notizie", "notizia", "news", "cronaca", "attualità",
+        "quanto costa", "quanto pesa", "quanto dura", "quanto è",
+        "quando è", "quando nasce", "quando muore", "quando inizia", "quando finisce",
+        "dove si trova", "dove è", "dov'è",
+        "come funziona", "come si fa", "come si usa",
+        "cos'è", "cos è", "cosa significa", "che cos'è", "che cos è", "che significa",
+        "farmaco", "farmaci", "medicina", "medicinale", "ibuprofene", "tachipirina",
+        "paracetamolo", "antibiotico", "antibiotici", "dose", "dosaggio",
+        "sintomo", "sintomi", "diagnosi", "effetti collaterali",
+        "febbre", "mal di testa", "mal di stomaco", "pressione",
+        "ricetta", "ingredienti", "calorie", "proteine",
+        "capitale", "popolazione", "distanza", "altitudine",
+        "chi è", "chi era", "chi ha inventato", "chi ha scritto",
+        "traduzione", "traduci", "tradurre",
+        "calcola", "calcolo", "formula", "equazione",
+        "legge", "normativa", "codice civile", "codice penale",
+    ]
+
+    FACTUAL_PATTERNS = [
+        re.compile(r"\b(?:quanto|quanta|quanti|quante)\b.*\b(?:cost|pes|dur|è|sono)\b", re.I),
+        re.compile(r"\b(?:quando|dove|come)\b.*\b(?:è|sono|si|nasce|muore|funziona|trova)\b", re.I),
+        re.compile(r"\b(?:che|cos['']?è|cosa significa)\b", re.I),
+        re.compile(r"\b(?:posso prendere|si può prendere|fa male|fa bene)\b.*\b(?:con|se|la|il)\b", re.I),
+    ]
+
     def decide(
         self,
         user_message: str,
@@ -124,6 +155,27 @@ class IntentEngine:
             intent["focus"] = "presenza"
             intent["use_memory"] = True
             print(f"[INTENT] emotional_signal_detected", flush=True)
+
+        # ===============================
+        # DUAL BRAIN ROUTING
+        # ===============================
+        has_factual = (
+            any(kw in msg_lower for kw in self.FACTUAL_KEYWORDS)
+            or any(p.search(msg) for p in self.FACTUAL_PATTERNS)
+        )
+
+        if has_emotion and has_factual:
+            # Misto: emozione + fatto → fatti (il fatto domina, l'emozione è contesto)
+            intent["brain_mode"] = "fatti"
+            intent["emotional_context"] = True
+            print(f"[INTENT] brain_mode=fatti (misto: emozione+fatto)", flush=True)
+        elif has_factual:
+            intent["brain_mode"] = "fatti"
+            intent["emotional_context"] = False
+            print(f"[INTENT] brain_mode=fatti", flush=True)
+        else:
+            intent["brain_mode"] = "relazione"
+            print(f"[INTENT] brain_mode=relazione", flush=True)
 
         # ===============================
         # CONTESTO DALLA MEMORIA

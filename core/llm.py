@@ -83,6 +83,38 @@ Domande — REGOLA FERREA:
 """
 
 
+# ===============================
+# IDENTITÀ GENESI-FATTI
+# ===============================
+# Motore informativo. Nessuna emozione. Nessuna relazione.
+
+GENESI_FACTS = """Sei un motore informativo integrato in Genesi.
+
+Il tuo ruolo:
+- Fornire informazioni accurate, aggiornate e verificabili.
+- Linguaggio chiaro, sobrio, preciso. Italiano corretto ma non freddo.
+- Rispondi in modo diretto e utile, senza giri di parole.
+
+Cosa NON fai MAI:
+- Non usi tono emotivo, empatico o consolatorio.
+- Non dici "capisco", "mi dispiace", "sono qui per te".
+- Non fai compagnia. Non consoli. Non fai l'amico.
+- Non aggiungi frasi relazionali prima o dopo l'informazione.
+- Non inventi dati. Se non sei sicuro, dillo chiaramente.
+
+Cosa FAI:
+- Rispondi al punto con l'informazione richiesta.
+- Se è una domanda medica, sii prudente e suggerisci di consultare un medico.
+- Se è una domanda fattuale, dai la risposta più accurata possibile.
+- Usa un tono neutro ma non robotico. Chiaro, come un buon articolo.
+
+Formato:
+- Niente elenchi puntati salvo quando servono davvero.
+- Frasi brevi e informative. Non prolisso.
+- Solo il testo della risposta, niente altro.
+"""
+
+
 def generate_response(payload: dict) -> str:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -93,30 +125,70 @@ def generate_response(payload: dict) -> str:
     prompt = payload["prompt"]
     tone = payload.get("tone")
     intent = payload.get("intent", {})
-    model = payload.get("model", "gpt-4o")
+    brain_mode = intent.get("brain_mode", "relazione")
 
-    print(f"[LLM] model={model}", flush=True)
+    # ===============================
+    # DUAL BRAIN DISPATCH
+    # ===============================
+    if brain_mode == "fatti":
+        return _generate_facts(client, prompt, intent)
+    else:
+        return _generate_relazione(client, prompt, intent, tone)
+
+
+def _generate_facts(client, prompt: str, intent: dict) -> str:
+    """Genesi-Fatti: gpt-4o-mini, prompt informativo, nessuna memoria relazionale."""
+    model = "gpt-4o-mini"
+
+    system_prompt = GENESI_FACTS
+    if intent.get("emotional_context"):
+        system_prompt += (
+            "\nL'utente sembra preoccupato o emotivo riguardo a questo tema. "
+            "Rispondi comunque in modo informativo e fattuale, senza consolare. "
+            "Puoi aggiungere una breve nota di prudenza se appropriato.\n"
+        )
+
+    print(f"[LLM] brain=FATTI model={model}", flush=True)
     print(f"[LLM] prompt_preview='{prompt[:400]}...'", flush=True)
 
-    # ---- SYSTEM PROMPT: IDENTITÀ + MODULAZIONE TONO ----
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt}
+        ],
+        max_tokens=500,
+        temperature=0.3,
+        presence_penalty=0.0,
+        frequency_penalty=0.0
+    )
+
+    raw = response.choices[0].message.content.strip()
+    print(f"[LLM] facts_response='{raw[:300]}...'", flush=True)
+    return raw
+
+
+def _generate_relazione(client, prompt: str, intent: dict, tone) -> str:
+    """Genesi-Relazione: gpt-4o, prompt identitario, memoria e tono."""
+    model = "gpt-4o"
+
     system_prompt = GENESI_IDENTITY
 
-    # Modulazione tono basata su stato emotivo rilevato
     emotional_weight = intent.get("emotional_weight", 0.3)
-
     if emotional_weight > 0.6:
         system_prompt += "\nL'utente sta attraversando un momento emotivamente intenso. Sii presente, non analitico.\n"
-    
+
     if tone:
         empathy = getattr(tone, "empathy", 0.5)
         directness = getattr(tone, "directness", 0.5)
-        
         if empathy > 0.7:
             system_prompt += "Il tono della conversazione è emotivo. Rispondi con calore.\n"
         if directness > 0.7:
             system_prompt += "L'utente preferisce risposte dirette. Vai al punto.\n"
 
-    # ---- CHIAMATA LLM ----
+    print(f"[LLM] brain=RELAZIONE model={model}", flush=True)
+    print(f"[LLM] prompt_preview='{prompt[:400]}...'", flush=True)
+
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -130,6 +202,5 @@ def generate_response(payload: dict) -> str:
     )
 
     raw = response.choices[0].message.content.strip()
-    print(f"[LLM] response='{raw[:300]}...'", flush=True)
-
+    print(f"[LLM] relazione_response='{raw[:300]}...'", flush=True)
     return raw
