@@ -53,8 +53,21 @@ def _detect_emotional_weight(text: str) -> float:
 # ===============================
 # TEXT PREPROCESSING
 # ===============================
+def _soften_closings(text: str) -> str:
+    # "eh" / "eh." / ", eh." as final token → trailing ellipsis
+    text = re.sub(r",?\s*eh\.?\s*$", "… eh…", text)
+    # "dai." / "sai." / "ecco." as bare closing → ellipsis
+    text = re.sub(r",?\s*(dai|sai|ecco)\.?\s*$", r"… \1…", text)
+    # Trailing bare period after short emotional word → ellipsis
+    text = re.sub(r"(?:^|\s)(già|bene|vero|insomma)\.\s*$", r" \1…", text)
+    text = text.strip()
+    return text
+
+
 def _preprocess(text: str) -> str:
     text = re.sub(r"\s+", " ", text.strip())
+    # Soften emotional closings before any other transform
+    text = _soften_closings(text)
     # Breathing comma before conjunctions after long words
     text = re.sub(
         r"(\w{12,})\s+(e|ma|però|perché|quando|dove|come)\s",
