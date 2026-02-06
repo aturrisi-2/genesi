@@ -233,7 +233,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
             # RIPRISTINO: Passa SEMPRE le memorie recuperate
             # La decisione su usarle spetta al prompt, non al bypass
             generator = ResponseGenerator()
-            response_text = generator.generate_response(
+            response_text = await generator.generate_response(
                 user_message=request.message,
                 cognitive_state=state,
                 recent_memories=recent_memories,  # SEMPRE passato

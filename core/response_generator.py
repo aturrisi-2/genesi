@@ -1,4 +1,5 @@
 from core.llm import generate_response as llm_generate
+from core.tools import resolve_tools
 from typing import Optional, Dict, List
 import json
 from datetime import datetime
@@ -6,7 +7,7 @@ from datetime import datetime
 
 class ResponseGenerator:
 
-    def generate_response(
+    async def generate_response(
         self,
         user_message: str,
         cognitive_state,
@@ -28,11 +29,13 @@ class ResponseGenerator:
             )
 
         # ===============================
-        # DUAL BRAIN ROUTING
+        # DUAL BRAIN ROUTING — CON TOOLS API
         # ===============================
         elif intent.get("brain_mode") == "fatti":
-            # Genesi-Fatti: solo il messaggio, niente memoria/tono/contesto relazionale
-            prompt = self._build_facts_prompt(user_message)
+            # 1. Chiama API esterne per dati reali
+            tool_result = await resolve_tools(user_message)
+            # 2. Costruisci prompt arricchito con dati reali
+            prompt = self._build_facts_prompt(user_message, tool_result)
 
         else:
             # Genesi-Relazione: prompt completo con memoria, tono, contesto
@@ -217,5 +220,114 @@ class ResponseGenerator:
     # ===============================
     # PROMPT FATTUALE (GENESI-FATTI)
     # ===============================
-    def _build_facts_prompt(self, user_message: str) -> str:
-        return f"DOMANDA:\n{user_message}\n\nRispondi con informazioni accurate. Solo il testo della risposta."
+    def _build_facts_prompt(self, user_message: str, tool_result: dict = None) -> str:
+        sections = []
+
+        if tool_result and tool_result.get("data") and not tool_result["data"].get("error"):
+            tool_type = tool_result.get("tool_type", "unknown")
+            data = tool_result["data"]
+
+            if tool_type == "meteo":
+                sections.append(self._format_weather_data(data))
+            elif tool_type == "news":
+                sections.append(self._format_news_data(data))
+            elif tool_type == "economy":
+                sections.append(self._format_economy_data(data))
+            elif tool_type == "medical":
+                sections.append(self._format_medical_data(data))
+
+            print(f"[FATTI][LLM_SYNTHESIS] tool={tool_type} data_injected=True", flush=True)
+        else:
+            tool_type = tool_result.get("tool_type", "none") if tool_result else "none"
+            print(f"[FATTI][LLM_SYNTHESIS] tool={tool_type} (no real data, solo LLM knowledge)", flush=True)
+
+        sections.append(f"DOMANDA DELL'UTENTE:\n{user_message}")
+
+        if tool_result and tool_result.get("data") and not tool_result["data"].get("error"):
+            sections.append(
+                "ISTRUZIONE: Usa i DATI REALI forniti sopra per rispondere. "
+                "Sintetizza in modo chiaro e naturale in italiano. "
+                "Non inventare dati aggiuntivi. Solo il testo della risposta."
+            )
+        else:
+            sections.append(
+                "Rispondi con le informazioni più accurate che conosci. "
+                "Solo il testo della risposta."
+            )
+
+        return "\n\n".join(sections)
+
+    def _format_weather_data(self, data: dict) -> str:
+        lines = ["DATI METEO REALI (fonte: OpenWeatherMap):"]
+        city = data.get("city", "")
+        current = data.get("current", {})
+        if current:
+            lines.append(f"Città: {city}")
+            lines.append(f"Ora: {current.get('description', '')}")
+            lines.append(f"Temperatura: {current.get('temp', '')}°C (percepita {current.get('feels_like', '')}°C)")
+            lines.append(f"Min/Max: {current.get('temp_min', '')}°C / {current.get('temp_max', '')}°C")
+            lines.append(f"Umidità: {current.get('humidity', '')}%")
+            lines.append(f"Vento: {current.get('wind_speed', '')} m/s")
+
+        forecast = data.get("forecast", [])
+        if forecast:
+            lines.append("\nPrevisioni prossime ore:")
+            for f in forecast[:6]:
+                lines.append(f"  {f.get('datetime', '')}: {f.get('temp', '')}°C, {f.get('description', '')}, umidità {f.get('humidity', '')}%")
+
+        return "\n".join(lines)
+
+    def _format_news_data(self, data: dict) -> str:
+        lines = [f"NOTIZIE REALI (fonte: GNews, aggiornate a {data.get('timestamp', 'ora')}):"]
+        for art in data.get("articles", []):
+            lines.append(f"- {art.get('title', '')}")
+            desc = art.get('description', '')
+            if desc:
+                lines.append(f"  {desc[:200]}")
+            source = art.get('source', '')
+            if source:
+                lines.append(f"  (fonte: {source})")
+        return "\n".join(lines)
+
+    def _format_economy_data(self, data: dict) -> str:
+        lines = ["DATI ECONOMICI REALI:"]
+
+        rates = data.get("exchange_rates", {})
+        if rates:
+            lines.append("Tassi di cambio (ECB):")
+            for pair, val in rates.items():
+                lines.append(f"  {pair}: {val}")
+
+        gdp = data.get("italy_gdp_growth", [])
+        if gdp:
+            lines.append("Crescita PIL Italia (World Bank):")
+            for entry in gdp:
+                lines.append(f"  {entry['year']}: {entry['gdp_growth_pct']}%")
+
+        unemp = data.get("italy_unemployment", [])
+        if unemp:
+            lines.append("Disoccupazione Italia (Eurostat):")
+            for entry in unemp:
+                lines.append(f"  {entry['period']}: {entry['rate_pct']}%")
+
+        news = data.get("economic_news", [])
+        if news:
+            lines.append("Notizie economiche recenti:")
+            for art in news:
+                lines.append(f"  - {art.get('title', '')}")
+
+        return "\n".join(lines)
+
+    def _format_medical_data(self, data: dict) -> str:
+        lines = ["INFORMAZIONI MEDICHE (fonti istituzionali):"]
+
+        for info in data.get("medical_info", []):
+            lines.append(f"\n{info.get('title', '')}:")
+            lines.append(info.get('extract', ''))
+            lines.append(f"(fonte: {info.get('source', '')})")
+
+        disclaimer = data.get("disclaimer", "")
+        if disclaimer:
+            lines.append(f"\nNOTA: {disclaimer}")
+
+        return "\n".join(lines)
