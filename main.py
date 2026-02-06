@@ -7,10 +7,11 @@ import os
 from pydantic import BaseModel
 
 # === DIAGNOSTICA TEMPORANEA — RIMUOVERE DOPO VERIFICA ===
-print("🔐 ENV CHECK")
-print("OPENAI_API_KEY:", "OK" if os.getenv("OPENAI_API_KEY") else "MISSING")
-print("OPENWEATHER_API_KEY:", "OK" if os.getenv("OPENWEATHER_API_KEY") else "MISSING")
-print("NEWSAPI_KEY:", "OK" if os.getenv("NEWSAPI_KEY") else "MISSING")
+print("🔐 ENV CHECK (GENESI STARTUP)", flush=True)
+print("OPENAI_API_KEY:", "OK" if os.getenv("OPENAI_API_KEY") else "MISSING", flush=True)
+print("OPENWEATHER_API_KEY:", "OK" if os.getenv("OPENWEATHER_API_KEY") else "MISSING", flush=True)
+print("GNEWS_API_KEY:", "OK" if os.getenv("GNEWS_API_KEY") else "MISSING", flush=True)
+print("NEWSAPI_KEY:", "OK" if os.getenv("NEWSAPI_KEY") else "MISSING", flush=True)
 # =========================================================
 
 from core.state import CognitiveState

@@ -66,6 +66,7 @@ def extract_city(text: str) -> str:
 async def fetch_weather(user_message: str) -> Dict:
     """Chiama OpenWeatherMap e restituisce dati meteo reali."""
     api_key = _get_openweather_key()
+    print(f"[FATTI][API_CALL] OPENWEATHER_API_KEY present: {bool(api_key)}", flush=True)
     if not api_key:
         print("[FATTI][API_METEO] ❌ OPENWEATHER_API_KEY non configurata", flush=True)
         return {"error": "API meteo non configurata", "source": "openweathermap"}
@@ -124,6 +125,10 @@ async def fetch_weather(user_message: str) -> Dict:
                 "forecast": []
             }
 
+            # Log raw API data sample
+            print(f"[FATTI][API_DATA_SAMPLE] weather_status={current_resp.status_code} forecast_status={forecast_resp.status_code}", flush=True)
+            print(f"[FATTI][API_DATA_SAMPLE] current_keys={list(current_data.keys())}", flush=True)
+
             # Parse current
             if "main" in current_data:
                 result["current"] = {
@@ -165,6 +170,7 @@ async def fetch_weather(user_message: str) -> Dict:
 async def fetch_news(user_message: str) -> Dict:
     """Chiama GNews API per notizie aggiornate."""
     api_key = _get_newsapi_key()
+    print(f"[FATTI][API_CALL] NEWSAPI_KEY present: {bool(api_key)}", flush=True)
     if not api_key:
         print("[FATTI][API_NEWS] ❌ NEWSAPI_KEY non configurata", flush=True)
         return {"error": "API news non configurata", "source": "gnews"}
@@ -205,6 +211,13 @@ async def fetch_news(user_message: str) -> Dict:
 
             resp = await client.get("https://gnews.io/api/v4/top-headlines", params=params)
             data = resp.json()
+
+            # Log raw API data sample
+            print(f"[FATTI][API_DATA_SAMPLE] news_status={resp.status_code} articles_count={len(data.get('articles', []))}", flush=True)
+            if data.get("articles"):
+                print(f"[FATTI][API_DATA_SAMPLE] first_title='{data['articles'][0].get('title', '')[:80]}'", flush=True)
+            else:
+                print(f"[FATTI][API_DATA_SAMPLE] NO DATA — response_keys={list(data.keys())}", flush=True)
 
             articles = []
             for art in data.get("articles", [])[:5]:
