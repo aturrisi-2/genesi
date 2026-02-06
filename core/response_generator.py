@@ -102,10 +102,10 @@ class ResponseGenerator:
         sections.append(f"MESSAGGIO:\n{user_message}")
 
         # --- ISTRUZIONE FINALE ---
-        if intent.get("depth") == "breve" or len(user_message.split()) <= 5:
+        if len(user_message.split()) <= 5:
             sections.append(
-                "ISTRUZIONE: L'utente ha scritto poco. NON compensare con domande. "
-                "Rispondi con una frase dichiarativa breve. Nessuna domanda. "
+                "ISTRUZIONE: L'utente ha scritto poco. Sii presente e discorsivo. "
+                "Parla, commenta, rifletti — ma senza fare domande. "
                 "Rispondi come Genesi. Solo il testo della risposta, niente altro."
             )
         else:

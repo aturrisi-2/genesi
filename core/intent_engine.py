@@ -138,7 +138,7 @@ class IntentEngine:
         # ===============================
         word_count = len(msg.split())
         if word_count <= 3 and not has_emotion:
-            intent["depth"] = "breve"
+            intent["depth"] = "presente"
 
         # ===============================
         # TONO BASSO → PIÙ PRESENZA
