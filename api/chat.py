@@ -104,6 +104,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
             )
         return {
             "response": response_text,
+            "tts_mode": "normal",
             "user_id": request.user_id,
             "timestamp": datetime.now().isoformat(),
             "closure": True
@@ -176,6 +177,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                 
                 return {
                     "response": response_text,
+                    "tts_mode": "normal",
                     "user_id": request.user_id,
                     "timestamp": datetime.now().isoformat(),
                     "psy_mode": True
@@ -364,8 +366,16 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
         )
         log("MEMORY_SAVE", type="standard", user_id=request.user_id, event="user_message+system_response")
         
+        # Determina tts_mode in base al brain_mode e tipo risposta
+        tts_mode = "normal"
+        if intent.get("brain_mode") == "fatti":
+            tts_mode = "informative"
+        elif len(response_text) > 500:
+            tts_mode = "informative"
+        
         return {
             "response": response_text,
+            "tts_mode": tts_mode,
             "state": {
                 "user": state.user.to_dict(),
                 "recent_events": [e.to_dict() for e in state.recent_events[-5:]],

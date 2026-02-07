@@ -339,15 +339,15 @@ async function _playTTSChunk(text) {
   });
 }
 
-async function playTTS(text) {
+async function playTTS(text, tts_mode = 'normal') {
   if (!ttsEnabled || !text) return;
-  console.log('[TTS] playTTS len=' + text.length);
+  console.log('[TTS] playTTS len=' + text.length + ' mode=' + tts_mode);
   
-  // SOLO per testi molto lunghi (>500 char) usa segmentazione
-  if (text.length > 500) {
+  // FORZA segmentazione per testi informativi o lunghi
+  if (tts_mode === 'informative' || text.length > 500) {
     await playTTSSegmented(text);
   } else {
-    // Testi brevi: playback normale
+    // Testi brevi normali: playback normale
     await _playTTSChunk(text);
   }
 }
@@ -449,7 +449,7 @@ async function sendChatMessage(message) {
   }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
-  return data.response || '';
+  return data;
 }
 
 // ===============================
@@ -477,10 +477,10 @@ async function sendMessage() {
   setState(STATES.THINKING);
 
   try {
-    const reply = await sendChatMessage(text);
-    if (reply) {
-      addGenesiMessage(reply);
-      playTTS(reply);
+    const data = await sendChatMessage(text);
+    if (data && data.response) {
+      addGenesiMessage(data.response);
+      playTTS(data.response, data.tts_mode);
     }
   } catch (e) {
     console.error('Chat error:', e);
