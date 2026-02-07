@@ -496,7 +496,14 @@ async function sendMessage() {
     const data = await sendChatMessage(text);
     if (data && data.response) {
       addGenesiMessage(data.response);
-      playTTS(data.response, data.tts_mode);
+      
+      // TTS OBBLIGATORIO QUANDO should_respond=True
+      if (data.should_respond) {
+        console.log('[TTS_MANDATORY] should_respond=True, forcing TTS');
+        playTTS(data.response, data.tts_mode);
+      } else {
+        console.log('[TTS_MANDATORY] should_respond=False, skipping TTS');
+      }
     }
   } catch (e) {
     console.error('Chat error:', e);

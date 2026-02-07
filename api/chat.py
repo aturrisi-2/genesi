@@ -351,6 +351,12 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
             # NOTA: il context viene già eliminato prima della chiamata a generate_response
             # quindi non serve eliminarlo di nuovo qui
 
+        # ASSERT DIFENSIVO: TTS OBBLIGATORIO QUANDO should_respond=True
+        if intent.get("should_respond") and not response_text.strip():
+            print(f"[TTS_ASSERT] ERROR: should_respond=True ma risposta vuota! user_id={request.user_id}", flush=True)
+            # Fallback: risposta minima per garantire TTS
+            response_text = "Sono qui."
+        
         # 7. Store system response
         system_affect = compute_affect(
             "system_response",
@@ -372,10 +378,17 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
             tts_mode = "informative"
         elif len(response_text) > 500:
             tts_mode = "informative"
+        # Psychological branch viene gestito prima nel codice
+        # Qui manteniamo il tts_mode già determinato
+        
+        # LOG TTS OBBLIGATORIO
+        if intent.get("should_respond"):
+            print(f"[TTS_MANDATORY] user_id={request.user_id} should_respond=True response_len={len(response_text)} tts_mode={tts_mode}", flush=True)
         
         return {
             "response": response_text,
             "tts_mode": tts_mode,
+            "should_respond": intent.get("should_respond", False),
             "state": {
                 "user": state.user.to_dict(),
                 "recent_events": [e.to_dict() for e in state.recent_events[-5:]],
