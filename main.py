@@ -94,6 +94,22 @@ async def text_to_speech(request: TTSRequest):
     if not text:
         return JSONResponse(status_code=400, content={"error": "Testo vuoto"})
 
+    # ===============================
+    # SANITIZZAZIONE DIFENSIVA TTS
+    # ===============================
+    # Rimuovi timestamp ISO (es: 2025-02-07T23:42:00.123Z)
+    import re
+    text = re.sub(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z\s*', '', text)
+    # Rimuovi prefissi di log [TAG]
+    text = re.sub(r'^\[[A-Z_]+\]\s*', '', text)
+    # Rimuovi numeri iniziali seguiti da spazio (es: "1234567890 ")
+    text = re.sub(r'^\d+\s+', '', text)
+    # Assicura che il testo contenga solo caratteri umani
+    if not re.search(r'[a-zA-ZàèéìòùÀÈÉÌÒÙ]', text):
+        return JSONResponse(status_code=400, content={"error": "Testo non valido"})
+    
+    print(f"[TTS] sanitized text='{text[:100]}...'", flush=True)
+
     try:
         audio_bytes = await synthesize_bytes_async(text)
         return Response(
