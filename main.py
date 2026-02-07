@@ -114,14 +114,33 @@ async def text_to_speech(request: TTSRequest):
     if not re.search(r'[a-zA-ZàèéìòùÀÈÉÌÒÙ]', text):
         return JSONResponse(status_code=400, content={"error": "Testo non valido"})
     
-    print(f"[TTS] sanitized text='{text[:100]}...'", flush=True)
+    print(f"[TTS] sanitized text='{text[:100]}...' (len={len(text)})", flush=True)
 
     try:
         audio_bytes = await synthesize_bytes_async(text)
+        audio_size = len(audio_bytes)
+        
+        # Calcola durata stimata (MP3 ~128 kbps = 16 KB/s)
+        estimated_duration = audio_size / 16000 if audio_size > 0 else 0
+        
+        print(f"[TTS] OUTPUT: size={audio_size} bytes, duration_est={estimated_duration:.2f}s", flush=True)
+        
+        # ASSERT FINALE: audio size > 0
+        if audio_size == 0:
+            print(f"[TTS] ERROR: Audio size 0! text_len={len(text)}", flush=True)
+            return JSONResponse(status_code=500, content={"error": "Audio generation failed - empty output"})
+        
+        if audio_size < 100:
+            print(f"[TTS] WARNING: Audio very small ({audio_size} bytes)", flush=True)
+        
         return Response(
             content=audio_bytes,
             media_type="audio/mpeg",
-            headers={"Content-Disposition": "inline"}
+            headers={
+                "Content-Disposition": "inline",
+                "Content-Length": str(audio_size),
+                "X-Audio-Duration": str(estimated_duration)
+            }
         )
     except Exception as e:
         print(f"[TTS] error: {e}", flush=True)

@@ -272,7 +272,8 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
   if (!ttsEnabled || !text) return;
   
   const chunks = _splitTextForTTS(text, tts_mode);
-  console.log('[TTS] segmented into', chunks.length, 'chunks, total len=' + text.length + ' mode=' + tts_mode);
+  console.log('[TTS] CHUNKING: total_len=' + text.length + ' mode=' + tts_mode);
+  console.log('[TTS] CHUNKS:', chunks.map((c, i) => `${i + 1}: "${c.substring(0, 50)}..." (${c.length}char)`));
   
   for (let i = 0; i < chunks.length; i++) {
     // VERIFICA INPUT UTENTE PRIMA DI OGNI CHUNK
@@ -282,7 +283,8 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
     }
     
     const chunk = chunks[i];
-    console.log('[TTS] playing chunk', i + 1, '/', chunks.length, 'len=' + chunk.length);
+    console.log('[TTS] PLAYING chunk', i + 1, '/', chunks.length, 'len=' + chunk.length);
+    console.log('[TTS] CHUNK TEXT:', chunk);
     
     try {
       await _playTTSChunk(chunk);
@@ -306,53 +308,65 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
 }
 
 async function _playTTSChunk(text) {
-  stopAudio();
-
-  const res = await fetch('/tts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text })
-  });
+  if (!ttsEnabled || !text) return;
   
-  if (!res.ok) { 
-    console.warn('[TTS] chunk not ok'); 
-    return; 
-  }
-
-  const arrayBuf = await res.arrayBuffer();
-  if (arrayBuf.byteLength < 100) { 
-    console.warn('[TTS] chunk too small'); 
-    return; 
-  }
-
-  const ctx = _getTTSCtx();
-  if (ctx.state === 'suspended') await ctx.resume();
-
-  const audioBuffer = await ctx.decodeAudioData(arrayBuf);
-
-  const source = ctx.createBufferSource();
-  source.buffer = audioBuffer;
-  source.connect(ctx.destination);
-
-  source.onended = () => {
-    _ttsSource = null;
-    console.log('[TTS] chunk ended');
-  };
-
-  _ttsSource = source;
-  source.start(0);
+  console.log('[TTS] _playTTSChunk len=' + text.length);
+  console.log('[TTS] TEXT:', text);
   
-  // Attendi la fine del chunk
-  return new Promise((resolve) => {
-    const checkEnded = () => {
-      if (_ttsSource === null) {
-        resolve();
-      } else {
-        setTimeout(checkEnded, 50);
-      }
+  try {
+    console.log('[TTS] FETCH: calling /tts...');
+    const response = await fetch('/tts', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({'text': text})
+    });
+    
+    console.log('[TTS] RESPONSE: status=' + response.status + ' headers=' + JSON.stringify(Object.fromEntries(response.headers.entries())));
+    
+    if (!response.ok) {
+      console.error('[TTS] HTTP error:', response.status, response.statusText);
+      const errorText = await response.text();
+      console.error('[TTS] ERROR BODY:', errorText);
+      return;
+    }
+    
+    const audioBlob = await response.blob();
+    console.log('[TTS] BLOB: size=' + audioBlob.size + ' type=' + audioBlob.type);
+    
+    // ASSERT FINALE: blob size > 0
+    if (audioBlob.size === 0) {
+      console.error('[TTS] ERROR: Audio blob size 0!');
+      return;
+    }
+    
+    if (audioBlob.size < 100) {
+      console.warn('[TTS] WARNING: Audio blob very small (' + audioBlob.size + ' bytes)');
+    }
+    
+    const audioUrl = URL.createObjectURL(audioBlob);
+    console.log('[TTS] AUDIO URL created');
+    
+    const audio = new Audio(audioUrl);
+    _ttsSource = audio;
+    
+    audio.onended = () => {
+      console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
+      _ttsSource = null;
+      URL.revokeObjectURL(audioUrl);
     };
-    checkEnded();
-  });
+    
+    audio.oncanplay = () => {
+      console.log('[TTS] AUDIO CAN PLAY: duration=' + audio.duration + 's');
+    };
+    
+    console.log('[TTS] CALLING audio.play()...');
+    await audio.play();
+    console.log('[TTS] AUDIO PLAYING: duration=' + audio.duration + 's');
+    
+  } catch (e) {
+    console.error('[TTS] _playTTSChunk error:', e);
+    _ttsSource = null;
+  }
 }
 
 async function playTTS(text, tts_mode = 'normal') {
