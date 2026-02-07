@@ -498,6 +498,37 @@ async function transcribeAudio(blob) {
 // ===============================
 // FILE UPLOAD
 // ===============================
+function _addPreview(previewUrl, file, parentEl) {
+  const type = file.type || '';
+  const wrap = document.createElement('div');
+  wrap.className = 'upload-preview';
+
+  if (type.startsWith('image/')) {
+    const img = document.createElement('img');
+    img.src = previewUrl;
+    img.alt = file.name;
+    img.className = 'preview-img';
+    img.loading = 'lazy';
+    wrap.appendChild(img);
+  } else if (type === 'application/pdf') {
+    const obj = document.createElement('object');
+    obj.data = previewUrl;
+    obj.type = 'application/pdf';
+    obj.className = 'preview-pdf';
+    const fallback = document.createElement('a');
+    fallback.href = previewUrl;
+    fallback.target = '_blank';
+    fallback.textContent = 'Apri PDF';
+    fallback.className = 'preview-pdf-link';
+    obj.appendChild(fallback);
+    wrap.appendChild(obj);
+  }
+
+  if (wrap.children.length > 0) {
+    parentEl.prepend(wrap);
+  }
+}
+
 function handleFileUpload() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -519,7 +550,13 @@ function handleFileUpload() {
       if (!res.ok) throw new Error(`Upload ${res.status}`);
       const result = await res.json();
       loadingMsg.remove();
-      addGenesiMessage(result.response || "File ricevuto.");
+
+      const msgEl = addGenesiMessage(result.response || "File ricevuto.");
+
+      // Preview inline
+      if (result.preview_url) {
+        _addPreview(result.preview_url, file, msgEl);
+      }
     } catch (e) {
       console.error('Upload error:', e);
       loadingMsg.remove();

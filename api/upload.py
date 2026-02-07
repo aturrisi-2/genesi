@@ -1,169 +1,187 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status, Request
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request
+from fastapi.responses import FileResponse
 import os
+import re
 import uuid
 import logging
 from pathlib import Path
-from core.file_analyzer import analyze_file
+from core.file_analyzer import analyze_file, MAX_FILE_SIZE
 from core.decision_engine import decide_response_strategy
 from core.response_router import route_response
 
 # ===============================
 # DOCUMENT CONTEXT TEMPORANEO PER USER
 # ===============================
-last_document_context = {}  # {user_id: {"content": text, "timestamp": time}}
+last_document_context = {}
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/upload")
 
 UPLOAD_DIR = "/tmp/genesi_uploads"
 
+def _sanitize_filename(name: str) -> str:
+    """Rimuove caratteri pericolosi dal filename."""
+    name = Path(name).name  # solo il nome, no path traversal
+    name = re.sub(r"[^\w.\-]", "_", name)
+    return name[:200]  # max 200 chars
+
+
+# ===============================
+# SERVE FILE PER PREVIEW
+# ===============================
+@router.get("/file/{file_id}/{filename}")
+async def serve_uploaded_file(file_id: str, filename: str):
+    """Serve file caricati per preview nel frontend."""
+    safe_name = _sanitize_filename(filename)
+    file_path = os.path.join(UPLOAD_DIR, f"{file_id}_{safe_name}")
+    if not os.path.exists(file_path):
+        # Prova con il filename originale
+        for f in os.listdir(UPLOAD_DIR):
+            if f.startswith(file_id):
+                file_path = os.path.join(UPLOAD_DIR, f)
+                break
+        else:
+            raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
+
+
+# ===============================
+# UPLOAD PRINCIPALE
+# ===============================
 @router.post("/")
 async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), http_request: Request = None):
     if not file or not file.filename:
         raise HTTPException(status_code=400, detail="File required")
-    
-    # ===============================
-    # LOG DIAGNOSTICO USER_ID RICEVUTO
-    # ===============================
-    logger.info(f"[UPLOAD] received user_id={user_id}")
-    
-    # ===============================
-    # VALIDAZIONE USER_ID OBBLIGATORIA
-    # ===============================
+
     if not user_id:
-        logger.warning(f"[UPLOAD] missing user_id - document_context will not be saved")
-        raise HTTPException(status_code=400, detail="user_id required for document context")
-    
-    logger.info(f"[UPLOAD] processing file for user_id={user_id}")
-    
+        raise HTTPException(status_code=400, detail="user_id required")
+
+    logger.info(f"[UPLOAD] file={file.filename} user={user_id} ct={file.content_type}")
+
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    
+
     file_id = str(uuid.uuid4())
-    file_path = os.path.join(UPLOAD_DIR, f"{file_id}_{file.filename}")
-    
+    safe_filename = _sanitize_filename(file.filename)
+    file_path = os.path.join(UPLOAD_DIR, f"{file_id}_{safe_filename}")
+
     try:
         content = await file.read()
+
+        # Sicurezza: limite dimensione
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=413, detail=f"File troppo grande. Limite: 20MB.")
+
         with open(file_path, "wb") as f:
             f.write(content)
-        
+
         # Analisi file
         analysis = analyze_file(file_path, file.filename, file.content_type or "")
-        
+        kind = analysis.get("kind", "binary")
+
+        # File rifiutato (troppo grande)
+        if kind == "rejected":
+            return {
+                "file_id": file_id,
+                "filename": file.filename,
+                "analysis": analysis,
+                "response": analysis.get("error", "File non processabile.")
+            }
+
         # ===============================
-        # GESTIONE IMMAGINI CON OCR
+        # PREVIEW URL
         # ===============================
+        preview_url = None
+        if kind == "image":
+            preview_url = f"/upload/file/{file_id}/{safe_filename}"
+        elif kind == "document" and analysis.get("subtype") == "pdf":
+            preview_url = f"/upload/file/{file_id}/{safe_filename}"
+
+        # ===============================
+        # ROUTING PER TIPO
+        # ===============================
+        response_text = ""
         document_context = None
-        file_ext = Path(file.filename).suffix.lower()
-        
-        if file_ext in ['.jpg', '.jpeg', '.png'] and analysis.get("kind") == "image":
-            try:
-                from core.ocr.ocr_engine import extract_text_with_ocr
-                
-                logger.info(f"[UPLOAD][OCR] image_detected")
-                ocr_text = extract_text_with_ocr(file_path)
-                text_length = len(ocr_text.strip())
-                
-                logger.info(f"[UPLOAD][OCR] text_length={text_length}")
-                
-                # FASE 1: ANALISI CONTENUTO E DETERMINAZIONE MODALITÀ
-                # REGOLA D'ORO: Le immagini sono SEMPRE mode="image", OCR non cambia il tipo di documento
-                has_clear_text = text_length >= 20 and any(char.isalpha() for char in ocr_text.strip())
-                
-                # Per immagini: document_mode è SEMPRE "image"
-                document_mode = "image"
-                
-                # Per immagini: affidabilità OCR è sempre "low" per default
-                ocr_reliability = "low" if has_clear_text else "none"
-                
-                # Descrizione appropriata per immagini
-                if has_clear_text:
-                    content_description = f"Immagine (screenshot) con testo OCR rilevato (affidabilità: {ocr_reliability}). Testo estratto disponibile su richiesta esplicita."
-                    extracted_content = ocr_text.strip()  # Tenere per trascrizioni esplicite
-                else:
-                    content_description = f"Immagine (screenshot) senza testo chiaro rilevabile. Contenuto prevalentemente visivo."
-                    extracted_content = ""
-                
-                # Crea document context completo con modalità e affidabilità
-                document_context = {
-                    "content": extracted_content,
-                    "description": content_description,
-                    "file_type": "image",
-                    "document_mode": document_mode,
-                    "source": "image_ocr",
-                    "ocr_reliability": ocr_reliability,
-                    "has_clear_text": has_clear_text,
-                    "filename": file.filename,
-                    "timestamp": str(uuid.uuid4())
-                }
-                
-                # Imposta active_document per il chat context
-                if http_request:
-                    http_request.state.active_document = {
-                        "user_id": user_id,
-                        "content": extracted_content,
-                        "description": content_description,
-                        "file_type": "image",
-                        "document_mode": document_mode,
-                        "source": "image_ocr",
-                        "ocr_reliability": ocr_reliability,
-                        "has_clear_text": has_clear_text,
-                        "timestamp": str(uuid.uuid4())
-                    }
-                
-                logger.info(f"[UPLOAD][OCR] processed | mode={document_mode} | reliability={ocr_reliability} | has_text={has_clear_text}")
-                
-                # Salva document context per user_id SOLO se user_id valido
-                if user_id:
-                    last_document_context[user_id] = document_context
-                    logger.info(f"[UPLOAD] document_context_saved | user_id={user_id} | mode={document_mode} | reliability={ocr_reliability}")
-                else:
-                    logger.warning(f"[UPLOAD] cannot save document_context - missing user_id")
-                
-                # Aggiorna analysis per riflettere il testo trovato
-                analysis["has_text"] = has_clear_text
-                analysis["text"] = extracted_content
-                analysis["ocr_used"] = True
-                analysis["document_mode"] = document_mode
-                analysis["ocr_reliability"] = ocr_reliability
-                    
-            except Exception as e:
-                logger.error(f"OCR processing failed for {file.filename}: {e}")
-        
-        # BIFURCAZIONE: Immagini vs Documenti testuali
-        if analysis.get("kind") == "image" and document_context:
-            # FLUSSO IMMAGINI: usa image_handler dedicato
+
+        if kind == "image":
+            # IMMAGINI: GPT-4o Vision + OCR fallback
             from core.image_handler import handle_image
-            
+
+            ocr_text = analysis.get("text", "")
+            has_text = analysis.get("has_text", False)
+
+            document_context = {
+                "content": ocr_text,
+                "has_clear_text": has_text,
+                "filename": file.filename,
+                "file_type": "image",
+                "document_mode": "image",
+                "ocr_reliability": "low" if has_text else "none",
+                "source": "image_ocr" if analysis.get("ocr_used") else "upload",
+            }
+
             response_text = await handle_image(
                 image_context=document_context,
-                user_message="descrivimi l'immagine",  # Default per upload automatico
-                user_id=user_id
+                user_message="Analizza questa immagine in dettaglio.",
+                user_id=user_id,
+                file_path=file_path
             )
-            decision = "image_handled"
-        else:
-            # FLUSSO DOCUMENTALE: usa pipeline esistente
-            decision = decide_response_strategy(analysis)
+
+        elif kind == "document" and analysis.get("subtype") == "pdf":
+            # PDF: testuale o scansionato
+            if analysis.get("has_text"):
+                # PDF testuale → analisi contenuto
+                response_text = await route_response(analysis, file_path, {"user_id": user_id})
+            else:
+                # PDF scansionato → OCR già tentato in analyze_file
+                if analysis.get("ocr_used") and analysis.get("text"):
+                    response_text = await route_response(analysis, file_path, {"user_id": user_id})
+                else:
+                    response_text = f"Il PDF '{file.filename}' sembra essere una scansione. Non sono riuscito a estrarre testo leggibile. Prova a caricare una versione con testo selezionabile."
+
+        elif kind == "text":
+            # Testo/codice
             response_text = await route_response(analysis, file_path, {"user_id": user_id})
-        
+
+        elif kind in ["audio", "video", "archive", "binary"]:
+            # File non analizzabili direttamente
+            desc = analysis.get("description", "")
+            if desc:
+                response_text = desc
+            else:
+                size_bytes = analysis.get("size_bytes", 0)
+                size_str = f"{size_bytes / 1024:.0f}KB" if size_bytes < 1024 * 1024 else f"{size_bytes / (1024*1024):.1f}MB"
+                response_text = f"Ho ricevuto '{file.filename}' ({analysis.get('mime', 'sconosciuto')}, {size_str}). Questo tipo di file non è analizzabile direttamente, ma è stato caricato correttamente."
+
+        else:
+            # Fallback: prova route_response
+            try:
+                response_text = await route_response(analysis, file_path, {"user_id": user_id})
+            except Exception:
+                response_text = f"Ho ricevuto '{file.filename}'. Il file è stato caricato correttamente."
+
+        # Salva document context
+        if document_context and user_id:
+            last_document_context[user_id] = document_context
+
         result = {
             "file_id": file_id,
             "filename": file.filename,
             "content_type": file.content_type or "application/octet-stream",
             "analysis": analysis,
-            "decision": decision,
-            "response": response_text
+            "response": response_text or "File ricevuto."
         }
-        
-        # Aggiungi document context se presente
+
+        if preview_url:
+            result["preview_url"] = preview_url
+
         if document_context:
             result["document_context"] = document_context
-        
-        # Aggiungi anche il context persistente per user_id
-        if user_id in last_document_context:
-            result["persistent_context"] = last_document_context[user_id]
-        
+
+        logger.info(f"[UPLOAD] done: {file.filename} kind={kind} preview={'yes' if preview_url else 'no'}")
         return result
-    
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Upload error: {e}")
+        logger.error(f"[UPLOAD] error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Upload failed")

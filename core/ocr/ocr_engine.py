@@ -39,9 +39,15 @@ except ImportError as e:
     logging.error(f"OCR dependencies missing: {e}")
     OCR_AVAILABLE = False
 
-# Import per OCR immagini
-from .image_ocr import extract_text_from_image
-from .image_classifier import classify_image_for_ocr
+# Import per OCR immagini (protetti)
+try:
+    from .image_ocr import extract_text_from_image
+    from .image_classifier import classify_image_for_ocr
+except ImportError as e:
+    logging.warning(f"Tesseract OCR not properly installed. OCR functionality will be limited.")
+    OCR_AVAILABLE = False
+    def extract_text_from_image(path): return ""
+    def classify_image_for_ocr(path): return {"image_kind": "pure-image", "confidence": "low", "signals": {"resolution": "unknown", "aspect_ratio": "0.00", "estimated_text_density": 0.0, "color_variance": 0.0}}
 
 logger = logging.getLogger(__name__)
 
