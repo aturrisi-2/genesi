@@ -86,6 +86,17 @@ function _getTTSCtx() {
   return _ttsCtx;
 }
 
+// iOS Safari: AudioContext must be created+resumed during a synchronous
+// user gesture (tap/click). Call this at the START of any gesture handler,
+// BEFORE any await, so the gesture is still "active" for iOS.
+function _warmTTSCtx() {
+  const ctx = _getTTSCtx();
+  if (ctx.state === 'suspended') {
+    ctx.resume();
+    console.log('[TTS] ctx warmed (resume called during gesture)');
+  }
+}
+
 function stopAudio() {
   if (_ttsSource) {
     try { _ttsSource.stop(); } catch (e) {}
@@ -213,6 +224,9 @@ async function sendChatMessage(message) {
 // SEND MESSAGE
 // ===============================
 async function sendMessage() {
+  // Warm AudioContext NOW (sync, during user gesture) — iOS requires this
+  _warmTTSCtx();
+
   const text = textInput.value.trim();
   if (!text || currentState !== STATES.IDLE) return;
 
@@ -330,6 +344,9 @@ function resetMicrophoneState() {
 }
 
 async function startRecording() {
+  // Warm TTS AudioContext during mic tap gesture (iOS needs this for post-mic TTS)
+  _warmTTSCtx();
+
   console.log('[MIC] start, iOS=' + _isIOS + ' safari=' + _isSafari + ' webAudio=' + _useWebAudio);
   if (currentState !== STATES.IDLE || isRecording) return;
   stopAudio();
@@ -535,6 +552,12 @@ textInput.addEventListener('focus', () => {
 // ===============================
 // INIT
 // ===============================
+// iOS: pre-unlock AudioContext on very first user interaction
+document.addEventListener('touchstart', function _firstTouch() {
+  _warmTTSCtx();
+  document.removeEventListener('touchstart', _firstTouch);
+}, { once: true });
+
 (async () => {
   await bootstrapUser();
   scrollToBottom();
