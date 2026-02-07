@@ -269,16 +269,24 @@ function _splitTextForTTS(text, tts_mode = 'normal') {
 }
 
 async function playTTSSegmented(text, tts_mode = 'normal') {
-  if (!ttsEnabled || !text) return;
+  console.log('[TTS_FLOW] step=1 segmented_start len=' + text.length + ' mode=' + tts_mode);
+  
+  if (!ttsEnabled || !text) {
+    console.log('[TTS_FLOW] step=2 segmented_skip_tts_disabled_or_empty');
+    return;
+  }
   
   const chunks = _splitTextForTTS(text, tts_mode);
+  console.log('[TTS_FLOW] step=3 segmented_chunks_created count=' + chunks.length);
   console.log('[TTS] CHUNKING: total_len=' + text.length + ' mode=' + tts_mode);
   console.log('[TTS] CHUNKS:', chunks.map((c, i) => `${i + 1}: "${c.substring(0, 50)}..." (${c.length}char)`));
   
   for (let i = 0; i < chunks.length; i++) {
+    console.log('[TTS_FLOW] step=4.' + (i + 1) + ' processing_chunk_' + (i + 1) + '/' + chunks.length);
+    
     // VERIFICA INPUT UTENTE PRIMA DI OGNI CHUNK
     if (_ttsSource === null) {
-      console.log('[TTS] interrupted before chunk', i + 1);
+      console.log('[TTS_FLOW] step=5.' + (i + 1) + ' interrupted_before_chunk_' + (i + 1));
       break;
     }
     
@@ -287,33 +295,44 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
     console.log('[TTS] CHUNK TEXT:', chunk);
     
     try {
+      console.log('[TTS_FLOW] step=6.' + (i + 1) + ' calling_playTTSChunk');
       await _playTTSChunk(chunk);
+      console.log('[TTS_FLOW] step=7.' + (i + 1) + ' playTTSChunk_completed');
       
       // PAUSA LUNGA per psychological tra chunk
       if (tts_mode === 'psychological' && i < chunks.length - 1) {
-        console.log('[TTS] psychological pause between chunks');
+        console.log('[TTS_FLOW] step=8.' + (i + 1) + ' psychological_pause');
         await new Promise(resolve => setTimeout(resolve, 800)); // 800ms pause
+        console.log('[TTS_FLOW] step=9.' + (i + 1) + ' psychological_pause_completed');
       }
     } catch (e) {
-      console.error('[TTS] chunk error:', e);
+      console.error('[TTS_FLOW] step=ERROR.' + (i + 1) + ' chunk_error:', e);
       break;
     }
     
     // VERIFICA INPUT UTENTE DOPO OGNI CHUNK
     if (_ttsSource === null) {
-      console.log('[TTS] interrupted after chunk', i + 1);
+      console.log('[TTS_FLOW] step=10.' + (i + 1) + ' interrupted_after_chunk_' + (i + 1));
       break;
     }
   }
+  
+  console.log('[TTS_FLOW] step=11 segmented_finished');
 }
 
 async function _playTTSChunk(text) {
-  if (!ttsEnabled || !text) return;
+  console.log('[TTS_FLOW] step=1 chunk_start len=' + text.length);
+  
+  if (!ttsEnabled || !text) {
+    console.log('[TTS_FLOW] step=2 chunk_skip_tts_disabled_or_empty');
+    return;
+  }
   
   console.log('[TTS] _playTTSChunk len=' + text.length);
   console.log('[TTS] TEXT:', text);
   
   try {
+    console.log('[TTS_FLOW] step=3 calling_fetch_tts');
     console.log('[TTS] FETCH: calling /tts...');
     const response = await fetch('/tts', {
       method: 'POST',
@@ -321,65 +340,90 @@ async function _playTTSChunk(text) {
       body: JSON.stringify({'text': text})
     });
     
+    console.log('[TTS_FLOW] step=4 fetch_response_received');
     console.log('[TTS] RESPONSE: status=' + response.status + ' headers=' + JSON.stringify(Object.fromEntries(response.headers.entries())));
     
     if (!response.ok) {
+      console.log('[TTS_FLOW] step=ERROR fetch_http_error status=' + response.status);
       console.error('[TTS] HTTP error:', response.status, response.statusText);
       const errorText = await response.text();
       console.error('[TTS] ERROR BODY:', errorText);
       return;
     }
     
+    console.log('[TTS_FLOW] step=5 reading_blob');
     const audioBlob = await response.blob();
+    console.log('[TTS_FLOW] step=6 blob_received');
     console.log('[TTS] BLOB: size=' + audioBlob.size + ' type=' + audioBlob.type);
     
     // ASSERT FINALE: blob size > 0
     if (audioBlob.size === 0) {
+      console.log('[TTS_FLOW] step=ERROR blob_size_zero');
       console.error('[TTS] ERROR: Audio blob size 0!');
       return;
     }
     
     if (audioBlob.size < 100) {
+      console.log('[TTS_FLOW] step=WARNING blob_too_small size=' + audioBlob.size);
       console.warn('[TTS] WARNING: Audio blob very small (' + audioBlob.size + ' bytes)');
     }
     
+    console.log('[TTS_FLOW] step=7 creating_audio_url');
     const audioUrl = URL.createObjectURL(audioBlob);
     console.log('[TTS] AUDIO URL created');
     
+    console.log('[TTS_FLOW] step=8 creating_audio_object');
     const audio = new Audio(audioUrl);
     _ttsSource = audio;
     
     audio.onended = () => {
+      console.log('[TTS_FLOW] step=9 audio_ended duration=' + audio.duration + 's');
       console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
       _ttsSource = null;
       URL.revokeObjectURL(audioUrl);
     };
     
     audio.oncanplay = () => {
+      console.log('[TTS_FLOW] step=10 audio_can_play duration=' + audio.duration + 's');
       console.log('[TTS] AUDIO CAN PLAY: duration=' + audio.duration + 's');
     };
     
+    console.log('[TTS_FLOW] step=11 calling_audio_play');
     console.log('[TTS] CALLING audio.play()...');
     await audio.play();
+    console.log('[TTS_FLOW] step=12 audio_playing duration=' + audio.duration + 's');
     console.log('[TTS] AUDIO PLAYING: duration=' + audio.duration + 's');
     
   } catch (e) {
+    console.log('[TTS_FLOW] step=ERROR chunk_exception');
     console.error('[TTS] _playTTSChunk error:', e);
     _ttsSource = null;
   }
 }
 
 async function playTTS(text, tts_mode = 'normal') {
-  if (!ttsEnabled || !text) return;
-  console.log('[TTS] playTTS len=' + text.length + ' mode=' + tts_mode);
+  console.log('[TTS_FLOW] step=1 playTTS_start len=' + text.length + ' mode=' + tts_mode);
+  
+  if (!ttsEnabled || !text) {
+    console.log('[TTS_FLOW] step=2 playTTS_skip_tts_disabled_or_empty');
+    return;
+  }
+  
+  console.log('[TTS_FLOW] step=3 playTTS_checking_segmentation');
   
   // FORZA segmentazione per testi informativi, psychological o lunghi
   if (tts_mode === 'informative' || tts_mode === 'psychological' || text.length > 500) {
+    console.log('[TTS_FLOW] step=4 playTTS_calling_segmented');
     await playTTSSegmented(text, tts_mode);
+    console.log('[TTS_FLOW] step=5 playTTS_segmented_completed');
   } else {
+    console.log('[TTS_FLOW] step=4 playTTS_calling_single_chunk');
     // Testi brevi normali: playback normale
     await _playTTSChunk(text);
+    console.log('[TTS_FLOW] step=5 playTTS_single_chunk_completed');
   }
+  
+  console.log('[TTS_FLOW] step=6 playTTS_finished');
 }
 
 // ===============================

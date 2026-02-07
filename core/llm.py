@@ -107,7 +107,12 @@ REGOLE ASSOLUTE:
 def generate_response(payload: dict) -> str:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return "Ci sono, ma in questo momento qualcosa non va con la mia voce. Riprova tra poco."
+        # TEMP: Bypass per test TTS con risposte lunghe
+        prompt = payload.get("prompt", "")
+        if len(prompt) > 200:
+            return "Questa è una risposta di test lunga per verificare che il TTS funzioni correttamente anche con testi estesi. " * 10
+        else:
+            return "Questa è una risposta di test breve per verificare il TTS."
 
     client = OpenAI(api_key=api_key)
 
