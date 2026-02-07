@@ -496,39 +496,134 @@ async function transcribeAudio(blob) {
 }
 
 // ===============================
-// FILE UPLOAD
+// FILE BUBBLE — preview fumetto
 // ===============================
-function _addPreview(previewUrl, file, parentEl) {
+let _activeBubble = null;
+
+function _fileIcon(type) {
+  if (type.startsWith('image/')) return '🖼';
+  if (type === 'application/pdf') return '📄';
+  if (type.startsWith('audio/')) return '🎵';
+  if (type.startsWith('video/')) return '🎬';
+  if (type.startsWith('text/') || type.includes('json') || type.includes('xml')) return '📝';
+  if (type.includes('zip') || type.includes('tar') || type.includes('rar')) return '📦';
+  return '📎';
+}
+
+function _showFileBubble(file, status) {
+  _dismissFileBubble(true);
+
   const type = file.type || '';
-  const wrap = document.createElement('div');
-  wrap.className = 'upload-preview';
+  const bubble = document.createElement('div');
+  bubble.className = 'file-bubble';
+
+  // Thumbnail or icon
+  if (type.startsWith('image/')) {
+    const thumb = document.createElement('img');
+    thumb.className = 'file-bubble__thumb';
+    thumb.alt = file.name;
+    const reader = new FileReader();
+    reader.onload = (ev) => { thumb.src = ev.target.result; };
+    reader.readAsDataURL(file);
+    bubble.appendChild(thumb);
+  } else {
+    const icon = document.createElement('div');
+    icon.className = 'file-bubble__icon';
+    icon.textContent = _fileIcon(type);
+    bubble.appendChild(icon);
+  }
+
+  // Info
+  const info = document.createElement('div');
+  info.className = 'file-bubble__info';
+  const nameEl = document.createElement('div');
+  nameEl.className = 'file-bubble__name';
+  nameEl.textContent = file.name;
+  const statusEl = document.createElement('div');
+  statusEl.className = 'file-bubble__status';
+  statusEl.textContent = status || 'Genesi sta guardando...';
+  info.appendChild(nameEl);
+  info.appendChild(statusEl);
+  bubble.appendChild(info);
+
+  // Close
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'file-bubble__close';
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    _dismissFileBubble();
+  });
+  bubble.appendChild(closeBtn);
+
+  // Expanded preview container (hidden by default)
+  const previewWrap = document.createElement('div');
+  previewWrap.className = 'file-bubble__preview';
+  bubble.appendChild(previewWrap);
+
+  // Tap to expand/collapse
+  bubble.addEventListener('click', () => {
+    bubble.classList.toggle('expanded');
+  });
+
+  // Insert between #presence and #dialogue
+  const presence = document.getElementById('presence');
+  if (presence && presence.nextSibling) {
+    presence.parentNode.insertBefore(bubble, presence.nextSibling);
+  } else {
+    app.prepend(bubble);
+  }
+
+  _activeBubble = bubble;
+  return bubble;
+}
+
+function _updateBubbleStatus(text) {
+  if (!_activeBubble) return;
+  const s = _activeBubble.querySelector('.file-bubble__status');
+  if (s) s.textContent = text;
+}
+
+function _setBubblePreview(previewUrl, file) {
+  if (!_activeBubble) return;
+  const wrap = _activeBubble.querySelector('.file-bubble__preview');
+  if (!wrap) return;
+  const type = file.type || '';
 
   if (type.startsWith('image/')) {
     const img = document.createElement('img');
     img.src = previewUrl;
     img.alt = file.name;
-    img.className = 'preview-img';
-    img.loading = 'lazy';
     wrap.appendChild(img);
   } else if (type === 'application/pdf') {
     const obj = document.createElement('object');
     obj.data = previewUrl;
     obj.type = 'application/pdf';
-    obj.className = 'preview-pdf';
-    const fallback = document.createElement('a');
-    fallback.href = previewUrl;
-    fallback.target = '_blank';
-    fallback.textContent = 'Apri PDF';
-    fallback.className = 'preview-pdf-link';
-    obj.appendChild(fallback);
+    const link = document.createElement('a');
+    link.href = previewUrl;
+    link.target = '_blank';
+    link.textContent = 'Apri PDF';
+    link.className = 'preview-pdf-link';
+    obj.appendChild(link);
     wrap.appendChild(obj);
-  }
-
-  if (wrap.children.length > 0) {
-    parentEl.prepend(wrap);
   }
 }
 
+function _dismissFileBubble(instant) {
+  if (!_activeBubble) return;
+  const el = _activeBubble;
+  _activeBubble = null;
+  if (instant) {
+    el.remove();
+    return;
+  }
+  el.style.animation = 'bubbleOut 0.25s ease forwards';
+  el.addEventListener('animationend', () => el.remove(), { once: true });
+}
+
+// ===============================
+// FILE UPLOAD
+// ===============================
 function handleFileUpload() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -537,6 +632,9 @@ function handleFileUpload() {
   input.onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // Show bubble immediately with local preview
+    _showFileBubble(file, 'Genesi sta guardando...');
 
     const loadingMsg = addGenesiMessage("Sto analizzando il file...");
     setState(STATES.THINKING);
@@ -551,16 +649,24 @@ function handleFileUpload() {
       const result = await res.json();
       loadingMsg.remove();
 
-      const msgEl = addGenesiMessage(result.response || "File ricevuto.");
+      // Update bubble status
+      _updateBubbleStatus('Analisi completata');
 
-      // Preview inline
+      // Set server preview if available
       if (result.preview_url) {
-        _addPreview(result.preview_url, file, msgEl);
+        _setBubblePreview(result.preview_url, file);
       }
+
+      addGenesiMessage(result.response || "File ricevuto.");
+
+      // Auto-dismiss bubble after 8s
+      setTimeout(() => _dismissFileBubble(), 8000);
     } catch (e) {
       console.error('Upload error:', e);
       loadingMsg.remove();
+      _updateBubbleStatus('Errore');
       addGenesiMessage("Errore nel caricamento. Riprova.");
+      setTimeout(() => _dismissFileBubble(), 4000);
     } finally {
       setState(STATES.IDLE);
     }
