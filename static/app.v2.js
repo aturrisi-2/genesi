@@ -232,6 +232,12 @@ async function sendMessage() {
 
   textInput.value = '';
 
+  // Pulse shockwave on send
+  const ic = document.getElementById('input-container');
+  ic.classList.remove('pulse');
+  void ic.offsetWidth;
+  ic.classList.add('pulse');
+
   addUserMessage(text);
   setState(STATES.THINKING);
 
@@ -561,4 +567,14 @@ document.addEventListener('touchstart', function _firstTouch() {
 (async () => {
   await bootstrapUser();
   scrollToBottom();
+
+  // Neon flicker — wrap each word of the presence text in a span
+  const presenceP = document.querySelector('#presence p');
+  if (presenceP) {
+    const words = presenceP.textContent.split(' ');
+    presenceP.innerHTML = words.map((w, i) => {
+      const flicker = (i === 2 || i === 5) ? ' style="animation: neonFlicker 6s ' + (i * 0.7) + 's infinite"' : '';
+      return '<span' + flicker + '>' + w + '</span>';
+    }).join(' ');
+  }
 })();
