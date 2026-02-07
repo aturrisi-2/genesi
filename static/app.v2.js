@@ -72,31 +72,30 @@ function scrollToBottomSmooth() {
 }
 
 // ===============================
-// TTS AUDIO — routed through AudioContext for iOS Safari
+// TTS AUDIO — decoded via AudioContext (Safari-safe)
 // ===============================
-let currentAudio = null;
-let _ttsAudioCtx = null;
+let _ttsCtx = null;
+let _ttsSource = null;
 let ttsEnabled = true;
 
-function _getTTSContext() {
-  if (!_ttsAudioCtx || _ttsAudioCtx.state === 'closed') {
-    _ttsAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    console.log('[TTS] new AudioContext created');
+function _getTTSCtx() {
+  if (!_ttsCtx || _ttsCtx.state === 'closed') {
+    _ttsCtx = new (window.AudioContext || window.webkitAudioContext)();
+    console.log('[TTS] AudioContext created, rate=' + _ttsCtx.sampleRate);
   }
-  return _ttsAudioCtx;
+  return _ttsCtx;
 }
 
 function stopAudio() {
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio.currentTime = 0;
-    currentAudio = null;
+  if (_ttsSource) {
+    try { _ttsSource.stop(); } catch (e) {}
+    _ttsSource = null;
   }
 }
 
 async function playTTS(text) {
   if (!ttsEnabled || !text) return;
-  console.log('[TTS] playTTS called, len=' + text.length);
+  console.log('[TTS] playTTS len=' + text.length);
 
   stopAudio();
 
@@ -107,43 +106,34 @@ async function playTTS(text) {
       body: JSON.stringify({ text })
     });
     console.log('[TTS] fetch status=' + res.status);
-    if (!res.ok) { console.warn('[TTS] fetch not ok'); return; }
+    if (!res.ok) { console.warn('[TTS] not ok'); return; }
 
-    const blob = await res.blob();
-    console.log('[TTS] blob size=' + blob.size + ' type=' + blob.type);
-    if (blob.size < 100) { console.warn('[TTS] blob too small'); return; }
+    const arrayBuf = await res.arrayBuffer();
+    console.log('[TTS] arrayBuffer bytes=' + arrayBuf.byteLength);
+    if (arrayBuf.byteLength < 100) { console.warn('[TTS] too small'); return; }
 
-    // Get or create persistent AudioContext
-    const ctx = _getTTSContext();
+    const ctx = _getTTSCtx();
     if (ctx.state === 'suspended') await ctx.resume();
     console.log('[TTS] ctx.state=' + ctx.state);
 
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    currentAudio = audio;
+    const audioBuffer = await ctx.decodeAudioData(arrayBuf);
+    console.log('[TTS] decoded, duration=' + audioBuffer.duration.toFixed(2) + 's');
 
-    // Route audio through AudioContext → speakers (required on iOS Safari)
-    const source = ctx.createMediaElementSource(audio);
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
     source.connect(ctx.destination);
-    console.log('[TTS] routed through AudioContext');
 
-    audio.onended = () => {
+    source.onended = () => {
       console.log('[TTS] ended');
-      URL.revokeObjectURL(url);
-      currentAudio = null;
+      _ttsSource = null;
     };
 
-    audio.onerror = (e) => {
-      console.error('[TTS] error', e);
-      URL.revokeObjectURL(url);
-      currentAudio = null;
-    };
-
-    await audio.play();
+    _ttsSource = source;
+    source.start(0);
     console.log('[TTS] playing');
   } catch (e) {
     console.error('[TTS] failed:', e);
-    currentAudio = null;
+    _ttsSource = null;
   }
 }
 
