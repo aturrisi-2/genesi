@@ -85,6 +85,16 @@ function stopAudio() {
   }
 }
 
+// iOS Safari: after AudioContext.close() (mic), the audio session is released.
+// We must unlock it again before HTMLAudioElement.play() will produce sound.
+async function _unlockAudioSession() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') await ctx.resume();
+    ctx.close();
+  } catch (e) { /* non-critical */ }
+}
+
 async function playTTS(text) {
   if (!ttsEnabled || !text) return;
 
@@ -101,6 +111,9 @@ async function playTTS(text) {
 
     const blob = await res.blob();
     if (blob.size < 100) return;
+
+    // Re-unlock audio session (iOS: needed after mic AudioContext was closed)
+    await _unlockAudioSession();
 
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
