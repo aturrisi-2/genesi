@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accedi — Genesi</title>
+    <link rel="stylesheet" href="/static/auth.css">
+</head>
+<body>
+    <div class="auth-card">
+        <h1>Accedi a Genesi</h1>
+        <p class="subtitle">Il tuo spazio ti aspetta.</p>
+
+        <form id="login-form">
+            <div class="field">
+                <label for="email">Email</label>
+                <input type="email" id="email" placeholder="la-tua@email.com" required autocomplete="email">
+            </div>
+            <div class="field">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="La tua password" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn" id="submit-btn">Accedi</button>
+        </form>
+
+        <div id="msg" class="msg"></div>
+
+        <div class="links">
+            <a href="/register">Crea un account</a>
+            <span>·</span>
+            <a href="/forgot-password">Password dimenticata?</a>
+        </div>
+    </div>
+
+    <script>
+    const form = document.getElementById('login-form');
+    const msg = document.getElementById('msg');
+    const btn = document.getElementById('submit-btn');
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        msg.className = 'msg';
+        msg.style.display = 'none';
+
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+
+        btn.disabled = true;
+        btn.textContent = 'Accesso...';
+
+        try {
+            const res = await fetch('/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                localStorage.setItem('genesi_access_token', data.access_token);
+                localStorage.setItem('genesi_refresh_token', data.refresh_token);
+                localStorage.setItem('genesi_user_id', data.user_id);
+                localStorage.setItem('genesi_is_admin', data.is_admin);
+                window.location.href = '/';
+            } else {
+                msg.textContent = data.detail || 'Credenziali non valide.';
+                msg.className = 'msg error';
+            }
+        } catch (err) {
+            msg.textContent = 'Errore di connessione.';
+            msg.className = 'msg error';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Accedi';
+        }
+    });
+    </script>
+</body>
+</html>

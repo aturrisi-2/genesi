@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — Genesi</title>
+    <link rel="stylesheet" href="/static/auth.css">
+</head>
+<body>
+    <div class="auth-card" style="max-width:520px;">
+        <h1>Pannello Admin</h1>
+        <p class="subtitle" id="subtitle">Caricamento statistiche...</p>
+
+        <div id="stats" style="display:none;">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="value" id="s-total">-</div>
+                    <div class="label">Utenti totali</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="s-verified">-</div>
+                    <div class="label">Verificati</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="s-7d">-</div>
+                    <div class="label">Attivi 7g</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="s-30d">-</div>
+                    <div class="label">Attivi 30g</div>
+                </div>
+                <div class="stat-card" style="grid-column: 1 / -1;">
+                    <div class="value" id="s-today">-</div>
+                    <div class="label">Registrazioni oggi</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="msg" class="msg"></div>
+
+        <div class="links" style="margin-top:28px;">
+            <a href="/">Torna a Genesi</a>
+            <span>·</span>
+            <a href="#" id="logout-link">Logout</a>
+        </div>
+    </div>
+
+    <script>
+    const token = localStorage.getItem('genesi_access_token');
+    const isAdmin = localStorage.getItem('genesi_is_admin');
+    const msg = document.getElementById('msg');
+    const subtitle = document.getElementById('subtitle');
+
+    if (!token || isAdmin !== 'true') {
+        subtitle.textContent = '';
+        msg.textContent = 'Accesso negato. Devi essere admin per visualizzare questa pagina.';
+        msg.className = 'msg error';
+    } else {
+        loadStats();
+    }
+
+    async function loadStats() {
+        try {
+            const res = await fetch('/auth/admin/stats', {
+                headers: { 'Authorization': 'Bearer ' + token },
+            });
+
+            if (res.status === 401 || res.status === 403) {
+                subtitle.textContent = '';
+                msg.textContent = 'Sessione scaduta o accesso negato.';
+                msg.className = 'msg error';
+                return;
+            }
+
+            const data = await res.json();
+
+            if (res.ok) {
+                subtitle.textContent = 'Ultimo aggiornamento: ' + new Date(data.timestamp).toLocaleString('it-IT');
+                document.getElementById('s-total').textContent = data.total_users;
+                document.getElementById('s-verified').textContent = data.verified_users;
+                document.getElementById('s-7d').textContent = data.active_7d;
+                document.getElementById('s-30d').textContent = data.active_30d;
+                document.getElementById('s-today').textContent = data.registrations_today;
+                document.getElementById('stats').style.display = 'block';
+            } else {
+                msg.textContent = data.detail || 'Errore nel caricamento.';
+                msg.className = 'msg error';
+            }
+        } catch (err) {
+            msg.textContent = 'Errore di connessione.';
+            msg.className = 'msg error';
+        }
+    }
+
+    document.getElementById('logout-link').addEventListener('click', (e) => {
+        e.preventDefault();
+        localStorage.removeItem('genesi_access_token');
+        localStorage.removeItem('genesi_refresh_token');
+        localStorage.removeItem('genesi_user_id');
+        localStorage.removeItem('genesi_is_admin');
+        window.location.href = '/login';
+    });
+    </script>
+</body>
+</html>

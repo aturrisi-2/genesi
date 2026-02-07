@@ -11,6 +11,8 @@ from api.chat import router as chat_router
 from api.upload import router as upload_router
 from api.stt import router as stt_router
 from tts.coqui import synthesize_bytes_async
+from auth.router import router as auth_router
+from auth.database import init_db
 
 # ======================================================
 # Config
@@ -21,6 +23,11 @@ ENABLE_TTS = True
 BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI()
+
+
+@app.on_event("startup")
+async def startup():
+    await init_db()
 
 # ======================================================
 # Modelli
@@ -39,6 +46,31 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def serve_index():
     return FileResponse(BASE_DIR / "static" / "index.html")
 
+
+@app.get("/register")
+async def serve_register():
+    return FileResponse(BASE_DIR / "static" / "register.html")
+
+
+@app.get("/login")
+async def serve_login():
+    return FileResponse(BASE_DIR / "static" / "login.html")
+
+
+@app.get("/forgot-password")
+async def serve_forgot_password():
+    return FileResponse(BASE_DIR / "static" / "forgot-password.html")
+
+
+@app.get("/reset-password")
+async def serve_reset_password():
+    return FileResponse(BASE_DIR / "static" / "reset-password.html")
+
+
+@app.get("/admin")
+async def serve_admin():
+    return FileResponse(BASE_DIR / "static" / "admin.html")
+
 # ======================================================
 # API
 # ======================================================
@@ -47,6 +79,7 @@ app.include_router(user_router)
 app.include_router(chat_router)
 app.include_router(upload_router)
 app.include_router(stt_router)
+app.include_router(auth_router)
 
 # ======================================================
 # TTS — Edge TTS (Microsoft Neural, gratuito)
