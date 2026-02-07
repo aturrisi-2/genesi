@@ -49,6 +49,17 @@ class IntentEngine:
     ]
 
     # ===============================
+    # CLOSURE INTENT TRIGGERS
+    # ===============================
+    CLOSURE_SOFT = ["ok", "ok grazie", "va bene", "bene", "perfetto", "grazie", "grazie mille"]
+    CLOSURE_HARD = ["stop", "basta", "adesso basta", "basta così", "non voglio più", "lascia perdere"]
+    CLOSURE_TRANSITION_PATTERNS = [
+        re.compile(r"\b(?:ok|va bene|stop|basta)\b.*\b(?:parliamo|dimmi|raccontami|cambia|altro)\b", re.I),
+        re.compile(r"\b(?:lasciamo stare|ci sentiamo dopo|a dopo|più tardi)\b", re.I),
+        re.compile(r"\b(?:ok|va bene|stop|basta)\b.*\b(?:d'altro|d altro)\b", re.I),
+    ]
+
+    # ===============================
     # DUAL BRAIN — FACTUAL SIGNALS
     # ===============================
     # Se il messaggio contiene questi pattern → Genesi-Fatti (gpt-4o-mini)
@@ -105,12 +116,6 @@ class IntentEngine:
         print(f"[INTENT] message='{msg}'", flush=True)
 
         # ===============================
-        # MEMORIA ESPLICITA
-        # ===============================
-        memory_keywords = ["memorizza", "memorizzalo", "ricorda", "ricordalo", "salva", "salvalo", "ricordati", "tieni a mente"]
-        explicit_memory = any(k in msg_lower for k in memory_keywords)
-
-        # ===============================
         # INTENT BASE
         # ===============================
         intent = {
@@ -118,9 +123,44 @@ class IntentEngine:
             "style": "presence",
             "depth": "naturale",
             "focus": "presente",
-            "use_memory": explicit_memory or bool(relevant_memories),
+            "use_memory": False,
             "emotional_weight": 0.3,
         }
+
+        # ===============================
+        # CLOSURE INTENT DETECTION (contextual)
+        # ===============================
+        closure_level = None
+        # Soft closure (short)
+        if msg_lower in self.CLOSURE_SOFT:
+            closure_level = "soft"
+        # Hard closure (short)
+        elif msg_lower in self.CLOSURE_HARD:
+            closure_level = "hard"
+        # Transition closure (pattern, can be longer)
+        elif any(p.search(msg) for p in self.CLOSURE_TRANSITION_PATTERNS):
+            closure_level = "transition"
+
+        if closure_level:
+            intent["type"] = "closure"
+            intent["closure_level"] = closure_level
+            intent["should_respond"] = True  # We'll decide response type in ResponseGenerator
+            intent["style"] = "minimal"
+            intent["depth"] = "presente"
+            intent["focus"] = "chiusura"
+            intent["use_memory"] = False
+            intent["emotional_weight"] = 0.0
+            print(f"[INTENT] closure_detected level={closure_level}", flush=True)
+            # Early return: closure overrides everything else
+            print(f"[INTENT] final={intent}", flush=True)
+            return intent
+
+        # ===============================
+        # MEMORIA ESPLICITA
+        # ===============================
+        memory_keywords = ["memorizza", "memorizzalo", "ricorda", "ricordalo", "salva", "salvalo", "ricordati", "tieni a mente"]
+        explicit_memory = any(k in msg_lower for k in memory_keywords)
+        intent["use_memory"] = explicit_memory or bool(relevant_memories)
 
         # ===============================
         # ESTRAZIONE IDENTITÀ: NOME

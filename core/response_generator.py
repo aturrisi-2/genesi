@@ -21,6 +21,32 @@ class ResponseGenerator:
         print(f"[RESPONSE_GENERATOR] intent={intent}", flush=True)
 
         # ===============================
+        # CLOSURE INTENT HANDLING (PRE-LLM)
+        # ===============================
+        if intent.get("type") == "closure":
+            level = intent.get("closure_level", "soft")
+            # Determine if previous response was long/psycho (simplified: check recent memories for system_response length)
+            prev_long = any(
+                e.get("type") == "system_response" and len(str(e.get("content", {}).get("text", ""))) > 100
+                for e in recent_memories[-2:]
+            )
+            if level == "soft":
+                if prev_long:
+                    response = "Va bene."
+                else:
+                    response = ""  # Silence
+                print(f"[INTENT_CLOSURE] level=soft action={'response' if response else 'silence'}", flush=True)
+                return response
+            elif level == "hard":
+                response = "Ok."
+                print(f"[INTENT_CLOSURE] level=hard action=minimal", flush=True)
+                return response
+            elif level == "transition":
+                response = "Va bene. Dimmi."
+                print(f"[INTENT_CLOSURE] level=transition action=aggancio", flush=True)
+                return response
+
+        # ===============================
         # GESTIONE DOCUMENTI / FILE
         # ===============================
         if document_context:

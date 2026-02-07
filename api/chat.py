@@ -53,6 +53,63 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
             log("CHAT_IN", error="missing_user_id")
     
     # ===============================
+    # INTENT ENGINE (include closure)
+    # ===============================
+    # Eseguiamo subito per rilevare closure e bypassare tutto il resto
+    state = CognitiveState.build(request.user_id)
+    recent_memories = get_recent_events(request.user_id, limit=5)
+    relevant_memories = search_events(request.user_id, request.message, limit=3)
+    tone = compute_tone(recent_memories)
+    intent_engine = IntentEngine()
+    intent = intent_engine.decide(
+        request.message,
+        state.user,
+        state,
+        recent_memories,
+        relevant_memories,
+        tone
+    )
+
+    # ===============================
+    # CLOSURE HANDLING: skip psycho, no memory side-effects
+    # ===============================
+    if intent.get("type") == "closure":
+        log("INTENT_CLOSURE", user_id=request.user_id, level=intent.get("closure_level"))
+        # Risposta diretta tramite ResponseGenerator (PRE-LLM)
+        response_generator = ResponseGenerator()
+        response_text = await response_generator.generate_response(
+            user_message=request.message,
+            cognitive_state=state,
+            recent_memories=recent_memories,
+            relevant_memories=relevant_memories,
+            tone=tone,
+            intent=intent
+        )
+        # Salviamo solo evento minimo in memoria episodica (no psicologica)
+        user_affect = compute_affect("user_message", {"text": request.message})
+        store_event(
+            user_id=request.user_id,
+            type="user_message",
+            content={"text": request.message},
+            salience=0.2,  # Bassa salience per closure
+            affect=user_affect
+        )
+        if response_text.strip():  # Solo se c'è risposta
+            store_event(
+                user_id=request.user_id,
+                type="system_response",
+                content={"text": response_text},
+                salience=0.2,
+                affect=compute_affect("system_response", {"text": response_text})
+            )
+        return {
+            "response": response_text,
+            "user_id": request.user_id,
+            "timestamp": datetime.now().isoformat(),
+            "closure": True
+        }
+
+    # ===============================
     # RAMO PSICOLOGICO — RILEVAZIONE AUTOMATICA
     # ===============================
     # Rileva PRIMA di tutto (tranne immagini attive).
@@ -77,7 +134,6 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                     entries=psy_context.get("total_interactions", 0))
                 
                 # Recupera nome utente se disponibile
-                state = CognitiveState.build(request.user_id)
                 user_name = None
                 if hasattr(state, 'user') and hasattr(state.user, 'profile'):
                     user_name = (state.user.profile or {}).get('name')
@@ -191,14 +247,11 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     else:
         log("PSYCH_DETECT", note="no_distress_detected", user_id=request.user_id) if False else None
     
-    # 1. Build cognitive state
-    state = CognitiveState.build(request.user_id)
-
     # 2. Compute message salience and affect
     user_salience = compute_salience(
         event_type="user_message",
         content={"text": request.message},
-        past_events=[e.to_dict() for e in state.recent_events]
+        past_events=[e for e in recent_memories if isinstance(e, dict) and e.get("content")]
     )
 
     user_affect = compute_affect(

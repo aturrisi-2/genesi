@@ -27,7 +27,7 @@ def compute_tone(events: List) -> ToneProfile:
             return sum(numeric_vals) / len(numeric_vals) if numeric_vals else 0.0
         return float(val) if isinstance(val, (int, float)) else 0.0
 
-    decayed_affects = [_to_float(e.decayed_affect) for e in events if hasattr(e, 'decayed_affect')]
+    decayed_affects = [_to_float(e.get('decayed_affect')) for e in events if isinstance(e, dict) and e.get('decayed_affect') is not None]
     avg_decayed_affect = sum(decayed_affects) / len(decayed_affects) if decayed_affects else 0.0
     
     if avg_decayed_affect > 0.2:
@@ -37,7 +37,7 @@ def compute_tone(events: List) -> ToneProfile:
         empathy += 0.3
         directness -= 0.2
     
-    saliences = [e.salience for e in events]
+    saliences = [e.get('salience', 0.5) for e in events if isinstance(e, dict)]
     avg_salience = sum(saliences) / len(saliences) if saliences else 0.0
     
     if avg_salience > 0.5:
