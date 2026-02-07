@@ -81,40 +81,6 @@ def _split_sentences(text: str) -> list:
     return [p.strip() for p in parts if p.strip() and len(p.strip()) > 2]
 
 
-def _add_micro_pauses(text: str) -> str:
-    """Inserisce micro-pause variabili su virgole e cambi frase per ritmo naturale."""
-    import random
-    # Pause su virgole: 50-120 ms casuali (0.05-0.12s)
-    text = re.sub(r",\s*", lambda m: f",{random.randint(50, 120)}ms ", text)
-    # Pause su punto fine frase (non dopo ellipsis): 80-150 ms
-    text = re.sub(r"\.(\s+|$)", lambda m: f".{random.randint(80, 150)}ms ", text)
-    # Rimuovi spazi doppi dopo pause
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
-
-
-def _should_breathe(text: str) -> bool:
-    """Decide se inserire un respiro contestuale: SOLO risposte lunghe/densi/cambio argomento."""
-    word_count = len(text.split())
-    # Risposta lunga (>30 parole) o densa (>3 frasi)
-    sentence_count = len(re.findall(r"[.!?]+", text))
-    if word_count > 30 or sentence_count > 3:
-        return True
-    # Cambio argomento: indicatori espliciti
-    topic_shift = re.search(r"\b(?:a parte questo|però|comunque|d'altronde|invece|altra cosa|cambiando argomento)\b", text, re.I)
-    if topic_shift:
-        return True
-    return False
-
-
-def _add_contextual_breath(text: str) -> str:
-    """Aggiunge un respiro brevissimo e non udibile come 'effetto'."""
-    import random
-    # Respiro: 200-400 ms, inserito solo all'inizio se serve
-    if _should_breathe(text):
-        breath_ms = random.randint(200, 400)
-        return f"{breath_ms}ms {text}"
-    return text
 
 
 # ===============================
@@ -160,8 +126,6 @@ async def _synth_segment(text: str, rate: str, pitch: str) -> bytes:
 async def _synthesize_async(text: str) -> bytes:
     emo = _detect_emotional_weight(text)
     processed = _preprocess(text)
-    processed = _add_contextual_breath(processed)  # respiro SOLO se serve
-    processed = _add_micro_pauses(processed)  # micro-pause variabili
     sentences = _split_sentences(processed)
 
     if not sentences:

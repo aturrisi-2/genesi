@@ -104,6 +104,12 @@ async def text_to_speech(request: TTSRequest):
     text = re.sub(r'^\[[A-Z_]+\]\s*', '', text)
     # Rimuovi numeri iniziali seguiti da spazio (es: "1234567890 ")
     text = re.sub(r'^\d+\s+', '', text)
+    # Rimuovi parametri temporali residui (ms) che Edge TTS non supporta
+    if re.search(r'\d+ms', text):
+        print(f"[TTS] WARNING: rimosso parametri temporali dal testo", flush=True)
+        text = re.sub(r'\d+\s?ms', '', text)
+    # Rimuovi spazi multipli residui
+    text = re.sub(r'\s+', ' ', text).strip()
     # Assicura che il testo contenga solo caratteri umani
     if not re.search(r'[a-zA-ZàèéìòùÀÈÉÌÒÙ]', text):
         return JSONResponse(status_code=400, content={"error": "Testo non valido"})
