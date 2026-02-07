@@ -66,24 +66,13 @@ def _soften_closings(text: str) -> str:
 
 def _preprocess(text: str) -> str:
     text = re.sub(r"\s+", " ", text.strip())
-    # Soften emotional closings before any other transform
+    # Soften emotional closings
     text = _soften_closings(text)
-    # Breathing comma before conjunctions after long words
-    text = re.sub(
-        r"(\w{12,})\s+(e|ma|però|perché|quando|dove|come)\s",
-        r"\1, \2 ",
-        text,
-    )
-    # Period → ellipsis solo per frasi molto lunghe (pause naturali, non eccessive)
-    def _period_to_ellipsis(m):
-        before, after = m.group(1), m.group(2)
-        if len(before) > 40:
-            return before + "... " + after
-        return before + ". " + after
-
-    text = re.sub(r"([^.]{5,})\.\s+(\S)", _period_to_ellipsis, text)
     # Soften exclamation marks
     text = text.replace("!", ".")
+    # Riduci ellipsis multiple a singolo punto (meno pause)
+    text = re.sub(r"\.{2,}", ".", text)
+    text = re.sub(r"…", ",", text)
     return text.strip()
 
 
@@ -95,7 +84,7 @@ def _split_sentences(text: str) -> list:
 # ===============================
 # PROSODY — MICRO-VARIED PER SEGMENT
 # ===============================
-_VARIATION_CYCLE = [0, -1.5, +1, -0.5, +0.8, -1]
+_VARIATION_CYCLE = [0, -0.5, +0.5, -0.3, +0.4, -0.2]
 
 
 def _format_val(val: float, suffix: str, lo: int, hi: int) -> str:
@@ -108,13 +97,13 @@ def _format_val(val: float, suffix: str, lo: int, hi: int) -> str:
 
 
 def _get_prosody(emo: float, idx: int) -> tuple:
-    # Più sveglia e presente. Emotional → leggermente più lenta.
-    base_rate = 2 - (emo * 8)     # light≈+1, neutral≈-2, heavy≈-6
-    base_pitch = 0 - (emo * 2)    # light≈0, neutral≈-1, heavy≈-2
+    # Veloce e fluida. Emotional → solo leggermente più lenta.
+    base_rate = 12 - (emo * 14)    # light≈+9, neutral≈+5, heavy≈-1
+    base_pitch = 0 - (emo * 1.5)   # light≈0, neutral≈-0.75, heavy≈-1.5
     v = _VARIATION_CYCLE[idx % len(_VARIATION_CYCLE)]
     rate = base_rate + v
-    pitch = base_pitch + (v * 0.3)
-    return _format_val(rate, "%", -10, 5), _format_val(pitch, "Hz", -4, 1)
+    pitch = base_pitch + (v * 0.2)
+    return _format_val(rate, "%", -5, 15), _format_val(pitch, "Hz", -3, 1)
 
 
 # ===============================
