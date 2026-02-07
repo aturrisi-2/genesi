@@ -192,10 +192,20 @@ function setState(newState) {
 // ===============================
 // MESSAGES
 // ===============================
+// Neon hue palette — each message gets a different color
+const _neonHues = [180, 300, 90, 210, 330, 45, 270, 150, 0, 60];
+let _neonIdx = 0;
+
 function addMessage(text, sender) {
   const el = document.createElement('div');
   el.className = `message ${sender}`;
   el.textContent = text;
+
+  // Assign rotating neon hue
+  const hue = _neonHues[_neonIdx % _neonHues.length];
+  el.style.setProperty('--neon-hue', hue + 'deg');
+  _neonIdx++;
+
   dialogue.appendChild(el);
 
   // Always scroll on new message (user just sent or received)

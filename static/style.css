@@ -8,15 +8,14 @@
 }
 
 :root {
-    --bg-deep: #0a0a12;
-    --bg-surface: rgba(12, 12, 22, 0.65);
-    --text-color: rgba(255, 255, 250, 0.92);
-    --text-muted: rgba(255, 255, 250, 0.5);
-    --neon-cyan: #00e5ff;
-    --neon-violet: #bf5af2;
-    --neon-magenta: #ff2d78;
-    --glass-border: rgba(255, 255, 255, 0.08);
-    --glass-border-hover: rgba(255, 255, 255, 0.18);
+    --bg-charcoal: #1a1a22;
+    --bg-slate: #252530;
+    --text-color: rgba(255, 255, 255, 0.93);
+    --text-muted: rgba(200, 200, 210, 0.55);
+    --glass-bg: rgba(30, 30, 40, 0.55);
+    --glass-border: rgba(255, 255, 255, 0.06);
+    --glass-border-hover: rgba(255, 255, 255, 0.14);
+    --neon-hue: 180deg;
     --app-height: 100vh;
     --transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -32,7 +31,7 @@ body {
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background: var(--bg-deep);
+    background: var(--bg-charcoal);
     height: 100%;
     overflow: hidden;
     position: fixed;
@@ -42,8 +41,9 @@ body {
 }
 
 /* ===============================
-   ATMOSPHERIC BACKGROUND
+   NOIR BACKGROUND — COMIC ATMOSPHERE
    =============================== */
+/* Vignette — dark edges, lighter center */
 body::before {
     content: "";
     position: fixed;
@@ -51,22 +51,30 @@ body::before {
     pointer-events: none;
     z-index: 0;
     background:
-        radial-gradient(ellipse 80% 60% at 20% 10%, rgba(0, 229, 255, 0.06) 0%, transparent 60%),
-        radial-gradient(ellipse 70% 50% at 80% 90%, rgba(191, 90, 242, 0.05) 0%, transparent 55%),
-        radial-gradient(ellipse 90% 80% at 50% 50%, rgba(10, 10, 18, 0.9) 0%, transparent 100%);
+        radial-gradient(ellipse 70% 65% at 50% 50%,
+            transparent 0%,
+            rgba(10, 10, 14, 0.25) 60%,
+            rgba(5, 5, 8, 0.7) 100%
+        ),
+        linear-gradient(180deg,
+            #1e1e28 0%,
+            #222230 30%,
+            #1c1c26 70%,
+            #141418 100%
+        );
 }
 
-/* Grain overlay — cinematic noise */
+/* Halftone / paper grain overlay */
 body::after {
     content: "";
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: 9999;
-    opacity: 0.03;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='h'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23h)' opacity='0.7'/%3E%3C/svg%3E");
     background-repeat: repeat;
-    background-size: 256px 256px;
+    background-size: 200px 200px;
     mix-blend-mode: overlay;
 }
 
@@ -104,53 +112,22 @@ body::after {
     max-width: 24ch;
     margin: 0 auto;
     line-height: 1.5;
-    color: var(--neon-cyan);
+    color: #e0e0e8;
     text-shadow:
-        0 0 4px rgba(0, 229, 255, 0.9),
-        0 0 11px rgba(0, 229, 255, 0.5),
-        0 0 22px rgba(0, 229, 255, 0.25),
-        0 0 44px rgba(0, 229, 255, 0.12);
-    animation: neonBreath 4s ease-in-out infinite;
-    will-change: text-shadow, opacity;
+        0 0 6px rgba(255, 255, 255, 0.15),
+        0 0 20px rgba(255, 255, 255, 0.06);
+    animation: neonBreath 5s ease-in-out infinite;
+    will-change: opacity;
 }
 
 @keyframes neonBreath {
-    0%, 100% {
-        opacity: 1;
-        text-shadow:
-            0 0 4px rgba(0, 229, 255, 0.9),
-            0 0 11px rgba(0, 229, 255, 0.5),
-            0 0 22px rgba(0, 229, 255, 0.25),
-            0 0 44px rgba(0, 229, 255, 0.12);
-    }
-    30% {
-        opacity: 0.92;
-        text-shadow:
-            0 0 3px rgba(0, 229, 255, 0.7),
-            0 0 8px rgba(0, 229, 255, 0.35),
-            0 0 18px rgba(0, 229, 255, 0.15);
-    }
-    50% {
-        opacity: 1;
-        text-shadow:
-            0 0 5px rgba(0, 229, 255, 1),
-            0 0 14px rgba(0, 229, 255, 0.6),
-            0 0 28px rgba(0, 229, 255, 0.3),
-            0 0 50px rgba(0, 229, 255, 0.15);
-    }
-    72% {
-        opacity: 0.88;
-        text-shadow:
-            0 0 2px rgba(0, 229, 255, 0.6),
-            0 0 7px rgba(0, 229, 255, 0.3),
-            0 0 14px rgba(0, 229, 255, 0.1);
-    }
+    0%, 100% { opacity: 0.75; }
+    50%      { opacity: 1; }
 }
 
-/* Neon flicker on individual words — applied via JS or nth-letter workaround */
 @keyframes neonFlicker {
     0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; }
-    20%, 24%, 55% { opacity: 0.4; }
+    20%, 24%, 55% { opacity: 0.35; }
 }
 
 /* ===============================
@@ -168,22 +145,22 @@ body::after {
     overscroll-behavior-y: contain;
 }
 
-/* Scrollbar styling */
 #dialogue::-webkit-scrollbar {
-    width: 4px;
+    width: 3px;
 }
 #dialogue::-webkit-scrollbar-track {
     background: transparent;
 }
 #dialogue::-webkit-scrollbar-thumb {
-    background: rgba(0, 229, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08);
     border-radius: 2px;
 }
 
 /* ===============================
-   MESSAGES — FROSTED GLASS
+   MESSAGES — GLASS ON PAPER + NEON HUE BORDERS
    =============================== */
 .message {
+    --neon-hue: 180deg;
     font-size: 1.05rem;
     line-height: 1.55;
     width: fit-content;
@@ -198,43 +175,36 @@ body::after {
     overflow-wrap: break-word;
     white-space: pre-wrap;
     will-change: transform, opacity;
+    background: var(--glass-bg);
+    color: #fff;
+    border: 1px solid hsl(var(--neon-hue), 100%, 65%, 0.25);
+    box-shadow:
+        0 0 5px hsl(var(--neon-hue), 100%, 60%, 0.1),
+        0 0 15px hsl(var(--neon-hue), 100%, 60%, 0.05),
+        inset 0 0 10px hsl(var(--neon-hue), 100%, 60%, 0.03);
 }
 
-@supports (backdrop-filter: blur(12px)) {
+@supports (backdrop-filter: blur(14px)) {
     .message {
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
+        backdrop-filter: blur(14px) saturate(1.1);
+        -webkit-backdrop-filter: blur(14px) saturate(1.1);
     }
 }
 
-/* Genesi — amethyst glass */
 .message.genesi {
     align-self: flex-start;
-    background: rgba(60, 20, 90, 0.35);
-    color: #fff;
-    border: 1px solid rgba(191, 90, 242, 0.2);
     border-bottom-left-radius: 0.25rem;
-    box-shadow:
-        0 0 6px rgba(191, 90, 242, 0.1),
-        inset 0 0 12px rgba(191, 90, 242, 0.05);
 }
 
-/* User — dark cyan glass */
 .message.user {
     align-self: flex-end;
-    background: rgba(0, 40, 60, 0.4);
-    color: #fff;
-    border: 1px solid rgba(0, 229, 255, 0.15);
     border-bottom-right-radius: 0.25rem;
-    box-shadow:
-        0 0 6px rgba(0, 229, 255, 0.08),
-        inset 0 0 12px rgba(0, 229, 255, 0.04);
 }
 
 @keyframes msgAppear {
     from {
         opacity: 0;
-        transform: translateY(8px) scale(0.98);
+        transform: translateY(8px) scale(0.97);
     }
     to {
         opacity: 1;
@@ -249,7 +219,7 @@ body::after {
     flex-shrink: 0;
     font-size: 0.8rem;
     text-align: center;
-    padding: 0.3rem 0;
+    padding: 0.4rem 0;
     color: var(--text-muted);
     opacity: 0;
     transition: opacity 0.3s ease;
@@ -266,24 +236,25 @@ body::after {
     bottom: 0;
     left: 50%;
     transform: translateX(-50%);
-    width: 120px;
+    width: 140px;
     height: 2px;
     border-radius: 1px;
     background: linear-gradient(90deg,
         transparent,
-        var(--neon-violet),
-        var(--neon-cyan),
-        var(--neon-violet),
+        hsl(300, 100%, 65%),
+        hsl(180, 100%, 60%),
+        hsl(60, 100%, 60%),
+        hsl(300, 100%, 65%),
         transparent
     );
-    background-size: 200% 100%;
-    animation: energyBar 1.5s ease-in-out infinite;
+    background-size: 300% 100%;
+    animation: energyBar 2s ease-in-out infinite;
 }
 
 @keyframes energyBar {
-    0%   { background-position: 200% 0; opacity: 0.6; }
+    0%   { background-position: 300% 0; opacity: 0.5; }
     50%  { opacity: 1; }
-    100% { background-position: -200% 0; opacity: 0.6; }
+    100% { background-position: -300% 0; opacity: 0.5; }
 }
 
 /* ===============================
@@ -296,36 +267,83 @@ body::after {
 }
 
 #input-container {
-    background: rgba(12, 12, 22, 0.7);
+    background: rgba(22, 22, 32, 0.75);
     border-radius: 1.5rem;
     padding: 0.5rem 0.8rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
     border: 1px solid var(--glass-border);
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    transition: border-color 0.4s ease, box-shadow 0.4s ease;
+    position: relative;
 }
 
 @supports (backdrop-filter: blur(20px)) {
     #input-container {
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
+        backdrop-filter: blur(20px) saturate(1.1);
+        -webkit-backdrop-filter: blur(20px) saturate(1.1);
     }
 }
 
+/* RGB border glow — always-on slow rotation */
+#input-container::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(
+        from var(--rgb-angle, 0deg),
+        hsl(0, 100%, 65%, 0.15),
+        hsl(60, 100%, 60%, 0.15),
+        hsl(120, 100%, 55%, 0.15),
+        hsl(180, 100%, 60%, 0.15),
+        hsl(240, 100%, 65%, 0.15),
+        hsl(300, 100%, 60%, 0.15),
+        hsl(360, 100%, 65%, 0.15)
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    animation: rgbRotate 8s linear infinite;
+}
+
+@keyframes rgbRotate {
+    to { --rgb-angle: 360deg; }
+}
+
+@property --rgb-angle {
+    syntax: "<angle>";
+    initial-value: 0deg;
+    inherits: false;
+}
+
 #input-container:focus-within {
-    border-color: rgba(0, 229, 255, 0.3);
     box-shadow:
-        0 0 8px rgba(0, 229, 255, 0.1),
-        0 0 20px rgba(0, 229, 255, 0.05),
-        inset 0 0 8px rgba(0, 229, 255, 0.03);
+        0 0 10px rgba(255, 255, 255, 0.04),
+        0 0 30px rgba(120, 180, 255, 0.04);
+}
+
+#input-container:focus-within::before {
+    background: conic-gradient(
+        from var(--rgb-angle, 0deg),
+        hsl(0, 100%, 65%, 0.35),
+        hsl(60, 100%, 60%, 0.35),
+        hsl(120, 100%, 55%, 0.35),
+        hsl(180, 100%, 60%, 0.35),
+        hsl(240, 100%, 65%, 0.35),
+        hsl(300, 100%, 60%, 0.35),
+        hsl(360, 100%, 65%, 0.35)
+    );
 }
 
 /* Send pulse — shockwave on submit */
 @keyframes sendPulse {
-    0%   { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.4); }
-    70%  { box-shadow: 0 0 0 12px rgba(0, 229, 255, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0); }
+    0%   { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.25); }
+    70%  { box-shadow: 0 0 0 14px rgba(255, 255, 255, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
 }
 
 #input-container.pulse {
@@ -353,7 +371,7 @@ body::after {
 #plus-button svg {
     width: 15px;
     height: 15px;
-    stroke: rgba(255, 255, 255, 0.7);
+    stroke: rgba(255, 255, 255, 0.6);
     stroke-width: 2;
     fill: none;
 }
@@ -380,7 +398,7 @@ body::after {
     font-size: 1rem;
     padding: 0.6rem 0;
     outline: none;
-    caret-color: var(--neon-cyan);
+    caret-color: hsl(180, 100%, 65%);
     -webkit-appearance: none;
     appearance: none;
 }
@@ -407,8 +425,8 @@ body::after {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    background: rgba(191, 90, 242, 0.08);
-    border: 1px solid rgba(191, 90, 242, 0.2);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     transition: background 0.25s ease, border-color 0.25s ease, transform 0.15s ease, box-shadow 0.25s ease;
     animation: none;
 }
@@ -416,15 +434,15 @@ body::after {
 #mic-button svg {
     width: 15px;
     height: 15px;
-    stroke: rgba(255, 255, 255, 0.85);
+    stroke: rgba(255, 255, 255, 0.75);
     stroke-width: 2;
     fill: none;
 }
 
 #mic-button:hover {
-    background: rgba(191, 90, 242, 0.15);
-    border-color: rgba(191, 90, 242, 0.4);
-    box-shadow: 0 0 8px rgba(191, 90, 242, 0.15);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.06);
 }
 
 #mic-button:active {
@@ -433,22 +451,22 @@ body::after {
 
 #mic-button.recording {
     animation: mic-pulse-neon 1.4s infinite ease-in-out;
-    background: rgba(191, 90, 242, 0.2);
-    border-color: rgba(191, 90, 242, 0.7);
+    background: rgba(255, 60, 80, 0.12);
+    border-color: rgba(255, 60, 80, 0.5);
 }
 
 @keyframes mic-pulse-neon {
     0%   {
         transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(191, 90, 242, 0.5), 0 0 6px rgba(191, 90, 242, 0.3);
+        box-shadow: 0 0 0 0 rgba(255, 60, 80, 0.4), 0 0 6px rgba(255, 60, 80, 0.2);
     }
     50%  {
         transform: scale(1.06);
-        box-shadow: 0 0 0 10px rgba(191, 90, 242, 0), 0 0 14px rgba(191, 90, 242, 0.15);
+        box-shadow: 0 0 0 10px rgba(255, 60, 80, 0), 0 0 14px rgba(255, 60, 80, 0.1);
     }
     100% {
         transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(191, 90, 242, 0), 0 0 6px rgba(191, 90, 242, 0.3);
+        box-shadow: 0 0 0 0 rgba(255, 60, 80, 0), 0 0 6px rgba(255, 60, 80, 0.2);
     }
 }
 
@@ -460,8 +478,8 @@ body::after {
     flex-shrink: 0;
     width: 2.2rem;
     height: 2.2rem;
-    background: rgba(0, 229, 255, 0.06);
-    border: 1px solid rgba(0, 229, 255, 0.2);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -472,21 +490,21 @@ body::after {
 
 #send-button:disabled {
     pointer-events: none;
-    opacity: 0.25;
+    opacity: 0.2;
 }
 
 #send-button svg {
     width: 16px;
     height: 16px;
-    stroke: rgba(0, 229, 255, 0.85);
+    stroke: rgba(255, 255, 255, 0.75);
     stroke-width: 2;
     fill: none;
 }
 
 #send-button:hover {
-    background: rgba(0, 229, 255, 0.12);
-    border-color: rgba(0, 229, 255, 0.4);
-    box-shadow: 0 0 8px rgba(0, 229, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.06);
 }
 
 #send-button:active {
