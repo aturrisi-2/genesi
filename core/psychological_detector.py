@@ -122,12 +122,20 @@ EMOTIONAL_BOOST_WEIGHT = 0.10
 EMOTIONAL_BOOST_CAP = 0.20
 
 # Soglia di attivazione del ramo psicologico
-# Abbassata a 0.20: un singolo segnale mild (0.2) o un boost emotivo basta
 ACTIVATION_THRESHOLD = 0.20
 # Soglia per segnali critici (attivazione immediata)
 CRITICAL_THRESHOLD = 0.8
 # Numero di messaggi neutri consecutivi per disattivare
 DEACTIVATION_NEUTRAL_COUNT = 3
+
+# ===============================
+# SOGLIA DINAMICA (MOMENTUM)
+# ===============================
+# Messaggi negativi consecutivi aggiungono un bonus cumulativo.
+# Questo evita che un singolo messaggio moderato venga ignorato
+# quando fa parte di una sequenza di sofferenza.
+MOMENTUM_BONUS = 0.08   # per messaggio negativo consecutivo
+MOMENTUM_CAP = 0.24     # max 3 messaggi di accumulo
 
 # Directory per stato detector per-utente
 PSY_DETECTOR_DIR = Path("data/psychological/detector")
@@ -191,11 +199,30 @@ def detect(user_id: str, message: str) -> Dict:
     if emotional_signal and max_severity == "none":
         max_severity = "mild"
     
+    # ===============================
+    # FASE 3: Soglia dinamica (momentum)
+    # ===============================
+    has_distress = current_score >= ACTIVATION_THRESHOLD or emotional_signal or len(current_signals) > 0
+    consecutive = state.get("consecutive_distress", 0)
+    
+    if has_distress:
+        consecutive += 1
+        momentum = min(consecutive * MOMENTUM_BONUS, MOMENTUM_CAP)
+        current_score += momentum
+        if momentum > 0:
+            _log("PSYCH_MOMENTUM", user_id=user_id,
+                 consecutive=consecutive, bonus=momentum,
+                 score_after=current_score)
+    else:
+        consecutive = 0
+    
+    state["consecutive_distress"] = consecutive
+    
     # Cap score a 1.0
     current_score = min(current_score, 1.0)
     
     # ===============================
-    # FASE 3: Decisione attivazione
+    # FASE 4: Decisione attivazione
     # ===============================
     is_crisis = max_severity == "critical"
     was_active = state.get("active", False)
@@ -214,13 +241,22 @@ def detect(user_id: str, message: str) -> Dict:
             state["activation_time"] = datetime.utcnow().isoformat()
         
     elif was_active and current_score < ACTIVATION_THRESHOLD:
+        # ===============================
+        # DECAY esplicito
+        # ===============================
         neutral_count = state.get("neutral_count", 0) + 1
         state["neutral_count"] = neutral_count
+        
+        _log("PSYCH_DECAY", user_id=user_id,
+             neutral_counter=f"{neutral_count}/{DEACTIVATION_NEUTRAL_COUNT}")
         
         if neutral_count >= DEACTIVATION_NEUTRAL_COUNT:
             active = False
             reason = f"context normalized ({neutral_count} neutral messages)"
             state["deactivation_time"] = datetime.utcnow().isoformat()
+            state["consecutive_distress"] = 0
+            _log("PSYCH_DECAY", user_id=user_id,
+                 completed=True, action="reverting to standard branch")
         else:
             active = True
             reason = f"still active (neutral={neutral_count}/{DEACTIVATION_NEUTRAL_COUNT})"
@@ -245,6 +281,7 @@ def detect(user_id: str, message: str) -> Dict:
         "crisis": is_crisis,
         "reason": reason,
         "emotional_signal": emotional_signal,
+        "consecutive_distress": consecutive,
     }
     
     _log("PSYCH_DETECT", user_id=user_id,

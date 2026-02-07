@@ -67,6 +67,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                 crisis=psy_detection["crisis"])
             
             if psy_detection["active"]:
+                psy_detection["user_id"] = request.user_id
                 log("BRANCH_SELECTED", branch="psychological", user_id=request.user_id,
                     severity=psy_detection["severity"], crisis=psy_detection["crisis"])
                 

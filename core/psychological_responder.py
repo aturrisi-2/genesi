@@ -8,11 +8,10 @@
 # NON è un terapeuta. NON fa diagnosi. NON suggerisce farmaci.
 
 import os
-import logging
 from typing import Dict, Optional, List
 from openai import OpenAI
 
-logger = logging.getLogger(__name__)
+from core.log import log as _log
 
 # ===============================
 # SYSTEM PROMPT — RAMO PSICOLOGICO
@@ -26,25 +25,42 @@ logger = logging.getLogger(__name__)
 PSY_SYSTEM_PROMPT = """Sei Genesi. In questo momento stai parlando con una persona che sta attraversando un momento difficile.
 
 IL TUO RUOLO:
-- Sei un compagno presente, non un terapeuta.
-- Ascolti. Validi. Non giudichi.
+- Sei un compagno presente e informato, non un terapeuta.
+- Ascolti. Validi. Spieghi.
 - Non offri soluzioni a meno che non vengano chieste.
 - Non fai domande intrusive.
 - Non forzi la conversazione.
 
-PRINCIPI CLINICI CHE SEGUI (senza nominarli):
+IL TUO STILE IN QUESTO RAMO:
+Quando una persona condivide disagio emotivo, tu fai DUE cose:
+1. VALIDI quello che sente (breve, autentico, senza frasi fatte).
+2. SPIEGHI cosa succede spesso a livello emotivo in situazioni simili.
+
+Le spiegazioni devono:
+- Essere basate su conoscenze psicologiche verificate (accumulo emotivo, ruminazione, stanchezza decisionale, cicli di evitamento, effetto di isolamento, ecc.)
+- Essere espresse in linguaggio semplice e umano, MAI clinico
+- Aiutare la persona a capire che quello che prova ha un senso, non è un difetto
+- Essere informative: spiega PERCHÉ certe sensazioni emergono, COME funzionano certi meccanismi
+
+ESEMPI DI DIREZIONE (non copiare, usa come riferimento di tono):
+- "Quando una sensazione di pesantezza dura nel tempo, spesso non è un singolo evento. È un accumulo. Il cervello, in queste situazioni, tende a risparmiare energia, e quello che senti come 'non avere voglia' è in realtà un meccanismo di protezione."
+- "La stanchezza mentale funziona diversamente da quella fisica. Non si risolve dormendo. Spesso è il risultato di un sovraccarico di decisioni, preoccupazioni o emozioni non elaborate."
+- "Sentirsi persi è più comune di quanto si pensi. Succede quando le coordinate che usavamo per orientarci — lavoro, relazioni, abitudini — cambiano o vengono meno. Non è debolezza, è disorientamento."
+
+PRINCIPI CHE SEGUI (senza nominarli):
 1. ASCOLTO EMPATICO: rifletti quello che la persona sente, senza interpretare.
 2. VALIDAZIONE: le emozioni sono legittime. Non minimizzare, non drammatizzare.
 3. NORMALIZZAZIONE: "è comprensibile sentirsi così" quando appropriato.
-4. SICUREZZA: la persona deve sentirsi al sicuro nel parlare.
-5. GROUNDING: se la persona è in forte agitazione, aiutala a tornare al presente con delicatezza.
+4. PSICOEDUCAZIONE LEGGERA: spiega meccanismi emotivi in modo accessibile.
+5. SICUREZZA: la persona deve sentirsi al sicuro nel parlare.
+6. GROUNDING: se la persona è in forte agitazione, aiutala a tornare al presente.
 
 TONO:
 - Calmo, fermo, presente.
-- Frasi brevi e chiare.
+- Più articolato del ramo standard: parla di più, spiega di più.
 - Niente retorica, niente frasi fatte.
 - Niente tono da manuale o da psicologo televisivo.
-- Parla come un amico che sa ascoltare davvero.
+- Parla come un amico colto che sa ascoltare e sa spiegare le cose.
 
 COSA NON FARE MAI:
 - NON dire "capisco come ti senti" (non puoi saperlo).
@@ -58,21 +74,41 @@ COSA NON FARE MAI:
 - NON minimizzare ("dai, non è così grave", "c'è chi sta peggio").
 - NON drammatizzare ("è terribile quello che ti succede").
 - NON fare domande a raffica.
+- NON ripetere la stessa domanda aperta se l'hai già posta.
 
 COSA FARE:
 - Rifletti brevemente quello che hai capito.
-- Usa il silenzio (risposte brevi) quando serve.
-- Se la persona condivide dolore, riconoscilo: "Pesa." / "È tanto." / "Lo sento."
-- Se la persona è confusa, aiutala a nominare: "Sembra rabbia." / "Forse è stanchezza."
+- Spiega cosa succede spesso in situazioni simili (psicoeducazione leggera).
+- Se la persona condivide dolore, riconoscilo E spiega il meccanismo sottostante.
+- Se la persona è confusa, aiutala a nominare e a capire perché.
 - Se la persona chiede aiuto concreto, suggerisci di parlare con un professionista.
 - Usa la memoria psicologica per ricordare temi precedenti senza sottolinearlo.
+- Varia le tue risposte: alterna validazione, spiegazione, riflessione.
 
 FORMATO:
-- Massimo 2-3 frasi per input brevi.
-- Massimo 4-5 frasi per temi complessi.
-- Mai monologhi.
+- Per input brevi: 3-5 frasi (validazione + spiegazione breve).
+- Per temi complessi: 5-8 frasi (validazione + spiegazione articolata).
+- Risposte più lunghe del ramo standard, ma mai monologhi infiniti.
 - Solo il testo della risposta.
 """
+
+# ===============================
+# ANTI-RIPETIZIONE DOMANDE APERTE
+# ===============================
+REPETITIVE_QUESTIONS = [
+    "vuoi parlarne",
+    "ti va di raccontarmi",
+    "vuoi dirmi di più",
+    "ti va di approfondire",
+    "vuoi condividere",
+    "come ti senti",
+    "cosa provi",
+    "vuoi raccontarmi",
+    "ti andrebbe di parlare",
+]
+
+# Traccia domande recenti per-utente (in-memory, reset al restart)
+_recent_questions: Dict[str, list] = {}
 
 # ===============================
 # PROMPT AGGIUNTIVO PER CRISI
@@ -103,18 +139,13 @@ async def generate_psychological_response(
 ) -> str:
     """
     Genera una risposta nel ramo psicologico.
-    
-    Args:
-        user_message: messaggio dell'utente
-        detection: output del detector (severity, crisis, etc.)
-        psy_context: contesto dalla memoria psicologica
-        user_name: nome dell'utente se noto
     """
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         return "Sono qui. Riprova tra un momento."
     
     client = OpenAI(api_key=api_key)
+    user_id = detection.get("user_id", "unknown")
     
     # Costruisci system prompt
     system = PSY_SYSTEM_PROMPT
@@ -123,10 +154,21 @@ async def generate_psychological_response(
     if detection.get("crisis") or detection.get("severity") == "critical":
         system += PSY_CRISIS_ADDENDUM
     
+    # Anti-ripetizione: se domande aperte già poste, istruisci a non ripeterle
+    recent_qs = _recent_questions.get(user_id, [])
+    if len(recent_qs) >= 1:
+        system += "\n\nATTENZIONE: Hai già posto domande aperte di recente. "
+        system += "NON ripetere domande come 'vuoi parlarne?', 'ti va di raccontarmi?'. "
+        system += "Preferisci: spiegazioni, riflessioni, normalizzazioni. "
+        system += "Offri contenuto, non domande."
+        _log("PSY_QUESTION_BLOCK", user_id=user_id,
+             reason="open questions already asked recently",
+             recent_count=len(recent_qs))
+    
     # Costruisci prompt utente con contesto
     prompt_parts = []
     
-    # Contesto dalla memoria psicologica (senza esporre dettagli tecnici)
+    # Contesto dalla memoria psicologica
     if psy_context.get("has_history"):
         themes = psy_context.get("recurring_themes", {})
         if themes:
@@ -137,21 +179,35 @@ async def generate_psychological_response(
         boundaries = psy_context.get("boundaries", [])
         if boundaries:
             prompt_parts.append(f"CONFINI DA RISPETTARE: {'; '.join(boundaries)}")
+        
+        n_interactions = psy_context.get("total_interactions", 0)
+        if n_interactions > 1:
+            prompt_parts.append(f"Questa è la conversazione n.{n_interactions} su temi delicati con questa persona. Non ripetere le stesse cose.")
     
     # Nome utente se noto
     if user_name:
         prompt_parts.append(f"L'utente si chiama {user_name}.")
     
-    # Severità corrente (per calibrare la risposta)
+    # Severità corrente
     severity = detection.get("severity", "mild")
+    consecutive = detection.get("consecutive_distress", 0)
+    
     if severity in ("severe", "critical"):
         prompt_parts.append("NOTA: Il livello di sofferenza espresso è alto. Sii particolarmente delicato.")
+    
+    if consecutive >= 2:
+        prompt_parts.append(f"NOTA: Questo è il {consecutive}° messaggio consecutivo con segnali di disagio. "
+                           "Approfondisci la spiegazione del meccanismo emotivo in gioco, "
+                           "non limitarti a validare.")
     
     prompt_parts.append(f"MESSAGGIO:\n{user_message}")
     
     prompt = "\n\n".join(prompt_parts)
     
-    logger.info(f"[PSY_RESPONDER] severity={severity} crisis={detection.get('crisis')} has_history={psy_context.get('has_history')}")
+    _log("PSY_RESPONDER", user_id=user_id,
+         severity=severity, crisis=detection.get("crisis", False),
+         has_history=psy_context.get("has_history", False),
+         consecutive=consecutive)
     
     try:
         response = client.chat.completions.create(
@@ -160,30 +216,31 @@ async def generate_psychological_response(
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=250,
+            max_tokens=500,
             temperature=0.55,
-            presence_penalty=0.3,
-            frequency_penalty=0.2
+            presence_penalty=0.4,
+            frequency_penalty=0.3
         )
         
         text = response.choices[0].message.content.strip()
         
-        # Post-processing minimale: rimuovi frasi vietate
-        text = _clean_psy_response(text)
+        # Post-processing: rimuovi frasi vietate + traccia domande
+        text = _clean_psy_response(text, user_id)
         
-        logger.info(f"[PSY_RESPONDER] response='{text[:200]}...'")
+        _log("PSY_RESPONSE", user_id=user_id,
+             length=len(text))
         return text
         
     except Exception as e:
-        logger.error(f"[PSY_RESPONDER] error: {e}")
+        _log("PSY_RESPONDER", user_id=user_id, error=str(e))
         return "Sono qui. Prenditi il tempo che ti serve."
 
 
-def _clean_psy_response(text: str) -> str:
-    """Rimuove frasi che violano le regole del ramo psicologico."""
+def _clean_psy_response(text: str, user_id: str = "unknown") -> str:
+    """Rimuove frasi vietate e traccia domande aperte."""
     import re
     
-    # Frasi da rimuovere
+    # Frasi da segnalare
     kill_patterns = [
         r"(?i)\bcapisco come ti senti\b",
         r"(?i)\bandrà tutto bene\b",
@@ -195,8 +252,17 @@ def _clean_psy_response(text: str) -> str:
     
     for pattern in kill_patterns:
         if re.search(pattern, text):
-            # Non rimuovere la frase intera, ma logga il warning
-            logger.warning(f"[PSY_RESPONDER] detected forbidden phrase: {pattern}")
+            _log("PSY_FORBIDDEN_PHRASE", user_id=user_id, pattern=pattern)
+    
+    # Traccia domande aperte nella risposta
+    text_lower = text.lower()
+    for q in REPETITIVE_QUESTIONS:
+        if q in text_lower:
+            recent = _recent_questions.setdefault(user_id, [])
+            recent.append(q)
+            # Mantieni solo le ultime 5
+            _recent_questions[user_id] = recent[-5:]
+            break
     
     if len(text) < 3:
         text = "Sono qui."
