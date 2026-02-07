@@ -196,17 +196,15 @@ class ResponseGenerator:
         seen = set()
         lines = []
 
-        # Prima le memorie rilevanti (più importanti)
         for m in (relevant_memories or [])[:5]:
             text = self._extract_memory_text(m)
-            if text and text not in seen:
+            if text and text not in seen and not self._is_noise(m, text):
                 seen.add(text)
                 lines.append(f"- {text}")
 
-        # Poi le recenti (contesto temporale)
         for m in (recent_memories or [])[:5]:
             text = self._extract_memory_text(m)
-            if text and text not in seen:
+            if text and text not in seen and not self._is_noise(m, text):
                 seen.add(text)
                 lines.append(f"- {text}")
 
@@ -219,6 +217,23 @@ class ResponseGenerator:
         if isinstance(content, str):
             return content.strip()
         return ""
+
+    def _is_noise(self, memory: Dict, text: str) -> bool:
+        """Filtra memorie che non devono entrare nel prompt RELAZIONE."""
+        mem_type = memory.get("type", "")
+        if mem_type == "system_response":
+            return True
+        if mem_type == "document_context":
+            return True
+        text_lower = text.lower()
+        noise_phrases = [
+            "dati meteo", "openweather", "gnews", "ecb", "eurostat",
+            "world bank", "notizie principali", "previsioni", "°c con",
+            "umidità al", "vento a", "eur/usd",
+        ]
+        if any(p in text_lower for p in noise_phrases):
+            return True
+        return False
 
     # ===============================
     # TONO → LINGUAGGIO NATURALE

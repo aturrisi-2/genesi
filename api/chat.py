@@ -31,26 +31,6 @@ class ChatRequest(BaseModel):
     message: str
 
 
-def is_relational_message(message: str) -> bool:
-    """Verifica se il messaggio è relazionale (non tecnico)"""
-    relational_keywords = [
-        "ciao", "buongiorno", "buonasera", "grazie", "ok", "va bene", 
-        "perfetto", "bene", "capito", "ho capito", "certo", "sicuro",
-        "scusa", "scusami", "prego", "di nulla", "figurati"
-    ]
-    emotional_keywords = [
-        "mi sento", "sono felice", "sono triste", "sono preoccupato",
-        "sono arrabbiato", "mi dispiace", "mi piace", "non mi piace"
-    ]
-    
-    message_lower = message.lower().strip()
-    return (
-        any(keyword in message_lower for keyword in relational_keywords) or
-        any(keyword in message_lower for keyword in emotional_keywords) or
-        len(message_lower.split()) <= 2  # Messaggi molto brevi spesso relazionali
-    )
-
-
 @router.post("/chat")
 async def chat_endpoint(request: ChatRequest, http_request: Request):
     print(f"[CHAT_ENDPOINT] incoming_message = '{request.message}'", flush=True)
@@ -91,10 +71,6 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                 "timestamp": datetime.now().isoformat(),
                 "image_mode": True
             }
-    
-    # 🔍 DIAGNOSI MEMORIA: check per frasi dichiarative
-    is_declarative = any(keyword in request.message.lower() for keyword in ["memorizza", "ricorda", "salva", "ricordati", "tieni a mente"])
-    print(f"[CHAT_ENDPOINT] is_declarative = {is_declarative}", flush=True)
     
     # ===============================
     # DOCUMENT CONTEXT TEMPORANEO

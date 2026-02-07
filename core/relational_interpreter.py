@@ -4,12 +4,10 @@ from pathlib import Path
 from datetime import datetime
 import json
 
-RELATIONAL_DIR = Path("data/relational")
-RELATIONAL_DIR.mkdir(parents=True, exist_ok=True)
+from core.relational.accumulator import RELATIONAL_DIR
 
-# Soglie umane (non rigide)
 ACCUMULATION_THRESHOLD = 1.0
-DECAY = 0.9  # dimenticanza naturale
+DECAY = 0.9
 
 
 class RelationalInterpreter:

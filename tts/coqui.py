@@ -74,10 +74,10 @@ def _preprocess(text: str) -> str:
         r"\1, \2 ",
         text,
     )
-    # Period → ellipsis only for sentences >20 chars (creates natural pause)
+    # Period → ellipsis solo per frasi molto lunghe (pause naturali, non eccessive)
     def _period_to_ellipsis(m):
         before, after = m.group(1), m.group(2)
-        if len(before) > 20:
+        if len(before) > 40:
             return before + "... " + after
         return before + ". " + after
 
@@ -106,13 +106,13 @@ def _format_val(val: float, suffix: str, lo: int, hi: int) -> str:
 
 
 def _get_prosody(emo: float, idx: int) -> tuple:
-    # Emotional → slower, deeper. Light → slightly faster, brighter.
-    base_rate = -4 - (emo * 6)    # light≈-5, neutral≈-7, heavy≈-9
-    base_pitch = -1 - (emo * 2)   # light≈-1, neutral≈-2, heavy≈-3
+    # Più sveglia e presente. Emotional → leggermente più lenta.
+    base_rate = 2 - (emo * 8)     # light≈+1, neutral≈-2, heavy≈-6
+    base_pitch = 0 - (emo * 2)    # light≈0, neutral≈-1, heavy≈-2
     v = _VARIATION_CYCLE[idx % len(_VARIATION_CYCLE)]
     rate = base_rate + v
     pitch = base_pitch + (v * 0.3)
-    return _format_val(rate, "%", -14, -2), _format_val(pitch, "Hz", -5, -1)
+    return _format_val(rate, "%", -10, 5), _format_val(pitch, "Hz", -4, 1)
 
 
 # ===============================
