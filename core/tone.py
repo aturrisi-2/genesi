@@ -21,7 +21,13 @@ def compute_tone(events: List) -> ToneProfile:
     directness = 0.5
     verbosity = 0.5
     
-    decayed_affects = [e.decayed_affect for e in events if hasattr(e, 'decayed_affect')]
+    def _to_float(val):
+        if isinstance(val, dict):
+            numeric_vals = [v for v in val.values() if isinstance(v, (int, float))]
+            return sum(numeric_vals) / len(numeric_vals) if numeric_vals else 0.0
+        return float(val) if isinstance(val, (int, float)) else 0.0
+
+    decayed_affects = [_to_float(e.decayed_affect) for e in events if hasattr(e, 'decayed_affect')]
     avg_decayed_affect = sum(decayed_affects) / len(decayed_affects) if decayed_affects else 0.0
     
     if avg_decayed_affect > 0.2:
