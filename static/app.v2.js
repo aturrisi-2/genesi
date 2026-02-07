@@ -214,6 +214,17 @@ function stopAudio() {
   }
 }
 
+// ===============================
+// BARGE-IN — immediate TTS interruption on user input
+// ===============================
+function _interruptTTS(reason) {
+  if (_ttsSource) {
+    console.log('[BARGE-IN] interrupt reason=' + reason);
+    try { _ttsSource.stop(); } catch (e) {}
+    _ttsSource = null;
+  }
+}
+
 async function playTTS(text) {
   if (!ttsEnabled || !text) return;
   console.log('[TTS] playTTS len=' + text.length);
@@ -362,6 +373,9 @@ async function sendChatMessage(message) {
 // SEND MESSAGE
 // ===============================
 async function sendMessage() {
+  // Barge-in: interrompi TTS su input utente
+  _interruptTTS('user_input');
+
   // Warm AudioContext NOW (sync, during user gesture) — iOS requires this
   _warmTTSCtx();
 
@@ -488,6 +502,9 @@ function resetMicrophoneState() {
 }
 
 async function startRecording() {
+  // Barge-in: interrompi TTS quando utente preme mic
+  _interruptTTS('mic_press');
+
   // Warm TTS AudioContext during mic tap gesture (iOS needs this for post-mic TTS)
   _warmTTSCtx();
 
@@ -844,12 +861,21 @@ if (isTouchDevice) {
 }
 
 // ===============================
-// INPUT FOCUS — KEYBOARD HANDLING
+// INPUT FOCUS — KEYBOARD HANDLING + BARGE-IN
 // ===============================
 textInput.addEventListener('focus', () => {
+  // Barge-in: interrompi TTS quando utente inizia a scrivere
+  _interruptTTS('text_focus');
   // iOS keyboard animation can take ~400ms on first open
   setTimeout(() => { updateAppHeight(); scrollToBottom(); }, 100);
   setTimeout(() => { updateAppHeight(); scrollToBottom(); }, 400);
+});
+
+// Barge-in su ogni digitazione (solo se TTS sta suonando)
+textInput.addEventListener('input', () => {
+  if (_ttsSource) {
+    _interruptTTS('text_typing');
+  }
 });
 
 // ===============================

@@ -81,6 +81,42 @@ def _split_sentences(text: str) -> list:
     return [p.strip() for p in parts if p.strip() and len(p.strip()) > 2]
 
 
+def _add_micro_pauses(text: str) -> str:
+    """Inserisce micro-pause variabili su virgole e cambi frase per ritmo naturale."""
+    import random
+    # Pause su virgole: 50-120 ms casuali (0.05-0.12s)
+    text = re.sub(r",\s*", lambda m: f",{random.randint(50, 120)}ms ", text)
+    # Pause su punto fine frase (non dopo ellipsis): 80-150 ms
+    text = re.sub(r"\.(\s+|$)", lambda m: f".{random.randint(80, 150)}ms ", text)
+    # Rimuovi spazi doppi dopo pause
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def _should_breathe(text: str) -> bool:
+    """Decide se inserire un respiro contestuale: SOLO risposte lunghe/densi/cambio argomento."""
+    word_count = len(text.split())
+    # Risposta lunga (>30 parole) o densa (>3 frasi)
+    sentence_count = len(re.findall(r"[.!?]+", text))
+    if word_count > 30 or sentence_count > 3:
+        return True
+    # Cambio argomento: indicatori espliciti
+    topic_shift = re.search(r"\b(?:a parte questo|però|comunque|d'altronde|invece|altra cosa|cambiando argomento)\b", text, re.I)
+    if topic_shift:
+        return True
+    return False
+
+
+def _add_contextual_breath(text: str) -> str:
+    """Aggiunge un respiro brevissimo e non udibile come 'effetto'."""
+    import random
+    # Respiro: 200-400 ms, inserito solo all'inizio se serve
+    if _should_breathe(text):
+        breath_ms = random.randint(200, 400)
+        return f"{breath_ms}ms {text}"
+    return text
+
+
 # ===============================
 # PROSODY — MICRO-VARIED PER SEGMENT
 # ===============================
@@ -97,13 +133,13 @@ def _format_val(val: float, suffix: str, lo: int, hi: int) -> str:
 
 
 def _get_prosody(emo: float, idx: int) -> tuple:
-    # Veloce e fluida. Emotional → solo leggermente più lenta.
-    base_rate = 12 - (emo * 14)    # light≈+9, neutral≈+5, heavy≈-1
+    # Veloce e fluida. Aumento base rate +5% (da 12 a 17). Emotional → solo leggermente più lenta.
+    base_rate = 17 - (emo * 14)    # light≈+14, neutral≈+10, heavy≈+4
     base_pitch = 0 - (emo * 1.5)   # light≈0, neutral≈-0.75, heavy≈-1.5
     v = _VARIATION_CYCLE[idx % len(_VARIATION_CYCLE)]
     rate = base_rate + v
     pitch = base_pitch + (v * 0.2)
-    return _format_val(rate, "%", -5, 15), _format_val(pitch, "Hz", -3, 1)
+    return _format_val(rate, "%", -5, 20), _format_val(pitch, "Hz", -3, 1)
 
 
 # ===============================
@@ -124,6 +160,8 @@ async def _synth_segment(text: str, rate: str, pitch: str) -> bytes:
 async def _synthesize_async(text: str) -> bytes:
     emo = _detect_emotional_weight(text)
     processed = _preprocess(text)
+    processed = _add_contextual_breath(processed)  # respiro SOLO se serve
+    processed = _add_micro_pauses(processed)  # micro-pause variabili
     sentences = _split_sentences(processed)
 
     if not sentences:
