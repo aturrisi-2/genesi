@@ -246,6 +246,7 @@ function resetMicrophoneState() {
 }
 
 async function startRecording() {
+  console.log('[MIC] startRecording called, state=' + currentState + ' isRecording=' + isRecording);
   if (currentState !== STATES.IDLE || isRecording) return;
 
   // Stop any playing TTS
@@ -255,25 +256,31 @@ async function startRecording() {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
     });
+    console.log('[MIC] getUserMedia OK, tracks=' + stream.getAudioTracks().length);
 
     currentStream = stream;
     const mimeType = getSupportedMimeType();
+    console.log('[MIC] mimeType=' + mimeType);
     mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
     audioChunks = [];
 
     mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) audioChunks.push(e.data);
+      console.log('[MIC] chunk size=' + e.data.size + ' total_chunks=' + audioChunks.length);
     };
 
     mediaRecorder.onstop = async () => {
+      console.log('[MIC] onstop fired, chunks=' + audioChunks.length);
       setTimeout(async () => {
         if (currentStream) currentStream.getTracks().forEach(t => t.stop());
 
         const blobType = mimeType || 'audio/webm';
         const blob = new Blob(audioChunks, { type: blobType });
+        console.log('[MIC] blob size=' + blob.size + ' type=' + blobType);
         resetMicrophoneState();
 
         if (blob.size < 500) {
+          console.log('[MIC] blob too small, discarding');
           setState(STATES.IDLE);
           return;
         }
@@ -285,36 +292,42 @@ async function startRecording() {
     isRecording = true;
     setState(STATES.RECORDING);
     micButton.classList.add('recording');
+    console.log('[MIC] recording started');
 
   } catch (e) {
-    console.error('Mic denied:', e);
+    console.error('[MIC] denied:', e);
     setState(STATES.IDLE);
   }
 }
 
 function stopRecording() {
+  console.log('[MIC] stopRecording called, isRecording=' + isRecording);
   if (!isRecording || !mediaRecorder) return;
   mediaRecorder.stop();
 }
 
 async function transcribeAudio(blob) {
+  console.log('[STT] sending blob size=' + blob.size);
   setState(STATES.THINKING);
   try {
     const fd = new FormData();
     fd.append('audio', blob, `rec${blob.type.includes('wav') ? '.wav' : '.webm'}`);
     const res = await fetch('/stt', { method: 'POST', body: fd });
+    console.log('[STT] response status=' + res.status);
     if (!res.ok) throw new Error(`STT ${res.status}`);
     const result = await res.json();
     const text = result.text?.trim() || '';
+    console.log('[STT] transcribed text="' + text + '"');
     if (text) {
       textInput.value = text;
       setState(STATES.IDLE);
       sendMessage();
     } else {
+      console.log('[STT] empty transcription, ignoring');
       setState(STATES.IDLE);
     }
   } catch (e) {
-    console.error('STT error:', e);
+    console.error('[STT] error:', e);
     setState(STATES.IDLE);
   }
 }
@@ -384,11 +397,11 @@ if (isTouchDevice) {
 // INPUT FOCUS — KEYBOARD HANDLING
 // ===============================
 textInput.addEventListener('focus', () => {
-  // Wait for keyboard animation to complete, then scroll
-  setTimeout(() => {
-    updateAppHeight();
-    scrollToBottom();
-  }, 300);
+  // Multiple ticks to catch keyboard animation on first open (iOS)
+  updateAppHeight();
+  scrollToBottom();
+  setTimeout(() => { updateAppHeight(); scrollToBottom(); }, 150);
+  setTimeout(() => { updateAppHeight(); scrollToBottom(); }, 400);
 });
 
 // ===============================
