@@ -531,6 +531,138 @@ body::after {
 }
 
 /* ===============================
+   AUTH GATE — welcome screen (non-logged)
+   =============================== */
+#auth-gate {
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem 1.2rem;
+}
+
+#auth-gate-inner {
+    max-width: 340px;
+}
+
+#auth-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.8rem;
+    font-weight: 500;
+    color: #00e5ff;
+    margin-bottom: 0.6rem;
+    text-shadow:
+        0 0 4px #00e5ff,
+        0 0 12px rgba(0, 229, 255, 0.5),
+        0 0 28px rgba(0, 229, 255, 0.2);
+}
+
+#auth-subtitle {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin-bottom: 1.8rem;
+}
+
+#auth-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    align-items: center;
+}
+
+.auth-btn {
+    display: inline-block;
+    width: 220px;
+    padding: 0.75rem 1.2rem;
+    border-radius: 0.5rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-decoration: none;
+    text-align: center;
+    transition: opacity 0.2s, transform 0.15s;
+    cursor: pointer;
+}
+
+.auth-btn:active {
+    transform: scale(0.97);
+}
+
+.auth-btn--primary {
+    background: #00e5ff;
+    color: #0c0c14;
+    border: none;
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.25);
+}
+
+.auth-btn--primary:hover {
+    opacity: 0.9;
+}
+
+.auth-btn--secondary {
+    background: transparent;
+    color: #00e5ff;
+    border: 1px solid rgba(0, 229, 255, 0.35);
+}
+
+.auth-btn--secondary:hover {
+    background: rgba(0, 229, 255, 0.06);
+}
+
+/* ===============================
+   USER BAR — logged-in header
+   =============================== */
+#user-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+#user-greeting {
+    opacity: 0.7;
+}
+
+#user-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+#admin-link {
+    color: #00e5ff;
+    text-decoration: none;
+    font-size: 0.78rem;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+#admin-link:hover {
+    opacity: 1;
+}
+
+#logout-btn {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.55);
+    padding: 0.3rem 0.7rem;
+    border-radius: 0.35rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+#logout-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* ===============================
    MOBILE
    =============================== */
 @media (max-width: 600px) {

@@ -7,10 +7,32 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
     <title>Genesi</title>
-    <link rel="stylesheet" href="/static/style.css?v=8">
+    <link rel="stylesheet" href="/static/style.css?v=9">
 </head>
 <body>
     <div id="genesi-app">
+
+        <!-- Auth gate: visibile solo se NON loggato -->
+        <div id="auth-gate">
+            <div id="auth-gate-inner">
+                <h1 id="auth-title">Benvenuto in Genesi</h1>
+                <p id="auth-subtitle">Per iniziare, crea un account o accedi.</p>
+                <div id="auth-buttons">
+                    <a href="/register" class="auth-btn auth-btn--primary">Registrati</a>
+                    <a href="/login" class="auth-btn auth-btn--secondary">Accedi</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- User bar: visibile solo se loggato -->
+        <div id="user-bar" style="display:none;">
+            <span id="user-greeting"></span>
+            <div id="user-bar-actions">
+                <a href="/admin" id="admin-link" style="display:none;">Admin</a>
+                <button id="logout-btn" type="button">Esci</button>
+            </div>
+        </div>
+
         <header id="presence">
             <p>Ciò che conta davvero è come attraversi il fuoco.</p>
         </header>
@@ -60,6 +82,6 @@
         </form>
     </div>
 
-    <script src="/static/app.v2.js?v=13"></script>
+    <script src="/static/app.v2.js?v=14"></script>
 </body>
 </html>
