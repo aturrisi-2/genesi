@@ -22,23 +22,27 @@ const chatForm = document.getElementById('chat-form');
 // The CSS flex layout then naturally shrinks #dialogue.
 
 function updateAppHeight() {
-  const h = window.visualViewport
-    ? window.visualViewport.height
-    : window.innerHeight;
-  document.documentElement.style.setProperty('--app-height', h + 'px');
+  if (window.visualViewport) {
+    const h = window.visualViewport.height;
+    const top = window.visualViewport.offsetTop;
+    document.documentElement.style.setProperty('--app-height', h + 'px');
+    // iOS Safari: when keyboard opens, viewport scrolls up — compensate
+    document.getElementById('genesi-app').style.transform =
+      top > 0 ? 'translateY(' + top + 'px)' : '';
+  } else {
+    document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
+  }
 }
 
 updateAppHeight();
 
 if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', () => {
+  const _onViewport = () => {
     updateAppHeight();
-    // After keyboard open/close, scroll to bottom if user was near bottom
-    if (isNearBottom()) {
-      requestAnimationFrame(() => scrollToBottom());
-    }
-  });
-  window.visualViewport.addEventListener('scroll', updateAppHeight);
+    requestAnimationFrame(() => scrollToBottom());
+  };
+  window.visualViewport.addEventListener('resize', _onViewport);
+  window.visualViewport.addEventListener('scroll', _onViewport);
 } else {
   window.addEventListener('resize', updateAppHeight);
 }
@@ -223,33 +227,97 @@ chatForm.addEventListener('submit', (e) => {
 });
 
 // ===============================
-// MICROPHONE
+// MICROPHONE — DUAL PATH (iOS Safari + Others)
 // ===============================
-let mediaRecorder = null;
-let audioChunks = [];
 let isRecording = false;
 let currentStream = null;
 
+// iOS Safari detection
+const _isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const _isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const _useWebAudio = _isIOS || (_isSafari && !window.MediaRecorder);
+
+// --- MediaRecorder path (Chrome, Android, Firefox) ---
+let mediaRecorder = null;
+let audioChunks = [];
+
 function getSupportedMimeType() {
-  for (const t of ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/wav']) {
+  if (typeof MediaRecorder === 'undefined') return '';
+  for (const t of ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']) {
     if (MediaRecorder.isTypeSupported(t)) return t;
   }
   return '';
 }
 
+// --- WebAudio/PCM path (iOS Safari) ---
+let _audioCtx = null;
+let _scriptNode = null;
+let _pcmBuffers = [];
+let _pcmLength = 0;
+const _SAMPLE_RATE = 16000;
+
+function _encodeWAV(samples) {
+  const len = samples.length;
+  const buf = new ArrayBuffer(44 + len * 2);
+  const view = new DataView(buf);
+  // RIFF header
+  _writeStr(view, 0, 'RIFF');
+  view.setUint32(4, 36 + len * 2, true);
+  _writeStr(view, 8, 'WAVE');
+  // fmt
+  _writeStr(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);       // PCM
+  view.setUint16(22, 1, true);       // mono
+  view.setUint32(24, _SAMPLE_RATE, true);
+  view.setUint32(28, _SAMPLE_RATE * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  // data
+  _writeStr(view, 36, 'data');
+  view.setUint32(40, len * 2, true);
+  for (let i = 0; i < len; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+function _writeStr(view, offset, str) {
+  for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+}
+
+function _downsample(buffer, fromRate, toRate) {
+  if (fromRate === toRate) return buffer;
+  const ratio = fromRate / toRate;
+  const len = Math.round(buffer.length / ratio);
+  const result = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    const idx = Math.round(i * ratio);
+    result[i] = buffer[Math.min(idx, buffer.length - 1)];
+  }
+  return result;
+}
+
 function resetMicrophoneState() {
   mediaRecorder = null;
   audioChunks = [];
+  _pcmBuffers = [];
+  _pcmLength = 0;
+  if (_scriptNode) { _scriptNode.disconnect(); _scriptNode = null; }
+  if (_audioCtx && _audioCtx.state !== 'closed') {
+    try { _audioCtx.close(); } catch(e) {}
+  }
+  _audioCtx = null;
   isRecording = false;
   currentStream = null;
   micButton.classList.remove('recording');
 }
 
 async function startRecording() {
-  console.log('[MIC] startRecording called, state=' + currentState + ' isRecording=' + isRecording);
+  console.log('[MIC] start, iOS=' + _isIOS + ' safari=' + _isSafari + ' webAudio=' + _useWebAudio);
   if (currentState !== STATES.IDLE || isRecording) return;
-
-  // Stop any playing TTS
   stopAudio();
 
   try {
@@ -257,42 +325,60 @@ async function startRecording() {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
     });
     console.log('[MIC] getUserMedia OK, tracks=' + stream.getAudioTracks().length);
-
     currentStream = stream;
-    const mimeType = getSupportedMimeType();
-    console.log('[MIC] mimeType=' + mimeType);
-    mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-    audioChunks = [];
 
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) audioChunks.push(e.data);
-      console.log('[MIC] chunk size=' + e.data.size + ' total_chunks=' + audioChunks.length);
-    };
+    if (_useWebAudio) {
+      // --- iOS Safari: AudioContext + ScriptProcessorNode → PCM WAV ---
+      _audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: _SAMPLE_RATE });
+      // iOS requires resume after user gesture
+      if (_audioCtx.state === 'suspended') await _audioCtx.resume();
+      console.log('[MIC][iOS] AudioContext rate=' + _audioCtx.sampleRate + ' state=' + _audioCtx.state);
 
-    mediaRecorder.onstop = async () => {
-      console.log('[MIC] onstop fired, chunks=' + audioChunks.length);
-      setTimeout(async () => {
-        if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+      const source = _audioCtx.createMediaStreamSource(stream);
+      _scriptNode = _audioCtx.createScriptProcessor(4096, 1, 1);
+      _pcmBuffers = [];
+      _pcmLength = 0;
 
+      _scriptNode.onaudioprocess = (e) => {
+        const data = e.inputBuffer.getChannelData(0);
+        const copy = new Float32Array(data.length);
+        copy.set(data);
+        _pcmBuffers.push(copy);
+        _pcmLength += copy.length;
+      };
+
+      source.connect(_scriptNode);
+      _scriptNode.connect(_audioCtx.destination);
+      console.log('[MIC][iOS] recording via ScriptProcessor');
+
+    } else {
+      // --- Standard: MediaRecorder ---
+      const mimeType = getSupportedMimeType();
+      console.log('[MIC] MediaRecorder mimeType=' + mimeType);
+      mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
         const blobType = mimeType || 'audio/webm';
         const blob = new Blob(audioChunks, { type: blobType });
-        console.log('[MIC] blob size=' + blob.size + ' type=' + blobType);
+        console.log('[MIC] MediaRecorder blob size=' + blob.size);
+        const stream = currentStream;
         resetMicrophoneState();
-
-        if (blob.size < 500) {
-          console.log('[MIC] blob too small, discarding');
-          setState(STATES.IDLE);
-          return;
-        }
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        if (blob.size < 500) { setState(STATES.IDLE); return; }
         await transcribeAudio(blob);
-      }, 200);
-    };
+      };
 
-    mediaRecorder.start(1000);
+      mediaRecorder.start(1000);
+    }
+
     isRecording = true;
     setState(STATES.RECORDING);
     micButton.classList.add('recording');
-    console.log('[MIC] recording started');
 
   } catch (e) {
     console.error('[MIC] denied:', e);
@@ -301,29 +387,59 @@ async function startRecording() {
 }
 
 function stopRecording() {
-  console.log('[MIC] stopRecording called, isRecording=' + isRecording);
-  if (!isRecording || !mediaRecorder) return;
-  mediaRecorder.stop();
+  console.log('[MIC] stop, isRecording=' + isRecording + ' webAudio=' + _useWebAudio);
+  if (!isRecording) return;
+
+  if (_useWebAudio) {
+    // --- iOS: stop ScriptProcessor, build WAV, send ---
+    if (_scriptNode) _scriptNode.disconnect();
+    if (_audioCtx && _audioCtx.state !== 'closed') {
+      try { _audioCtx.close(); } catch(e) {}
+    }
+    const nativeSR = _audioCtx ? _audioCtx.sampleRate : _SAMPLE_RATE;
+    const stream = currentStream;
+
+    // Merge PCM buffers
+    const merged = new Float32Array(_pcmLength);
+    let offset = 0;
+    for (const buf of _pcmBuffers) { merged.set(buf, offset); offset += buf.length; }
+
+    const downsampled = _downsample(merged, nativeSR, _SAMPLE_RATE);
+    const wavBlob = _encodeWAV(downsampled);
+    console.log('[MIC][iOS] WAV blob size=' + wavBlob.size + ' samples=' + downsampled.length);
+
+    resetMicrophoneState();
+    if (stream) stream.getTracks().forEach(t => t.stop());
+
+    if (wavBlob.size < 500) { setState(STATES.IDLE); return; }
+    transcribeAudio(wavBlob);
+
+  } else {
+    // --- Standard: stop MediaRecorder (onstop handler fires) ---
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+    }
+  }
 }
 
 async function transcribeAudio(blob) {
-  console.log('[STT] sending blob size=' + blob.size);
+  console.log('[STT] sending size=' + blob.size + ' type=' + blob.type);
   setState(STATES.THINKING);
   try {
+    const ext = blob.type.includes('wav') ? '.wav' : '.webm';
     const fd = new FormData();
-    fd.append('audio', blob, `rec${blob.type.includes('wav') ? '.wav' : '.webm'}`);
+    fd.append('audio', blob, 'rec' + ext);
     const res = await fetch('/stt', { method: 'POST', body: fd });
-    console.log('[STT] response status=' + res.status);
-    if (!res.ok) throw new Error(`STT ${res.status}`);
+    console.log('[STT] status=' + res.status);
+    if (!res.ok) throw new Error('STT ' + res.status);
     const result = await res.json();
     const text = result.text?.trim() || '';
-    console.log('[STT] transcribed text="' + text + '"');
+    console.log('[STT] text="' + text + '"');
     if (text) {
       textInput.value = text;
       setState(STATES.IDLE);
       sendMessage();
     } else {
-      console.log('[STT] empty transcription, ignoring');
       setState(STATES.IDLE);
     }
   } catch (e) {
@@ -397,10 +513,8 @@ if (isTouchDevice) {
 // INPUT FOCUS — KEYBOARD HANDLING
 // ===============================
 textInput.addEventListener('focus', () => {
-  // Multiple ticks to catch keyboard animation on first open (iOS)
-  updateAppHeight();
-  scrollToBottom();
-  setTimeout(() => { updateAppHeight(); scrollToBottom(); }, 150);
+  // iOS keyboard animation can take ~400ms on first open
+  setTimeout(() => { updateAppHeight(); scrollToBottom(); }, 100);
   setTimeout(() => { updateAppHeight(); scrollToBottom(); }, 400);
 });
 
