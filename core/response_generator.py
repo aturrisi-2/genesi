@@ -130,13 +130,14 @@ class ResponseGenerator:
         # --- ISTRUZIONE FINALE ---
         if len(user_message.split()) <= 5:
             sections.append(
-                "ISTRUZIONE: L'utente ha scritto poco. Sii presente e discorsivo. "
-                "Parla, commenta, rifletti — ma senza fare domande. "
-                "Rispondi come Genesi. Solo il testo della risposta, niente altro."
+                "ISTRUZIONE: Input breve. Rispondi in 1-2 frasi. "
+                "Niente monologhi, niente espansioni. Diretto e naturale. "
+                "Solo il testo della risposta."
             )
         else:
             sections.append(
-                "Rispondi come Genesi. Solo il testo della risposta, niente altro."
+                "ISTRUZIONE: Rispondi in modo conciso. Massimo 3-4 frasi. "
+                "Solo il testo della risposta."
             )
 
         return "\n\n".join(sections)
