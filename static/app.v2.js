@@ -499,6 +499,8 @@ async function transcribeAudio(blob) {
 // FILE BUBBLE — preview fumetto
 // ===============================
 let _activeBubble = null;
+const _isMobile = () => window.innerWidth <= 600;
+const _truncate = (s, max) => { if (!s) return ''; return s.length > max ? s.slice(0, max - 1) + '…' : s; };
 
 function _fileIcon(type) {
   if (type.startsWith('image/')) return '🖼';
@@ -538,10 +540,10 @@ function _showFileBubble(file, status) {
   info.className = 'file-bubble__info';
   const nameEl = document.createElement('div');
   nameEl.className = 'file-bubble__name';
-  nameEl.textContent = file.name;
+  nameEl.textContent = _truncate(file.name, _isMobile() ? 24 : 36);
   const statusEl = document.createElement('div');
   statusEl.className = 'file-bubble__status';
-  statusEl.textContent = status || 'Genesi sta guardando...';
+  statusEl.textContent = _truncate(status || 'Genesi sta guardando...', 120);
   info.appendChild(nameEl);
   info.appendChild(statusEl);
   bubble.appendChild(info);
@@ -581,7 +583,7 @@ function _showFileBubble(file, status) {
 function _updateBubbleStatus(text) {
   if (!_activeBubble) return;
   const s = _activeBubble.querySelector('.file-bubble__status');
-  if (s) s.textContent = text;
+  if (s) s.textContent = _truncate(text, 120);
 }
 
 function _setBubblePreview(previewUrl, file) {
@@ -593,19 +595,31 @@ function _setBubblePreview(previewUrl, file) {
   if (type.startsWith('image/')) {
     const img = document.createElement('img');
     img.src = previewUrl;
-    img.alt = file.name;
+    img.alt = _truncate(file.name, 30);
+    img.onerror = () => img.remove();
     wrap.appendChild(img);
   } else if (type === 'application/pdf') {
-    const obj = document.createElement('object');
-    obj.data = previewUrl;
-    obj.type = 'application/pdf';
-    const link = document.createElement('a');
-    link.href = previewUrl;
-    link.target = '_blank';
-    link.textContent = 'Apri PDF';
-    link.className = 'preview-pdf-link';
-    obj.appendChild(link);
-    wrap.appendChild(obj);
+    // Mobile: link only (object embed is too heavy)
+    // Desktop: object embed with link fallback
+    if (_isMobile()) {
+      const link = document.createElement('a');
+      link.href = previewUrl;
+      link.target = '_blank';
+      link.textContent = 'Apri PDF ↗';
+      link.className = 'preview-pdf-link';
+      wrap.appendChild(link);
+    } else {
+      const obj = document.createElement('object');
+      obj.data = previewUrl;
+      obj.type = 'application/pdf';
+      const link = document.createElement('a');
+      link.href = previewUrl;
+      link.target = '_blank';
+      link.textContent = 'Apri PDF';
+      link.className = 'preview-pdf-link';
+      obj.appendChild(link);
+      wrap.appendChild(obj);
+    }
   }
 }
 
@@ -633,10 +647,13 @@ function handleFileUpload() {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Show bubble immediately with local preview
-    _showFileBubble(file, 'Genesi sta guardando...');
+    let loadingMsg = null;
+    try {
+      // Show bubble immediately with local preview
+      _showFileBubble(file, 'Genesi sta guardando...');
+    } catch (_) { /* bubble is cosmetic, never block upload */ }
 
-    const loadingMsg = addGenesiMessage("Sto analizzando il file...");
+    loadingMsg = addGenesiMessage("Sto analizzando il file...");
     setState(STATES.THINKING);
 
     const fd = new FormData();
@@ -647,26 +664,25 @@ function handleFileUpload() {
       const res = await fetch('/upload', { method: 'POST', body: fd });
       if (!res.ok) throw new Error(`Upload ${res.status}`);
       const result = await res.json();
-      loadingMsg.remove();
+      if (loadingMsg) loadingMsg.remove();
 
-      // Update bubble status
-      _updateBubbleStatus('Analisi completata');
+      // Update bubble — short status only, full analysis goes to chat
+      try {
+        _updateBubbleStatus('Analisi completata');
+        if (result.preview_url) _setBubblePreview(result.preview_url, file);
+      } catch (_) { /* cosmetic */ }
 
-      // Set server preview if available
-      if (result.preview_url) {
-        _setBubblePreview(result.preview_url, file);
-      }
-
+      // Full analysis in chat message (not in bubble)
       addGenesiMessage(result.response || "File ricevuto.");
 
-      // Auto-dismiss bubble after 8s
-      setTimeout(() => _dismissFileBubble(), 8000);
+      // Auto-dismiss bubble after 6s
+      setTimeout(() => { try { _dismissFileBubble(); } catch(_){} }, 6000);
     } catch (e) {
       console.error('Upload error:', e);
-      loadingMsg.remove();
-      _updateBubbleStatus('Errore');
+      if (loadingMsg) loadingMsg.remove();
+      try { _updateBubbleStatus('Errore'); } catch(_){}
       addGenesiMessage("Errore nel caricamento. Riprova.");
-      setTimeout(() => _dismissFileBubble(), 4000);
+      setTimeout(() => { try { _dismissFileBubble(); } catch(_){} }, 3000);
     } finally {
       setState(STATES.IDLE);
     }

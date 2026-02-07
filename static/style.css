@@ -702,6 +702,9 @@ body::after {
     color: rgba(0, 229, 255, 0.7);
     font-style: italic;
     letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Close button */
@@ -754,35 +757,52 @@ body::after {
     border-radius: 0.3rem;
 }
 
-/* ---- MOBILE (default, already mobile-first) ---- */
+/* ---- MOBILE: lightweight, no heavy effects ---- */
 @media (max-width: 600px) {
     .file-bubble {
         margin: 0 0.5rem;
         padding: 0.35rem 0.5rem;
         gap: 0.45rem;
-        max-height: 50px;
+        max-height: 48px;
+        -webkit-backdrop-filter: blur(6px);
+        backdrop-filter: blur(6px);
+        box-shadow: 0 0 4px rgba(0, 229, 255, 0.08);
+        overflow: hidden;
     }
 
     .file-bubble.expanded {
-        max-height: 280px;
+        max-height: 240px;
     }
 
     .file-bubble__thumb,
     .file-bubble__icon {
-        width: 36px;
-        height: 36px;
+        width: 34px;
+        height: 34px;
     }
 
     .file-bubble__name {
-        font-size: 0.72rem;
+        font-size: 0.7rem;
+    }
+
+    .file-bubble__status {
+        font-size: 0.6rem;
     }
 
     .file-bubble__preview img {
-        max-height: 180px;
+        max-height: 150px;
     }
 
     .file-bubble__preview object {
-        height: 160px;
+        display: none;
+    }
+}
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+    .file-bubble {
+        animation: none;
+        opacity: 1;
+        transform: none;
     }
 }
 
