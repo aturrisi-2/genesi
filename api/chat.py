@@ -23,6 +23,11 @@ from api.upload import last_document_context
 # Import per image handler
 from core.image_handler import handle_image
 
+# Import per ramo psicologico
+from core.psychological_detector import detect as psy_detect
+from core.psychological_memory import store as psy_store, get_context as psy_get_context
+from core.psychological_responder import generate_psychological_response
+
 router = APIRouter()
 
 
@@ -44,6 +49,71 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
         request.user_id = http_request.headers.get("X-User-ID", "")
         if not request.user_id:
             print(f"[CHAT_ENDPOINT] missing user_id - cannot use document_context", flush=True)
+    
+    # ===============================
+    # RAMO PSICOLOGICO — RILEVAZIONE AUTOMATICA
+    # ===============================
+    # Rileva PRIMA di tutto (tranne immagini attive).
+    # Se attivo, devia al responder psicologico dedicato.
+    if request.user_id:
+        try:
+            psy_detection = psy_detect(request.user_id, request.message)
+            print(f"[CHAT] psy_detection = {psy_detection}", flush=True)
+            
+            if psy_detection["active"]:
+                print(f"[CHAT] PSY_BRANCH_ACTIVE | severity={psy_detection['severity']} crisis={psy_detection['crisis']}", flush=True)
+                
+                # Recupera contesto psicologico dedicato
+                psy_context = psy_get_context(request.user_id)
+                
+                # Recupera nome utente se disponibile
+                state = CognitiveState.build(request.user_id)
+                user_name = None
+                if hasattr(state, 'user') and hasattr(state.user, 'profile'):
+                    user_name = (state.user.profile or {}).get('name')
+                
+                # Genera risposta psicologica
+                response_text = await generate_psychological_response(
+                    user_message=request.message,
+                    detection=psy_detection,
+                    psy_context=psy_context,
+                    user_name=user_name,
+                )
+                
+                # Salva in memoria psicologica (isolata)
+                psy_store(
+                    user_id=request.user_id,
+                    entry_type="theme" if not psy_detection["crisis"] else "crisis",
+                    content=request.message,
+                    severity=psy_detection["severity"],
+                )
+                
+                # Salva anche in memoria episodica (per continuità conversazione)
+                user_affect = compute_affect("user_message", {"text": request.message})
+                store_event(
+                    user_id=request.user_id,
+                    type="user_message",
+                    content={"text": request.message},
+                    salience=0.8,
+                    affect=user_affect
+                )
+                store_event(
+                    user_id=request.user_id,
+                    type="system_response",
+                    content={"text": response_text},
+                    salience=1.0,
+                    affect=compute_affect("system_response", {"text": response_text})
+                )
+                
+                return {
+                    "response": response_text,
+                    "user_id": request.user_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "psy_mode": True
+                }
+        except Exception as e:
+            # Il ramo psicologico non deve MAI bloccare il flusso normale
+            print(f"[CHAT] psy_detection_error: {e} — continuing normal flow", flush=True)
     
     # ===============================
     # BLOCCO IMMAGINI: PRIORITÀ ASSOLUTA
