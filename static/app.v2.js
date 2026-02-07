@@ -85,18 +85,21 @@ function stopAudio() {
   }
 }
 
-// iOS Safari: after AudioContext.close() (mic), the audio session is released.
-// We must unlock it again before HTMLAudioElement.play() will produce sound.
-async function _unlockAudioSession() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === 'suspended') await ctx.resume();
-    ctx.close();
-  } catch (e) { /* non-critical */ }
+// Persistent AudioContext for TTS unlock (iOS Safari needs this alive)
+let _ttsAudioCtx = null;
+
+async function _ensureAudioSession() {
+  if (!_ttsAudioCtx || _ttsAudioCtx.state === 'closed') {
+    _ttsAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (_ttsAudioCtx.state === 'suspended') {
+    await _ttsAudioCtx.resume();
+  }
 }
 
 async function playTTS(text) {
   if (!ttsEnabled || !text) return;
+  console.log('[TTS] playTTS called, text length=' + text.length);
 
   stopAudio();
 
@@ -106,32 +109,38 @@ async function playTTS(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text })
     });
+    console.log('[TTS] fetch status=' + res.status);
 
-    if (!res.ok) return;
+    if (!res.ok) { console.warn('[TTS] fetch not ok'); return; }
 
     const blob = await res.blob();
-    if (blob.size < 100) return;
+    console.log('[TTS] blob size=' + blob.size + ' type=' + blob.type);
+    if (blob.size < 100) { console.warn('[TTS] blob too small'); return; }
 
-    // Re-unlock audio session (iOS: needed after mic AudioContext was closed)
-    await _unlockAudioSession();
+    // Ensure audio session is active (iOS: needed after mic closes its AudioContext)
+    await _ensureAudioSession();
+    console.log('[TTS] audioCtx state=' + (_ttsAudioCtx ? _ttsAudioCtx.state : 'null'));
 
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     currentAudio = audio;
 
     audio.onended = () => {
+      console.log('[TTS] playback ended');
       URL.revokeObjectURL(url);
       currentAudio = null;
     };
 
-    audio.onerror = () => {
+    audio.onerror = (e) => {
+      console.error('[TTS] audio error', e);
       URL.revokeObjectURL(url);
       currentAudio = null;
     };
 
     await audio.play();
+    console.log('[TTS] play() started');
   } catch (e) {
-    console.warn('TTS playback failed:', e);
+    console.error('[TTS] playback failed:', e);
     currentAudio = null;
   }
 }
