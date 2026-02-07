@@ -99,10 +99,12 @@ _VARIATION_CYCLE = [0, -1.5, +1, -0.5, +0.8, -1]
 
 
 def _format_val(val: float, suffix: str, lo: int, hi: int) -> str:
+    """Formatta valore per edge-tts: richiede segno esplicito (+5% o -5%)."""
     v = max(lo, min(hi, int(round(val))))
     if v == 0:
         v = -1
-    return f"{v}{suffix}"
+    sign = "+" if v > 0 else ""
+    return f"{sign}{v}{suffix}"
 
 
 def _get_prosody(emo: float, idx: int) -> tuple:
