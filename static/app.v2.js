@@ -225,47 +225,130 @@ function _interruptTTS(reason) {
   }
 }
 
+// ===============================
+// SEGMENTAZIONE INTELLIGENTE TTS
+// ===============================
+function _splitTextForTTS(text) {
+  // Dividi il testo in chunk di 1-2 frasi per punteggiatura forte
+  const sentences = text.split(/([.!?]+)\s*/);
+  const chunks = [];
+  let currentChunk = '';
+  
+  for (let i = 0; i < sentences.length; i += 2) {
+    const sentence = sentences[i] + (sentences[i + 1] || '');
+    if (!sentence.trim()) continue;
+    
+    // Se il chunk corrente + la nuova frase è ancora breve (<200 char), aggiungi
+    if (currentChunk.length + sentence.length < 200) {
+      currentChunk += sentence;
+    } else {
+      // Altrimenti salva il chunk corrente e inizia uno nuovo
+      if (currentChunk.trim()) {
+        chunks.push(currentChunk.trim());
+      }
+      currentChunk = sentence;
+    }
+  }
+  
+  // Aggiungi l'ultimo chunk
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim());
+  }
+  
+  return chunks;
+}
+
+async function playTTSSegmented(text) {
+  if (!ttsEnabled || !text) return;
+  
+  const chunks = _splitTextForTTS(text);
+  console.log('[TTS] segmented into', chunks.length, 'chunks, total len=' + text.length);
+  
+  for (let i = 0; i < chunks.length; i++) {
+    // VERIFICA INPUT UTENTE PRIMA DI OGNI CHUNK
+    if (_ttsSource === null) {
+      console.log('[TTS] interrupted before chunk', i + 1);
+      break;
+    }
+    
+    const chunk = chunks[i];
+    console.log('[TTS] playing chunk', i + 1, '/', chunks.length, 'len=' + chunk.length);
+    
+    try {
+      await _playTTSChunk(chunk);
+    } catch (e) {
+      console.error('[TTS] chunk error:', e);
+      break;
+    }
+    
+    // VERIFICA INPUT UTENTE DOPO OGNI CHUNK
+    if (_ttsSource === null) {
+      console.log('[TTS] interrupted after chunk', i + 1);
+      break;
+    }
+  }
+}
+
+async function _playTTSChunk(text) {
+  stopAudio();
+
+  const res = await fetch('/tts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text })
+  });
+  
+  if (!res.ok) { 
+    console.warn('[TTS] chunk not ok'); 
+    return; 
+  }
+
+  const arrayBuf = await res.arrayBuffer();
+  if (arrayBuf.byteLength < 100) { 
+    console.warn('[TTS] chunk too small'); 
+    return; 
+  }
+
+  const ctx = _getTTSCtx();
+  if (ctx.state === 'suspended') await ctx.resume();
+
+  const audioBuffer = await ctx.decodeAudioData(arrayBuf);
+
+  const source = ctx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(ctx.destination);
+
+  source.onended = () => {
+    _ttsSource = null;
+    console.log('[TTS] chunk ended');
+  };
+
+  _ttsSource = source;
+  source.start(0);
+  
+  // Attendi la fine del chunk
+  return new Promise((resolve) => {
+    const checkEnded = () => {
+      if (_ttsSource === null) {
+        resolve();
+      } else {
+        setTimeout(checkEnded, 50);
+      }
+    };
+    checkEnded();
+  });
+}
+
 async function playTTS(text) {
   if (!ttsEnabled || !text) return;
   console.log('[TTS] playTTS len=' + text.length);
-
-  stopAudio();
-
-  try {
-    const res = await fetch('/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
-    });
-    console.log('[TTS] fetch status=' + res.status);
-    if (!res.ok) { console.warn('[TTS] not ok'); return; }
-
-    const arrayBuf = await res.arrayBuffer();
-    console.log('[TTS] arrayBuffer bytes=' + arrayBuf.byteLength);
-    if (arrayBuf.byteLength < 100) { console.warn('[TTS] too small'); return; }
-
-    const ctx = _getTTSCtx();
-    if (ctx.state === 'suspended') await ctx.resume();
-    console.log('[TTS] ctx.state=' + ctx.state);
-
-    const audioBuffer = await ctx.decodeAudioData(arrayBuf);
-    console.log('[TTS] decoded, duration=' + audioBuffer.duration.toFixed(2) + 's');
-
-    const source = ctx.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(ctx.destination);
-
-    source.onended = () => {
-      console.log('[TTS] ended');
-      _ttsSource = null;
-    };
-
-    _ttsSource = source;
-    source.start(0);
-    console.log('[TTS] playing');
-  } catch (e) {
-    console.error('[TTS] failed:', e);
-    _ttsSource = null;
+  
+  // SOLO per testi molto lunghi (>500 char) usa segmentazione
+  if (text.length > 500) {
+    await playTTSSegmented(text);
+  } else {
+    // Testi brevi: playback normale
+    await _playTTSChunk(text);
   }
 }
 
