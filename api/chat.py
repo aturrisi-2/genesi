@@ -7,6 +7,7 @@ import json
 
 from core.state import CognitiveState
 from core.response_generator import ResponseGenerator
+from core.log import log
 
 from memory.episodic import store_event, get_recent_events, search_events
 from memory.affective import compute_affect
@@ -38,17 +39,18 @@ class ChatRequest(BaseModel):
 
 @router.post("/chat")
 async def chat_endpoint(request: ChatRequest, http_request: Request):
-    print(f"[CHAT_ENDPOINT] incoming_message = '{request.message}'", flush=True)
-    print(f"[CHAT_ENDPOINT] user_id = {request.user_id}", flush=True)
+    # ===============================
+    # LOG INGRESSO
+    # ===============================
+    log("CHAT_IN", user_id=request.user_id, msg=request.message)
     
     # ===============================
     # VALIDAZIONE USER_ID
     # ===============================
     if not request.user_id:
-        # Prova a recuperare user_id da header
         request.user_id = http_request.headers.get("X-User-ID", "")
         if not request.user_id:
-            print(f"[CHAT_ENDPOINT] missing user_id - cannot use document_context", flush=True)
+            log("CHAT_IN", error="missing_user_id")
     
     # ===============================
     # RAMO PSICOLOGICO — RILEVAZIONE AUTOMATICA
@@ -58,13 +60,20 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     if request.user_id:
         try:
             psy_detection = psy_detect(request.user_id, request.message)
-            print(f"[CHAT] psy_detection = {psy_detection}", flush=True)
+            log("PSYCH_DETECT", user_id=request.user_id,
+                active=psy_detection["active"],
+                score=psy_detection["score"],
+                severity=psy_detection["severity"],
+                crisis=psy_detection["crisis"])
             
             if psy_detection["active"]:
-                print(f"[CHAT] PSY_BRANCH_ACTIVE | severity={psy_detection['severity']} crisis={psy_detection['crisis']}", flush=True)
+                log("BRANCH_SELECTED", branch="psychological", user_id=request.user_id,
+                    severity=psy_detection["severity"], crisis=psy_detection["crisis"])
                 
                 # Recupera contesto psicologico dedicato
                 psy_context = psy_get_context(request.user_id)
+                log("MEMORY_LOAD", type="psychological", user_id=request.user_id,
+                    entries=psy_context.get("total_interactions", 0))
                 
                 # Recupera nome utente se disponibile
                 state = CognitiveState.build(request.user_id)
@@ -87,6 +96,8 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                     content=request.message,
                     severity=psy_detection["severity"],
                 )
+                log("MEMORY_SAVE", type="psychological", user_id=request.user_id,
+                    entry_type="crisis" if psy_detection["crisis"] else "theme")
                 
                 # Salva anche in memoria episodica (per continuità conversazione)
                 user_affect = compute_affect("user_message", {"text": request.message})
@@ -104,6 +115,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                     salience=1.0,
                     affect=compute_affect("system_response", {"text": response_text})
                 )
+                log("MEMORY_SAVE", type="standard", user_id=request.user_id, event="user_message+system_response")
                 
                 return {
                     "response": response_text,
@@ -112,8 +124,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                     "psy_mode": True
                 }
         except Exception as e:
-            # Il ramo psicologico non deve MAI bloccare il flusso normale
-            print(f"[CHAT] psy_detection_error: {e} — continuing normal flow", flush=True)
+            log("PSYCH_DETECT", error=str(e), user_id=request.user_id)
     
     # ===============================
     # BLOCCO IMMAGINI: PRIORITÀ ASSOLUTA
@@ -122,8 +133,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     if request.user_id and request.user_id in last_document_context:
         persistent_doc = last_document_context[request.user_id]
         if persistent_doc.get('document_mode') == 'image':
-            print(f"[CHAT] active_image_context_found | user_id={request.user_id}", flush=True)
-            print(f"[CHAT] routing_to_image_handler | message='{request.message}'", flush=True)
+            log("BRANCH_SELECTED", branch="image", user_id=request.user_id)
             
             # Bypassa COMPLETAMENTE il flusso chat standard
             response_text = await handle_image(
@@ -156,12 +166,10 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
         document_context = persistent_doc.get('content', '')
         force_document_focus = True
 
-        print(f"[CHAT] document_context_attached = True | user_id={request.user_id}", flush=True)
-        print(f"[CHAT] document_context_length = {len(document_context)}", flush=True)
+        log("BRANCH_SELECTED", branch="document", user_id=request.user_id, doc_len=len(document_context))
 
         # one-shot: rimuovi dopo l'uso
         del last_document_context[request.user_id]
-        print(f"[CHAT] document_context_cleared | user_id={request.user_id}", flush=True)
 
     
     # Fallback: check per document context attivo (in session state)
@@ -175,14 +183,12 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
             if is_vague_question:
                 document_context = active_doc.get('content', '')
                 force_document_focus = True
-                print(f"[CHAT_ENDPOINT] active_document_detected = True", flush=True)
-                print(f"[CHAT_ENDPOINT] document_context_used = True", flush=True)
+                log("BRANCH_SELECTED", branch="document", user_id=request.user_id, source="session")
                 
                 # Rimuovi context dopo uso (one-shot)
                 delattr(http_request.state, 'active_document')
-                print(f"[CHAT_ENDPOINT] document_context_cleared = True", flush=True)
     else:
-        print(f"[CHAT] document_context_attached = False | user_id={request.user_id}", flush=True)
+        log("PSYCH_DETECT", note="no_distress_detected", user_id=request.user_id) if False else None
     
     # 1. Build cognitive state
     state = CognitiveState.build(request.user_id)
@@ -218,12 +224,11 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
         relational_eval=relational_eval
     )
 
-    print("🧠 RELATIONAL EVAL:", relational_eval, flush=True)
-    print("🧠 RELATIONAL STATE:", relational_state, flush=True)
-
     # 4. Get relevant context
     recent_memories = get_recent_events(request.user_id, limit=5)
     relevant_memories = search_events(request.user_id, request.message, limit=3)
+    log("MEMORY_LOAD", type="standard", user_id=request.user_id,
+        recent=len(recent_memories), relevant=len(relevant_memories))
 
     # 5. Compute conversation tone
     tone = compute_tone(state.recent_events)
@@ -255,9 +260,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
             
             # Forza focus su documento ma mantieni memoria attiva
             intent["focus"] = "documento"
-            intent["use_memory"] = True  # FORZA uso memoria anche con documenti
-            print(f"[CHAT_ENDPOINT] document_focus_forced = True", flush=True)
-            print(f"[CHAT_ENDPOINT] memory_preserved_with_document = True", flush=True)
+            intent["use_memory"] = True
         else:
             intent = intent_engine.decide(
                 user_message=request.message,
@@ -268,13 +271,12 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                 tone=tone
             )
 
-        print(f"[CHAT_ENDPOINT] intent_decided = {intent}", flush=True)
-        print(f"[CHAT_ENDPOINT] use_memory = {intent.get('use_memory')}", flush=True)
+        log("BRANCH_SELECTED", branch="standard", user_id=request.user_id,
+            brain=intent.get("brain_mode", "relazione"), focus=intent.get("focus", "presente"))
         
         if not intent["should_respond"]:
             response_text = ""
         else:
-            print(f"[CHAT_ENDPOINT] memory_passed_to_generator = {intent.get('use_memory')}", flush=True)
             
             # RIPRISTINO: Passa SEMPRE le memorie recuperate
             # La decisione su usarle spetta al prompt, non al bypass
@@ -306,8 +308,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
             salience=1.0,
             affect=system_affect
         )
-
-        print(f"[CHAT_ENDPOINT] final_response = '{response_text}'", flush=True)
+        log("MEMORY_SAVE", type="standard", user_id=request.user_id, event="user_message+system_response")
         
         return {
             "response": response_text,

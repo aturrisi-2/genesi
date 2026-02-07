@@ -4,12 +4,11 @@
 
 import re
 import json
-import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 
-logger = logging.getLogger(__name__)
+from core.log import log as _log
 
 # ===============================
 # SEGNALI DI DISTRESS (PESATI)
@@ -183,8 +182,9 @@ def detect(user_id: str, message: str) -> Dict:
         "reason": reason,
     }
     
-    if active:
-        logger.info(f"[PSY_DETECTOR] user={user_id} ACTIVE severity={max_severity} score={current_score:.2f} crisis={is_crisis}")
+    _log("PSYCH_DETECT", user_id=user_id, active=active,
+         score=current_score, severity=max_severity, crisis=is_crisis,
+         reason=reason)
     
     return result
 

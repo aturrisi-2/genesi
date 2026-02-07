@@ -4,12 +4,11 @@
 # NON accessibile fuori dal ramo psicologico.
 
 import json
-import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
 
-logger = logging.getLogger(__name__)
+from core.log import log as _log
 
 PSY_MEMORY_DIR = Path("data/psychological/memory")
 PSY_MEMORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -47,7 +46,8 @@ def store(user_id: str, entry_type: str, content: str,
         memory["entries"] = memory["entries"][-MAX_ENTRIES:]
     
     _save(user_id, memory)
-    logger.info(f"[PSY_MEMORY] stored | user={user_id} type={entry_type} severity={severity}")
+    _log("MEMORY_SAVE", type="psychological", user_id=user_id,
+         entry_type=entry_type, severity=severity)
     return entry
 
 
@@ -86,7 +86,7 @@ def add_boundary(user_id: str, boundary: str):
     if boundary not in memory.get("boundaries", []):
         memory.setdefault("boundaries", []).append(boundary)
         _save(user_id, memory)
-        logger.info(f"[PSY_MEMORY] boundary_added | user={user_id}")
+        _log("MEMORY_SAVE", type="psychological_boundary", user_id=user_id)
 
 
 def get_recurring_themes(user_id: str) -> dict:
