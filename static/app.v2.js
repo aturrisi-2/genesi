@@ -228,25 +228,35 @@ function _interruptTTS(reason) {
 // ===============================
 // SEGMENTAZIONE INTELLIGENTE TTS
 // ===============================
-function _splitTextForTTS(text) {
+function _splitTextForTTS(text, tts_mode = 'normal') {
   // Dividi il testo in chunk di 1-2 frasi per punteggiatura forte
   const sentences = text.split(/([.!?]+)\s*/);
   const chunks = [];
   let currentChunk = '';
   
+  // Per psychological: max 1 frase per chunk, più brevi
+  const maxChunkSize = tts_mode === 'psychological' ? 150 : 200;
+  
   for (let i = 0; i < sentences.length; i += 2) {
     const sentence = sentences[i] + (sentences[i + 1] || '');
     if (!sentence.trim()) continue;
     
-    // Se il chunk corrente + la nuova frase è ancora breve (<200 char), aggiungi
-    if (currentChunk.length + sentence.length < 200) {
-      currentChunk += sentence;
-    } else {
-      // Altrimenti salva il chunk corrente e inizia uno nuovo
+    // Per psychological: forza 1 frase per chunk
+    if (tts_mode === 'psychological') {
       if (currentChunk.trim()) {
         chunks.push(currentChunk.trim());
       }
       currentChunk = sentence;
+    } else {
+      // Per normal/informative: 1-2 frasi per chunk
+      if (currentChunk.length + sentence.length < maxChunkSize) {
+        currentChunk += sentence;
+      } else {
+        if (currentChunk.trim()) {
+          chunks.push(currentChunk.trim());
+        }
+        currentChunk = sentence;
+      }
     }
   }
   
@@ -258,11 +268,11 @@ function _splitTextForTTS(text) {
   return chunks;
 }
 
-async function playTTSSegmented(text) {
+async function playTTSSegmented(text, tts_mode = 'normal') {
   if (!ttsEnabled || !text) return;
   
-  const chunks = _splitTextForTTS(text);
-  console.log('[TTS] segmented into', chunks.length, 'chunks, total len=' + text.length);
+  const chunks = _splitTextForTTS(text, tts_mode);
+  console.log('[TTS] segmented into', chunks.length, 'chunks, total len=' + text.length + ' mode=' + tts_mode);
   
   for (let i = 0; i < chunks.length; i++) {
     // VERIFICA INPUT UTENTE PRIMA DI OGNI CHUNK
@@ -276,6 +286,12 @@ async function playTTSSegmented(text) {
     
     try {
       await _playTTSChunk(chunk);
+      
+      // PAUSA LUNGA per psychological tra chunk
+      if (tts_mode === 'psychological' && i < chunks.length - 1) {
+        console.log('[TTS] psychological pause between chunks');
+        await new Promise(resolve => setTimeout(resolve, 800)); // 800ms pause
+      }
     } catch (e) {
       console.error('[TTS] chunk error:', e);
       break;
@@ -343,9 +359,9 @@ async function playTTS(text, tts_mode = 'normal') {
   if (!ttsEnabled || !text) return;
   console.log('[TTS] playTTS len=' + text.length + ' mode=' + tts_mode);
   
-  // FORZA segmentazione per testi informativi o lunghi
-  if (tts_mode === 'informative' || text.length > 500) {
-    await playTTSSegmented(text);
+  // FORZA segmentazione per testi informativi, psychological o lunghi
+  if (tts_mode === 'informative' || tts_mode === 'psychological' || text.length > 500) {
+    await playTTSSegmented(text, tts_mode);
   } else {
     // Testi brevi normali: playback normale
     await _playTTSChunk(text);

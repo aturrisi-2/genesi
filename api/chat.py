@@ -177,7 +177,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                 
                 return {
                     "response": response_text,
-                    "tts_mode": "normal",
+                    "tts_mode": "psychological",
                     "user_id": request.user_id,
                     "timestamp": datetime.now().isoformat(),
                     "psy_mode": True
