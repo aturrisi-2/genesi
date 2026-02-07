@@ -72,10 +72,19 @@ function scrollToBottomSmooth() {
 }
 
 // ===============================
-// TTS AUDIO
+// TTS AUDIO — routed through AudioContext for iOS Safari
 // ===============================
 let currentAudio = null;
+let _ttsAudioCtx = null;
 let ttsEnabled = true;
+
+function _getTTSContext() {
+  if (!_ttsAudioCtx || _ttsAudioCtx.state === 'closed') {
+    _ttsAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    console.log('[TTS] new AudioContext created');
+  }
+  return _ttsAudioCtx;
+}
 
 function stopAudio() {
   if (currentAudio) {
@@ -85,21 +94,9 @@ function stopAudio() {
   }
 }
 
-// Persistent AudioContext for TTS unlock (iOS Safari needs this alive)
-let _ttsAudioCtx = null;
-
-async function _ensureAudioSession() {
-  if (!_ttsAudioCtx || _ttsAudioCtx.state === 'closed') {
-    _ttsAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if (_ttsAudioCtx.state === 'suspended') {
-    await _ttsAudioCtx.resume();
-  }
-}
-
 async function playTTS(text) {
   if (!ttsEnabled || !text) return;
-  console.log('[TTS] playTTS called, text length=' + text.length);
+  console.log('[TTS] playTTS called, len=' + text.length);
 
   stopAudio();
 
@@ -110,37 +107,42 @@ async function playTTS(text) {
       body: JSON.stringify({ text })
     });
     console.log('[TTS] fetch status=' + res.status);
-
     if (!res.ok) { console.warn('[TTS] fetch not ok'); return; }
 
     const blob = await res.blob();
     console.log('[TTS] blob size=' + blob.size + ' type=' + blob.type);
     if (blob.size < 100) { console.warn('[TTS] blob too small'); return; }
 
-    // Ensure audio session is active (iOS: needed after mic closes its AudioContext)
-    await _ensureAudioSession();
-    console.log('[TTS] audioCtx state=' + (_ttsAudioCtx ? _ttsAudioCtx.state : 'null'));
+    // Get or create persistent AudioContext
+    const ctx = _getTTSContext();
+    if (ctx.state === 'suspended') await ctx.resume();
+    console.log('[TTS] ctx.state=' + ctx.state);
 
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     currentAudio = audio;
 
+    // Route audio through AudioContext → speakers (required on iOS Safari)
+    const source = ctx.createMediaElementSource(audio);
+    source.connect(ctx.destination);
+    console.log('[TTS] routed through AudioContext');
+
     audio.onended = () => {
-      console.log('[TTS] playback ended');
+      console.log('[TTS] ended');
       URL.revokeObjectURL(url);
       currentAudio = null;
     };
 
     audio.onerror = (e) => {
-      console.error('[TTS] audio error', e);
+      console.error('[TTS] error', e);
       URL.revokeObjectURL(url);
       currentAudio = null;
     };
 
     await audio.play();
-    console.log('[TTS] play() started');
+    console.log('[TTS] playing');
   } catch (e) {
-    console.error('[TTS] playback failed:', e);
+    console.error('[TTS] failed:', e);
     currentAudio = null;
   }
 }
