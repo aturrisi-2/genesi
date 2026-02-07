@@ -99,8 +99,8 @@ def _format_val(val: float, suffix: str, lo: int, hi: int) -> str:
 
 
 def _get_prosody(emo: float, idx: int) -> tuple:
-    # Veloce e fluida. Aumento base rate +5% (da 12 a 17). Emotional → solo leggermente più lenta.
-    base_rate = 17 - (emo * 14)    # light≈+14, neutral≈+10, heavy≈+4
+    # Veloce e fluida. Aumento base rate +8% (da 17 a 18). Compensato da micro-pause intelligenti.
+    base_rate = 18 - (emo * 14)    # light≈+15, neutral≈+11, heavy≈+5
     base_pitch = 0 - (emo * 1.5)   # light≈0, neutral≈-0.75, heavy≈-1.5
     v = _VARIATION_CYCLE[idx % len(_VARIATION_CYCLE)]
     rate = base_rate + v
@@ -121,28 +121,112 @@ async def _synth_segment(text: str, rate: str, pitch: str) -> bytes:
 
 
 # ===============================
+# AUDIO CONTROLS (separati dal testo)
+# ===============================
+class AudioControls:
+    def __init__(self):
+        self.pauses_after = []  # [(index, duration_ms), ...]
+        self.should_breathe = False
+        self.breath_position = 0  # index where to insert breath
+
+def _analyze_audio_controls(text: str, sentences: list) -> AudioControls:
+    """Analizza il testo per determinare controlli audio SENZA modificare il testo."""
+    controls = AudioControls()
+    word_count = len(text.split())
+    sentence_count = len(sentences)
+    
+    # Respirazione contestuale SOLO per risposte lunghe/densi/cambio argomento
+    if word_count > 30 or sentence_count > 3:
+        # Cambio argomento: indicatori espliciti
+        topic_shift = re.search(r"\b(?:a parte questo|però|comunque|d'altronde|invece|altra cosa|cambiando argomento)\b", text, re.I)
+        if topic_shift:
+            controls.should_breathe = True
+            controls.breath_position = 0  # All'inizio
+        elif word_count > 40:  # Risposta molto lunga
+            controls.should_breathe = True
+            controls.breath_position = 0
+    
+    # Micro-pause dopo virgole e frasi brevi
+    import random
+    for i, sent in enumerate(sentences):
+        # Pause dopo virgole: 40-80 ms
+        if ',' in sent and len(sent.split()) < 8:  # Frasi brevi
+            pause_ms = random.randint(40, 80)
+            controls.pauses_after.append((i, pause_ms))
+        # Pause dopo frasi dense: 80-140 ms
+        elif len(sent.split()) > 10 and i < len(sentences) - 1:  # Non ultima frase
+            pause_ms = random.randint(80, 140)
+            controls.pauses_after.append((i, pause_ms))
+    
+    return controls
+
+def _create_silence(duration_ms: int) -> bytes:
+    """Crea un buffer di silenzio della durata specificata."""
+    # Edge TTS usa 16kHz, 16-bit, mono
+    sample_rate = 16000
+    bytes_per_sample = 2
+    num_samples = int(sample_rate * duration_ms / 1000)
+    silence = b'\x00' * (num_samples * bytes_per_sample)
+    return silence
+
+def _create_breath_audio() -> bytes:
+    """Crea un respiro brevissimo e non udibile come effetto."""
+    # Per ora usiamo silenzio con durata molto breve (200-400ms)
+    import random
+    duration_ms = random.randint(200, 400)
+    return _create_silence(duration_ms)
+
+# ===============================
 # MAIN PIPELINE
 # ===============================
 async def _synthesize_async(text: str) -> bytes:
+    # STEP 1: Analisi testo TTS (immutabile)
     emo = _detect_emotional_weight(text)
     processed = _preprocess(text)
     sentences = _split_sentences(processed)
-
+    
     if not sentences:
         sentences = [processed]
-
+    
+    # STEP 2: Analisi controlli audio (separati dal testo)
+    controls = _analyze_audio_controls(text, sentences)
+    
+    # STEP 3: Sintesi con controlli audio
     all_audio = io.BytesIO()
+    
+    # Respirazione iniziale se necessaria
+    if controls.should_breathe and controls.breath_position == 0:
+        breath_audio = _create_breath_audio()
+        all_audio.write(breath_audio)
+    
+    # Sintesi frasi con pause
     for i, sent in enumerate(sentences):
         rate, pitch = _get_prosody(emo, i)
         audio = await _synth_segment(sent, rate, pitch)
         all_audio.write(audio)
-
+        
+        # Micro-pause dopo questa frase?
+        for pause_idx, pause_ms in controls.pauses_after:
+            if pause_idx == i:
+                silence = _create_silence(pause_ms)
+                all_audio.write(silence)
+                break
+    
     return all_audio.getvalue()
 
 
 def synthesize_bytes(text: str) -> bytes:
     if not text or not isinstance(text, str) or not text.strip():
         raise ValueError("Testo vuoto")
+    
+    # SICUREZZA: assert nessun parametro temporale nel testo
+    if "ms" in text.lower():
+        import re
+        if re.search(r'\d+ms', text):
+            print(f"[TTS] WARNING: rilevati parametri temporali nel testo: {text}", flush=True)
+            # Rimuovi ms per sicurezza
+            text = re.sub(r'\d+\s?ms', '', text)
+    
     return asyncio.run(_synthesize_async(text.strip()))
 
 
