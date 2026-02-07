@@ -72,6 +72,10 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class ResendVerificationRequest(BaseModel):
+    email: str
+
+
 # ===============================
 # Validation helpers
 # ===============================
@@ -246,6 +250,68 @@ async def login(req: LoginRequest, http_request: Request, db: AsyncSession = Dep
         "user_id": user.id,
         "is_admin": user.is_admin,
     }
+
+
+# ===============================
+# Resend Verification Email
+# ===============================
+
+@router.post("/resend-verification")
+async def resend_verification(req: ResendVerificationRequest, http_request: Request, db: AsyncSession = Depends(get_db)):
+    ip = http_request.client.host if http_request.client else "unknown"
+    _check_rate_limit(ip, "resend-verification")
+
+    email = req.email.strip().lower()
+    _validate_email(email)
+
+    # User lookup
+    result = await db.execute(select(AuthUser).where(AuthUser.email == email))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        # Generic response to avoid email enumeration
+        _log("AUTH_RESEND_VERIFICATION", email=email, found=False)
+        return {"status": "ok", "message": "Se l'email è registrata, riceverai un link di verifica."}
+
+    if user.is_verified:
+        _log("AUTH_RESEND_VERIFICATION", user_id=user.id, email=email, already_verified=True)
+        return {"status": "ok", "message": "Il tuo account è già verificato. Puoi accedere normalmente."}
+
+    # Invalidate previous verification tokens
+    old_tokens = await db.execute(
+        select(AuthToken).where(
+            AuthToken.user_id == user.id,
+            AuthToken.token_type == "verify_email",
+            AuthToken.used == False,
+        )
+    )
+    for old in old_tokens.scalars():
+        old.used = True
+
+    # New verification token
+    token_str = generate_secure_token()
+    token = AuthToken(
+        user_id=user.id,
+        token=token_str,
+        token_type="verify_email",
+        expires_at=datetime.utcnow() + timedelta(hours=VERIFY_TOKEN_EXPIRE_HOURS),
+    )
+    db.add(token)
+    await db.commit()
+
+    _log("AUTH_RESEND_VERIFICATION", user_id=user.id, email=email, found=True, already_verified=False)
+
+    # Send verification email
+    try:
+        await send_verification_email(email, token_str)
+        return {"status": "ok", "message": "Email di verifica inviata."}
+    except Exception as e:
+        _log("AUTH_RESEND_VERIFICATION_SMTP_ERROR", user_id=user.id, email=email, error=str(e))
+        # Human-friendly response, no technical details
+        raise HTTPException(
+            status_code=500,
+            detail="Non è stato possibile inviare l'email. Riprova tra qualche minuto oppure contatta l'amministratore."
+        )
 
 
 # ===============================

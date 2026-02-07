@@ -25,6 +25,16 @@
 
         <div id="msg" class="msg"></div>
 
+        <!-- Blocco per utente non verificato (invisibile di default) -->
+        <div id="unverified-block" style="display:none;">
+            <div class="msg error">
+                <p>Il tuo account non è ancora verificato.</p>
+                <p>Per motivi di sicurezza devi confermare la tua email prima di accedere.</p>
+            </div>
+            <button type="button" id="resend-btn" class="btn btn--secondary">Rimanda email di verifica</button>
+            <div id="resend-msg" class="msg"></div>
+        </div>
+
         <div class="links">
             <a href="/register">Crea un account</a>
             <span>·</span>
@@ -36,6 +46,10 @@
     const form = document.getElementById('login-form');
     const msg = document.getElementById('msg');
     const btn = document.getElementById('submit-btn');
+    const unverifiedBlock = document.getElementById('unverified-block');
+    const resendBtn = document.getElementById('resend-btn');
+    const resendMsg = document.getElementById('resend-msg');
+    let resendCooldown = false;
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -62,9 +76,14 @@
                 localStorage.setItem('genesi_user_id', data.user_id);
                 localStorage.setItem('genesi_is_admin', data.is_admin);
                 window.location.href = '/';
+            } else if (res.status === 403 && data.detail && data.detail.includes('non verificato')) {
+                // Mostra blocco non verificato
+                msg.style.display = 'none';
+                unverifiedBlock.style.display = 'block';
             } else {
                 msg.textContent = data.detail || 'Credenziali non valide.';
                 msg.className = 'msg error';
+                unverifiedBlock.style.display = 'none';
             }
         } catch (err) {
             msg.textContent = 'Errore di connessione.';
@@ -72,6 +91,74 @@
         } finally {
             btn.disabled = false;
             btn.textContent = 'Accedi';
+        }
+    });
+
+    // Resend verification
+    resendBtn.addEventListener('click', async () => {
+        if (resendCooldown) return;
+
+        const email = document.getElementById('email').value.trim();
+        if (!email) {
+            resendMsg.textContent = 'Inserisci la tua email.';
+            resendMsg.className = 'msg error';
+            return;
+        }
+
+        resendBtn.disabled = true;
+        resendBtn.textContent = 'Invio email in corso...';
+        resendMsg.className = 'msg loading';
+        resendMsg.textContent = 'Invio email in corso...';
+        resendMsg.style.display = 'block';
+
+        try {
+            const res = await fetch('/auth/resend-verification', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email }),
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                // Successo (verde)
+                resendMsg.textContent = data.message || 'Email di verifica inviata con successo.';
+                resendMsg.className = 'msg success';
+                // Suggerimento spam
+                setTimeout(() => {
+                    const extra = document.createElement('p');
+                    extra.style.marginTop = '8px';
+                    extra.style.fontSize = '0.85em';
+                    extra.style.opacity = '0.7';
+                    extra.textContent = 'Controlla la posta in arrivo e anche la cartella spam.';
+                    resendMsg.appendChild(extra);
+                }, 100);
+                // Cooldown 60s
+                resendCooldown = true;
+                let left = 60;
+                resendBtn.disabled = true;
+                const iv = setInterval(() => {
+                    left--;
+                    resendBtn.textContent = `Rimanda (${left}s)`;
+                    if (left <= 0) {
+                        clearInterval(iv);
+                        resendBtn.textContent = 'Rimanda email di verifica';
+                        resendBtn.disabled = false;
+                        resendCooldown = false;
+                    }
+                }, 1000);
+            } else {
+                // Errore (rosso)
+                resendMsg.textContent = data.detail || 'Si è verificato un problema temporaneo.';
+                resendMsg.className = 'msg error';
+            }
+        } catch (err) {
+            resendMsg.textContent = 'Si è verificato un problema temporaneo. Riprova più tardi.';
+            resendMsg.className = 'msg error';
+        } finally {
+            if (!resendCooldown) {
+                resendBtn.disabled = false;
+                resendBtn.textContent = 'Rimanda email di verifica';
+            }
         }
     });
     </script>
