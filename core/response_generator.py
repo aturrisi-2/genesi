@@ -340,13 +340,18 @@ class ResponseGenerator:
                     tomorrow_entries.append(f)
 
             if tomorrow_entries:
-                temps = [f.get("temp", 0) for f in tomorrow_entries]
+                temps = []
+                for f in tomorrow_entries:
+                    try:
+                        temps.append(float(f.get("temp", 0)))
+                    except (TypeError, ValueError):
+                        pass
                 descs = [f.get("description", "") for f in tomorrow_entries]
-                t_min_f = min(temps) if temps else ""
-                t_max_f = max(temps) if temps else ""
-                # Descrizione più frequente
-                desc_f = max(set(descs), key=descs.count) if descs else ""
-                parts.append(f"Domani si prevedono temperature tra {t_min_f}°C e {t_max_f}°C, con {desc_f}.")
+                if temps:
+                    t_min_f = f"{min(temps):.1f}"
+                    t_max_f = f"{max(temps):.1f}"
+                    desc_f = max(set(descs), key=descs.count) if descs else ""
+                    parts.append(f"Domani si prevedono temperature tra {t_min_f}°C e {t_max_f}°C, con {desc_f}.")
             elif len(forecast) >= 3:
                 # Prossime ore
                 next_f = forecast[2]  # ~9h avanti

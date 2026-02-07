@@ -25,46 +25,135 @@ def _get_newsapi_key() -> Optional[str]:
 
 
 # ===============================
-# CITY EXTRACTION
+# HELPERS
 # ===============================
 
-_CITY_PATTERN = re.compile(
-    r"\b(?:a|di|su|per|in)\s+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)*)",
+def _r1(val) -> str:
+    """Arrotonda un numero a 1 decimale. Restituisce stringa."""
+    try:
+        return f"{float(val):.1f}"
+    except (TypeError, ValueError):
+        return str(val)
+
+
+# ===============================
+# CITY / LOCATION EXTRACTION
+# ===============================
+
+_PREP_PATTERN = re.compile(
+    r"\b(?:a|ad|di|su|per|in|da|nel|nella|nello|nell|dello|della|del)\s+"
+    r"([A-ZÀ-Úa-zà-ú][a-zà-ú']+(?:\s+(?:di|del|della|dell|dei|delle|d'|in|al|alla|sul|sulla)?\s*[A-ZÀ-Úa-zà-ú][a-zà-ú']+)*)",
     re.UNICODE
 )
 
-_ITALIAN_CITIES = {
-    "roma", "milano", "napoli", "torino", "palermo", "genova", "bologna",
-    "firenze", "bari", "catania", "venezia", "verona", "messina", "padova",
-    "trieste", "brescia", "parma", "modena", "reggio calabria", "reggio emilia",
-    "perugia", "cagliari", "livorno", "foggia", "rimini", "salerno", "ferrara",
-    "sassari", "siracusa", "pescara", "monza", "bergamo", "trento", "vicenza",
-    "terni", "novara", "piacenza", "ancona", "lecce", "bolzano", "catanzaro",
-    "udine", "aosta", "potenza", "campobasso", "l'aquila",
+_STOP_WORDS = {
+    "meteo", "tempo", "temperatura", "previsioni", "notizie", "notizia", "news",
+    "cronaca", "attualità", "oggi", "domani", "ieri", "adesso", "ora", "che",
+    "come", "quanto", "quanti", "quale", "quali", "cosa", "dove", "quando",
+    "piove", "pioverà", "neve", "vento", "sole", "gradi", "caldo", "freddo",
+    "successo", "succede", "succedendo", "ultime", "ultima", "degno", "nota",
+    "per", "a", "ad", "fa", "il", "lo", "la", "le", "gli", "un", "una",
 }
 
+_LINK_WORDS = {"di", "del", "della", "dell", "dei", "delle", "d'", "in", "al", "alla", "sul", "sulla", "sant", "san"}
+
 def extract_city(text: str) -> str:
-    """Estrae la città dal messaggio. Default: Roma."""
-    match = _CITY_PATTERN.search(text)
-    if match:
-        city = match.group(1).strip()
-        if city.lower() in _ITALIAN_CITIES:
-            return city
-        return city
-    # Cerca menzione diretta di città italiane
+    """Estrae la località dal messaggio. Supporta qualsiasi luogo. Default: Roma."""
+
+    # 1. PRIORITÀ: cattura tutto dopo keyword meteo/notizie (nomi multi-parola)
     text_lower = text.lower()
-    for city in _ITALIAN_CITIES:
-        if city in text_lower:
-            return city.title()
+    for kw in ["meteo ", "tempo a ", "previsioni ", "notizie di ", "notizie da ",
+               "notizie a ", "notizie su ", "notizie "]:
+        idx = text_lower.find(kw)
+        if idx >= 0:
+            rest = text[idx + len(kw):].strip()
+            rest_words = rest.split()
+            location_parts = []
+            for rw in rest_words:
+                clean = rw.strip(".,!?;:'\"")
+                if not clean:
+                    break
+                if clean.lower() in _STOP_WORDS and len(clean) <= 1:
+                    break
+                if clean.lower() in _STOP_WORDS and not location_parts:
+                    continue  # skip leading stop words
+                # Articoli interni (di, del, sant, san, etc.) sono OK dentro un nome
+                if clean.lower() in _LINK_WORDS or clean.lower() in _STOP_WORDS:
+                    if location_parts and clean.lower() in _LINK_WORDS:
+                        location_parts.append(clean)
+                        continue
+                    if not location_parts:
+                        continue
+                    break
+                location_parts.append(clean)
+            if location_parts:
+                loc = " ".join(location_parts)
+                print(f"[CITY_EXTRACT] found via keyword: '{loc}'", flush=True)
+                return loc.title()
+
+    # 2. Cerca dopo preposizione (a, di, in, etc.)
+    for match in _PREP_PATTERN.finditer(text):
+        candidate = match.group(1).strip()
+        if candidate.lower() not in _STOP_WORDS and len(candidate) > 1:
+            print(f"[CITY_EXTRACT] found via prep: '{candidate}'", flush=True)
+            return candidate.title()
+
+    # 3. Cerca parole capitalizzate e costruisci nome multi-parola
+    words = text.split()
+    for i, w in enumerate(words):
+        clean = w.strip(".,!?;:'\"")
+        if clean and clean[0].isupper() and clean.lower() not in _STOP_WORDS and len(clean) > 1:
+            parts = [clean]
+            j = i + 1
+            while j < len(words):
+                nw = words[j].strip(".,!?;:'\"")
+                if not nw:
+                    break
+                if nw.lower() in _LINK_WORDS:
+                    parts.append(nw)
+                    j += 1
+                    continue
+                if nw[0].isupper() and nw.lower() not in _STOP_WORDS:
+                    parts.append(nw)
+                    j += 1
+                    continue
+                break
+            result = " ".join(parts)
+            print(f"[CITY_EXTRACT] found via caps: '{result}'", flush=True)
+            return result.title()
+
+    print(f"[CITY_EXTRACT] default: Roma", flush=True)
     return "Roma"
 
 
 # ===============================
-# 1. METEO — OpenWeatherMap
+# 1. METEO — OpenWeatherMap (GLOBALE)
 # ===============================
 
+async def _geocode_city(client, city: str, api_key: str) -> Optional[Dict]:
+    """Usa OpenWeather Geocoding API per risolvere qualsiasi località in coordinate.
+    Supporta villaggi, frazioni, comuni minuscoli — qualsiasi luogo nel mondo."""
+    geo_url = "https://api.openweathermap.org/geo/1.0/direct"
+    # Prova prima con ,IT per località italiane
+    for query in [f"{city},IT", city]:
+        resp = await client.get(geo_url, params={
+            "q": query,
+            "limit": 1,
+            "appid": api_key
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            if data:
+                loc = data[0]
+                resolved = loc.get("local_names", {}).get("it", loc.get("name", city))
+                print(f"[GEOCODE] ✓ '{city}' → {resolved} ({loc['lat']}, {loc['lon']}) country={loc.get('country','?')}", flush=True)
+                return {"lat": loc["lat"], "lon": loc["lon"], "name": resolved, "country": loc.get("country", "")}
+    print(f"[GEOCODE] ✗ '{city}' non trovata", flush=True)
+    return None
+
+
 async def fetch_weather(user_message: str) -> Dict:
-    """Chiama OpenWeatherMap e restituisce dati meteo reali."""
+    """Chiama OpenWeatherMap e restituisce dati meteo reali per QUALSIASI località."""
     api_key = _get_openweather_key()
     print(f"[FATTI][API_CALL] OPENWEATHER_API_KEY present: {bool(api_key)}", flush=True)
     if not api_key:
@@ -72,87 +161,73 @@ async def fetch_weather(user_message: str) -> Dict:
         return {"error": "API meteo non configurata", "source": "openweathermap"}
 
     city = extract_city(user_message)
-    print(f"[FATTI][API_METEO] città={city}", flush=True)
+    print(f"[FATTI][API_METEO] città_estratta={city}", flush=True)
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=12.0) as client:
         try:
-            # Current weather
+            # STEP 1: Geocoding — risolvi qualsiasi località in coordinate
+            geo = await _geocode_city(client, city, api_key)
+            if not geo:
+                return {"error": f"Località '{city}' non trovata", "source": "openweathermap"}
+
+            lat, lon = geo["lat"], geo["lon"]
+            resolved_name = geo["name"]
+
+            # STEP 2: Current weather via coordinate (funziona per qualsiasi punto)
             current_url = "https://api.openweathermap.org/data/2.5/weather"
             current_resp = await client.get(current_url, params={
-                "q": city + ",IT",
+                "lat": lat, "lon": lon,
                 "appid": api_key,
                 "units": "metric",
                 "lang": "it"
             })
             current_data = current_resp.json()
 
-            if current_resp.status_code != 200:
-                # Riprova senza ,IT per città estere
-                current_resp = await client.get(current_url, params={
-                    "q": city,
-                    "appid": api_key,
-                    "units": "metric",
-                    "lang": "it"
-                })
-                current_data = current_resp.json()
-
-            # 5-day forecast
+            # STEP 3: Forecast via coordinate
             forecast_url = "https://api.openweathermap.org/data/2.5/forecast"
             forecast_resp = await client.get(forecast_url, params={
-                "q": city + ",IT",
+                "lat": lat, "lon": lon,
                 "appid": api_key,
                 "units": "metric",
                 "lang": "it",
-                "cnt": 16  # ~48h di previsioni (ogni 3h)
+                "cnt": 16
             })
             forecast_data = forecast_resp.json()
 
-            if forecast_resp.status_code != 200:
-                forecast_resp = await client.get(forecast_url, params={
-                    "q": city,
-                    "appid": api_key,
-                    "units": "metric",
-                    "lang": "it",
-                    "cnt": 16
-                })
-                forecast_data = forecast_resp.json()
-
             result = {
                 "source": "openweathermap",
-                "city": city,
+                "city": resolved_name,
                 "timestamp": datetime.now().isoformat(),
                 "current": {},
                 "forecast": []
             }
 
-            # Log raw API data sample
             print(f"[FATTI][API_DATA_SAMPLE] weather_status={current_resp.status_code} forecast_status={forecast_resp.status_code}", flush=True)
-            print(f"[FATTI][API_DATA_SAMPLE] current_keys={list(current_data.keys())}", flush=True)
 
-            # Parse current
+            # Parse current — TUTTI I NUMERI ARROTONDATI A 1 DECIMALE
             if "main" in current_data:
                 result["current"] = {
-                    "temp": current_data["main"]["temp"],
-                    "feels_like": current_data["main"]["feels_like"],
-                    "temp_min": current_data["main"]["temp_min"],
-                    "temp_max": current_data["main"]["temp_max"],
-                    "humidity": current_data["main"]["humidity"],
+                    "temp": _r1(current_data["main"]["temp"]),
+                    "feels_like": _r1(current_data["main"]["feels_like"]),
+                    "temp_min": _r1(current_data["main"]["temp_min"]),
+                    "temp_max": _r1(current_data["main"]["temp_max"]),
+                    "humidity": round(current_data["main"]["humidity"]),
                     "description": current_data.get("weather", [{}])[0].get("description", ""),
-                    "wind_speed": current_data.get("wind", {}).get("speed", 0),
+                    "wind_speed": _r1(current_data.get("wind", {}).get("speed", 0)),
                 }
                 print(f"[FATTI][API_METEO] ✓ current: {result['current']['temp']}°C, {result['current']['description']}", flush=True)
 
-            # Parse forecast
+            # Parse forecast — ARROTONDATO
             if "list" in forecast_data:
                 for item in forecast_data["list"]:
                     result["forecast"].append({
                         "datetime": item.get("dt_txt", ""),
-                        "temp": item["main"]["temp"],
-                        "temp_min": item["main"]["temp_min"],
-                        "temp_max": item["main"]["temp_max"],
+                        "temp": _r1(item["main"]["temp"]),
+                        "temp_min": _r1(item["main"]["temp_min"]),
+                        "temp_max": _r1(item["main"]["temp_max"]),
                         "description": item.get("weather", [{}])[0].get("description", ""),
-                        "humidity": item["main"]["humidity"],
-                        "wind_speed": item.get("wind", {}).get("speed", 0),
+                        "humidity": round(item["main"]["humidity"]),
+                        "wind_speed": _r1(item.get("wind", {}).get("speed", 0)),
                     })
                 print(f"[FATTI][API_METEO] ✓ forecast: {len(result['forecast'])} entries", flush=True)
 
@@ -164,19 +239,50 @@ async def fetch_weather(user_message: str) -> Dict:
 
 
 # ===============================
-# 2. NEWS — GNews API
+# 2. NEWS — GNews API (GLOBALE)
 # ===============================
 
+def _extract_news_location(text: str) -> Optional[str]:
+    """Estrae località specifica per ricerca notizie locali."""
+    msg_lower = text.lower()
+    # Se contiene keyword di località + preposizione → estrai
+    for kw in ["notizie di", "notizie da", "notizie a", "notizie su",
+               "news di", "news da", "cronaca di", "cronaca da",
+               "succede a", "successo a", "successo a", "succedendo a"]:
+        idx = msg_lower.find(kw)
+        if idx >= 0:
+            rest = text[idx + len(kw):].strip()
+            rest_words = rest.split()
+            location_parts = []
+            for rw in rest_words:
+                clean = rw.strip(".,!?;:'\"")
+                if clean.lower() in _STOP_WORDS or len(clean) <= 1:
+                    break
+                location_parts.append(clean)
+                if len(location_parts) >= 3:
+                    break
+            if location_parts:
+                loc = " ".join(location_parts)
+                print(f"[NEWS_LOCATION] found: '{loc}'", flush=True)
+                return loc
+    # Prova extract_city come fallback
+    city = extract_city(text)
+    if city != "Roma":
+        return city
+    return None
+
+
 async def fetch_news(user_message: str) -> Dict:
-    """Chiama GNews API per notizie aggiornate."""
+    """Chiama GNews API per notizie aggiornate. Supporta ricerca per località."""
     api_key = _get_newsapi_key()
     print(f"[FATTI][API_CALL] NEWSAPI_KEY present: {bool(api_key)}", flush=True)
     if not api_key:
         print("[FATTI][API_NEWS] ❌ NEWSAPI_KEY non configurata", flush=True)
         return {"error": "API news non configurata", "source": "gnews"}
 
-    # Determina topic dal messaggio
     msg_lower = user_message.lower()
+
+    # Determina topic
     topic = "general"
     if any(w in msg_lower for w in ["economia", "economica", "economico", "borsa", "mercati", "pil"]):
         topic = "business"
@@ -189,49 +295,74 @@ async def fetch_news(user_message: str) -> Dict:
     elif any(w in msg_lower for w in ["salute", "sanità", "medico", "ospedale"]):
         topic = "health"
 
-    # Determina se cerca notizie italiane o europee
+    # Determina lingua e paese
     lang = "it"
     country = "it"
     if any(w in msg_lower for w in ["europa", "europee", "europeo", "mondo", "mondiale", "internazional"]):
-        country = ""  # Non filtrare per paese
+        country = ""
 
-    print(f"[FATTI][API_NEWS] topic={topic} country={country}", flush=True)
+    # Estrai località per ricerca locale
+    location = _extract_news_location(user_message)
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    print(f"[FATTI][API_NEWS] topic={topic} country={country} location={location}", flush=True)
+
+    async with httpx.AsyncClient(timeout=12.0) as client:
         try:
-            # GNews API
-            params = {
-                "apikey": api_key,
-                "lang": lang,
-                "max": 5,
-                "topic": topic,
-            }
-            if country:
-                params["country"] = country
-
-            resp = await client.get("https://gnews.io/api/v4/top-headlines", params=params)
-            data = resp.json()
-
-            # Log raw API data sample
-            print(f"[FATTI][API_DATA_SAMPLE] news_status={resp.status_code} articles_count={len(data.get('articles', []))}", flush=True)
-            if data.get("articles"):
-                print(f"[FATTI][API_DATA_SAMPLE] first_title='{data['articles'][0].get('title', '')[:80]}'", flush=True)
-            else:
-                print(f"[FATTI][API_DATA_SAMPLE] NO DATA — response_keys={list(data.keys())}", flush=True)
-
             articles = []
-            for art in data.get("articles", [])[:5]:
-                articles.append({
-                    "title": art.get("title", ""),
-                    "description": art.get("description", ""),
-                    "source": art.get("source", {}).get("name", ""),
-                    "published": art.get("publishedAt", ""),
-                })
+
+            # STRATEGIA 1: Se c'è una località specifica → usa search endpoint
+            if location:
+                search_params = {
+                    "apikey": api_key,
+                    "q": location,
+                    "lang": lang,
+                    "max": 5,
+                    "sortby": "publishedAt",
+                }
+                resp = await client.get("https://gnews.io/api/v4/search", params=search_params)
+                data = resp.json()
+                print(f"[FATTI][API_NEWS] search '{location}': status={resp.status_code} count={len(data.get('articles', []))}", flush=True)
+
+                for art in data.get("articles", [])[:5]:
+                    articles.append({
+                        "title": art.get("title", ""),
+                        "description": art.get("description", ""),
+                        "source": art.get("source", {}).get("name", ""),
+                        "published": art.get("publishedAt", ""),
+                    })
+
+                # Se la ricerca locale non trova nulla → fallback a top-headlines
+                if not articles:
+                    print(f"[FATTI][API_NEWS] search vuota per '{location}', fallback a top-headlines", flush=True)
+
+            # STRATEGIA 2: Top headlines (default o fallback)
+            if not articles:
+                params = {
+                    "apikey": api_key,
+                    "lang": lang,
+                    "max": 5,
+                    "topic": topic,
+                }
+                if country:
+                    params["country"] = country
+
+                resp = await client.get("https://gnews.io/api/v4/top-headlines", params=params)
+                data = resp.json()
+                print(f"[FATTI][API_NEWS] headlines: status={resp.status_code} count={len(data.get('articles', []))}", flush=True)
+
+                for art in data.get("articles", [])[:5]:
+                    articles.append({
+                        "title": art.get("title", ""),
+                        "description": art.get("description", ""),
+                        "source": art.get("source", {}).get("name", ""),
+                        "published": art.get("publishedAt", ""),
+                    })
 
             print(f"[FATTI][API_NEWS] ✓ {len(articles)} articoli trovati", flush=True)
             return {
                 "source": "gnews",
                 "topic": topic,
+                "location": location,
                 "timestamp": datetime.now().isoformat(),
                 "articles": articles
             }
