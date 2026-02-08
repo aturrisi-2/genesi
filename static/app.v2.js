@@ -313,10 +313,8 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
     }
     
     // VERIFICA INPUT UTENTE DOPO OGNI CHUNK
-    if (_ttsSource === null) {
-      console.log('[TTS_FLOW] step=10.' + (i + 1) + ' interrupted_after_chunk_' + (i + 1));
-      break;
-    }
+    // NOTA: _ttsSource=null dopo chunk completato è normale (audio finito)
+    // L'interruzione utente viene gestita prima del prossimo chunk
   }
   
   console.log('[TTS_FLOW] step=11 segmented_finished');
