@@ -138,72 +138,7 @@ class IntentEngine:
                 "reason": "noise_input"
             }
         
-        # ANALISI AMBIGUÀ CON LOCAL LLM
-        if self._needs_local_llm_analysis(msg):
-            print(f"[PROACTOR] calling_local_llm input='{msg}'", flush=True)
-            
-            try:
-                llm_analysis = local_llm.analyze(msg)
                 
-                # VERIFICA SE È ERRORE TECNICO O FALLBACK NORMALE
-                if llm_analysis.get("technical_error", False):
-                    # ERRORE TECNICO → FALLBACK SICUREZZA A CHATGPT
-                    print(f"[LOCAL_LLM] technical_error → fallback to GPT", flush=True)
-                    
-                    # PERMETTI CHATGPT PER INPUT UMANI SEMPLICI
-                    if self._is_simple_human_input(msg):
-                        print(f"[PROACTOR] decision=ESCALATE_FALLBACK_GPT input='{msg}' source='fallback_safety'", flush=True)
-                        # Continua con il normale processo a ChatGPT
-                    else:
-                        # INPUT AMBIGIO O SOSPETTO → BLOCCA PER SICUREZZA
-                        print(f"[PROACTOR] decision=BLOCK_AMBIGUOUS_NO_LLM input='{msg}' source='fallback_safety'", flush=True)
-                        return {
-                            "should_respond": False,
-                            "decision": "silence",
-                            "reason": "ambiguous_input_no_llm"
-                        }
-                else:
-                    # FALLBACK NORMALE → USA DECISIONE LOCAL LLM
-                    # SE LOCAL LLM INDICA RUMORE → BLOCCA
-                    if llm_analysis.get("is_noise", False):
-                        print(f"[PROACTOR] decision=BLOCK_LLM_NOISE reason='{llm_analysis.get('intent', 'noise')}'", flush=True)
-                        return {
-                            "should_respond": False,
-                            "decision": "silence",
-                            "reason": "llm_noise_detection"
-                        }
-                    
-                    # SE LOCAL LLM CONSIGLIA DI NON ESCALARE → BLOCCA
-                    if not llm_analysis.get("should_escalate", False):
-                        print(f"[PROACTOR] decision=BLOCK_LLM_NO_ESCALATE reason='{llm_analysis.get('intent', 'no_escalate')}'", flush=True)
-                        return {
-                            "should_respond": False,
-                            "decision": "silence",
-                            "reason": "llm_no_escalate"
-                        }
-                    
-                    # USA TESTO PULITO DAL LOCAL LLM
-                    msg = llm_analysis.get("clean_text", msg)
-                    msg_lower = msg.lower()
-                    print(f"[PROACTOR] using_clean_text='{msg}'", flush=True)
-                
-            except Exception as e:
-                # LOCAL LLM NON RAGGIUNGIBILE → FALLBACK SICUREZZA A CHATGPT
-                print(f"[LOCAL_LLM] unavailable → fallback to GPT (error: {e})", flush=True)
-                
-                # PERMETTI CHATGPT PER INPUT UMANI SEMPLICI
-                if self._is_simple_human_input(msg):
-                    print(f"[PROACTOR] decision=ESCALATE_FALLBACK_GPT input='{msg}' source='fallback_safety'", flush=True)
-                    # Continua con il normale processo a ChatGPT
-                else:
-                    # INPUT AMBIGIO O SOSPETTO → BLOCCA PER SICUREZZA
-                    print(f"[PROACTOR] decision=BLOCK_AMBIGUOUS_NO_LLM input='{msg}' source='fallback_safety'", flush=True)
-                    return {
-                        "should_respond": False,
-                        "decision": "silence",
-                        "reason": "ambiguous_input_no_llm"
-                    }
-        
         print(f"[PROACTOR] decision=ESCALATE_TO_CHATGPT input='{msg}'", flush=True)
 
         # ===============================

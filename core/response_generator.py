@@ -36,10 +36,10 @@ class ResponseGenerator:
             try:
                 # Chiamata diretta a PersonalPlex 7B
                 local_llm = LocalLLM()
-                local_result = local_llm.analyze(user_message)
+                response_text = local_llm.generate(user_message)
                 
-                if local_result and isinstance(local_result, dict) and 'response' in local_result:
-                    response_text = local_result['response'].strip()
+                if response_text and len(response_text.strip()) > 0:
+                    response_text = response_text.strip()
                     print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B response: '{response_text[:100]}...'", flush=True)
                     print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B SUCCESS", flush=True)
                     return response_text
