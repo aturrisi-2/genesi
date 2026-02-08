@@ -182,10 +182,11 @@ function scrollToBottomSmooth() {
 }
 
 // ===============================
-// TTS AUDIO — decoded via AudioContext (Safari-safe)
+// TTS STATE
 // ===============================
 let _ttsCtx = null;
 let _ttsSource = null;
+let _isPlayingChunk = false;
 let ttsEnabled = true;
 
 function _getTTSCtx() {
@@ -286,8 +287,8 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
     console.log('[TTS_FLOW] step=4.' + (i + 1) + ' processing_chunk_' + (i + 1) + '/' + chunks.length);
     
     // VERIFICA INPUT UTENTE PRIMA DI OGNI CHUNK (escluso primo chunk)
-    // _ttsSource=null è normale all'inizio, significa solo che nessun audio sta suonando ancora
-    if (i > 0 && _ttsSource === null) {
+    // _ttsSource=null è normale solo all'inizio, non dopo chunk completato
+    if (i > 0 && _ttsSource === null && !_isPlayingChunk) {
       console.log('[TTS_FLOW] step=5.' + (i + 1) + ' interrupted_before_chunk_' + (i + 1));
       break;
     }
@@ -391,6 +392,7 @@ async function _playTTSChunk(text) {
     
     console.log('[TTS_FLOW] step=11 calling_audio_play');
     console.log('[TTS] CALLING audio.play()...');
+    _isPlayingChunk = true;
     await audio.play();
     console.log('[TTS_FLOW] step=12 audio_playing duration=' + audio.duration + 's');
     console.log('[TTS] AUDIO PLAYING: duration=' + audio.duration + 's');
@@ -402,6 +404,7 @@ async function _playTTSChunk(text) {
         console.log('[TTS_FLOW] step=14 audio_ended duration=' + audio.duration + 's');
         console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
         _ttsSource = null;
+        _isPlayingChunk = false;
         URL.revokeObjectURL(audioUrl);
         resolve();
       };
@@ -411,6 +414,7 @@ async function _playTTSChunk(text) {
         if (audio.ended || audio.paused) {
           console.log('[TTS_FLOW] step=14 audio_ended_fallback duration=' + audio.duration + 's');
           _ttsSource = null;
+          _isPlayingChunk = false;
           URL.revokeObjectURL(audioUrl);
           resolve();
         }
@@ -421,6 +425,7 @@ async function _playTTSChunk(text) {
         console.log('[TTS_FLOW] step=14 audio_ended duration=' + audio.duration + 's');
         console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
         _ttsSource = null;
+        _isPlayingChunk = false;
         URL.revokeObjectURL(audioUrl);
         resolve();
       };
