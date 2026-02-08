@@ -1,11 +1,12 @@
 """
 Local LLM Module - PersonalPlex 7B Integration
-Modulo per analisi cognitiva secondaria con modello locale NVIDIA
+Modulo per analisi cognitiva primaria con modello locale NVIDIA
 """
 
 import logging
 import requests
 import json
+import time
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -13,9 +14,11 @@ logger = logging.getLogger(__name__)
 class LocalLLM:
     """Interfaccia per PersonalPlex 7B via backend locale NVIDIA"""
     
-    def __init__(self, backend_url: str = "http://localhost:8001/analyze"):
+    def __init__(self, backend_url: str = "http://localhost:8001/analyze", timeout: int = 15, max_retries: int = 1):
         self.backend_url = backend_url
-        self.timeout = 10
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.health_url = "http://localhost:8001/health"
     
     def analyze(self, text: str) -> Dict[str, Any]:
         """
@@ -28,75 +31,112 @@ class LocalLLM:
             Dict con:
             - intent: string (tipo di intento rilevato)
             - confidence: float (0.0-1.0)
-            - clean_text: string (testo pulito)
-            - is_noise: bool (se è rumore/nonsense)
-            - should_escalate: bool (se passare a ChatGPT)
+            - response: string (risposta generata)
+            - latency_ms: float (latenza chiamata)
+            - technical_error: bool (errore tecnico)
         """
-        try:
-            payload = {
-                "text": text,
-                "model": "personalplex_7b",
-                "task": "noise_detection_and_intent"
+        start_time = time.time()
+        
+        # Health check prima di procedere
+        if not self._health_check():
+            logger.error("[PERSONALPLEX] Service down - cannot analyze")
+            return {
+                "intent": "error",
+                "confidence": 0.0,
+                "response": "",
+                "latency_ms": 0.0,
+                "technical_error": True
             }
-            
-            response = requests.post(
-                self.backend_url,
-                json=payload,
-                timeout=self.timeout,
+        
+        # Retry logic
+        for attempt in range(self.max_retries + 1):
+            try:
+                logger.info(f"[PERSONALPLEX] called=true attempt={attempt+1} text='{text[:50]}...'")
+                
+                payload = {"text": text}
+                
+                response = requests.post(
+                    self.backend_url,
+                    json=payload,
+                    timeout=self.timeout,
+                    headers={"Content-Type": "application/json"}
+                )
+                
+                latency = (time.time() - start_time) * 1000
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    
+                    # Estrai dati dalla risposta PersonalPlex
+                    intent = result.get("intent", "conversation")
+                    confidence = result.get("confidence", 0.5)
+                    response_text = result.get("response", "")
+                    
+                    logger.info(f"[PERSONALPLEX] success=true latency={latency:.1f}ms confidence={confidence:.2f}")
+                    
+                    return {
+                        "intent": intent,
+                        "confidence": confidence,
+                        "response": response_text,
+                        "latency_ms": latency,
+                        "technical_error": False
+                    }
+                else:
+                    logger.error(f"[PERSONALPLEX] HTTP error: {response.status_code}")
+                    if attempt == self.max_retries:
+                        break
+                    
+            except requests.exceptions.Timeout:
+                logger.error(f"[PERSONALPLEX] timeout attempt={attempt+1}")
+                if attempt == self.max_retries:
+                    break
+                    
+            except requests.exceptions.ConnectionError:
+                logger.error(f"[PERSONALPLEX] connection error attempt={attempt+1}")
+                if attempt == self.max_retries:
+                    break
+                    
+            except Exception as e:
+                logger.error(f"[PERSONALPLEX] unexpected error attempt={attempt+1}: {e}")
+                if attempt == self.max_retries:
+                    break
+        
+        # Tutti i tentativi falliti
+        latency = (time.time() - start_time) * 1000
+        logger.error(f"[PERSONALPLEX] failed=true latency={latency:.1f}ms attempts={self.max_retries+1}")
+        
+        return {
+            "intent": "error",
+            "confidence": 0.0,
+            "response": "",
+            "latency_ms": latency,
+            "technical_error": True
+        }
+    
+    def _health_check(self) -> bool:
+        """Verifica che PersonalPlex sia attivo"""
+        try:
+            response = requests.get(
+                self.health_url,
+                timeout=5,
                 headers={"Content-Type": "application/json"}
             )
             
             if response.status_code == 200:
-                result = response.json()
-                
-                # Validazione output obbligatorio
-                required_keys = ["intent", "confidence", "clean_text", "is_noise", "should_escalate"]
-                for key in required_keys:
-                    if key not in result:
-                        logger.error(f"[LOCAL_LLM] Missing required key: {key}")
-                        return self._fallback_analysis(text)
-                
-                logger.info(f"[LOCAL_LLM] intent={result['intent']} confidence={result['confidence']:.2f} noise={result['is_noise']} escalate={result['should_escalate']}")
-                return result
-                
+                health_data = response.json()
+                if health_data.get("status") == "ok" and health_data.get("model_loaded"):
+                    logger.info("[PERSONALPLEX] health_check=true model_loaded=true")
+                    return True
+                else:
+                    logger.warning(f"[PERSONALPLEX] health_check=false status={health_data.get('status')}")
+                    return False
             else:
-                logger.error(f"[LOCAL_LLM] Backend error: {response.status_code}")
-                return self._fallback_analysis(text, is_technical_error=True)
+                logger.warning(f"[PERSONALPLEX] health_check=false http={response.status_code}")
+                return False
                 
         except Exception as e:
-            logger.error(f"[LOCAL_LLM] Analysis failed: {e}")
-            return self._fallback_analysis(text, is_technical_error=True)
-    
-    def _fallback_analysis(self, text: str, is_technical_error: bool = False) -> Dict[str, Any]:
-        """
-        Fallback se backend non disponibile
-        Analisi euristica base
-        """
-        text_clean = text.strip().lower()
-        
-        # Euristiche base per rumore/nonsense
-        noise_indicators = [
-            len(text_clean) < 3,  # troppo corto
-            text_clean.count(' ') > len(text_clean) / 3,  # troppe parole ripetute
-            all(c in 'aeiou' for c in text_clean),  # solo vocali
-            text_clean.replace(' ', '').isalpha() and len(set(text_clean.replace(' ', ''))) < 3  # caratteri ripetuti
-        ]
-        
-        is_noise = any(noise_indicators)
-        confidence = 0.3 if is_noise else 0.6
-        should_escalate = not is_noise and len(text_clean) > 5
-        
-        result = {
-            "intent": "noise" if is_noise else "unknown",
-            "confidence": confidence,
-            "clean_text": text_clean,
-            "is_noise": is_noise,
-            "should_escalate": should_escalate,
-            "technical_error": is_technical_error
-        }
-        
-        logger.info(f"[LOCAL_LLM] FALLBACK intent={result['intent']} confidence={result['confidence']:.2f} noise={result['is_noise']} escalate={result['should_escalate']}")
-        return result
+            logger.error(f"[PERSONALPLEX] health_check=false error={e}")
+            return False
 
 # Istanza globale
 local_llm = LocalLLM()

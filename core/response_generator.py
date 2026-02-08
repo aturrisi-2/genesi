@@ -6,9 +6,9 @@ import json
 from datetime import datetime, timedelta
 
 # ========================================
-# MODO FORZATO PERSONALPLEX 7B (TEMPORANEO)
+# MODO FORZATO PERSONALPLEX 7B (DISABILITATO)
 # ========================================
-FORCE_LOCAL_LLM = True
+FORCE_LOCAL_LLM = False
 
 
 class ResponseGenerator:
