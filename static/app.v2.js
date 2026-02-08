@@ -951,9 +951,9 @@ async function startRecording() {
     console.log('[MIC] requesting permission...');
     const constraints = {
       audio: { 
-        echoCancellation: true, 
-        noiseSuppression: true, 
-        autoGainControl: true 
+        echoCancellation: false, 
+        noiseSuppression: false, 
+        autoGainControl: false 
       }
     };
     
@@ -989,24 +989,44 @@ async function startRecording() {
         console.log('[iOS STT] AudioContext rate=' + _audioCtx.sampleRate + ' state=' + _audioCtx.state);
 
         const source = _audioCtx.createMediaStreamSource(stream);
+        
+        // Aggiungi GainNode per ridurre volume a 0.3 (evita clipping)
+        const gainNode = _audioCtx.createGain();
+        gainNode.gain.value = 0.3;
+        console.log('[iOS STT] GainNode created with gain=0.3');
+        
         _scriptNode = _audioCtx.createScriptProcessor(4096, 1, 1);
         _pcmBuffers = [];
         _pcmLength = 0;
         let frameCount = 0;
         let audioDetected = false;
+        let clippingCount = 0;
 
         _scriptNode.onaudioprocess = (e) => {
           const data = e.inputBuffer.getChannelData(0);
           
-          // DEBUG iOS: verifica dati audio
+          // DEBUG iOS: verifica dati audio e calcola RMS/clipping
           let hasNonZero = false;
           let maxValue = 0;
+          let sumSquares = 0;
+          
           for (let i = 0; i < data.length; i++) {
-            if (Math.abs(data[i]) > 0.00001) { // Soglia più bassa
+            const absValue = Math.abs(data[i]);
+            if (absValue > 0.00001) { // Soglia più bassa
               hasNonZero = true;
-              maxValue = Math.max(maxValue, Math.abs(data[i]));
+              maxValue = Math.max(maxValue, absValue);
             }
+            
+            // Clipping detection
+            if (absValue > 0.95) {
+              clippingCount++;
+            }
+            
+            // RMS calculation
+            sumSquares += data[i] * data[i];
           }
+          
+          const rms = Math.sqrt(sumSquares / data.length);
           
           // iOS: raccoglie TUTTI i dati audio senza soglia
           const copy = new Float32Array(data.length);
@@ -1018,20 +1038,21 @@ async function startRecording() {
           // Primo rilevamento audio
           if (hasNonZero && !audioDetected) {
             audioDetected = true;
-            console.log('[iOS STT] AUDIO DETECTED! maxValue=' + maxValue.toFixed(6));
+            console.log('[iOS STT] AUDIO DETECTED! maxValue=' + maxValue.toFixed(6) + ' rms=' + rms.toFixed(6) + ' clipping=' + clippingCount);
           }
           
           // Log dettagliato per debug iOS
           if (frameCount === 1) {
-            console.log('[iOS STT] FIRST FRAME: length=' + data.length + ' hasNonZero=' + hasNonZero + ' maxValue=' + maxValue.toFixed(6));
+            console.log('[iOS STT] FIRST FRAME: length=' + data.length + ' hasNonZero=' + hasNonZero + ' maxValue=' + maxValue.toFixed(6) + ' rms=' + rms.toFixed(6));
           }
           
           if (frameCount % 100 === 0) {
-            console.log('[iOS STT] frame ' + frameCount + ': samples=' + _pcmLength + ' hasNonZero=' + hasNonZero + ' maxValue=' + maxValue.toFixed(6) + ' audioDetected=' + audioDetected);
+            console.log('[iOS STT] frame ' + frameCount + ': samples=' + _pcmLength + ' hasNonZero=' + hasNonZero + ' maxValue=' + maxValue.toFixed(6) + ' rms=' + rms.toFixed(6) + ' clipping=' + clippingCount);
           }
         };
 
-        source.connect(_scriptNode);
+        source.connect(gainNode);
+        gainNode.connect(_scriptNode);
         // CONNETTI a destination per iOS (importante!)
         _scriptNode.connect(_audioCtx.destination);
         
@@ -1041,6 +1062,19 @@ async function startRecording() {
         setState(STATES.RECORDING);
         micButton.classList.add('recording');
         console.log('[iOS STT] recording started with audio output');
+        
+        // Log finale statisthe alla fine della registrazione
+        const originalStop = stopRecording;
+        stopRecording = function() {
+          console.log('[iOS STT] RECORDING STOPPED - FINAL STATS:');
+          console.log('[iOS STT] Total frames: ' + frameCount);
+          console.log('[iOS STT] Total samples: ' + _pcmLength);
+          console.log('[iOS STT] Clipping events: ' + clippingCount);
+          console.log('[iOS STT] Audio detected: ' + audioDetected);
+          console.log('[iOS STT] Estimated duration: ' + (_pcmLength / 16000).toFixed(2) + 's');
+          console.log('[iOS STT] Target amplitude: 8000-15000 (avoid >20000)');
+          return originalStop.call(this);
+        };
         
       } catch (error) {
         console.error('[iOS STT] AudioContext setup failed:', error);
