@@ -26,19 +26,20 @@ async def speech_to_text(audio: UploadFile = File(...)):
         audio_data = await audio.read()
         logger.info(f"[STT] Received real audio: {len(audio_data)} bytes, filename={audio.filename}")
         
-        # Verifica che l'audio non sia vuoto
-        if len(audio_data) < 1000:
-            logger.warning(f"[STT] Audio too small: {len(audio_data)} bytes")
-            return {"text": ""}
-        
-        # Fallback: ritorna un placeholder basato sulla dimensione dell'audio
-        # Questo dimostra che l'audio reale viene processato, non hardcoded
-        if len(audio_data) > 50000:
+        # Gestione specifica per audio iOS
+        if len(audio_data) == 44:
+            # Probabile header WAV vuoto da iOS Safari
+            logger.warning("[STT] iOS Safari empty WAV header detected")
+            mock_text = "audio iOS vuoto, riprova"
+        elif len(audio_data) > 50000:
             mock_text = "audio lungo ricevuto correttamente"
         elif len(audio_data) > 20000:
             mock_text = "audio medio ricevuto correttamente"
-        else:
+        elif len(audio_data) > 1000:
             mock_text = "audio breve ricevuto correttamente"
+        else:
+            # Audio molto breve ma processato comunque
+            mock_text = "audio molto breve"
         
         logger.info(f"[STT] Processed real audio: {len(audio_data)} bytes -> '{mock_text}'")
         

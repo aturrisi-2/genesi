@@ -1078,6 +1078,16 @@ function stopRecording() {
     const stream = currentStream;
 
     // Merge PCM buffers
+    console.log('[iOS STT] merging PCM buffers: ' + _pcmBuffers.length + ' buffers, total length: ' + _pcmLength);
+    
+    if (_pcmLength === 0) {
+      console.error('[iOS STT] NO PCM DATA COLLECTED - microphone issue');
+      resetMicrophoneState();
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      setState(STATES.IDLE);
+      return;
+    }
+    
     const merged = new Float32Array(_pcmLength);
     let offset = 0;
     for (const buf of _pcmBuffers) { merged.set(buf, offset); offset += buf.length; }
