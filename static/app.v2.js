@@ -565,7 +565,15 @@ async function sendMessage() {
         console.log('[TTS_MANDATORY] should_respond=True, forcing TTS');
         console.log('[TTS_CALL] response_len=' + (data.response ? data.response.length : 0) + ' tts_mode=' + (data.tts_mode || 'none'));
         console.log('[TTS_CALL] response_preview=' + (data.response ? data.response.substring(0, 100) + '...' : 'null'));
-        playTTS(data.response, data.tts_mode);
+        
+        try {
+          console.log('[TTS_CALL] about_to_call_playTTS');
+          playTTS(data.response, data.tts_mode);
+          console.log('[TTS_CALL] playTTS_returned_successfully');
+        } catch (e) {
+          console.error('[TTS_ABORT] reason=exception_in_playTTS error=', e);
+          console.error('[TTS_ABORT] error_stack=', e.stack);
+        }
       } else {
         console.log('[TTS_MANDATORY] should_respond=False, skipping TTS');
       }
