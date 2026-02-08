@@ -397,6 +397,37 @@ async function _playTTSChunk(text) {
     console.log('[TTS_FLOW] step=12 audio_playing duration=' + audio.duration + 's');
     console.log('[TTS] AUDIO PLAYING: duration=' + audio.duration + 's');
     
+    // ATTENDI CHE IL CHUNK FINISCA PRIMA DI PASSARE AL SUCCESSIVO
+    console.log('[TTS_FLOW] step=13 waiting_for_chunk_end');
+    await new Promise(resolve => {
+      audio.onended = () => {
+        console.log('[TTS_FLOW] step=14 audio_ended duration=' + audio.duration + 's');
+        console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
+        _ttsSource = null;
+        URL.revokeObjectURL(audioUrl);
+        resolve();
+      };
+      
+      // Fallback in caso onended non funzioni
+      const timeout = setTimeout(() => {
+        if (audio.ended || audio.paused) {
+          console.log('[TTS_FLOW] step=14 audio_ended_fallback duration=' + audio.duration + 's');
+          _ttsSource = null;
+          URL.revokeObjectURL(audioUrl);
+          resolve();
+        }
+      }, (audio.duration + 1) * 1000);
+      
+      audio.onended = () => {
+        clearTimeout(timeout);
+        console.log('[TTS_FLOW] step=14 audio_ended duration=' + audio.duration + 's');
+        console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
+        _ttsSource = null;
+        URL.revokeObjectURL(audioUrl);
+        resolve();
+      };
+    });
+    
   } catch (e) {
     console.log('[TTS_FLOW] step=ERROR chunk_exception');
     console.error('[TTS] _playTTSChunk error:', e);
