@@ -139,6 +139,39 @@ class IntentEngine:
             }
         
                 
+        # ===============================
+        # PERSONALPLEX 7B - PRIMARIO OBBLIGATORIO
+        # ===============================
+        try:
+            from core.local_llm import LocalLLM
+            local_llm = LocalLLM()
+            
+            print(f"[PROACTOR] calling PERSONALPLEX first", flush=True)
+            
+            # Health check
+            if local_llm._health_check():
+                print(f"[PROACTOR] PERSONALPLEX healthy - generating response", flush=True)
+                
+                # Genera risposta con PersonalPlex
+                response = local_llm.generate(msg)
+                
+                if response and len(response.strip()) > 0:
+                    print(f"[PROACTOR] PERSONALPLEX response received", flush=True)
+                    return {
+                        "should_respond": True,
+                        "decision": "respond",
+                        "reason": "personalplex_primary",
+                        "brain_mode": "relazione",
+                        "personalplex_response": response.strip()
+                    }
+                else:
+                    print(f"[PROACTOR] PERSONALPLEX empty response", flush=True)
+            else:
+                print(f"[PROACTOR] PERSONALPLEX down - fallback to GPT", flush=True)
+                
+        except Exception as e:
+            print(f"[PROACTOR] PERSONALPLEX error: {e} - fallback to GPT", flush=True)
+
         print(f"[PROACTOR] decision=ESCALATE_TO_CHATGPT input='{msg}'", flush=True)
 
         # ===============================

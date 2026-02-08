@@ -141,6 +141,15 @@ class ResponseGenerator:
             )
 
         # ===============================
+        # CONTROLLO RISPOSTA PERSONALPLEX PRIMA DI GPT
+        # ===============================
+        if intent.get("reason") == "personalplex_primary" and "personalplex_response" in intent:
+            # Usa risposta PersonalPlex dal Proactor
+            response = intent["personalplex_response"]
+            print(f"[RESPONSE_GENERATOR] using PERSONALPLEX response='{response[:200]}...'", flush=True)
+            return response.strip()
+        
+        # ===============================
         # CHIAMATA LLM (il routing modello avviene in llm.py)
         # ===============================
         if FORCE_LOCAL_LLM:
