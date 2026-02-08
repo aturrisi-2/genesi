@@ -895,6 +895,10 @@ function resetMicrophoneState() {
     try { _audioCtx.close(); } catch(e) {}
   }
   _audioCtx = null;
+  if (_gainContext && _gainContext.state !== 'closed') {
+    try { _gainContext.close(); } catch(e) {}
+  }
+  _gainContext = null;
   isRecording = false;
   currentStream = null;
   micButton.classList.remove('recording');
@@ -1086,11 +1090,29 @@ async function startRecording() {
     }
     
     if (!_useWebAudio) {
-      // --- Standard: MediaRecorder ---
+      // --- Standard: MediaRecorder con gain ---
       const mimeType = getSupportedMimeType();
       console.log('[MIC] MediaRecorder mimeType=' + mimeType);
-      mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      
+      // Crea AudioContext per applicare gain anche a MediaRecorder
+      const gainCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = gainCtx.createMediaStreamSource(stream);
+      const gainNode = gainCtx.createGain();
+      gainNode.gain.value = 0.3;
+      
+      // Crea destination per lo stream post-gain
+      const destination = gainCtx.createMediaStreamDestination();
+      source.connect(gainNode);
+      gainNode.connect(destination);
+      
+      console.log('[MIC] GainNode created for MediaRecorder: gain=0.3');
+      
+      // MediaRecorder USA lo stream post-gain
+      mediaRecorder = new MediaRecorder(destination.stream, mimeType ? { mimeType } : {});
       audioChunks = [];
+      
+      // Salva contesto per cleanup
+      _gainContext = gainCtx;
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunks.push(e.data);
