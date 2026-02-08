@@ -1218,9 +1218,20 @@ async function transcribeAudio(blob) {
     
     const result = await res.json();
     const text = result.text?.trim() || '';
-    console.log('[STT] transcription received: "' + text + '"');
+    const status = result.status || '';
+    console.log('[STT] transcription received: "' + text + '" status=' + status);
     
-    // INVIA SEMPRE il transcript, anche se vuoto
+    // GESTIONE STATO EMPTY
+    if (status === 'empty' && result.action === 'retry') {
+      console.log('[STT] empty transcription → showing retry feedback');
+      setState(STATES.IDLE);
+      
+      // Feedback non verbale per retry
+      _showSTTRetryFeedback();
+      return; // NON inviare nulla a /chat
+    }
+    
+    // INVIA SOLO se trascrizione valida
     console.log('[STT] setting input and sending message...');
     textInput.value = text;
     setState(STATES.IDLE);
@@ -1229,6 +1240,42 @@ async function transcribeAudio(blob) {
     console.error('[STT] request failed:', e);
     setState(STATES.IDLE);
   }
+}
+
+function _showSTTRetryFeedback() {
+  // Feedback non verbale per retry STT
+  const micButton = document.getElementById('mic-button');
+  if (micButton) {
+    // Animazione mic button per indicare retry
+    micButton.style.animation = 'pulse 1s ease-in-out 2';
+    setTimeout(() => {
+      micButton.style.animation = '';
+    }, 2000);
+  }
+  
+  // Mostra tooltip temporaneo
+  const tooltip = document.createElement('div');
+  tooltip.textContent = 'Non ho sentito bene, riprova';
+  tooltip.style.cssText = `
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.8);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    z-index: 1000;
+    animation: fadeInOut 2s ease-in-out;
+  `;
+  
+  document.body.appendChild(tooltip);
+  setTimeout(() => {
+    if (tooltip.parentNode) {
+      tooltip.parentNode.removeChild(tooltip);
+    }
+  }, 2000);
 }
 
 // ===============================

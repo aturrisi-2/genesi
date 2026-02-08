@@ -122,13 +122,54 @@ async def speech_to_text(audio: UploadFile = File(...)):
             
             logger.info(f"[STT] Whisper transcription: '{text}'")
             
+            # VALIDAZIONE POST-WHISPER OBBLIGATORIA
+            if not self._is_valid_transcription(text):
+                logger.warning(f"[STT] empty transcription → ignored")
+                return {"text": "", "status": "empty", "action": "retry"}
+            
         except Exception as e:
             logger.error(f"[STT] Whisper error: {e}")
-            text = ""
+            logger.warning(f"[STT] empty transcription → ignored (Whisper error)")
+            return {"text": "", "status": "empty", "action": "retry"}
         
         logger.info(f"[STT] STT result: '{text}'")
         return {"text": text}
         
     except Exception as e:
         logger.error(f"[STT] Error: {e}")
-        return {"text": ""}
+        logger.warning(f"[STT] empty transcription → ignored (general error)")
+        return {"text": "", "status": "empty", "action": "retry"}
+
+def _is_valid_transcription(text: str) -> bool:
+    """
+    Validazione post-Whisper per trascrizioni valide
+    """
+    # Lunghezza minima
+    if len(text) < 2:
+        return False
+    
+    # Non solo spazi
+    text_clean = text.strip()
+    if len(text_clean) < 2:
+        return False
+    
+    # Almeno un carattere alfanumerico
+    if not any(c.isalnum() for c in text_clean):
+        return False
+    
+    # Non solo caratteri ripetuti (es "aaa", "ooo") - solo se > 3 caratteri
+    if len(text_clean) > 3:
+        chars_no_spaces = text_clean.replace(' ', '')
+        if len(set(chars_no_spaces)) < 2:
+            return False
+    
+    # Parole significative comuni anche se corte
+    meaningful_short = ['ok', 'sì', 'si', 'no', 'va', 'ben']
+    if text_clean.lower() in meaningful_short:
+        return True
+    
+    # Se ha spazi, probabilmente è una frase valida
+    if ' ' in text_clean and len(text_clean) >= 3:
+        return True
+    
+    return True
