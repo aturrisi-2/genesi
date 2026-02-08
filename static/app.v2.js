@@ -272,6 +272,7 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
   console.log('[TTS_FLOW] step=1 segmented_start len=' + text.length + ' mode=' + tts_mode);
   
   if (!ttsEnabled || !text) {
+    console.log('[TTS_ABORT] reason=segmented_tts_disabled_or_empty ttsEnabled=' + ttsEnabled + ' text_len=' + (text ? text.length : 0));
     console.log('[TTS_FLOW] step=2 segmented_skip_tts_disabled_or_empty');
     return;
   }
@@ -324,6 +325,7 @@ async function _playTTSChunk(text) {
   console.log('[TTS_FLOW] step=1 chunk_start len=' + text.length);
   
   if (!ttsEnabled || !text) {
+    console.log('[TTS_ABORT] reason=chunk_tts_disabled_or_empty ttsEnabled=' + ttsEnabled + ' text_len=' + (text ? text.length : 0));
     console.log('[TTS_FLOW] step=2 chunk_skip_tts_disabled_or_empty');
     return;
   }
@@ -405,6 +407,7 @@ async function playTTS(text, tts_mode = 'normal') {
   console.log('[TTS_FLOW] step=1 playTTS_start len=' + text.length + ' mode=' + tts_mode);
   
   if (!ttsEnabled || !text) {
+    console.log('[TTS_ABORT] reason=tts_disabled_or_empty ttsEnabled=' + ttsEnabled + ' text_len=' + (text ? text.length : 0));
     console.log('[TTS_FLOW] step=2 playTTS_skip_tts_disabled_or_empty');
     return;
   }
@@ -412,6 +415,8 @@ async function playTTS(text, tts_mode = 'normal') {
   console.log('[TTS_FLOW] step=3 playTTS_checking_segmentation');
   
   // FORZA segmentazione per testi informativi, psychological o lunghi
+  console.log('[TTS_FLOW] step=3.5 checking_conditions tts_mode=' + tts_mode + ' len=' + text.length);
+  
   if (tts_mode === 'informative' || tts_mode === 'psychological' || text.length > 500) {
     console.log('[TTS_FLOW] step=4 playTTS_calling_segmented');
     await playTTSSegmented(text, tts_mode);
@@ -558,6 +563,8 @@ async function sendMessage() {
       // TTS OBBLIGATORIO QUANDO should_respond=True
       if (data.should_respond) {
         console.log('[TTS_MANDATORY] should_respond=True, forcing TTS');
+        console.log('[TTS_CALL] response_len=' + (data.response ? data.response.length : 0) + ' tts_mode=' + (data.tts_mode || 'none'));
+        console.log('[TTS_CALL] response_preview=' + (data.response ? data.response.substring(0, 100) + '...' : 'null'));
         playTTS(data.response, data.tts_mode);
       } else {
         console.log('[TTS_MANDATORY] should_respond=False, skipping TTS');
