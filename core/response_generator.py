@@ -1,8 +1,14 @@
 from core.llm import generate_response as llm_generate
+from core.local_llm import LocalLLM
 from core.tools import resolve_tools
 from typing import Optional, Dict, List
 import json
 from datetime import datetime, timedelta
+
+# ========================================
+# MODO FORZATO PERSONALPLEX 7B (TEMPORANEO)
+# ========================================
+FORCE_LOCAL_LLM = True
 
 
 class ResponseGenerator:
@@ -19,6 +25,33 @@ class ResponseGenerator:
     ) -> str:
 
         print(f"[RESPONSE_GENERATOR] intent={intent}", flush=True)
+
+        # ========================================
+        # MODO FORZATO PERSONALPLEX 7B (TEMPORANEO)
+        # ========================================
+        if FORCE_LOCAL_LLM:
+            print(f"[FORCED_LOCAL_LLM] IGNORING Proactor decision", flush=True)
+            print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B called with: '{user_message}'", flush=True)
+            
+            try:
+                # Chiamata diretta a PersonalPlex 7B
+                local_llm = LocalLLM()
+                local_result = local_llm.analyze(user_message)
+                
+                if local_result and isinstance(local_result, dict) and 'response' in local_result:
+                    response_text = local_result['response'].strip()
+                    print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B response: '{response_text[:100]}...'", flush=True)
+                    print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B SUCCESS", flush=True)
+                    return response_text
+                else:
+                    print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B empty response", flush=True)
+                    print(f"[FORCED_LOCAL_LLM] Fallback to GPT", flush=True)
+                    # Continua con GPT come fallback
+                    
+            except Exception as e:
+                print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B error: {e}", flush=True)
+                print(f"[FORCED_LOCAL_LLM] Fallback to GPT", flush=True)
+                # Continua con GPT come fallback
 
         # ===============================
         # PROACTOR DECISION CHECK
@@ -110,6 +143,8 @@ class ResponseGenerator:
         # ===============================
         # CHIAMATA LLM (il routing modello avviene in llm.py)
         # ===============================
+        if FORCE_LOCAL_LLM:
+            print(f"[FORCED_LOCAL_LLM] Fallback to GPT", flush=True)
         print(f"[CHATGPT] called=true", flush=True)
         response = llm_generate({
             "prompt": prompt,
