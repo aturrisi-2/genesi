@@ -284,6 +284,38 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
   console.log('[TTS] CHUNKING: total_len=' + text.length + ' mode=' + tts_mode);
   console.log('[TTS] CHUNKS:', chunks.map((c, i) => `${i + 1}: "${c.substring(0, 50)}..." (${c.length}char)`));
   
+  // Array per i blob pre-caricati
+  const chunkBlobs = new Array(chunks.length);
+  
+  // Funzione per fetch di un chunk
+  const fetchChunk = async (index) => {
+    const chunk = chunks[index];
+    console.log('[TTS_PREFETCH] index=' + (index + 1) + '/total=' + chunks.length + ' len=' + chunk.length);
+    
+    try {
+      const response = await fetch('/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: chunk })
+      });
+      
+      if (!response.ok) {
+        throw new Error('TTS fetch failed: ' + response.status);
+      }
+      
+      const blob = await response.blob();
+      chunkBlobs[index] = blob;
+      console.log('[TTS_PREFETCH_DONE] index=' + (index + 1) + ' size=' + blob.size);
+    } catch (e) {
+      console.error('[TTS_PREFETCH_ERROR] index=' + (index + 1), e);
+      chunkBlobs[index] = null;
+    }
+  };
+  
+  // Pre-fetch del primo chunk
+  await fetchChunk(0);
+  
+  // Ciclo principale con prefetch
   for (let i = 0; i < chunks.length; i++) {
     console.log('[TTS_FLOW] step=4.' + (i + 1) + ' processing_chunk_' + (i + 1) + '/' + chunks.length);
     
@@ -294,6 +326,11 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
       break;
     }
     
+    // Avvia prefetch del chunk successivo mentre questo suona
+    if (i < chunks.length - 1) {
+      fetchChunk(i + 1); // Non await per fetch in background
+    }
+    
     const chunk = chunks[i];
     console.log('[TTS_CHUNK] index=' + (i + 1) + '/total=' + chunks.length + ' len=' + chunk.length);
     console.log('[TTS] PLAYING chunk', i + 1, '/', chunks.length, 'len=' + chunk.length);
@@ -301,8 +338,16 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
     
     try {
       console.log('[TTS_FLOW] step=6.' + (i + 1) + ' calling_playTTSChunk');
-      await _playTTSChunk(chunk);
-      console.log('[TTS_FLOW] step=7.' + (i + 1) + ' playTTSChunk_completed');
+      
+      // Misura tempo tra chunk
+      const chunkStartTime = performance.now();
+      
+      await _playTTSChunkWithBlob(chunk, chunkBlobs[i], i);
+      
+      const chunkEndTime = performance.now();
+      const chunkDuration = chunkEndTime - chunkStartTime;
+      
+      console.log('[TTS_FLOW] step=7.' + (i + 1) + ' playTTSChunk_completed duration=' + chunkDuration.toFixed(2) + 'ms');
       
       // PAUSA LUNGA per psychological tra chunk
       if (tts_mode === 'psychological' && i < chunks.length - 1) {
@@ -326,6 +371,92 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
   _wasPlayingChunk = false;
 }
 
+async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
+  console.log('[TTS_FLOW] step=1 chunk_start len=' + text.length);
+  
+  if (!ttsEnabled || !text) {
+    console.log('[TTS_ABORT] reason=chunk_tts_disabled_or_empty ttsEnabled=' + ttsEnabled + ' text_len=' + (text ? text.length : 0));
+    console.log('[TTS_FLOW] step=2 chunk_skip_tts_disabled_or_empty');
+    return;
+  }
+  
+  if (!blob || blob.size === 0) {
+    console.log('[TTS_ABORT] reason=empty_prefetched_blob');
+    console.log('[TTS_FLOW] step=3 empty_prefetched_blob');
+    return;
+  }
+  
+  console.log('[TTS] _playTTSChunkWithBlob len=' + text.length + ' blob_size=' + blob.size);
+  console.log('[TTS] TEXT:', text);
+  
+  try {
+    console.log('[TTS_FLOW] step=3 creating_audio_url');
+    const audioUrl = URL.createObjectURL(blob);
+    console.log('[TTS] AUDIO URL created from prefetched blob');
+    
+    console.log('[TTS_FLOW] step=4 creating_audio_object');
+    const audio = new Audio(audioUrl);
+    _ttsSource = audio;
+    
+    audio.oncanplay = () => {
+      console.log('[TTS_FLOW] step=5 audio_can_play duration=' + audio.duration + 's');
+      console.log('[TTS] AUDIO CAN PLAY: duration=' + audio.duration + 's');
+    };
+    
+    console.log('[TTS_FLOW] step=6 calling_audio_play');
+    console.log('[TTS] CALLING audio.play()...');
+    _isPlayingChunk = true;
+    _wasPlayingChunk = true;
+    await audio.play();
+    console.log('[TTS_FLOW] step=7 audio_playing duration=' + audio.duration + 's');
+    console.log('[TTS] AUDIO PLAYING: duration=' + audio.duration + 's');
+    
+    // ATTENDI CHE IL CHUNK FINISCA PRIMA DI PASSARE AL SUCCESSIVO
+    console.log('[TTS_FLOW] step=8 waiting_for_chunk_end');
+    await new Promise(resolve => {
+      audio.onended = () => {
+        console.log('[TTS_FLOW] step=9 audio_ended duration=' + audio.duration + 's');
+        console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
+        console.log('[TTS_CHUNK_END] index=' + (chunkIndex + 1) + ' duration=' + audio.duration + 's');
+        _ttsSource = null;
+        _isPlayingChunk = false;
+        // NOTA: _wasPlayingChunk rimane true per indicare che siamo in un ciclo TTS segmentato
+        URL.revokeObjectURL(audioUrl);
+        resolve();
+      };
+      
+      // Fallback in caso onended non funzioni
+      const timeout = setTimeout(() => {
+        if (audio.ended || audio.paused) {
+          console.log('[TTS_FLOW] step=9 audio_ended_fallback duration=' + audio.duration + 's');
+          _ttsSource = null;
+          _isPlayingChunk = false;
+          // NOTA: _wasPlayingChunk rimane true per indicare che siamo in un ciclo TTS segmentato
+          URL.revokeObjectURL(audioUrl);
+          resolve();
+        }
+      }, (audio.duration + 1) * 1000);
+      
+      audio.onended = () => {
+        clearTimeout(timeout);
+        console.log('[TTS_FLOW] step=9 audio_ended duration=' + audio.duration + 's');
+        console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
+        console.log('[TTS_CHUNK_END] index=' + (chunkIndex + 1) + ' duration=' + audio.duration + 's');
+        _ttsSource = null;
+        _isPlayingChunk = false;
+        // NOTA: _wasPlayingChunk rimane true per indicare che siamo in un ciclo TTS segmentato
+        URL.revokeObjectURL(audioUrl);
+        resolve();
+      };
+    });
+    
+  } catch (e) {
+    console.log('[TTS_FLOW] step=ERROR chunk_exception');
+    console.error('[TTS] _playTTSChunkWithBlob error:', e);
+    _ttsSource = null;
+  }
+}
+
 async function _playTTSChunk(text) {
   console.log('[TTS_FLOW] step=1 chunk_start len=' + text.length);
   
@@ -341,54 +472,40 @@ async function _playTTSChunk(text) {
   try {
     console.log('[TTS_FLOW] step=3 calling_fetch_tts');
     console.log('[TTS] FETCH: calling /tts...');
+    
     const response = await fetch('/tts', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({'text': text})
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text })
     });
     
     console.log('[TTS_FLOW] step=4 fetch_response_received');
-    console.log('[TTS] RESPONSE: status=' + response.status + ' headers=' + JSON.stringify(Object.fromEntries(response.headers.entries())));
+    console.log('[TTS] RESPONSE: status=' + response.status + ' headers=' + JSON.stringify(Object.fromEntries(response.headers)));
     
     if (!response.ok) {
-      console.log('[TTS_FLOW] step=ERROR fetch_http_error status=' + response.status);
-      console.error('[TTS] HTTP error:', response.status, response.statusText);
-      const errorText = await response.text();
-      console.error('[TTS] ERROR BODY:', errorText);
+      console.log('[TTS_ABORT] reason=fetch_failed status=' + response.status);
+      console.log('[TTS_FLOW] step=5 fetch_failed');
       return;
     }
     
     console.log('[TTS_FLOW] step=5 reading_blob');
-    const audioBlob = await response.blob();
+    const blob = await response.blob();
     console.log('[TTS_FLOW] step=6 blob_received');
-    console.log('[TTS] BLOB: size=' + audioBlob.size + ' type=' + audioBlob.type);
+    console.log('[TTS] BLOB: size=' + blob.size + ' type=' + blob.type);
     
-    // ASSERT FINALE: blob size > 0
-    if (audioBlob.size === 0) {
-      console.log('[TTS_FLOW] step=ERROR blob_size_zero');
-      console.error('[TTS] ERROR: Audio blob size 0!');
+    if (!blob || blob.size === 0) {
+      console.log('[TTS_ABORT] reason=empty_blob');
+      console.log('[TTS_FLOW] step=7 empty_blob');
       return;
     }
     
-    if (audioBlob.size < 100) {
-      console.log('[TTS_FLOW] step=WARNING blob_too_small size=' + audioBlob.size);
-      console.warn('[TTS] WARNING: Audio blob very small (' + audioBlob.size + ' bytes)');
-    }
-    
     console.log('[TTS_FLOW] step=7 creating_audio_url');
-    const audioUrl = URL.createObjectURL(audioBlob);
+    const audioUrl = URL.createObjectURL(blob);
     console.log('[TTS] AUDIO URL created');
     
     console.log('[TTS_FLOW] step=8 creating_audio_object');
     const audio = new Audio(audioUrl);
     _ttsSource = audio;
-    
-    audio.onended = () => {
-      console.log('[TTS_FLOW] step=9 audio_ended duration=' + audio.duration + 's');
-      console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
-      _ttsSource = null;
-      URL.revokeObjectURL(audioUrl);
-    };
     
     audio.oncanplay = () => {
       console.log('[TTS_FLOW] step=10 audio_can_play duration=' + audio.duration + 's');
