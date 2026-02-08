@@ -82,17 +82,69 @@ async def speech_to_text(audio: UploadFile = File(...)):
             logger.error("[STT] Audio normalization failed")
             return {"text": ""}
         
-        # Calcola durata audio (PCM 16-bit = 2 bytes per sample, 16000 samples/sec)
+        # FASE 2: ANALISI PIPELINE AUDIO DETTAGLIATA
         duration_seconds = len(pcm_data) / (2 * 16000)
         
-        # Verifica che l'audio contenga dati (non sia tutto silenzio)
         import numpy as np
         audio_array = np.frombuffer(pcm_data, dtype=np.int16)
-        max_amplitude = np.max(np.abs(audio_array))
-        logger.info(f"[STT] Audio specs: duration={duration_seconds:.2f}s, sample_rate=16000Hz, channels=1, format=PCM16, max_amplitude={max_amplitude}")
         
-        if max_amplitude < 1000:  # Soglia molto bassa per audio silenzioso
-            logger.warning(f"[STT] Audio too quiet (max_amplitude={max_amplitude}), may not contain speech")
+        # METRICHE AUDIO DETTAGLIATE
+        max_amplitude = np.max(np.abs(audio_array))
+        rms = np.sqrt(np.mean(audio_array.astype(np.float32) ** 2))
+        dc_offset = np.mean(audio_array)
+        clipping_count = np.sum(np.abs(audio_array) >= 32767)
+        
+        logger.info(f"[STT] PIPELINE ANALYSIS:")
+        logger.info(f"[STT]   input: {len(audio_data)} bytes, type={content_type}")
+        logger.info(f"[STT]   pcm: {len(pcm_data)} bytes, duration={duration_seconds:.2f}s")
+        logger.info(f"[STT]   sample_rate: 16000Hz, channels: 1, format: PCM16")
+        logger.info(f"[STT]   max_amplitude: {max_amplitude}")
+        logger.info(f"[STT]   rms: {rms:.2f}")
+        logger.info(f"[STT]   dc_offset: {dc_offset:.2f}")
+        logger.info(f"[STT]   clipping_samples: {clipping_count}")
+        
+        # FASE 2: CONTROLLO QUALITÀ AUDIO PRIMA DI WHISPER
+        quality_issues = []
+        
+        # Controllo RMS (rumore troppo basso)
+        if rms < 500:
+            quality_issues.append(f"rms_too_low:{rms:.0f}")
+        
+        # Controllo clipping (audio saturato)
+        if clipping_count > len(audio_array) * 0.1:  # >10% clipping
+            quality_issues.append(f"excessive_clipping:{clipping_count}")
+        
+        # Controllo DC offset (problemi hardware)
+        if abs(dc_offset) > 1000:
+            quality_issues.append(f"dc_offset:{dc_offset:.0f}")
+        
+        # Controllo frame ripetuti (audio bloccato)
+        if len(audio_array) > 16000:  # almeno 1 secondo
+            # Controlla se ci sono frame identici ripetuti
+            frame_size = 1600  # 100ms frames
+            frames = audio_array[:len(audio_array)//frame_size*frame_size].reshape(-1, frame_size)
+            if len(frames) > 10:
+                # Calcola similarità tra frame consecutivi
+                correlations = []
+                for i in range(len(frames)-1):
+                    corr = np.corrcoef(frames[i], frames[i+1])[0,1]
+                    if not np.isnan(corr):
+                        correlations.append(corr)
+                
+                if correlations and np.mean(correlations) > 0.95:
+                    quality_issues.append("repeated_frames")
+        
+        # Se ci sono problemi qualità → scarta prima di Whisper
+        if quality_issues:
+            logger.warning(f"[STT] AUDIO QUALITY ISSUES: {', '.join(quality_issues)}")
+            logger.warning(f"[STT] Discarding audio before Whisper")
+            return {
+                "text": "",
+                "stt_status": "noise",
+                "quality_issues": quality_issues
+            }
+        
+        logger.info(f"[STT] Audio quality OK → proceeding to Whisper")
         
         # PIPELINE STT con Whisper reale
         try:
@@ -122,15 +174,53 @@ async def speech_to_text(audio: UploadFile = File(...)):
             
             logger.info(f"[STT] Whisper transcription: '{text}'")
             
+            # FASE 3: CONTROLLO QUALITÀ TRASCRIZIONE
+            logger.info(f"[STT] Whisper raw output: '{text}'")
+            
+            # Analisi qualità trascrizione
+            transcription_issues = []
+            
+            # Controllo sillabe singole
+            words = text.split()
+            if len(words) == 1 and len(text) < 4:
+                transcription_issues.append("single_syllable")
+            
+            # Controllo caratteri random/non-italiani
+            if any(ord(c) < 32 or ord(c) > 255 for c in text if not c.isspace()):
+                transcription_issues.append("invalid_characters")
+            
+            # Controllo lingue miste (caratteri non italiani)
+            italian_chars = set("abcdefghijklmnopqrstuvwxyzàèéìòùABCDEFGHIJKLMNOPQRSTUVWXYZÀÈÉÌÒÙ'.,!?- ")
+            if any(c not in italian_chars for c in text):
+                transcription_issues.append("mixed_languages")
+            
+            # Controllo ripetizioni caratteri
+            if len(text) > 5 and len(set(text.replace(' ', ''))) < 3:
+                transcription_issues.append("repeated_chars")
+            
+            # Se ci sono problemi trascrizione → classificare come NOISE
+            if transcription_issues:
+                logger.warning(f"[STT] TRANSCRIPTION QUALITY ISSUES: {', '.join(transcription_issues)}")
+                logger.warning(f"[STT] Classifying as noise")
+                return {
+                    "text": "",
+                    "stt_status": "noise",
+                    "transcription_issues": transcription_issues
+                }
+            
             # VALIDAZIONE POST-WHISPER OBBLIGATORIA
             if not _is_valid_transcription(text):
                 logger.warning(f"[STT] empty transcription → ignored")
-                return {"text": "", "status": "empty", "action": "retry"}
+                return {"text": "", "stt_status": "empty", "action": "retry"}
             
         except Exception as e:
             logger.error(f"[STT] Whisper error: {e}")
-            logger.warning(f"[STT] empty transcription → ignored (Whisper error)")
-            return {"text": "", "status": "empty", "action": "retry"}
+            logger.warning(f"[STT] Whisper exception → returning error status")
+            return {
+                "text": "",
+                "stt_status": "error",
+                "whisper_error": str(e)
+            }
         
         logger.info(f"[STT] STT result: '{text}'")
         return {"text": text}

@@ -1202,6 +1202,8 @@ async function transcribeAudio(blob) {
   console.log('[STT] request sent size=' + blob.size + ' type=' + blob.type);
   
   setState(STATES.THINKING);
+  
+  // FASE 4: FINALLY GLOBALE PER GARANTIRE STOP MICROFONO
   try {
     const ext = blob.type.includes('wav') ? '.wav' : '.webm';
     const fd = new FormData();
@@ -1218,23 +1220,19 @@ async function transcribeAudio(blob) {
     
     const result = await res.json();
     const text = result.text?.trim() || '';
-    const status = result.status || '';
-    console.log('[STT] transcription received: "' + text + '" status=' + status);
+    const status = result.stt_status || result.status || '';
+    console.log('[STT] transcription received: "' + text + '" stt_status=' + status);
     
-    // GESTIONE STATI EMPTY/ERROR
-    if (status === 'empty' || status === 'error') {
+    // GESTIONE STATI EMPTY/ERROR/NOISE
+    if (status === 'empty' || status === 'error' || status === 'noise') {
       console.log('[STT] ' + status + ' transcription → showing feedback');
       setState(STATES.IDLE);
-      
-      // FORZA STOP RECORDING SE ANCORA ATTIVO
-      if (isRecording) {
-        console.log('[STT] forcing stop recording due to ' + status);
-        stopRecording();
-      }
       
       // Feedback appropriato
       if (status === 'empty' && result.action === 'retry') {
         _showSTTRetryFeedback();
+      } else if (status === 'noise') {
+        _showSTTNoiseFeedback(result.quality_issues || result.transcription_issues);
       } else {
         _showSTTErrorFeedback();
       }
@@ -1246,19 +1244,72 @@ async function transcribeAudio(blob) {
     textInput.value = text;
     setState(STATES.IDLE);
     sendMessage();
+    
   } catch (e) {
     console.error('[STT] request failed:', e);
     setState(STATES.IDLE);
+    _showSTTErrorFeedback();
     
-    // FORZA STOP RECORDING SE ANCORA ATTIVO
+  } finally {
+    // FASE 4: GARANTISCI STOP MICROFONO SEMPRE
     if (isRecording) {
-      console.log('[STT] forcing stop recording due to request error');
-      stopRecording();
+      console.log('[STT] FINALLY: forcing stop recording (guaranteed)');
+      try {
+        stopRecording();
+      } catch (stopError) {
+        console.error('[STT] Error stopping recording in finally:', stopError);
+        // Forza reset stato UI anche se stopRecording fallisce
+        isRecording = false;
+        setState(STATES.IDLE);
+        const micButton = document.getElementById('mic-button');
+        if (micButton) {
+          micButton.classList.remove('recording');
+          micButton.textContent = '🎤';
+        }
+      }
     }
     
-    // Feedback errore
-    _showSTTErrorFeedback();
+    console.log('[STT] FINALLY: microphone cleanup completed');
   }
+}
+
+function _showSTTNoiseFeedback(issues) {
+  // Feedback non verbale per rumore/qualità audio
+  const micButton = document.getElementById('mic-button');
+  if (micButton) {
+    // Animazione arancione per rumore
+    micButton.style.backgroundColor = '#ff8800';
+    setTimeout(() => {
+      micButton.style.backgroundColor = '';
+    }, 1000);
+  }
+  
+  // Mostra tooltip con dettagli problemi
+  const issueText = Array.isArray(issues) ? issues.join(', ') : 'rumore rilevato';
+  const tooltip = document.createElement('div');
+  tooltip.textContent = 'Audio di bassa qualità: ' + issueText;
+  tooltip.style.cssText = `
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255,136,0,0.9);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    z-index: 1000;
+    animation: fadeInOut 3s ease-in-out;
+    max-width: 300px;
+    text-align: center;
+  `;
+  
+  document.body.appendChild(tooltip);
+  setTimeout(() => {
+    if (tooltip.parentNode) {
+      tooltip.parentNode.removeChild(tooltip);
+    }
+  }, 3000);
 }
 
 function _showSTTErrorFeedback() {
