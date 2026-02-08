@@ -791,11 +791,37 @@ chatForm.addEventListener('submit', (e) => {
 let isRecording = false;
 let currentStream = null;
 
-// iOS Safari detection
-const _isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const _isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+// Platform detection affidabile
+const _isIOS = (() => {
+  // iOS detection robusta
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+})();
+
+const _isSafari = (() => {
+  // Safari detection basata su feature, non solo userAgent
+  const isSafariLike = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  const hasSafariFeatures = 
+    typeof safari !== 'undefined' || // Safari extension object
+    !window.chrome || // No Chrome
+    (window.safari && window.safari.pushNotification); // Safari push notifications
+  
+  return isSafariLike || hasSafariFeatures;
+})();
+
 const _useWebAudio = _isIOS || (_isSafari && !window.MediaRecorder);
+
+// Detection dettagliata per logging
+function _getPlatformInfo() {
+  return {
+    isIOS: _isIOS,
+    isSafari: _isSafari,
+    hasMediaRecorder: !!window.MediaRecorder,
+    hasGetUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+    userAgent: navigator.userAgent,
+    platform: navigator.platform
+  };
+}
 
 // --- MediaRecorder path (Chrome, Android, Firefox) ---
 let mediaRecorder = null;
@@ -881,7 +907,8 @@ async function startRecording() {
   // Warm TTS AudioContext during mic tap gesture (iOS needs this for post-mic TTS)
   _warmTTSCtx();
 
-  console.log('[MIC] start, iOS=' + _isIOS + ' safari=' + _isSafari + ' webAudio=' + _useWebAudio);
+  const platform = _getPlatformInfo();
+  console.log('[MIC] start', platform);
   if (currentState !== STATES.IDLE || isRecording) return;
   stopAudio();
 
@@ -890,6 +917,20 @@ async function startRecording() {
     console.error('[MIC] ERROR: insecure context, HTTPS required');
     alert('Microfono richiede connessione sicura (HTTPS).');
     return;
+  }
+
+  // SAFARI DESKTOP: controllo specifico
+  if (_isSafari && !_isIOS) {
+    console.log('[MIC][DESKTOP] Safari desktop detected');
+    
+    // Verifica che getUserMedia sia disponibile
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      console.error('[MIC][DESKTOP] getUserMedia not available in Safari');
+      alert('Microfono non disponibile in Safari. Assicurati di aver concesso il permesso e di usare Safari 11+.');
+      return;
+    }
+    
+    console.log('[MIC][DESKTOP] getUserMedia available, requesting permission...');
   }
 
   // CONTROLLO DEFENSIVO: verifica supporto mediaDevices
@@ -908,35 +949,80 @@ async function startRecording() {
 
   try {
     console.log('[MIC] requesting permission...');
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-    });
+    const constraints = {
+      audio: { 
+        echoCancellation: true, 
+        noiseSuppression: true, 
+        autoGainControl: true 
+      }
+    };
+    
+    // SAFARI DESKTOP: constraints specifiche
+    if (_isSafari && !_isIOS) {
+      console.log('[MIC][DESKTOP] using Safari-specific constraints');
+      // Safari desktop a volte richiede constraints più semplici
+      constraints.audio = true;
+    }
+    
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    
+    if (_isSafari && !_isIOS) {
+      console.log('[MIC][DESKTOP] permission granted, Safari desktop stream ready');
+    }
+    
     console.log('[MIC] permission granted, tracks=' + stream.getAudioTracks().length);
     currentStream = stream;
 
     if (_useWebAudio) {
       // --- iOS Safari: AudioContext + ScriptProcessorNode → PCM WAV ---
+      console.log('[MIC][iOS] setting up AudioContext recording');
       _audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: _SAMPLE_RATE });
+      
       // iOS requires resume after user gesture
-      if (_audioCtx.state === 'suspended') await _audioCtx.resume();
+      if (_audioCtx.state === 'suspended') {
+        await _audioCtx.resume();
+        console.log('[MIC][iOS] AudioContext resumed');
+      }
+      
       console.log('[MIC][iOS] AudioContext rate=' + _audioCtx.sampleRate + ' state=' + _audioCtx.state);
 
       const source = _audioCtx.createMediaStreamSource(stream);
       _scriptNode = _audioCtx.createScriptProcessor(4096, 1, 1);
       _pcmBuffers = [];
       _pcmLength = 0;
+      let frameCount = 0;
 
       _scriptNode.onaudioprocess = (e) => {
         const data = e.inputBuffer.getChannelData(0);
-        const copy = new Float32Array(data.length);
-        copy.set(data);
-        _pcmBuffers.push(copy);
-        _pcmLength += copy.length;
+        
+        // iOS: verifica che ci siano dati audio reali
+        let hasAudio = false;
+        for (let i = 0; i < data.length; i++) {
+          if (Math.abs(data[i]) > 0.001) { // Soglia per rumore di fondo
+            hasAudio = true;
+            break;
+          }
+        }
+        
+        if (hasAudio) {
+          const copy = new Float32Array(data.length);
+          copy.set(data);
+          _pcmBuffers.push(copy);
+          _pcmLength += copy.length;
+          frameCount++;
+          
+          // Log ogni 100 frame per verificare acquisizione
+          if (frameCount % 100 === 0) {
+            console.log('[MIC][IOS] audio frames captured: ' + frameCount + ', total samples: ' + _pcmLength);
+          }
+        }
       };
 
       source.connect(_scriptNode);
-      _scriptNode.connect(_audioCtx.destination);
-      console.log('[MIC][iOS] recording via ScriptProcessor');
+      // NON connettere a destination per evitare feedback
+      // _scriptNode.connect(_audioCtx.destination);
+      
+      console.log('[MIC][iOS] recording via ScriptProcessor (no feedback)');
 
       isRecording = true;
       setState(STATES.RECORDING);
@@ -967,12 +1053,21 @@ async function startRecording() {
 
       mediaRecorder.start(1000);
       console.log('[MIC] MediaRecorder started');
+      
+      if (_isSafari && !_isIOS) {
+        console.log('[MIC][DESKTOP] Safari desktop recording started');
+      }
     }
 
     isRecording = true;
     setState(STATES.RECORDING);
     micButton.classList.add('recording');
-    console.log('[MIC] recording started successfully');
+    
+    if (_isSafari && !_isIOS) {
+      console.log('[MIC][DESKTOP] Safari desktop recording active');
+    } else {
+      console.log('[MIC] recording started successfully');
+    }
 
   } catch (e) {
     console.error('[MIC] denied:', e);
@@ -1018,6 +1113,19 @@ function stopRecording() {
 
 async function transcribeAudio(blob) {
   console.log('[STT] request sent size=' + blob.size + ' type=' + blob.type);
+  
+  // VALIDAZIONE AUDIO: non inviare audio vuoto o troppo piccolo
+  if (!blob || blob.size < 1000) { // < 1KB è probabilmente vuoto
+    console.error('[STT] audio too small or empty: ' + blob.size + ' bytes');
+    setState(STATES.IDLE);
+    
+    // Mostra errore utente per iOS
+    if (_isIOS) {
+      alert('Audio troppo breve o non rilevato. Prova a parlare più a lungo e vicino al microfono.');
+    }
+    return;
+  }
+  
   setState(STATES.THINKING);
   try {
     const ext = blob.type.includes('wav') ? '.wav' : '.webm';
