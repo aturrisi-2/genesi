@@ -975,65 +975,83 @@ async function startRecording() {
 
     if (_useWebAudio) {
       // --- iOS Safari: AudioContext + ScriptProcessorNode → PCM WAV ---
-      console.log('[iOS STT] recording started');
-      _audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: _SAMPLE_RATE });
+      console.log('[iOS STT] setting up AudioContext recording');
       
-      // iOS requires resume after user gesture
-      if (_audioCtx.state === 'suspended') {
-        await _audioCtx.resume();
-        console.log('[iOS STT] AudioContext resumed');
-      }
-      
-      console.log('[iOS STT] AudioContext rate=' + _audioCtx.sampleRate + ' state=' + _audioCtx.state);
-
-      const source = _audioCtx.createMediaStreamSource(stream);
-      _scriptNode = _audioCtx.createScriptProcessor(4096, 1, 1);
-      _pcmBuffers = [];
-      _pcmLength = 0;
-      let frameCount = 0;
-
-      _scriptNode.onaudioprocess = (e) => {
-        const data = e.inputBuffer.getChannelData(0);
+      try {
+        _audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: _SAMPLE_RATE });
         
-        // DEBUG iOS: verifica dati audio
-        let hasNonZero = false;
-        let maxValue = 0;
-        for (let i = 0; i < data.length; i++) {
-          if (data[i] !== 0) {
-            hasNonZero = true;
-            maxValue = Math.max(maxValue, Math.abs(data[i]));
+        // iOS requires resume after user gesture
+        if (_audioCtx.state === 'suspended') {
+          await _audioCtx.resume();
+          console.log('[iOS STT] AudioContext resumed');
+        }
+        
+        console.log('[iOS STT] AudioContext rate=' + _audioCtx.sampleRate + ' state=' + _audioCtx.state);
+
+        const source = _audioCtx.createMediaStreamSource(stream);
+        _scriptNode = _audioCtx.createScriptProcessor(4096, 1, 1);
+        _pcmBuffers = [];
+        _pcmLength = 0;
+        let frameCount = 0;
+        let audioDetected = false;
+
+        _scriptNode.onaudioprocess = (e) => {
+          const data = e.inputBuffer.getChannelData(0);
+          
+          // DEBUG iOS: verifica dati audio
+          let hasNonZero = false;
+          let maxValue = 0;
+          for (let i = 0; i < data.length; i++) {
+            if (Math.abs(data[i]) > 0.00001) { // Soglia più bassa
+              hasNonZero = true;
+              maxValue = Math.max(maxValue, Math.abs(data[i]));
+            }
           }
-        }
-        
-        // iOS: raccoglie TUTTI i dati audio senza soglia
-        const copy = new Float32Array(data.length);
-        copy.set(data);
-        _pcmBuffers.push(copy);
-        _pcmLength += copy.length;
-        frameCount++;
-        
-        // Log dettagliato per debug iOS
-        if (frameCount === 1) {
-          console.log('[iOS STT] FIRST FRAME: length=' + data.length + ' hasNonZero=' + hasNonZero + ' maxValue=' + maxValue.toFixed(6));
-        }
-        
-        if (frameCount % 100 === 0) {
-          console.log('[iOS STT] frame ' + frameCount + ': samples=' + _pcmLength + ' hasNonZero=' + hasNonZero + ' maxValue=' + maxValue.toFixed(6));
-        }
-      };
+          
+          // iOS: raccoglie TUTTI i dati audio senza soglia
+          const copy = new Float32Array(data.length);
+          copy.set(data);
+          _pcmBuffers.push(copy);
+          _pcmLength += copy.length;
+          frameCount++;
+          
+          // Primo rilevamento audio
+          if (hasNonZero && !audioDetected) {
+            audioDetected = true;
+            console.log('[iOS STT] AUDIO DETECTED! maxValue=' + maxValue.toFixed(6));
+          }
+          
+          // Log dettagliato per debug iOS
+          if (frameCount === 1) {
+            console.log('[iOS STT] FIRST FRAME: length=' + data.length + ' hasNonZero=' + hasNonZero + ' maxValue=' + maxValue.toFixed(6));
+          }
+          
+          if (frameCount % 100 === 0) {
+            console.log('[iOS STT] frame ' + frameCount + ': samples=' + _pcmLength + ' hasNonZero=' + hasNonZero + ' maxValue=' + maxValue.toFixed(6) + ' audioDetected=' + audioDetected);
+          }
+        };
 
-      source.connect(_scriptNode);
-      // NON connettere a destination per evitare feedback
-      // _scriptNode.connect(_audioCtx.destination);
-      
-      console.log('[iOS STT] ScriptProcessor connected, waiting for audio data...');
+        source.connect(_scriptNode);
+        // CONNETTI a destination per iOS (importante!)
+        _scriptNode.connect(_audioCtx.destination);
+        
+        console.log('[iOS STT] ScriptProcessor connected to destination');
 
-      isRecording = true;
-      setState(STATES.RECORDING);
-      micButton.classList.add('recording');
-      console.log('[iOS STT] recording started, waiting for onaudioprocess events...');
-
-    } else {
+        isRecording = true;
+        setState(STATES.RECORDING);
+        micButton.classList.add('recording');
+        console.log('[iOS STT] recording started with audio output');
+        
+      } catch (error) {
+        console.error('[iOS STT] AudioContext setup failed:', error);
+        // Fallback: prova MediaRecorder se AudioContext fallisce
+        console.log('[iOS STT] falling back to MediaRecorder');
+        _useWebAudio = false;
+        // Continua con il percorso MediaRecorder sotto
+      }
+    }
+    
+    if (!_useWebAudio) {
       // --- Standard: MediaRecorder ---
       const mimeType = getSupportedMimeType();
       console.log('[MIC] MediaRecorder mimeType=' + mimeType);
