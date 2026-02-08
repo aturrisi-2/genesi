@@ -885,11 +885,33 @@ async function startRecording() {
   if (currentState !== STATES.IDLE || isRecording) return;
   stopAudio();
 
+  // CONTROLLO DEFENSIVO: verifica contesto sicuro (HTTPS richiesto)
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    console.error('[MIC] ERROR: insecure context, HTTPS required');
+    alert('Microfono richiede connessione sicura (HTTPS).');
+    return;
+  }
+
+  // CONTROLLO DEFENSIVO: verifica supporto mediaDevices
+  if (!navigator.mediaDevices) {
+    console.error('[MIC] ERROR: navigator.mediaDevices not supported');
+    alert('Microfono non supportato in questo browser. Usa Chrome o Safari.');
+    return;
+  }
+
+  // CONTROLLO DEFENSIVO: verifica getUserMedia
+  if (!navigator.mediaDevices.getUserMedia) {
+    console.error('[MIC] ERROR: getUserMedia not supported');
+    alert('Microfono non supportato in questo browser. Usa Chrome o Safari.');
+    return;
+  }
+
   try {
+    console.log('[MIC] requesting permission...');
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
     });
-    console.log('[MIC] getUserMedia OK, tracks=' + stream.getAudioTracks().length);
+    console.log('[MIC] permission granted, tracks=' + stream.getAudioTracks().length);
     currentStream = stream;
 
     if (_useWebAudio) {
@@ -916,6 +938,11 @@ async function startRecording() {
       _scriptNode.connect(_audioCtx.destination);
       console.log('[MIC][iOS] recording via ScriptProcessor');
 
+      isRecording = true;
+      setState(STATES.RECORDING);
+      micButton.classList.add('recording');
+      console.log('[MIC] recording started successfully (iOS)');
+
     } else {
       // --- Standard: MediaRecorder ---
       const mimeType = getSupportedMimeType();
@@ -939,11 +966,13 @@ async function startRecording() {
       };
 
       mediaRecorder.start(1000);
+      console.log('[MIC] MediaRecorder started');
     }
 
     isRecording = true;
     setState(STATES.RECORDING);
     micButton.classList.add('recording');
+    console.log('[MIC] recording started successfully');
 
   } catch (e) {
     console.error('[MIC] denied:', e);
@@ -988,27 +1017,37 @@ function stopRecording() {
 }
 
 async function transcribeAudio(blob) {
-  console.log('[STT] sending size=' + blob.size + ' type=' + blob.type);
+  console.log('[STT] request sent size=' + blob.size + ' type=' + blob.type);
   setState(STATES.THINKING);
   try {
     const ext = blob.type.includes('wav') ? '.wav' : '.webm';
     const fd = new FormData();
     fd.append('audio', blob, 'rec' + ext);
+    
+    console.log('[STT] sending POST /stt...');
     const res = await fetch('/stt', { method: 'POST', body: fd });
-    console.log('[STT] status=' + res.status);
-    if (!res.ok) throw new Error('STT ' + res.status);
+    console.log('[STT] response status=' + res.status);
+    
+    if (!res.ok) {
+      console.error('[STT] HTTP error: ' + res.status);
+      throw new Error('STT ' + res.status);
+    }
+    
     const result = await res.json();
     const text = result.text?.trim() || '';
-    console.log('[STT] text="' + text + '"');
+    console.log('[STT] transcription received: "' + text + '"');
+    
     if (text) {
+      console.log('[STT] setting input and sending message...');
       textInput.value = text;
       setState(STATES.IDLE);
       sendMessage();
     } else {
+      console.log('[STT] empty transcription, resetting state');
       setState(STATES.IDLE);
     }
   } catch (e) {
-    console.error('[STT] error:', e);
+    console.error('[STT] request failed:', e);
     setState(STATES.IDLE);
   }
 }

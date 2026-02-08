@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, status, UploadFile, File
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -80,6 +80,30 @@ app.include_router(chat_router)
 app.include_router(upload_router)
 # app.include_router(stt_router)  # Temporaneamente commentato per test TTS
 app.include_router(auth_router)
+
+# ======================================================
+# STT — Speech to Text (semplice per test microfono)
+# ======================================================
+
+@app.post("/stt")
+async def speech_to_text(audio: UploadFile = File(...)):
+    """
+    Endpoint STT semplificato per test microfono.
+    Ritorna un testo fittizio per verificare che il microfono funzioni.
+    """
+    try:
+        # Leggi i dati audio (non li processiamo, solo per test)
+        audio_data = await audio.read()
+        print(f"[STT] Received audio: {len(audio_data)} bytes, filename={audio.filename}")
+        
+        # Ritorna un testo fittizio per testare il microfono
+        mock_text = "test microfono funzionante"
+        
+        return JSONResponse(content={"text": mock_text})
+        
+    except Exception as e:
+        print(f"[STT] Error: {e}")
+        return JSONResponse(content={"text": ""}, status_code=500)
 
 # ======================================================
 # TTS — Edge TTS (Microsoft Neural, gratuito)
