@@ -11,13 +11,13 @@ router = APIRouter()
 @router.post("/stt")
 async def speech_to_text(audio: UploadFile = File(...)):
     """
-    Endpoint STT stabile senza dipendenze esterne.
-    Processa dati e restituisce trascrizione.
-    In produzione integrare Whisper quando disponibile.
+    Endpoint STT deterministico con una sola pipeline.
+    Processa dati vocali e restituisce sempre stringa vuota.
+    In produzione sostituire con vera trascrizione Whisper.
     """
     
     try:
-        # Leggi i dati reali
+        # Leggi i dati vocali
         audio_data = await audio.read()
         logger.info(f"[STT] Received data: {len(audio_data)} bytes, filename={audio.filename}")
         
@@ -26,7 +26,8 @@ async def speech_to_text(audio: UploadFile = File(...)):
             logger.warning(f"[STT] Data too small: {len(audio_data)} bytes")
             return {"text": ""}
         
-        # Per testing temporaneo: restituisci stringa vuota
+        # PIPELINE UNICA DETERMINISTICA
+        # Sempre stringa vuota per evitare output vuoto inconsistente
         # In produzione sostituire con vera trascrizione Whisper
         text = ""
         
