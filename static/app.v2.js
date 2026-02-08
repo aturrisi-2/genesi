@@ -285,8 +285,9 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
   for (let i = 0; i < chunks.length; i++) {
     console.log('[TTS_FLOW] step=4.' + (i + 1) + ' processing_chunk_' + (i + 1) + '/' + chunks.length);
     
-    // VERIFICA INPUT UTENTE PRIMA DI OGNI CHUNK
-    if (_ttsSource === null) {
+    // VERIFICA INPUT UTENTE PRIMA DI OGNI CHUNK (escluso primo chunk)
+    // _ttsSource=null è normale all'inizio, significa solo che nessun audio sta suonando ancora
+    if (i > 0 && _ttsSource === null) {
       console.log('[TTS_FLOW] step=5.' + (i + 1) + ' interrupted_before_chunk_' + (i + 1));
       break;
     }
@@ -419,6 +420,7 @@ async function playTTS(text, tts_mode = 'normal') {
   
   if (tts_mode === 'informative' || tts_mode === 'psychological' || text.length > 500) {
     console.log('[TTS_FLOW] step=4 playTTS_calling_segmented');
+    console.log('[TTS_DEBUG] _ttsSource_before_segmented=' + _ttsSource);
     await playTTSSegmented(text, tts_mode);
     console.log('[TTS_FLOW] step=5 playTTS_segmented_completed');
   } else {
