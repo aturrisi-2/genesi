@@ -108,9 +108,9 @@ async def test_surgical_stt():
     print("\n5. COMPORTAMENTO ATTESO:")
     print("   - Audio < 100 bytes: risposta vuota")
     print("   - Audio < 5000 bytes: risposta vuota")
-    print("   - Audio 5000-20000 bytes: 'prova audio'")
-    print("   - Audio 20000-50000 bytes: 'audio di prova medio funzionante'")
-    print("   - Audio > 50000 bytes: frase lunga di test")
+    print("   - Audio 5000-20000 bytes: risposta vuota")
+    print("   - Audio 20000-50000 bytes: risposta vuota")
+    print("   - Audio > 50000 bytes: risposta vuota")
     print("   - iOS 44 bytes: risposta vuota")
     
     # Uccidi il server

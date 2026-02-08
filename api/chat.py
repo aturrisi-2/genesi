@@ -52,7 +52,8 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
         "[audio troppo breve]",
         "[errore trascrizione]",
         "[silenzio]",
-        "[trascrizione fallita]"
+        "[trascrizione fallita]",
+        ""  # Stringa vuota = nessuna trascrizione
     ]
     
     if request.message in stt_technical_markers:

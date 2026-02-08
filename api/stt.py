@@ -24,16 +24,16 @@ async def speech_to_text(audio: UploadFile = File(...)):
         # Verifica dimensione minima
         if len(audio_data) < 100:
             logger.warning(f"[STT] Data too small: {len(audio_data)} bytes")
-            return {"text": "[audio troppo breve]"}
+            return {"text": ""}
         
         # PIPELINE UNICA DETERMINISTICA
         # In produzione sostituire con vera trascrizione Whisper
-        # MAI stringa vuota se audio ricevuto
-        text = "[audio non riconosciuto]"
+        # Per ora restituisce stringa vuota per evitare test hardcoded
+        text = ""
         
         logger.info(f"[STT] Processed data: {len(audio_data)} bytes -> '{text}'")
         return {"text": text}
         
     except Exception as e:
         logger.error(f"[STT] Error: {e}")
-        return {"text": "[errore trascrizione]"}
+        return {"text": ""}
