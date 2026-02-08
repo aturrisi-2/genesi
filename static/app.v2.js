@@ -187,6 +187,7 @@ function scrollToBottomSmooth() {
 let _ttsCtx = null;
 let _ttsSource = null;
 let _isPlayingChunk = false;
+let _wasPlayingChunk = false;
 let ttsEnabled = true;
 
 function _getTTSCtx() {
@@ -287,13 +288,14 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
     console.log('[TTS_FLOW] step=4.' + (i + 1) + ' processing_chunk_' + (i + 1) + '/' + chunks.length);
     
     // VERIFICA INPUT UTENTE PRIMA DI OGNI CHUNK (escluso primo chunk)
-    // _ttsSource=null è normale solo all'inizio, non dopo chunk completato
-    if (i > 0 && _ttsSource === null && !_isPlayingChunk) {
+    // Interruzione utente solo se _ttsSource=null e non siamo in un ciclo naturale
+    if (i > 0 && _ttsSource === null && !_isPlayingChunk && !_wasPlayingChunk) {
       console.log('[TTS_FLOW] step=5.' + (i + 1) + ' interrupted_before_chunk_' + (i + 1));
       break;
     }
     
     const chunk = chunks[i];
+    console.log('[TTS_CHUNK] index=' + (i + 1) + '/total=' + chunks.length + ' len=' + chunk.length);
     console.log('[TTS] PLAYING chunk', i + 1, '/', chunks.length, 'len=' + chunk.length);
     console.log('[TTS] CHUNK TEXT:', chunk);
     
@@ -319,6 +321,7 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
   }
   
   console.log('[TTS_FLOW] step=11 segmented_finished');
+  console.log('[TTS_DONE] total_chunks=' + chunks.length);
 }
 
 async function _playTTSChunk(text) {
@@ -393,6 +396,7 @@ async function _playTTSChunk(text) {
     console.log('[TTS_FLOW] step=11 calling_audio_play');
     console.log('[TTS] CALLING audio.play()...');
     _isPlayingChunk = true;
+    _wasPlayingChunk = true;
     await audio.play();
     console.log('[TTS_FLOW] step=12 audio_playing duration=' + audio.duration + 's');
     console.log('[TTS] AUDIO PLAYING: duration=' + audio.duration + 's');
@@ -403,8 +407,10 @@ async function _playTTSChunk(text) {
       audio.onended = () => {
         console.log('[TTS_FLOW] step=14 audio_ended duration=' + audio.duration + 's');
         console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
+        console.log('[TTS_CHUNK_END] index=' + (i + 1) + ' duration=' + audio.duration + 's');
         _ttsSource = null;
         _isPlayingChunk = false;
+        _wasPlayingChunk = false;
         URL.revokeObjectURL(audioUrl);
         resolve();
       };
@@ -415,6 +421,7 @@ async function _playTTSChunk(text) {
           console.log('[TTS_FLOW] step=14 audio_ended_fallback duration=' + audio.duration + 's');
           _ttsSource = null;
           _isPlayingChunk = false;
+          _wasPlayingChunk = false;
           URL.revokeObjectURL(audioUrl);
           resolve();
         }
@@ -426,6 +433,7 @@ async function _playTTSChunk(text) {
         console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
         _ttsSource = null;
         _isPlayingChunk = false;
+        _wasPlayingChunk = false;
         URL.revokeObjectURL(audioUrl);
         resolve();
       };
