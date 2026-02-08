@@ -995,6 +995,16 @@ async function startRecording() {
       _scriptNode.onaudioprocess = (e) => {
         const data = e.inputBuffer.getChannelData(0);
         
+        // DEBUG iOS: verifica dati audio
+        let hasNonZero = false;
+        let maxValue = 0;
+        for (let i = 0; i < data.length; i++) {
+          if (data[i] !== 0) {
+            hasNonZero = true;
+            maxValue = Math.max(maxValue, Math.abs(data[i]));
+          }
+        }
+        
         // iOS: raccoglie TUTTI i dati audio senza soglia
         const copy = new Float32Array(data.length);
         copy.set(data);
@@ -1002,9 +1012,13 @@ async function startRecording() {
         _pcmLength += copy.length;
         frameCount++;
         
-        // Log ogni 100 frame per verificare acquisizione
+        // Log dettagliato per debug iOS
+        if (frameCount === 1) {
+          console.log('[iOS STT] FIRST FRAME: length=' + data.length + ' hasNonZero=' + hasNonZero + ' maxValue=' + maxValue.toFixed(6));
+        }
+        
         if (frameCount % 100 === 0) {
-          console.log('[iOS STT] samples collected: ' + _pcmLength);
+          console.log('[iOS STT] frame ' + frameCount + ': samples=' + _pcmLength + ' hasNonZero=' + hasNonZero + ' maxValue=' + maxValue.toFixed(6));
         }
       };
 
@@ -1012,12 +1026,12 @@ async function startRecording() {
       // NON connettere a destination per evitare feedback
       // _scriptNode.connect(_audioCtx.destination);
       
-      console.log('[MIC][iOS] recording via ScriptProcessor (no feedback)');
+      console.log('[iOS STT] ScriptProcessor connected, waiting for audio data...');
 
       isRecording = true;
       setState(STATES.RECORDING);
       micButton.classList.add('recording');
-      console.log('[MIC] recording started successfully (iOS)');
+      console.log('[iOS STT] recording started, waiting for onaudioprocess events...');
 
     } else {
       // --- Standard: MediaRecorder ---
