@@ -975,16 +975,16 @@ async function startRecording() {
 
     if (_useWebAudio) {
       // --- iOS Safari: AudioContext + ScriptProcessorNode → PCM WAV ---
-      console.log('[MIC][iOS] setting up AudioContext recording');
+      console.log('[iOS STT] recording started');
       _audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: _SAMPLE_RATE });
       
       // iOS requires resume after user gesture
       if (_audioCtx.state === 'suspended') {
         await _audioCtx.resume();
-        console.log('[MIC][iOS] AudioContext resumed');
+        console.log('[iOS STT] AudioContext resumed');
       }
       
-      console.log('[MIC][iOS] AudioContext rate=' + _audioCtx.sampleRate + ' state=' + _audioCtx.state);
+      console.log('[iOS STT] AudioContext rate=' + _audioCtx.sampleRate + ' state=' + _audioCtx.state);
 
       const source = _audioCtx.createMediaStreamSource(stream);
       _scriptNode = _audioCtx.createScriptProcessor(4096, 1, 1);
@@ -995,26 +995,16 @@ async function startRecording() {
       _scriptNode.onaudioprocess = (e) => {
         const data = e.inputBuffer.getChannelData(0);
         
-        // iOS: verifica che ci siano dati audio reali
-        let hasAudio = false;
-        for (let i = 0; i < data.length; i++) {
-          if (Math.abs(data[i]) > 0.001) { // Soglia per rumore di fondo
-            hasAudio = true;
-            break;
-          }
-        }
+        // iOS: raccoglie TUTTI i dati audio senza soglia
+        const copy = new Float32Array(data.length);
+        copy.set(data);
+        _pcmBuffers.push(copy);
+        _pcmLength += copy.length;
+        frameCount++;
         
-        if (hasAudio) {
-          const copy = new Float32Array(data.length);
-          copy.set(data);
-          _pcmBuffers.push(copy);
-          _pcmLength += copy.length;
-          frameCount++;
-          
-          // Log ogni 100 frame per verificare acquisizione
-          if (frameCount % 100 === 0) {
-            console.log('[MIC][IOS] audio frames captured: ' + frameCount + ', total samples: ' + _pcmLength);
-          }
+        // Log ogni 100 frame per verificare acquisizione
+        if (frameCount % 100 === 0) {
+          console.log('[iOS STT] samples collected: ' + _pcmLength);
         }
       };
 
@@ -1094,7 +1084,7 @@ function stopRecording() {
 
     const downsampled = _downsample(merged, nativeSR, _SAMPLE_RATE);
     const wavBlob = _encodeWAV(downsampled);
-    console.log('[MIC][iOS] WAV blob size=' + wavBlob.size + ' samples=' + downsampled.length);
+    console.log('[iOS STT] wav size: ' + wavBlob.size + ' bytes');
 
     resetMicrophoneState();
     if (stream) stream.getTracks().forEach(t => t.stop());
