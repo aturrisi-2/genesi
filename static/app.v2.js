@@ -1108,6 +1108,7 @@ async function startRecording() {
       console.log('[MIC] GainNode created for MediaRecorder: gain=0.3');
       
       // MediaRecorder USA lo stream post-gain
+      console.log('[MIC] Recording from POST-GAIN stream');
       mediaRecorder = new MediaRecorder(destination.stream, mimeType ? { mimeType } : {});
       audioChunks = [];
       
