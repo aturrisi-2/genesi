@@ -84,7 +84,15 @@ async def speech_to_text(audio: UploadFile = File(...)):
         
         # Calcola durata audio (PCM 16-bit = 2 bytes per sample, 16000 samples/sec)
         duration_seconds = len(pcm_data) / (2 * 16000)
-        logger.info(f"[STT] Audio specs: duration={duration_seconds:.2f}s, sample_rate=16000Hz, channels=1, format=PCM16")
+        
+        # Verifica che l'audio contenga dati (non sia tutto silenzio)
+        import numpy as np
+        audio_array = np.frombuffer(pcm_data, dtype=np.int16)
+        max_amplitude = np.max(np.abs(audio_array))
+        logger.info(f"[STT] Audio specs: duration={duration_seconds:.2f}s, sample_rate=16000Hz, channels=1, format=PCM16, max_amplitude={max_amplitude}")
+        
+        if max_amplitude < 1000:  # Soglia molto bassa per audio silenzioso
+            logger.warning(f"[STT] Audio too quiet (max_amplitude={max_amplitude}), may not contain speech")
         
         # PIPELINE STT con Whisper reale
         try:
@@ -93,10 +101,17 @@ async def speech_to_text(audio: UploadFile = File(...)):
             
             # Salva PCM come WAV temporaneo per Whisper
             with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_wav:
-                # Ricrea header WAV per PCM
-                wav_header = b'RIFF\x24\x08\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00@\x1f\x00\x00\x80\x3e\x00\x00\x02\x00\x10\x00data\x00\x08\x00\x00'
+                # Calcola header WAV dinamico
+                pcm_size = len(pcm_data)
+                file_size = pcm_size + 36
+                wav_header = (
+                    b'RIFF' + file_size.to_bytes(4, 'little') +
+                    b'WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00@\x1f\x00\x00\x80\x3e\x00\x00\x02\x00\x10\x00' +
+                    b'data' + pcm_size.to_bytes(4, 'little')
+                )
                 temp_wav.write(wav_header + pcm_data)
                 temp_wav_path = temp_wav.name
+                logger.info(f"[STT] WAV created: {file_size} bytes total, {pcm_size} bytes PCM")
             
             # Trascrivi con Whisper
             result = model.transcribe(temp_wav_path, language='it', fp16=False)
