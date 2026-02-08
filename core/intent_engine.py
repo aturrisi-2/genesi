@@ -4,6 +4,7 @@ from typing import Dict, List
 import re
 
 from storage.users import save_user
+from core.local_llm import local_llm
 
 
 # ===============================
@@ -114,6 +115,58 @@ class IntentEngine:
         msg_lower = msg.lower()
 
         print(f"[INTENT] message='{msg}'", flush=True)
+
+        # ===============================
+        # PROACTOR: VALIDAZIONE INPUT STT
+        # ===============================
+        
+        # BLOCCO INPUT VUOTO O MINIMO
+        if not msg or len(msg.strip()) < 2:
+            print(f"[PROACTOR] decision=BLOCK_EMPTY input='{msg}'", flush=True)
+            return {
+                "should_respond": False,
+                "decision": "silence",
+                "reason": "empty_input"
+            }
+        
+        # BLOCCO RIPETIZIONI E CARATTERI SPURII
+        if self._is_noise_input(msg):
+            print(f"[PROACTOR] decision=BLOCK_NOISE input='{msg}'", flush=True)
+            return {
+                "should_respond": False,
+                "decision": "silence",
+                "reason": "noise_input"
+            }
+        
+        # ANALISI AMBIGUÀ CON LOCAL LLM
+        if self._needs_local_llm_analysis(msg):
+            print(f"[PROACTOR] calling_local_llm input='{msg}'", flush=True)
+            llm_analysis = local_llm.analyze(msg)
+            
+            # SE LOCAL LLM INDICA RUMORE → BLOCCA
+            if llm_analysis.get("is_noise", False):
+                print(f"[PROACTOR] decision=BLOCK_LLM_NOISE reason='{llm_analysis.get('intent', 'noise')}'", flush=True)
+                return {
+                    "should_respond": False,
+                    "decision": "silence",
+                    "reason": "llm_noise_detection"
+                }
+            
+            # SE LOCAL LLM CONSIGLIA DI NON ESCALARE → BLOCCA
+            if not llm_analysis.get("should_escalate", False):
+                print(f"[PROACTOR] decision=BLOCK_LLM_NO_ESCALATE reason='{llm_analysis.get('intent', 'no_escalate')}'", flush=True)
+                return {
+                    "should_respond": False,
+                    "decision": "silence",
+                    "reason": "llm_no_escalate"
+                }
+            
+            # USA TESTO PULITO DAL LOCAL LLM
+            msg = llm_analysis.get("clean_text", msg)
+            msg_lower = msg.lower()
+            print(f"[PROACTOR] using_clean_text='{msg}'", flush=True)
+        
+        print(f"[PROACTOR] decision=ESCALATE_TO_CHATGPT input='{msg}'", flush=True)
 
         # ===============================
         # INTENT BASE
@@ -250,3 +303,59 @@ class IntentEngine:
 
         print(f"[INTENT] final={intent}", flush=True)
         return intent
+
+    def _is_noise_input(self, msg: str) -> bool:
+        """
+        Verifica se l'input è rumore/nonsense STT
+        """
+        msg_clean = msg.strip().lower()
+        
+        # Input troppo corto
+        if len(msg_clean) < 3:
+            return True
+        
+        # Solo caratteri ripetuti (es "aaaa", "oooo")
+        if len(set(msg_clean.replace(' ', ''))) < 3 and len(msg_clean) > 5:
+            return True
+        
+        # Troppe parole identiche
+        words = msg_clean.split()
+        if len(words) > 3 and len(set(words)) < 2:
+            return True
+        
+        # Solo vocali ripetute
+        if all(c in 'aeiou' for c in msg_clean.replace(' ', '')) and len(msg_clean) > 3:
+            return True
+        
+        # Caratteri non alfabetici eccessivi
+        non_alpha = sum(1 for c in msg_clean if not c.isalpha() and c != ' ')
+        if non_alpha > len(msg_clean) * 0.3:
+            return True
+        
+        return False
+    
+    def _needs_local_llm_analysis(self, msg: str) -> bool:
+        """
+        Decide se serve analisi con Local LLM
+        """
+        msg_clean = msg.strip().lower()
+        
+        # Input ambiguo o borderline
+        if len(msg_clean) < 5:
+            return True
+        
+        # Contiene caratteri strani
+        if any(c not in 'abcdefghijklmnopqrstuvwxyzàèéìòù ' for c in msg_clean):
+            return True
+        
+        # Parole sospette o nonsense
+        suspicious_words = ['oooo', 'aaaa', 'eeee', 'iiii', 'uuuu', 'mmm', 'nnn']
+        if any(word in msg_clean for word in suspicious_words):
+            return True
+        
+        # Rapporto spazi/parole anomalo
+        words = msg_clean.split()
+        if len(words) > 0 and len(msg_clean.replace(' ', '')) / len(words) < 2:
+            return True
+        
+        return False

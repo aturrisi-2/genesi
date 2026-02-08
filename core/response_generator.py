@@ -21,6 +21,25 @@ class ResponseGenerator:
         print(f"[RESPONSE_GENERATOR] intent={intent}", flush=True)
 
         # ===============================
+        # PROACTOR DECISION CHECK
+        # ===============================
+        
+        # SE PROACTOR HA BLOCCATO → NON CHIAMARE CHATGPT
+        if not intent.get("should_respond", True):
+            decision = intent.get("decision", "silence")
+            reason = intent.get("reason", "proactor_block")
+            print(f"[RESPONSE_GENERATOR] PROACTOR_BLOCKED decision={decision} reason={reason}", flush=True)
+            print(f"[CHATGPT] called=false", flush=True)
+            return ""  # Silenzio assoluto
+        
+        # SE PROACTOR DECIDE SILENZIO → NON CHIAMARE CHATGPT
+        if intent.get("decision") == "silence":
+            reason = intent.get("reason", "silence_decision")
+            print(f"[RESPONSE_GENERATOR] PROACTOR_SILENCE reason={reason}", flush=True)
+            print(f"[CHATGPT] called=false", flush=True)
+            return ""  # Silenzio assoluto
+
+        # ===============================
         # CLOSURE INTENT HANDLING (PRE-LLM)
         # ===============================
         if intent.get("type") == "closure":
@@ -91,6 +110,7 @@ class ResponseGenerator:
         # ===============================
         # CHIAMATA LLM (il routing modello avviene in llm.py)
         # ===============================
+        print(f"[CHATGPT] called=true", flush=True)
         response = llm_generate({
             "prompt": prompt,
             "intent": intent,
