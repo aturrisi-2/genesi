@@ -9,7 +9,7 @@ from core.state import CognitiveState
 from api.user import router as user_router
 from api.chat import router as chat_router
 from api.upload import router as upload_router
-# from api.stt import router as stt_router  # Temporaneamente commentato per test TTS
+from api.stt import router as stt_router
 from tts.coqui import synthesize_bytes_async
 from auth.router import router as auth_router
 from auth.database import init_db
@@ -78,32 +78,8 @@ async def serve_admin():
 app.include_router(user_router)
 app.include_router(chat_router)
 app.include_router(upload_router)
-# app.include_router(stt_router)  # Temporaneamente commentato per test TTS
+app.include_router(stt_router)
 app.include_router(auth_router)
-
-# ======================================================
-# STT — Speech to Text (semplice per test microfono)
-# ======================================================
-
-@app.post("/stt")
-async def speech_to_text(audio: UploadFile = File(...)):
-    """
-    Endpoint STT semplificato per test microfono.
-    Ritorna un testo fittizio per verificare che il microfono funzioni.
-    """
-    try:
-        # Leggi i dati audio (non li processiamo, solo per test)
-        audio_data = await audio.read()
-        print(f"[STT] Received audio: {len(audio_data)} bytes, filename={audio.filename}")
-        
-        # Ritorna un testo fittizio per testare il microfono
-        mock_text = "test microfono funzionante"
-        
-        return JSONResponse(content={"text": mock_text})
-        
-    except Exception as e:
-        print(f"[STT] Error: {e}")
-        return JSONResponse(content={"text": ""}, status_code=500)
 
 # ======================================================
 # TTS — Edge TTS (Microsoft Neural, gratuito)
