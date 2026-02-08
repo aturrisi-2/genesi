@@ -322,6 +322,8 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
   
   console.log('[TTS_FLOW] step=11 segmented_finished');
   console.log('[TTS_DONE] total_chunks=' + chunks.length);
+  // Resetta stato solo alla fine di tutti i chunk
+  _wasPlayingChunk = false;
 }
 
 async function _playTTSChunk(text) {
@@ -410,7 +412,7 @@ async function _playTTSChunk(text) {
         console.log('[TTS_CHUNK_END] index=' + (i + 1) + ' duration=' + audio.duration + 's');
         _ttsSource = null;
         _isPlayingChunk = false;
-        _wasPlayingChunk = false;
+        // NOTA: _wasPlayingChunk rimane true per indicare che siamo in un ciclo TTS segmentato
         URL.revokeObjectURL(audioUrl);
         resolve();
       };
@@ -421,7 +423,7 @@ async function _playTTSChunk(text) {
           console.log('[TTS_FLOW] step=14 audio_ended_fallback duration=' + audio.duration + 's');
           _ttsSource = null;
           _isPlayingChunk = false;
-          _wasPlayingChunk = false;
+          // NOTA: _wasPlayingChunk rimane true per indicare che siamo in un ciclo TTS segmentato
           URL.revokeObjectURL(audioUrl);
           resolve();
         }
@@ -433,7 +435,7 @@ async function _playTTSChunk(text) {
         console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
         _ttsSource = null;
         _isPlayingChunk = false;
-        _wasPlayingChunk = false;
+        // NOTA: _wasPlayingChunk rimane true per indicare che siamo in un ciclo TTS segmentato
         URL.revokeObjectURL(audioUrl);
         resolve();
       };
