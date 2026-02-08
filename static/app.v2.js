@@ -1047,7 +1047,6 @@ async function startRecording() {
         const stream = currentStream;
         resetMicrophoneState();
         if (stream) stream.getTracks().forEach(t => t.stop());
-        if (blob.size < 500) { setState(STATES.IDLE); return; }
         await transcribeAudio(blob);
       };
 
@@ -1100,7 +1099,6 @@ function stopRecording() {
     resetMicrophoneState();
     if (stream) stream.getTracks().forEach(t => t.stop());
 
-    if (wavBlob.size < 500) { setState(STATES.IDLE); return; }
     transcribeAudio(wavBlob);
 
   } else {
@@ -1113,18 +1111,6 @@ function stopRecording() {
 
 async function transcribeAudio(blob) {
   console.log('[STT] request sent size=' + blob.size + ' type=' + blob.type);
-  
-  // VALIDAZIONE AUDIO: non inviare audio vuoto o troppo piccolo
-  if (!blob || blob.size < 1000) { // < 1KB è probabilmente vuoto
-    console.error('[STT] audio too small or empty: ' + blob.size + ' bytes');
-    setState(STATES.IDLE);
-    
-    // Mostra errore utente per iOS
-    if (_isIOS) {
-      alert('Audio troppo breve o non rilevato. Prova a parlare più a lungo e vicino al microfono.');
-    }
-    return;
-  }
   
   setState(STATES.THINKING);
   try {
@@ -1145,15 +1131,11 @@ async function transcribeAudio(blob) {
     const text = result.text?.trim() || '';
     console.log('[STT] transcription received: "' + text + '"');
     
-    if (text) {
-      console.log('[STT] setting input and sending message...');
-      textInput.value = text;
-      setState(STATES.IDLE);
-      sendMessage();
-    } else {
-      console.log('[STT] empty transcription, resetting state');
-      setState(STATES.IDLE);
-    }
+    // INVIA SEMPRE il transcript, anche se vuoto
+    console.log('[STT] setting input and sending message...');
+    textInput.value = text;
+    setState(STATES.IDLE);
+    sendMessage();
   } catch (e) {
     console.error('[STT] request failed:', e);
     setState(STATES.IDLE);
