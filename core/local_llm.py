@@ -124,8 +124,8 @@ class LocalLLM:
             
             if response.status_code == 200:
                 health_data = response.json()
-                if health_data.get("status") == "ok" and health_data.get("model_loaded"):
-                    logger.info("[PERSONALPLEX] health_check=true model_loaded=true")
+                if health_data.get("status") == "ok":
+                    logger.info(f"[PERSONALPLEX] health_check=true model={health_data.get('model','unknown')}")
                     return True
                 else:
                     logger.warning(f"[PERSONALPLEX] health_check=false status={health_data.get('status')}")

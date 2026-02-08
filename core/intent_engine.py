@@ -124,7 +124,7 @@ class IntentEngine:
             from core.local_llm import LocalLLM
             local_llm = LocalLLM()
             
-            print(f"[PROACTOR] calling PersonalPlex 7B", flush=True)
+            print(f"[PROACTOR] calling PERSONALPLEX", flush=True)
             plex_result = local_llm.analyze(msg)
             
             if plex_result and not plex_result.get("technical_error", False):
@@ -133,7 +133,7 @@ class IntentEngine:
                 response = plex_result.get("response", "")
                 latency = plex_result.get("latency_ms", 0)
                 
-                print(f"[PROACTOR] PersonalPlex 7B success intent={intent} confidence={confidence:.2f} latency={latency:.1f}ms", flush=True)
+                print(f"[PROACTOR] PERSONALPLEX success intent={intent} confidence={confidence:.2f} latency={latency:.1f}ms", flush=True)
                 
                 # Se PersonalPlex risponde con alta confidence, usa la sua decisione
                 if confidence > 0.6 and response:
@@ -147,13 +147,13 @@ class IntentEngine:
                         "plex_response": response
                     }
                 else:
-                    print(f"[PROACTOR] PersonalPlex 7B low confidence={confidence:.2f} - continuing analysis", flush=True)
+                    print(f"[PROACTOR] PERSONALPLEX low confidence={confidence:.2f} - continuing analysis", flush=True)
             else:
-                print(f"[PROACTOR] PersonalPlex 7B failed - continuing with fallback", flush=True)
+                print(f"[PROACTOR] PERSONALPLEX failed - continuing with fallback", flush=True)
                 
         except Exception as e:
-            print(f"[PROACTOR] PersonalPlex 7B exception: {e}", flush=True)
-            print(f"[PROACTOR] ERROR: PersonalPlex 7B down - using fallback", flush=True)
+            print(f"[PROACTOR] PERSONALPLEX exception: {e}", flush=True)
+            print(f"[PROACTOR] fallback to GPT", flush=True)
 
         # ===============================
         # PROACTOR: VALIDAZIONE INPUT STT (FALLBACK)
