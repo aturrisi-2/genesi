@@ -1221,13 +1221,23 @@ async function transcribeAudio(blob) {
     const status = result.status || '';
     console.log('[STT] transcription received: "' + text + '" status=' + status);
     
-    // GESTIONE STATO EMPTY
-    if (status === 'empty' && result.action === 'retry') {
-      console.log('[STT] empty transcription → showing retry feedback');
+    // GESTIONE STATI EMPTY/ERROR
+    if (status === 'empty' || status === 'error') {
+      console.log('[STT] ' + status + ' transcription → showing feedback');
       setState(STATES.IDLE);
       
-      // Feedback non verbale per retry
-      _showSTTRetryFeedback();
+      // FORZA STOP RECORDING SE ANCORA ATTIVO
+      if (isRecording) {
+        console.log('[STT] forcing stop recording due to ' + status);
+        stopRecording();
+      }
+      
+      // Feedback appropriato
+      if (status === 'empty' && result.action === 'retry') {
+        _showSTTRetryFeedback();
+      } else {
+        _showSTTErrorFeedback();
+      }
       return; // NON inviare nulla a /chat
     }
     
@@ -1239,7 +1249,52 @@ async function transcribeAudio(blob) {
   } catch (e) {
     console.error('[STT] request failed:', e);
     setState(STATES.IDLE);
+    
+    // FORZA STOP RECORDING SE ANCORA ATTIVO
+    if (isRecording) {
+      console.log('[STT] forcing stop recording due to request error');
+      stopRecording();
+    }
+    
+    // Feedback errore
+    _showSTTErrorFeedback();
   }
+}
+
+function _showSTTErrorFeedback() {
+  // Feedback non verbale per errore STT
+  const micButton = document.getElementById('mic-button');
+  if (micButton) {
+    // Animazione rossa per errore
+    micButton.style.backgroundColor = '#ff4444';
+    setTimeout(() => {
+      micButton.style.backgroundColor = '';
+    }, 1000);
+  }
+  
+  // Mostra tooltip errore
+  const tooltip = document.createElement('div');
+  tooltip.textContent = 'Errore microfono, riprova';
+  tooltip.style.cssText = `
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255,68,68,0.9);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    z-index: 1000;
+    animation: fadeInOut 2s ease-in-out;
+  `;
+  
+  document.body.appendChild(tooltip);
+  setTimeout(() => {
+    if (tooltip.parentNode) {
+      tooltip.parentNode.removeChild(tooltip);
+    }
+  }, 2000);
 }
 
 function _showSTTRetryFeedback() {

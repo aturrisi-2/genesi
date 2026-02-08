@@ -123,7 +123,7 @@ async def speech_to_text(audio: UploadFile = File(...)):
             logger.info(f"[STT] Whisper transcription: '{text}'")
             
             # VALIDAZIONE POST-WHISPER OBBLIGATORIA
-            if not self._is_valid_transcription(text):
+            if not _is_valid_transcription(text):
                 logger.warning(f"[STT] empty transcription → ignored")
                 return {"text": "", "status": "empty", "action": "retry"}
             
