@@ -105,11 +105,38 @@ REGOLE ASSOLUTE:
 
 
 def generate_response(payload: dict) -> str:
+    prompt = payload["prompt"]
+    tone = payload.get("tone")
+    intent = payload.get("intent", {})
+    brain_mode = intent.get("brain_mode", "relazione")
+
+    # ===============================
+    # PERSONALPLEX 7B - PRIMARIO
+    # ===============================
+    try:
+        from core.local_llm import LocalLLM
+        local_llm = LocalLLM()
+        
+        print(f"[PERSONALPLEX] called=true prompt='{prompt[:50]}...'", flush=True)
+        
+        # Chiama PersonalPlex per generazione testo
+        response = local_llm.generate(prompt)
+        
+        if response and len(response.strip()) > 0:
+            print(f"[PERSONALPLEX] success=true response='{response[:50]}...'", flush=True)
+            return response.strip()
+        else:
+            print(f"[PERSONALPLEX] empty_response - fallback to GPT", flush=True)
+            
+    except Exception as e:
+        print(f"[PERSONALPLEX] error={e} - fallback to GPT", flush=True)
+
+    # ===============================
+    # GPT FALLBACK
+    # ===============================
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         # Se non c'è chiave API, restituisci una risposta normale al contenuto
-        prompt = payload.get("prompt", "")
-        # Estrai le prime parole del prompt per creare una risposta naturale
         words = prompt.split()[:5]  # Prendi le prime 5 parole
         if words:
             return " ".join(words) + "."
@@ -117,11 +144,7 @@ def generate_response(payload: dict) -> str:
             return "Non ho capito."
 
     client = OpenAI(api_key=api_key)
-
-    prompt = payload["prompt"]
-    tone = payload.get("tone")
-    intent = payload.get("intent", {})
-    brain_mode = intent.get("brain_mode", "relazione")
+    print(f"[GPT] fallback=true", flush=True)
 
     # ===============================
     # DUAL BRAIN DISPATCH
