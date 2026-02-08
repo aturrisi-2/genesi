@@ -95,6 +95,18 @@ async def text_to_speech(request: TTSRequest):
         return JSONResponse(status_code=400, content={"error": "Testo vuoto"})
 
     # ===============================
+    # LOG DI CONFINE TTS_PRE
+    # ===============================
+    text_head = text[:100] + "..." if len(text) > 100 else text
+    text_tail = "..." + text[-100:] if len(text) > 100 else text
+    print(f"[TTS_PRE] len={len(text)} head='{text_head}' tail='{text_tail}'", flush=True)
+    
+    # ASSERT FINALE: testo non vuoto
+    if not text or len(text.strip()) == 0:
+        print(f"[TTS_PRE] ERROR: testo vuoto!", flush=True)
+        return JSONResponse(status_code=400, content={"error": "Testo vuoto"})
+    
+    # ===============================
     # SANITIZZAZIONE DIFENSIVA TTS
     # ===============================
     # Rimuovi timestamp ISO (es: 2025-02-07T23:42:00.123Z)
@@ -109,10 +121,18 @@ async def text_to_speech(request: TTSRequest):
         print(f"[TTS] WARNING: rimosso parametri temporali dal testo", flush=True)
         text = re.sub(r'\d+\s?ms', '', text)
     # Rimuovi spazi multipli residui
+    original_len = len(text)
     text = re.sub(r'\s+', ' ', text).strip()
+    after_spaces_len = len(text)
+    
     # Assicura che il testo contenga solo caratteri umani
     if not re.search(r'[a-zA-ZàèéìòùÀÈÉÌÒÙ]', text):
+        print(f"[TTS_PRE] ERROR: testo non contiene caratteri validi dopo sanitizzazione!", flush=True)
         return JSONResponse(status_code=400, content={"error": "Testo non valido"})
+    
+    # Verifica modifiche durante sanitizzazione
+    if original_len != after_spaces_len:
+        print(f"[TTS_PRE] INFO: rimossi {original_len - after_spaces_len} caratteri spazi", flush=True)
     
     print(f"[TTS] sanitized text='{text[:100]}...' (len={len(text)})", flush=True)
 
