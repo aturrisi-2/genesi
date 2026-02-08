@@ -45,6 +45,31 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     log("CHAT_IN", user_id=request.user_id, msg=request.message)
     
     # ===============================
+    # BLOCCO SEGNALI TECNICI STT
+    # ===============================
+    stt_technical_markers = [
+        "[audio non riconosciuto]",
+        "[audio troppo breve]",
+        "[errore trascrizione]",
+        "[silenzio]",
+        "[trascrizione fallita]"
+    ]
+    
+    if request.message in stt_technical_markers:
+        log("CHAT_STT_TECHNICAL", user_id=request.user_id, marker=request.message)
+        # Risposta vuota statica, nessun TTS
+        return {
+            "response": "",
+            "tts_mode": None,
+            "should_respond": False,
+            "state": {
+                "user": {"user_id": request.user_id},
+                "recent_events": [],
+                "context": {}
+            }
+        }
+    
+    # ===============================
     # VALIDAZIONE USER_ID
     # ===============================
     if not request.user_id:
