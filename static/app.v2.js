@@ -190,6 +190,35 @@ let _isPlayingChunk = false;
 let _wasPlayingChunk = false;
 let ttsEnabled = true;
 
+// ===============================
+// TTS TEXT NORMALIZATION
+// ===============================
+function normalizeTextForTTS(text) {
+  if (!text || typeof text !== 'string') return text;
+  
+  const original = text;
+  
+  // Converta "..." e "...." in "."
+  text = text.replace(/\.{3,4}/g, '.');
+  
+  // Garantisce uno spazio dopo il punto se manca e c'è un carattere
+  text = text.replace(/\.([a-zA-ZàèéìòùÀÈÉÌÒÙ])/g, '. $1');
+  
+  // Rimuove chunk contenenti solo punteggiatura
+  text = text.replace(/^[.,;:!?]+$/, '');
+  
+  // Rimuove spazi multipli
+  text = text.replace(/\s+/g, ' ').trim();
+  
+  // Log debug solo se necessario
+  if (original !== text) {
+    console.log('[TTS_NORMALIZE] before:', JSON.stringify(original));
+    console.log('[TTS_NORMALIZE] after:', JSON.stringify(text));
+  }
+  
+  return text;
+}
+
 function _getTTSCtx() {
   if (!_ttsCtx || _ttsCtx.state === 'closed') {
     _ttsCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -290,13 +319,14 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
   // Funzione per fetch di un chunk
   const fetchChunk = async (index) => {
     const chunk = chunks[index];
+    const normalizedChunk = normalizeTextForTTS(chunk);
     console.log('[TTS_PREFETCH] index=' + (index + 1) + '/total=' + chunks.length + ' len=' + chunk.length);
     
     try {
       const response = await fetch('/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: chunk })
+        body: JSON.stringify({ text: normalizedChunk })
       });
       
       if (!response.ok) {
@@ -473,10 +503,11 @@ async function _playTTSChunk(text) {
     console.log('[TTS_FLOW] step=3 calling_fetch_tts');
     console.log('[TTS] FETCH: calling /tts...');
     
+    const normalizedText = normalizeTextForTTS(text);
     const response = await fetch('/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text })
+      body: JSON.stringify({ text: normalizedText })
     });
     
     console.log('[TTS_FLOW] step=4 fetch_response_received');
