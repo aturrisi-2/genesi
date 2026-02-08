@@ -86,9 +86,30 @@ async def speech_to_text(audio: UploadFile = File(...)):
         duration_seconds = len(pcm_data) / (2 * 16000)
         logger.info(f"[STT] Audio specs: duration={duration_seconds:.2f}s, sample_rate=16000Hz, channels=1, format=PCM16")
         
-        # PIPELINE STT (per ora restituisce stringa vuota)
-        # In produzione sostituire con vera trascrizione Whisper
-        text = ""
+        # PIPELINE STT con Whisper reale
+        try:
+            import whisper
+            model = whisper.load_model("base")
+            
+            # Salva PCM come WAV temporaneo per Whisper
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_wav:
+                # Ricrea header WAV per PCM
+                wav_header = b'RIFF\x24\x08\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00@\x1f\x00\x00\x80\x3e\x00\x00\x02\x00\x10\x00data\x00\x08\x00\x00'
+                temp_wav.write(wav_header + pcm_data)
+                temp_wav_path = temp_wav.name
+            
+            # Trascrivi con Whisper
+            result = model.transcribe(temp_wav_path, language='it', fp16=False)
+            text = result['text'].strip()
+            
+            # Pulizia file temporaneo
+            os.unlink(temp_wav_path)
+            
+            logger.info(f"[STT] Whisper transcription: '{text}'")
+            
+        except Exception as e:
+            logger.error(f"[STT] Whisper error: {e}")
+            text = ""
         
         logger.info(f"[STT] STT result: '{text}'")
         return {"text": text}
