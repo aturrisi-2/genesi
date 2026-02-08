@@ -61,13 +61,13 @@ class LocalLLM:
                 
             else:
                 logger.error(f"[LOCAL_LLM] Backend error: {response.status_code}")
-                return self._fallback_analysis(text)
+                return self._fallback_analysis(text, is_technical_error=True)
                 
         except Exception as e:
             logger.error(f"[LOCAL_LLM] Analysis failed: {e}")
-            return self._fallback_analysis(text)
+            return self._fallback_analysis(text, is_technical_error=True)
     
-    def _fallback_analysis(self, text: str) -> Dict[str, Any]:
+    def _fallback_analysis(self, text: str, is_technical_error: bool = False) -> Dict[str, Any]:
         """
         Fallback se backend non disponibile
         Analisi euristica base
@@ -91,7 +91,8 @@ class LocalLLM:
             "confidence": confidence,
             "clean_text": text_clean,
             "is_noise": is_noise,
-            "should_escalate": should_escalate
+            "should_escalate": should_escalate,
+            "technical_error": is_technical_error
         }
         
         logger.info(f"[LOCAL_LLM] FALLBACK intent={result['intent']} confidence={result['confidence']:.2f} noise={result['is_noise']} escalate={result['should_escalate']}")

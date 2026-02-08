@@ -141,30 +141,68 @@ class IntentEngine:
         # ANALISI AMBIGUÀ CON LOCAL LLM
         if self._needs_local_llm_analysis(msg):
             print(f"[PROACTOR] calling_local_llm input='{msg}'", flush=True)
-            llm_analysis = local_llm.analyze(msg)
             
-            # SE LOCAL LLM INDICA RUMORE → BLOCCA
-            if llm_analysis.get("is_noise", False):
-                print(f"[PROACTOR] decision=BLOCK_LLM_NOISE reason='{llm_analysis.get('intent', 'noise')}'", flush=True)
-                return {
-                    "should_respond": False,
-                    "decision": "silence",
-                    "reason": "llm_noise_detection"
-                }
-            
-            # SE LOCAL LLM CONSIGLIA DI NON ESCALARE → BLOCCA
-            if not llm_analysis.get("should_escalate", False):
-                print(f"[PROACTOR] decision=BLOCK_LLM_NO_ESCALATE reason='{llm_analysis.get('intent', 'no_escalate')}'", flush=True)
-                return {
-                    "should_respond": False,
-                    "decision": "silence",
-                    "reason": "llm_no_escalate"
-                }
-            
-            # USA TESTO PULITO DAL LOCAL LLM
-            msg = llm_analysis.get("clean_text", msg)
-            msg_lower = msg.lower()
-            print(f"[PROACTOR] using_clean_text='{msg}'", flush=True)
+            try:
+                llm_analysis = local_llm.analyze(msg)
+                
+                # VERIFICA SE È ERRORE TECNICO O FALLBACK NORMALE
+                if llm_analysis.get("technical_error", False):
+                    # ERRORE TECNICO → FALLBACK SICUREZZA A CHATGPT
+                    print(f"[LOCAL_LLM] technical_error → fallback to GPT", flush=True)
+                    
+                    # PERMETTI CHATGPT PER INPUT UMANI SEMPLICI
+                    if self._is_simple_human_input(msg):
+                        print(f"[PROACTOR] decision=ESCALATE_FALLBACK_GPT input='{msg}' source='fallback_safety'", flush=True)
+                        # Continua con il normale processo a ChatGPT
+                    else:
+                        # INPUT AMBIGIO O SOSPETTO → BLOCCA PER SICUREZZA
+                        print(f"[PROACTOR] decision=BLOCK_AMBIGUOUS_NO_LLM input='{msg}' source='fallback_safety'", flush=True)
+                        return {
+                            "should_respond": False,
+                            "decision": "silence",
+                            "reason": "ambiguous_input_no_llm"
+                        }
+                else:
+                    # FALLBACK NORMALE → USA DECISIONE LOCAL LLM
+                    # SE LOCAL LLM INDICA RUMORE → BLOCCA
+                    if llm_analysis.get("is_noise", False):
+                        print(f"[PROACTOR] decision=BLOCK_LLM_NOISE reason='{llm_analysis.get('intent', 'noise')}'", flush=True)
+                        return {
+                            "should_respond": False,
+                            "decision": "silence",
+                            "reason": "llm_noise_detection"
+                        }
+                    
+                    # SE LOCAL LLM CONSIGLIA DI NON ESCALARE → BLOCCA
+                    if not llm_analysis.get("should_escalate", False):
+                        print(f"[PROACTOR] decision=BLOCK_LLM_NO_ESCALATE reason='{llm_analysis.get('intent', 'no_escalate')}'", flush=True)
+                        return {
+                            "should_respond": False,
+                            "decision": "silence",
+                            "reason": "llm_no_escalate"
+                        }
+                    
+                    # USA TESTO PULITO DAL LOCAL LLM
+                    msg = llm_analysis.get("clean_text", msg)
+                    msg_lower = msg.lower()
+                    print(f"[PROACTOR] using_clean_text='{msg}'", flush=True)
+                
+            except Exception as e:
+                # LOCAL LLM NON RAGGIUNGIBILE → FALLBACK SICUREZZA A CHATGPT
+                print(f"[LOCAL_LLM] unavailable → fallback to GPT (error: {e})", flush=True)
+                
+                # PERMETTI CHATGPT PER INPUT UMANI SEMPLICI
+                if self._is_simple_human_input(msg):
+                    print(f"[PROACTOR] decision=ESCALATE_FALLBACK_GPT input='{msg}' source='fallback_safety'", flush=True)
+                    # Continua con il normale processo a ChatGPT
+                else:
+                    # INPUT AMBIGIO O SOSPETTO → BLOCCA PER SICUREZZA
+                    print(f"[PROACTOR] decision=BLOCK_AMBIGUOUS_NO_LLM input='{msg}' source='fallback_safety'", flush=True)
+                    return {
+                        "should_respond": False,
+                        "decision": "silence",
+                        "reason": "ambiguous_input_no_llm"
+                    }
         
         print(f"[PROACTOR] decision=ESCALATE_TO_CHATGPT input='{msg}'", flush=True)
 
@@ -340,7 +378,7 @@ class IntentEngine:
         """
         msg_clean = msg.strip().lower()
         
-        # Input ambiguo o borderline
+        # Input ambiguo o borderline (inclusi input brevi)
         if len(msg_clean) < 5:
             return True
         
@@ -357,5 +395,47 @@ class IntentEngine:
         words = msg_clean.split()
         if len(words) > 0 and len(msg_clean.replace(' ', '')) / len(words) < 2:
             return True
+        
+        return False
+    
+    def _is_simple_human_input(self, msg: str) -> bool:
+        """
+        Identifica input umani semplici che possono passare a ChatGPT
+        anche senza Local LLM
+        """
+        msg_clean = msg.strip().lower()
+        
+        # Saluti e interazioni semplici
+        simple_greetings = [
+            'ciao', 'salve', 'buongiorno', 'buonasera', 'buonanotte',
+            'ok', 'va bene', 'bene', 'perfetto', 'grazie', 'grazie mille',
+            'sì', 'si', 'no', 'certo', 'sicuro', 'certamente'
+        ]
+        
+        if msg_clean in simple_greetings:
+            return True
+        
+        # Frasi brevi e naturali (1-3 parole)
+        words = msg_clean.split()
+        if len(words) <= 3 and len(msg_clean) >= 2:
+            # Verifica che non siano caratteri ripetuti
+            if len(set(msg_clean.replace(' ', ''))) >= len(msg_clean.replace(' ', '')) * 0.5:
+                return True
+        
+        # Domande semplici e comuni
+        simple_questions = [
+            'come stai', 'come va', 'tutto bene', 'tutto ok',
+            'chi sei', 'cosa fai', 'di cosa parliamo'
+        ]
+        
+        if msg_clean in simple_questions:
+            return True
+        
+        # Parole singole significative
+        if len(words) == 1 and len(msg_clean) >= 3:
+            word = words[0]
+            # Esclude caratteri ripetuti
+            if len(set(word)) >= len(word) * 0.6:
+                return True
         
         return False

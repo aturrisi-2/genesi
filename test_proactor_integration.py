@@ -45,8 +45,8 @@ def test_proactor_integration():
         ("oooo oooo oooo", "noise_input"),
         
         # Input ambigui (dovrebbero chiamare Local LLM)
-        ("ciao", "local_llm_analysis"),
-        ("test", "local_llm_analysis"),
+        ("ciao", "fallback_gpt"),  # Con Local LLM down, dovrebbe passare a ChatGPT
+        ("test", "fallback_gpt"),  # Con Local LLM down, "test" è input semplice → ChatGPT
         
         # Input validi (dovrebbero passare a ChatGPT)
         ("questa è una prova di registrazione", "chatgpt"),
@@ -78,9 +78,9 @@ def test_proactor_integration():
             success = not should_respond and decision == "silence"
         elif expected_behavior == "noise_input":
             success = not should_respond and decision == "silence"
-        elif expected_behavior == "local_llm_analysis":
-            # Verifica che Local LLM sia stato chiamato (log)
-            success = should_respond  # Dipende da risposta Local LLM
+        elif expected_behavior == "fallback_gpt":
+            # Con Local LLM down, input semplici dovrebbero passare a ChatGPT
+            success = should_respond and decision != "silence"
         elif expected_behavior == "chatgpt":
             success = should_respond and decision != "silence"
         else:
