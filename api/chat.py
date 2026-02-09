@@ -29,8 +29,168 @@ from core.psychological_detector import detect as psy_detect
 from core.psychological_memory import store as psy_store, get_context as psy_get_context
 from core.psychological_responder import generate_psychological_response
 from core.text_post_processor import text_post_processor
+from core.intent_router import intent_router
+from core.verified_knowledge import verified_knowledge
 
 router = APIRouter()
+
+
+async def _handle_verified_response(
+    routing_info: Dict,
+    request: ChatRequest,
+    state,
+    recent_memories: List[Dict],
+    relevant_memories: List[Dict],
+    tone
+) -> Dict:
+    """
+    GESTIONE RISPOSTE VERIFICATE - NESSUN LLM CREATIVO
+    Solo fonti verificate, deterministico
+    """
+    intent_type = routing_info['intent']
+    print(f"[VERIFIED_RESPONSE] Handling intent={intent_type}", flush=True)
+    
+    response_text = ""
+    
+    # Info mediche → Wikipedia con disclaimer
+    if intent_type == "medical_info":
+        print(f"[VERIFIED_RESPONSE] Using medical knowledge", flush=True)
+        medical_data = verified_knowledge.get_medical_info(request.message)
+        
+        if medical_data.get("verified", False):
+            content = medical_data.get("content", "")
+            disclaimer = medical_data.get("disclaimer", "")
+            
+            if disclaimer and content:
+                response_text = f"{content} {disclaimer}"
+            else:
+                response_text = content
+        else:
+            response_text = medical_data.get("content", "Per questioni mediche consulta un professionale.")
+    
+    # Info storiche → Wikipedia
+    elif intent_type == "historical_info":
+        print(f"[VERIFIED_RESPONSE] Using historical knowledge", flush=True)
+        historical_data = verified_knowledge.get_historical_info(request.message)
+        
+        if historical_data.get("verified", False):
+            response_text = historical_data.get("content", "Informazione storica non disponibile.")
+        else:
+            response_text = historical_data.get("content", "Non ho informazioni specifiche su questo argomento.")
+    
+    # Meteo → Tools (stub per ora)
+    elif intent_type == "weather":
+        print(f"[VERIFIED_RESPONSE] Using weather tools", flush=True)
+        try:
+            from core.tools import resolve_tools
+            tool_result = await resolve_tools(request.message)
+            if tool_result and tool_result.get("data") and not tool_result["data"].get("error"):
+                # Template semplice per meteo
+                data = tool_result["data"]
+                city = data.get("city", "la tua zona")
+                current = data.get("current", {})
+                if current:
+                    temp = current.get("temp", "")
+                    desc = current.get("description", "")
+                    response_text = f"A {city} ci sono {temp}°C con {desc}."
+                else:
+                    response_text = "Non riesco a ottenere informazioni meteo in questo momento."
+            else:
+                response_text = "Non riesco a ottenere informazioni meteo in questo momento."
+        except Exception as e:
+            print(f"[VERIFIED_RESPONSE] Weather tool error: {e}", flush=True)
+            response_text = "Non riesco a ottenere informazioni meteo in questo momento."
+    
+    # News → Tools (stub per ora)
+    elif intent_type == "news":
+        print(f"[VERIFIED_RESPONSE] Using news tools", flush=True)
+        try:
+            from core.tools import resolve_tools
+            tool_result = await resolve_tools(request.message)
+            if tool_result and tool_result.get("data") and not tool_result["data"].get("error"):
+                # Template semplice per news
+                data = tool_result["data"]
+                articles = data.get("articles", [])
+                if articles:
+                    title = articles[0].get("title", "").strip()
+                    response_text = f"Notizia principale: {title}"
+                else:
+                    response_text = "Non ci sono notizie disponibili in questo momento."
+            else:
+                response_text = "Non riesco a ottenere notizie in questo momento."
+        except Exception as e:
+            print(f"[VERIFIED_RESPONSE] News tool error: {e}", flush=True)
+            response_text = "Non riesco a ottenere notizie in questo momento."
+    
+    # Supporto emotivo → ramo psicologico (senza LLM creativo)
+    elif intent_type == "emotional_support":
+        print(f"[VERIFIED_RESPONSE] Using psychological support", flush=True)
+        # Usa il ramo psicologico esistente ma senza LLM creativo
+        from core.genesi_response_engine import genesi_engine
+        result = genesi_engine.generate_response_from_text(request.message)
+        response_text = result.get("final_text", "Sono qui per ascoltarti.")
+    
+    # Tempo e date → sistema
+    elif intent_type == "other":
+        print(f"[VERIFIED_RESPONSE] Using system time", flush=True)
+        from datetime import datetime
+        now = datetime.now()
+        
+        # Pattern per riconoscere tipo di richiesta temporale
+        message_lower = request.message.lower()
+        
+        if "giorno" in message_lower or "data" in message_lower:
+            # Formato italiano: 9 febbraio 2026
+            response_text = f"Oggi è {now.day} {now.strftime('%B')} {now.year}."
+        elif "ora" in message_lower or "ore" in message_lower:
+            # Formato italiano: 14:30
+            response_text = f"Sono le {now.strftime('%H:%M')}."
+        elif "anno" in message_lower:
+            response_text = f"Siamo nel {now.year}."
+        else:
+            # Risposta generica
+            response_text = f"Sono le {now.strftime('%H:%M')} del {now.day} {now.strftime('%B')} {now.year}."
+    
+    # Fallback sicuro
+    else:
+        print(f"[VERIFIED_RESPONSE] Using safe fallback", flush=True)
+        response_text = "Non posso aiutarti con questa richiesta in modo specifico."
+    
+    # POST-PROCESSOR LINGUISTICO - Pulisci anche risposte verificate
+    if response_text:
+        original_text = response_text
+        response_text = text_post_processor.clean_response(response_text)
+        if original_text != response_text:
+            log("TEXT_POST_PROCESSOR", user_id=request.user_id, branch="verified",
+                original_len=len(original_text), cleaned_len=len(response_text))
+    
+    # Salva in memoria se appropriato
+    if response_text and intent_type != "other":
+        system_affect = compute_affect("system_response", {"text": response_text})
+        store_event(
+            user_id=request.user_id,
+            type="system_response",
+            content={"text": response_text},
+            salience=1.0,
+            affect=system_affect
+        )
+        log("MEMORY_SAVE", type="verified", user_id=request.user_id, intent=intent_type)
+    
+    # Determina tts_mode
+    tts_mode = "informative" if intent_type in ["medical_info", "historical_info", "weather", "news"] else "normal"
+    
+    print(f"[VERIFIED_RESPONSE] Final response: '{response_text}'", flush=True)
+    
+    # RITORNA RISPOSTA UNICA - NESSUN DOPPIO OUTPUT
+    return {
+        "response": response_text,
+        "user_id": request.user_id,
+        "timestamp": datetime.now().isoformat(),
+        "tts_mode": tts_mode,
+        "intent": intent_type,
+        "source": routing_info['source'],
+        "verified": True
+    }
 
 
 class ChatRequest(BaseModel):
@@ -96,6 +256,19 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
         relevant_memories,
         tone
     )
+
+    # ===============================
+    # ROUTING DETERMINISTICO PRIMA DI LLM
+    # ===============================
+    # Questo DEVE venire prima di qualsiasi chiamata LLM
+    routing_info = intent_router.get_routing_info(request.message)
+    print(f"[INTENT_ROUTED] type={routing_info['intent']} source={routing_info['source']} block_creative={routing_info['block_creative_llm']}", flush=True)
+    
+    # Se l'intent richiede fonti verificate, blocca subito il routing LLM
+    if routing_info['block_creative_llm']:
+        return await _handle_verified_response(
+            routing_info, request, state, recent_memories, relevant_memories, tone
+        )
 
     # ===============================
     # CLOSURE HANDLING: skip psycho, no memory side-effects

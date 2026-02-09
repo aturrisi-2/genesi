@@ -75,6 +75,13 @@ class IntentRouter:
                 r"mi sento", r"sentimento", r"emozione", r"ansia", r"stress",
                 r"depressione", r"tristezza", r"felicità", r"rabbia", r"paura",
                 r"aiutami", r"aiuto", r"consiglio", r"parlare con"
+            ],
+            
+            IntentType.OTHER: [
+                # Tempo e date
+                r"che giorno è", r"che ore sono", r"che data è", r"quanti ne abbiamo",
+                r"che tempo è", r"che ora è", r"che data è oggi", r"oggi che giorno è",
+                r"anno corrente", r"anno in corso", r"che anno è", r"quale anno"
             ]
         }
     
@@ -158,10 +165,10 @@ class IntentRouter:
             },
             
             IntentType.OTHER: {
-                "source": "fallback",
-                "llm_creative": True,
-                "verified_data": False,
-                "tone": "neutral"
+                "source": "system_time",
+                "llm_creative": False,
+                "verified_data": True,
+                "tone": "informative"
             }
         }
         
@@ -181,7 +188,8 @@ class IntentRouter:
             IntentType.MEDICAL_INFO,
             IntentType.HISTORICAL_INFO,
             IntentType.WEATHER,
-            IntentType.NEWS
+            IntentType.NEWS,
+            IntentType.OTHER
         }
         
         return intent_type in blocked_intents
