@@ -120,12 +120,19 @@ class SurgicalPipeline:
         if guard_result["is_clean"]:
             filtered_text = guard_result["cleaned_text"]
         else:
-            # Se contaminato, genera risposta semplice
+            # Se contaminato, PULISCE NON SOSTITUISCE
             print(f"[SURGICAL_PIPELINE] Contamination detected: {guard_result['issues']}", flush=True)
-            filtered_text = language_guard.generate_simple_response({
-                "intent": intent_type,
-                "user_message": user_message
-            })
+            
+            # 1. Tentativo di pulizia NON distruttiva
+            cleaned_text = self._clean_response_safely(final_text, guard_result['issues'])
+            
+            if cleaned_text and len(cleaned_text.strip()) > 3:
+                print(f"[SURGICAL_PIPELINE] Cleaned successfully", flush=True)
+                filtered_text = cleaned_text
+            else:
+                # 2. Solo se pulizia fallisce completamente, rigenera
+                print(f"[SURGICAL_PIPELINE] Cleaning failed, regenerating", flush=True)
+                filtered_text = await self._regenerate_response_safely(user_message, intent_type)
         
         print(f"[SURGICAL_PIPELINE] Filtered: '{filtered_text[:50]}...'", flush=True)
         
@@ -176,6 +183,87 @@ class SurgicalPipeline:
         
         # Ultimo fallback - risposta generica ma non vuota
         return "Cerchiamo di affrontare questo insieme. C'è altro che posso fare per aiutarti?"
+    
+    def _clean_response_safely(self, text: str, issues: List[str]) -> str:
+        """
+        Pulizia NON distruttiva del testo
+        Rimuove solo contaminazioni, preserva il significato
+        """
+        if not text:
+            return ""
+        
+        cleaned = text
+        
+        # Rimuovi emoji
+        if "emoji" in issues:
+            import re
+            # Rimuovi emoji comuni
+            emoji_pattern = re.compile(
+                "["
+                "\U0001F600-\U0001F64F"  # emoticons
+                "\U0001F300-\U0001F5FF"  # symbols & pictographs
+                "\U0001F680-\U0001F6FF"  # transport & map symbols
+                "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+                "\U00002702-\U000027B0"
+                "\U000024C2-\U0001F251"
+                "]+", flags=re.UNICODE
+            )
+            cleaned = emoji_pattern.sub(r'', cleaned)
+        
+        # Rimuovi azioni teatrali (*smile*, *giggle*)
+        if "theatricality" in issues:
+            import re
+            # Rimuovi testo tra asterischi
+            theatrical_pattern = re.compile(r'\*[^*]*\*', re.IGNORECASE)
+            cleaned = theatrical_pattern.sub('', cleaned)
+        
+        # Rimuovi caratteri non italiani
+        if "invalid_chars" in issues:
+            import re
+            # Mantieni solo caratteri italiani validi
+            italian_pattern = re.compile(r'[^a-zA-ZàèéìíòóùÀÈÉÌÍÒÓÙ\s.,!?;:\'-]', re.UNICODE)
+            cleaned = italian_pattern.sub('', cleaned)
+        
+        # Normalizza spazi
+        cleaned = ' '.join(cleaned.split())
+        
+        return cleaned.strip()
+    
+    async def _regenerate_response_safely(self, user_message: str, intent_type: str) -> str:
+        """
+        Rigenera risposta solo se pulizia fallisce completamente
+        Usa prompt correttivo per evitare contaminazione
+        """
+        try:
+            # Prompt correttivo per evitare problemi
+            if intent_type == "chat_free":
+                prompt = f"Rispondi in modo semplice e diretto a: {user_message}\n\nImportante: rispondi solo in italiano, senza emoji, senza azioni tra asterischi, senza teatralità."
+            elif intent_type == "medical_info":
+                prompt = f"Rispondi con empatia ma senza consigli medici specifici a: {user_message}\n\nImportante: rispondi solo in italiano, senza emoji, senza azioni tra asterischi, senza teatralità."
+            elif intent_type == "emotional_support":
+                prompt = f"Rispondi con supporto emotivo a: {user_message}\n\nImportante: rispondi solo in italiano, senza emoji, senza azioni tra asterischi, senza teatralità."
+            else:
+                prompt = f"Rispondi in modo informativo a: {user_message}\n\nImportante: rispondi solo in italiano, senza emoji, senza azioni tra asterischi, senza teatralità."
+            
+            # Usa GPT-full per rigenerazione sicura
+            from core.engines import engine_registry
+            response = await engine_registry.generate_with_engine(
+                engine_type="gpt_full",
+                message=prompt,
+                params={"temperature": 0.3, "max_tokens": 100},
+                context={"regeneration": True}
+            )
+            
+            if response and len(response.strip()) > 3:
+                return response.strip()
+            else:
+                # Ultimo fallback - ma costruttivo
+                return "Posso aiutarti in altro modo?"
+                
+        except Exception as e:
+            print(f"[SURGICAL_PIPELINE] Regeneration failed: {e}", flush=True)
+            # Fallback finale costruttivo
+            return "Cerchiamo un approccio diverso."
 
 # Istanza globale
 surgical_pipeline = SurgicalPipeline()
