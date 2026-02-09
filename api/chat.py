@@ -35,6 +35,11 @@ from core.verified_knowledge import verified_knowledge
 router = APIRouter()
 
 
+class ChatRequest(BaseModel):
+    user_id: str
+    message: str
+
+
 async def _handle_verified_response(
     routing_info: Dict,
     request: ChatRequest,
@@ -191,11 +196,6 @@ async def _handle_verified_response(
         "source": routing_info['source'],
         "verified": True
     }
-
-
-class ChatRequest(BaseModel):
-    user_id: str
-    message: str
 
 
 @router.post("/chat")
