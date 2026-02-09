@@ -113,7 +113,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
         )
         # Salviamo solo evento minimo in memoria episodica (no psicologica)
         user_affect = compute_affect("user_message", {"text": request.message})
-    store_event(
+        store_event(
             user_id=request.user_id,
             type="user_message",
             content={"text": request.message},
