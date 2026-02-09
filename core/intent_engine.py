@@ -148,12 +148,32 @@ class IntentEngine:
             
             print(f"[PROACTOR] calling PERSONALPLEX first", flush=True)
             
+            # ESCALATION LOGIC: usa GPT per messaggi complessi
+            msg_len = len(msg)
+            needs_gpt = msg_len > 80 or any(word in msg.lower() for word in ["spiega", "perché", "come funziona", "analizza", "dettagli"])
+            
+            if needs_gpt:
+                print(f"[PROACTOR] ESCALATION_TO_GPT message_len={msg_len} complex=true", flush=True)
+                return {
+                    "should_respond": True,
+                    "decision": "respond",
+                    "reason": "complex_message_escalate_to_gpt",
+                    "brain_mode": "relazione"
+                }
+            
             # Health check
             if local_llm._health_check():
                 print(f"[PROACTOR] PERSONALPLEX healthy - generating response", flush=True)
                 
+                # FAST PATH per messaggi brevi
+                fast_messages = ["ci sei", "ok", "vai", "dimmi", "ciao", "hey", "grazie"]
+                is_fast = msg_len < 15 or msg.lower().strip() in fast_messages
+                mode = "presence" if is_fast else "normal"
+                
+                print(f"[PROACTOR] FAST_PATH={is_fast} mode={mode} len={msg_len}", flush=True)
+                
                 # Genera risposta con PersonalPlex
-                response = local_llm.generate(msg)
+                response = local_llm.generate(msg, mode=mode)
                 
                 if response and len(response.strip()) > 0:
                     print(f"[PROACTOR] PERSONALPLEX response received", flush=True)

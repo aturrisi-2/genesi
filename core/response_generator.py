@@ -34,9 +34,20 @@ class ResponseGenerator:
             print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B called with: '{user_message}'", flush=True)
             
             try:
-                # Chiamata diretta a PersonalPlex 7B
+                # FAST PATH: messaggi brevi -> mode="presence" ultra-veloce
+                fast_messages = ["ci sei", "ok", "vai", "dimmi", "ciao", "hey", "grazie"]
+                is_fast = len(user_message) < 15 or user_message.lower().strip() in fast_messages
+                
+                if is_fast:
+                    print(f"[FAST_PATH] message='{user_message}' -> presence mode", flush=True)
+                    mode = "presence"
+                else:
+                    print(f"[NORMAL_PATH] message='{user_message[:30]}...' -> normal mode", flush=True)
+                    mode = "normal"
+                
+                # Chiamata diretta a PersonalPlex 7B con mode appropriato
                 local_llm = LocalLLM()
-                response_text = local_llm.generate(user_message)
+                response_text = local_llm.generate(user_message, mode=mode)
                 
                 if response_text and len(response_text.strip()) > 0:
                     response_text = response_text.strip()
