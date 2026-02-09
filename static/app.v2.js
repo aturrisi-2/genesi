@@ -473,67 +473,24 @@ async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
   }
   
   try {
-    console.log('[TTS_FLOW] step=3 creating_audio_url');
-    const audioUrl = URL.createObjectURL(blob);
-    console.log('[TTS] AUDIO URL created from prefetched blob');
+    console.log('[TTS_FLOW] step=7 calling_playTTSAudio');
     
-    console.log('[TTS_FLOW] step=4 creating_audio_object');
-    const audio = _primedAudio || new Audio(audioUrl);
-    audio.src = audioUrl;
-    audio.muted = false;
-    _ttsSource = audio;
-    
-    audio.oncanplay = () => {
-      console.log('[TTS_FLOW] step=5 audio_can_play duration=' + audio.duration + 's');
-      console.log('[TTS] AUDIO CAN PLAY: duration=' + audio.duration + 's');
-    };
-    
-    console.log('[TTS_FLOW] step=6 calling_audio_play');
-    console.log('[TTS] CALLING audio.play()...');
-    console.log('[TTS] Tentativo di playback (blob) - AudioContext state=' + (window.audioContext ? window.audioContext.state : 'none'));
-    _isPlayingChunk = true;
-    _wasPlayingChunk = true;
-    await audio.play();
-    console.log('[TTS_FLOW] step=7 audio_playing duration=' + audio.duration + 's');
-    console.log('[TTS] AUDIO PLAYING: duration=' + audio.duration + 's');
+    // USA NUOVA FUNZIONE playTTSAudio con decodeAudioData
+    await playTTSAudio(blob);
     
     // ATTENDI CHE IL CHUNK FINISCA PRIMA DI PASSARE AL SUCCESSIVO
     console.log('[TTS_FLOW] step=8 waiting_for_chunk_end');
     await new Promise(resolve => {
-      audio.onended = () => {
-        console.log('[TTS_FLOW] step=9 audio_ended duration=' + audio.duration + 's');
-        console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
-        console.log('[TTS_CHUNK_END] index=' + (chunkIndex + 1) + ' duration=' + audio.duration + 's');
-        _ttsSource = null;
-        _isPlayingChunk = false;
-        // NOTA: _wasPlayingChunk rimane true per indicare che siamo in un ciclo TTS segmentato
-        URL.revokeObjectURL(audioUrl);
-        resolve();
-      };
-      
-      // Fallback in caso onended non funzioni
-      const timeout = setTimeout(() => {
-        if (audio.ended || audio.paused) {
-          console.log('[TTS_FLOW] step=9 audio_ended_fallback duration=' + audio.duration + 's');
-          _ttsSource = null;
-          _isPlayingChunk = false;
-          // NOTA: _wasPlayingChunk rimane true per indicare che siamo in un ciclo TTS segmentato
-          URL.revokeObjectURL(audioUrl);
+      const checkEnded = () => {
+        if (!_isPlayingChunk) {
+          console.log('[TTS_FLOW] step=9 audio_ended');
+          console.log('[TTS] CHUNK ENDED - AudioBufferSourceNode completato');
           resolve();
+        } else {
+          setTimeout(checkEnded, 100); // Controlla ogni 100ms
         }
-      }, (audio.duration + 1) * 1000);
-      
-      audio.onended = () => {
-        clearTimeout(timeout);
-        console.log('[TTS_FLOW] step=9 audio_ended duration=' + audio.duration + 's');
-        console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
-        console.log('[TTS_CHUNK_END] index=' + (chunkIndex + 1) + ' duration=' + audio.duration + 's');
-        _ttsSource = null;
-        _isPlayingChunk = false;
-        // NOTA: _wasPlayingChunk rimane true per indicare che siamo in un ciclo TTS segmentato
-        URL.revokeObjectURL(audioUrl);
-        resolve();
       };
+      checkEnded();
     });
     
   } catch (e) {
@@ -610,66 +567,24 @@ async function _playTTSChunk(text) {
       return;
     }
     
-    console.log('[TTS_FLOW] step=7 creating_audio_url');
-    const audioUrl = URL.createObjectURL(blob);
-    console.log('[TTS] AUDIO URL created');
+    console.log('[TTS_FLOW] step=7 calling_playTTSAudio');
     
-    console.log('[TTS_FLOW] step=8 creating_audio_object');
-    const audio = _primedAudio || new Audio(audioUrl);
-    audio.src = audioUrl;
-    audio.muted = false;
-    _ttsSource = audio;
-    
-    audio.oncanplay = () => {
-      console.log('[TTS_FLOW] step=10 audio_can_play duration=' + audio.duration + 's');
-      console.log('[TTS] AUDIO CAN PLAY: duration=' + audio.duration + 's');
-    };
-    
-    console.log('[TTS_FLOW] step=11 calling_audio_play');
-    console.log('[TTS] CALLING audio.play()...');
-    console.log('[TTS] Tentativo di playback - AudioContext state=' + (window.audioContext ? window.audioContext.state : 'none'));
-    _isPlayingChunk = true;
-    _wasPlayingChunk = true;
-    await audio.play();
-    console.log('[TTS_FLOW] step=12 audio_playing duration=' + audio.duration + 's');
-    console.log('[TTS] AUDIO PLAYING: duration=' + audio.duration + 's');
+    // USA NUOVA FUNZIONE playTTSAudio con decodeAudioData
+    await playTTSAudio(blob);
     
     // ATTENDI CHE IL CHUNK FINISCA PRIMA DI PASSARE AL SUCCESSIVO
-    console.log('[TTS_FLOW] step=13 waiting_for_chunk_end');
+    console.log('[TTS_FLOW] step=8 waiting_for_chunk_end');
     await new Promise(resolve => {
-      audio.onended = () => {
-        console.log('[TTS_FLOW] step=14 audio_ended duration=' + audio.duration + 's');
-        console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
-        console.log('[TTS_CHUNK_END] index=' + (i + 1) + ' duration=' + audio.duration + 's');
-        _ttsSource = null;
-        _isPlayingChunk = false;
-        // NOTA: _wasPlayingChunk rimane true per indicare che siamo in un ciclo TTS segmentato
-        URL.revokeObjectURL(audioUrl);
-        resolve();
-      };
-      
-      // Fallback in caso onended non funzioni
-      const timeout = setTimeout(() => {
-        if (audio.ended || audio.paused) {
-          console.log('[TTS_FLOW] step=14 audio_ended_fallback duration=' + audio.duration + 's');
-          _ttsSource = null;
-          _isPlayingChunk = false;
-          // NOTA: _wasPlayingChunk rimane true per indicare che siamo in un ciclo TTS segmentato
-          URL.revokeObjectURL(audioUrl);
+      const checkEnded = () => {
+        if (!_isPlayingChunk) {
+          console.log('[TTS_FLOW] step=9 audio_ended');
+          console.log('[TTS] CHUNK ENDED - AudioBufferSourceNode completato');
           resolve();
+        } else {
+          setTimeout(checkEnded, 100); // Controlla ogni 100ms
         }
-      }, (audio.duration + 1) * 1000);
-      
-      audio.onended = () => {
-        clearTimeout(timeout);
-        console.log('[TTS_FLOW] step=14 audio_ended duration=' + audio.duration + 's');
-        console.log('[TTS] CHUNK ENDED: duration=' + audio.duration + 's');
-        _ttsSource = null;
-        _isPlayingChunk = false;
-        // NOTA: _wasPlayingChunk rimane true per indicare che siamo in un ciclo TTS segmentato
-        URL.revokeObjectURL(audioUrl);
-        resolve();
       };
+      checkEnded();
     });
     
   } catch (e) {
@@ -1749,6 +1664,67 @@ function unlockAudio() {
 // Funzione per verificare stato audio unlock
 function isAudioUnlocked() {
   return window.audioUnlocked === true && window.audioContext && window.audioContext.state === 'running';
+}
+
+// ===============================
+// TTS AUDIO PLAYBACK - decodeAudioData + AudioBufferSourceNode
+// ===============================
+async function playTTSAudio(blob) {
+  console.log('[TTS] TTS blob ricevuto - size=' + blob.size + ' type=' + blob.type);
+  
+  // Verifica AudioContext globale
+  if (!window.audioContext) {
+    console.error('[TTS] AudioContext non disponibile - audio non unlockato');
+    return;
+  }
+  
+  console.log('[TTS] AudioContext state: ' + window.audioContext.state);
+  
+  // Resume se suspended
+  if (window.audioContext.state === 'suspended') {
+    console.log('[TTS] Resume AudioContext...');
+    await window.audioContext.resume();
+    console.log('[TTS] AudioContext resumed - state: ' + window.audioContext.state);
+  }
+  
+  try {
+    // Converti blob in ArrayBuffer
+    const arrayBuffer = await blob.arrayBuffer();
+    console.log('[TTS] ArrayBuffer creato - size=' + arrayBuffer.byteLength);
+    
+    // Decodifica audio
+    const audioBuffer = await window.audioContext.decodeAudioData(arrayBuffer);
+    console.log('[TTS] AudioBuffer decodificato - duration=' + audioBuffer.duration + 's sampleRate=' + audioBuffer.sampleRate);
+    
+    // Crea AudioBufferSourceNode
+    const source = window.audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(window.audioContext.destination);
+    
+    // Log quando parte il playback
+    source.onended = () => {
+      console.log('[TTS] Playback completato');
+      _ttsSource = null;
+      _isPlayingChunk = false;
+    };
+    
+    // Avvia playback
+    console.log('[TTS] Playback avviato');
+    source.start(0);
+    
+    // Aggiorna stato TTS
+    _ttsSource = source;
+    _isPlayingChunk = true;
+    _wasPlayingChunk = true;
+    
+    console.log('[TTS] AudioBufferSourceNode avviato con successo');
+    
+  } catch (error) {
+    console.error('[TTS] Errore durante playback TTS:', error);
+    console.error('[TTS] Errore details:', error.message);
+    _ttsSource = null;
+    _isPlayingChunk = false;
+  }
 }
 
 // iOS: pre-unlock AudioContext on very first user interaction
