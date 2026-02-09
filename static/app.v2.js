@@ -755,30 +755,30 @@ async function sendMessage() {
     const data = await sendChatMessage(text);
     console.log('[FRONTEND] response received - data=', data);
     
-    // USA SEMPRE final_text - NUOVO CONTRATTO API
-    const botMessage = data.final_text;
+    // USA SEMPRE response - CONTRATTO API BACKEND
+    const botMessage = data.response;
     
     if (!botMessage || botMessage.trim().length === 0) return;
     
-    console.log('[FRONTEND] final_text rendered - text=', botMessage.substring(0, 100) + '...');
+    console.log('[FRONTEND] CHAT RESPONSE RENDERED:', data.response);
     addGenesiMessage(botMessage);
     
-    // TTS SEMPRE OBBLIGATORIO SU final_text
-    if (data && data.final_text && data.final_text.trim().length > 0) {
-      console.log('[TTS_MANDATORY] final_text valida, forcing TTS');
-      console.log('[TTS_CALL] final_text_len=' + data.final_text.length + ' tts_mode=' + (data.tts_mode || 'none'));
-      console.log('[TTS_CALL] final_text_preview=' + data.final_text.substring(0, 100) + '...');
+    // TTS SEMPRE OBBLIGATORIO SU response
+    if (data && data.response && data.response.trim().length > 0) {
+      console.log('[TTS_MANDATORY] response valida, forcing TTS');
+      console.log('[TTS_CALL] response_len=' + data.response.length + ' tts_mode=' + (data.tts_mode || 'none'));
+      console.log('[TTS_CALL] response_preview=' + data.response.substring(0, 100) + '...');
       
       try {
         console.log('[TTS_CALL] about_to_call_playTTS');
-        playTTS(data.final_text, data.tts_mode);
+        playTTS(data.response, data.tts_mode);
         console.log('[TTS_CALL] playTTS_returned_successfully');
       } catch (e) {
         console.error('[TTS_ABORT] reason=exception_in_playTTS error=', e);
         console.error('[TTS_ABORT] error_stack=', e.stack);
       }
     } else if (data) {
-      console.log('[TTS_SKIP] final_text vuota o non valida, skipping TTS');
+      console.log('[TTS_SKIP] response vuota o non valida, skipping TTS');
     }
   } catch (e) {
     console.error('Chat error:', e);
@@ -1570,7 +1570,7 @@ function handleFileUpload() {
       } catch (_) { /* cosmetic */ }
 
       // Full analysis in chat message (not in bubble)
-      addGenesiMessage(result.final_text || result.response || "File ricevuto.");
+      addGenesiMessage(result.response || "File ricevuto.");
 
       // Auto-dismiss bubble after 6s
       setTimeout(() => { try { _dismissFileBubble(); } catch(_){} }, 6000);
