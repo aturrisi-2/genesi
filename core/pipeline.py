@@ -10,6 +10,8 @@ from core.local_llm import LocalLLM
 from core.llm import generate_response as llm_generate
 from core.genesi_response_engine import genesi_engine
 from core.tools import resolve_tools
+from core.intent_router import intent_router
+from core.verified_knowledge import verified_knowledge
 
 class Pipeline:
     """
@@ -31,30 +33,31 @@ class Pipeline:
         document_context: Optional[Dict] = None
     ) -> Dict:
         """
-        PIPELINE OBBLIGATORIA:
-        1. Proactor decide il path UNA SOLA VOLTA
-        2. UN SOLO modulo genera contenuto
-        3. Contenuto assegnato a final_text
-        4. final_text salvato, inviato frontend, inviato TTS
+        PIPELINE OBBLIGATORIA CON ROUTING DETERMINISTICO:
+        1. Intent Router classifica il messaggio
+        2. Routing decide la fonte dati
+        3. UN SOLO modulo genera contenuto
+        4. Contenuto assegnato a final_text
         """
         print(f"[PIPELINE] Processing: '{user_message[:50]}...'", flush=True)
         
-        # 1. PROACTOR DECIDE IL PATH UNA SOLA VOLTA
-        path_decision = self._proactor_decide_path(user_message, cognitive_state, intent)
-        print(f"[PIPELINE] path={path_decision['path']} reason='{path_decision['reason']}' confidence={path_decision['confidence']}", flush=True)
+        # 1. INTENT ROUTING DETERMINISTICO
+        routing_info = intent_router.get_routing_info(user_message)
+        print(f"[INTENT_ROUTED] type={routing_info['intent']} source={routing_info['source']} block_creative={routing_info['block_creative_llm']}", flush=True)
         
-        # 2. UN SOLO MODULO GENERA IL CONTENUTO
-        final_text = await self._generate_content_single_path(
-            path_decision, user_message, cognitive_state, tone
+        # 2. GENERAZIONE CONTENUTO BASATA SU ROUTING
+        final_text = await self._generate_content_with_routing(
+            routing_info, user_message, cognitive_state, tone
         )
         
         # 3. ASSEGNA A final_text
         result = {
             "final_text": final_text,
             "confidence": "ok",
-            "style": "psychological" if intent.get("type") == "psychological" else "standard",
-            "path": path_decision["path"],
-            "path_reason": path_decision["reason"]
+            "style": "psychological" if routing_info['intent'] == "emotional_support" else "standard",
+            "path": routing_info['source'],
+            "intent": routing_info['intent'],
+            "routing_info": routing_info
         }
         
         print(f"[PIPELINE] final_text=\"{final_text}\"", flush=True)
@@ -125,73 +128,93 @@ class Pipeline:
             "confidence": 0.5
         }
     
-    async def _generate_content_single_path(
+    async def _generate_content_with_routing(
         self, 
-        path_decision: Dict, 
+        routing_info: Dict, 
         user_message: str, 
         cognitive_state, 
         tone
     ) -> str:
         """
-        UN SOLO MODULO GENERA IL CONTENUTO
-        Nessuna chiamata multipla
+        GENERAZIONE CONTENUTO BASATA SU ROUTING DETERMINISTICO
+        Blocca LLM creativo per domande mediche/storiche/fattuali
         """
-        path = path_decision["path"]
+        intent_type = routing_info['intent']
+        source = routing_info['source']
         
-        if path == "personalplex":
-            # PersonalPlex - canale umano principale
-            print(f"[PIPELINE] generating via PersonalPlex", flush=True)
-            response = self.local_llm.generate_chat_response(user_message)
-            
-            if response and len(response.strip()) > 0:
-                print(f"[PIPELINE] PersonalPlex response received", flush=True)
-                return response.strip()
-            else:
-                print(f"[PIPELINE] PersonalPlex empty response", flush=True)
-                return self._genesi_fallback(user_message)
+        print(f"[PIPELINE] Generating content for intent={intent_type} source={source}", flush=True)
         
-        elif path == "gpt":
-            # GPT - supporto cognitivo
-            print(f"[PIPELINE] generating via GPT", flush=True)
+        # Chat libera → PersonalPlex creativo
+        if intent_type == "chat_free":
+            if self.local_llm.is_available():
+                print(f"[PIPELINE] Using PersonalPlex for chat_free", flush=True)
+                response = self.local_llm.generate_chat_response(user_message)
+                if response and len(response.strip()) > 0:
+                    return response.strip()
             
-            # GPT per intent analysis
-            intent_prompt = self._build_gpt_intent_prompt(user_message)
-            gpt_response = llm_generate({
-                "prompt": intent_prompt,
-                "intent": {"type": "intent_extraction"},
-                "tone": tone
-            })
-            
-            # Estrai intent da GPT
-            try:
-                intent_data = json.loads(gpt_response)
-                if "intent" in intent_data:
-                    print(f"[PIPELINE] GPT intent extracted: {intent_data}", flush=True)
-                    # Usa Genesi engine per testo finale
-                    result = genesi_engine.generate_response_from_intent(intent_data)
-                    return result["final_text"]
-            except json.JSONDecodeError:
-                print(f"[PIPELINE] GPT response not JSON, using text", flush=True)
-            
-            # Fallback: usa Genesi engine con testo GPT
-            result = genesi_engine.generate_response_from_text(gpt_response)
+            # Fallback Genesi
+            return self._genesi_fallback(user_message)
+        
+        # Supporto emotivo → ramo psicologico
+        elif intent_type == "emotional_support":
+            print(f"[PIPELINE] Routing to psychological support", flush=True)
+            result = genesi_engine.generate_response_from_text(user_message)
             return result["final_text"]
         
-        elif path == "tools":
-            # Tools per domande fattuali
-            print(f"[PIPELINE] generating via Tools", flush=True)
+        # Info mediche → fonte verificata
+        elif intent_type == "medical_info":
+            print(f"[PIPELINE] Using verified medical knowledge", flush=True)
+            medical_data = verified_knowledge.get_medical_info(user_message)
+            
+            if medical_data.get("verified", False):
+                content = medical_data.get("content", "")
+                disclaimer = medical_data.get("disclaimer", "")
+                
+                # Aggiungi disclaimer se presente
+                if disclaimer and content:
+                    content = f"{content} {disclaimer}"
+                
+                return content
+            else:
+                return medical_data.get("content", "Per questioni mediche consulta un professionista.")
+        
+        # Info storiche → fonte verificata
+        elif intent_type == "historical_info":
+            print(f"[PIPELINE] Using verified historical knowledge", flush=True)
+            historical_data = verified_knowledge.get_historical_info(user_message)
+            
+            if historical_data.get("verified", False):
+                return historical_data.get("content", "Informazione storica non disponibile.")
+            else:
+                return historical_data.get("content", "Non ho informazioni specifiche su questo argomento storico.")
+        
+        # Weather → API
+        elif intent_type == "weather":
+            print(f"[PIPELINE] Using weather API", flush=True)
             try:
                 tool_result = await resolve_tools(user_message)
                 if tool_result and tool_result.get("data") and not tool_result["data"].get("error"):
-                    # Template diretto per dati tools
                     return self._tools_template(tool_result)
             except Exception as e:
-                print(f"[PIPELINE] Tools error: {e}", flush=True)
+                print(f"[PIPELINE] Weather API error: {e}", flush=True)
             
-            return self._genesi_fallback(user_message)
+            return "Non riesco a ottenere informazioni meteo in questo momento."
         
-        else:  # fallback
-            # Fallback Genesi
+        # News → API
+        elif intent_type == "news":
+            print(f"[PIPELINE] Using news API", flush=True)
+            try:
+                tool_result = await resolve_tools(user_message)
+                if tool_result and tool_result.get("data") and not tool_result["data"].get("error"):
+                    return self._tools_template(tool_result)
+            except Exception as e:
+                print(f"[PIPELINE] News API error: {e}", flush=True)
+            
+            return "Non riesco a ottenere notizie in questo momento."
+        
+        # Fallback
+        else:
+            print(f"[PIPELINE] Using fallback for intent={intent_type}", flush=True)
             return self._genesi_fallback(user_message)
     
     def _genesi_fallback(self, user_message: str) -> str:
