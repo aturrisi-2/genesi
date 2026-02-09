@@ -756,16 +756,12 @@ async function sendMessage() {
     console.log('[FRONTEND] response received - data=', data);
     
     // USA SEMPRE final_text - NUOVO CONTRATTO API
-    if (data && data.final_text && typeof data.final_text === 'string' && data.final_text.trim().length > 0) {
-      console.log('[FRONTEND] final_text rendered - text=', data.final_text.substring(0, 100) + '...');
-      addGenesiMessage(data.final_text);
-    } else {
-      console.log('[FRONTEND] final_text suppressed - reason=no_final_text');
-      console.log('[FRONTEND] data=', data);
-      // Fallback: mostra comunque qualcosa per non bloccare utente
-      const fallbackText = data.final_text || "Sono qui con te.";
-      addGenesiMessage(fallbackText);
-    }
+    const botMessage = data.final_text;
+    
+    if (!botMessage || botMessage.trim().length === 0) return;
+    
+    console.log('[FRONTEND] final_text rendered - text=', botMessage.substring(0, 100) + '...');
+    addGenesiMessage(botMessage);
     
     // TTS SEMPRE OBBLIGATORIO SU final_text
     if (data && data.final_text && data.final_text.trim().length > 0) {
@@ -1574,7 +1570,7 @@ function handleFileUpload() {
       } catch (_) { /* cosmetic */ }
 
       // Full analysis in chat message (not in bubble)
-      addGenesiMessage(result.response || "File ricevuto.");
+      addGenesiMessage(result.final_text || result.response || "File ricevuto.");
 
       // Auto-dismiss bubble after 6s
       setTimeout(() => { try { _dismissFileBubble(); } catch(_){} }, 6000);
