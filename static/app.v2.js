@@ -490,6 +490,7 @@ async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
     
     console.log('[TTS_FLOW] step=6 calling_audio_play');
     console.log('[TTS] CALLING audio.play()...');
+    console.log('[TTS] Tentativo di playback (blob) - AudioContext state=' + (window.audioContext ? window.audioContext.state : 'none'));
     _isPlayingChunk = true;
     _wasPlayingChunk = true;
     await audio.play();
@@ -601,6 +602,7 @@ async function _playTTSChunk(text) {
     const blob = await response.blob();
     console.log('[TTS_FLOW] step=6 blob_received');
     console.log('[TTS] BLOB: size=' + blob.size + ' type=' + blob.type);
+    console.log('[TTS] TTS blob ricevuto - size=' + blob.size + ' type=' + blob.type);
     
     if (!blob || blob.size === 0) {
       console.log('[TTS_ABORT] reason=empty_blob');
@@ -625,6 +627,7 @@ async function _playTTSChunk(text) {
     
     console.log('[TTS_FLOW] step=11 calling_audio_play');
     console.log('[TTS] CALLING audio.play()...');
+    console.log('[TTS] Tentativo di playback - AudioContext state=' + (window.audioContext ? window.audioContext.state : 'none'));
     _isPlayingChunk = true;
     _wasPlayingChunk = true;
     await audio.play();
