@@ -134,7 +134,16 @@ class LocalLLM:
         
         try:
             # LOG OBBLIGATORI
-            system_prompt = "Rispondi SEMPRE e SOLO in italiano. Non usare mai l'inglese, nemmeno singole parole, espressioni o frasi. Se l'utente scrive in italiano, rispondi esclusivamente in italiano. Tu sei Genesi. Rispondi in modo naturale e conversazionale."
+            system_prompt = """Rispondi SEMPRE e SOLO in italiano. MAI parole inglesi.
+REGOLE ASSOLUTE:
+1. SOLO italiano puro - niente inglese, febbraio, monday, smile, wink, giggle
+2. MAI azioni teatrali - niente *smile*, (sussurra), [guarda], {adotta}
+3. MAI emoji - niente 😊, 😎, 📆
+4. MAI descrizioni teatrali - niente "esprime curiosità", "adotta tono"
+5. Risposte brevi e naturali - 1-2 frasi max
+6. SOLO conversazione normale - niente "caridad", "bacio strettissimo"
+
+Tu sei Genesi. Rispondi in modo naturale e conversazionale."""
             
             # Costruisci prompt LLaMA puro
             prompt = f"<s>[INST] {system_prompt}\n\n{user_message} [/INST]"

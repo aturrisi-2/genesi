@@ -13,6 +13,9 @@ from memory.episodic import store_event, get_recent_events, search_events
 from memory.affective import compute_affect
 from memory.salience import compute_salience
 
+# Memoria identitaria
+from core.identity_memory import save_user_name, get_user_name, extract_name_from_message, is_name_query
+
 from core.relational_interpreter import RelationalInterpreter
 from core.relational.accumulator import RelationalAccumulator
 
@@ -161,10 +164,33 @@ async def _handle_verified_response(
             # FALLBACK EMPATICO IN CASO DI ERRORE
             response_text = human_fallback.get_fallback("emotional_distress", request.message)
     
+    # Identità → memoria nome utente
+    elif intent_type == "identity":
+        print(f"[VERIFIED_RESPONSE] Handling identity", flush=True)
+        
+        # 1. Controlla se l'utente sta fornendo il proprio nome
+        extracted_name = extract_name_from_message(request.message)
+        if extracted_name:
+            # Salva il nome in memoria
+            if save_user_name(request.user_id, extracted_name):
+                response_text = f"Piacere, {extracted_name}! Ricorderò il tuo nome."
+            else:
+                response_text = f"Piacere, {extracted_name}!"
+        else:
+            # 2. Controlla se l'utente chiede il proprio nome
+            if is_name_query(request.message):
+                saved_name = get_user_name(request.user_id)
+                if saved_name:
+                    response_text = f"Sì, ti chiami {saved_name}."
+                else:
+                    response_text = human_fallback.get_fallback("identity", request.message)
+            else:
+                # 3. Altre domande identitarie
+                response_text = "Sono Genesi, la tua assistente personale."
+    
     # Tempo e date → sistema
     elif intent_type == "other":
         print(f"[VERIFIED_RESPONSE] Using system time", flush=True)
-        from datetime import datetime
         now = datetime.now()
         
         # Pattern per riconoscere tipo di richiesta temporale

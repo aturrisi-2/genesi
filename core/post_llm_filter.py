@@ -15,34 +15,50 @@ class PostLLMFilter:
     def __init__(self):
         # Pattern linguistici inappropriati
         self.inappropriate_patterns = [
-            # Lingua non italiana
-            r'\b(hola|hello|hey|hi|good morning|good evening)\b',
-            r'\b(¿qué|what|how|why|when|where)\b',
-            r'\b(thank you|thanks|gracias|merci)\b',
-            r'\b(lo siento|sorry|excuse me)\b',
-            r'\b(buenos días|good night)\b',
-            r'\b(caridad|charity|amor|love)\b',
-            r'\b(kiss|bacio|baci|beso|besos)\b',
+            # Lingua non italiana - PIÙ AGGRESSIVO
+            r'\b(hola|hello|hey|hi|good morning|good evening|good afternoon)\b',
+            r'\b(¿qué|what|how|why|when|where|who|which)\b',
+            r'\b(thank you|thanks|gracias|merci|thank|thx)\b',
+            r'\b(lo siento|sorry|excuse me|pardon|forgive)\b',
+            r'\b(buenos días|good night|good bye|bye|goodbye)\b',
+            r'\b(caridad|charity|amor|love|like|enjoy)\b',
+            r'\b(kiss|bacio|baci|beso|besos|hug|cuddle)\b',
+            r'\b(february|january|march|april|may|june|july|august|september|october|november|december)\b',
+            r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b',
+            r'\b(adjusts|smile|wink|giggle|laugh|frown|nod|shrug)\b',
+            r'\b(amazing|awesome|great|wonderful|fantastic|perfect|excellent)\b',
+            r'\b(really|actually|literally|basically|seriously|definitely)\b',
             
-            # Teatralità inappropriata
+            # Teatralità inappropriata - PIÙ COMPLETA
             r'\*[^*]*\*',  # Azioni tra asterischi
             r'\([^)]*\)',  # Azioni in parentesi
             r'\[[^\]]*\]',  # Azioni in quadre
+            r'\{[^}]*\}',  # Azioni in graffe
             
-            # Emoji
+            # Emoji e simboli
             r'[\U0001F600-\U0001F64F]',  # Emoticoni
             r'[\U0001F300-\U0001F5FF]',  # Simboli vari
             r'[\U0001F680-\U0001F6FF]',  # Trasporti e simboli
             r'[\U0001F1E0-\U0001F1FF]',  # Bandiere
+            r'[\U00002600-\U000026FF]',  # Simboli vari
+            r'[\U00002700-\U000027BF]',  # Dingbats
             
             # Affermazioni mediche inappropriate
-            r'\b(non preoccuparti|tranquillo|calmati)\b',
-            r'\b(stai bene|sarai tutto bene|ti guarirò)\b',
+            r'\b(non preoccuparti|tranquillo|calmati|relax)\b',
+            r'\b(stai bene|sarai tutto bene|ti guarirò|guarirai)\b',
             r'\b(ho la soluzione|ti posso aiutare|posso curarti)\b',
+            r'\b(non ti preoccupare|non ti preoccupare)\b',
             
             # Affermazioni affettive inappropriate in contesto medico
             r'\b(ti voglio bene|ti adoro|sei speciale)\b',
             r'\b(un bacio|un abbraccio|ti stringo)\b',
+            r'\b(carissimo|carissima|tesoro|dolcezza)\b',
+            
+            # Descrizioni teatrali
+            r'\b(esprime|mostra|manifesta|dimostra)\b',
+            r'\b(curioso|interessato|sorpreso|scioccato)\b',
+            r'\b(adotta|assume|indossa)\b',
+            r'\b(festoso|entusiasta|eccitato)\b',
         ]
         
         # Fallback empatici per contesti specifici

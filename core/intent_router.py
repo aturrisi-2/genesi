@@ -15,6 +15,7 @@ class IntentType(Enum):
     WEATHER = "weather"
     NEWS = "news"
     EMOTIONAL_SUPPORT = "emotional_support"
+    IDENTITY = "identity"
     OTHER = "other"
 
 class IntentRouter:
@@ -75,6 +76,13 @@ class IntentRouter:
                 r"mi sento", r"sentimento", r"emozione", r"ansia", r"stress",
                 r"depressione", r"tristezza", r"felicità", r"rabbia", r"paura",
                 r"aiutami", r"aiuto", r"consiglio", r"parlare con"
+            ],
+            
+            IntentType.IDENTITY: [
+                # Identità e nome
+                r"mi chiamo", r"il mio nome è", r"io sono", r"sono [a-z]+",
+                r"ti ricordi il mio nome", r"ricordi il mio nome", r"come ti chiami",
+                r"il mio nome", r"il cognome", r"chi sono"
             ],
             
             IntentType.OTHER: [
