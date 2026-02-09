@@ -5,7 +5,9 @@ Memoria stabile per informazioni identitarie dell'utente (nome, etc.)
 
 import re
 from typing import Optional, Dict, Any
-from memory.episodic import search_events, store_event
+
+# Memoria temporanea per test (in produzione usa database)
+_identity_memory_store: Dict[str, Dict[str, Any]] = {}
 
 def extract_name_from_message(message: str) -> Optional[str]:
     """
@@ -35,6 +37,20 @@ def extract_name_from_message(message: str) -> Optional[str]:
             if len(name) >= 2 and name.isalpha():
                 return name
     
+    # Pattern per nomi singoli (es. "Alfio", "Marco")
+    # Se il messaggio è solo un nome proprio
+    words = message_lower.split()
+    if len(words) == 1 and len(words[0]) >= 2 and words[0].isalpha():
+        # Verifica che sia un nome italiano comune
+        common_names = {
+            'marco', 'paolo', 'luca', 'alessandro', 'francesco', 'lorenzo', 
+            'mattia', 'davide', 'simone', 'andrea', 'riccardo', 'giulio',
+            'maria', 'sara', 'giulia', 'sofia', 'alice', 'chiara', 'valentina',
+            'alfio', 'mario', 'antonio', 'giuseppe', 'giovanni', 'stefano'
+        }
+        if words[0] in common_names:
+            return words[0].capitalize()
+    
     return None
 
 def save_user_name(user_id: str, name: str) -> bool:
@@ -49,15 +65,29 @@ def save_user_name(user_id: str, name: str) -> bool:
         True se salvato con successo
     """
     try:
-        # Salva come evento speciale di tipo identity
-        store_event(
-            user_id=user_id,
-            type="identity",
-            content={"name": name, "type": "user_name"},
-            salience=1.0,  # Massima importanza
-            affect={"valence": 0.5, "arousal": 0.3}
-        )
+        # Salva in memoria temporanea
+        if user_id not in _identity_memory_store:
+            _identity_memory_store[user_id] = {}
+        
+        _identity_memory_store[user_id]['name'] = name
+        _identity_memory_store[user_id]['type'] = 'user_name'
+        
         print(f"[IDENTITY_MEMORY] Saved name '{name}' for user {user_id}", flush=True)
+        
+        # Tentativo di salvare anche in memoria episodica
+        try:
+            from memory.episodic import store_event
+            store_event(
+                user_id=user_id,
+                type="identity",
+                content={"name": name, "type": "user_name"},
+                salience=1.0,  # Massima importanza
+                affect={"valence": 0.5, "arousal": 0.3}
+            )
+            print(f"[IDENTITY_MEMORY] Also saved to episodic memory", flush=True)
+        except Exception as e:
+            print(f"[IDENTITY_MEMORY] Episodic save failed: {e}", flush=True)
+        
         return True
     except Exception as e:
         print(f"[IDENTITY_MEMORY] Error saving name: {e}", flush=True)
@@ -74,16 +104,33 @@ def get_user_name(user_id: str) -> Optional[str]:
         Nome utente o None
     """
     try:
-        # Cerca eventi di tipo identity con nome
-        events = search_events(user_id, "nome", limit=10)
+        # Prima controlla memoria temporanea
+        if user_id in _identity_memory_store:
+            name = _identity_memory_store[user_id].get('name')
+            if name:
+                print(f"[IDENTITY_MEMORY] Retrieved name '{name}' from temp memory for user {user_id}", flush=True)
+                return name
         
-        for event in events:
-            if hasattr(event, 'content') and isinstance(event.content, dict):
-                if event.content.get("type") == "user_name":
-                    name = event.content.get("name")
-                    if name and isinstance(name, str):
-                        print(f"[IDENTITY_MEMORY] Retrieved name '{name}' for user {user_id}", flush=True)
-                        return name
+        # Poi controlla memoria episodica
+        try:
+            from memory.episodic import get_recent_events
+            events = get_recent_events(user_id, limit=20)
+            
+            for event in events:
+                if hasattr(event, 'type') and event.type == "identity":
+                    if hasattr(event, 'content') and isinstance(event.content, dict):
+                        if event.content.get("type") == "user_name":
+                            name = event.content.get("name")
+                            if name and isinstance(name, str):
+                                print(f"[IDENTITY_MEMORY] Retrieved name '{name}' from episodic memory for user {user_id}", flush=True)
+                                # Salva anche in memoria temporanea per futuro
+                                if user_id not in _identity_memory_store:
+                                    _identity_memory_store[user_id] = {}
+                                _identity_memory_store[user_id]['name'] = name
+                                _identity_memory_store[user_id]['type'] = 'user_name'
+                                return name
+        except Exception as e:
+            print(f"[IDENTITY_MEMORY] Episodic search failed: {e}", flush=True)
         
         print(f"[IDENTITY_MEMORY] No name found for user {user_id}", flush=True)
         return None
