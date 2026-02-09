@@ -225,13 +225,14 @@ function normalizeTextForTTS(text) {
 }
 
 function _getTTSCtx() {
-  // Verifica se AudioContext non esiste, è closed, suspended o invalid
-  if (!_ttsCtx || _ttsCtx.state === 'closed' || _ttsCtx.state === 'suspended' || _ttsCtx.state === 'interrupted') {
-    console.log('[TTS] Creating new AudioContext - previous state=' + (_ttsCtx ? _ttsCtx.state : 'none'));
-    _ttsCtx = new (window.AudioContext || window.webkitAudioContext)();
-    console.log('[TTS] AudioContext created, rate=' + _ttsCtx.sampleRate + ' state=' + _ttsCtx.state);
+  // USA ESCLUSIVAMENTE il AudioContext globale creato alla prima gesture
+  if (!window.audioContext) {
+    console.error('[TTS] Global AudioContext not available - audio not unlocked');
+    return null;
   }
-  return _ttsCtx;
+  
+  console.log('[TTS] Using global AudioContext, state=' + window.audioContext.state);
+  return window.audioContext;
 }
 
 // iOS Safari: AudioContext must be created+resumed during a synchronous
@@ -239,6 +240,11 @@ function _getTTSCtx() {
 // BEFORE any await, so the gesture is still "active" for iOS.
 function _warmTTSCtx() {
   const ctx = _getTTSCtx();
+  if (!ctx) {
+    console.warn('[TTS] Cannot warm - no global AudioContext');
+    return;
+  }
+  
   console.log('[TTS] WarmTTSCtx - state=' + ctx.state);
   
   // Resume per qualsiasi stato non-running
@@ -443,8 +449,21 @@ async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
   console.log('[TTS] _playTTSChunkWithBlob len=' + text.length + ' blob_size=' + blob.size);
   console.log('[TTS] TEXT:', text);
   
+  // VERIFICA AUDIO UNLOCK PRIMA DI PROCEDERE
+  if (!window.audioUnlocked) {
+    console.warn('[TTS] Audio not unlocked - skipping TTS playback (blob)');
+    console.log('[TTS_ABORT] reason=audio_not_unlocked_blob');
+    return;
+  }
+  
   // VERIFICA E RIPRISTINA AudioContext PRIMA della riproduzione
   const ttsCtx = _getTTSCtx();
+  if (!ttsCtx) {
+    console.warn('[TTS] No AudioContext available - skipping TTS (blob)');
+    console.log('[TTS_ABORT] reason=no_audiocontext_blob');
+    return;
+  }
+  
   console.log('[TTS] AudioContext check (blob) - state=' + ttsCtx.state);
   
   if (ttsCtx.state === 'suspended' || ttsCtx.state === 'interrupted') {
@@ -535,8 +554,21 @@ async function _playTTSChunk(text) {
   console.log('[TTS] _playTTSChunk len=' + text.length);
   console.log('[TTS] TEXT:', text);
   
+  // VERIFICA AUDIO UNLOCK PRIMA DI PROCEDERE
+  if (!window.audioUnlocked) {
+    console.warn('[TTS] Audio not unlocked - skipping TTS playback');
+    console.log('[TTS_ABORT] reason=audio_not_unlocked');
+    return;
+  }
+  
   // VERIFICA E RIPRISTINA AudioContext PRIMA della riproduzione
   const ttsCtx = _getTTSCtx();
+  if (!ttsCtx) {
+    console.warn('[TTS] No AudioContext available - skipping TTS');
+    console.log('[TTS_ABORT] reason=no_audiocontext');
+    return;
+  }
+  
   console.log('[TTS] AudioContext check - state=' + ttsCtx.state);
   
   if (ttsCtx.state === 'suspended' || ttsCtx.state === 'interrupted') {
@@ -1679,12 +1711,64 @@ textInput.addEventListener('input', () => {
 // ===============================
 // INIT
 // ===============================
+// ===============================
+// GLOBAL AUDIO UNLOCK - Prima gesture utente
+// ===============================
+function unlockAudio() {
+  if (window.audioUnlocked) {
+    console.log('[AUDIO] Already unlocked');
+    return;
+  }
+  
+  console.log('[AUDIO] Unlocking audio on first user gesture');
+  
+  try {
+    // Crea AudioContext globale
+    window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    console.log('[AUDIO] Global AudioContext created, state=' + window.audioContext.state);
+    
+    // Resume immediato
+    window.audioContext.resume().then(() => {
+      console.log('[AUDIO] Global AudioContext resumed successfully');
+      window.audioUnlocked = true;
+      console.log('[AUDIO] Audio unlocked successfully');
+    }).catch(err => {
+      console.error('[AUDIO] Global AudioContext resume failed:', err);
+      window.audioUnlocked = true; // Anche se fallisce, consideriamo unlocked
+    });
+    
+  } catch (error) {
+    console.error('[AUDIO] Failed to create global AudioContext:', error);
+    window.audioUnlocked = true; // Fallback
+  }
+}
+
+// Funzione per verificare stato audio unlock
+function isAudioUnlocked() {
+  return window.audioUnlocked === true && window.audioContext && window.audioContext.state === 'running';
+}
+
 // iOS: pre-unlock AudioContext on very first user interaction
 document.addEventListener('touchstart', function _firstTouch() {
+  console.log('[AUDIO] First touch detected - unlocking audio');
+  unlockAudio();
+  
   // Audio Priming: previeni NotAllowedError su Safari/iOS
   primeAudio();
   _warmTTSCtx();
+  
   document.removeEventListener('touchstart', _firstTouch);
+}, { once: true });
+
+// Prima gesture su desktop (click)
+document.addEventListener('click', function _firstClick(e) {
+  // Solo se non è già stato unlockato da touch
+  if (!window.audioUnlocked) {
+    console.log('[AUDIO] First click detected - unlocking audio');
+    unlockAudio();
+  }
+  
+  document.removeEventListener('click', _firstClick);
 }, { once: true });
 
 (async () => {
