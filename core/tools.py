@@ -18,10 +18,24 @@ import httpx
 # ===============================
 
 def _get_openweather_key() -> Optional[str]:
-    return os.getenv("OPENWEATHER_API_KEY")
+    key = os.getenv("OPENWEATHER_API_KEY")
+    print(f"[ENV_CHECK] OPENWEATHER_API_KEY={'OK' if key else 'KO'}", flush=True)
+    return key
 
 def _get_newsapi_key() -> Optional[str]:
-    return os.getenv("NEWSAPI_KEY")
+    key = os.getenv("NEWSAPI_KEY")
+    print(f"[ENV_CHECK] NEWSAPI_KEY={'OK' if key else 'KO'}", flush=True)
+    return key
+
+def check_api_keys() -> Dict[str, bool]:
+    """
+    Verifica tutte le API keys disponibili
+    """
+    return {
+        "openweather": bool(_get_openweather_key()),
+        "newsapi": bool(_get_newsapi_key()),
+        "openai": bool(os.getenv("OPENAI_API_KEY"))
+    }
 
 
 # ===============================

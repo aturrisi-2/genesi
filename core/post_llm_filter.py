@@ -6,6 +6,8 @@ Filtra e sanifica risposte LLM per comportamento umano stabile
 import re
 from typing import Dict, Optional
 
+from core.language_guard import language_guard
+
 class PostLLMFilter:
     """
     FILTRO POST-LLM PER COMPORTAMENTO UMANO STABILE
@@ -80,49 +82,74 @@ class PostLLMFilter:
     
     def filter_response(self, response: str, context: Optional[Dict] = None) -> str:
         """
-        FILTRA E SANIFICA RISPOSTA LLM - FORZATO
+        FILTRA E SANIFICA RISPOSTA LLM - CON LANGUAGE GUARD
         
         Args:
             response: Risposta LLM originale
             context: Contesto della conversazione (intent, user state, etc.)
             
         Returns:
-            Risposta filtrata e umana o fallback
+            Risposta filtrata e umana o fallback solo se necessario
         """
         if not response or not isinstance(response, str):
             return self._get_empathetic_fallback(context)
         
-        original = response
+        # Usa language_guard centralizzato
+        guard_result = language_guard.check_and_clean(response, context)
         
-        # 1. RIMOZIONE FORZATA pattern inappropriati
-        filtered = response
-        for pattern in self.inappropriate_patterns:
-            filtered = re.sub(pattern, '', filtered, flags=re.IGNORECASE)
+        if guard_result["is_clean"]:
+            # Testo pulito, ritorna direttamente
+            print(f"[POST_LLM_FILTER] CLEAN: '{response[:50]}...'", flush=True)
+            return guard_result["cleaned_text"]
         
-        # 2. Pulizia spazi multipli
-        filtered = re.sub(r'\s+', ' ', filtered).strip()
+        # Testo contaminato, tenta rigenerazione
+        print(f"[POST_LLM_FILTER] CONTAMINATED: {guard_result['issues']}", flush=True)
         
-        # 3. VERIFICA FORZATA contaminazione - ZERO TOLLERANZA
-        if self._has_any_contamination(filtered):
-            print(f"[POST_LLM_FILTER] CONTAMINATED: '{original[:50]}...' -> FALLBACK")
+        # Aggiungi user_message al context per la rigenerazione
+        if context:
+            context["user_message"] = context.get("user_message", "")
+        
+        regenerated = self._attempt_regeneration(context, response)
+        
+        if regenerated and regenerated != self._get_empathetic_fallback(context):
+            print(f"[POST_LLM_FILTER] REGENERATED: '{regenerated[:50]}...'", flush=True)
+            return regenerated
+        else:
+            print(f"[POST_LLM_FILTER] FALLBACK: All attempts failed", flush=True)
             return self._get_empathetic_fallback(context)
+    
+    def _attempt_regeneration(self, context: Optional[Dict], original_response: str) -> str:
+        """
+        Tenta di rigenerare la risposta usando language_guard
+        """
+        try:
+            # Usa language_guard per generare risposta semplice
+            if context:
+                simple_response = language_guard.generate_simple_response(context)
+                if simple_response:
+                    return simple_response
+        except Exception as e:
+            print(f"[POST_LLM_FILTER] Regeneration failed: {e}", flush=True)
         
-        # 4. Verifica lunghezza minima
-        if len(filtered) < 5:
-            print(f"[POST_LLM_FILTER] TOO SHORT: '{original[:50]}...' -> FALLBACK")
-            return self._get_empathetic_fallback(context)
+        # Solo se tutto fallisce, fallback
+        return self._get_empathetic_fallback(context)
+    
+    def _generate_simple_historical_response(self, message: str) -> str:
+        """
+        Genera risposta storica semplice in italiano
+        """
+        message_lower = message.lower()
         
-        # 5. Verifica che sia italiano puro
-        if not self._is_pure_italian(filtered):
-            print(f"[POST_LLM_FILTER] NOT ITALIAN: '{original[:50]}...' -> FALLBACK")
-            return self._get_empathetic_fallback(context)
+        # Pattern comuni per persone storiche
+        if "chi è" in message_lower or "chi era" in message_lower:
+            if "napoleone" in message_lower:
+                return "Napoleone Bonaparte fu un imperatore francese che conquisto gran parte dell'Europa nei primi anni dell'Ottocento."
+            elif "alessandro" in message_lower and "magno" in message_lower:
+                return "Alessandro Magno fu un re macedone che creò il più grande impero del mondo antico, conquistando persino l'impero persiano."
+            elif "giulio cesare" in message_lower:
+                return "Giulio Cesare fu un generale e statista romano che giocò un ruolo cruciale nella transizione dalla Repubblica all'Impero."
         
-        # Log del filtraggio
-        if original != filtered:
-            print(f"[POST_LLM_FILTER] Original: '{original[:50]}...'")
-            print(f"[POST_LLM_FILTER] Filtered: '{filtered[:50]}...'")
-        
-        return filtered
+        return None
     
     def _has_any_contamination(self, text: str) -> bool:
         """

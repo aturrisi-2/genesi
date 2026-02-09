@@ -1,0 +1,29 @@
+[Unit]
+Description=Genesi AI Assistant
+After=network.target
+
+[Service]
+Type=simple
+User=genesi
+Group=genesi
+WorkingDirectory=/opt/genesi
+Environment=PYTHONPATH=/opt/genesi
+EnvironmentFile=/etc/genesi.env
+ExecStart=/usr/bin/python3 /opt/genesi/main.py
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=genesi
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/genesi/data /opt/genesi/logs
+
+[Install]
+WantedBy=multi-user.target

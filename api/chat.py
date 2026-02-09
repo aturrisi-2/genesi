@@ -86,7 +86,19 @@ async def _handle_verified_response(
         if historical_data.get("verified", False):
             response_text = historical_data.get("content", "Informazione storica non disponibile.")
         else:
-            response_text = historical_data.get("content", "Non ho informazioni specifiche su questo argomento.")
+            # DELEGA AL LLM se verified non ha dati certi
+            print(f"[VERIFIED_RESPONSE] No verified data, delegating to LLM", flush=True)
+            try:
+                from core.local_llm import LocalLLM
+                llm = LocalLLM()
+                response_text = await llm.generate_chat_response(
+                    message=request.message,
+                    user_id=request.user_id,
+                    context={"intent": intent_type, "source": "verified_fallback"}
+                )
+            except Exception as e:
+                print(f"[VERIFIED_RESPONSE] LLM delegation failed: {e}", flush=True)
+                response_text = "Non posso fornire informazioni su questo argomento in questo momento."
     
     # Meteo → Tools (stub per ora)
     elif intent_type == "weather":
