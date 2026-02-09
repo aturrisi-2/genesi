@@ -113,7 +113,7 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
         )
         # Salviamo solo evento minimo in memoria episodica (no psicologica)
         user_affect = compute_affect("user_message", {"text": request.message})
-        store_event(
+    store_event(
             user_id=request.user_id,
             type="user_message",
             content={"text": request.message},
@@ -315,121 +315,61 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     # 5. Compute conversation tone
     tone = compute_tone(state.recent_events)
 
-    # 6. Generate response
-    try:
-        intent_engine = IntentEngine()
+    # 6. PIPELINE UNICA - Proactor + Generator in un solo passo
+    generator = ResponseGenerator()
+    final_result = await generator.generate_final_response(
+        user_message=request.message,
+        cognitive_state=state,
+        recent_memories=recent_memories,
+        relevant_memories=relevant_memories,
+        tone=tone,
+        intent={"should_respond": True},  # Pipeline decide internamente
+        document_context=document_context
+    )
+    
+    response_text = final_result.get("final_text", "")
+    confidence = final_result.get("confidence", "ok")
+    style = final_result.get("style", "standard")
+    
+    log("PIPELINE_COMPLETED", user_id=request.user_id, 
+        path=final_result.get("path", "unknown"),
+        final_text=response_text[:50])
+    
+    # 7. Store system response
+    system_affect = compute_affect(
+        "system_response",
+        {"text": response_text}
+    )
 
-        # Se c'è document context, integra memoria personale + documento
-        if force_document_focus:
-            # Combina memoria personale con context documento
-            document_memories = [{
-                "content": document_context,
-                "type": "document_context",
-                "timestamp": datetime.now().isoformat()
-            }]
-            
-            # MANTIENI memoria personale anche con documenti
-            combined_relevant = relevant_memories + document_memories
-            
-            intent = intent_engine.decide(
-                user_message=request.message,
-                user=state.user,
-                cognitive_state=state,
-                recent_memories=recent_memories,  # MANTIENI memoria recente
-                relevant_memories=combined_relevant,  # Combina memoria + documento
-                tone=tone
-            )
-            
-            # Forza focus su documento ma mantieni memoria attiva
-            intent["focus"] = "documento"
-            intent["use_memory"] = True
-        else:
-            intent = intent_engine.decide(
-                user_message=request.message,
-                user=state.user,
-                cognitive_state=state,
-                recent_memories=recent_memories,
-                relevant_memories=relevant_memories,
-                tone=tone
-            )
-
-        log("BRANCH_SELECTED", branch="standard", user_id=request.user_id,
-            brain=intent.get("brain_mode", "relazione"), focus=intent.get("focus", "presente"))
-        
-        if not intent["should_respond"]:
-            response_text = ""
-        else:
-            
-            # USA NUOVO RESPONSE GENERATOR CON FINAL_RESPONSE
-            generator = ResponseGenerator()
-            final_result = await generator.generate_final_response(
-                user_message=request.message,
-                cognitive_state=state,
-                recent_memories=recent_memories,
-                relevant_memories=relevant_memories,
-                tone=tone,
-                intent=intent,
-                document_context=document_context
-            )
-            
-            response_text = final_result.get("final_text", "")
-            confidence = final_result.get("confidence", "ok")
-            style = final_result.get("style", "standard")
-            
-            # Subito dopo la risposta → elimina il document_context (one-shot)
-            # NOTA: il context viene già eliminato prima della chiamata a generate_response
-            # quindi non serve eliminarlo di nuovo qui
-
-        # ASSERT DIFENSIVO: TTS OBBLIGATORIO QUANDO should_respond=True
-        if intent.get("should_respond") and not response_text.strip():
-            print(f"[TTS_ASSERT] ERROR: should_respond=True ma risposta vuota! user_id={request.user_id}", flush=True)
-            # Fallback: risposta minima per garantire TTS
-            response_text = "Sono qui."
-        
-        # 7. Store system response
-        system_affect = compute_affect(
-            "system_response",
-            {"text": response_text}
-        )
-
-        store_event(
-            user_id=request.user_id,
-            type="system_response",
-            content={"text": response_text},
-            salience=1.0,
-            affect=system_affect
-        )
-        log("MEMORY_SAVE", type="standard", user_id=request.user_id, event="user_message+system_response")
-        
-        # Determina tts_mode in base al brain_mode e tipo risposta
-        tts_mode = "normal"
-        if intent.get("brain_mode") == "fatti":
-            tts_mode = "informative"
-        elif len(response_text) > 500:
-            tts_mode = "informative"
-        # Psychological branch viene gestito prima nel codice
-        # Qui manteniamo il tts_mode già determinato
-        
-        # LOG TTS OBBLIGATORIO
-        if intent.get("should_respond"):
-            print(f"[TTS_MANDATORY] user_id={request.user_id} should_respond=True response_len={len(response_text)} tts_mode={tts_mode}", flush=True)
-        
-        # NUOVO FORMATO API - FINAL_RESPONSE SEMPRE
-        return {
-            "final_text": response_text,
-            "confidence": confidence,
-            "style": style,
-            "tts_mode": tts_mode,
-            "should_respond": intent.get("should_respond", False),
-            "state": {
-                "user": state.user.to_dict(),
-                "recent_events": [e.to_dict() for e in state.recent_events[-5:]],
-                "context": state.context
-            }
+    store_event(
+        user_id=request.user_id,
+        type="system_response",
+        content={"text": response_text},
+        salience=1.0,
+        affect=system_affect
+    )
+    log("MEMORY_SAVE", type="standard", user_id=request.user_id, event="user_message+system_response")
+    
+    # Determina tts_mode in base al path e tipo risposta
+    tts_mode = "normal"
+    if final_result.get("path") == "tools":
+        tts_mode = "informative"
+    elif len(response_text) > 500:
+        tts_mode = "informative"
+    
+    # LOG TTS OBBLIGATORIO
+    print(f"[TTS_MANDATORY] user_id={request.user_id} response_len={len(response_text)} tts_mode={tts_mode}", flush=True)
+    
+    # NUOVO FORMATO API - FINAL_RESPONSE SEMPRE
+    return {
+        "final_text": response_text,
+        "confidence": confidence,
+        "style": style,
+        "tts_mode": tts_mode,
+        "should_respond": True,  # Pipeline sempre risponde
+        "state": {
+            "user": state.user.to_dict(),
+            "recent_events": [e.to_dict() for e in state.recent_events[-5:]],
+            "context": state.context
         }
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating response: {str(e)}"
-        )
+    }

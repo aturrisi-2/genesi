@@ -1,16 +1,10 @@
-from core.llm import generate_response as llm_generate
-from core.local_llm import LocalLLM
-from core.tools import resolve_tools
-from core.genesi_response_engine import genesi_engine
+from core.pipeline import pipeline
 from typing import Optional, Dict, List
-import json
-from datetime import datetime, timedelta
-import re
 
 class ResponseGenerator:
     """
-    GENERATORE DI RISPOSTA FINALE - NUOVO PARADIGMA
-    LLM produce solo intent, Genesi produce testo finale
+    GENERATORE DI RISPOSTA FINALE - PIPELINE UNICA
+    UNA request → UNA risposta finale
     """
 
     async def generate_final_response(
@@ -24,101 +18,24 @@ class ResponseGenerator:
         document_context: Optional[Dict] = None
     ) -> Dict:
         """
-        GENERA RISPOSTA FINALE BASATA SU INTENT LLM
-        LLM → intent strutturato, Genesi → testo finale
+        PIPELINE UNICA DETERMINISTICA
+        Proactor decide → Un modulo genera → final_text
         """
-        print(f"[GENESI_FINAL] Processing: '{user_message[:50]}...'", flush=True)
+        print(f"[RESPONSE_GENERATOR] Using unified pipeline", flush=True)
         
-        # 1. OTTIENI INTENT DALL'LLM
-        llm_intent = await self._extract_intent_from_llm(user_message, cognitive_state, tone)
-        
-        # 2. GENERA RISPOSTA FINALE CON GENESI ENGINE
-        if llm_intent and isinstance(llm_intent, dict):
-            print(f"[GENESI_FINAL] Using structured intent from LLM", flush=True)
-            final_result = genesi_engine.generate_response_from_intent(llm_intent)
-        else:
-            print(f"[GENESI_FINAL] Using text fallback from LLM", flush=True)
-            final_result = genesi_engine.generate_response_from_text(str(llm_intent))
-        
-        # 3. AGGIUNGI CONTESTO AGGIUNTIVO
-        final_result["style"] = "psychological" if intent.get("type") == "psychological" else "standard"
-        
-        print(f"[GENESI_FINAL] Final response: '{final_result['final_text']}'", flush=True)
-        return final_result
-
-    async def _extract_intent_from_llm(self, user_message: str, cognitive_state, tone) -> Dict:
-        """
-        Estrai intent strutturato dall'LLM
-        LLM NON deve produrre testo finale, solo intent
-        """
-        try:
-            # Build prompt per intent extraction
-            intent_prompt = self._build_intent_prompt(user_message, cognitive_state, tone)
-            
-            # Chiama LLM
-            llm_response = llm_generate({
-                "prompt": intent_prompt,
-                "intent": {"type": "intent_extraction"},
-                "tone": tone
-            })
-            
-            print(f"[GENESI_LLM] Raw response: '{llm_response[:100]}...'", flush=True)
-            
-            # Prova a parsare come JSON strutturato
-            try:
-                import json
-                intent_data = json.loads(llm_response)
-                
-                # Valida struttura
-                if "intent" in intent_data and "confidence" in intent_data:
-                    print(f"[GENESI_LLM] Structured intent: {intent_data}", flush=True)
-                    return intent_data
-                    
-            except json.JSONDecodeError:
-                print(f"[GENESI_LLM] Not JSON, treating as text fallback", flush=True)
-            
-            # Se non è JSON, usa come testo per pattern matching
-            if genesi_engine.validate_llm_output(llm_response):
-                # LLM ha prodotto solo intent breve, va bene
-                return {"intent": "generic", "confidence": 0.5}
-            else:
-                # LLM ha prodotto troppo testo, scarta e usa generic
-                print(f"[GENESI_LLM] LLM produced too much text, using generic", flush=True)
-                return {"intent": "generic", "confidence": 0.3}
-                
-        except Exception as e:
-            print(f"[GENESI_LLM] Error: {e}", flush=True)
-            return {"intent": "generic", "confidence": 0.3}
-
-    def _build_intent_prompt(self, user_message: str, cognitive_state, tone) -> str:
-        """
-        Build prompt per estrarre solo intent dall'LLM
-        """
-        sections = []
-        
-        # User info
-        user_profile = cognitive_state.user.profile or {}
-        if user_profile.get("name"):
-            sections.append(f"UTENTE: {user_profile['name']}")
-        
-        # Message
-        sections.append(f"MESSAGGIO:\n{user_message}")
-        
-        # Instructions for intent extraction
-        sections.append(
-            "ISTRUZIONI:\n"
-            "- Analizza SOLO l'intent del messaggio\n"
-            "- NON scrivere frasi complete\n"
-            "- NON usare emoji o asterischi\n"
-            "- Rispondi SOLO in questo formato JSON:\n"
-            '{\n'
-            '  "intent": "greeting|physical_discomfort|emotional_distress|acknowledgment|question|farewell|generic",\n'
-            '  "confidence": 0.0-1.0\n'
-            '}\n'
-            "- Scegli l'intent più appropriato"
+        # USA PIPELINE UNICA
+        result = await pipeline.process_message(
+            user_message=user_message,
+            cognitive_state=cognitive_state,
+            recent_memories=recent_memories,
+            relevant_memories=relevant_memories,
+            tone=tone,
+            intent=intent,
+            document_context=document_context
         )
         
-        return "\n\n".join(sections)
+        print(f"[RESPONSE_GENERATOR] Pipeline completed", flush=True)
+        return result
 
     
     # ===============================
