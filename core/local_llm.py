@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class LocalLLM:
     """Interfaccia per PersonalPlex 7B via backend locale NVIDIA"""
     
-    def __init__(self, backend_url: str = "http://127.0.0.1:8080/chat/completions", timeout: int = 1.2, max_retries: int = 0):
+    def __init__(self, backend_url: str = "http://127.0.0.1:8080/completion", timeout: int = 1.2, max_retries: int = 0):
         self.backend_url = backend_url
         self.timeout = timeout
         self.max_retries = max_retries
@@ -49,18 +49,18 @@ class LocalLLM:
             temperature = self.temperature
         
         try:
-            # LOG DEBUG OBBLIGATORIO
+            # LOG OBBLIGATORI
             system_prompt = "Tu sei Genesi. Rispondi in modo naturale e conversazionale."
             
-            # Payload ESATTO per /chat/completions
+            # Costruisci prompt LLaMA puro
+            prompt = f"<s>[INST] {system_prompt}\n\n{prompt} [/INST]"
+            print(f"[DEBUG] PROMPT: {prompt}", flush=True)
+            
+            # Payload ESATTO per /completion
             payload = {
-                "model": "llama-2-7b-chat",
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.2,
-                "max_tokens": 256
+                "prompt": prompt,
+                "n_predict": 256,
+                "temperature": 0.7
             }
             
             print(f"[DEBUG] PAYLOAD: {json.dumps(payload, indent=2)}", flush=True)
@@ -78,14 +78,13 @@ class LocalLLM:
                 result = response.json()
                 print(f"[DEBUG] RESPONSE: {json.dumps(result, indent=2)}", flush=True)
                 
-                # RESPONSE PARSING OBBLIGATORIO
-                if "choices" in result and len(result["choices"]) > 0:
-                    content = result["choices"][0]["message"]["content"]
+                # Parsing RISPOSTA: SOLO response["content"]
+                if "content" in result:
+                    content = result["content"].strip()
                     
-                    if not content or not content.strip():
-                        raise Exception("Content vuoto da llama-server")
+                    if len(content) < 2:
+                        raise Exception("Content troppo corto da llama-server")
                     
-                    content = content.strip()
                     tokens_count = len(content.split())
                     
                     print(f"[DEBUG] CONTENT_LENGTH: {len(content)} tokens: {tokens_count}", flush=True)
@@ -93,7 +92,7 @@ class LocalLLM:
                     
                     return content
                 else:
-                    raise Exception("Response senza 'choices' da llama-server")
+                    raise Exception("Response senza 'content' da llama-server")
             else:
                 raise Exception(f"HTTP {response.status_code}: {response.text}")
                 
@@ -119,18 +118,18 @@ class LocalLLM:
         start_time = time.time()
         
         try:
-            # LOG DEBUG OBBLIGATORIO
+            # LOG OBBLIGATORI
             system_prompt = "Tu sei Genesi. Rispondi in modo naturale e conversazionale."
             
-            # Payload ESATTO per /chat/completions
+            # Costruisci prompt LLaMA puro
+            prompt = f"<s>[INST] {system_prompt}\n\n{user_message} [/INST]"
+            print(f"[DEBUG] CHAT PROMPT: {prompt}", flush=True)
+            
+            # Payload ESATTO per /completion
             payload = {
-                "model": "llama-2-7b-chat",
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                "temperature": 0.7,
-                "max_tokens": 256
+                "prompt": prompt,
+                "n_predict": 256,
+                "temperature": 0.7
             }
             
             print(f"[DEBUG] CHAT PAYLOAD: {json.dumps(payload, indent=2)}", flush=True)
@@ -148,14 +147,13 @@ class LocalLLM:
                 result = response.json()
                 print(f"[DEBUG] CHAT RESPONSE: {json.dumps(result, indent=2)}", flush=True)
                 
-                # RESPONSE PARSING OBBLIGATORIO
-                if "choices" in result and len(result["choices"]) > 0:
-                    content = result["choices"][0]["message"]["content"]
+                # Parsing RISPOSTA: SOLO response["content"]
+                if "content" in result:
+                    content = result["content"].strip()
                     
-                    if not content or not content.strip():
-                        raise Exception("Chat content vuoto da llama-server")
+                    if len(content) < 2:
+                        raise Exception("Chat content troppo corto da llama-server")
                     
-                    content = content.strip()
                     tokens_count = len(content.split())
                     
                     print(f"[DEBUG] CHAT CONTENT_LENGTH: {len(content)} tokens: {tokens_count}", flush=True)
@@ -163,7 +161,7 @@ class LocalLLM:
                     
                     return content
                 else:
-                    raise Exception("Chat response senza 'choices' da llama-server")
+                    raise Exception("Chat response senza 'content' da llama-server")
             else:
                 raise Exception(f"Chat HTTP {response.status_code}: {response.text}")
                 
@@ -189,18 +187,18 @@ class LocalLLM:
         start_time = time.time()
         
         try:
-            # LOG DEBUG OBBLIGATORIO
+            # LOG OBBLIGATORI
             system_prompt = "Tu sei Genesi. Riassumi le informazioni in modo strutturato e conciso."
             
-            # Payload ESATTO per /chat/completions
+            # Costruisci prompt LLaMA puro
+            prompt = f"<s>[INST] {system_prompt}\n\nCONTESTO: {memory_context}\n\nRIASSUNTO: [/INST]"
+            print(f"[DEBUG] MEMORY PROMPT: {prompt}", flush=True)
+            
+            # Payload ESATTO per /completion
             payload = {
-                "model": "llama-2-7b-chat",
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"CONTESTO: {memory_context}\n\nRIASSUNTO:"}
-                ],
-                "temperature": 0.3,
-                "max_tokens": 256
+                "prompt": prompt,
+                "n_predict": 256,
+                "temperature": 0.3
             }
             
             print(f"[DEBUG] MEMORY PAYLOAD: {json.dumps(payload, indent=2)}", flush=True)
@@ -218,14 +216,13 @@ class LocalLLM:
                 result = response.json()
                 print(f"[DEBUG] MEMORY RESPONSE: {json.dumps(result, indent=2)}", flush=True)
                 
-                # RESPONSE PARSING OBBLIGATORIO
-                if "choices" in result and len(result["choices"]) > 0:
-                    content = result["choices"][0]["message"]["content"]
+                # Parsing RISPOSTA: SOLO response["content"]
+                if "content" in result:
+                    content = result["content"].strip()
                     
-                    if not content or not content.strip():
-                        raise Exception("Memory content vuoto da llama-server")
+                    if len(content) < 2:
+                        raise Exception("Memory content troppo corto da llama-server")
                     
-                    content = content.strip()
                     tokens_count = len(content.split())
                     
                     print(f"[DEBUG] MEMORY CONTENT_LENGTH: {len(content)} tokens: {tokens_count}", flush=True)
@@ -233,7 +230,7 @@ class LocalLLM:
                     
                     return content
                 else:
-                    raise Exception("Memory response senza 'choices' da llama-server")
+                    raise Exception("Memory response senza 'content' da llama-server")
             else:
                 raise Exception(f"Memory HTTP {response.status_code}: {response.text}")
                 
