@@ -1,4 +1,9 @@
 // ===============================
+// AUDIO PRIMING
+// ===============================
+let _primedAudio = null;
+
+// ===============================
 // STATES
 // ===============================
 const STATES = { IDLE: 'idle', THINKING: 'thinking', RECORDING: 'recording' };
@@ -238,6 +243,15 @@ function _warmTTSCtx() {
   }
 }
 
+function primeAudio() {
+  if (!_primedAudio) {
+    _primedAudio = new Audio();
+    _primedAudio.muted = true;
+    _primedAudio.play().catch(() => {});
+    console.log('[AUDIO] primed');
+  }
+}
+
 function stopAudio() {
   if (_ttsSource) {
     try { _ttsSource.stop(); } catch (e) {}
@@ -425,7 +439,9 @@ async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
     console.log('[TTS] AUDIO URL created from prefetched blob');
     
     console.log('[TTS_FLOW] step=4 creating_audio_object');
-    const audio = new Audio(audioUrl);
+    const audio = _primedAudio || new Audio(audioUrl);
+    audio.src = audioUrl;
+    audio.muted = false;
     _ttsSource = audio;
     
     audio.oncanplay = () => {
@@ -535,7 +551,9 @@ async function _playTTSChunk(text) {
     console.log('[TTS] AUDIO URL created');
     
     console.log('[TTS_FLOW] step=8 creating_audio_object');
-    const audio = new Audio(audioUrl);
+    const audio = _primedAudio || new Audio(audioUrl);
+    audio.src = audioUrl;
+    audio.muted = false;
     _ttsSource = audio;
     
     audio.oncanplay = () => {
@@ -729,6 +747,9 @@ async function sendChatMessage(message) {
 // SEND MESSAGE
 // ===============================
 async function sendMessage() {
+  // Audio Priming: previeni NotAllowedError su Safari/iOS
+  primeAudio();
+  
   // Barge-in: interrompi TTS su input utente
   _interruptTTS('user_input');
 
@@ -1586,6 +1607,9 @@ sendButton.addEventListener('click', sendMessage);
 plusButton.addEventListener('click', handleFileUpload);
 
 const handleMicToggle = (e) => {
+  // Audio Priming: previeni NotAllowedError su Safari/iOS
+  primeAudio();
+  
   if (e.type === 'touchstart') e.preventDefault();
   isRecording ? stopRecording() : startRecording();
 };
@@ -1627,6 +1651,8 @@ textInput.addEventListener('input', () => {
 // ===============================
 // iOS: pre-unlock AudioContext on very first user interaction
 document.addEventListener('touchstart', function _firstTouch() {
+  // Audio Priming: previeni NotAllowedError su Safari/iOS
+  primeAudio();
   _warmTTSCtx();
   document.removeEventListener('touchstart', _firstTouch);
 }, { once: true });
