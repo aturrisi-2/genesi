@@ -140,47 +140,16 @@ class IntentEngine:
         
                 
         # ===============================
-        # PERSONALPLEX 7B - PRIMARIO OBBLIGATORIO
+        # RIMOSSO: PersonalPlex NON deve essere chiamato prima di Proactor
         # ===============================
-        try:
-            from core.local_llm import LocalLLM
-            local_llm = LocalLLM()
-            
-            print(f"[PROACTOR] calling PERSONALPLEX first", flush=True)
-            
-            # NESSUNA ESCALATION GPT - solo PersonalPlex
-            
-            # CHIAMATA CHAT PERSONALPLEX - nessun health check
-            print(f"[PROACTOR] PERSONALPLEX CHAT generating response", flush=True)
-            
-            # Genera risposta CHAT con PersonalPlex (UNA SOLA VOLTA)
-            response = local_llm.generate_chat_response(msg)
-            
-            if response and len(response.strip()) > 0:
-                print(f"[PROACTOR] PERSONALPLEX CHAT response received", flush=True)
-                return {
-                    "should_respond": True,
-                    "decision": "respond",
-                    "reason": "personalplex_chat_primary",
-                    "brain_mode": "relazione",
-                    "personalplex_response": response.strip()
-                }
-            else:
-                print(f"[PROACTOR] PERSONALPLEX CHAT empty - NO RESPONSE", flush=True)
-                # SE PersonalPlex CHAT restituisce vuoto → nessuna risposta
-                
-        except Exception as e:
-            print(f"[PROACTOR] PERSONALPLEX error: {e} - NO RESPONSE", flush=True)
-            # SE PersonalPlex fallisce → nessuna risposta
-
-        # NESSUN FALLBACK GPT - solo PersonalPlex
-        print(f"[PROACTOR] NO RESPONSE - PersonalPlex failed", flush=True)
+        # QUESTO ERA L'ERRORE MADRE - ora la pipeline chirurgica gestisce tutto
+        print(f"[INTENT] Classification complete - NO pre-routing", flush=True)
         
-        # ===============================
-        # NO RESPONSE FALLBACK
-        # ===============================
+        # Continua con il resto della logica di classificazione intent
+        
+        # Inizializza intent base
         intent = {
-            "should_respond": False,
+            "should_respond": True,
             "style": "presence",
             "depth": "naturale",
             "focus": "presente",

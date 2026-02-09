@@ -42,6 +42,22 @@ class IntentRouter:
                 r"medico", r"medica", r"ospedale", r"pronto soccorso", r"diagnosi"
             ],
             
+            IntentType.EMOTIONAL_SUPPORT: [
+                # Segnali di distress emotivo
+                r"depresso", r"depressa", r"depressione", r"triste", r"tristezza",
+                r"ansia", r"ansioso", r"ansiosa", r"stress", r"stressato", r"stressata",
+                r"panico", r"attacco di panico", r"crisi", r"crisi di pianto",
+                r"mi sento solo", r"mi sento sola", r"solitudine", r"abbandonato",
+                r"non ce la faccio", r"non ne posso più", r"sono stufo", r"sono stufa",
+                r"mi sento male", r"sto male", r"non sto bene", r"mi sento giù",
+                r"mi sento vuoto", r"senza speranza", r"disperato", r"disperata",
+                r"paura", r"spaventato", r"spaventata", r"preoccupato", r"preoccupata",
+                r"angoscia", r"angosciato", r"angosciata", r"tormento", r"tormentato",
+                r"burnout", r"esaurimento", r"crollo", r"crollo nervoso",
+                r"piangere", r"piango", r"ho pianto", r"voglio piangere",
+                r"aiutami", r"salvami", r"non so cosa fare", r"sono confuso"
+            ],
+            
             IntentType.HISTORICAL_INFO: [
                 # Domande storiche generiche
                 r"chi è", r"chi era", r"chi furono", r"chi sono",

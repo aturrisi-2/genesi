@@ -99,7 +99,7 @@ class SurgicalPipeline:
                 
                 if not final_text or len(final_text.strip()) < 3:
                     print(f"[SURGICAL_PIPELINE] Engine returned empty, using fallback", flush=True)
-                    final_text = "Mi dispiace, non riesco a rispondere."
+                    final_text = "Cerchiamo di trovare una soluzione insieme."
                     
             except Exception as e:
                 print(f"[SURGICAL_PIPELINE] Engine error: {e}", flush=True)
@@ -175,7 +175,7 @@ class SurgicalPipeline:
             print(f"[SURGICAL_PIPELINE] Fallback engine also failed: {e}", flush=True)
         
         # Ultimo fallback - risposta generica ma non vuota
-        return "Mi dispiace, non posso rispondere a questa domanda. Posso aiutarti con altro?"
+        return "Cerchiamo di affrontare questo insieme. C'è altro che posso fare per aiutarti?"
 
 # Istanza globale
 surgical_pipeline = SurgicalPipeline()

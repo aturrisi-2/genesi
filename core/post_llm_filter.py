@@ -61,22 +61,22 @@ class PostLLMFilter:
             r'\b(festoso|entusiasta|eccitato)\b',
         ]
         
-        # Fallback empatici per contesti specifici
-        self.empathetic_fallbacks = {
-            "medical_distress": [
-                "Mi dispiace che tu stia male. Se il dolore è intenso o persistente, è importante consultare un medico.",
-                "Capisco che ti preoccupi. Per problemi di salute è sempre meglio rivolgersi a un professionista.",
-                "Sento che questo momento è difficile. Non posso fare diagnosi, ma ti incoraggio a cercare aiuto medico se necessario."
+        # Fallback costruttivi - MAI "Mi dispiace"
+        self.fallback_responses = {
+            "identity": [
+                "Sono Genesi, la tua assistente personale.",
+                "Sono qui per aiutarti.",
+                "Genesi al tuo servizio."
             ],
             "emotional_distress": [
-                "Mi dispiace che tu ti senta così. Possiamo restare un momento su questo, se vuoi.",
-                "Capisco che questo sia un momento difficile. Sono qui per ascoltarti.",
-                "Sento il peso di quello che stai vivendo. Non sei solo in questo."
+                "Sono qui con te. Non sei solo.",
+                "Posso aiutarti in questo momento difficile.",
+                "Ascolto quello che stai vivendo."
             ],
             "general_fallback": [
-                "Mi dispiace, non riesco a rispondere come vorrei in questo momento.",
-                "Capisco la tua domanda, ma non ho una risposta adeguata ora.",
-                "Mi dispiace, non posso aiutarti come meriti in questo momento."
+                "Cerchiamo di affrontare questo insieme.",
+                "Possiamo trovare una soluzione.",
+                "Sono qui per supportarti."
             ]
         }
     

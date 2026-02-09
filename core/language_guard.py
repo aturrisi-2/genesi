@@ -183,8 +183,8 @@ class LanguageGuard:
         elif intent == 'other':
             return "Non posso rispondere a questa domanda in questo momento."
         
-        # Fallback generico
-        return "Mi dispiace, non posso aiutarti con questa richiesta."
+        # Fallback generico - MAI "Mi dispiace"
+        return "Cerchiamo di trovare una soluzione insieme."
 
 # Istanza globale
 language_guard = LanguageGuard()
