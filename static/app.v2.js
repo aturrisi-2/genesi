@@ -332,9 +332,9 @@ function _splitTextForTTS(text, tts_mode = 'normal') {
 async function playTTSSegmented(text, tts_mode = 'normal') {
   console.log('[TTS_FLOW] step=1 segmented_start len=' + text.length + ' mode=' + tts_mode);
   
-  if (!ttsEnabled || !text) {
-    console.log('[TTS_ABORT] reason=segmented_tts_disabled_or_empty ttsEnabled=' + ttsEnabled + ' text_len=' + (text ? text.length : 0));
-    console.log('[TTS_FLOW] step=2 segmented_skip_tts_disabled_or_empty');
+  if (!text || text.trim().length === 0) {
+    console.log('[TTS_ABORT] reason=segmented_empty_text text_len=' + (text ? text.length : 0));
+    console.log('[TTS_FLOW] step=2 segmented_skip_empty_text');
     return;
   }
   
@@ -434,9 +434,9 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
 async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
   console.log('[TTS_FLOW] step=1 chunk_start len=' + text.length);
   
-  if (!ttsEnabled || !text) {
-    console.log('[TTS_ABORT] reason=chunk_tts_disabled_or_empty ttsEnabled=' + ttsEnabled + ' text_len=' + (text ? text.length : 0));
-    console.log('[TTS_FLOW] step=2 chunk_skip_tts_disabled_or_empty');
+  if (!text || text.trim().length === 0) {
+    console.log('[TTS_ABORT] reason=chunk_empty_text text_len=' + (text ? text.length : 0));
+    console.log('[TTS_FLOW] step=2 chunk_skip_empty_text');
     return;
   }
   
@@ -503,9 +503,9 @@ async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
 async function _playTTSChunk(text) {
   console.log('[TTS_FLOW] step=1 chunk_start len=' + text.length);
   
-  if (!ttsEnabled || !text) {
-    console.log('[TTS_ABORT] reason=chunk_tts_disabled_or_empty ttsEnabled=' + ttsEnabled + ' text_len=' + (text ? text.length : 0));
-    console.log('[TTS_FLOW] step=2 chunk_skip_tts_disabled_or_empty');
+  if (!text || text.trim().length === 0) {
+    console.log('[TTS_ABORT] reason=chunk_empty_text text_len=' + (text ? text.length : 0));
+    console.log('[TTS_FLOW] step=2 chunk_skip_empty_text');
     return;
   }
   
@@ -538,6 +538,7 @@ async function _playTTSChunk(text) {
   try {
     console.log('[TTS_FLOW] step=3 calling_fetch_tts');
     console.log('[TTS] FETCH: calling /tts...');
+    console.log('[TTS] richiesta inviata - text_len=' + text.length);
     
     const normalizedText = normalizeTextForTTS(text);
     const response = await fetch('/tts', {
@@ -597,9 +598,9 @@ async function _playTTSChunk(text) {
 async function playTTS(text, tts_mode = 'normal') {
   console.log('[TTS_FLOW] step=1 playTTS_start len=' + text.length + ' mode=' + tts_mode);
   
-  if (!ttsEnabled || !text) {
-    console.log('[TTS_ABORT] reason=tts_disabled_or_empty ttsEnabled=' + ttsEnabled + ' text_len=' + (text ? text.length : 0));
-    console.log('[TTS_FLOW] step=2 playTTS_skip_tts_disabled_or_empty');
+  if (!text || text.trim().length === 0) {
+    console.log('[TTS_ABORT] reason=empty_text text_len=' + (text ? text.length : 0));
+    console.log('[TTS_FLOW] step=2 playTTS_skip_empty_text');
     return;
   }
   
@@ -755,11 +756,11 @@ async function sendMessage() {
     if (data && data.response) {
       addGenesiMessage(data.response);
       
-      // TTS OBBLIGATORIO QUANDO should_respond=True
-      if (data.should_respond) {
-        console.log('[TTS_MANDATORY] should_respond=True, forcing TTS');
-        console.log('[TTS_CALL] response_len=' + (data.response ? data.response.length : 0) + ' tts_mode=' + (data.tts_mode || 'none'));
-        console.log('[TTS_CALL] response_preview=' + (data.response ? data.response.substring(0, 100) + '...' : 'null'));
+      // TTS SEMPRE OBBLIGATORIO SU RISPOSTA TESTUALE VALIDA
+      if (data.response && data.response.trim().length > 0) {
+        console.log('[TTS_MANDATORY] risposta testuale valida, forcing TTS');
+        console.log('[TTS_CALL] response_len=' + data.response.length + ' tts_mode=' + (data.tts_mode || 'none'));
+        console.log('[TTS_CALL] response_preview=' + data.response.substring(0, 100) + '...');
         
         try {
           console.log('[TTS_CALL] about_to_call_playTTS');
@@ -770,7 +771,7 @@ async function sendMessage() {
           console.error('[TTS_ABORT] error_stack=', e.stack);
         }
       } else {
-        console.log('[TTS_MANDATORY] should_respond=False, skipping TTS');
+        console.log('[TTS_SKIP] risposta vuota o non valida, skipping TTS');
       }
     }
   } catch (e) {
@@ -1678,7 +1679,7 @@ async function playTTSAudio(blob) {
     return;
   }
   
-  console.log('[TTS] AudioContext state: ' + window.audioContext.state);
+  console.log('[AUDIO] context state: ' + window.audioContext.state);
   
   // Resume se suspended
   if (window.audioContext.state === 'suspended') {
@@ -1709,7 +1710,7 @@ async function playTTSAudio(blob) {
     };
     
     // Avvia playback
-    console.log('[TTS] Playback avviato');
+    console.log('[AUDIO] playback start');
     source.start(0);
     
     // Aggiorna stato TTS
