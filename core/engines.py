@@ -267,14 +267,48 @@ class EngineRegistry:
     async def generate_with_engine(self, engine_type: str, message: str, params: Dict[str, Any], context: Optional[Dict] = None) -> str:
         """
         Genera risposta con motore specifico
+        FALLBACK CORRETTI - MAI PersonalPlex per intent specialistici
         """
         engine = self.get_engine(engine_type)
+        intent_type = params.get("intent_type", "")
         
-        if not engine.can_handle(params.get("intent_type", "")):
-            print(f"[ENGINE_REGISTRY] Engine {engine_type} cannot handle intent, fallback to personalplex", flush=True)
-            engine = self.get_engine("personalplex")
+        # Verifica se il motore può gestire l'intent
+        if not engine.can_handle(intent_type):
+            print(f"[ENGINE_REGISTRY] Engine {engine_type} cannot handle intent: {intent_type}", flush=True)
+            
+            # FALLBACK CORRETTI basati su intent
+            if intent_type in ["weather", "news"]:
+                # Fallback a GPT-full per API che falliscono
+                print(f"[ENGINE_REGISTRY] Fallback: api_tools -> gpt_full", flush=True)
+                engine = self.get_engine("gpt_full")
+            elif intent_type in ["medical_info", "psychological", "historical_info", "verified_knowledge"]:
+                # Retry con stesso motore o errore contestuale
+                print(f"[ENGINE_REGISTRY] Fallback: retry same engine or contextual error", flush=True)
+                return await self._handle_specialist_fallback(intent_type, message, params, context)
+            else:
+                # Solo per chat_free o altri, usa PersonalPlex
+                print(f"[ENGINE_REGISTRY] Fallback: {intent_type} -> personalplex", flush=True)
+                engine = self.get_engine("personalplex")
         
         return await engine.generate(message, params, context)
+    
+    async def _handle_specialist_fallback(self, intent_type: str, message: str, params: Dict[str, Any], context: Optional[Dict] = None) -> str:
+        """
+        Gestione fallback per motori specialistici - MAI PersonalPlex
+        """
+        print(f"[ENGINE_REGISTRY] Handling specialist fallback for {intent_type}", flush=True)
+        
+        # Risposte contestuali per ogni tipo di fallimento
+        fallback_responses = {
+            "weather": "In questo momento non riesco a ottenere informazioni meteo. Vuoi che riprovi?",
+            "news": "Non riesco a recuperare le notizie attualmente. Posso aiutarti con altro?",
+            "medical_info": "Per questioni mediche è sempre meglio consultare un professionista. Posso aiutarti in altro modo?",
+            "psychological": "Sono qui per ascoltarti. In questo momento ho difficoltà a elaborare, ma sono con te.",
+            "historical_info": "Non riesco a accedere alle informazioni storiche in questo momento. Vuoi che riprovi?",
+            "verified_knowledge": "Non posso verificare questa informazione ora. Posso aiutarti con altro?"
+        }
+        
+        return fallback_responses.get(intent_type, "In questo momento non posso elaborare questa richiesta. Posso aiutarti con altro?")
 
 # Istanza globale
 engine_registry = EngineRegistry()

@@ -124,7 +124,7 @@ class SurgicalPipeline:
             print(f"[SURGICAL_PIPELINE] Contamination detected: {guard_result['issues']}", flush=True)
             
             # 1. Tentativo di pulizia NON distruttiva
-            cleaned_text = self._clean_response_safely(final_text, guard_result['issues'])
+            cleaned_text = self._clean_response_safely(final_text, guard_result['issues'], intent_type)
             
             if cleaned_text and len(cleaned_text.strip()) > 3:
                 print(f"[SURGICAL_PIPELINE] Cleaned successfully", flush=True)
@@ -184,18 +184,19 @@ class SurgicalPipeline:
         # Ultimo fallback - risposta generica ma non vuota
         return "Cerchiamo di affrontare questo insieme. C'è altro che posso fare per aiutarti?"
     
-    def _clean_response_safely(self, text: str, issues: List[str]) -> str:
+    def _clean_response_safely(self, text: str, issues: List[str], intent_type: str = "") -> str:
         """
         Pulizia NON distruttiva del testo
         Rimuove solo contaminazioni, preserva il significato
+        EMOJI CONSENTITI in chat libera
         """
         if not text:
             return ""
         
         cleaned = text
         
-        # Rimuovi emoji
-        if "emoji" in issues:
+        # Rimuovi emoji SOLO in contesti specialistici, non in chat libera
+        if "emoji" in issues and intent_type != "chat_free":
             import re
             # Rimuovi emoji comuni
             emoji_pattern = re.compile(
@@ -210,14 +211,14 @@ class SurgicalPipeline:
             )
             cleaned = emoji_pattern.sub(r'', cleaned)
         
-        # Rimuovi azioni teatrali (*smile*, *giggle*)
+        # Rimuovi azioni teatrali (*smile*, *giggle*) - SEMPRE
         if "theatricality" in issues:
             import re
             # Rimuovi testo tra asterischi
             theatrical_pattern = re.compile(r'\*[^*]*\*', re.IGNORECASE)
             cleaned = theatrical_pattern.sub('', cleaned)
         
-        # Rimuovi caratteri non italiani
+        # Rimuovi caratteri non italiani - SEMPRE
         if "invalid_chars" in issues:
             import re
             # Mantieni solo caratteri italiani validi
