@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class LocalLLM:
     """Interfaccia per PersonalPlex 7B via backend locale NVIDIA"""
     
-    def __init__(self, backend_url: str = "http://localhost:8080/completion", timeout: int = 1.2, max_retries: int = 0):
+    def __init__(self, backend_url: str = "http://127.0.0.1:8080/chat/completions", timeout: int = 1.2, max_retries: int = 0):
         self.backend_url = backend_url
         self.timeout = timeout
         self.max_retries = max_retries
@@ -49,33 +49,26 @@ class LocalLLM:
             temperature = self.temperature
         
         try:
-            # Formato LLaMA 2 OBBLIGATORIO
+            # LOG DEBUG OBBLIGATORIO
             system_prompt = "Tu sei Genesi. Rispondi in modo naturale e conversazionale."
-            formatted_prompt = f"<s>[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\n{prompt}\n[/INST]"
             
-            # Payload llama.cpp ultra-ottimizzato
+            # Payload ESATTO per /chat/completions
             payload = {
-                "prompt": formatted_prompt,
-                "model": self.model_path,
-                "n_predict": min(max_tokens, 25),  # Max 25 token
-                "temperature": temperature,
-                "top_p": self.top_p,
-                "ctx_size": self.ctx_size,
-                "n_threads": 4,
-                "stop": ["</s>", "[INST]", "[/INST]", "\n", ":", "•", "-"],  # Stop extra
-                "seed": -1,
-                "repeat_penalty": 1.1,
-                "tfs_z": 1.0,  # Token frequency sampling
-                "typical_p": 1.0,  # Typical sampling
-                "mirostat": 2,  # Mirostat per qualità
-                "mirostat_tau": 3.0,  # Target entropy
-                "mirostat_eta": 0.1  # Learning rate
+                "model": "llama-2-7b-chat",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.2,
+                "max_tokens": 256
             }
+            
+            print(f"[DEBUG] PAYLOAD: {json.dumps(payload, indent=2)}", flush=True)
             
             response = requests.post(
                 self.backend_url,
                 json=payload,
-                timeout=self.timeout,  # 1.2s hard timeout
+                timeout=self.timeout,
                 headers={"Content-Type": "application/json"}
             )
             
@@ -83,22 +76,26 @@ class LocalLLM:
             
             if response.status_code == 200:
                 result = response.json()
+                print(f"[DEBUG] RESPONSE: {json.dumps(result, indent=2)}", flush=True)
                 
-                # Estrai contenuto da llama.cpp
-                if "content" in result:
-                    content = result["content"].strip()
+                # RESPONSE PARSING OBBLIGATORIO
+                if "choices" in result and len(result["choices"]) > 0:
+                    content = result["choices"][0]["message"]["content"]
+                    
+                    if not content or not content.strip():
+                        raise Exception("Content vuoto da llama-server")
+                    
+                    content = content.strip()
                     tokens_count = len(content.split())
                     
-                    # Log UNA riga con decisione finale
+                    print(f"[DEBUG] CONTENT_LENGTH: {len(content)} tokens: {tokens_count}", flush=True)
                     logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=local")
                     
                     return content
                 else:
-                    logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=local, error=invalid_response")
-                    return ""
+                    raise Exception("Response senza 'choices' da llama-server")
             else:
-                logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=local, error=http_{response.status_code}")
-                return ""
+                raise Exception(f"HTTP {response.status_code}: {response.text}")
                 
         except requests.exceptions.Timeout:
             latency = (time.time() - start_time) * 1000
@@ -122,23 +119,21 @@ class LocalLLM:
         start_time = time.time()
         
         try:
-            # Formato LLaMA 2 OBBLIGATORIO
+            # LOG DEBUG OBBLIGATORIO
             system_prompt = "Tu sei Genesi. Rispondi in modo naturale e conversazionale."
-            formatted_prompt = f"<s>[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\n{user_message}\n[/INST]"
             
-            # Payload ottimizzato per chat
+            # Payload ESATTO per /chat/completions
             payload = {
-                "prompt": formatted_prompt,
-                "model": self.model_path,
-                "n_predict": min(self.max_tokens, 25),
-                "temperature": 0.7,  # Più creativo per chat
-                "top_p": self.top_p,
-                "ctx_size": self.ctx_size,
-                "n_threads": 4,
-                "stop": ["</s>", "[INST]", "[/INST]", "\n", ":", "•", "-"],
-                "seed": -1,
-                "repeat_penalty": 1.1
+                "model": "llama-2-7b-chat",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 256
             }
+            
+            print(f"[DEBUG] CHAT PAYLOAD: {json.dumps(payload, indent=2)}", flush=True)
             
             response = requests.post(
                 self.backend_url,
@@ -151,17 +146,26 @@ class LocalLLM:
             
             if response.status_code == 200:
                 result = response.json()
-                if "content" in result:
-                    content = result["content"].strip()
+                print(f"[DEBUG] CHAT RESPONSE: {json.dumps(result, indent=2)}", flush=True)
+                
+                # RESPONSE PARSING OBBLIGATORIO
+                if "choices" in result and len(result["choices"]) > 0:
+                    content = result["choices"][0]["message"]["content"]
+                    
+                    if not content or not content.strip():
+                        raise Exception("Chat content vuoto da llama-server")
+                    
+                    content = content.strip()
                     tokens_count = len(content.split())
+                    
+                    print(f"[DEBUG] CHAT CONTENT_LENGTH: {len(content)} tokens: {tokens_count}", flush=True)
                     logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=chat")
+                    
                     return content
                 else:
-                    logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=chat, error=invalid_response")
-                    return ""
+                    raise Exception("Chat response senza 'choices' da llama-server")
             else:
-                logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=chat, error=http_{response.status_code}")
-                return ""
+                raise Exception(f"Chat HTTP {response.status_code}: {response.text}")
                 
         except requests.exceptions.Timeout:
             latency = (time.time() - start_time) * 1000
@@ -185,23 +189,21 @@ class LocalLLM:
         start_time = time.time()
         
         try:
-            # Formato LLaMA 2 OBBLIGATORIO
+            # LOG DEBUG OBBLIGATORIO
             system_prompt = "Tu sei Genesi. Riassumi le informazioni in modo strutturato e conciso."
-            formatted_prompt = f"<s>[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\nCONTESTO: {memory_context}\n\nRIASSUNTO:\n[/INST]"
             
-            # Payload ottimizzato per memoria
+            # Payload ESATTO per /chat/completions
             payload = {
-                "prompt": formatted_prompt,
-                "model": self.model_path,
-                "n_predict": min(self.max_tokens, 50),  # Più token per memoria
-                "temperature": 0.3,  # Più preciso per memoria
-                "top_p": 0.8,
-                "ctx_size": self.ctx_size,
-                "n_threads": 4,
-                "stop": ["</s>", "[INST]", "[/INST]"],
-                "seed": -1,
-                "repeat_penalty": 1.1
+                "model": "llama-2-7b-chat",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"CONTESTO: {memory_context}\n\nRIASSUNTO:"}
+                ],
+                "temperature": 0.3,
+                "max_tokens": 256
             }
+            
+            print(f"[DEBUG] MEMORY PAYLOAD: {json.dumps(payload, indent=2)}", flush=True)
             
             response = requests.post(
                 self.backend_url,
@@ -214,17 +216,26 @@ class LocalLLM:
             
             if response.status_code == 200:
                 result = response.json()
-                if "content" in result:
-                    content = result["content"].strip()
+                print(f"[DEBUG] MEMORY RESPONSE: {json.dumps(result, indent=2)}", flush=True)
+                
+                # RESPONSE PARSING OBBLIGATORIO
+                if "choices" in result and len(result["choices"]) > 0:
+                    content = result["choices"][0]["message"]["content"]
+                    
+                    if not content or not content.strip():
+                        raise Exception("Memory content vuoto da llama-server")
+                    
+                    content = content.strip()
                     tokens_count = len(content.split())
+                    
+                    print(f"[DEBUG] MEMORY CONTENT_LENGTH: {len(content)} tokens: {tokens_count}", flush=True)
                     logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=memory")
+                    
                     return content
                 else:
-                    logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=memory, error=invalid_response")
-                    return ""
+                    raise Exception("Memory response senza 'choices' da llama-server")
             else:
-                logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=memory, error=http_{response.status_code}")
-                return ""
+                raise Exception(f"Memory HTTP {response.status_code}: {response.text}")
                 
         except requests.exceptions.Timeout:
             latency = (time.time() - start_time) * 1000
