@@ -117,21 +117,21 @@ def generate_response(payload: dict) -> str:
         from core.local_llm import LocalLLM
         local_llm = LocalLLM()
         
-        print(f"[PERSONALPLEX] called=true prompt='{prompt[:30]}...'", flush=True)
+        print(f"[PERSONALPLEX] CHAT called=true prompt='{prompt[:30]}...'", flush=True)
         
-        # CHIAMATA DIRETTA PERSONALPLEX - UNA SOLA VOLTA
-        response = local_llm.generate(prompt)
+        # CHIAMATA CHAT PERSONALPLEX - UNA SOLA VOLTA
+        response = local_llm.generate_chat_response(prompt)
         
         if response and len(response.strip()) > 0:
-            print(f"[PERSONALPLEX] success=true response='{response[:50]}...'", flush=True)
+            print(f"[PERSONALPLEX] CHAT success=true response='{response[:50]}...'", flush=True)
             return response.strip()
         else:
-            print(f"[PERSONALPLEX] empty_response - NO RETRY", flush=True)
-            # SE PersonalPlex restituisce vuoto, NON richiamare
+            print(f"[PERSONALPLEX] CHAT empty_response - NO RETRY", flush=True)
+            # SE PersonalPlex CHAT restituisce vuoto, NON richiamare
                 
     except Exception as e:
-        print(f"[PERSONALPLEX] error={e} - NO RETRY", flush=True)
-        # SE PersonalPlex fallisce, NON retry
+        print(f"[PERSONALPLEX] CHAT error={e} - NO RETRY", flush=True)
+        # SE PersonalPlex CHAT fallisce, NON retry
 
     # ===============================
     # GPT FALLBACK

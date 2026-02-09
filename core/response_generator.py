@@ -34,25 +34,25 @@ class ResponseGenerator:
             print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B called with: '{user_message}'", flush=True)
             
             try:
-                # CHIAMATA DIRETTA PERSONALPLEX - UNA SOLA VOLTA
+                # CHIAMATA CHAT PERSONALPLEX - UNA SOLA VOLTA
                 local_llm = LocalLLM()
-                response_text = local_llm.generate(user_message)
+                response_text = local_llm.generate_chat_response(user_message)
                 
                 if response_text and len(response_text.strip()) > 0:
                     response_text = response_text.strip()
                     
-                    # Validazione risposta breve e naturale
+                    # Validazione risposta CHAT naturale
                     words = response_text.split()
                     if len(words) <= 10 and not any(char in response_text for char in [':', '•', '-', '1.', '2.', '3.']):
-                        print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B response: '{response_text}'", flush=True)
-                        print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B SUCCESS", flush=True)
+                        print(f"[FORCED_LOCAL_LLM] PersonalPlex CHAT response: '{response_text}'", flush=True)
+                        print(f"[FORCED_LOCAL_LLM] PersonalPlex CHAT SUCCESS", flush=True)
                         return response_text
                     else:
-                        print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B response too long/unnatural", flush=True)
-                        # SE risposta troppo lunga → GPT fallback
+                        print(f"[FORCED_LOCAL_LLM] PersonalPlex CHAT response too long/unnatural", flush=True)
+                        # SE risposta CHAT troppo lunga → GPT fallback
                 else:
-                    print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B empty response", flush=True)
-                    # SE PersonalPlex restituisce vuoto → GPT fallback
+                    print(f"[FORCED_LOCAL_LLM] PersonalPlex CHAT empty response", flush=True)
+                    # SE PersonalPlex CHAT restituisce vuoto → GPT fallback
                     
             except Exception as e:
                 print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B error: {e}", flush=True)

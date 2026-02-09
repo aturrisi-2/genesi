@@ -161,24 +161,24 @@ class IntentEngine:
                     "brain_mode": "relazione"
                 }
             
-            # CHIAMATA DIRETTA PERSONALPLEX - nessun health check
-            print(f"[PROACTOR] PERSONALPLEX generating response", flush=True)
+            # CHIAMATA CHAT PERSONALPLEX - nessun health check
+            print(f"[PROACTOR] PERSONALPLEX CHAT generating response", flush=True)
             
-            # Genera risposta con PersonalPlex (UNA SOLA VOLTA)
-            response = local_llm.generate(msg)
+            # Genera risposta CHAT con PersonalPlex (UNA SOLA VOLTA)
+            response = local_llm.generate_chat_response(msg)
             
             if response and len(response.strip()) > 0:
-                print(f"[PROACTOR] PERSONALPLEX response received", flush=True)
+                print(f"[PROACTOR] PERSONALPLEX CHAT response received", flush=True)
                 return {
                     "should_respond": True,
                     "decision": "respond",
-                    "reason": "personalplex_primary",
+                    "reason": "personalplex_chat_primary",
                     "brain_mode": "relazione",
                     "personalplex_response": response.strip()
                 }
             else:
-                print(f"[PROACTOR] PERSONALPLEX empty/timeout - immediate GPT fallback", flush=True)
-                # SE PersonalPlex va in timeout o restituisce vuoto → GPT immediato
+                print(f"[PROACTOR] PERSONALPLEX CHAT empty/timeout - immediate GPT fallback", flush=True)
+                # SE PersonalPlex CHAT va in timeout o restituisce vuoto → GPT immediato
                 
         except Exception as e:
             print(f"[PROACTOR] PERSONALPLEX error: {e} - immediate GPT fallback", flush=True)
