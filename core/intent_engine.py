@@ -177,10 +177,12 @@ class IntentEngine:
                     "personalplex_response": response.strip()
                 }
             else:
-                print(f"[PROACTOR] PERSONALPLEX empty response", flush=True)
+                print(f"[PROACTOR] PERSONALPLEX empty/timeout - immediate GPT fallback", flush=True)
+                # SE PersonalPlex va in timeout o restituisce vuoto → GPT immediato
                 
         except Exception as e:
-            print(f"[PROACTOR] PERSONALPLEX error: {e} - fallback to GPT", flush=True)
+            print(f"[PROACTOR] PERSONALPLEX error: {e} - immediate GPT fallback", flush=True)
+            # SE PersonalPlex fallisce → GPT immediato, NO retry
 
         print(f"[PROACTOR] decision=ESCALATE_TO_CHATGPT input='{msg}'", flush=True)
 

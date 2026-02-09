@@ -40,12 +40,19 @@ class ResponseGenerator:
                 
                 if response_text and len(response_text.strip()) > 0:
                     response_text = response_text.strip()
-                    print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B response: '{response_text[:100]}...'", flush=True)
-                    print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B SUCCESS", flush=True)
-                    return response_text
+                    
+                    # Validazione risposta breve e naturale
+                    words = response_text.split()
+                    if len(words) <= 10 and not any(char in response_text for char in [':', '•', '-', '1.', '2.', '3.']):
+                        print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B response: '{response_text}'", flush=True)
+                        print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B SUCCESS", flush=True)
+                        return response_text
+                    else:
+                        print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B response too long/unnatural", flush=True)
+                        # SE risposta troppo lunga → GPT fallback
                 else:
                     print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B empty response", flush=True)
-                    # SE PersonalPlex restituisce vuoto, NON richiamare
+                    # SE PersonalPlex restituisce vuoto → GPT fallback
                     
             except Exception as e:
                 print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B error: {e}", flush=True)

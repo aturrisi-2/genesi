@@ -14,14 +14,15 @@ logger = logging.getLogger(__name__)
 class LocalLLM:
     """Interfaccia per PersonalPlex 7B via backend locale NVIDIA"""
     
-    def __init__(self, backend_url: str = "http://localhost:8080/completion", timeout: int = 8, max_retries: int = 0):
+    def __init__(self, backend_url: str = "http://localhost:8080/completion", timeout: int = 1.2, max_retries: int = 0):
         self.backend_url = backend_url
         self.timeout = timeout
         self.max_retries = max_retries
         self.model_path = "/opt/models/llama-2-7b-chat.Q4_K_M.gguf"
-        self.ctx_size = 2048
-        self.max_tokens = 256
-        self.temperature = 0.7
+        self.ctx_size = 512  # Ridotto per velocità
+        self.max_tokens = 32  # Hard limit per < 1200ms
+        self.temperature = 0.6  # Ridotto per risposte brevi
+        self.top_p = 0.9  # Hard limit
     
         
     # HEALTH CHECK RIMOSSO - nessuna chiamata ridondante per velocità
@@ -48,26 +49,33 @@ class LocalLLM:
             temperature = self.temperature
         
         try:
-            # Prepara prompt per llama.cpp (formato chat)
-            formatted_prompt = f"[INST] {prompt} [/INST]"
+            # Prompt ultra-ottimizzato per risposte brevi (1 frase max)
+            system_prompt = "Tu sei Genesi. Rispondi in 1 frase max, 25 token max. Presenza, dialogo breve."
+            formatted_prompt = f"[INST] {system_prompt}\n\n{prompt} [/INST]"
             
-            # Payload llama.cpp diretto
+            # Payload llama.cpp ultra-ottimizzato
             payload = {
                 "prompt": formatted_prompt,
                 "model": self.model_path,
-                "n_predict": max_tokens,
+                "n_predict": min(max_tokens, 25),  # Max 25 token
                 "temperature": temperature,
+                "top_p": self.top_p,
                 "ctx_size": self.ctx_size,
-                "n_threads": 4,  # CPU threads
-                "stop": ["</s>", "[INST]", "[/INST]"],
+                "n_threads": 4,
+                "stop": ["</s>", "[INST]", "[/INST]", "\n", ":", "•", "-"],  # Stop extra
                 "seed": -1,
-                "repeat_penalty": 1.1
+                "repeat_penalty": 1.1,
+                "tfs_z": 1.0,  # Token frequency sampling
+                "typical_p": 1.0,  # Typical sampling
+                "mirostat": 2,  # Mirostat per qualità
+                "mirostat_tau": 3.0,  # Target entropy
+                "mirostat_eta": 0.1  # Learning rate
             }
             
             response = requests.post(
                 self.backend_url,
                 json=payload,
-                timeout=self.timeout,  # 8s hard timeout
+                timeout=self.timeout,  # 1.2s hard timeout
                 headers={"Content-Type": "application/json"}
             )
             
@@ -81,25 +89,25 @@ class LocalLLM:
                     content = result["content"].strip()
                     tokens_count = len(content.split())
                     
-                    # Log UNA riga come richiesto
-                    logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat")
+                    # Log UNA riga con decisione finale
+                    logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=local")
                     
                     return content
                 else:
-                    logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error=invalid_response")
+                    logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=local, error=invalid_response")
                     return ""
             else:
-                logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error=http_{response.status_code}")
+                logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=local, error=http_{response.status_code}")
                 return ""
                 
         except requests.exceptions.Timeout:
             latency = (time.time() - start_time) * 1000
-            logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error=timeout")
-            return "Scusa, ci ho messo troppo tempo. Riprova."
+            logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=gpt, error=timeout")
+            return ""  # Fallback immediato a GPT
         except Exception as e:
             latency = (time.time() - start_time) * 1000
-            logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error={e}")
-            return "Scusa, c'è stato un problema. Riprova."
+            logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=gpt, error={e}")
+            return ""  # Fallback immediato a GPT
 
 # Istanza globale
 local_llm = LocalLLM()
