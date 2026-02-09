@@ -1,6 +1,7 @@
 from core.llm import generate_response as llm_generate
 from core.local_llm import LocalLLM
 from core.tools import resolve_tools
+from core.genesi_response_engine import genesi_engine
 from typing import Optional, Dict, List
 import json
 from datetime import datetime, timedelta
@@ -8,29 +9,9 @@ import re
 
 class ResponseGenerator:
     """
-    GENERATORE DI RISPOSTA FINALE UNICA
-    SOLO UNA RISPOSTA COERENTE, UMANA, SOBRIA
+    GENERATORE DI RISPOSTA FINALE - NUOVO PARADIGMA
+    LLM produce solo intent, Genesi produce testo finale
     """
-
-    def __init__(self):
-        self.forbidden_patterns = [
-            r'\*[a-zA-Z]+\*',  # *azione* teatrale
-            r'\*[a-zA-Z]+ [a-zA-Z]+\*',  # *azione teatrale*
-            r'\*[a-zA-Z]+ [a-zA-Z]+ [a-zA-Z]+\*',  # *azione teatrale lunga*
-            r'🥰|😘|💋|💕|💖|💗|💓|💞|💝|❤️',  # emoji eccessive
-            r'Spero che ti faccia male',  # linguaggio inappropriato
-            r'prendi.*pillo|medicina|farmac|terapia',  # suggerimenti medici
-        ]
-        
-        self.minimal_responses = [
-            "Ti ascolto. Dimmi pure.",
-            "Sono qui con te.",
-            "Capisco. Continua.",
-            "Mi dispiace che ti senti così.",
-            "Va bene. Dimmi di più.",
-            "Ti capisco.",
-            "Sono qui per te."
-        ]
 
     async def generate_final_response(
         self,
@@ -43,274 +24,103 @@ class ResponseGenerator:
         document_context: Optional[Dict] = None
     ) -> Dict:
         """
-        GENERA UNA SOLA RISPOSTA FINALE VALIDATA
+        GENERA RISPOSTA FINALE BASATA SU INTENT LLM
+        LLM → intent strutturato, Genesi → testo finale
         """
-        print(f"[FINAL_RESPONSE] Generating for: '{user_message[:50]}...'", flush=True)
+        print(f"[GENESI_FINAL] Processing: '{user_message[:50]}...'", flush=True)
         
-        # RACCOLTA PROPOSTE DA TUTTI I MODULI
-        proposals = []
+        # 1. OTTIENI INTENT DALL'LLM
+        llm_intent = await self._extract_intent_from_llm(user_message, cognitive_state, tone)
         
-        # 1. Proposta PersonalPlex (se presente)
-        if intent.get("reason") == "personalplex_primary" and "personalplex_response" in intent:
-            proposal = intent["personalplex_response"].strip()
-            if self._is_valid_response(proposal):
-                proposals.append({"source": "personalplex", "text": proposal, "confidence": 0.8})
+        # 2. GENERA RISPOSTA FINALE CON GENESI ENGINE
+        if llm_intent and isinstance(llm_intent, dict):
+            print(f"[GENESI_FINAL] Using structured intent from LLM", flush=True)
+            final_result = genesi_engine.generate_response_from_intent(llm_intent)
+        else:
+            print(f"[GENESI_FINAL] Using text fallback from LLM", flush=True)
+            final_result = genesi_engine.generate_response_from_text(str(llm_intent))
         
-        # 2. Proposta LLM principale
+        # 3. AGGIUNGI CONTESTO AGGIUNTIVO
+        final_result["style"] = "psychological" if intent.get("type") == "psychological" else "standard"
+        
+        print(f"[GENESI_FINAL] Final response: '{final_result['final_text']}'", flush=True)
+        return final_result
+
+    async def _extract_intent_from_llm(self, user_message: str, cognitive_state, tone) -> Dict:
+        """
+        Estrai intent strutturato dall'LLM
+        LLM NON deve produrre testo finale, solo intent
+        """
         try:
-            prompt = self._build_conversation_prompt(
-                user_message, cognitive_state, recent_memories,
-                relevant_memories, tone, intent
-            )
+            # Build prompt per intent extraction
+            intent_prompt = self._build_intent_prompt(user_message, cognitive_state, tone)
+            
+            # Chiama LLM
             llm_response = llm_generate({
-                "prompt": prompt,
-                "intent": intent,
+                "prompt": intent_prompt,
+                "intent": {"type": "intent_extraction"},
                 "tone": tone
             })
             
-            if self._is_valid_response(llm_response):
-                proposals.append({"source": "llm", "text": llm_response.strip(), "confidence": 0.9})
-        except Exception as e:
-            print(f"[FINAL_RESPONSE] LLM error: {e}", flush=True)
-        
-        # 3. Proposta LocalLLM (fallback)
-        try:
-            local_llm = LocalLLM()
-            local_response = local_llm.generate_chat_response(user_message)
+            print(f"[GENESI_LLM] Raw response: '{llm_response[:100]}...'", flush=True)
             
-            if self._is_valid_response(local_response):
-                proposals.append({"source": "local", "text": local_response.strip(), "confidence": 0.7})
-        except Exception as e:
-            print(f"[FINAL_RESPONSE] LocalLLM error: {e}", flush=True)
-        
-        # 4. Proposta Tools (per domande fattuali)
-        if intent.get("brain_mode") == "fatti":
+            # Prova a parsare come JSON strutturato
             try:
-                tool_result = await resolve_tools(user_message)
-                if tool_result and tool_result.get("data") and not tool_result["data"].get("error"):
-                    direct_response = self._direct_template(tool_result)
-                    if direct_response and self._is_valid_response(direct_response):
-                        proposals.append({"source": "tools", "text": direct_response, "confidence": 0.95})
-            except Exception as e:
-                print(f"[FINAL_RESPONSE] Tools error: {e}", flush=True)
-        
-        # SELEZIONE E VALIDAZIONE FINALE
-        final_response = self._select_and_validate_response(proposals, user_message)
-        
-        result = {
-            "final_text": final_response,
-            "confidence": "ok",
-            "style": "psychological" if intent.get("type") == "psychological" else "standard"
-        }
-        
-        print(f"[FINAL_RESPONSE] Selected: '{final_response[:100]}...'", flush=True)
-        return result
+                import json
+                intent_data = json.loads(llm_response)
+                
+                # Valida struttura
+                if "intent" in intent_data and "confidence" in intent_data:
+                    print(f"[GENESI_LLM] Structured intent: {intent_data}", flush=True)
+                    return intent_data
+                    
+            except json.JSONDecodeError:
+                print(f"[GENESI_LLM] Not JSON, treating as text fallback", flush=True)
+            
+            # Se non è JSON, usa come testo per pattern matching
+            if genesi_engine.validate_llm_output(llm_response):
+                # LLM ha prodotto solo intent breve, va bene
+                return {"intent": "generic", "confidence": 0.5}
+            else:
+                # LLM ha prodotto troppo testo, scarta e usa generic
+                print(f"[GENESI_LLM] LLM produced too much text, using generic", flush=True)
+                return {"intent": "generic", "confidence": 0.3}
+                
+        except Exception as e:
+            print(f"[GENESI_LLM] Error: {e}", flush=True)
+            return {"intent": "generic", "confidence": 0.3}
 
-    def _is_valid_response(self, text: str) -> bool:
+    def _build_intent_prompt(self, user_message: str, cognitive_state, tone) -> str:
         """
-        Verifica se una risposta è valida e umana
-        """
-        if not text or len(text.strip()) == 0:
-            return False
-        
-        text = text.strip()
-        
-        # Controlla pattern vietati
-        for pattern in self.forbidden_patterns:
-            if re.search(pattern, text, re.IGNORECASE):
-                print(f"[FINAL_RESPONSE] Rejected for pattern: {pattern}", flush=True)
-                return False
-        
-        # Controlla lunghezza ragionevole
-        if len(text) > 500:
-            print(f"[FINAL_RESPONSE] Rejected for length: {len(text)}", flush=True)
-            return False
-        
-        # Controlla che non sia solo simboli/punteggiatura
-        if not re.search(r'[a-zA-Zàèéìòù]', text):
-            print(f"[FINAL_RESPONSE] Rejected: no letters", flush=True)
-            return False
-        
-        return True
-
-    def _select_and_validate_response(self, proposals: List[Dict], user_message: str) -> str:
-        """
-        Seleziona la migliore proposta o genera fallback
-        """
-        if not proposals:
-            print(f"[FINAL_RESPONSE] No valid proposals, using minimal response", flush=True)
-            return self._get_minimal_response(user_message)
-        
-        # Ordina per confidence
-        proposals.sort(key=lambda x: x["confidence"], reverse=True)
-        
-        # Prendi la proposta con confidence più alta
-        best = proposals[0]
-        print(f"[FINAL_RESPONSE] Best proposal: {best['source']} (confidence: {best['confidence']})", flush=True)
-        
-        # Validazione finale
-        cleaned = self._clean_response(best["text"])
-        if self._is_valid_response(cleaned):
-            return cleaned
-        
-        # Se anche la migliore non è valida, prova la seconda
-        if len(proposals) > 1:
-            second = proposals[1]
-            cleaned = self._clean_response(second["text"])
-            if self._is_valid_response(cleaned):
-                print(f"[FINAL_RESPONSE] Using second best: {second['source']}", flush=True)
-                return cleaned
-        
-        # Fallback minimale
-        print(f"[FINAL_RESPONSE] All proposals invalid, using minimal response", flush=True)
-        return self._get_minimal_response(user_message)
-
-    def _clean_response(self, text: str) -> str:
-        """
-        Pulisce la risposta da elementi indesiderati
-        """
-        if not text:
-            return ""
-        
-        # Rimuovi azioni teatrali
-        text = re.sub(r'\*[a-zA-Z]+\*', '', text)
-        text = re.sub(r'\*[a-zA-Z]+ [a-zA-Z]+\*', '', text)
-        text = re.sub(r'\*[a-zA-Z]+ [a-zA-Z]+ [a-zA-Z]+\*', '', text)
-        
-        # Rimuovi emoji eccessive
-        text = re.sub(r'[🥰😘💋💕💖💗💓💞💝❤️]', '', text)
-        
-        # Rimuovi spazi multipli
-        text = re.sub(r'\s+', ' ', text)
-        
-        # Trim
-        return text.strip()
-
-    def _get_minimal_response(self, user_message: str) -> str:
-        """
-        Genera risposta minimale ma umana
-        """
-        # Scegli risposta appropriata al contesto
-        if any(word in user_message.lower() for word in ["male", "dolore", "soffro", "mi sento"]):
-            return "Mi dispiace. Sono qui con te."
-        
-        if any(word in user_message.lower() for word in ["ciao", "salve", "buongiorno"]):
-            return "Ciao. Come posso aiutarti?"
-        
-        if len(user_message.strip()) < 5:
-            return "Dimmi di più."
-        
-        # Risposta minimale casuale ma appropriata
-        import random
-        return random.choice(self.minimal_responses)
-
-    def _build_conversation_prompt(
-        self,
-        user_message: str,
-        cognitive_state,
-        recent_memories: List[Dict],
-        relevant_memories: List[Dict],
-        tone,
-        intent: Dict
-    ) -> str:
-        """
-        Costruisce prompt per LLM con stile umano e sobrio
+        Build prompt per estrarre solo intent dall'LLM
         """
         sections = []
-
-        # --- CHI È L'UTENTE ---
+        
+        # User info
         user_profile = cognitive_state.user.profile or {}
         if user_profile.get("name"):
             sections.append(f"UTENTE: {user_profile['name']}")
-
-        # --- CONTESTO RECENTE ---
-        memory_text = self._format_memories_human(recent_memories, relevant_memories)
-        if memory_text:
-            sections.append(f"CONTESTO:\n{memory_text}")
-
-        # --- MESSAGGIO ---
+        
+        # Message
         sections.append(f"MESSAGGIO:\n{user_message}")
-
-        # --- ISTRUZIONE STILE ---
+        
+        # Instructions for intent extraction
         sections.append(
             "ISTRUZIONI:\n"
-            "- Rispondi in italiano naturale e sobrio\n"
-            "- Sii empatico ma maturo\n"
-            "- Niente linguaggio teatrale (*azioni*)\n"
-            "- Niente emoji eccessive\n"
-            "- Massimo 2-3 frasi\n"
-            "- Sii diretto ma gentile\n"
-            "- Non dare consigli medici\n"
-            "- Solo il testo della risposta"
+            "- Analizza SOLO l'intent del messaggio\n"
+            "- NON scrivere frasi complete\n"
+            "- NON usare emoji o asterischi\n"
+            "- Rispondi SOLO in questo formato JSON:\n"
+            '{\n'
+            '  "intent": "greeting|physical_discomfort|emotional_distress|acknowledgment|question|farewell|generic",\n'
+            '  "confidence": 0.0-1.0\n'
+            '}\n'
+            "- Scegli l'intent più appropriato"
         )
-
+        
         return "\n\n".join(sections)
 
-    def _format_memories_human(
-        self,
-        recent_memories: List[Dict],
-        relevant_memories: List[Dict]
-    ) -> str:
-        """
-        Formatta memorie in modo umano
-        """
-        seen = set()
-        lines = []
-
-        for m in (relevant_memories or [])[:3]:
-            text = self._extract_memory_text(m)
-            if text and text not in seen and len(text) < 100:
-                seen.add(text)
-                lines.append(f"- {text}")
-
-        for m in (recent_memories or [])[:3]:
-            text = self._extract_memory_text(m)
-            if text and text not in seen and len(text) < 100:
-                seen.add(text)
-                lines.append(f"- {text}")
-
-        return "\n".join(lines) if lines else ""
-
-    def _extract_memory_text(self, memory: Dict) -> str:
-        """Estrae testo dalla memoria"""
-        content = memory.get("content", "")
-        if isinstance(content, dict):
-            return content.get("text", "").strip()
-        if isinstance(content, str):
-            return content.strip()
-        return ""
-
-    def _direct_template(self, tool_result: dict) -> str:
-        """Template diretto per dati reali"""
-        tool_type = tool_result.get("tool_type")
-        data = tool_result.get("data", {})
-
-        if tool_type == "meteo":
-            return self._direct_weather(data)
-        elif tool_type == "news":
-            return self._direct_news(data)
-        return ""
-
-    def _direct_weather(self, data: dict) -> str:
-        """Risposta diretta meteo"""
-        city = data.get("city", "la tua zona")
-        current = data.get("current", {})
-        if not current:
-            return ""
-        
-        temp = current.get("temp", "")
-        desc = current.get("description", "")
-        return f"A {city} ci sono {temp}°C con {desc}."
-
-    def _direct_news(self, data: dict) -> str:
-        """Risposta diretta news"""
-        articles = data.get("articles", [])
-        if not articles:
-            return ""
-        
-        title = articles[0].get("title", "").strip()
-        return f"Notizia principale: {title}"
-
+    
     # ===============================
     # PROMPT CONVERSAZIONALE
     # ===============================
