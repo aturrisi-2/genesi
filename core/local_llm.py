@@ -50,7 +50,7 @@ class LocalLLM:
         
         try:
             # LOG OBBLIGATORI
-            system_prompt = "Tu sei Genesi. Rispondi in modo naturale e conversazionale."
+            system_prompt = "Rispondi SEMPRE e SOLO in italiano. Non usare mai l'inglese, nemmeno singole parole, espressioni o frasi. Se l'utente scrive in italiano, rispondi esclusivamente in italiano. Tu sei Genesi. Rispondi in modo naturale e conversazionale."
             
             # Costruisci prompt LLaMA puro
             prompt = f"<s>[INST] {system_prompt}\n\n{prompt} [/INST]"
@@ -126,7 +126,7 @@ class LocalLLM:
         
         try:
             # LOG OBBLIGATORI
-            system_prompt = "Tu sei Genesi. Rispondi in modo naturale e conversazionale."
+            system_prompt = "Rispondi SEMPRE e SOLO in italiano. Non usare mai l'inglese, nemmeno singole parole, espressioni o frasi. Se l'utente scrive in italiano, rispondi esclusivamente in italiano. Tu sei Genesi. Rispondi in modo naturale e conversazionale."
             
             # Costruisci prompt LLaMA puro
             prompt = f"<s>[INST] {system_prompt}\n\n{user_message} [/INST]"
@@ -202,7 +202,7 @@ class LocalLLM:
         
         try:
             # LOG OBBLIGATORI
-            system_prompt = "Tu sei Genesi. Riassumi le informazioni in modo strutturato e conciso."
+            system_prompt = "Rispondi SEMPRE e SOLO in italiano. Non usare mai l'inglese, nemmeno singole parole, espressioni o frasi. Se l'utente scrive in italiano, rispondi esclusivamente in italiano. Tu sei Genesi. Riassumi le informazioni in modo strutturato e conciso."
             
             # Costruisci prompt LLaMA puro
             prompt = f"<s>[INST] {system_prompt}\n\nCONTESTO: {memory_context}\n\nRIASSUNTO: [/INST]"
