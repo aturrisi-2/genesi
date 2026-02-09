@@ -8,6 +8,7 @@ from pathlib import Path
 from core.file_analyzer import analyze_file, MAX_FILE_SIZE
 from core.decision_engine import decide_response_strategy
 from core.response_router import route_response
+from core.text_post_processor import text_post_processor
 
 # ===============================
 # DOCUMENT CONTEXT TEMPORANEO PER USER
@@ -158,6 +159,13 @@ async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), ht
                 response_text = await route_response(analysis, file_path, {"user_id": user_id})
             except Exception:
                 response_text = f"Ho ricevuto '{file.filename}'. Il file è stato caricato correttamente."
+
+        # POST-PROCESSOR LINGUISTICO - Pulisci anche risposte upload
+        if response_text:
+            original_text = response_text
+            response_text = text_post_processor.clean_response(response_text)
+            if original_text != response_text:
+                logger.info(f"[UPLOAD] TEXT_POST_PROCESSOR: {len(original_text)}→{len(response_text)} chars")
 
         # Salva document context
         if document_context and user_id:

@@ -28,6 +28,7 @@ from core.image_handler import handle_image
 from core.psychological_detector import detect as psy_detect
 from core.psychological_memory import store as psy_store, get_context as psy_get_context
 from core.psychological_responder import generate_psychological_response
+from core.text_post_processor import text_post_processor
 
 router = APIRouter()
 
@@ -111,6 +112,14 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
             tone=tone,
             intent=intent
         )
+        
+        # POST-PROCESSOR LINGUISTICO - Pulisci anche risposte closure
+        if response_text:
+            original_text = response_text
+            response_text = text_post_processor.clean_response(response_text)
+            if original_text != response_text:
+                log("TEXT_POST_PROCESSOR", user_id=request.user_id, branch="closure",
+                    original_len=len(original_text), cleaned_len=len(response_text))
         # Salviamo solo evento minimo in memoria episodica (no psicologica)
         user_affect = compute_affect("user_message", {"text": request.message})
         store_event(
@@ -173,6 +182,14 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                     user_name=user_name,
                 )
                 
+                # POST-PROCESSOR LINGUISTICO - Pulisci anche risposte psicologiche
+                if response_text:
+                    original_text = response_text
+                    response_text = text_post_processor.clean_response(response_text)
+                    if original_text != response_text:
+                        log("TEXT_POST_PROCESSOR", user_id=request.user_id, branch="psychological",
+                            original_len=len(original_text), cleaned_len=len(response_text))
+                
                 # Salva in memoria psicologica (isolata)
                 psy_store(
                     user_id=request.user_id,
@@ -226,6 +243,14 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                 user_message=request.message,
                 user_id=request.user_id
             )
+            
+            # POST-PROCESSOR LINGUISTICO - Pulisci anche risposte image
+            if response_text:
+                original_text = response_text
+                response_text = text_post_processor.clean_response(response_text)
+                if original_text != response_text:
+                    log("TEXT_POST_PROCESSOR", user_id=request.user_id, branch="image",
+                        original_len=len(original_text), cleaned_len=len(response_text))
             
             # NON cancellare l'immagine - rimane attiva per richieste successive
             # NON usare document_context, IntentEngine, ResponseGenerator
@@ -330,6 +355,15 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     response_text = final_result.get("final_text", "")
     confidence = final_result.get("confidence", "ok")
     style = final_result.get("style", "standard")
+    
+    # POST-PROCESSOR LINGUISTICO - Pulisci metatesto teatrale prima di tutto
+    if response_text:
+        original_text = response_text
+        response_text = text_post_processor.clean_response(response_text)
+        # Log silenzioso solo se c'è stata pulizia
+        if original_text != response_text:
+            log("TEXT_POST_PROCESSOR", user_id=request.user_id, 
+                original_len=len(original_text), cleaned_len=len(response_text))
     
     log("PIPELINE_COMPLETED", user_id=request.user_id, 
         path=final_result.get("path", "unknown"),
