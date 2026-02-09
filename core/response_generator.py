@@ -49,14 +49,14 @@ class ResponseGenerator:
                         return response_text
                     else:
                         print(f"[FORCED_LOCAL_LLM] PersonalPlex CHAT response too long/unnatural", flush=True)
-                        # SE risposta CHAT troppo lunga → GPT fallback
+                        # NESSUN fallback - risposta ignorata
                 else:
                     print(f"[FORCED_LOCAL_LLM] PersonalPlex CHAT empty response", flush=True)
-                    # SE PersonalPlex CHAT restituisce vuoto → GPT fallback
+                    # NESSUN fallback - nessuna risposta
                     
             except Exception as e:
                 print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B error: {e}", flush=True)
-                # SE PersonalPlex fallisce, NON retry
+                # NESSUN fallback - nessuna risposta
 
         # ===============================
         # PROACTOR DECISION CHECK

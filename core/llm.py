@@ -1,6 +1,5 @@
 import os
 import re
-from openai import OpenAI
 
 
 # ===============================
@@ -126,75 +125,16 @@ def generate_response(payload: dict) -> str:
             print(f"[PERSONALPLEX] CHAT success=true response='{response[:50]}...'", flush=True)
             return response.strip()
         else:
-            print(f"[PERSONALPLEX] CHAT empty_response - NO RETRY", flush=True)
-            # SE PersonalPlex CHAT restituisce vuoto, NON richiamare
+            print(f"[PERSONALPLEX] CHAT empty_response - NO RESPONSE", flush=True)
+            # SE PersonalPlex CHAT restituisce vuoto → nessuna risposta
                 
     except Exception as e:
-        print(f"[PERSONALPLEX] CHAT error={e} - NO RETRY", flush=True)
-        # SE PersonalPlex CHAT fallisce, NON retry
+        print(f"[PERSONALPLEX] CHAT error={e} - NO RESPONSE", flush=True)
+        # SE PersonalPlex CHAT fallisce → nessuna risposta
 
-    # ===============================
-    # GPT FALLBACK
-    # ===============================
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        # Se non c'è chiave API, restituisci una risposta normale al contenuto
-        words = prompt.split()[:5]  # Prendi le prime 5 parole
-        if words:
-            return " ".join(words) + "."
-        else:
-            return "Non ho capito."
-
-    client = OpenAI(api_key=api_key)
-    print(f"[GPT] fallback=true", flush=True)
-
-    # ===============================
-    # DUAL BRAIN DISPATCH
-    # ===============================
-    if brain_mode == "fatti":
-        return _generate_facts(client, prompt, intent)
-    else:
-        return _generate_relazione(client, prompt, intent, tone)
-
-
-def _generate_facts(client, prompt: str, intent: dict) -> str:
-    """Genesi-Fatti: gpt-4o-mini, prompt informativo, nessuna memoria relazionale."""
-    model = "gpt-4o-mini"
-
-    # Se il prompt contiene dati reali iniettati da API → usa il system prompt RIFORMULATORE
-    has_real_data = intent.get("_has_real_data", False)
-
-    if has_real_data:
-        system_prompt = GENESI_FACTS_WITH_DATA
-        print(f"[LLM] brain=FATTI model={model} mode=RIFORMULATORE (dati reali)", flush=True)
-    else:
-        system_prompt = GENESI_FACTS
-        print(f"[LLM] brain=FATTI model={model} mode=KNOWLEDGE (solo LLM)", flush=True)
-
-    if intent.get("emotional_context"):
-        system_prompt += (
-            "\nL'utente sembra preoccupato o emotivo riguardo a questo tema. "
-            "Rispondi comunque in modo informativo e fattuale, senza consolare. "
-            "Puoi aggiungere una breve nota di prudenza se appropriato.\n"
-        )
-
-    print(f"[LLM] prompt_preview='{prompt[:400]}...'", flush=True)
-
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ],
-        max_tokens=500,
-        temperature=0.2 if has_real_data else 0.3,
-        presence_penalty=0.0,
-        frequency_penalty=0.0
-    )
-
-    raw = response.choices[0].message.content.strip()
-    print(f"[LLM] facts_response='{raw[:300]}...'", flush=True)
-    return raw
+    # NESSUN FALLBACK GPT - solo PersonalPlex
+    print(f"[LLM] NO RESPONSE - PersonalPlex failed", flush=True)
+    return ""  # Nessuna risposta se PersonalPlex fallisce
 
 
 def _clean_tics(text: str) -> str:
@@ -243,42 +183,3 @@ def _clean_tics(text: str) -> str:
     return text
 
 
-def _generate_relazione(client, prompt: str, intent: dict, tone) -> str:
-    """Genesi-Relazione: gpt-4o, prompt identitario, memoria e tono."""
-    model = "gpt-4o"
-
-    system_prompt = GENESI_IDENTITY
-
-    emotional_weight = intent.get("emotional_weight", 0.3)
-    if emotional_weight > 0.6:
-        system_prompt += "\nL'utente sta attraversando un momento emotivamente intenso. Sii presente, non analitico.\n"
-
-    if tone:
-        empathy = getattr(tone, "empathy", 0.5)
-        directness = getattr(tone, "directness", 0.5)
-        if empathy > 0.7:
-            system_prompt += "Il tono della conversazione è emotivo. Rispondi con calore.\n"
-        if directness > 0.7:
-            system_prompt += "L'utente preferisce risposte dirette. Vai al punto.\n"
-
-    print(f"[LLM] brain=RELAZIONE model={model}", flush=True)
-    print(f"[LLM] prompt_preview='{prompt[:400]}...'", flush=True)
-
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ],
-        max_tokens=200,
-        temperature=0.65,
-        presence_penalty=0.5,
-        frequency_penalty=0.4
-    )
-
-    raw = response.choices[0].message.content.strip()
-    print(f"[LLM] relazione_raw='{raw[:300]}...'", flush=True)
-    cleaned = _clean_tics(raw)
-    if cleaned != raw:
-        print(f"[LLM] relazione_cleaned='{cleaned[:300]}...'", flush=True)
-    return cleaned

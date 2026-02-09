@@ -49,9 +49,9 @@ class LocalLLM:
             temperature = self.temperature
         
         try:
-            # Prompt ultra-ottimizzato per risposte brevi (1 frase max)
-            system_prompt = "Tu sei Genesi. Rispondi in 1 frase max, 25 token max. Presenza, dialogo breve."
-            formatted_prompt = f"[INST] {system_prompt}\n\n{prompt} [/INST]"
+            # Formato LLaMA 2 OBBLIGATORIO
+            system_prompt = "Tu sei Genesi. Rispondi in modo naturale e conversazionale."
+            formatted_prompt = f"<s>[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\n{prompt}\n[/INST]"
             
             # Payload llama.cpp ultra-ottimizzato
             payload = {
@@ -102,12 +102,12 @@ class LocalLLM:
                 
         except requests.exceptions.Timeout:
             latency = (time.time() - start_time) * 1000
-            logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=gpt, error=timeout")
-            return ""  # Fallback immediato a GPT
+            logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error=timeout")
+            return ""  # NESSUN fallback - solo llama.cpp
         except Exception as e:
             latency = (time.time() - start_time) * 1000
-            logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=gpt, error={e}")
-            return ""  # Fallback immediato a GPT
+            logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error={e}")
+            return ""  # NESSUN fallback - solo llama.cpp
     
     def generate_chat_response(self, user_message: str) -> str:
         """
@@ -122,9 +122,9 @@ class LocalLLM:
         start_time = time.time()
         
         try:
-            # Prompt chat naturale - NESSUN RIFERIMENTO A MEMORIA
-            system_prompt = "Tu sei Genesi. Rispondi in modo naturale e conversazionale. 1 frase max. Presenza, dialogo."
-            formatted_prompt = f"[INST] {system_prompt}\n\n{user_message} [/INST]"
+            # Formato LLaMA 2 OBBLIGATORIO
+            system_prompt = "Tu sei Genesi. Rispondi in modo naturale e conversazionale."
+            formatted_prompt = f"<s>[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\n{user_message}\n[/INST]"
             
             # Payload ottimizzato per chat
             payload = {
@@ -165,12 +165,12 @@ class LocalLLM:
                 
         except requests.exceptions.Timeout:
             latency = (time.time() - start_time) * 1000
-            logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=gpt, error=timeout")
-            return ""
+            logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error=timeout")
+            return ""  # NESSUN fallback - solo llama.cpp
         except Exception as e:
             latency = (time.time() - start_time) * 1000
-            logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=gpt, error={e}")
-            return ""
+            logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error={e}")
+            return ""  # NESSUN fallback - solo llama.cpp
     
     def generate_memory_summary(self, memory_context: str) -> str:
         """
@@ -185,9 +185,9 @@ class LocalLLM:
         start_time = time.time()
         
         try:
-            # Prompt strutturato per memoria
-            system_prompt = "Tu sei Genesi. Riassumi le informazioni in modo strutturato e conciso. Fatti importanti, punti chiave."
-            formatted_prompt = f"[INST] {system_prompt}\n\nCONTESTO: {memory_context}\n\nRIASSUNTO: [/INST]"
+            # Formato LLaMA 2 OBBLIGATORIO
+            system_prompt = "Tu sei Genesi. Riassumi le informazioni in modo strutturato e conciso."
+            formatted_prompt = f"<s>[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\nCONTESTO: {memory_context}\n\nRIASSUNTO:\n[/INST]"
             
             # Payload ottimizzato per memoria
             payload = {
@@ -228,12 +228,12 @@ class LocalLLM:
                 
         except requests.exceptions.Timeout:
             latency = (time.time() - start_time) * 1000
-            logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=memory, error=timeout")
-            return ""
+            logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error=timeout")
+            return ""  # NESSUN fallback - solo llama.cpp
         except Exception as e:
             latency = (time.time() - start_time) * 1000
-            logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, decision=memory, error={e}")
-            return ""
+            logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error={e}")
+            return ""  # NESSUN fallback - solo llama.cpp
 
 # Istanza globale
 local_llm = LocalLLM()

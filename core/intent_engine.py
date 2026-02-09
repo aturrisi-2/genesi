@@ -148,18 +148,7 @@ class IntentEngine:
             
             print(f"[PROACTOR] calling PERSONALPLEX first", flush=True)
             
-            # ESCALATION LOGIC: usa GPT per messaggi complessi
-            msg_len = len(msg)
-            needs_gpt = msg_len > 80 or any(word in msg.lower() for word in ["spiega", "perché", "come funziona", "analizza", "dettagli"])
-            
-            if needs_gpt:
-                print(f"[PROACTOR] ESCALATION_TO_GPT message_len={msg_len} complex=true", flush=True)
-                return {
-                    "should_respond": True,
-                    "decision": "respond",
-                    "reason": "complex_message_escalate_to_gpt",
-                    "brain_mode": "relazione"
-                }
+            # NESSUNA ESCALATION GPT - solo PersonalPlex
             
             # CHIAMATA CHAT PERSONALPLEX - nessun health check
             print(f"[PROACTOR] PERSONALPLEX CHAT generating response", flush=True)
@@ -177,20 +166,21 @@ class IntentEngine:
                     "personalplex_response": response.strip()
                 }
             else:
-                print(f"[PROACTOR] PERSONALPLEX CHAT empty/timeout - immediate GPT fallback", flush=True)
-                # SE PersonalPlex CHAT va in timeout o restituisce vuoto → GPT immediato
+                print(f"[PROACTOR] PERSONALPLEX CHAT empty - NO RESPONSE", flush=True)
+                # SE PersonalPlex CHAT restituisce vuoto → nessuna risposta
                 
         except Exception as e:
-            print(f"[PROACTOR] PERSONALPLEX error: {e} - immediate GPT fallback", flush=True)
-            # SE PersonalPlex fallisce → GPT immediato, NO retry
+            print(f"[PROACTOR] PERSONALPLEX error: {e} - NO RESPONSE", flush=True)
+            # SE PersonalPlex fallisce → nessuna risposta
 
-        print(f"[PROACTOR] decision=ESCALATE_TO_CHATGPT input='{msg}'", flush=True)
-
+        # NESSUN FALLBACK GPT - solo PersonalPlex
+        print(f"[PROACTOR] NO RESPONSE - PersonalPlex failed", flush=True)
+        
         # ===============================
-        # INTENT BASE
+        # NO RESPONSE FALLBACK
         # ===============================
         intent = {
-            "should_respond": True,
+            "should_respond": False,
             "style": "presence",
             "depth": "naturale",
             "focus": "presente",
@@ -285,18 +275,9 @@ class IntentEngine:
             or any(p.search(msg) for p in self.FACTUAL_PATTERNS)
         )
 
-        if has_emotion and has_factual:
-            # Misto: emozione + fatto → fatti (il fatto domina, l'emozione è contesto)
-            intent["brain_mode"] = "fatti"
-            intent["emotional_context"] = True
-            print(f"[INTENT] brain_mode=fatti (misto: emozione+fatto)", flush=True)
-        elif has_factual:
-            intent["brain_mode"] = "fatti"
-            intent["emotional_context"] = False
-            print(f"[INTENT] brain_mode=fatti", flush=True)
-        else:
-            intent["brain_mode"] = "relazione"
-            print(f"[INTENT] brain_mode=relazione", flush=True)
+        # NESSUN ROUTING COMPLESSO - solo PersonalPlex
+        intent["brain_mode"] = "relazione"  # Fisso, non usato
+        print(f"[INTENT] brain_mode=relazione (fisso)", flush=True)
 
         # ===============================
         # CONTESTO DALLA MEMORIA
