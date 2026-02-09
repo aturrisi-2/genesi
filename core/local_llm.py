@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class LocalLLM:
     """Interfaccia per PersonalPlex 7B via backend locale NVIDIA"""
     
-    def __init__(self, backend_url: str = "http://127.0.0.1:8080/completion", timeout: int = 1.2, max_retries: int = 0):
+    def __init__(self, backend_url: str = "http://127.0.0.1:8080/completion", timeout: int = 10, max_retries: int = 0):
         self.backend_url = backend_url
         self.timeout = timeout
         self.max_retries = max_retries
@@ -90,7 +90,12 @@ class LocalLLM:
                     
                     print(f"[DEBUG] CONTENT_LENGTH: {len(content)} tokens: {tokens_count}", flush=True)
                     print(f"[DEBUG] RISPOSTA ACCETTATA: '{content}'", flush=True)
-                    logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=local")
+                    
+                    # Log INFO per risposte accettate anche se lente
+                    if latency > 2000:  # Se più di 2 secondi
+                        logger.info(f"RISPOSTA LENTA MA ACCETTATA: latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=local")
+                    else:
+                        logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=local")
                     
                     return content
                 else:
@@ -161,7 +166,12 @@ class LocalLLM:
                     
                     print(f"[DEBUG] CHAT CONTENT_LENGTH: {len(content)} tokens: {tokens_count}", flush=True)
                     print(f"[DEBUG] CHAT RISPOSTA ACCETTATA: '{content}'", flush=True)
-                    logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=chat")
+                    
+                    # Log INFO per risposte accettate anche se lente
+                    if latency > 2000:  # Se più di 2 secondi
+                        logger.info(f"CHAT RISPOSTA LENTA MA ACCETTATA: latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=chat")
+                    else:
+                        logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=chat")
                     
                     return content
                 else:
@@ -232,7 +242,12 @@ class LocalLLM:
                     
                     print(f"[DEBUG] MEMORY CONTENT_LENGTH: {len(content)} tokens: {tokens_count}", flush=True)
                     print(f"[DEBUG] MEMORY RISPOSTA ACCETTATA: '{content}'", flush=True)
-                    logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=memory")
+                    
+                    # Log INFO per risposte accettate anche se lente
+                    if latency > 2000:  # Se più di 2 secondi
+                        logger.info(f"MEMORY RISPOSTA LENTA MA ACCETTATA: latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=memory")
+                    else:
+                        logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=memory")
                     
                     return content
                 else:
