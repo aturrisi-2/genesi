@@ -12,6 +12,7 @@ from core.genesi_response_engine import genesi_engine
 from core.tools import resolve_tools
 from core.intent_router import intent_router
 from core.verified_knowledge import verified_knowledge
+from core.post_llm_filter import post_llm_filter
 
 class Pipeline:
     """
@@ -149,8 +150,17 @@ class Pipeline:
             if self.local_llm.is_available():
                 print(f"[PIPELINE] Using PersonalPlex for chat_free", flush=True)
                 response = self.local_llm.generate_chat_response(user_message)
-                if response and len(response.strip()) > 0:
-                    return response.strip()
+                
+                # FILTRO POST-LLM PER COMPORTAMENTO UMANO
+                if response:
+                    context = {"intent": intent_type, "user_state": cognitive_state}
+                    filtered_response = post_llm_filter.filter_response(response, context)
+                    
+                    if filtered_response and len(filtered_response.strip()) > 0:
+                        return filtered_response.strip()
+                
+                # Fallback se filtro invalida la risposta
+                return self._genesi_fallback(user_message)
             
             # Fallback Genesi
             return self._genesi_fallback(user_message)

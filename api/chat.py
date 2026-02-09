@@ -31,6 +31,8 @@ from core.psychological_responder import generate_psychological_response
 from core.text_post_processor import text_post_processor
 from core.intent_router import intent_router
 from core.verified_knowledge import verified_knowledge
+from core.post_llm_filter import post_llm_filter
+from core.human_fallback import human_fallback
 
 router = APIRouter()
 
@@ -101,10 +103,12 @@ async def _handle_verified_response(
                 else:
                     response_text = "Non riesco a ottenere informazioni meteo in questo momento."
             else:
-                response_text = "Non riesco a ottenere informazioni meteo in questo momento."
+                # FALLBACK UMANO - non esporre errore tecnico
+                response_text = human_fallback.get_fallback("weather", request.message)
         except Exception as e:
             print(f"[VERIFIED_RESPONSE] Weather tool error: {e}", flush=True)
-            response_text = "Non riesco a ottenere informazioni meteo in questo momento."
+            # FALLBACK UMANO - nascondi completamente l'errore
+            response_text = human_fallback.get_fallback("weather", request.message)
     
     # News → Tools (stub per ora)
     elif intent_type == "news":
@@ -122,18 +126,40 @@ async def _handle_verified_response(
                 else:
                     response_text = "Non ci sono notizie disponibili in questo momento."
             else:
-                response_text = "Non riesco a ottenere notizie in questo momento."
+                # FALLBACK UMANO - non esporre errore tecnico
+                response_text = human_fallback.get_fallback("news", request.message)
         except Exception as e:
             print(f"[VERIFIED_RESPONSE] News tool error: {e}", flush=True)
-            response_text = "Non riesco a ottenere notizie in questo momento."
+            # FALLBACK UMANO - nascondi completamente l'errore
+            response_text = human_fallback.get_fallback("news", request.message)
     
     # Supporto emotivo → ramo psicologico (senza LLM creativo)
     elif intent_type == "emotional_support":
         print(f"[VERIFIED_RESPONSE] Using psychological support", flush=True)
-        # Usa il ramo psicologico esistente ma senza LLM creativo
-        from core.genesi_response_engine import genesi_engine
-        result = genesi_engine.generate_response_from_text(request.message)
-        response_text = result.get("final_text", "Sono qui per ascoltarti.")
+        try:
+            # Usa il ramo psicologico esistente ma senza LLM creativo
+            from core.genesi_response_engine import genesi_engine
+            result = genesi_engine.generate_response_from_text(request.message)
+            response_text = result.get("final_text", "")
+            
+            # FILTRO POST-LLM PER SUPPORTO EMOTIVO
+            if response_text:
+                context = {"intent": intent_type, "user_state": state}
+                filtered_response = post_llm_filter.filter_response(response_text, context)
+                
+                if filtered_response and len(filtered_response.strip()) > 0:
+                    response_text = filtered_response
+                else:
+                    # FALLBACK EMPATICO SE FILTRO INVALIDA
+                    response_text = human_fallback.get_fallback("emotional_distress", request.message)
+            else:
+                # FALLBACK EMPATICO SE RESPONSE VUOTA
+                response_text = human_fallback.get_fallback("emotional_distress", request.message)
+                
+        except Exception as e:
+            print(f"[VERIFIED_RESPONSE] Psychological error: {e}", flush=True)
+            # FALLBACK EMPATICO IN CASO DI ERRORE
+            response_text = human_fallback.get_fallback("emotional_distress", request.message)
     
     # Tempo e date → sistema
     elif intent_type == "other":
@@ -526,6 +552,20 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     )
     
     response_text = final_result.get("final_text", "")
+    
+    # FILTRO POST-LLM PER COMPORTAMENTO UMANO (anche per pipeline principale)
+    if response_text:
+        context = {"intent": intent.get("type", "chat_free"), "user_state": state}
+        filtered_response = post_llm_filter.filter_response(response_text, context)
+        
+        if filtered_response and len(filtered_response.strip()) > 0:
+            response_text = filtered_response
+        else:
+            # FALLBACK UMANO SE FILTRO INVALIDA
+            if "ricordi" in request.message.lower() or "chiami" in request.message.lower():
+                response_text = human_fallback.get_fallback("identity", request.message)
+            else:
+                response_text = human_fallback.get_fallback("general", request.message)
     confidence = final_result.get("confidence", "ok")
     style = final_result.get("style", "standard")
     
