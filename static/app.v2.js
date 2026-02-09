@@ -225,9 +225,11 @@ function normalizeTextForTTS(text) {
 }
 
 function _getTTSCtx() {
-  if (!_ttsCtx || _ttsCtx.state === 'closed') {
+  // Verifica se AudioContext non esiste, è closed, suspended o invalid
+  if (!_ttsCtx || _ttsCtx.state === 'closed' || _ttsCtx.state === 'suspended' || _ttsCtx.state === 'interrupted') {
+    console.log('[TTS] Creating new AudioContext - previous state=' + (_ttsCtx ? _ttsCtx.state : 'none'));
     _ttsCtx = new (window.AudioContext || window.webkitAudioContext)();
-    console.log('[TTS] AudioContext created, rate=' + _ttsCtx.sampleRate);
+    console.log('[TTS] AudioContext created, rate=' + _ttsCtx.sampleRate + ' state=' + _ttsCtx.state);
   }
   return _ttsCtx;
 }
@@ -237,9 +239,17 @@ function _getTTSCtx() {
 // BEFORE any await, so the gesture is still "active" for iOS.
 function _warmTTSCtx() {
   const ctx = _getTTSCtx();
-  if (ctx.state === 'suspended') {
-    ctx.resume();
-    console.log('[TTS] ctx warmed (resume called during gesture)');
+  console.log('[TTS] WarmTTSCtx - state=' + ctx.state);
+  
+  // Resume per qualsiasi stato non-running
+  if (ctx.state === 'suspended' || ctx.state === 'interrupted') {
+    ctx.resume().then(() => {
+      console.log('[TTS] ctx resumed successfully, state=' + ctx.state);
+    }).catch(err => {
+      console.error('[TTS] ctx resume failed:', err);
+    });
+  } else if (ctx.state === 'running') {
+    console.log('[TTS] ctx already running');
   }
 }
 
@@ -433,6 +443,16 @@ async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
   console.log('[TTS] _playTTSChunkWithBlob len=' + text.length + ' blob_size=' + blob.size);
   console.log('[TTS] TEXT:', text);
   
+  // VERIFICA E RIPRISTINA AudioContext PRIMA della riproduzione
+  const ttsCtx = _getTTSCtx();
+  console.log('[TTS] AudioContext check (blob) - state=' + ttsCtx.state);
+  
+  if (ttsCtx.state === 'suspended' || ttsCtx.state === 'interrupted') {
+    console.log('[TTS] Resuming AudioContext before blob playback');
+    await ttsCtx.resume();
+    console.log('[TTS] AudioContext resumed (blob) - state=' + ttsCtx.state);
+  }
+  
   try {
     console.log('[TTS_FLOW] step=3 creating_audio_url');
     const audioUrl = URL.createObjectURL(blob);
@@ -514,6 +534,16 @@ async function _playTTSChunk(text) {
   
   console.log('[TTS] _playTTSChunk len=' + text.length);
   console.log('[TTS] TEXT:', text);
+  
+  // VERIFICA E RIPRISTINA AudioContext PRIMA della riproduzione
+  const ttsCtx = _getTTSCtx();
+  console.log('[TTS] AudioContext check - state=' + ttsCtx.state);
+  
+  if (ttsCtx.state === 'suspended' || ttsCtx.state === 'interrupted') {
+    console.log('[TTS] Resuming AudioContext before playback');
+    await ttsCtx.resume();
+    console.log('[TTS] AudioContext resumed - state=' + ttsCtx.state);
+  }
   
   try {
     console.log('[TTS_FLOW] step=3 calling_fetch_tts');
