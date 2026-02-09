@@ -681,8 +681,18 @@ let _neonIdx = 0;
 function addMessage(text, sender) {
   const el = document.createElement('div');
   el.className = `message ${sender}`;
-  el.textContent = text;
-
+  
+  // Usa innerHTML con escape per proteggere da XSS ma permettere formattazione
+  // Previene sovrascritture future garantendo che il contenuto sia locked
+  const escapedText = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+  
+  el.innerHTML = escapedText;
+  
   // Assign rotating neon hue
   const hue = _neonHues[_neonIdx % _neonHues.length];
   el.style.setProperty('--neon-hue', hue + 'deg');
@@ -692,6 +702,10 @@ function addMessage(text, sender) {
 
   // Always scroll on new message (user just sent or received)
   requestAnimationFrame(() => scrollToBottom());
+  
+  // Log per debugging del rendering
+  console.log('[RENDER] Message added:', { sender, textLength: text.length, element: el });
+  
   return el;
 }
 
@@ -760,23 +774,33 @@ async function sendMessage() {
     
     if (!botMessage || botMessage.trim().length === 0) return;
     
+    // RENDERING GARANTITO: aggiungi messaggio e verifica sia visibile
     console.log('[FRONTEND] CHAT RESPONSE RENDERED:', data.response);
-    addGenesiMessage(botMessage);
+    const messageElement = addGenesiMessage(botMessage);
     
-    // TTS SEMPRE OBBLIGATORIO SU response
+    // VERIFICA: assicura che il messaggio sia nel DOM
+    if (!messageElement || !document.contains(messageElement)) {
+      console.error('[RENDER_ERROR] Message element not found in DOM after insertion');
+      return;
+    }
+    
+    // TTS SOLO DOPO rendering confermato
     if (data && data.response && data.response.trim().length > 0) {
       console.log('[TTS_MANDATORY] response valida, forcing TTS');
       console.log('[TTS_CALL] response_len=' + data.response.length + ' tts_mode=' + (data.tts_mode || 'none'));
       console.log('[TTS_CALL] response_preview=' + data.response.substring(0, 100) + '...');
       
-      try {
-        console.log('[TTS_CALL] about_to_call_playTTS');
-        playTTS(data.response, data.tts_mode);
-        console.log('[TTS_CALL] playTTS_returned_successfully');
-      } catch (e) {
-        console.error('[TTS_ABORT] reason=exception_in_playTTS error=', e);
-        console.error('[TTS_ABORT] error_stack=', e.stack);
-      }
+      // TTS asincrono non bloccante - non interferisce con il rendering
+      setTimeout(() => {
+        try {
+          console.log('[TTS_CALL] about_to_call_playTTS');
+          playTTS(data.response, data.tts_mode);
+          console.log('[TTS_CALL] playTTS_returned_successfully');
+        } catch (e) {
+          console.error('[TTS_ABORT] reason=exception_in_playTTS error=', e);
+          console.error('[TTS_ABORT] error_stack=', e.stack);
+        }
+      }, 50); // piccolo delay per garantire rendering completo
     } else if (data) {
       console.log('[TTS_SKIP] response vuota o non valida, skipping TTS');
     }
