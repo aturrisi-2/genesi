@@ -755,45 +755,34 @@ async function sendMessage() {
     const data = await sendChatMessage(text);
     console.log('[FRONTEND] response received - data=', data);
     
-    if (data && data.response) {
-      console.log('[FRONTEND] response rendered - text=', data.response.substring(0, 100) + '...');
-      addGenesiMessage(data.response);
-    } else if (data && typeof data === 'object') {
-      // CONTROLLO AGGIUNTIVO: forza rendering se c'è qualsiasi campo testuale
-      const possibleTextFields = ['response', 'message', 'text', 'content', 'answer'];
-      for (const field of possibleTextFields) {
-        if (data[field] && typeof data[field] === 'string' && data[field].trim().length > 0) {
-          console.log('[FRONTEND] response rendered (fallback) - field=', field, 'text=', data[field].substring(0, 100) + '...');
-          addGenesiMessage(data[field]);
-          break;
-        }
-      }
-      
-      if (!possibleTextFields.some(field => data[field] && typeof data[field] === 'string' && data[field].trim().length > 0)) {
-        console.log('[FRONTEND] response suppressed - reason=no_valid_text_field');
-        console.log('[FRONTEND] data=', data);
-      }
+    // USA SEMPRE final_text - NUOVO CONTRATTO API
+    if (data && data.final_text && typeof data.final_text === 'string' && data.final_text.trim().length > 0) {
+      console.log('[FRONTEND] final_text rendered - text=', data.final_text.substring(0, 100) + '...');
+      addGenesiMessage(data.final_text);
     } else {
-      console.log('[FRONTEND] response suppressed - reason=invalid_data');
+      console.log('[FRONTEND] final_text suppressed - reason=no_final_text');
       console.log('[FRONTEND] data=', data);
+      // Fallback: mostra comunque qualcosa per non bloccare utente
+      const fallbackText = data.final_text || "Sono qui con te.";
+      addGenesiMessage(fallbackText);
     }
     
-    // TTS SEMPRE OBBLIGATORIO SU RISPOSTA TESTUALE VALIDA
-    if (data && data.response && data.response.trim().length > 0) {
-      console.log('[TTS_MANDATORY] risposta testuale valida, forcing TTS');
-      console.log('[TTS_CALL] response_len=' + data.response.length + ' tts_mode=' + (data.tts_mode || 'none'));
-      console.log('[TTS_CALL] response_preview=' + data.response.substring(0, 100) + '...');
+    // TTS SEMPRE OBBLIGATORIO SU final_text
+    if (data && data.final_text && data.final_text.trim().length > 0) {
+      console.log('[TTS_MANDATORY] final_text valida, forcing TTS');
+      console.log('[TTS_CALL] final_text_len=' + data.final_text.length + ' tts_mode=' + (data.tts_mode || 'none'));
+      console.log('[TTS_CALL] final_text_preview=' + data.final_text.substring(0, 100) + '...');
       
       try {
         console.log('[TTS_CALL] about_to_call_playTTS');
-        playTTS(data.response, data.tts_mode);
+        playTTS(data.final_text, data.tts_mode);
         console.log('[TTS_CALL] playTTS_returned_successfully');
       } catch (e) {
         console.error('[TTS_ABORT] reason=exception_in_playTTS error=', e);
         console.error('[TTS_ABORT] error_stack=', e.stack);
       }
     } else if (data) {
-      console.log('[TTS_SKIP] risposta vuota o non valida, skipping TTS');
+      console.log('[TTS_SKIP] final_text vuota o non valida, skipping TTS');
     }
   } catch (e) {
     console.error('Chat error:', e);

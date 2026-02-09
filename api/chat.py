@@ -360,18 +360,21 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
             response_text = ""
         else:
             
-            # RIPRISTINO: Passa SEMPRE le memorie recuperate
-            # La decisione su usarle spetta al prompt, non al bypass
+            # USA NUOVO RESPONSE GENERATOR CON FINAL_RESPONSE
             generator = ResponseGenerator()
-            response_text = await generator.generate_response(
+            final_result = await generator.generate_final_response(
                 user_message=request.message,
                 cognitive_state=state,
-                recent_memories=recent_memories,  # SEMPRE passato
-                relevant_memories=relevant_memories,  # SEMPRE passato
+                recent_memories=recent_memories,
+                relevant_memories=relevant_memories,
                 tone=tone,
                 intent=intent,
                 document_context=document_context
             )
+            
+            response_text = final_result.get("final_text", "")
+            confidence = final_result.get("confidence", "ok")
+            style = final_result.get("style", "standard")
             
             # Subito dopo la risposta → elimina il document_context (one-shot)
             # NOTA: il context viene già eliminato prima della chiamata a generate_response
@@ -411,8 +414,11 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
         if intent.get("should_respond"):
             print(f"[TTS_MANDATORY] user_id={request.user_id} should_respond=True response_len={len(response_text)} tts_mode={tts_mode}", flush=True)
         
+        # NUOVO FORMATO API - FINAL_RESPONSE SEMPRE
         return {
-            "response": response_text,
+            "final_text": response_text,
+            "confidence": confidence,
+            "style": style,
             "tts_mode": tts_mode,
             "should_respond": intent.get("should_respond", False),
             "state": {
