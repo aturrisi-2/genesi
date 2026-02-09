@@ -362,11 +362,13 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     
     # NUOVO FORMATO API - FINAL_RESPONSE SEMPRE
     return {
-        "final_text": response_text,
+        "response": response_text,  # CAMBIATO: final_text -> response
         "confidence": confidence,
         "style": style,
         "tts_mode": tts_mode,
         "should_respond": True,  # Pipeline sempre risponde
+        "user_id": request.user_id,
+        "timestamp": datetime.now().isoformat(),
         "state": {
             "user": state.user.to_dict(),
             "recent_events": [e.to_dict() for e in state.recent_events[-5:]],

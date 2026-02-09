@@ -24,6 +24,14 @@ class LocalLLM:
         self.temperature = 0.6  # Ridotto per risposte brevi
         self.top_p = 0.9  # Hard limit
     
+    def is_available(self) -> bool:
+        """
+        VERIFICA CONFIGURAZIONE SENZA CHIAMATE LLM
+        REGOLA D'ORO: MAI testare con chiamate reali
+        """
+        # PersonalPlex è considerato disponibile se backend_url è configurato
+        return bool(self.backend_url and self.backend_url.startswith("http"))
+    
         
     # HEALTH CHECK RIMOSSO - nessuna chiamata ridondante per velocità
     

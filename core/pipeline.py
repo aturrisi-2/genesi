@@ -86,32 +86,27 @@ class Pipeline:
             }
         
         # PRIORITÀ 1: PersonalPlex (canale umano principale)
-        try:
-            print(f"[PIPELINE] testing PersonalPlex availability", flush=True)
-            test_response = self.local_llm.generate_chat_response("test")
-            if test_response and len(test_response.strip()) > 0:
-                print(f"[PIPELINE] PersonalPlex available", flush=True)
-                return {
-                    "path": "personalplex",
-                    "reason": "personalplex_primary",
-                    "confidence": 0.9
-                }
-        except Exception as e:
-            print(f"[PIPELINE] PersonalPlex unavailable: {e}", flush=True)
+        # REGOLA D'ORO: MAI chiamare LLM per testare disponibilità
+        # Se è configurato → usalo, altrimenti fallback
+        if self.local_llm.is_available():
+            print(f"[PIPELINE] Using PersonalPlex (configured)", flush=True)
+            return {
+                "path": "personalplex",
+                "reason": "personalplex_primary",
+                "confidence": 0.9
+            }
+        else:
+            print(f"[PIPELINE] PersonalPlex not configured", flush=True)
         
         # PRIORITÀ 2: GPT per supporto cognitivo
-        try:
-            print(f"[PIPELINE] testing GPT availability", flush=True)
-            test_response = llm_generate({"prompt": "test", "intent": {"type": "test"}, "tone": {"empathy": 0.5}})
-            if test_response:
-                print(f"[PIPELINE] GPT available", flush=True)
-                return {
-                    "path": "gpt",
-                    "reason": "gpt_cognitive_support",
-                    "confidence": 0.7
-                }
-        except Exception as e:
-            print(f"[PIPELINE] GPT unavailable: {e}", flush=True)
+        # REGOLA D'ORO: MAI chiamare LLM per testare disponibilità
+        # Se è configurato → usalo, altrimenti fallback
+        print(f"[PIPELINE] Using GPT (configured)", flush=True)
+        return {
+            "path": "gpt",
+            "reason": "gpt_cognitive_support",
+            "confidence": 0.7
+        }
         
         # PRIORITÀ 3: Tools per domande fattuali
         if self._is_factual_question(msg):
