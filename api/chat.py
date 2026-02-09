@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 import json
 
 from core.state import CognitiveState
-from core.response_generator import ResponseGenerator
+# from core.response_generator import ResponseGenerator  # Sostituito da surgical_pipeline
 from core.log import log
 
 from memory.episodic import store_event, get_recent_events, search_events
@@ -24,8 +24,8 @@ from core.tone import compute_tone
 # Import per document context persistente
 from api.upload import last_document_context
 
-# Import per image handler
-from core.image_handler import handle_image
+# Import per nuova pipeline chirurgica
+from core.surgical_pipeline import surgical_pipeline
 
 # Import per ramo psicologico
 from core.psychological_detector import detect as psy_detect
@@ -314,13 +314,16 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
             log("CHAT_IN", error="missing_user_id")
     
     # ===============================
-    # INTENT ENGINE (include closure)
+    # INTENT ENGINE (solo per context, non più routing)
     # ===============================
-    # Eseguiamo subito per rilevare closure e bypassare tutto il resto
+    # NOTA: La pipeline chirurgica gestisce internamente intent e routing
+    # Questo codice è mantenuto solo per context e memory
     state = CognitiveState.build(request.user_id)
     recent_memories = get_recent_events(request.user_id, limit=5)
     relevant_memories = search_events(request.user_id, request.message, limit=3)
     tone = compute_tone(recent_memories)
+    
+    # Intent engine solo per context storico
     intent_engine = IntentEngine()
     intent = intent_engine.decide(
         request.message,
@@ -332,163 +335,42 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     )
 
     # ===============================
-    # ROUTING DETERMINISTICO PRIMA DI LLM
+    # VECCHIO ROUTING COMMENTATO - ora gestito da surgical_pipeline
     # ===============================
-    # Questo DEVE venire prima di qualsiasi chiamata LLM
-    routing_info = intent_router.get_routing_info(request.message)
-    print(f"[INTENT_ROUTED] type={routing_info['intent']} source={routing_info['source']} block_creative={routing_info['block_creative_llm']}", flush=True)
+    # Il routing deterministico è ora gestito internamente dalla pipeline chirurgica
+    # per evitare doppie generazioni e garantire il flusso obbligatorio
     
-    # Se l'intent richiede fonti verificate, blocca subito il routing LLM
-    if routing_info['block_creative_llm']:
-        return await _handle_verified_response(
-            routing_info, request, state, recent_memories, relevant_memories, tone
-        )
+    # routing_info = intent_router.get_routing_info(request.message)
+    # if routing_info['block_creative_llm']:
+    #     return await _handle_verified_response(...)
+    
+    print(f"[CHAT] Using surgical pipeline (replaces old routing)", flush=True)
 
     # ===============================
-    # CLOSURE HANDLING: skip psycho, no memory side-effects
+    # CLOSURE HANDLING - ora gestito da surgical_pipeline
     # ===============================
-    if intent.get("type") == "closure":
-        log("INTENT_CLOSURE", user_id=request.user_id, level=intent.get("closure_level"))
-        # Risposta diretta tramite ResponseGenerator (PRE-LLM)
-        response_generator = ResponseGenerator()
-        response_text = await response_generator.generate_response(
-            user_message=request.message,
-            cognitive_state=state,
-            recent_memories=recent_memories,
-            relevant_memories=relevant_memories,
-            tone=tone,
-            intent=intent
-        )
-        
-        # POST-PROCESSOR LINGUISTICO - Pulisci anche risposte closure
-        if response_text:
-            original_text = response_text
-            response_text = text_post_processor.clean_response(response_text)
-            if original_text != response_text:
-                log("TEXT_POST_PROCESSOR", user_id=request.user_id, branch="closure",
-                    original_len=len(original_text), cleaned_len=len(response_text))
-        # Salviamo solo evento minimo in memoria episodica (no psicologica)
-        user_affect = compute_affect("user_message", {"text": request.message})
-        store_event(
-            user_id=request.user_id,
-            type="user_message",
-            content={"text": request.message},
-            salience=0.2,  # Bassa salience per closure
-            affect=user_affect
-        )
-        if response_text.strip():  # Solo se c'è risposta
-            store_event(
-                user_id=request.user_id,
-                type="system_response",
-                content={"text": response_text},
-                salience=0.2,
-                affect=compute_affect("system_response", {"text": response_text})
-            )
-        return {
-            "response": response_text,
-            "tts_mode": "normal",
-            "user_id": request.user_id,
-            "timestamp": datetime.now().isoformat(),
-            "closure": True
-        }
+    # NOTA: Anche closure è gestito internamente dalla pipeline chirurgica
+    # per garantire flusso obbligatorio e evitare doppie generazioni
+    
+    # if intent.get("type") == "closure":
+    #     log("INTENT_CLOSURE", user_id=request.user_id, level=intent.get("closure_level"))
+    #     # Vecchio codice con ResponseGenerator - sostituito da pipeline
+    
+    print(f"[CHAT] Closure handling delegated to surgical pipeline", flush=True)
 
     # ===============================
     # RAMO PSICOLOGICO — RILEVAZIONE AUTOMATICA
     # ===============================
-    # Rileva PRIMA di tutto (tranne immagini attive).
-    # Se attivo, devia al responder psicologico dedicato.
-    if request.user_id:
-        try:
-            psy_detection = psy_detect(request.user_id, request.message)
-            log("PSYCH_DETECT", user_id=request.user_id,
-                active=psy_detection["active"],
-                score=psy_detection["score"],
-                severity=psy_detection["severity"],
-                crisis=psy_detection["crisis"])
-            
-            # NUOVA LOGICA: Se utente emotivamente attivo, controlla se è domanda factual
-            if psy_detection["active"]:
-                # Controlla se è una domanda factual (verified intent)
-                routing_info = intent_router.get_routing_info(request.message)
-                
-                # Se è una domanda factual, bypassa ramo psicologico
-                if routing_info['block_creative_llm']:
-                    log("PSYCH_BYPASS", user_id=request.user_id, 
-                        reason="factual_question", 
-                        intent=routing_info['intent'])
-                    return await _handle_verified_response(
-                        routing_info, request, state, recent_memories, relevant_memories, tone
-                    )
-                
-                # Altrimenti procedi con ramo psicologico
-                psy_detection["user_id"] = request.user_id
-                log("BRANCH_SELECTED", branch="psychological", user_id=request.user_id,
-                    severity=psy_detection["severity"], crisis=psy_detection["crisis"])
-                
-                # Recupera contesto psicologico dedicato
-                psy_context = psy_get_context(request.user_id)
-                log("MEMORY_LOAD", type="psychological", user_id=request.user_id,
-                    entries=psy_context.get("total_interactions", 0))
-                
-                # Recupera nome utente se disponibile
-                user_name = None
-                if hasattr(state, 'user') and hasattr(state.user, 'profile'):
-                    user_name = (state.user.profile or {}).get('name')
-                
-                # Genera risposta psicologica
-                response_text = await generate_psychological_response(
-                    user_message=request.message,
-                    detection=psy_detection,
-                    psy_context=psy_context,
-                    user_name=user_name,
-                )
-                
-                # POST-PROCESSOR LINGUISTICO - Pulisci anche risposte psicologiche
-                if response_text:
-                    original_text = response_text
-                    response_text = text_post_processor.clean_response(response_text)
-                    if original_text != response_text:
-                        log("TEXT_POST_PROCESSOR", user_id=request.user_id, branch="psychological",
-                            original_len=len(original_text), cleaned_len=len(response_text))
-                
-                # Salva in memoria psicologica (isolata)
-                psy_store(
-                    user_id=request.user_id,
-                    entry_type="theme" if not psy_detection["crisis"] else "crisis",
-                    content=request.message,
-                    severity=psy_detection["severity"],
-                )
-                log("MEMORY_SAVE", type="psychological", user_id=request.user_id,
-                    entry_type="crisis" if psy_detection["crisis"] else "theme")
-                
-                # Salva anche in memoria episodica (per continuità conversazione)
-                user_affect = compute_affect("user_message", {"text": request.message})
-                store_event(
-                    user_id=request.user_id,
-                    type="user_message",
-                    content={"text": request.message},
-                    salience=0.8,
-                    affect=user_affect
-                )
-                store_event(
-                    user_id=request.user_id,
-                    type="system_response",
-                    content={"text": response_text},
-                    salience=1.0,
-                    affect=compute_affect("system_response", {"text": response_text})
-                )
-                log("MEMORY_SAVE", type="standard", user_id=request.user_id, event="user_message+system_response")
-                
-                return {
-                    "response": response_text,
-                    "tts_mode": "psychological",
-                    "user_id": request.user_id,
-                    "timestamp": datetime.now().isoformat(),
-                    "psy_mode": True
-                }
-        except Exception as e:
-            log("PSYCH_DETECT", error=str(e), user_id=request.user_id)
+    # NOTA: Anche il ramo psicologico è gestito internamente dalla pipeline chirurgica
+    # per garantire flusso obbligatorio e evitare doppie generazioni
     
+    # if request.user_id:
+    #     try:
+    #         psy_detection = psy_detect(request.user_id, request.message)
+    #         # ... vecchio codice psicologico
+    
+    print(f"[CHAT] Psychological handling delegated to surgical pipeline", flush=True)
+
     # ===============================
     # BLOCCO IMMAGINI: PRIORITÀ ASSOLUTA
     # ===============================
@@ -601,9 +483,9 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     # 5. Compute conversation tone
     tone = compute_tone(state.recent_events)
 
-    # 6. PIPELINE UNICA - Proactor + Generator in un solo passo
-    generator = ResponseGenerator()
-    final_result = await generator.generate_final_response(
+    # 6. PIPELINE CHIRURGICA - Flusso obbligatorio
+    print(f"[CHAT] Using surgical pipeline", flush=True)
+    final_result = await surgical_pipeline.process_message(
         user_message=request.message,
         cognitive_state=state,
         recent_memories=recent_memories,
@@ -614,22 +496,10 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     )
     
     response_text = final_result.get("final_text", "")
+    engine_used = final_result.get("engine_used", "unknown")
     
-    # FILTRO POST-LLM PER COMPORTAMENTO UMANO (anche per pipeline principale)
-    if response_text:
-        context = {"intent": intent.get("type", "chat_free"), "user_state": state}
-        filtered_response = post_llm_filter.filter_response(response_text, context)
-        
-        if filtered_response and len(filtered_response.strip()) > 0:
-            response_text = filtered_response
-        else:
-            # FALLBACK UMANO SE FILTRO INVALIDA
-            if "ricordi" in request.message.lower() or "chiami" in request.message.lower():
-                response_text = human_fallback.get_fallback("identity", request.message)
-            else:
-                response_text = human_fallback.get_fallback("general", request.message)
-    confidence = final_result.get("confidence", "ok")
-    style = final_result.get("style", "standard")
+    print(f"[CHAT] Engine used: {engine_used}", flush=True)
+    print(f"[CHAT] Response: '{response_text[:50]}...'", flush=True)
     
     # POST-PROCESSOR LINGUISTICO - Pulisci metatesto teatrale prima di tutto
     if response_text:
@@ -641,7 +511,8 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                 original_len=len(original_text), cleaned_len=len(response_text))
     
     log("PIPELINE_COMPLETED", user_id=request.user_id, 
-        path=final_result.get("path", "unknown"),
+        path="surgical",
+        engine=engine_used,
         final_text=response_text[:50])
     
     # 7. Store system response
@@ -672,8 +543,8 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     # NUOVO FORMATO API - FINAL_RESPONSE SEMPRE
     return {
         "response": response_text,  # CAMBIATO: final_text -> response
-        "confidence": confidence,
-        "style": style,
+        "confidence": "ok",  # Default per pipeline chirurgica
+        "style": "standard",  # Default per pipeline chirurgica
         "tts_mode": tts_mode,
         "should_respond": True,  # Pipeline sempre risponde
         "user_id": request.user_id,

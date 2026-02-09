@@ -49,6 +49,10 @@ class IntentRouter:
                 r"quando è nato", r"quando nacque", r"quando morì", r"quando mori",
                 r"dove è nato", r"dove nacque", r"dove morì", r"dove mori",
                 r"cosa ha fatto", r"cosa fece", r"cosa fece famoso",
+                # Definizioni e concetti
+                r"cos'è", r"cosa è", r"che cos'è", r"che cosa è",
+                r"definizione", r"significato", r"spiegami", r"spiega",
+                r"come funziona", r"come funziona", r"come funzionano",
                 # Periodi storici
                 r"romani", r"greci", r"egizi", r"medioevo", r"rinascimento",
                 r"antichità", r"storia", r"storico", r"storica",
