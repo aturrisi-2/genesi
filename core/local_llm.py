@@ -82,12 +82,14 @@ class LocalLLM:
                 if "content" in result:
                     content = result["content"].strip()
                     
-                    if len(content) < 2:
-                        raise Exception("Content troppo corto da llama-server")
+                    # SE HTTP 200 e content non vuoto → RISPOSTA SEMPRE VALIDA
+                    if not content:
+                        raise Exception("Content vuoto da llama-server")
                     
                     tokens_count = len(content.split())
                     
                     print(f"[DEBUG] CONTENT_LENGTH: {len(content)} tokens: {tokens_count}", flush=True)
+                    print(f"[DEBUG] RISPOSTA ACCETTATA: '{content}'", flush=True)
                     logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=local")
                     
                     return content
@@ -151,12 +153,14 @@ class LocalLLM:
                 if "content" in result:
                     content = result["content"].strip()
                     
-                    if len(content) < 2:
-                        raise Exception("Chat content troppo corto da llama-server")
+                    # SE HTTP 200 e content non vuoto → RISPOSTA SEMPRE VALIDA
+                    if not content:
+                        raise Exception("Chat content vuoto da llama-server")
                     
                     tokens_count = len(content.split())
                     
                     print(f"[DEBUG] CHAT CONTENT_LENGTH: {len(content)} tokens: {tokens_count}", flush=True)
+                    print(f"[DEBUG] CHAT RISPOSTA ACCETTATA: '{content}'", flush=True)
                     logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=chat")
                     
                     return content
@@ -220,12 +224,14 @@ class LocalLLM:
                 if "content" in result:
                     content = result["content"].strip()
                     
-                    if len(content) < 2:
-                        raise Exception("Memory content troppo corto da llama-server")
+                    # SE HTTP 200 e content non vuoto → RISPOSTA SEMPRE VALIDA
+                    if not content:
+                        raise Exception("Memory content vuoto da llama-server")
                     
                     tokens_count = len(content.split())
                     
                     print(f"[DEBUG] MEMORY CONTENT_LENGTH: {len(content)} tokens: {tokens_count}", flush=True)
+                    print(f"[DEBUG] MEMORY RISPOSTA ACCETTATA: '{content}'", flush=True)
                     logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=memory")
                     
                     return content
