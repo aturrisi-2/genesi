@@ -43,16 +43,24 @@ class IntentRouter:
             ],
             
             IntentType.HISTORICAL_INFO: [
-                # Pattern storici
-                r"chi era", r"chi furono", r"chi è stato", r"chi sono stati",
-                r"quando nacque", r"quando morì", r"quando visse",
-                r"storia di", r"storia del", r"epoca di", r"periodo di",
+                # Domande storiche generiche
+                r"chi è", r"chi era", r"chi furono", r"chi sono",
+                r"com'è", r"come era", r"come furono", r"come sono",
+                r"quando è nato", r"quando nacque", r"quando morì", r"quando mori",
+                r"dove è nato", r"dove nacque", r"dove morì", r"dove mori",
+                r"cosa ha fatto", r"cosa fece", r"cosa fece famoso",
+                # Periodi storici
+                r"romani", r"greci", r"egizi", r"medioevo", r"rinascimento",
+                r"antichità", r"storia", r"storico", r"storica",
                 # Eventi storici
                 r"guerra", r"rivoluzione", r"battaglia", r"impero", r"regno",
                 r"medioevo", r"rinascimento", r"illuminismo", r"rivoluzione industriale",
                 # Domande su persone storiche
                 r"napoleone", r"giulio cesare", r"leonardo da vinci", r"michelangelo",
-                r"dante", r"petrarca", r"galileo", r"newton", r"einstein"
+                r"dante", r"petrarca", r"galileo", r"newton", r"einstein",
+                # Nomi storici comuni
+                r"alessandro", r"magno", r"attila", r"carlo magno", r"marco aurelio",
+                r"augusto", r"traiano", r"nerone", r"costantino", r"giustiniano"
             ],
             
             IntentType.WEATHER: [
@@ -172,6 +180,13 @@ class IntentRouter:
                 "tone": "informative"
             },
             
+            IntentType.IDENTITY: {
+                "source": "identity_memory",
+                "llm_creative": False,
+                "verified_data": True,
+                "tone": "friendly"
+            },
+            
             IntentType.OTHER: {
                 "source": "system_time",
                 "llm_creative": False,
@@ -197,7 +212,8 @@ class IntentRouter:
             IntentType.HISTORICAL_INFO,
             IntentType.WEATHER,
             IntentType.NEWS,
-            IntentType.OTHER
+            IntentType.OTHER,
+            IntentType.IDENTITY
         }
         
         return intent_type in blocked_intents

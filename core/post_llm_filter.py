@@ -13,29 +13,27 @@ class PostLLMFilter:
     """
     
     def __init__(self):
-        # Pattern linguistici inappropriati
+        # Pattern linguistici inappropriati - FORZATO
         self.inappropriate_patterns = [
-            # Lingua non italiana - PIÙ AGGRESSIVO
-            r'\b(hola|hello|hey|hi|good morning|good evening|good afternoon)\b',
-            r'\b(¿qué|what|how|why|when|where|who|which)\b',
-            r'\b(thank you|thanks|gracias|merci|thank|thx)\b',
-            r'\b(lo siento|sorry|excuse me|pardon|forgive)\b',
-            r'\b(buenos días|good night|good bye|bye|goodbye)\b',
-            r'\b(caridad|charity|amor|love|like|enjoy)\b',
-            r'\b(kiss|bacio|baci|beso|besos|hug|cuddle)\b',
+            # TUTTO l'inglese - ZERO TOLLERANZA
+            r'\b(the|and|for|are|but|not|you|all|can|had|her|was|one|our|out|day|get|has|him|his|how|man|new|now|old|see|two|way|who|boy|did|its|let|put|say|she|too|use)\b',
+            r'\b(hello|hey|hi|good morning|good evening|good afternoon|good night|good bye|bye|goodbye)\b',
+            r'\b(what|how|why|when|where|who|which|where|when|why|what|who)\b',
+            r'\b(thank you|thanks|gracias|merci|thank|thx|please|sorry|excuse me|pardon|forgive)\b',
+            r'\b(amazing|awesome|great|wonderful|fantastic|perfect|excellent|really|actually|literally|basically|seriously|definitely)\b',
             r'\b(february|january|march|april|may|june|july|august|september|october|november|december)\b',
             r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b',
-            r'\b(adjusts|smile|wink|giggle|laugh|frown|nod|shrug)\b',
-            r'\b(amazing|awesome|great|wonderful|fantastic|perfect|excellent)\b',
-            r'\b(really|actually|literally|basically|seriously|definitely)\b',
+            r'\b(adjusts|smile|wink|giggle|laugh|frown|nod|shrug|stares|looks|glances|peers)\b',
+            r'\b(caridad|charity|amor|love|like|enjoy|kiss|bacio|baci|beso|besos|hug|cuddle)\b',
+            r'\b(hola|¿qué|lo siento|buenos días|adiós|hasta luego)\b',
             
-            # Teatralità inappropriata - PIÙ COMPLETA
+            # Teatralità - ELIMINAZIONE COMPLETA
             r'\*[^*]*\*',  # Azioni tra asterischi
             r'\([^)]*\)',  # Azioni in parentesi
             r'\[[^\]]*\]',  # Azioni in quadre
             r'\{[^}]*\}',  # Azioni in graffe
             
-            # Emoji e simboli
+            # Emoji e simboli - TUTTI
             r'[\U0001F600-\U0001F64F]',  # Emoticoni
             r'[\U0001F300-\U0001F5FF]',  # Simboli vari
             r'[\U0001F680-\U0001F6FF]',  # Trasporti e simboli
@@ -49,7 +47,7 @@ class PostLLMFilter:
             r'\b(ho la soluzione|ti posso aiutare|posso curarti)\b',
             r'\b(non ti preoccupare|non ti preoccupare)\b',
             
-            # Affermazioni affettive inappropriate in contesto medico
+            # Affermazioni affettive inappropriate
             r'\b(ti voglio bene|ti adoro|sei speciale)\b',
             r'\b(un bacio|un abbraccio|ti stringo)\b',
             r'\b(carissimo|carissima|tesoro|dolcezza)\b',
@@ -82,38 +80,41 @@ class PostLLMFilter:
     
     def filter_response(self, response: str, context: Optional[Dict] = None) -> str:
         """
-        FILTRA E SANIFICA RISPOSTA LLM
+        FILTRA E SANIFICA RISPOSTA LLM - FORZATO
         
         Args:
             response: Risposta LLM originale
             context: Contesto della conversazione (intent, user state, etc.)
             
         Returns:
-            Risposta filtrata e umana
+            Risposta filtrata e umana o fallback
         """
         if not response or not isinstance(response, str):
             return self._get_empathetic_fallback(context)
         
         original = response
         
-        # 1. Rimuovi pattern inappropriati
+        # 1. RIMOZIONE FORZATA pattern inappropriati
         filtered = response
         for pattern in self.inappropriate_patterns:
             filtered = re.sub(pattern, '', filtered, flags=re.IGNORECASE)
         
-        # 2. Pulisci spazi multipli
+        # 2. Pulizia spazi multipli
         filtered = re.sub(r'\s+', ' ', filtered).strip()
         
-        # 3. Verifica se la risposta è ancora valida
-        if len(filtered) < 10:  # Troppo corta dopo filtraggio
+        # 3. VERIFICA FORZATA contaminazione - ZERO TOLLERANZA
+        if self._has_any_contamination(filtered):
+            print(f"[POST_LLM_FILTER] CONTAMINATED: '{original[:50]}...' -> FALLBACK")
             return self._get_empathetic_fallback(context)
         
-        # 4. Verifica contaminazione linguistica
-        if self._has_language_contamination(filtered):
+        # 4. Verifica lunghezza minima
+        if len(filtered) < 5:
+            print(f"[POST_LLM_FILTER] TOO SHORT: '{original[:50]}...' -> FALLBACK")
             return self._get_empathetic_fallback(context)
         
-        # 5. Verifica appropriatezza contestuale
-        if context and not self._is_contextually_appropriate(filtered, context):
+        # 5. Verifica che sia italiano puro
+        if not self._is_pure_italian(filtered):
+            print(f"[POST_LLM_FILTER] NOT ITALIAN: '{original[:50]}...' -> FALLBACK")
             return self._get_empathetic_fallback(context)
         
         # Log del filtraggio
@@ -123,21 +124,49 @@ class PostLLMFilter:
         
         return filtered
     
-    def _has_language_contamination(self, text: str) -> bool:
+    def _has_any_contamination(self, text: str) -> bool:
         """
-        Verifica contaminazione linguistica
+        Verifica contaminazione FORZATA - ZERO TOLLERANZA
         """
-        # Pattern per lingue non italiane
-        non_italian_patterns = [
-            r'\b(hello|hey|hi|what|how|why|when|where|thank|thanks|sorry|love|kiss)\b',
-            r'\b(¿qué|hola|buenos|gracias|lo siento|caridad)\b'
-        ]
+        # Qualsiasi asterisco, parentesi, quadra, graffa
+        if '*' in text or '(' in text or '[' in text or '{' in text:
+            return True
         
-        for pattern in non_italian_patterns:
-            if re.search(pattern, text, re.IGNORECASE):
-                return True
+        # Qualsiasi emoji
+        if any(ord(char) >= 0x1F600 and ord(char) <= 0x1F64F for char in text):
+            return True
+        
+        # Qualsiasi parola inglese comune - SOLO se predominante
+        english_words = ['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'man', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'its', 'let', 'put', 'say', 'she', 'too', 'use', 'hello', 'what', 'how', 'why', 'when', 'where', 'who', 'which', 'thank', 'thanks', 'please', 'sorry', 'amazing', 'awesome', 'great', 'wonderful', 'fantastic', 'perfect', 'excellent', 'really', 'actually', 'literally', 'basically', 'seriously', 'definitely']
+        
+        words = text.lower().split()
+        english_count = sum(1 for word in words if word in english_words)
+        
+        # Blocca solo se >30% delle parole sono inglesi
+        if len(words) > 0 and (english_count / len(words)) > 0.3:
+            return True
         
         return False
+    
+    def _is_pure_italian(self, text: str) -> bool:
+        """
+        Verifica che il testo sia italiano puro
+        """
+        # Caratteri italiani validi
+        italian_chars = set('abcdefghijklmnopqrstuvwxyzàèéìíòóùABCDEFGHIJKLMNOPQRSTUVWXYZÀÈÉÌÍÒÓÙ\'.,!?;: ')
+        
+        for char in text:
+            if char not in italian_chars:
+                return False
+        
+        # Verifica che ci siano parole italiane
+        italian_words = ['il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una', 'dei', 'degli', 'delle', 'del', 'dello', 'della', 'e', 'o', 'ma', 'per', 'con', 'su', 'da', 'in', 'a', 'che', 'chi', 'come', 'quando', 'dove', 'perché', 'non', 'si', 'no', 'sì', 'questo', 'quella', 'quello', 'questa', 'questi', 'quelle']
+        
+        words = text.lower().split()
+        italian_count = sum(1 for word in words if word in italian_words)
+        
+        # Almeno 30% delle parole devono essere italiane
+        return len(words) > 0 and (italian_count / len(words)) >= 0.3
     
     def _is_contextually_appropriate(self, text: str, context: Dict) -> bool:
         """

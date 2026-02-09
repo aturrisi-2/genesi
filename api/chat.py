@@ -193,12 +193,22 @@ async def _handle_verified_response(
         print(f"[VERIFIED_RESPONSE] Using system time", flush=True)
         now = datetime.now()
         
+        # Mapping mesi in italiano
+        mesi_italiani = {
+            'January': 'gennaio', 'February': 'febbraio', 'March': 'marzo',
+            'April': 'aprile', 'May': 'maggio', 'June': 'giugno',
+            'July': 'luglio', 'August': 'agosto', 'September': 'settembre',
+            'October': 'ottobre', 'November': 'novembre', 'December': 'dicembre'
+        }
+        
+        mese_italiano = mesi_italiani.get(now.strftime('%B'), now.strftime('%B'))
+        
         # Pattern per riconoscere tipo di richiesta temporale
         message_lower = request.message.lower()
         
         if "giorno" in message_lower or "data" in message_lower:
             # Formato italiano: 9 febbraio 2026
-            response_text = f"Oggi è {now.day} {now.strftime('%B')} {now.year}."
+            response_text = f"Oggi è {now.day} {mese_italiano} {now.year}."
         elif "ora" in message_lower or "ore" in message_lower:
             # Formato italiano: 14:30
             response_text = f"Sono le {now.strftime('%H:%M')}."
@@ -206,7 +216,7 @@ async def _handle_verified_response(
             response_text = f"Siamo nel {now.year}."
         else:
             # Risposta generica
-            response_text = f"Sono le {now.strftime('%H:%M')} del {now.day} {now.strftime('%B')} {now.year}."
+            response_text = f"Sono le {now.strftime('%H:%M')} del {now.day} {mese_italiano} {now.year}."
     
     # Fallback sicuro
     else:
@@ -384,7 +394,21 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                 severity=psy_detection["severity"],
                 crisis=psy_detection["crisis"])
             
+            # NUOVA LOGICA: Se utente emotivamente attivo, controlla se è domanda factual
             if psy_detection["active"]:
+                # Controlla se è una domanda factual (verified intent)
+                routing_info = intent_router.get_routing_info(request.message)
+                
+                # Se è una domanda factual, bypassa ramo psicologico
+                if routing_info['block_creative_llm']:
+                    log("PSYCH_BYPASS", user_id=request.user_id, 
+                        reason="factual_question", 
+                        intent=routing_info['intent'])
+                    return await _handle_verified_response(
+                        routing_info, request, state, recent_memories, relevant_memories, tone
+                    )
+                
+                # Altrimenti procedi con ramo psicologico
                 psy_detection["user_id"] = request.user_id
                 log("BRANCH_SELECTED", branch="psychological", user_id=request.user_id,
                     severity=psy_detection["severity"], crisis=psy_detection["crisis"])
