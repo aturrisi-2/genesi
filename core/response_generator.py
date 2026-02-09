@@ -34,20 +34,9 @@ class ResponseGenerator:
             print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B called with: '{user_message}'", flush=True)
             
             try:
-                # FAST PATH: messaggi brevi -> mode="presence" ultra-veloce
-                fast_messages = ["ci sei", "ok", "vai", "dimmi", "ciao", "hey", "grazie"]
-                is_fast = len(user_message) < 15 or user_message.lower().strip() in fast_messages
-                
-                if is_fast:
-                    print(f"[FAST_PATH] message='{user_message}' -> presence mode", flush=True)
-                    mode = "presence"
-                else:
-                    print(f"[NORMAL_PATH] message='{user_message[:30]}...' -> normal mode", flush=True)
-                    mode = "normal"
-                
-                # Chiamata diretta a PersonalPlex 7B con mode appropriato
+                # CHIAMATA DIRETTA PERSONALPLEX - UNA SOLA VOLTA
                 local_llm = LocalLLM()
-                response_text = local_llm.generate(user_message, mode=mode)
+                response_text = local_llm.generate(user_message)
                 
                 if response_text and len(response_text.strip()) > 0:
                     response_text = response_text.strip()
@@ -56,13 +45,11 @@ class ResponseGenerator:
                     return response_text
                 else:
                     print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B empty response", flush=True)
-                    print(f"[FORCED_LOCAL_LLM] Fallback to GPT", flush=True)
-                    # Continua con GPT come fallback
+                    # SE PersonalPlex restituisce vuoto, NON richiamare
                     
             except Exception as e:
                 print(f"[FORCED_LOCAL_LLM] PersonalPlex 7B error: {e}", flush=True)
-                print(f"[FORCED_LOCAL_LLM] Fallback to GPT", flush=True)
-                # Continua con GPT come fallback
+                # SE PersonalPlex fallisce, NON retry
 
         # ===============================
         # PROACTOR DECISION CHECK

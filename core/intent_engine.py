@@ -161,33 +161,23 @@ class IntentEngine:
                     "brain_mode": "relazione"
                 }
             
-            # Health check
-            if local_llm._health_check():
-                print(f"[PROACTOR] PERSONALPLEX healthy - generating response", flush=True)
-                
-                # FAST PATH per messaggi brevi
-                fast_messages = ["ci sei", "ok", "vai", "dimmi", "ciao", "hey", "grazie"]
-                is_fast = msg_len < 15 or msg.lower().strip() in fast_messages
-                mode = "presence" if is_fast else "normal"
-                
-                print(f"[PROACTOR] FAST_PATH={is_fast} mode={mode} len={msg_len}", flush=True)
-                
-                # Genera risposta con PersonalPlex
-                response = local_llm.generate(msg, mode=mode)
-                
-                if response and len(response.strip()) > 0:
-                    print(f"[PROACTOR] PERSONALPLEX response received", flush=True)
-                    return {
-                        "should_respond": True,
-                        "decision": "respond",
-                        "reason": "personalplex_primary",
-                        "brain_mode": "relazione",
-                        "personalplex_response": response.strip()
-                    }
-                else:
-                    print(f"[PROACTOR] PERSONALPLEX empty response", flush=True)
+            # CHIAMATA DIRETTA PERSONALPLEX - nessun health check
+            print(f"[PROACTOR] PERSONALPLEX generating response", flush=True)
+            
+            # Genera risposta con PersonalPlex (UNA SOLA VOLTA)
+            response = local_llm.generate(msg)
+            
+            if response and len(response.strip()) > 0:
+                print(f"[PROACTOR] PERSONALPLEX response received", flush=True)
+                return {
+                    "should_respond": True,
+                    "decision": "respond",
+                    "reason": "personalplex_primary",
+                    "brain_mode": "relazione",
+                    "personalplex_response": response.strip()
+                }
             else:
-                print(f"[PROACTOR] PERSONALPLEX down - fallback to GPT", flush=True)
+                print(f"[PROACTOR] PERSONALPLEX empty response", flush=True)
                 
         except Exception as e:
             print(f"[PROACTOR] PERSONALPLEX error: {e} - fallback to GPT", flush=True)

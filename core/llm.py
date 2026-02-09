@@ -117,30 +117,21 @@ def generate_response(payload: dict) -> str:
         from core.local_llm import LocalLLM
         local_llm = LocalLLM()
         
-        # FAST PATH: messaggi brevi -> mode="presence" ultra-veloce
-        fast_messages = ["ci sei", "ok", "vai", "dimmi", "ciao", "hey", "grazie"]
-        is_fast = len(prompt) < 15 or prompt.lower().strip() in fast_messages
+        print(f"[PERSONALPLEX] called=true prompt='{prompt[:30]}...'", flush=True)
         
-        if is_fast:
-            print(f"[FAST_PATH] prompt='{prompt}' -> presence mode", flush=True)
-            mode = "presence"
-        else:
-            print(f"[NORMAL_PATH] prompt='{prompt[:30]}...' -> normal mode", flush=True)
-            mode = "normal"
-        
-        print(f"[PERSONALPLEX] called=true mode={mode} prompt='{prompt[:30]}...'", flush=True)
-        
-        # Chiama PersonalPlex per generazione testo con mode appropriato
-        response = local_llm.generate(prompt, mode=mode)
+        # CHIAMATA DIRETTA PERSONALPLEX - UNA SOLA VOLTA
+        response = local_llm.generate(prompt)
         
         if response and len(response.strip()) > 0:
             print(f"[PERSONALPLEX] success=true response='{response[:50]}...'", flush=True)
             return response.strip()
         else:
-            print(f"[PERSONALPLEX] empty_response - fallback to GPT", flush=True)
+            print(f"[PERSONALPLEX] empty_response - NO RETRY", flush=True)
+            # SE PersonalPlex restituisce vuoto, NON richiamare
                 
     except Exception as e:
-        print(f"[PERSONALPLEX] error={e} - fallback to GPT", flush=True)
+        print(f"[PERSONALPLEX] error={e} - NO RETRY", flush=True)
+        # SE PersonalPlex fallisce, NON retry
 
     # ===============================
     # GPT FALLBACK
