@@ -243,17 +243,15 @@ class PersonalplexEngine(BaseEngine):
         print(f"[PERSONALPLEX] Generating chat response", flush=True)
         
         try:
-            # Prompt per PersonalPlex - CONVERSAZIONE NATURALE
-            prompt = f"""Stai conversando con qualcuno. Rispondi come una persona reale, non come un assistente.
+            # Prompt per PersonalPlex - COMPLETAMENTE LIBERO
+            prompt = f"""{message}
 
-{message}
-
-Rispondi in modo naturale, come farebbe un amico. Sii te stesso, usa emoji se ti va."""
+Rispondi come ti pare."""
             
             response = self.local_llm.generate(
                 prompt=prompt,
-                max_tokens=120,  # Aumentato per conversazione naturale
-                temperature=0.8  # Aumentato per più creatività
+                max_tokens=200,  # Massima libertà
+                temperature=0.9  # Massima creatività
             )
             
             # Post-processing per garantire conformità (MAI rimuovere emoji)
@@ -266,34 +264,16 @@ Rispondi in modo naturale, come farebbe un amico. Sii te stesso, usa emoji se ti
             return "Ah, non so cosa dire..."  # Fallback naturale, non da assistente
     
     def _enforce_personalplex_rules(self, response: str) -> str:
-        """Applica regole PersonalPlex - MANTieni emoji Unicode, rimuovi descrizioni"""
+        """Applica regole PersonalPlex - LIBERO DALLE CATENE"""
         if not response:
             return response
         
-        # 1. Rimuovi descrizioni testuali di emoji tra asterischi
-        response = re.sub(r'\*[a-zA-Z\s]+(?:face|smile|wink|laugh|grin|sad|happy|angry|surprise)\*', '', response, flags=re.IGNORECASE)
-        response = re.sub(r'\*[a-zA-Z\s]*(?:sorride|ride|sorriso|risata)\*', '', response, flags=re.IGNORECASE)
+        # SOLO pulizia base - niente più vincoli!
+        # Rimuovi solo caratteri davvero problematici
+        response = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', response)
         
-        # 2. Rimuovi emoji testuali con : :
-        response = re.sub(r':[a-zA-Z_]+:', '', response)
-        
-        # 3. Rimuovi azioni tra parentesi
-        response = re.sub(r'\([a-zA-Z\s]*(?:sorride|ride|sorriso|risata|smile|laugh)\)', '', response, flags=re.IGNORECASE)
-        response = re.sub(r'\[[a-zA-Z\s]*(?:sorride|ride|sorriso|risata|smile|laugh)\]', '', response, flags=re.IGNORECASE)
-        
-        # 4. Rimuovi descrizioni in inglese
-        response = re.sub(r'\*[a-zA-Z\s]+(?:face|smile|wink|laugh|grin|sad|happy|angry|surprise)\*', '', response, flags=re.IGNORECASE)
-        
-        # 5. MANTieni solo emoji Unicode reali - rimuovi tutto il resto problematico
-        response = re.sub(r'[^\w\sàèéìòùÀÈÉÌÒÙ.,!?\'-😊😄😉🙃😎🤔😢🎉🔥💡⚡❤️🌟]', '', response)
-        
-        # 6. Rimuovi spazi multipli e pulisci
+        # Pulizia spazi multipli
         response = re.sub(r'\s+', ' ', response)
-        
-        # 7. Limita a 2 frasi
-        sentences = re.split(r'[.!?]+', response)
-        if len(sentences) > 2:
-            response = '. '.join(sentences[:2]) + '.'
         
         return response.strip()
     
