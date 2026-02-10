@@ -504,14 +504,9 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     print(f"[CHAT] Display: '{display_text[:50]}...'", flush=True)
     print(f"[CHAT] TTS: '{tts_text[:50]}...'", flush=True)
     
-    # POST-PROCESSOR LINGUISTICO - Pulisci SOLO display_text
-    if display_text:
-        original_text = display_text
-        display_text = text_post_processor.clean_response(display_text)
-        # Log silenzioso solo se c'è stata pulizia
-        if original_text != display_text:
-            log("TEXT_POST_PROCESSOR", user_id=request.user_id, 
-                original_len=len(original_text), cleaned_len=len(display_text))
+    # POST-PROCESSOR LINGUISTICO - MAI SU display_text
+    # display_text DEVE mantenere emoji e caratteri unicode
+    # SOLO tts_text viene processato per sintesi vocale
     
     log("PIPELINE_COMPLETED", user_id=request.user_id, 
         path="surgical",

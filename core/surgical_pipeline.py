@@ -160,14 +160,16 @@ class SurgicalPipeline:
         # 4. POST-FILTER - Pulizia sicurezza (NON normalizzatore)
         print(f"[SURGICAL_PIPELINE] Step 4: Post-filter safety", flush=True)
         
+        # display_text = testo originale con emoji (per UI) - MAI SANITIZZATO
+        display_text = final_text
+        
         # Language guard come sicurezza - APPLICATO SOLO A TTS
-        guard_result = language_guard.check_and_clean(final_text, {
+        tts_text = final_text  # Inizia con lo stesso testo
+        
+        guard_result = language_guard.check_and_clean(tts_text, {
             "intent": intent_type,
             "user_message": user_message
         })
-        
-        # display_text = testo originale con emoji (per UI)
-        display_text = final_text
         
         # tts_text = testo pulito per TTS
         if guard_result["is_clean"]:
@@ -177,7 +179,7 @@ class SurgicalPipeline:
             print(f"[SURGICAL_PIPELINE] Contamination detected: {guard_result['issues']}", flush=True)
             
             # 1. Tentativo di pulizia NON distruttiva SOLO per TTS
-            cleaned_text = self._clean_response_safely(final_text, guard_result['issues'], intent_type)
+            cleaned_text = self._clean_response_safely(tts_text, guard_result['issues'], intent_type)
             
             if cleaned_text and len(cleaned_text.strip()) > 3:
                 print(f"[SURGICAL_PIPELINE] TTS Cleaned successfully", flush=True)

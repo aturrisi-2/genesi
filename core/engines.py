@@ -324,9 +324,8 @@ class APIToolsEngine(BaseEngine):
                 
                 # Costruisci risposta TTS friendly con emoji
                 weather_emoji = self._get_weather_emoji(description)
-                response = f"{weather_emoji} A {city} ci sono {temp} gradi con {description}."
-                if humidity > 0:
-                    response += f" Umidità {humidity} per cento."
+                
+                # Determina descrizione vento
                 if wind_speed > 0:
                     if wind_speed <= 5:
                         wind_desc = "debole"
@@ -336,7 +335,10 @@ class APIToolsEngine(BaseEngine):
                         wind_desc = "forte"
                     else:
                         wind_desc = "molto forte"
-                    response += f" Vento {wind_desc}."
+                else:
+                    wind_desc = "assente"
+                
+                response = f"{weather_emoji} **{city}** {weather_emoji}\n{temp}°C, {description}\n💧 Umidità {humidity}%\n🌬️ Vento {wind_desc}"
                 
                 print(f"[DEBUG_WEATHER] response built (TTS friendly): {response}", flush=True)
                 return response
@@ -416,12 +418,9 @@ class APIToolsEngine(BaseEngine):
                         category = self._get_news_category(title, description)
                         emoji = self._get_news_emoji(category)
                         
-                        news_part = f"{emoji} **{location} – {category}**\n"
-                        news_part += f"👉 {title}\n"
-                        
-                        # Spiega PERCHÉ conta per Roma
-                        relevance = self._get_relevance_context(description, location)
-                        news_part += f"📍 {relevance}"
+                        news_part = f"📰 **{location} – {category}** 📰\n"
+                        news_part += f"👉 {title} 👉\n"
+                        news_part += f"📍 {relevance} 📍"
                         
                         # Aggiungi dettagli se disponibili
                         if description and len(description) > 30:
@@ -430,21 +429,21 @@ class APIToolsEngine(BaseEngine):
                             if sentences:
                                 detail_sentence = sentences[0].strip()
                                 if len(detail_sentence) > 20:
-                                    news_part += f" {detail_sentence}."
+                                    news_part += f" {detail_sentence}. 🔥"
                         
                         response_parts.append(news_part)
                     else:
-                        # Seconda notizia più breve
+                        # Seconda notizia più breve ma ricca di emoji
                         category = self._get_news_category(title, description)
                         emoji = self._get_news_emoji(category)
                         
-                        news_part = f"{emoji} {title}."
+                        news_part = f"{emoji} {title} ⚠️"
                         if description and len(description) > 30:
                             sentences = description.split('.')
                             if sentences:
                                 first_sentence = sentences[0].strip()
                                 if len(first_sentence) > 20:
-                                    news_part += f" {first_sentence}."
+                                    news_part += f" {first_sentence}. 📢"
                         
                         response_parts.append(news_part)
             
