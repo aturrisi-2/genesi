@@ -567,21 +567,14 @@ async function playTTS(text, tts_mode = 'normal') {
     // Testi brevi normali: playback normale
     await _playTTSChunk(text);
     console.log('[TTS_FLOW] step=5 playTTS_single_chunk_completed');
-  }
-  
   console.log('[TTS_FLOW] step=6 playTTS_finished');
 }
 
 // ===============================
-// USER IDENTITY
+// USER IDENTITY - NO AUTH
 // ===============================
 function getUserId() {
-  // Prefer auth user_id from JWT, fallback to localStorage
-  const payload = getTokenPayload();
-  if (payload && payload.sub) {
-    localStorage.setItem('genesi_user_id', payload.sub);
-    return payload.sub;
-  }
+  // Solo localStorage - nessun auth
   let id = localStorage.getItem('genesi_user_id');
   if (!id) {
     id = crypto.randomUUID();
