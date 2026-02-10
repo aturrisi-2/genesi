@@ -245,13 +245,17 @@ class APIToolsEngine(BaseEngine):
         """
         Chiama API esterne per meteo/news
         """
-        api_type = params.get("api_type", "")
-        print(f"[API_TOOLS] Calling {api_type} API", flush=True)
+        intent_type = params.get("intent_type", "")
+        print(f"[API_TOOLS] Calling API for intent: {intent_type}", flush=True)
+        print(f"[DEBUG_API_TOOLS] message: {message}", flush=True)
         
         try:
-            if api_type == "weather":
-                return await self._get_weather(params.get("location", "Roma"))
-            elif api_type == "news":
+            if intent_type == "weather":
+                # Estrai città dal messaggio
+                location = self._extract_location(message)
+                print(f"[DEBUG_API_TOOLS] extracted location: {location}", flush=True)
+                return await self._get_weather(location)
+            elif intent_type == "news":
                 return await self._get_news()
             else:
                 return "Servizio non disponibile."
@@ -260,14 +264,57 @@ class APIToolsEngine(BaseEngine):
             print(f"[API_TOOLS] Error: {e}", flush=True)
             return "Non riesco a ottenere informazioni in questo momento."
     
+    def _extract_location(self, message: str) -> str:
+        """Estrae città dal messaggio meteo"""
+        from core.tools import extract_city
+        location = extract_city(message)
+        print(f"[DEBUG_API_TOOLS] extract_city result: {location}", flush=True)
+        return location if location else "Roma"
+    
     def can_handle(self, intent_type: str) -> bool:
         """API tools gestiscono meteo e news"""
         return intent_type in ["weather", "news"]
     
     async def _get_weather(self, location: str) -> str:
-        """Ottiene meteo da location"""
-        # Simulazione - in produzione chiamerebbe API reali
-        return f"A {location} ci sono 18°C con cielo sereno."
+        """Ottiene meteo da location usando API reali"""
+        print(f"[DEBUG_WEATHER] _get_weather called with location: {location}", flush=True)
+        
+        try:
+            from core.tools import fetch_weather
+            print(f"[DEBUG_WEATHER] calling fetch_weather API", flush=True)
+            
+            weather_data = await fetch_weather(f"che tempo fa a {location}")
+            print(f"[DEBUG_WEATHER] API response received", flush=True)
+            
+            if "error" in weather_data:
+                print(f"[DEBUG_WEATHER] API error: {weather_data['error']}", flush=True)
+                return f"Non riesco a ottenere informazioni meteo per {location}."
+            
+            # Estrai dati meteo
+            current = weather_data.get("current", {})
+            city = weather_data.get("city", location)
+            
+            if current:
+                temp = current.get("temp", "N/A")
+                description = current.get("description", "condizioni sconosciute")
+                humidity = current.get("humidity", "N/A")
+                wind_speed = current.get("wind_speed", "N/A")
+                
+                response = f"A {city} ci sono {temp}°C con {description}."
+                if humidity != "N/A":
+                    response += f" Umidità: {humidity}%."
+                if wind_speed != "N/A":
+                    response += f" Vento: {wind_speed} km/h."
+                
+                print(f"[DEBUG_WEATHER] response built: {response}", flush=True)
+                return response
+            else:
+                print(f"[DEBUG_WEATHER] no current data in response", flush=True)
+                return f"Dati meteo non disponibili per {location}."
+                
+        except Exception as e:
+            print(f"[DEBUG_WEATHER] Exception in _get_weather: {e}", flush=True)
+            return f"Errore nel recupero dati meteo per {location}."
     
     async def _get_news(self) -> str:
         """Ottiene notizie"""

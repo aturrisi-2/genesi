@@ -234,7 +234,7 @@ async def fetch_weather(user_message: str) -> Dict:
                     "description": current_data.get("weather", [{}])[0].get("description", ""),
                     "wind_speed": _r1(current_data.get("wind", {}).get("speed", 0)),
                 }
-                print(f"[FATTI][API_METEO] ✓ current: {result['current']['temp']}°C, {result['current']['description']}", flush=True)
+                print(f"[FATTI][API_METEO] current: {result['current']['temp']}C, {result['current']['description']}", flush=True)
 
             # Parse forecast — ARROTONDATO
             if "list" in forecast_data:
