@@ -95,11 +95,17 @@ class GPTFullEngine(BaseEngine):
             # Prompt per GPT-full - solo fatti
             prompt = self._build_factual_prompt(message, params.get("intent_type", ""))
             
-            response = await self.llm_generate(
-                prompt=prompt,
-                temperature=params.get("temperature", 0.3),
-                max_tokens=params.get("max_tokens", 150)
-            )
+            # Costruisci payload corretto per generate_response()
+            payload = {
+                "prompt": prompt,
+                "tone": params.get("tone", "neutral"),
+                "intent": {
+                    "brain_mode": "factual",
+                    "intent_type": params.get("intent_type", "medical_info")
+                }
+            }
+            
+            response = self.llm_generate(payload)
             
             return response.strip()
             
@@ -141,6 +147,84 @@ REGOLE ASSOLUTE:
             base_prompt += "Rispondi in modo informativo e diretto."
         
         return f"{base_prompt}\n\nDomanda: {message}\nRisposta:"
+
+class PsychologicalEngine(BaseEngine):
+    """
+    MOTORE PSICOLOGICO - Supporto emotivo con GPT_FULL
+    Usa conoscenze psicologiche standard, linguaggio empatico
+    """
+    
+    def __init__(self):
+        from core.llm import generate_response as llm_generate
+        self.llm_generate = llm_generate
+    
+    async def generate(self, message: str, params: Dict[str, Any], context: Optional[Dict] = None) -> str:
+        """
+        Genera risposta psicologica empatica e supportiva
+        """
+        print(f"[PSYCHOLOGICAL] Generating empathetic response", flush=True)
+        
+        try:
+            # Prompt psicologico - empatico ma non diagnostico
+            prompt = self._build_psychological_prompt(message, params.get("emotional_weight", 0.5))
+            
+            # Costruisci payload per generate_response()
+            payload = {
+                "prompt": prompt,
+                "tone": "empathetic",
+                "intent": {
+                    "brain_mode": "support",
+                    "intent_type": "emotional_support"
+                }
+            }
+            
+            response = self.llm_generate(payload)
+            
+            return response.strip()
+            
+        except Exception as e:
+            print(f"[PSYCHOLOGICAL] Error: {e}", flush=True)
+            return "Capisco che questo momento sia difficile. Sono qui per ascoltarti."
+    
+    def can_handle(self, intent_type: str) -> bool:
+        """Motore psicologico gestisce supporto emotivo"""
+        return intent_type in ["emotional_support", "psychological"]
+    
+    def _build_psychological_prompt(self, message: str, emotional_weight: float) -> str:
+        """
+        Costruisce prompt psicologico - empatico ma non diagnostico
+        """
+        base_prompt = """Rispondi in modo empatico e supportivo.
+
+REGOLE ASSOLUTE:
+- Usa linguaggio calmo e normalizzante
+- NON fare diagnosi
+- NON suggerire terapie specifiche
+- Fornisci supporto emotivo generale
+- Normalizza i sentimenti espressi
+- Suggerisci strategie di coping generali
+- Se necessario, suggerisci aiuto professionale
+- Massimo 3-4 frasi
+"""
+
+        if emotional_weight >= 0.7:
+            base_prompt += """
+Il messaggio mostra alto distress emotivo.
+Rispondi con particolare empatia e validazione.
+Includi: "È normale sentirsi così in certi momenti".
+"""
+        elif emotional_weight >= 0.5:
+            base_prompt += """
+Il messaggio mostra moderato distress emotivo.
+Rispondi con supporto empatico e incoraggiamento.
+"""
+        else:
+            base_prompt += """
+Il messaggio mostra lieve distress emotivo.
+Rispondi con supporto generale e incoraggiamento.
+"""
+        
+        return f"{base_prompt}\n\nMessaggio: {message}\nRisposta:"
 
 class PersonalplexEngine(BaseEngine):
     """
@@ -687,37 +771,6 @@ class APIToolsEngine(BaseEngine):
         else:
             return "🌤️"
 
-class PsychologicalEngine(BaseEngine):
-    """
-    PSYCHOLOGICAL - Solo per supporto emotivo
-    """
-    
-    async def generate(self, message: str, params: Dict[str, Any], context: Optional[Dict] = None) -> str:
-        """
-        Genera risposta di supporto emotivo
-        """
-        print(f"[PSYCHOLOGICAL] Generating supportive response", flush=True)
-        
-        try:
-            from core.psychological_responder import generate_psychological_response
-            
-            response = await generate_psychological_response(
-                user_message=message,
-                detection=context.get("psy_detection", {}) if context else {},
-                psy_context=context.get("psy_context", {}) if context else {},
-                user_name=context.get("user_name") if context else None
-            )
-            
-            return response
-            
-        except Exception as e:
-            print(f"[PSYCHOLOGICAL] Error: {e}", flush=True)
-            return "Sono qui per te. Non sei solo."
-    
-    def can_handle(self, intent_type: str) -> bool:
-        """Psychological gestisce supporto emotivo"""
-        return intent_type == "emotional_support"
-
 class VerifiedKnowledgeEngine(BaseEngine):
     """
     VERIFIED KNOWLEDGE - Knowledge base verificato
@@ -763,9 +816,9 @@ class EngineRegistry:
     def __init__(self):
         self.engines = {
             "gpt_full": GPTFullEngine(),
+            "psychological": PsychologicalEngine(),  # NUOVO - con GPT_FULL
             "personalplex": PersonalplexEngine(),
             "api_tools": APIToolsEngine(),
-            "psychological": PsychologicalEngine(),
             "verified_knowledge": VerifiedKnowledgeEngine(),
             "date_time": DateTimeEngine()  # NUOVO
         }
