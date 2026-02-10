@@ -10,13 +10,13 @@ from pathlib import Path
 from tts.simple_tts import simple_tts
 from core.log import log
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/tts")
 
 class TTSRequest(BaseModel):
     text: str
     voice: str = "default"
 
-@router.post("/tts")
+@router.post("/")
 async def text_to_speech(request: TTSRequest):
     """
     Text-to-Speech - 1 intent → 1 funzione
