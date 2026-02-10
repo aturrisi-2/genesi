@@ -244,7 +244,12 @@ async def _handle_verified_response(
     # POST-PROCESSOR LINGUISTICO - Pulisci anche risposte verificate
     if response_text:
         original_text = response_text
-        response_text = text_post_processor.clean_response(response_text)
+        # ❌ BYPASS TOTALE per chat_free - nessuna formattazione Q/A
+        if intent_type != "chat_free":
+            response_text = text_post_processor.clean_response(response_text)
+        else:
+            # chat_free: testo nudo, nessun post-processing
+            pass
         if original_text != response_text:
             log("TEXT_POST_PROCESSOR", user_id=request.user_id, branch="verified",
                 original_len=len(original_text), cleaned_len=len(response_text))
@@ -405,7 +410,12 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
             # POST-PROCESSOR LINGUISTICO - Pulisci anche risposte image
             if response_text:
                 original_text = response_text
-                response_text = text_post_processor.clean_response(response_text)
+                # ❌ BYPASS TOTALE per chat_free - nessuna formattazione Q/A
+                if intent_type != "chat_free":
+                    response_text = text_post_processor.clean_response(response_text)
+                else:
+                    # chat_free: testo nudo, nessun post-processing
+                    pass
                 if original_text != response_text:
                     log("TEXT_POST_PROCESSOR", user_id=request.user_id, branch="image",
                         original_len=len(original_text), cleaned_len=len(response_text))

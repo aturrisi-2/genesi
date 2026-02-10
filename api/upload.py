@@ -163,7 +163,13 @@ async def upload_file(file: UploadFile = File(...), user_id: str = Form(...), ht
         # POST-PROCESSOR LINGUISTICO - Pulisci anche risposte upload
         if response_text:
             original_text = response_text
-            response_text = text_post_processor.clean_response(response_text)
+            # ❌ BYPASS TOTALE per chat_free - nessuna formattazione Q/A
+            # Note: upload non ha intent_type, ma se è chat_free bypassiamo
+            if "chat_free" not in str(response_text).lower():  # Detection semplice
+                response_text = text_post_processor.clean_response(response_text)
+            else:
+                # chat_free: testo nudo, nessun post-processing
+                pass
             if original_text != response_text:
                 logger.info(f"[UPLOAD] TEXT_POST_PROCESSOR: {len(original_text)}→{len(response_text)} chars")
 
