@@ -266,10 +266,25 @@ class APIToolsEngine(BaseEngine):
             return "Non riesco a ottenere informazioni in questo momento."
     
     def _extract_location(self, message: str) -> str:
-        """Estrae città dal messaggio meteo"""
+        """Estrae città dal messaggio meteo con normalizzazione preposizioni"""
+        # Normalizza il testo rimuovendo preposizioni comuni
+        normalized_message = message.lower()
+        prepositions = [" a ", " su ", " per ", " di ", " nel ", " nella ", " in "]
+        
+        for prep in prepositions:
+            normalized_message = normalized_message.replace(prep, " ")
+        
+        # Ricostruisci il messaggio normalizzato per l'estrazione
+        words = normalized_message.split()
+        normalized_message = " ".join(words)
+        
+        print(f"[DEBUG_WEATHER] normalized message: '{normalized_message}'", flush=True)
+        
+        # Usa extract_city sul messaggio normalizzato
         from core.tools import extract_city
-        location = extract_city(message)
-        print(f"[DEBUG_API_TOOLS] extract_city result: {location}", flush=True)
+        location = extract_city(normalized_message)
+        
+        print(f"[DEBUG_WEATHER] extracted location: '{location}'", flush=True)
         return location if location else "Roma"
     
     def can_handle(self, intent_type: str) -> bool:
@@ -365,10 +380,10 @@ class APIToolsEngine(BaseEngine):
                 filtered_articles = self._filter_news_by_location(articles, location)
                 print(f"[DEBUG_NEWS] filtered_articles={len(filtered_articles)}", flush=True)
                 
-                # Se dopo il filtro non ci sono articoli, usa fallback
-                if not filtered_articles:
-                    print(f"[DEBUG_NEWS] no articles after location filter", flush=True)
-                    return f"Al momento non ci sono notizie rilevanti su {location}."
+                # Se dopo il filtro ci sono meno di 2 articoli, usa fallback esplicito
+                if len(filtered_articles) < 2:
+                    print(f"[DEBUG_NEWS] insufficient local articles: {len(filtered_articles)}", flush=True)
+                    return f"Poche notizie locali oggi a {location}."
                 
                 articles = filtered_articles
             else:
@@ -388,25 +403,27 @@ class APIToolsEngine(BaseEngine):
                 description = self._clean_news_text(description)
                 
                 if title and len(title) > 10:
-                    # Costruisci risposta approfondita con contesto
+                    # Costruisci risposta approfondita con formato OBBLIGATORIO
                     if i == 0:
-                        # Prima notizia con emoji e contesto
+                        # Prima notizia con formato completo
                         category = self._get_news_category(title, description)
                         emoji = self._get_news_emoji(category)
                         
                         news_part = f"{emoji} **{location} – {category}**\n"
-                        news_part += f"{title}. "
+                        news_part += f"👉 {title}\n"
                         
-                        # Aggiungi contesto "perché conta"
-                        if description and len(description) > 20:
+                        # Spiega PERCHÉ conta per Roma
+                        relevance = self._get_relevance_context(description, location)
+                        news_part += f"📍 {relevance}"
+                        
+                        # Aggiungi dettagli se disponibili
+                        if description and len(description) > 30:
                             # Estrai la frase più importante
                             sentences = description.split('.')
                             if sentences:
-                                context_sentence = sentences[0].strip()
-                                if len(context_sentence) > 15:
-                                    # Aggiungi contesto di rilevanza
-                                    relevance = self._get_relevance_context(context_sentence, location)
-                                    news_part += f"{relevance} {context_sentence}."
+                                detail_sentence = sentences[0].strip()
+                                if len(detail_sentence) > 20:
+                                    news_part += f" {detail_sentence}."
                         
                         response_parts.append(news_part)
                     else:
@@ -427,7 +444,7 @@ class APIToolsEngine(BaseEngine):
             if response_parts:
                 # Unisci le notizie con formattazione
                 final_response = "\n\n".join(response_parts)
-                print(f"[DEBUG_NEWS] response built (rich with context): {final_response[:100]}...", flush=True)
+                print(f"[DEBUG_NEWS] response built (deep format): {final_response[:100]}...", flush=True)
                 return final_response
             else:
                 print(f"[DEBUG_NEWS] no valid content found", flush=True)
@@ -460,34 +477,89 @@ class APIToolsEngine(BaseEngine):
             return ""
     
     def _filter_news_by_location(self, articles: list, location: str) -> list:
-        """Filtra articoli per località usando parole chiave"""
+        """Filtra articoli SOLO per località con criteri severi"""
         location_lower = location.lower()
         
-        # Mappa località → parole chiave
-        location_keywords = {
-            "roma": ["roma", "romano", "romana", "capitale", "lazio"],
-            "milano": ["milano", "milanese", "lombardia", "lombardo"],
-            "napoli": ["napoli", "napoletano", "campania"],
-            "torino": ["torino", "torinese", "piemonte", "piemontese"],
-            "bologna": ["bologna", "bolognese", "emilia", "romagna"],
-            "firenze": ["firenze", "fiorentino", "toscana", "toscano"],
-            "genova": ["genova", "genovese", "liguria", "ligure"],
-            "palermo": ["palermo", "palermitano", "sicilia", "siciliano"],
+        # Parole chiave locali ESCLUSIVE per Roma
+        rome_keywords = [
+            "roma", "romano", "romana", "capitale", "lazio",
+            # Quartieri e zone specifiche
+            "trastevere", "tridente", "testaccio", "prati", "monti", "esquilino",
+            "tuscolano", "appio", "eur", "garbatella", "pigneto", "san lorenzo",
+            "campidoglio", "quirinale", "vaticano", "trastevere",
+            # Istituzioni locali
+            "comune di roma", "sindaco di roma", "municipio", "atac", "roma servizi",
+            # Luoghi specifici
+            "colosseo", "fori imperiali", "piazza navona", "fontana di trevi",
+            "pantheon", "circo massimo", "bocca della verità", "castel sant'angelo",
+            # Infrastrutture
+            "metro a", "metro b", "linea a", "linea b", "termini", "tiburtina",
+            "grande raccordo anulare", "gra", "autostrada roma"
+        ]
+        
+        # Parole chiave per altre città
+        city_keywords = {
+            "milano": ["milano", "milanese", "lombardia", "duomo", "piazza del duomo", "atm", "comune di milano"],
+            "napoli": ["napoli", "napoletano", "campania", "municipio di napoli", "anm"],
+            "torino": ["torino", "torinese", "piemonte", "municipio", "gtt"],
+            "bologna": ["bologna", "bolognese", "emilia", "romagna", "tper"],
+            "firenze": ["firenze", "fiorentino", "toscana", "palazzo vecchio", "autolinee toscane"],
+            "genova": ["genova", "genovese", "liguria", "amt"],
+            "palermo": ["palermo", "palermitano", "sicilia", "amat"]
         }
         
         # Ottieni parole chiave per la località
-        keywords = location_keywords.get(location_lower, [location_lower])
+        if location_lower == "roma":
+            keywords = rome_keywords
+        else:
+            keywords = city_keywords.get(location_lower, [location_lower])
         
         filtered_articles = []
         for article in articles:
             title = article.get("title", "").lower()
             description = article.get("description", "").lower()
             
-            # Controlla se contiene parole chiave della località
-            if any(keyword in title or keyword in description for keyword in keywords):
+            # SCARTA contenuti non locali
+            if self._is_non_local_content(title, description):
+                continue
+            
+            # Controlla se contiene parole chiave LOCALI ESCLUSIVE
+            if any(keyword in title for keyword in keywords):
+                filtered_articles.append(article)
+            elif any(keyword in description for keyword in keywords):
                 filtered_articles.append(article)
         
         return filtered_articles
+    
+    def _is_non_local_content(self, title: str, description: str) -> bool:
+        """Scarta contenuti non locali"""
+        text = (title + " " + description).lower()
+        
+        # SCARTA questi contenuti
+        non_local_patterns = [
+            # Oroscopo e astrologia
+            "oroscopo", "oroscopo della settimana", "segno zodiacale", "ariete", "toro", "gemelli",
+            "cancro", "leone", "vergine", "bilancia", "scorpione", "sagittario", "capricorno", 
+            "acquario", "pesci",
+            
+            # Sport nazionale non locale
+            "serie a", "serie b", "champions league", "europa league", "nazionale italiana",
+            "juventus", "milan", "inter",
+            
+            # Economia nazionale
+            "borsa italiana", "ftse mib", "spread", "btp", "banca d'italia", "economia nazionale",
+            
+            # Spettacolo nazionale
+            "sanremo", "festival di sanremo", "cinema italiano", "tv italiana",
+            
+            # Politica nazionale
+            "governo nazionale", "consiglio dei ministri", "palazzo chigi", "presidente del consiglio",
+            
+            # Internazionale
+            "ue", "unione europea", "nato", "onu", "stati uniti", "cina", "russia"
+        ]
+        
+        return any(pattern in text for pattern in non_local_patterns)
     
     def _get_news_category(self, title: str, description: str) -> str:
         """Determina la categoria della notizia"""
@@ -530,22 +602,25 @@ class APIToolsEngine(BaseEngine):
     def _get_relevance_context(self, sentence: str, location: str) -> str:
         """Genera contesto di rilevanza per la località"""
         location_lower = location.lower()
+        sentence_lower = sentence.lower()
         
         # Pattern di rilevanza per Roma
         if location_lower == "roma":
-            if any(word in sentence.lower() for word in ["centro", "storico", "colosseo", "vaticano"]):
+            if any(word in sentence_lower for word in ["centro", "storico", "colosseo", "vaticano"]):
                 return "Questo interessa chi vive o visita il centro storico. "
-            elif any(word in sentence.lower() for word in ["metro", "bus", "traffico"]):
+            elif any(word in sentence_lower for word in ["metro", "bus", "traffico", "spostamenti"]):
                 return "Questo potrebbe cambiare gli spostamenti quotidiani. "
-            elif any(word in sentence.lower() for word in ["comune", "sindaco", "municipio"]):
+            elif any(word in sentence_lower for word in ["comune", "sindaco", "municipio", "decisione"]):
                 return "Questa decisione amministrativa riguarda tutti i residenti. "
+            elif any(word in sentence_lower for word in ["lavori", "intervento", "manutenzione"]):
+                return "Questi lavori potrebbero causare disagi alla circolazione. "
             else:
                 return f"Questa notizia è rilevante per chi vive a {location}. "
         
         # Pattern di rilevanza per altre città
-        elif any(word in sentence.lower() for word in ["metro", "bus", "traffico"]):
+        elif any(word in sentence_lower for word in ["metro", "bus", "traffico"]):
             return "Questo potrebbe impattare la mobilità urbana. "
-        elif any(word in sentence.lower() for word in ["comune", "sindaco"]):
+        elif any(word in sentence_lower for word in ["comune", "sindaco"]):
             return "Questa decisione amministrativa riguarda i cittadini. "
         else:
             return f"Questo evento è importante per {location}. "
