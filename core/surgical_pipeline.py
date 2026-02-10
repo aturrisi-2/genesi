@@ -167,9 +167,12 @@ class SurgicalPipeline:
                 )
                 
                 if not final_text or len(final_text.strip()) < 3:
-                    print(f"[SURGICAL_PIPELINE] Engine returned empty, using fallback", flush=True)
-                    print(f"[DEBUG_FALLBACK] reason=engine_empty_response", flush=True)
-                    final_text = "Cerchiamo di trovare una soluzione insieme."
+                    print(f"[SURGICAL_PIPELINE] Engine returned empty", flush=True)
+                    # Per chat_free, NON usare fallback generico
+                    if intent_type == "chat_free":
+                        final_text = "Ciao! 😊 Come posso aiutarti?"
+                    else:
+                        final_text = "Cerchiamo di trovare una soluzione insieme."
                     
             except Exception as e:
                 print(f"[SURGICAL_PIPELINE] Engine error: {e}", flush=True)

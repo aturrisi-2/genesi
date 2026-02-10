@@ -243,21 +243,11 @@ class PersonalplexEngine(BaseEngine):
         print(f"[PERSONALPLEX] Generating chat response", flush=True)
         
         try:
-            # Prompt per PersonalPlex - SOLO EMOJI UNICODE REALI
-            prompt = f"""Rispondi in modo naturale e semplice a: {message}
+            # Prompt per PersonalPlex - SEMPLICE E PERMISSIVO
+            prompt = f"""Rispondi in modo naturale a: {message}
 
-REGOLE ASSOLUTE:
-- SOLO italiano
-- EMOJI CONSENTITE SOLO in forma UNICODE: 😊 😄 😉 🙃 😎 🤔
-- VIETATE descrizioni testuali di emoji: *grinning face*, *winking face*, *ride*, *smile*
-- VIETATE emoji testuali: :smile:, :wink:, :laugh:
-- VIETATE azioni tra parentesi: (sorride), (ride), [sorride]
-- VIETATE descrizioni tra asterischi: *sorride*, *ride*
-- Se vuoi esprimere un'emozione, usa SOLO emoji grafiche vere, NON descriverle a parole
-- Se non sei sicuro dell'emoji → NON usare nulla. Meglio testo pulito che descrizioni.
-- MASSIMO 2 frasi
-- Tono umano e sobrio
-- SOLO conversazione informale"""
+Sei Genesi. Sii breve e amichevole.
+Puoi usare emoji come 😊 😄 😉 se vuoi."""
             
             response = self.local_llm.generate(
                 prompt=prompt,

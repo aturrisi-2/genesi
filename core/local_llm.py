@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class LocalLLM:
     """Interfaccia per PersonalPlex 7B via backend locale NVIDIA"""
     
-    def __init__(self, backend_url: str = "http://127.0.0.1:8080/completion", timeout: int = 10, max_retries: int = 0):
+    def __init__(self, backend_url: str = "http://127.0.0.1:8080/completion", timeout: int = 25, max_retries: int = 2):
         self.backend_url = backend_url
         self.timeout = timeout
         self.max_retries = max_retries
@@ -37,16 +37,7 @@ class LocalLLM:
     
     def generate(self, prompt: str, max_tokens: int = None, temperature: float = None, mode: str = "normal") -> str:
         """
-        Genera testo con PersonalPlex 7B via llama.cpp diretto
-        
-        Args:
-            prompt: Prompt per generazione
-            max_tokens: Token massimi (default 256)
-            temperature: Temperatura (default 0.7)
-            mode: Modalità (ignorata per semplicità)
-            
-        Returns:
-            Testo generato
+        Genera testo con retry e backoff per chat_free stabile
         """
         start_time = time.time()
         
@@ -56,69 +47,71 @@ class LocalLLM:
         if temperature is None:
             temperature = self.temperature
         
-        try:
-            # LOG OBBLIGATORI
-            system_prompt = "Rispondi SEMPRE e SOLO in italiano. Non usare mai l'inglese, nemmeno singole parole, espressioni o frasi. Se l'utente scrive in italiano, rispondi esclusivamente in italiano. Tu sei Genesi. Rispondi in modo naturale e conversazionale."
-            
-            # Costruisci prompt LLaMA puro
-            prompt = f"<s>[INST] {system_prompt}\n\n{prompt} [/INST]"
-            print(f"[DEBUG] PROMPT: {prompt}", flush=True)
-            
-            # Payload ESATTO per /completion
-            payload = {
-                "prompt": prompt,
-                "n_predict": 256,
-                "temperature": 0.7
-            }
-            
-            print(f"[DEBUG] PAYLOAD: {json.dumps(payload, indent=2)}", flush=True)
-            
-            response = requests.post(
-                self.backend_url,
-                json=payload,
-                timeout=self.timeout,
-                headers={"Content-Type": "application/json"}
-            )
-            
-            latency = (time.time() - start_time) * 1000
-            
-            if response.status_code == 200:
-                result = response.json()
-                print(f"[DEBUG] RESPONSE: {json.dumps(result, indent=2)}", flush=True)
+        # Retry con backoff esponenziale
+        for attempt in range(self.max_retries + 1):
+            try:
+                if attempt > 0:
+                    # Backoff esponenziale: 5s, 10s
+                    backoff_time = 5 * (2 ** (attempt - 1))
+                    print(f"[LOCAL_LLM] Retry {attempt}/{self.max_retries} after {backoff_time}s backoff", flush=True)
+                    time.sleep(backoff_time)
                 
-                # Parsing RISPOSTA: SOLO response["content"]
-                if "content" in result:
-                    content = result["content"].strip()
+                # LOG OBBLIGATORI
+                system_prompt = "Rispondi SEMPRE e SOLO in italiano. Non usare mai l'inglese, nemmeno singole parole, espressioni o frasi. Se l'utente scrive in italiano, rispondi esclusivamente in italiano. Tu sei Genesi. Rispondi in modo naturale e conversazionale."
+                
+                # Costruisci prompt LLaMA puro
+                full_prompt = f"<s>[INST] {system_prompt}\n\n{prompt} [/INST]"
+                print(f"[DEBUG] PROMPT: {full_prompt}", flush=True)
+                
+                # Payload ESATTO per /completion
+                payload = {
+                    "prompt": full_prompt,
+                    "n_predict": 256,
+                    "temperature": 0.7
+                }
+                
+                print(f"[DEBUG] PAYLOAD: {json.dumps(payload, indent=2)}", flush=True)
+                
+                response = requests.post(
+                    self.backend_url,
+                    json=payload,
+                    timeout=self.timeout,
+                    headers={"Content-Type": "application/json"}
+                )
+                
+                latency = (time.time() - start_time) * 1000
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    content = data.get("content", "").strip()
                     
-                    # SE HTTP 200 e content non vuoto → RISPOSTA SEMPRE VALIDA
-                    if not content:
-                        raise Exception("Content vuoto da llama-server")
-                    
-                    tokens_count = len(content.split())
-                    
-                    print(f"[DEBUG] CONTENT_LENGTH: {len(content)} tokens: {tokens_count}", flush=True)
-                    print(f"[DEBUG] RISPOSTA ACCETTATA: '{content}'", flush=True)
-                    
-                    # Log INFO per risposte accettate anche se lente
-                    if latency > 2000:  # Se più di 2 secondi
-                        logger.info(f"RISPOSTA LENTA MA ACCETTATA: latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=local")
+                    if content:
+                        tokens = len(content.split())
+                        logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens}, model=llama-2-7b-chat")
+                        return content
                     else:
-                        logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=local")
-                    
-                    return content
+                        print(f"[LOCAL_LLM] Empty content on attempt {attempt + 1}", flush=True)
+                        continue
                 else:
-                    raise Exception("Response senza 'content' da llama-server")
-            else:
-                raise Exception(f"HTTP {response.status_code}: {response.text}")
+                    raise Exception(f"HTTP {response.status_code}: {response.text}")
+                    
+            except requests.exceptions.Timeout:
+                latency = (time.time() - start_time) * 1000
+                print(f"[LOCAL_LLM] Timeout on attempt {attempt + 1}/{self.max_retries + 1}", flush=True)
+                if attempt == self.max_retries:
+                    logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error=timeout_after_retries")
+                    return ""  # Solo dopo tutti i retry
+                continue
                 
-        except requests.exceptions.Timeout:
-            latency = (time.time() - start_time) * 1000
-            logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error=timeout")
-            return ""  # NESSUN fallback - solo llama.cpp
-        except Exception as e:
-            latency = (time.time() - start_time) * 1000
-            logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error={e}")
-            return ""  # NESSUN fallback - solo llama.cpp
+            except Exception as e:
+                latency = (time.time() - start_time) * 1000
+                print(f"[LOCAL_LLM] Error on attempt {attempt + 1}/{self.max_retries + 1}: {e}", flush=True)
+                if attempt == self.max_retries:
+                    logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error={e}")
+                    return ""  # Solo dopo tutti i retry
+                continue
+        
+        return ""
     
     def generate_chat_response(self, user_message: str) -> str:
         """
