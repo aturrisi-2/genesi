@@ -248,12 +248,18 @@ class IntentEngine:
         # ===============================
         # RILEVAMENTO EMOTIVO
         # ===============================
+        # EMOTIONAL SIGNAL DETECTION - FORZA PSYCHOLOGICAL
+        # ===============================
         has_emotion = any(signal in msg_lower for signal in self.EMOTIONAL_SIGNALS)
         if has_emotion:
             intent["emotional_weight"] = 0.7
             intent["focus"] = "presenza"
             intent["use_memory"] = True
-            print(f"[INTENT] emotional_signal_detected", flush=True)
+            intent["type"] = "emotional_support"  # FORZA intent psicologico
+            intent["should_respond"] = True
+            intent["style"] = "empatico"
+            intent["depth"] = "supportivo"
+            print(f"[INTENT] emotional_signal_detected → FORZA psychological_support", flush=True)
 
         # ===============================
         # DUAL BRAIN ROUTING

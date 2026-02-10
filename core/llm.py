@@ -104,6 +104,9 @@ REGOLE ASSOLUTE:
 
 
 def generate_response(payload: dict) -> str:
+    """
+    Funzione generica per risposte - usa PersonalPlex per chat
+    """
     prompt = payload["prompt"]
     tone = payload.get("tone")
     intent = payload.get("intent", {})
@@ -135,6 +138,99 @@ def generate_response(payload: dict) -> str:
     # NESSUN FALLBACK GPT - solo PersonalPlex
     print(f"[LLM] NO RESPONSE - PersonalPlex failed", flush=True)
     return ""  # Nessuna risposta se PersonalPlex fallisce
+
+
+def generate_gpt_full_response(payload: dict) -> str:
+    """
+    GPT_FULL - Modello distinto per risposte tecniche/mediche/psicologiche
+    NON usa PersonalPlex - FAIL HARD se non disponibile
+    """
+    prompt = payload["prompt"]
+    tone = payload.get("tone", "factual")
+    intent = payload.get("intent", {})
+    brain_mode = intent.get("brain_mode", "factual")
+    
+    print(f"[GPT_FULL] Generating response for brain_mode={brain_mode}", flush=True)
+    
+    # ===============================
+    # GPT_FULL - MODELLO DISTINTO
+    # ===============================
+    try:
+        # PRIMO TENTATIVO: OpenAI GPT se disponibile
+        if _try_openai_gpt():
+            return _generate_with_openai(prompt, tone, brain_mode)
+        
+        # SECONDO TENTATIVO: Modello locale distinto se disponibile
+        if _try_distinct_local_model():
+            return _generate_with_distinct_model(prompt, tone, brain_mode)
+        
+        # SE NESSUN MODELLO DISPONIBILE → FAIL HARD
+        print(f"[GPT_FULL] ERROR: No GPT_FULL model available - FAIL HARD", flush=True)
+        print(f"[GPT_FULL] This is a CRITICAL system failure", flush=True)
+        return ""
+        
+    except Exception as e:
+        print(f"[GPT_FULL] CRITICAL ERROR: {e}", flush=True)
+        print(f"[GPT_FULL] System cannot provide technical/medical responses", flush=True)
+        return ""
+
+
+def _try_openai_gpt() -> bool:
+    """Verifica se OpenAI GPT è disponibile"""
+    try:
+        import os
+        api_key = os.getenv("OPENAI_API_KEY")
+        if api_key and api_key.startswith("sk-"):
+            print(f"[GPT_FULL] OpenAI API key available", flush=True)
+            return True
+    except:
+        pass
+    return False
+
+
+def _generate_with_openai(prompt: str, tone: str, brain_mode: str) -> str:
+    """Genera risposta con OpenAI GPT"""
+    try:
+        import openai
+        
+        client = openai.OpenAI()
+        
+        messages = [
+            {"role": "system", "content": f"Sei un assistente esperto. Rispondi in modo {tone}. Brain mode: {brain_mode}."},
+            {"role": "user", "content": prompt}
+        ]
+        
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=messages,
+            max_tokens=150,
+            temperature=0.3
+        )
+        
+        result = response.choices[0].message.content.strip()
+        print(f"[GPT_FULL] OpenAI success: '{result[:50]}...'", flush=True)
+        return result
+        
+    except Exception as e:
+        print(f"[GPT_FULL] OpenAI error: {e}", flush=True)
+        raise
+
+
+def _try_distinct_local_model() -> bool:
+    """Verifica se modello locale distinto è disponibile"""
+    try:
+        # Qui potremmo verificare altri modelli locali
+        # Per ora fallback a PersonalPlex con avvertimento
+        print(f"[GPT_FULL] No distinct local model available", flush=True)
+        return False
+    except:
+        return False
+
+
+def _generate_with_distinct_model(prompt: str, tone: str, brain_mode: str) -> str:
+    """Genera risposta con modello locale distinto"""
+    # Implementazione futura per altri modelli
+    raise NotImplementedError("Distinct local model not implemented")
 
 
 def _clean_tics(text: str) -> str:

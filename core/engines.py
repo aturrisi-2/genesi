@@ -82,7 +82,7 @@ class GPTFullEngine(BaseEngine):
     """
     
     def __init__(self):
-        from core.llm import generate_response as llm_generate
+        from core.llm import generate_gpt_full_response as llm_generate
         self.llm_generate = llm_generate
     
     async def generate(self, message: str, params: Dict[str, Any], context: Optional[Dict] = None) -> str:
@@ -155,7 +155,7 @@ class PsychologicalEngine(BaseEngine):
     """
     
     def __init__(self):
-        from core.llm import generate_response as llm_generate
+        from core.llm import generate_gpt_full_response as llm_generate
         self.llm_generate = llm_generate
     
     async def generate(self, message: str, params: Dict[str, Any], context: Optional[Dict] = None) -> str:
@@ -229,7 +229,7 @@ Rispondi con supporto generale e incoraggiamento.
 class PersonalplexEngine(BaseEngine):
     """
     PERSONALPLEX - SOLO per chat libera e relazione
-    REGOLE RIGIDE: solo italiano, niente emoji, max 2 frasi
+    REGOLE: solo italiano, max 2 frasi, EMOJI CONSENTITE
     """
     
     def __init__(self):
@@ -238,18 +238,17 @@ class PersonalplexEngine(BaseEngine):
     
     async def generate(self, message: str, params: Dict[str, Any], context: Optional[Dict] = None) -> str:
         """
-        Genera risposta con PersonalPlex - VINCOLI RIGIDI
+        Genera risposta con PersonalPlex - VINCOLI RILASSATI
         """
         print(f"[PERSONALPLEX] Generating chat response", flush=True)
         
         try:
-            # Prompt rigoroso per PersonalPlex
+            # Prompt per PersonalPlex - EMOJI CONSENTITE
             prompt = f"""Rispondi in modo naturale e semplice a: {message}
 
 REGOLE ASSOLUTE:
 - SOLO italiano
-- NIENTE emoji
-- NIENTE simboli (*smile*, *wink*, ecc.)
+- EMOJI CONSENTITE nel testo
 - MASSIMO 2 frasi
 - Tono umano e sobrio
 - SOLO conversazione informale"""
@@ -260,7 +259,7 @@ REGOLE ASSOLUTE:
                 temperature=0.6
             )
             
-            # Post-processing per garantire conformità
+            # Post-processing per garantire conformità (MAI rimuovere emoji)
             response = self._enforce_personalplex_rules(response)
             
             return response.strip()
@@ -270,35 +269,23 @@ REGOLE ASSOLUTE:
             return "Posso aiutarti in altro modo?"
     
     def _enforce_personalplex_rules(self, response: str) -> str:
-        """Applica regole rigide alla risposta PersonalPlex"""
+        """Applica regole PersonalPlex - MAI rimuovere emoji"""
         if not response:
             return response
         
-        # Rimuovi emoji
-        import re
-        emoji_pattern = re.compile(
-            "["
-            "\U0001F600-\U0001F64F"
-            "\U0001F300-\U0001F5FF"
-            "\U0001F680-\U0001F6FF"
-            "\U0001F1E0-\U0001F1FF"
-            "]+", flags=re.UNICODE
-        )
-        response = emoji_pattern.sub('', response)
+        # MANTieni emoji - NON rimuovere
+        # Rimuovi solo caratteri problematici non-emoji
+        response = re.sub(r'[^\w\sàèéìòùÀÈÉÌÒÙ.,!?\'-🌟❤️😊😢🎉🔥💡⚡]', '', response)
         
-        # Rimuovi azioni teatrali
-        theatrical_pattern = re.compile(r'\*[^*]*\*', re.IGNORECASE)
-        response = theatrical_pattern.sub('', response)
+        # Rimuovi spazi multipli
+        response = re.sub(r'\s+', ' ', response)
         
         # Limita a 2 frasi
-        sentences = response.split('.')
+        sentences = re.split(r'[.!?]+', response)
         if len(sentences) > 2:
             response = '. '.join(sentences[:2]) + '.'
         
-        # Rimuovi spazi extra
-        response = ' '.join(response.split())
-        
-        return response
+        return response.strip()
     
     def can_handle(self, intent_type: str) -> bool:
         """PersonalPlex gestisce SOLO chat_free"""
