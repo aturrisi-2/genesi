@@ -238,12 +238,16 @@ class PersonalplexEngine(BaseEngine):
     
     async def generate(self, message: str, params: Dict[str, Any], context: Optional[Dict] = None) -> str:
         """
-        Genera risposta con PersonalPlex - VINCOLI RILASSATI
+        ❌ PERSONALPLEX NON GENERA PIÙ TESTO
+        ORCHESTRATORE PURO - DELEGA A MISTRAL
         """
-        print(f"[PERSONALPLEX] Generating chat response", flush=True)
+        print(f"[PERSONALPLEX] ORCHESTRATORE PURO - delegating to Mistral", flush=True)
         
+        # DELEGA A MISTRAL via LocalLLM (che ora usa Mistral)
         try:
-            # Prompt per PersonalPlex - FORMATO MISTRAL
+            from core.local_llm import local_llm
+            
+            # Prompt diretto per MISTRAL
             prompt = f"""[INST] Rispondi in italiano.
 Rispondi solo a quello che l'utente ha appena detto.
 Non introdurre nuovi argomenti.
@@ -252,20 +256,19 @@ Non usare azioni, asterischi o roleplay.
 
 {message} [/INST]"""
             
-            response = self.local_llm.generate(
+            response = local_llm.generate(
                 prompt=prompt,
-                max_tokens=80,   # Aumentato per Mistral
-                temperature=0.5  # Bilanciato per naturalezza
+                max_tokens=80,
+                temperature=0.5
             )
             
-            # Post-processing per garantire conformità (MAI rimuovere emoji)
+            # Post-processing minimo
             response = self._enforce_personalplex_rules(response)
-            
             return response.strip()
             
         except Exception as e:
-            print(f"[PERSONALPLEX] Error: {e}", flush=True)
-            return "Ah, non so cosa dire..."  # Fallback naturale, non da assistente
+            print(f"[PERSONALPLEX] Mistral delegation failed: {e}", flush=True)
+            return "Ah, non so cosa dire..."
     
     def _enforce_personalplex_rules(self, response: str) -> str:
         """Applica regole PersonalPlex - LIBERO DALLE CATENE"""
@@ -830,9 +833,9 @@ class EngineRegistry:
                 print(f"[ENGINE_REGISTRY] Fallback: retry same engine or contextual error", flush=True)
                 return await self._handle_specialist_fallback(intent_type, message, params, context)
             else:
-                # Solo per chat_free o altri, usa PersonalPlex
-                print(f"[ENGINE_REGISTRY] Fallback: {intent_type} -> personalplex", flush=True)
-                engine = self.get_engine("personalplex")
+                # ❌ NESSUN FALLBACK A PERSONALPLEX - VIETATO
+                print(f"[ENGINE_REGISTRY] No fallback available for {intent_type}", flush=True)
+                return "Servizio temporaneamente non disponibile."
         
         return await engine.generate(message, params, context)
     

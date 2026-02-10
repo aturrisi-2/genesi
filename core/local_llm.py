@@ -88,7 +88,7 @@ class LocalLLM:
                     
                     if content:
                         tokens = len(content.split())
-                        logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens}, model=llama-2-7b-chat")
+                        logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens}, model=mistral-7b-instruct")
                         return content
                     else:
                         print(f"[LOCAL_LLM] Empty content on attempt {attempt + 1}", flush=True)
@@ -100,7 +100,7 @@ class LocalLLM:
                 latency = (time.time() - start_time) * 1000
                 print(f"[LOCAL_LLM] Timeout on attempt {attempt + 1}/{self.max_retries + 1}", flush=True)
                 if attempt == self.max_retries:
-                    logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error=timeout_after_retries")
+                    logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=mistral-7b-instruct, error=timeout_after_retries")
                     return ""  # Solo dopo tutti i retry
                 continue
                 
@@ -108,7 +108,7 @@ class LocalLLM:
                 latency = (time.time() - start_time) * 1000
                 print(f"[LOCAL_LLM] Error on attempt {attempt + 1}/{self.max_retries + 1}: {e}", flush=True)
                 if attempt == self.max_retries:
-                    logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error={e}")
+                    logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=mistral-7b-instruct, error={e}")
                     return ""  # Solo dopo tutti i retry
                 continue
         
@@ -180,9 +180,9 @@ Tu sei Genesi. Rispondi in modo naturale e conversazionale."""
                     
                     # Log INFO per risposte accettate anche se lente
                     if latency > 2000:  # Se più di 2 secondi
-                        logger.info(f"CHAT RISPOSTA LENTA MA ACCETTATA: latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=chat")
+                        logger.info(f"CHAT RISPOSTA LENTA MA ACCETTATA: latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=mistral-7b-instruct, decision=chat")
                     else:
-                        logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=chat")
+                        logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=mistral-7b-instruct, decision=chat")
                     
                     return content
                 else:
@@ -192,11 +192,11 @@ Tu sei Genesi. Rispondi in modo naturale e conversazionale."""
                 
         except requests.exceptions.Timeout:
             latency = (time.time() - start_time) * 1000
-            logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error=timeout")
+            logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=mistral-7b-instruct, error=timeout")
             return ""  # NESSUN fallback - solo llama.cpp
         except Exception as e:
             latency = (time.time() - start_time) * 1000
-            logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error={e}")
+            logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=mistral-7b-instruct, error={e}")
             return ""  # NESSUN fallback - solo llama.cpp
     
     def generate_memory_summary(self, memory_context: str) -> str:
@@ -256,9 +256,9 @@ Tu sei Genesi. Rispondi in modo naturale e conversazionale."""
                     
                     # Log INFO per risposte accettate anche se lente
                     if latency > 2000:  # Se più di 2 secondi
-                        logger.info(f"MEMORY RISPOSTA LENTA MA ACCETTATA: latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=memory")
+                        logger.info(f"MEMORY RISPOSTA LENTA MA ACCETTATA: latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=mistral-7b-instruct, decision=memory")
                     else:
-                        logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=llama-2-7b-chat, decision=memory")
+                        logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=mistral-7b-instruct, decision=memory")
                     
                     return content
                 else:
@@ -268,11 +268,11 @@ Tu sei Genesi. Rispondi in modo naturale e conversazionale."""
                 
         except requests.exceptions.Timeout:
             latency = (time.time() - start_time) * 1000
-            logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error=timeout")
+            logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=mistral-7b-instruct, error=timeout")
             return ""  # NESSUN fallback - solo llama.cpp
         except Exception as e:
             latency = (time.time() - start_time) * 1000
-            logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=llama-2-7b-chat, error={e}")
+            logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=mistral-7b-instruct, error={e}")
             return ""  # NESSUN fallback - solo llama.cpp
 
 # Istanza globale
