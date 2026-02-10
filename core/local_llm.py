@@ -115,6 +115,7 @@ class LocalLLM:
     def generate_chat_response(self, prompt_text: str) -> str:
         """
         Genera risposta chat con Qwen2.5-7B-Instruct
+        Formato richiesto: <|im_start|>user\n{message}<|im_end|>\n<|im_start|>assistant\n
         
         Args:
             prompt_text: Testo del prompt lineare
@@ -125,8 +126,8 @@ class LocalLLM:
         start_time = time.time()
         
         try:
-            # Prompt lineare per Qwen2.5-7B-Instruct
-            prompt = f"Utente: {prompt_text}\nGenesi:"
+            # Prompt lineare per Qwen2.5-7B-Instruct come richiesto
+            prompt = f"<|im_start|>user\n{prompt_text}<|im_end|>\n<|im_start|>assistant\n"
             
             # Payload per llama.cpp con parametri bloccati
             payload = {
@@ -134,7 +135,7 @@ class LocalLLM:
                 "n_predict": 80,
                 "temperature": 0.35,
                 "top_p": 0.85,
-                "stop": ["Utente:", "</s>"]
+                "stop": ["<|im_start|>", "</s>"]
             }
             
             response = requests.post(

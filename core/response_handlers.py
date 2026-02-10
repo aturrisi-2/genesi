@@ -1,91 +1,77 @@
 """
 RESPONSE HANDLERS - Genesi Core v2
-1 intent → 1 funzione
-Ogni intent ha la sua funzione dedicata
+Architettura separata: Chat libera (Qwen) vs Tecnica (GPT)
+1 intent → 1 funzione con Proactor orchestratore
 """
 
 from datetime import datetime
 from typing import Dict, Optional
-from core.local_llm import LocalLLM
+from core.proactor import proactor
 from core.log import log
 
-# Istanza globale
-local_llm = LocalLLM()
-
 async def handle_greeting(message: str) -> str:
-    """Handler per saluti"""
-    responses = [
-        "Ciao! Come posso aiutarti?",
-        "Salve! Sono qui per te.",
-        "Ciao! Dimmi pure.",
-    ]
-    import random
-    return random.choice(responses)
+    """Handler per saluti - Qwen2.5-7B-Instruct"""
+    response = proactor.generate_response("greeting", message)
+    return response or "Ciao! Come posso aiutarti?"
 
 async def handle_how_are_you(message: str) -> str:
-    """Handler per 'come stai'"""
-    responses = [
-        "Sto bene, grazie! E tu?",
-        "Tutto ok, grazie per aver chiesto!",
-        "Bene, grazie! Come va a te?",
-    ]
-    import random
-    return random.choice(responses)
+    """Handler per 'come stai' - Qwen2.5-7B-Instruct"""
+    response = proactor.generate_response("how_are_you", message)
+    return response or "Sto bene, grazie! E tu?"
 
 async def handle_identity(message: str) -> str:
-    """Handler per identità"""
-    return "Sono Genesi, la tua assistente personale. Sono qui per aiutarti."
+    """Handler per identità - Qwen2.5-7B-Instruct"""
+    response = proactor.generate_response("identity", message)
+    return response or "Sono Genesi, la tua assistente personale."
 
 async def handle_time(message: str) -> str:
-    """Handler per ora"""
+    """Handler per ora - non usa LLM"""
     now = datetime.now()
     return f"Sono le {now.strftime('%H:%M')}."
 
 async def handle_date(message: str) -> str:
-    """Handler per data"""
+    """Handler per data - non usa LLM"""
     now = datetime.now()
     mesi = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", 
             "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"]
     return f"Oggi è {now.day} {mesi[now.month-1]} {now.year}."
 
 async def handle_weather(message: str) -> str:
-    """Handler per meteo - semplice"""
+    """Handler per meteo - non usa LLM"""
     return "Al momento non posso controllare il meteo. Scusa!"
 
 async def handle_help(message: str) -> str:
-    """Handler per aiuto"""
-    return "Posso aiutarti a conversare, rispondere domande semplici e darti l'ora e la data."
+    """Handler per aiuto - Qwen2.5-7B-Instruct"""
+    response = proactor.generate_response("help", message)
+    return response or "Posso aiutarti a conversare e rispondere domande semplici."
 
 async def handle_goodbye(message: str) -> str:
-    """Handler per arrivederci"""
-    responses = [
-        "A dopo! Buona giornata!",
-        "Arrivederci!",
-        "Ci vediamo presto!",
-    ]
-    import random
-    return random.choice(responses)
+    """Handler per arrivederci - Qwen2.5-7B-Instruct"""
+    response = proactor.generate_response("goodbye", message)
+    return response or "A dopo! Buona giornata!"
 
 async def handle_chat_free(message: str) -> str:
     """
-    Handler per chat libera - 1 intent → 1 funzione
-    Chiamata diretta al modello senza orchestrazione
+    Handler per chat libera - Qwen2.5-7B-Instruct
+    Chat libera, presenza umana, relazione
     """
-    try:
-        # Prompt semplice per chat libera
-        prompt = f"""Sei Genesi. Parli in italiano.
+    response = proactor.generate_response("chat_free", message)
+    return response or "Mi dispiace, ho avuto un problema. Riprova più tardi."
 
-Rispondi a questo messaggio in modo naturale e breve:
-{message}
+async def handle_technical(message: str) -> str:
+    """
+    Handler per tecnica - GPT
+    Spiegazioni, debugging, architettura, ragionamento
+    """
+    response = proactor.generate_response("tecnica", message)
+    return response or "Non posso gestire richieste tecniche al momento."
 
-Rispondi in modo diretto, senza presentazioni non richieste."""
-        
-        response = local_llm.generate(prompt)
-        return response
-        
-    except Exception as e:
-        log("CHAT_FREE_ERROR", error=str(e))
-        return "Mi dispiace, ho avuto un problema. Riprova più tardi."
+async def handle_debug(message: str) -> str:
+    """
+    Handler per debug - GPT
+    """
+    response = proactor.generate_response("debug", message)
+    return response or "Non posso fare debug al momento."
 
 # Mapping intent → handler
 INTENT_HANDLERS = {
@@ -98,11 +84,13 @@ INTENT_HANDLERS = {
     "help": handle_help,
     "goodbye": handle_goodbye,
     "chat_free": handle_chat_free,
+    "tecnica": handle_technical,
+    "debug": handle_debug,
 }
 
 async def handle_by_intent(intent: str, message: str) -> str:
     """
-    Handler universale - 1 intent → 1 funzione
+    Handler universale con Proactor - 1 intent → 1 funzione
     
     Args:
         intent: Intent classificato
