@@ -790,11 +790,15 @@ async function sendMessage() {
       console.log('[TTS_CALL] response_len=' + data.response.length + ' tts_mode=' + (data.tts_mode || 'none'));
       console.log('[TTS_CALL] response_preview=' + data.response.substring(0, 100) + '...');
       
+      // USA tts_text per il TTS, display_text per la UI
+      const ttsText = data.tts_text || data.response; // Fallback a response se tts_text non disponibile
+      console.log('[TTS_CALL] tts_text_len=' + ttsText.length + ' tts_text_preview=' + ttsText.substring(0, 100) + '...');
+      
       // TTS asincrono non bloccante - non interferisce con il rendering
       setTimeout(() => {
         try {
           console.log('[TTS_CALL] about_to_call_playTTS');
-          playTTS(data.response, data.tts_mode);
+          playTTS(ttsText, data.tts_mode);
           console.log('[TTS_CALL] playTTS_returned_successfully');
         } catch (e) {
           console.error('[TTS_ABORT] reason=exception_in_playTTS error=', e);
