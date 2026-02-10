@@ -1,10 +1,11 @@
 """
 TTS API - Genesi Core v2
 1 intent → 1 funzione
-Text-to-Speech API semplice
+Text-to-Speech API semplice - restituisce audio binario WAV
 """
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pathlib import Path
 from tts.simple_tts import simple_tts
@@ -20,23 +21,32 @@ class TTSRequest(BaseModel):
 async def text_to_speech(request: TTSRequest):
     """
     Text-to-Speech - 1 intent → 1 funzione
+    Restituisce SOLO audio binario WAV
     
     Args:
         request: Richiesta TTS
         
     Returns:
-        File audio sintetizzato
+        File audio WAV binario
     """
     try:
         # 1 intent → 1 funzione: sintesi diretta
         audio_path = simple_tts.synthesize(request.text)
         
-        log("TTS_API", text=request.text[:50])
+        # Verifica esistenza file
+        path_obj = Path(audio_path)
+        if not path_obj.exists():
+            log("TTS_FILE_NOT_FOUND", audio_path=audio_path)
+            raise HTTPException(status_code=500, detail="Audio file not found")
         
-        return {
-            "audio_file": audio_path,
-            "status": "synthesized"
-        }
+        log("TTS_API", text=request.text[:50], audio_path=audio_path)
+        
+        # Restituisci SOLO file audio binario WAV
+        return FileResponse(
+            path=audio_path,
+            media_type="audio/wav",
+            filename="tts_output.wav"
+        )
         
     except Exception as e:
         log("TTS_API_ERROR", error=str(e))
