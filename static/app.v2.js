@@ -1634,57 +1634,45 @@ function isAudioUnlocked() {
 }
 
 // ===============================
-// TTS AUDIO PLAYBACK - decodeAudioData + AudioBufferSourceNode
+// TTS AUDIO PLAYBACK - HTMLAudioElement (NO WebAudio)
 // ===============================
 async function playTTSAudio(blob) {
   console.log('[TTS] TTS blob ricevuto - size=' + blob.size + ' type=' + blob.type);
   
-  // Verifica AudioContext globale
-  if (!window.audioContext) {
-    console.error('[TTS] AudioContext non disponibile - audio non unlockato');
-    return;
-  }
-  
-  console.log('[AUDIO] context state: ' + window.audioContext.state);
-  
-  // Resume se suspended
-  if (window.audioContext.state === 'suspended') {
-    console.log('[TTS] Resume AudioContext...');
-    await window.audioContext.resume();
-    console.log('[TTS] AudioContext resumed - state: ' + window.audioContext.state);
-  }
-  
   try {
-    // Converti blob in ArrayBuffer
-    const arrayBuffer = await blob.arrayBuffer();
-    console.log('[TTS] ArrayBuffer creato - size=' + arrayBuffer.byteLength);
+    // Crea URL oggetto dal blob
+    const audioUrl = URL.createObjectURL(blob);
+    console.log('[TTS] Audio URL creato: ' + audioUrl);
     
-    // Decodifica audio
-    const audioBuffer = await window.audioContext.decodeAudioData(arrayBuffer);
-    console.log('[TTS] AudioBuffer decodificato - duration=' + audioBuffer.duration + 's sampleRate=' + audioBuffer.sampleRate);
+    // Crea HTMLAudioElement
+    const audio = new Audio(audioUrl);
+    console.log('[TTS] HTMLAudioElement creato');
     
-    // Crea AudioBufferSourceNode
-    const source = window.audioContext.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(window.audioContext.destination);
-    
-    // Log quando parte il playback
-    source.onended = () => {
+    // Configura eventi
+    audio.onended = () => {
       console.log('[TTS] Playback completato');
+      URL.revokeObjectURL(audioUrl); // Pulisci URL
+      _ttsSource = null;
+      _isPlayingChunk = false;
+    };
+    
+    audio.onerror = (error) => {
+      console.error('[TTS] Errore playback HTMLAudioElement:', error);
+      URL.revokeObjectURL(audioUrl); // Pulisci URL
       _ttsSource = null;
       _isPlayingChunk = false;
     };
     
     // Avvia playback
-    console.log('[AUDIO] playback start');
-    source.start(0);
+    console.log('[TTS] Avvio playback HTMLAudioElement');
+    await audio.play();
     
     // Aggiorna stato TTS
-    _ttsSource = source;
+    _ttsSource = audio;
     _isPlayingChunk = true;
     _wasPlayingChunk = true;
     
-    console.log('[TTS] AudioBufferSourceNode avviato con successo');
+    console.log('[TTS] HTMLAudioElement avviato con successo');
     
   } catch (error) {
     console.error('[TTS] Errore durante playback TTS:', error);
