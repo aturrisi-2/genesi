@@ -375,9 +375,9 @@ class EngineRegistry:
             
             # FALLBACK CORRETTI basati su intent
             if intent_type in ["weather", "news"]:
-                # Fallback a GPT-full per API che falliscono
-                print(f"[ENGINE_REGISTRY] Fallback: api_tools -> gpt_full", flush=True)
-                engine = self.get_engine("gpt_full")
+                # Fallback a API_TOOLS per intent meteo/news
+                print(f"[ENGINE_REGISTRY] Fallback: {engine_type} -> api_tools", flush=True)
+                engine = self.get_engine("api_tools")
             elif intent_type in ["medical_info", "psychological", "historical_info", "verified_knowledge", "date_time"]:
                 # Retry con stesso motore o errore contestuale
                 print(f"[ENGINE_REGISTRY] Fallback: retry same engine or contextual error", flush=True)

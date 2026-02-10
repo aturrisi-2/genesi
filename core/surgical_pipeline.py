@@ -45,6 +45,7 @@ class SurgicalPipeline:
         # 1. GPT-MINI - Classificazione intent (se non già fornita)
         if not intent or not intent.get("type"):
             print(f"[SURGICAL_PIPELINE] Step 1: GPT-mini classification", flush=True)
+            print(f"[DEBUG_INTENT] raw_message={user_message}", flush=True)
             intent = self.intent_engine.decide(
                 user_message,
                 cognitive_state.user,
@@ -53,24 +54,32 @@ class SurgicalPipeline:
                 relevant_memories,
                 tone
             )
+            print(f"[DEBUG_INTENT] classified_intent={intent.get('type', 'unknown')}", flush=True)
         else:
             print(f"[SURGICAL_PIPELINE] Step 1: Using provided intent", flush=True)
+            print(f"[DEBUG_INTENT] provided_intent={intent.get('type', 'unknown')}", flush=True)
         
         intent_type = intent.get("type", "chat_free")
         print(f"[SURGICAL_PIPELINE] Intent classified: {intent_type}", flush=True)
+        print(f"[DEBUG_INTENT] final_intent_type={intent_type}", flush=True)
         
         # 2. PROACTOR - Decisione motore
         print(f"[SURGICAL_PIPELINE] Step 2: PROACTOR decision", flush=True)
+        print(f"[DEBUG_PROACTOR] received_intent={intent_type}", flush=True)
         proactor_decision = proactor.decide_engine(intent_type, user_message, {
             "user_state": cognitive_state,
             "recent_memories": recent_memories,
             "tone": tone,
             "document_context": document_context
         })
+        print(f"[DEBUG_PROACTOR] decision={proactor_decision}", flush=True)
         
         engine_type = proactor_decision["engine"].value
         action = proactor_decision["action"]
         params = proactor_decision["params"]
+        
+        print(f"[DEBUG_PROACTOR] selected_engine={engine_type}", flush=True)
+        print(f"[DEBUG_PROACTOR] action={action}", flush=True)
         
         print(f"[SURGICAL_PIPELINE] Engine selected: {engine_type}, action: {action}", flush=True)
         
@@ -99,6 +108,7 @@ class SurgicalPipeline:
                 
                 if not final_text or len(final_text.strip()) < 3:
                     print(f"[SURGICAL_PIPELINE] Engine returned empty, using fallback", flush=True)
+                    print(f"[DEBUG_FALLBACK] reason=engine_empty_response", flush=True)
                     final_text = "Cerchiamo di trovare una soluzione insieme."
                     
             except Exception as e:
@@ -182,6 +192,7 @@ class SurgicalPipeline:
             print(f"[SURGICAL_PIPELINE] Fallback engine also failed: {e}", flush=True)
         
         # Ultimo fallback - risposta generica ma non vuota
+        print(f"[DEBUG_FALLBACK] reason=final_fallback_engine_failed", flush=True)
         return "Cerchiamo di affrontare questo insieme. C'è altro che posso fare per aiutarti?"
     
     def _clean_response_safely(self, text: str, issues: List[str], intent_type: str = "") -> str:

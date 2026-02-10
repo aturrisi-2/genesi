@@ -145,9 +145,7 @@ class IntentEngine:
         # QUESTO ERA L'ERRORE MADRE - ora la pipeline chirurgica gestisce tutto
         print(f"[INTENT] Classification complete - NO pre-routing", flush=True)
         
-        # Continua con il resto della logica di classificazione intent
-        
-        # Inizializza intent base
+        # Inizializza intent base PRIMA dei controlli
         intent = {
             "should_respond": True,
             "style": "presence",
@@ -156,6 +154,46 @@ class IntentEngine:
             "use_memory": False,
             "emotional_weight": 0.3,
         }
+        
+        # ===============================
+        # DEBUG INTENT ENGINE - CLASSIFICAZIONE DETERMINISTICA
+        # ===============================
+        print(f"[DEBUG_INTENT] raw_message={msg}", flush=True)
+        
+        # 1. CONTROLLO METEO - PRIORITARIO ASSOLUTO
+        weather_detected = self._detect_weather_intent(msg)
+        if weather_detected:
+            print(f"[DEBUG_INTENT] weather_detected=TRUE", flush=True)
+            print(f"[DEBUG_INTENT] final_intent=weather", flush=True)
+            intent["type"] = "weather"
+            intent["should_respond"] = True
+            print(f"[INTENT] final={intent}", flush=True)
+            return intent
+        
+        # 2. CONTROLLO NEWS - SECONDO PRIORITÀ
+        news_detected = self._detect_news_intent(msg)
+        if news_detected:
+            print(f"[DEBUG_INTENT] news_detected=TRUE", flush=True)
+            print(f"[DEBUG_INTENT] final_intent=news", flush=True)
+            intent["type"] = "news"
+            intent["should_respond"] = True
+            print(f"[INTENT] final={intent}", flush=True)
+            return intent
+        
+        # 3. CONTROLLO MEDICO - TERZO PRIORITÀ
+        medical_detected = self._detect_medical_intent(msg)
+        if medical_detected:
+            print(f"[DEBUG_INTENT] medical_detected=TRUE", flush=True)
+            print(f"[DEBUG_INTENT] final_intent=medical_info", flush=True)
+            intent["type"] = "medical_info"
+            intent["should_respond"] = True
+            print(f"[INTENT] final={intent}", flush=True)
+            return intent
+        
+        print(f"[DEBUG_INTENT] no_special_intent_detected", flush=True)
+        print(f"[DEBUG_INTENT] final_intent=chat_free", flush=True)
+        
+        # Continua con il resto della logica di classificazione intent
 
         # ===============================
         # CLOSURE INTENT DETECTION (contextual)
@@ -191,25 +229,6 @@ class IntentEngine:
         memory_keywords = ["memorizza", "memorizzalo", "ricorda", "ricordalo", "salva", "salvalo", "ricordati", "tieni a mente"]
         explicit_memory = any(k in msg_lower for k in memory_keywords)
         intent["use_memory"] = explicit_memory or bool(relevant_memories)
-
-        # ===============================
-        # ESTRAZIONE IDENTITÀ: NOME
-        # ===============================
-        name_match = self.NAME_PATTERN.search(msg)
-        if name_match:
-            name = name_match.group(1).capitalize()
-            if not hasattr(user, "profile") or user.profile is None:
-                user.profile = {}
-            if user.profile.get("name") != name:
-                user.profile["name"] = name
-                save_user(user)
-                print(f"[INTENT] name_saved={name}", flush=True)
-            intent["focus"] = "identità"
-            intent["emotional_weight"] = 0.5
-
-        # ===============================
-        # ESTRAZIONE IDENTITÀ: PROFESSIONE
-        # ===============================
         prof_match = self.PROFESSION_PATTERN.search(msg)
         if prof_match:
             profession = normalize_profession(prof_match.group(1))
@@ -324,6 +343,89 @@ class IntentEngine:
         # Rapporto spazi/parole anomalo
         words = msg_clean.split()
         if len(words) > 0 and len(msg_clean.replace(' ', '')) / len(words) < 2:
+            return True
+        
+        return False
+    
+    def _detect_weather_intent(self, msg: str) -> bool:
+        """
+        Detecta intent meteo in modo deterministico
+        Pattern robusti per "com'è il tempo a roma", "meteo milano", ecc.
+        """
+        msg_lower = msg.lower()
+        
+        # Pattern meteo primari
+        weather_keywords = [
+            "meteo", "tempo", "temperatura", "previsioni", "piove", "pioverà",
+            "fa caldo", "fa freddo", "fa freddo", "fa caldo", "fa bel tempo",
+            "nuvoloso", "soleggiato", "coperto", "sereno", "nuvoloso"
+        ]
+        
+        # Pattern di domanda meteo
+        weather_questions = [
+            "che tempo fa", "com'è il tempo", "come è il tempo",
+            "che tempo fa", "che temperatura", "quanti gradi",
+            "piove a", "neve a", "sole a", "vento a"
+        ]
+        
+        # Check keywords
+        if any(keyword in msg_lower for keyword in weather_keywords):
+            print(f"[DEBUG_INTENT] weather_keyword_found", flush=True)
+            return True
+        
+        # Check patterns
+        for pattern in weather_questions:
+            if pattern in msg_lower:
+                print(f"[DEBUG_INTENT] weather_pattern_found: {pattern}", flush=True)
+                return True
+        
+        # Check città + tempo
+        cities = ["roma", "milano", "torino", "napoli", "firenze", "bologna", 
+                   "genova", "palermo", "catania", "brescia", "verona", "padova"]
+        if any(city in msg_lower for city in cities) and any(keyword in msg_lower for keyword in weather_keywords):
+            print(f"[DEBUG_INTENT] city_weather_found", flush=True)
+            return True
+        
+        return False
+    
+    def _detect_news_intent(self, msg: str) -> bool:
+        """
+        Detecta intent news in modo deterministico
+        """
+        msg_lower = msg.lower()
+        
+        news_keywords = [
+            "notizie", "notizia", "news", "cronaca", "attualità",
+            "ultime notizie", "ultime ore", "successo oggi", "cosa è successo"
+        ]
+        
+        # Check keywords
+        if any(keyword in msg_lower for keyword in news_keywords):
+            print(f"[DEBUG_INTENT] news_keyword_found", flush=True)
+            return True
+        
+        # Pattern specifici
+        if "dimmi le notizie" in msg_lower or "dammi le notizie" in msg_lower:
+            print(f"[DEBUG_INTENT] news_pattern_found", flush=True)
+            return True
+        
+        return False
+    
+    def _detect_medical_intent(self, msg: str) -> bool:
+        """
+        Detecta intent medico in modo deterministico
+        """
+        msg_lower = msg.lower()
+        
+        medical_keywords = [
+            "mal di", "dolore", "febbre", "tosse", "raffreddore", "influenza",
+            "farmaco", "medicina", "cura", "terapia", "trattamento",
+            "sintomo", "diagnosi", "dottore", "medico", "ospedale"
+        ]
+        
+        # Check keywords
+        if any(keyword in msg_lower for keyword in medical_keywords):
+            print(f"[DEBUG_INTENT] medical_keyword_found", flush=True)
             return True
         
         return False

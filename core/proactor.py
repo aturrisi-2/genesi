@@ -66,23 +66,12 @@ class Proactor:
     
     def decide_engine(self, intent_type: str, message: str, context: Optional[Dict] = None) -> Dict[str, Any]:
         """
-        DECIDE IL MOTORE CORRETTO usando IntentRouter
-        
-        Args:
-            intent_type: Intent classificato da GPT-mini
-            message: Messaggio utente
-            context: Contesto aggiuntivo
-            
-        Returns:
-            Dict con decisione motore e parametri
+        DECISIONE MOTORE - ORCHESTRATORE UNICO
+        Usa l'intent ricevuto invece di ricalcolarlo
         """
         print(f"[PROACTOR] Deciding engine for intent: {intent_type}", flush=True)
         
-        # Usa IntentRouter per routing deterministico
-        from core.intent_router import intent_router
-        routing_info = intent_router.get_routing_info(message)
-        
-        # Mappa intent → motore basato su routing
+        # Mappa intent → motore basato su intent ricevuto (NON ricalcolato)
         intent_to_engine = {
             "medical_info": EngineType.GPT_FULL,
             "historical_info": EngineType.GPT_FULL,
@@ -92,16 +81,18 @@ class Proactor:
             "news": EngineType.API_TOOLS,
             "verified_knowledge": EngineType.VERIFIED_KNOWLEDGE,
             "emotional_support": EngineType.PSYCHOLOGICAL,
-            "date_time": EngineType.DATE_TIME,  # NUOVO
+            "date_time": EngineType.DATE_TIME,
             "chat_free": EngineType.PERSONALPLEX,
             "identity": EngineType.GPT_FULL,
             "other": EngineType.GPT_FULL,
         }
         
-        engine = intent_to_engine.get(routing_info['intent'], self.default_engine)
+        engine = intent_to_engine.get(intent_type, self.default_engine)
+        
+        print(f"[PROACTOR] Decision: {engine.value} for {intent_type}", flush=True)
         
         # Verifiche di sicurezza aggiuntive
-        if self._should_block_request(routing_info['intent'], message, context):
+        if self._should_block_request(intent_type, message, context):
             print(f"[PROACTOR] BLOCKED request for safety", flush=True)
             return {
                 "engine": EngineType.PERSONALPLEX,
@@ -110,20 +101,23 @@ class Proactor:
                 "params": {}
             }
         
-        # Parametri specifici per motore
-        params = self._get_engine_params(engine, routing_info['intent'], message, context)
+        # Parametri motore basati su intent
+        params = self._get_engine_params(intent_type, engine, message)
         
-        decision = {
+        return {
             "engine": engine,
             "action": "generate",
-            "intent_type": routing_info['intent'],
+            "intent_type": intent_type,
             "params": params,
-            "confidence": 0.9,  # Sempre alta con mapping deterministico
-            "routing_info": routing_info
+            "confidence": 0.9,
+            "routing_info": {
+                "intent": intent_type,
+                "source": "proactor_direct",
+                "block_creative_llm": intent_type in ["medical_info", "historical_info", "weather", "news"],
+                "verified_data": intent_type in ["weather", "news", "historical_info"],
+                "tone": "neutral"  # Default tone per ora
+            }
         }
-        
-        print(f"[PROACTOR] Decision: {engine.value} for {routing_info['intent']}", flush=True)
-        return decision
     
     def _should_block_request(self, intent_type: str, message: str, context: Optional[Dict] = None) -> bool:
         """

@@ -168,6 +168,9 @@ async def _geocode_city(client, city: str, api_key: str) -> Optional[Dict]:
 
 async def fetch_weather(user_message: str) -> Dict:
     """Chiama OpenWeatherMap e restituisce dati meteo reali per QUALSIASI località."""
+    print(f"[DEBUG_WEATHER] weather handler ENTERED", flush=True)
+    print(f"[DEBUG_WEATHER] raw_message={user_message}", flush=True)
+    
     api_key = _get_openweather_key()
     print(f"[FATTI][API_CALL] OPENWEATHER_API_KEY present: {bool(api_key)}", flush=True)
     if not api_key:
@@ -176,6 +179,7 @@ async def fetch_weather(user_message: str) -> Dict:
 
     city = extract_city(user_message)
     print(f"[FATTI][API_METEO] città_estratta={city}", flush=True)
+    print(f"[DEBUG_WEATHER] calling OpenWeather API", flush=True)
 
     async with httpx.AsyncClient(timeout=12.0) as client:
         try:
@@ -196,6 +200,7 @@ async def fetch_weather(user_message: str) -> Dict:
                 "lang": "it"
             })
             current_data = current_resp.json()
+            print(f"[DEBUG_WEATHER] api_response_received status={current_resp.status_code}", flush=True)
 
             # STEP 3: Forecast via coordinate
             forecast_url = "https://api.openweathermap.org/data/2.5/forecast"
