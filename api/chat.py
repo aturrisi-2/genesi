@@ -155,26 +155,32 @@ async def _handle_verified_response(
             # Usa il ramo psicologico esistente ma senza LLM creativo
             from core.genesi_response_engine import genesi_engine
             result = genesi_engine.generate_response_from_text(request.message)
-            response_text = result.get("final_text", "")
+            raw_response = result.get("final_text", "")
             
             # FILTRO POST-LLM PER SUPPORTO EMOTIVO
-            if response_text:
+            if raw_response:
                 context = {"intent": intent_type, "user_state": state}
-                filtered_response = post_llm_filter.filter_response(response_text, context)
+                filtered_response = post_llm_filter.filter_response(raw_response, context)
                 
                 if filtered_response and len(filtered_response.strip()) > 0:
-                    response_text = filtered_response
+                    raw_response = filtered_response
                 else:
                     # FALLBACK EMPATICO SE FILTRO INVALIDA
-                    response_text = human_fallback.get_fallback("emotional_distress", request.message)
+                    raw_response = human_fallback.get_fallback("emotional_distress", request.message)
             else:
                 # FALLBACK EMPATICO SE RESPONSE VUOTA
-                response_text = human_fallback.get_fallback("emotional_distress", request.message)
+                raw_response = human_fallback.get_fallback("emotional_distress", request.message)
                 
         except Exception as e:
             print(f"[VERIFIED_RESPONSE] Psychological error: {e}", flush=True)
             # FALLBACK EMPATICO IN CASO DI ERRORE
-            response_text = human_fallback.get_fallback("emotional_distress", request.message)
+            raw_response = human_fallback.get_fallback("emotional_distress", request.message)
+        
+        # SEPARAZIONE CANALI - display_text vs tts_text
+        from core.surgical_pipeline import surgical_pipeline
+        display_text = surgical_pipeline._build_display_text(raw_response, intent_type)
+        tts_text = await surgical_pipeline._build_tts_text(raw_response, intent_type, request.message)
+        response_text = display_text  # Per compatibilità con il resto del codice
     
     # Identità → memoria nome utente
     elif intent_type == "identity":
@@ -260,9 +266,18 @@ async def _handle_verified_response(
     
     print(f"[VERIFIED_RESPONSE] Final response: '{response_text}'", flush=True)
     
-    # RITORNA RISPOSTA UNICA - NESSUN DOPPIO OUTPUT
+    # Verifica se abbiamo tts_text disponibile (dalla separazione canali)
+    if 'tts_text' in locals():
+        print(f"[VERIFIED_RESPONSE] Using separated channels", flush=True)
+        final_tts_text = tts_text
+    else:
+        print(f"[VERIFIED_RESPONSE] Using single channel fallback", flush=True)
+        final_tts_text = response_text
+    
+    # RITORNA RISPOSTA CON DUE CANALI
     return {
-        "response": response_text,
+        "response": response_text,      # UI text (con emoji)
+        "tts_text": final_tts_text,    # TTS text (senza emoji)
         "user_id": request.user_id,
         "timestamp": datetime.now().isoformat(),
         "tts_mode": tts_mode,
