@@ -107,8 +107,22 @@ async def text_to_speech(request: TTSRequest):
         return JSONResponse(status_code=400, content={"error": "Testo vuoto"})
     
     # ===============================
-    # SANITIZZAZIONE DIFENSIVA TTS
+    # CHOKE POINT UNICO - sanitize_for_tts
     # ===============================
+    # IMPORTA e USA la funzione GLOBALE di sanitizzazione TTS
+    from core.surgical_pipeline import sanitize_for_tts
+    
+    # Applica sanitizzazione COMPLETA per TTS
+    original_text = text
+    text = sanitize_for_tts(text)
+    
+    # LOG DI CONTROLLO - verifica sanitizzazione
+    if len(original_text) != len(text):
+        print(f"[TTS_PRE] SANITIZATION: removed {len(original_text) - len(text)} characters", flush=True)
+        print(f"[TTS_PRE] ORIGINAL: '{original_text[:50]}...'", flush=True)
+        print(f"[TTS_PRE] SANITIZED: '{text[:50]}...'", flush=True)
+    
+    # SANITIZZAZIONE DIFENSIVA AGGIUNTIVA (solo per casi speciali)
     # Rimuovi timestamp ISO (es: 2025-02-07T23:42:00.123Z)
     import re
     text = re.sub(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z\s*', '', text)
@@ -129,6 +143,37 @@ async def text_to_speech(request: TTSRequest):
     if not re.search(r'[a-zA-ZàèéìòùÀÈÉÌÒÙ]', text):
         print(f"[TTS_PRE] ERROR: testo non contiene caratteri validi dopo sanitizzazione!", flush=True)
         return JSONResponse(status_code=400, content={"error": "Testo non valido"})
+    
+    # ===============================
+    # GUARDIA DI PROTEZIONE FUTURA
+    # ===============================
+    # Verifica finale che non ci siano emoji o markdown residui
+    has_emoji = bool(re.search(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF\U00002600-\U000026FF\U00002700-\U000027BF]', text))
+    has_markdown = bool(re.search(r'\*\*|__|##|[*_~`]', text))
+    has_symbols = bool(re.search(r'[^\w\s\.,!?;:àèéìòùÀÈÉÌÒÙ]', text))
+    
+    if has_emoji or has_markdown or has_symbols:
+        print(f"[TTS_PRE] ERROR: testo contiene elementi non parlabili!", flush=True)
+        print(f"[TTS_PRE] EMOJI: {has_emoji}, MARKDOWN: {has_markdown}, SYMBOLS: {has_symbols}", flush=True)
+        print(f"[TTS_PRE] TEXT: '{text[:100]}...'", flush=True)
+        
+        # Auto-sanitize di emergenza + WARNING
+        print(f"[TTS_PRE] WARNING: auto-sanitizing emergency cleanup", flush=True)
+        text = sanitize_for_tts(text)  # Double sanitize
+        
+        # Verifica finale
+        has_emoji_after = bool(re.search(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF\U00002600-\U000026FF\U00002700-\U000027BF]', text))
+        has_markdown_after = bool(re.search(r'\*\*|__|##|[*_~`]', text))
+        
+        if has_emoji_after or has_markdown_after:
+            print(f"[TTS_PRE] CRITICAL: auto-sanitize failed! Using fallback", flush=True)
+            # Fallback estremo: solo caratteri sicuri
+            text = re.sub(r'[^\w\s\.,!?;:àèéìòùÀÈÉÌÒÙ]', ' ', text)
+            text = re.sub(r'\s+', ' ', text).strip()
+        else:
+            print(f"[TTS_PRE] SUCCESS: auto-sanitize worked", flush=True)
+    else:
+        print(f"[TTS_PRE] SUCCESS: testo pulito, nessuna contaminazione", flush=True)
     
     # Verifica modifiche durante sanitizzazione
     if original_len != after_spaces_len:

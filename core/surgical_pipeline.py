@@ -14,12 +14,15 @@ import re
 def sanitize_for_tts(text: str) -> str:
     """
     Funzione GLOBALE per sanificare il testo prima del TTS
-    Rimuove emoji e simboli non pronunciabili
+    Rimuove emoji, markdown e simboli non pronunciabili
+    CHOKE POINT UNICO per TTS
     """
     if not text:
         return ""
     
-    # Rimuovi tutte le emoji
+    import re
+    
+    # 1. Rimuovi tutte le emoji unicode
     emoji_pattern = re.compile(
         "["
         "\U0001F600-\U0001F64F"  # emoticons
@@ -31,21 +34,41 @@ def sanitize_for_tts(text: str) -> str:
         "]+", flags=re.UNICODE
     )
     
-    # Rimuovi emoji
     cleaned = emoji_pattern.sub('', text)
     
-    # Rimuovi caratteri decorativi
+    # 2. Rimuovi markdown
+    cleaned = re.sub(r'\*\*([^*]+)\*\*', r'\1', cleaned)  # **bold**
+    cleaned = re.sub(r'__([^_]+)__', r'\1', cleaned)      # __underline__
+    cleaned = re.sub(r'##\s*', '', cleaned)               # ## headers
+    cleaned = re.sub(r'^\s*[-*+]\s*', '', cleaned, flags=re.MULTILINE)  # bullet points
+    cleaned = re.sub(r'^\s*\d+\.\s*', '', cleaned, flags=re.MULTILINE)  # numbered lists
+    cleaned = re.sub(r'[*_~`]', '', cleaned)             # altri simboli markdown
+    
+    # 3. Rimuovi emoticon ASCII
+    ascii_emoticons = [
+        r':D', r':\)', r':P', r';\)', r':-D', r':-\)', r':-P', r';-\)',
+        r':-o', r':-O', r':o', r':O', r':-\\', r':\\', r':-/', r':/',
+        r':\'\(', r':\'\(', r':-\'\(', r':-\'\('
+    ]
+    
+    for emoticon in ascii_emoticons:
+        cleaned = re.sub(emoticon, '', cleaned, flags=re.IGNORECASE)
+    
+    # 4. Rimuovi caratteri decorativi
     decorative_pattern = re.compile(r'[★☆♦♠♣♥❤️💔💕💞💓💗💖💘💝💟☀️☁️☂️☃️⭐💫✨⚡🔥💥💢💦💧💤💨🕳️💤💢💯💢💢]')
     cleaned = decorative_pattern.sub('', cleaned)
     
-    # Rimuovi simboli matematici e tecnici
+    # 5. Rimuovi simboli matematici e tecnici
     tech_pattern = re.compile(r'[±×÷≠≤≥∞∑∏∫∂∇∆∇∂∫]')
     cleaned = tech_pattern.sub('', cleaned)
     
-    # Normalizza spazi
-    cleaned = ' '.join(cleaned.split())
+    # 6. Rimuovi simboli non parlabili (ma mantieni punteggiatura italiana)
+    cleaned = re.sub(r'[^\w\s\.,!?;:àèéìòùÀÈÉÌÒÙ]', ' ', cleaned)
     
-    return cleaned.strip()
+    # 7. Normalizza spazi
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    
+    return cleaned
 
 class SurgicalPipeline:
     """
