@@ -160,37 +160,9 @@ class SurgicalPipeline:
         # 4. POST-FILTER - Pulizia sicurezza (NON normalizzatore)
         print(f"[SURGICAL_PIPELINE] Step 4: Post-filter safety", flush=True)
         
-        # display_text = testo originale con emoji (per UI) - MAI SANITIZZATO
-        display_text = final_text
-        
-        # Language guard come sicurezza - APPLICATO SOLO A TTS
-        tts_text = final_text  # Inizia con lo stesso testo
-        
-        guard_result = language_guard.check_and_clean(tts_text, {
-            "intent": intent_type,
-            "user_message": user_message
-        })
-        
-        # tts_text = testo pulito per TTS
-        if guard_result["is_clean"]:
-            tts_text = guard_result["cleaned_text"]
-        else:
-            # Se contaminato, PULISCE SOLO TTS
-            print(f"[SURGICAL_PIPELINE] Contamination detected: {guard_result['issues']}", flush=True)
-            
-            # 1. Tentativo di pulizia NON distruttiva SOLO per TTS
-            cleaned_text = self._clean_response_safely(tts_text, guard_result['issues'], intent_type)
-            
-            if cleaned_text and len(cleaned_text.strip()) > 3:
-                print(f"[SURGICAL_PIPELINE] TTS Cleaned successfully", flush=True)
-                tts_text = cleaned_text
-            else:
-                # 2. Solo se pulizia fallisce completamente, rigenera SOLO TTS
-                print(f"[SURGICAL_PIPELINE] TTS Cleaning failed, regenerating", flush=True)
-                tts_text = await self._regenerate_response_safely(user_message, intent_type)
-        
-        # Sanificazione finale TTS per rimuovere emoji
-        tts_text = sanitize_for_tts(tts_text)
+        # Costruisci display_text e tts_text con logiche DIVERSE
+        display_text = self._build_display_text(final_text, intent_type)
+        tts_text = await self._build_tts_text(final_text, intent_type, user_message)
         
         # Rimuovi emoji dai log per evitare crash encoding su Windows
         safe_display_log = ''.join(c if ord(c) < 128 else '?' for c in display_text)
@@ -295,7 +267,147 @@ class SurgicalPipeline:
         
         return cleaned.strip()
     
-    async def _regenerate_response_safely(self, user_message: str, intent_type: str) -> str:
+    def _build_display_text(self, raw_text: str, intent_type: str) -> str:
+        """
+        Costruisce display_text per UI con emoji e markdown
+        - Rimuove solo inglese e emoticon ASCII
+        - MANTIENE emoji unicode
+        - MANTIENE markdown
+        """
+        import re
+        
+        if not raw_text:
+            return raw_text
+        
+        display_text = raw_text.strip()
+        
+        # 1. Rimuovi emoticon ASCII (:D, :), :P, ;), ecc.)
+        ascii_emoticons = [
+            r':D', r':\)', r':P', r';\)', r':-D', r':-\)', r':-P', r';-\)',
+            r':-o', r':-O', r':o', r':O', r':-\\', r':\\', r':-/', r':/',
+            r':\'\(', r':\'\(', r':-\'\(', r':-\'\('
+        ]
+        
+        for emoticon in ascii_emoticons:
+            display_text = re.sub(emoticon, '', display_text, flags=re.IGNORECASE)
+        
+        # 2. Rimuovi frasi inglesi comuni
+        english_patterns = [
+            r'\b(hello|hi|hey|good morning|good evening|good afternoon|good night|bye|goodbye)\b',
+            r'\b(thank you|thanks|please|sorry|excuse me|pardon)\b',
+            r'\b(amazing|awesome|great|wonderful|fantastic|perfect|excellent|really|actually|literally)\b',
+            r'\b(how are you|what\'s up|how\'s it going)\b'
+        ]
+        
+        for pattern in english_patterns:
+            display_text = re.sub(pattern, '', display_text, flags=re.IGNORECASE)
+        
+        # 3. Rimuovi parole inglesi singole (ma mantieni italiano)
+        # Solo parole inglesi molto comuni e sicure
+        english_words = [
+            'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 
+            'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'man', 'new', 'now', 'old', 'see', 
+            'two', 'way', 'who', 'boy', 'did', 'its', 'let', 'put', 'say', 'she', 'too', 'use'
+        ]
+        
+        for word in english_words:
+            # Rimuovi solo se è una parola intera
+            display_text = re.sub(r'\b' + re.escape(word) + r'\b', '', display_text, flags=re.IGNORECASE)
+        
+        # 4. Pulizia spazi multipli
+        display_text = re.sub(r'\s+', ' ', display_text).strip()
+        
+        return display_text
+    
+    async def _build_tts_text(self, raw_text: str, intent_type: str, user_message: str) -> str:
+        """
+        Costruisce tts_text per sintesi vocale
+        - Rimuove TUTTO ciò che non è parlabile
+        - Rimuove emoji, markdown, simboli
+        - Rimuove inglese e emoticon ASCII
+        """
+        import re
+        
+        if not raw_text:
+            return raw_text
+        
+        tts_text = raw_text.strip()
+        
+        # 1. Rimuovi TUTTE le emoji unicode
+        emoji_patterns = [
+            r'[\U0001F600-\U0001F64F]',  # Emoticoni
+            r'[\U0001F300-\U0001F5FF]',  # Simboli vari
+            r'[\U0001F680-\U0001F6FF]',  # Trasporti e simboli
+            r'[\U0001F1E0-\U0001F1FF]',  # Bandiere
+            r'[\U00002600-\U000026FF]',  # Simboli vari
+            r'[\U00002700-\U000027BF]',  # Dingbats
+        ]
+        
+        for pattern in emoji_patterns:
+            tts_text = re.sub(pattern, '', tts_text)
+        
+        # 2. Rimuovi markdown
+        tts_text = re.sub(r'\*\*([^*]+)\*\*', r'\1', tts_text)  # **bold**
+        tts_text = re.sub(r'__([^_]+)__', r'\1', tts_text)      # __underline__
+        tts_text = re.sub(r'##\s*', '', tts_text)               # ## headers
+        tts_text = re.sub(r'^\s*[-*+]\s*', '', tts_text, flags=re.MULTILINE)  # bullet points
+        tts_text = re.sub(r'^\s*\d+\.\s*', '', tts_text, flags=re.MULTILINE)  # numbered lists
+        
+        # 3. Rimuovi emoticon ASCII
+        ascii_emoticons = [
+            r':D', r':\)', r':P', r';\)', r':-D', r':-\)', r':-P', r';-\)',
+            r':-o', r':-O', r':o', r':O', r':-\\', r':\\', r':-/', r':/',
+            r':\'\(', r':\'\(', r':-\'\(', r':-\'\('
+        ]
+        
+        for emoticon in ascii_emoticons:
+            tts_text = re.sub(emoticon, '', tts_text, flags=re.IGNORECASE)
+        
+        # 4. Rimuovi frasi inglesi
+        english_patterns = [
+            r'\b(hello|hi|hey|good morning|good evening|good afternoon|good night|bye|goodbye)\b',
+            r'\b(thank you|thanks|please|sorry|excuse me|pardon)\b',
+            r'\b(amazing|awesome|great|wonderful|fantastic|perfect|excellent|really|actually|literally)\b',
+            r'\b(how are you|what\'s up|how\'s it going)\b'
+        ]
+        
+        for pattern in english_patterns:
+            tts_text = re.sub(pattern, '', tts_text, flags=re.IGNORECASE)
+        
+        # 5. Rimuovi parole inglesi
+        english_words = [
+            'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 
+            'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'man', 'new', 'now', 'old', 'see', 
+            'two', 'way', 'who', 'boy', 'did', 'its', 'let', 'put', 'say', 'she', 'too', 'use'
+        ]
+        
+        for word in english_words:
+            tts_text = re.sub(r'\b' + re.escape(word) + r'\b', '', tts_text, flags=re.IGNORECASE)
+        
+        # 6. Rimuovi simboli non parlabili
+        tts_text = re.sub(r'[^\w\s\.,!?;:]', ' ', tts_text)  # Solo caratteri parlabili
+        
+        # 7. Pulizia spazi multipli
+        tts_text = re.sub(r'\s+', ' ', tts_text).strip()
+        
+        # 8. Language guard come sicurezza finale
+        guard_result = language_guard.check_and_clean(tts_text, {
+            "intent": intent_type,
+            "user_message": user_message
+        })
+        
+        if not guard_result["is_clean"]:
+            print(f"[SURGICAL_PIPELINE] TTS Contamination detected: {guard_result['issues']}", flush=True)
+            cleaned_text = self._clean_response_safely(tts_text, guard_result['issues'], intent_type)
+            if cleaned_text and len(cleaned_text.strip()) > 3:
+                tts_text = cleaned_text
+            else:
+                print(f"[SURGICAL_PIPELINE] TTS Cleaning failed, using fallback", flush=True)
+                tts_text = await self._regenerate_response_safely(user_message, intent_type)
+        else:
+            tts_text = guard_result["cleaned_text"]
+        
+        return tts_text
         """
         Rigenera risposta solo se pulizia fallisce completamente
         Usa prompt correttivo per evitare contaminazione
