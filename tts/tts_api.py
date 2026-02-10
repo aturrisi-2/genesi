@@ -39,9 +39,15 @@ async def text_to_speech(request: TTSRequest):
             log("TTS_FILE_NOT_FOUND", audio_path=audio_path)
             raise HTTPException(status_code=500, detail="Audio file not found")
         
-        log("TTS_API", text=request.text[:50], audio_path=audio_path)
+        # Verifica size file - CRITICO
+        file_size = path_obj.stat().st_size
+        if file_size == 0:
+            log("TTS_FILE_EMPTY", audio_path=audio_path, size=file_size)
+            raise HTTPException(status_code=500, detail="Audio file is empty")
         
-        # Restituisci SOLO file audio binario WAV
+        log("TTS_API", text=request.text[:50], audio_path=audio_path, size=file_size)
+        
+        # Restituisci SOLO file audio binario WAV se size > 0
         return FileResponse(
             path=audio_path,
             media_type="audio/wav",

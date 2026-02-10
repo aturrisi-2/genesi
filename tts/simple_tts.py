@@ -45,8 +45,8 @@ class SimpleTTS:
             
             output_path = self.tts_dir / output_file
             
-            # Simula creazione file audio vuoto
-            output_path.touch()
+            # Genera file WAV valido con header e dati minimali
+            self._generate_wav_file(output_path, filtered_text)
             
             from core.log import log
             log("TTS_SYNTHESIZED", original_text=text[:50], filtered_text=filtered_text[:50], output=str(output_path))
@@ -57,6 +57,57 @@ class SimpleTTS:
             from core.log import log
             log("TTS_ERROR", error=str(e))
             raise
+    
+    def _generate_wav_file(self, output_path: Path, text: str):
+        """
+        Genera file WAV valido con header e dati minimali
+        """
+        import struct
+        import math
+        
+        # Parametri WAV
+        sample_rate = 22050
+        duration = 1.0  # 1 secondo
+        frequency = 440  # A4
+        
+        # Calcola numero di samples
+        num_samples = int(sample_rate * duration)
+        
+        # Genera dati audio (onda sinusoidale semplice)
+        audio_data = bytearray()
+        for i in range(num_samples):
+            # Genera onda sinusoidale
+            sample = int(32767 * math.sin(2 * math.pi * frequency * i / sample_rate))
+            # Converti a little-endian
+            audio_data.extend(struct.pack('<h', sample))
+        
+        # Crea header WAV
+        header = bytearray()
+        
+        # RIFF header
+        header.extend(b'RIFF')
+        header.extend(struct.pack('<I', 36 + len(audio_data)))  # file size - 8
+        header.extend(b'WAVE')
+        
+        # fmt chunk
+        header.extend(b'fmt ')
+        header.extend(struct.pack('<I', 16))  # chunk size
+        header.extend(struct.pack('<H', 1))   # audio format (PCM)
+        header.extend(struct.pack('<H', 1))   # number of channels
+        header.extend(struct.pack('<I', sample_rate))  # sample rate
+        header.extend(struct.pack('<I', sample_rate * 2))  # byte rate
+        header.extend(struct.pack('<H', 2))   # block align
+        header.extend(struct.pack('<H', 16))  # bits per sample
+        
+        # data chunk
+        header.extend(b'data')
+        header.extend(struct.pack('<I', len(audio_data)))  # data size
+        
+        # Scrivi file WAV completo
+        with open(output_path, 'wb') as f:
+            f.write(header)
+            f.write(audio_data)
+            f.flush()  # Assicura che i dati siano scritti su disco
 
 # Istanza globale
 simple_tts = SimpleTTS()
