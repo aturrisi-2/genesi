@@ -2,6 +2,7 @@
 MAIN ENTRY POINT - Genesi Core v2
 Architettura: 1 intent → 1 funzione
 Nessun orchestratore, nessun fallback, nessun post-processing
+Storage in-memory per validazione comportamento
 """
 
 from fastapi import FastAPI, HTTPException
@@ -13,6 +14,7 @@ import uvicorn
 # Import base
 from api.user import router as user_router
 from api.chat import router as chat_router
+from api.memory import router as memory_router
 from core.log import log
 
 # ===============================
@@ -32,6 +34,7 @@ async def serve_index():
 # API routes
 app.include_router(user_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
+app.include_router(memory_router, prefix="/api")
 
 # ===============================
 # Health check
@@ -39,7 +42,7 @@ app.include_router(chat_router, prefix="/api")
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "version": "v2"}
+    return {"status": "healthy", "version": "v2", "storage": "in-memory"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
