@@ -243,16 +243,17 @@ class PersonalplexEngine(BaseEngine):
         print(f"[PERSONALPLEX] Generating chat response", flush=True)
         
         try:
-            # Prompt per PersonalPlex - SEMPLICE E PERMISSIVO
-            prompt = f"""Rispondi in modo naturale a: {message}
+            # Prompt per PersonalPlex - CONVERSAZIONE NATURALE
+            prompt = f"""Stai conversando con qualcuno. Rispondi come una persona reale, non come un assistente.
 
-Sei Genesi. Sii breve e amichevole.
-Puoi usare emoji come 😊 😄 😉 se vuoi."""
+{message}
+
+Rispondi in modo naturale, come farebbe un amico. Sii te stesso, usa emoji se ti va."""
             
             response = self.local_llm.generate(
                 prompt=prompt,
-                max_tokens=60,  # Ridotto per risposte brevi
-                temperature=0.6
+                max_tokens=120,  # Aumentato per conversazione naturale
+                temperature=0.8  # Aumentato per più creatività
             )
             
             # Post-processing per garantire conformità (MAI rimuovere emoji)
@@ -262,7 +263,7 @@ Puoi usare emoji come 😊 😄 😉 se vuoi."""
             
         except Exception as e:
             print(f"[PERSONALPLEX] Error: {e}", flush=True)
-            return "Posso aiutarti in altro modo?"
+            return "Ah, non so cosa dire..."  # Fallback naturale, non da assistente
     
     def _enforce_personalplex_rules(self, response: str) -> str:
         """Applica regole PersonalPlex - MANTieni emoji Unicode, rimuovi descrizioni"""

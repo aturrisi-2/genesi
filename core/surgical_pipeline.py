@@ -168,9 +168,9 @@ class SurgicalPipeline:
                 
                 if not final_text or len(final_text.strip()) < 3:
                     print(f"[SURGICAL_PIPELINE] Engine returned empty", flush=True)
-                    # Per chat_free, NON usare fallback generico
+                    # Per chat_free, fallback naturale non da assistente
                     if intent_type == "chat_free":
-                        final_text = "Ciao! 😊 Come posso aiutarti?"
+                        final_text = "Ah, interessante... dimmi di più."
                     else:
                         final_text = "Cerchiamo di trovare una soluzione insieme."
                     
