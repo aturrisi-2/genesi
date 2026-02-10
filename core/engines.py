@@ -257,7 +257,7 @@ class APIToolsEngine(BaseEngine):
                 print(f"[DEBUG_API_TOOLS] extracted location: {location}", flush=True)
                 return await self._get_weather(location)
             elif intent_type == "news":
-                return await self._get_news()
+                return await self._get_news(message)
             else:
                 return "Servizio non disponibile."
                 
@@ -332,15 +332,15 @@ class APIToolsEngine(BaseEngine):
             print(f"[DEBUG_WEATHER] Exception in _get_weather: {e}", flush=True)
             return f"Errore nel recupero dati meteo per {location}."
     
-    async def _get_news(self) -> str:
-        """Ottiene notizie reali da API"""
+    async def _get_news(self, message: str = "") -> str:
+        """Ottiene notizie reali da API con filtro per località"""
         print(f"[DEBUG_NEWS] _get_news called", flush=True)
         
         try:
             from core.tools import fetch_news
             print(f"[DEBUG_NEWS] calling fetch_news API", flush=True)
             
-            news_data = await fetch_news("dimmi le notizie di oggi")
+            news_data = await fetch_news(message)
             print(f"[DEBUG_NEWS] API response received", flush=True)
             
             if "error" in news_data:
@@ -349,11 +349,29 @@ class APIToolsEngine(BaseEngine):
             
             # Estrai articoli
             articles = news_data.get("articles", [])
-            print(f"[DEBUG_NEWS] articles count: {len(articles)}", flush=True)
+            print(f"[DEBUG_NEWS] total_articles={len(articles)}", flush=True)
             
             if not articles:
                 print(f"[DEBUG_NEWS] no articles found", flush=True)
                 return "Al momento non risultano notizie rilevanti."
+            
+            # Estrai località dal messaggio
+            location = self._extract_location_from_message(message)
+            print(f"[DEBUG_NEWS] location_filter={location}", flush=True)
+            
+            # Applica filtro per località se specificata
+            if location and location.lower() != "italia":
+                filtered_articles = self._filter_news_by_location(articles, location)
+                print(f"[DEBUG_NEWS] filtered_articles={len(filtered_articles)}", flush=True)
+                
+                # Se dopo il filtro non ci sono articoli, usa fallback
+                if not filtered_articles:
+                    print(f"[DEBUG_NEWS] no articles after location filter", flush=True)
+                    return f"Al momento non ci sono notizie rilevanti su {location}."
+                
+                articles = filtered_articles
+            else:
+                print(f"[DEBUG_NEWS] using all articles (no location filter)", flush=True)
             
             # Costruisci risposta TTS friendly con max 2 articoli
             response_parts = []
@@ -369,7 +387,7 @@ class APIToolsEngine(BaseEngine):
                 
                 if title and len(title) > 10:
                     if i == 0:
-                        response_parts.append(f"Ultime notizie. {title}.")
+                        response_parts.append(f"Ultime notizie{f' da {location}' if location else ''}. {title}.")
                     else:
                         response_parts.append(title)
                 
@@ -392,6 +410,58 @@ class APIToolsEngine(BaseEngine):
         except Exception as e:
             print(f"[DEBUG_NEWS] Exception in _get_news: {e}", flush=True)
             return "Non riesco a ottenere notizie in questo momento."
+    
+    def _extract_location_from_message(self, message: str) -> str:
+        """Estrae località dal messaggio news"""
+        message_lower = message.lower()
+        
+        # Pattern per notizie su località
+        for pattern in ["notizie su ", "notizie di ", "notizie da ", "notizie a "]:
+            idx = message_lower.find(pattern)
+            if idx >= 0:
+                rest = message[idx + len(pattern):].strip()
+                # Prendi solo la prima parola come località
+                if rest:
+                    location = rest.split()[0].strip()
+                    return location.capitalize()
+        
+        # Prova con extract_city come fallback
+        try:
+            from core.tools import extract_city
+            location = extract_city(message)
+            return location if location != "Roma" else ""
+        except:
+            return ""
+    
+    def _filter_news_by_location(self, articles: list, location: str) -> list:
+        """Filtra articoli per località usando parole chiave"""
+        location_lower = location.lower()
+        
+        # Mappa località → parole chiave
+        location_keywords = {
+            "roma": ["roma", "romano", "romana", "capitale", "lazio"],
+            "milano": ["milano", "milanese", "lombardia", "lombardo"],
+            "napoli": ["napoli", "napoletano", "campania"],
+            "torino": ["torino", "torinese", "piemonte", "piemontese"],
+            "bologna": ["bologna", "bolognese", "emilia", "romagna"],
+            "firenze": ["firenze", "fiorentino", "toscana", "toscano"],
+            "genova": ["genova", "genovese", "liguria", "ligure"],
+            "palermo": ["palermo", "palermitano", "sicilia", "siciliano"],
+        }
+        
+        # Ottieni parole chiave per la località
+        keywords = location_keywords.get(location_lower, [location_lower])
+        
+        filtered_articles = []
+        for article in articles:
+            title = article.get("title", "").lower()
+            description = article.get("description", "").lower()
+            
+            # Controlla se contiene parole chiave della località
+            if any(keyword in title or keyword in description for keyword in keywords):
+                filtered_articles.append(article)
+        
+        return filtered_articles
     
     def _clean_news_text(self, text: str) -> str:
         """Pulisce il testo delle notizie per TTS"""
