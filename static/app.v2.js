@@ -301,7 +301,7 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
     console.log('[TTS_PREFETCH] index=' + (index + 1) + '/total=' + chunks.length + ' len=' + chunk.length);
     
     try {
-      const response = await fetch('/tts', {
+      const response = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: normalizedChunk })
@@ -489,7 +489,7 @@ async function _playTTSChunk(text) {
     console.log('[TTS] richiesta inviata - text_len=' + text.length);
     
     const normalizedText = normalizeTextForTTS(text);
-    const response = await fetch('/tts', {
+    const response = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: normalizedText })
@@ -567,6 +567,8 @@ async function playTTS(text, tts_mode = 'normal') {
     // Testi brevi normali: playback normale
     await _playTTSChunk(text);
     console.log('[TTS_FLOW] step=5 playTTS_single_chunk_completed');
+  }
+  
   console.log('[TTS_FLOW] step=6 playTTS_finished');
 }
 
@@ -587,7 +589,7 @@ let userIdentity = {};
 
 async function bootstrapUser() {
   try {
-    const res = await fetch('/user/bootstrap', {
+    const res = await fetch('/api/user/bootstrap', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: getUserId() })
@@ -658,7 +660,7 @@ function addGenesiMessage(text) { return addMessage(text, 'genesi'); }
 // ===============================
 async function sendChatMessage(message) {
   // Nessun controllo auth - accesso diretto
-  const res = await fetch('/chat', {
+  const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: getUserId(), message })
@@ -1516,7 +1518,7 @@ function handleFileUpload() {
     fd.append('user_id', getUserId());
 
     try {
-      const res = await fetch('/upload', { method: 'POST', body: fd });
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
       if (!res.ok) throw new Error(`Upload ${res.status}`);
       const result = await res.json();
       if (loadingMsg) loadingMsg.remove();
