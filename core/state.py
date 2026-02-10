@@ -2,12 +2,7 @@ from typing import Dict, List
 
 from core.user import User
 from core.log import log
-from memory.episodic import EpisodicEvent
-from memory.select import select_relevant_events
-from storage.users import load_user, create_user as create_storage_user
-
-from core.relational.accumulator import relational_accumulator
-from core.relational.character_state import CharacterState
+from core.user_manager import user_manager
 
 
 class CognitiveState:
@@ -19,7 +14,7 @@ class CognitiveState:
     def __init__(
         self,
         user: User,
-        recent_events: List[EpisodicEvent] = None,
+        recent_events: List = None,
         context: Dict = None,
     ):
         self.user = user
@@ -32,15 +27,17 @@ class CognitiveState:
     @classmethod
     def build(cls, user_id: str, limit: int = 10) -> "CognitiveState":
         # 1. Utente
-        user = load_user(user_id)
-        if user:
+        user_data = user_manager.get_user(user_id)
+        if user_data:
+            user = User(user_id=user_id)
             log("USER_SESSION", user_id=user_id, status="existing")
         else:
-            user = create_storage_user()
+            user_data = user_manager.create_user(user_id)
+            user = User(user_id=user_id)
             log("USER_SESSION", user_id=user.user_id, status="created")
 
-        # 2. Eventi rilevanti
-        recent_events = select_relevant_events(user_id, limit)
+        # 2. Eventi rilevanti (disabilitati per ora)
+        recent_events = []
 
         # 3. Stato cognitivo base
         state = cls(
@@ -48,11 +45,5 @@ class CognitiveState:
             recent_events=recent_events,
             context={}
         )
-
-        # 4. Stato relazionale persistente
-        relational_state = relational_accumulator.load(user_id)
-
-        # 5. Carattere DERIVATO (non salvato)
-        state.character = CharacterState().compute(relational_state)
 
         return state

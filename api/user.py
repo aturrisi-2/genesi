@@ -3,9 +3,9 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
+import uuid
 
-from core.user import User
-from storage.users import load_user, save_user, create_user as create_storage_user
+from core.user_manager import user_manager
 
 router = APIRouter()
 
@@ -24,21 +24,21 @@ async def bootstrap_user(request: BootstrapRequest):
     """
 
     if request.user_id:
-        user = load_user(request.user_id)
-        if not user:
-            user = User(user_id=request.user_id)
+        user_data = user_manager.get_user(request.user_id)
+        if not user_data:
+            user_data = user_manager.create_user(request.user_id)
     else:
-        user = create_storage_user()
+        # Crea nuovo utente con ID univoco
+        new_user_id = str(uuid.uuid4())
+        user_data = user_manager.create_user(new_user_id)
 
-    # solo touch temporale
-    user.touch()
-
-    save_user(user)
+    # Aggiorna last_seen
+    user_manager.update_user(user_data["user_id"], {"last_seen": "now"})
 
     return {
-        "user_id": user.user_id,
-        "profile": user.profile or {},
-        "created_at": user.created_at,
-        "last_seen": user.last_seen
+        "user_id": user_data["user_id"],
+        "profile": user_data.get("preferences", {}),
+        "created_at": user_data["created_at"],
+        "last_seen": user_data["last_seen"]
     }
 
