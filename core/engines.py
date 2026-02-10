@@ -295,18 +295,33 @@ class APIToolsEngine(BaseEngine):
             city = weather_data.get("city", location)
             
             if current:
-                temp = current.get("temp", "N/A")
+                # Arrotonda i valori per TTS friendly
+                temp_raw = current.get("temp", 0)
                 description = current.get("description", "condizioni sconosciute")
-                humidity = current.get("humidity", "N/A")
-                wind_speed = current.get("wind_speed", "N/A")
+                humidity_raw = current.get("humidity", 0)
+                wind_speed_raw = current.get("wind_speed", 0)
                 
-                response = f"A {city} ci sono {temp}°C con {description}."
-                if humidity != "N/A":
-                    response += f" Umidità: {humidity}%."
-                if wind_speed != "N/A":
-                    response += f" Vento: {wind_speed} km/h."
+                # Arrotonda a interi
+                temp = int(round(float(temp_raw))) if temp_raw != "N/A" else 0
+                humidity = int(round(float(humidity_raw))) if humidity_raw != "N/A" else 0
+                wind_speed = int(round(float(wind_speed_raw))) if wind_speed_raw != "N/A" else 0
                 
-                print(f"[DEBUG_WEATHER] response built: {response}", flush=True)
+                # Costruisci risposta TTS friendly
+                response = f"A {city} ci sono {temp} gradi con {description}."
+                if humidity > 0:
+                    response += f" Umidità {humidity} per cento."
+                if wind_speed > 0:
+                    if wind_speed <= 5:
+                        wind_desc = "debole"
+                    elif wind_speed <= 15:
+                        wind_desc = "moderato"
+                    elif wind_speed <= 25:
+                        wind_desc = "forte"
+                    else:
+                        wind_desc = "molto forte"
+                    response += f" Vento {wind_desc}."
+                
+                print(f"[DEBUG_WEATHER] response built (TTS friendly): {response}", flush=True)
                 return response
             else:
                 print(f"[DEBUG_WEATHER] no current data in response", flush=True)
