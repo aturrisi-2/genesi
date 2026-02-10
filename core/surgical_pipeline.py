@@ -302,6 +302,10 @@ class SurgicalPipeline:
         """
         import re
         
+        # ❌ BYPASS TOTALE per chat_free - testo nudo dal modello
+        if intent_type == "chat_free":
+            return raw_text.strip()
+        
         if not raw_text:
             return raw_text
         
