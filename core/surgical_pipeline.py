@@ -9,6 +9,43 @@ from core.engines import engine_registry
 from core.intent_engine import IntentEngine
 from core.post_llm_filter import post_llm_filter
 from core.language_guard import language_guard
+import re
+
+def sanitize_for_tts(text: str) -> str:
+    """
+    Funzione GLOBALE per sanificare il testo prima del TTS
+    Rimuove emoji e simboli non pronunciabili
+    """
+    if not text:
+        return ""
+    
+    # Rimuovi tutte le emoji
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map symbols
+        "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        "\U00002702-\U000027B0"
+        "\U000024C2-\U0001F251"
+        "]+", flags=re.UNICODE
+    )
+    
+    # Rimuovi emoji
+    cleaned = emoji_pattern.sub('', text)
+    
+    # Rimuovi caratteri decorativi
+    decorative_pattern = re.compile(r'[★☆♦♠♣♥❤️💔💕💞💓💗💖💘💝💟☀️☁️☂️☃️⭐💫✨⚡🔥💥💢💦💧💤💨🕳️💤💢💯💢💢]')
+    cleaned = decorative_pattern.sub('', cleaned)
+    
+    # Rimuovi simboli matematici e tecnici
+    tech_pattern = re.compile(r'[±×÷≠≤≥∞∑∏∫∂∇∆∇∂∫]')
+    cleaned = tech_pattern.sub('', cleaned)
+    
+    # Normalizza spazi
+    cleaned = ' '.join(cleaned.split())
+    
+    return cleaned.strip()
 
 class SurgicalPipeline:
     """
@@ -150,8 +187,16 @@ class SurgicalPipeline:
         print(f"[SURGICAL_PIPELINE] Step 5: Ready for TTS", flush=True)
         
         # Costruisci risultato finale
+        # 5. TTS - Separazione testo visivo vs TTS
+        print(f"[SURGICAL_PIPELINE] Step 5: Ready for TTS", flush=True)
+        
+        # Testo visivo (con emoji) vs testo TTS (senza emoji)
+        tts_text = sanitize_for_tts(filtered_text)
+        print(f"[SURGICAL_PIPELINE] TTS sanitized: '{tts_text[:50]}...'", flush=True)
+        
         result = {
-            "final_text": filtered_text,
+            "final_text": filtered_text,  # Testo visivo con emoji
+            "tts_text": tts_text,         # Testo TTS senza emoji
             "intent": intent,
             "engine_used": engine_type,
             "proactor_decision": proactor_decision,

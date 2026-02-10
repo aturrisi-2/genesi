@@ -307,8 +307,9 @@ class APIToolsEngine(BaseEngine):
                 humidity = int(round(float(humidity_raw))) if humidity_raw != "N/A" else 0
                 wind_speed = int(round(float(wind_speed_raw))) if wind_speed_raw != "N/A" else 0
                 
-                # Costruisci risposta TTS friendly
-                response = f"A {city} ci sono {temp} gradi con {description}."
+                # Costruisci risposta TTS friendly con emoji
+                weather_emoji = self._get_weather_emoji(description)
+                response = f"{weather_emoji} A {city} ci sono {temp} gradi con {description}."
                 if humidity > 0:
                     response += f" Umidità {humidity} per cento."
                 if wind_speed > 0:
@@ -373,35 +374,60 @@ class APIToolsEngine(BaseEngine):
             else:
                 print(f"[DEBUG_NEWS] using all articles (no location filter)", flush=True)
             
-            # Costruisci risposta TTS friendly con max 2 articoli
+            # Costruisci risposta TTS friendly con max 2 articoli approfonditi
             response_parts = []
             
-            # Prendi solo i primi 2 articoli
+            # Prendi solo i primi 2 articoli e approfondisci
             for i, article in enumerate(articles[:2]):
                 title = article.get("title", "").strip()
                 description = article.get("description", "").strip()
+                source = article.get("source", "").strip()
                 
-                # Rimuovi fonti e date
+                # Rimuovi fonti e date ma mantieni il contenuto
                 title = self._clean_news_text(title)
                 description = self._clean_news_text(description)
                 
                 if title and len(title) > 10:
+                    # Costruisci risposta approfondita con contesto
                     if i == 0:
-                        response_parts.append(f"Ultime notizie{f' da {location}' if location else ''}. {title}.")
+                        # Prima notizia con emoji e contesto
+                        category = self._get_news_category(title, description)
+                        emoji = self._get_news_emoji(category)
+                        
+                        news_part = f"{emoji} **{location} – {category}**\n"
+                        news_part += f"{title}. "
+                        
+                        # Aggiungi contesto "perché conta"
+                        if description and len(description) > 20:
+                            # Estrai la frase più importante
+                            sentences = description.split('.')
+                            if sentences:
+                                context_sentence = sentences[0].strip()
+                                if len(context_sentence) > 15:
+                                    # Aggiungi contesto di rilevanza
+                                    relevance = self._get_relevance_context(context_sentence, location)
+                                    news_part += f"{relevance} {context_sentence}."
+                        
+                        response_parts.append(news_part)
                     else:
-                        response_parts.append(title)
-                
-                if description and len(description) > 20 and i < 2:
-                    # Limita a una frase breve
-                    sentences = description.split('.')
-                    if sentences:
-                        first_sentence = sentences[0].strip()
-                        if len(first_sentence) > 15:
-                            response_parts.append(first_sentence + ".")
+                        # Seconda notizia più breve
+                        category = self._get_news_category(title, description)
+                        emoji = self._get_news_emoji(category)
+                        
+                        news_part = f"{emoji} {title}."
+                        if description and len(description) > 30:
+                            sentences = description.split('.')
+                            if sentences:
+                                first_sentence = sentences[0].strip()
+                                if len(first_sentence) > 20:
+                                    news_part += f" {first_sentence}."
+                        
+                        response_parts.append(news_part)
             
             if response_parts:
-                final_response = " ".join(response_parts[:3])  # Max 3 frasi
-                print(f"[DEBUG_NEWS] response built (TTS friendly): {final_response}", flush=True)
+                # Unisci le notizie con formattazione
+                final_response = "\n\n".join(response_parts)
+                print(f"[DEBUG_NEWS] response built (rich with context): {final_response[:100]}...", flush=True)
                 return final_response
             else:
                 print(f"[DEBUG_NEWS] no valid content found", flush=True)
@@ -463,6 +489,67 @@ class APIToolsEngine(BaseEngine):
         
         return filtered_articles
     
+    def _get_news_category(self, title: str, description: str) -> str:
+        """Determina la categoria della notizia"""
+        text = (title + " " + description).lower()
+        
+        if any(word in text for word in ["metro", "bus", "traffico", "autostrada", "treno", "aeroporto"]):
+            return "Trasporti"
+        elif any(word in text for word in ["comune", "sindaco", "municipio", "regione", "provincia"]):
+            return "Politica"
+        elif any(word in text for word in ["scuola", "università", "studenti", "didattica"]):
+            return "Istruzione"
+        elif any(word in text for word in ["ospedale", "sanità", "medico", "paziente", "asl"]):
+            return "Sanità"
+        elif any(word in text for word in ["lavoro", "impiego", "disoccupazione", "sciopero"]):
+            return "Lavoro"
+        elif any(word in text for word in ["cultura", "museo", "teatro", "cinema", "concerto"]):
+            return "Cultura"
+        elif any(word in text for word in ["sport", "calcio", "stadio", "squadra"]):
+            return "Sport"
+        elif any(word in text for word in ["economia", "azienda", "negozio", "commercio"]):
+            return "Economia"
+        else:
+            return "Attualità"
+    
+    def _get_news_emoji(self, category: str) -> str:
+        """Restituisce l'emoji appropriata per la categoria"""
+        emoji_map = {
+            "Trasporti": "🚇",
+            "Politica": "🏛️",
+            "Istruzione": "🎓",
+            "Sanità": "🏥",
+            "Lavoro": "💼",
+            "Cultura": "🎭",
+            "Sport": "⚽",
+            "Economia": "💰",
+            "Attualità": "📰"
+        }
+        return emoji_map.get(category, "📰")
+    
+    def _get_relevance_context(self, sentence: str, location: str) -> str:
+        """Genera contesto di rilevanza per la località"""
+        location_lower = location.lower()
+        
+        # Pattern di rilevanza per Roma
+        if location_lower == "roma":
+            if any(word in sentence.lower() for word in ["centro", "storico", "colosseo", "vaticano"]):
+                return "Questo interessa chi vive o visita il centro storico. "
+            elif any(word in sentence.lower() for word in ["metro", "bus", "traffico"]):
+                return "Questo potrebbe cambiare gli spostamenti quotidiani. "
+            elif any(word in sentence.lower() for word in ["comune", "sindaco", "municipio"]):
+                return "Questa decisione amministrativa riguarda tutti i residenti. "
+            else:
+                return f"Questa notizia è rilevante per chi vive a {location}. "
+        
+        # Pattern di rilevanza per altre città
+        elif any(word in sentence.lower() for word in ["metro", "bus", "traffico"]):
+            return "Questo potrebbe impattare la mobilità urbana. "
+        elif any(word in sentence.lower() for word in ["comune", "sindaco"]):
+            return "Questa decisione amministrativa riguarda i cittadini. "
+        else:
+            return f"Questo evento è importante per {location}. "
+    
     def _clean_news_text(self, text: str) -> str:
         """Pulisce il testo delle notizie per TTS"""
         if not text:
@@ -488,6 +575,27 @@ class APIToolsEngine(BaseEngine):
             text = text[:100].rsplit(' ', 1)[0] + "..."
         
         return text.strip()
+    
+    def _get_weather_emoji(self, description: str) -> str:
+        """Restituisce l'emoji appropriata per il meteo"""
+        desc_lower = description.lower()
+        
+        if any(word in desc_lower for word in ["soleggiato", "sole", "sereno", "clear"]):
+            return "☀️"
+        elif any(word in desc_lower for word in ["nuvoloso", "nuvole", "cloudy"]):
+            return "☁️"
+        elif any(word in desc_lower for word in ["pioggia", "piove", "pioggia", "rain"]):
+            return "🌧️"
+        elif any(word in desc_lower for word in ["neve", "nevica", "snow"]):
+            return "❄️"
+        elif any(word in desc_lower for word in ["temporale", "tuono", "thunder"]):
+            return "⛈️"
+        elif any(word in desc_lower for word in ["nebbia", "nebbioso", "fog"]):
+            return "🌫️"
+        elif any(word in desc_lower for word in ["vento", "ventoso", "windy"]):
+            return "💨"
+        else:
+            return "🌤️"
 
 class PsychologicalEngine(BaseEngine):
     """
