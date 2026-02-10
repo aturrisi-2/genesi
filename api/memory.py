@@ -8,9 +8,9 @@ from fastapi import APIRouter, HTTPException
 from core.memory_storage import memory_storage
 from core.log import log
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/memory")
 
-@router.get("/memory/stats")
+@router.get("/stats")
 async def get_memory_stats():
     """
     Statistiche storage - 1 intent → 1 funzione
@@ -27,7 +27,7 @@ async def get_memory_stats():
         log("MEMORY_STATS_ERROR", error=str(e))
         raise HTTPException(status_code=500, detail="Memory stats error")
 
-@router.get("/memory/keys")
+@router.get("/keys")
 async def get_memory_keys():
     """
     Lista chiavi storage - 1 intent → 1 funzione
@@ -44,7 +44,7 @@ async def get_memory_keys():
         log("MEMORY_KEYS_ERROR", error=str(e))
         raise HTTPException(status_code=500, detail="Memory keys error")
 
-@router.delete("/memory/clear")
+@router.delete("/clear")
 async def clear_memory():
     """
     Pulisci storage - 1 intent → 1 funzione
@@ -60,7 +60,7 @@ async def clear_memory():
         log("MEMORY_CLEAR_ERROR", error=str(e))
         raise HTTPException(status_code=500, detail="Memory clear error")
 
-@router.get("/memory/exists/{key}")
+@router.get("/exists/{key}")
 async def key_exists(key: str):
     """
     Verifica esistenza chiave - 1 intent → 1 funzione

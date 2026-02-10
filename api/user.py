@@ -7,14 +7,14 @@ import uuid
 
 from core.user_manager import user_manager
 
-router = APIRouter()
+router = APIRouter(prefix="/user")
 
 
 class BootstrapRequest(BaseModel):
     user_id: Optional[str] = None
 
 
-@router.post("/user/bootstrap")
+@router.post("/bootstrap")
 async def bootstrap_user(request: BootstrapRequest):
     """
     Bootstrap = carica stato persistente.

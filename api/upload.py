@@ -10,13 +10,13 @@ import uuid
 import logging
 from core.log import log
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/upload")
 logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-@router.post("/upload")
+@router.post("/")
 async def upload_file(file: UploadFile = File(...)):
     """
     Upload file - 1 intent → 1 funzione

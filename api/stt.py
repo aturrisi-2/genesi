@@ -11,10 +11,10 @@ import tempfile
 import subprocess
 import os
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/stt")
 logger = logging.getLogger(__name__)
 
-@router.post("/stt")
+@router.post("/")
 async def speech_to_text(audio: UploadFile = File(...)):
     """
     Speech-to-Text - 1 intent → 1 funzione

@@ -13,7 +13,7 @@ from core.user_manager import user_manager
 from core.chat_memory import chat_memory
 from core.log import log
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/chat")
 
 class ChatRequest(BaseModel):
     message: str
@@ -25,7 +25,7 @@ class ChatResponse(BaseModel):
     intent: Optional[str] = None
     user_id: Optional[str] = None
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     """
     Chat endpoint - 1 intent → 1 funzione
