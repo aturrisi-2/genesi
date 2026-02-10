@@ -247,14 +247,18 @@ class PersonalplexEngine(BaseEngine):
         try:
             from core.local_llm import local_llm
             
-            # Prompt diretto per MISTRAL
-            prompt = f"""[INST] Rispondi in italiano.
-Rispondi solo a quello che l'utente ha appena detto.
-Non introdurre nuovi argomenti.
-Non fare domande se non sono implicite.
-Non usare azioni, asterischi o roleplay.
+            # Prompt CORRETTO per MISTRAL - UN SOLO BLOCCO [INST]...[/INST]
+            prompt = f"""[INST]
+Sei Genesi.
+Parli sempre e solo in italiano.
+Rispondi in modo naturale, umano e semplice.
+Non usare mai inglese, parole inglesi o espressioni inglesi.
+Non usare asterischi, azioni o roleplay (*smile*, *giggle*, ecc).
+Usa uno stile calmo ma sobrio, come una persona reale.
 
-{message} [/INST]"""
+Messaggio dell'utente:
+{message}
+[/INST]"""
             
             response = local_llm.generate(
                 prompt=prompt,

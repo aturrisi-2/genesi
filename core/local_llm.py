@@ -58,10 +58,10 @@ class LocalLLM:
                     time.sleep(backoff_time)
                 
                 # LOG OBBLIGATORI
-                system_prompt = "Rispondi SEMPRE e SOLO in italiano. Non usare mai l'inglese, nemmeno singole parole, espressioni o frasi. Se l'utente scrive in italiano, rispondi esclusivamente in italiano. Tu sei Genesi. Rispondi in modo naturale e conversazionale."
+                system_prompt = ""  # NESSUN system prompt - usa direttamente prompt
                 
-                # Costruisci prompt LLaMA puro
-                full_prompt = f"<s>[INST] {system_prompt}\n\n{prompt} [/INST]"
+                # Usa direttamente il prompt SENZA wrapping
+                full_prompt = prompt  # Prompt già formattato con [INST]...[/INST]
                 print(f"[DEBUG] PROMPT: {full_prompt}", flush=True)
                 
                 # Payload ESATTO per /completion
