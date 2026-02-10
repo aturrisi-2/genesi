@@ -1,7 +1,7 @@
 """
 TTS SIMPLE - Genesi Core v2
 1 intent → 1 funzione
-Text-to-Speech con Coqui TTS e voce italiana reale
+Text-to-Speech con Coqui TTS API ufficiale e voce italiana reale
 """
 
 from pathlib import Path
@@ -14,26 +14,33 @@ logger = logging.getLogger(__name__)
 class SimpleTTS:
     """
     TTS semplice - 1 intent → 1 funzione
-    Con filtro emoji per TTS (non per chat) e Coqui TTS
+    Con filtro emoji per TTS (non per chat) e Coqui TTS API ufficiale
     """
     
     def __init__(self):
         self.tts_dir = Path("tts_cache")
         self.tts_dir.mkdir(exist_ok=True)
-        # Inizializza Coqui TTS
+        # Inizializza Coqui TTS con API ufficiale
         self._init_coqui()
     
     def _init_coqui(self):
-        """Inizializza Coqui TTS con voce italiana"""
+        """Inizializza Coqui TTS con API ufficiale"""
         try:
-            import coqui
-            self.coqui = coqui
-            # Modello vocale italiano
-            self.model_path = "coqui/it/v1.0"
-            logger.info("Coqui TTS initialized with Italian model")
+            from TTS.api import TTS
+            
+            # Inizializza Coqui TTS con modello italiano
+            self.tts = TTS(
+                model_name="tts_models/it/mai_female/glow-tts",
+                progress_bar=False
+            )
+            logger.info("Coqui TTS initialized with Italian model: tts_models/it/mai_female/glow-tts")
+            
         except ImportError:
-            logger.error("Coqui TTS not available - install with: pip install coqui")
-            raise ImportError("Coqui TTS is required. Install with: pip install coqui")
+            logger.error("TTS package not available - install with: pip install TTS==0.22.0")
+            self.tts = None
+        except Exception as e:
+            logger.error(f"Failed to initialize Coqui TTS: {e}")
+            self.tts = None
     
     def synthesize(self, text: str, output_file: Optional[str] = None) -> str:
         """
@@ -53,6 +60,11 @@ class SimpleTTS:
             
             if not filtered_text.strip():
                 raise ValueError("Empty text after filtering")
+            
+            # Verifica che Coqui TTS sia disponibile
+            if not self.tts:
+                logger.error("Coqui TTS not available - cannot synthesize")
+                raise RuntimeError("TTS not initialized")
             
             # Genera filename se non fornito
             if output_file is None:
@@ -76,22 +88,21 @@ class SimpleTTS:
     
     def _synthesize_with_coqui(self, output_path: Path, text: str):
         """
-        Sintesi vocale con Coqui TTS
+        Sintesi vocale con Coqui TTS API ufficiale
         """
-        import torch
-        import torchaudio
-        
-        # Carica modello Coqui
-        model = self.coqui.load_model(self.model_path)
-        
-        # Genera audio
-        with torch.no_grad():
-            audio = model.generate(text=text)
-        
-        # Salva come WAV
-        torchaudio.save(output_path, audio, sample_rate=model.sample_rate)
-        
-        logger.info(f"Coqui TTS generated audio: {len(audio)} samples at {model.sample_rate}Hz")
+        try:
+            # Genera WAV con Coqui TTS
+            wav = self.tts.tts(text)
+            
+            # Salva WAV PCM reale
+            import soundfile as sf
+            sf.write(str(output_path), wav, self.tts.synthesizer.output_sample_rate)
+            
+            logger.info(f"Coqui TTS generated audio: {len(wav)} samples at {self.tts.synthesizer.output_sample_rate}Hz")
+            
+        except Exception as e:
+            logger.error(f"Coqui TTS synthesis failed: {e}")
+            raise
     
     def _generate_wav_file(self, output_path: Path, text: str):
         """
