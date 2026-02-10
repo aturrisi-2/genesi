@@ -12,24 +12,12 @@
 <body>
     <div id="genesi-app">
 
-        <!-- Auth gate: visibile solo se NON loggato -->
-        <div id="auth-gate">
-            <div id="auth-gate-inner">
-                <h1 id="auth-title">Benvenuto in Genesi</h1>
-                <p id="auth-subtitle">Per iniziare, crea un account o accedi.</p>
-                <div id="auth-buttons">
-                    <a href="/register" class="auth-btn auth-btn--primary">Registrati</a>
-                    <a href="/login" class="auth-btn auth-btn--secondary">Accedi</a>
-                </div>
-            </div>
-        </div>
-
-        <!-- User bar: visibile solo se loggato -->
-        <div id="user-bar" style="display:none;">
-            <span id="user-greeting"></span>
+        <!-- User bar: sempre visibile -->
+        <div id="user-bar">
+            <span id="user-greeting">Ciao</span>
             <div id="user-bar-actions">
                 <a href="/admin" id="admin-link" style="display:none;">Admin</a>
-                <button id="logout-btn" type="button">Esci</button>
+                <button id="logout-btn" type="button" style="display:none;">Esci</button>
             </div>
         </div>
 

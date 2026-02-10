@@ -19,114 +19,62 @@ const micButton = document.getElementById('mic-button');
 const plusButton = document.getElementById('plus-button');
 const chatForm = document.getElementById('chat-form');
 
-// Auth DOM
-const authGate = document.getElementById('auth-gate');
+// User bar DOM (auth disabilitato)
 const userBar = document.getElementById('user-bar');
 const userGreeting = document.getElementById('user-greeting');
 const adminLink = document.getElementById('admin-link');
 const logoutBtn = document.getElementById('logout-btn');
 
 // ===============================
-// AUTH STATE
+// AUTH STATE - DISABILITATO
 // ===============================
-let _isLoggedIn = false;
+let _isLoggedIn = true; // SEMPRE loggato
 
 function getAuthToken() {
-  return localStorage.getItem('genesi_access_token');
+  return null; // Nessun token
 }
 
 function isLoggedIn() {
-  const token = getAuthToken();
-  if (!token) return false;
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    if (payload.exp && payload.exp * 1000 < Date.now()) {
-      return false;
-    }
-    return true;
-  } catch (e) {
-    return false;
-  }
+  return true; // SEMPRE loggato
 }
 
 function getTokenPayload() {
-  const token = getAuthToken();
-  if (!token) return null;
-  try {
-    return JSON.parse(atob(token.split('.')[1]));
-  } catch (e) {
-    return null;
-  }
+  return null; // Nessun payload
 }
 
 function isAdmin() {
-  const p = getTokenPayload();
-  return p && p.admin === true;
+  return false; // Mai admin
 }
 
 async function tryRefreshToken() {
-  const refresh = localStorage.getItem('genesi_refresh_token');
-  if (!refresh) return false;
-  try {
-    const res = await fetch('/auth/refresh', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refresh }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      localStorage.setItem('genesi_access_token', data.access_token);
-      localStorage.setItem('genesi_refresh_token', data.refresh_token);
-      return true;
-    }
-  } catch (e) {}
-  return false;
+  return false; // Nessun refresh
 }
 
 function doLogout() {
-  localStorage.removeItem('genesi_access_token');
-  localStorage.removeItem('genesi_refresh_token');
-  localStorage.removeItem('genesi_is_admin');
-  applyAuthState();
+  // Nessun logout - disabilitato
 }
 
 function applyAuthState() {
-  _isLoggedIn = isLoggedIn();
+  // SEMPRE loggato - mostra chat, nascondi auth
+  userBar.style.display = 'flex';
+  document.getElementById('presence').style.display = '';
+  dialogue.style.display = '';
+  document.getElementById('status').style.display = '';
+  chatForm.style.display = '';
 
-  if (_isLoggedIn) {
-    // Logged in: hide gate, show chat + user bar
-    authGate.style.display = 'none';
-    userBar.style.display = 'flex';
-    document.getElementById('presence').style.display = '';
-    dialogue.style.display = '';
-    document.getElementById('status').style.display = '';
-    chatForm.style.display = '';
+  // Greeting fisso
+  userGreeting.textContent = 'Ciao';
 
-    // Greeting
-    const payload = getTokenPayload();
-    const uid = payload ? payload.sub : '';
-    userGreeting.textContent = 'Ciao';
-
-    // Admin link
-    if (isAdmin()) {
-      adminLink.style.display = 'inline-block';
-    } else {
-      adminLink.style.display = 'none';
-    }
-  } else {
-    // Not logged in: show gate, hide chat
-    authGate.style.display = 'flex';
-    userBar.style.display = 'none';
-    document.getElementById('presence').style.display = 'none';
-    dialogue.style.display = 'none';
-    document.getElementById('status').style.display = 'none';
-    chatForm.style.display = 'none';
-  }
+  // Admin link sempre nascosto
+  adminLink.style.display = 'none';
+  logoutBtn.style.display = 'none';
 }
 
-// Logout handler
+// Logout handler (disabilitato)
 if (logoutBtn) {
-  logoutBtn.addEventListener('click', doLogout);
+  logoutBtn.addEventListener('click', () => {
+    console.log('Logout disabilitato');
+  });
 }
 
 // ===============================
@@ -716,23 +664,12 @@ function addGenesiMessage(text) { return addMessage(text, 'genesi'); }
 // CHAT API
 // ===============================
 async function sendChatMessage(message) {
-  if (!_isLoggedIn) {
-    return 'Devi accedere per usare Genesi.';
-  }
+  // Nessun controllo auth - accesso diretto
   const res = await fetch('/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: getUserId(), message })
   });
-  if (res.status === 401 || res.status === 403) {
-    // Try refresh
-    const refreshed = await tryRefreshToken();
-    if (refreshed) {
-      return await sendChatMessage(message);
-    }
-    doLogout();
-    return 'La sessione è scaduta. Effettua di nuovo l\'accesso.';
-  }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
   return data;
@@ -1786,13 +1723,12 @@ document.addEventListener('click', function _firstClick(e) {
 }, { once: true });
 
 (async () => {
-  // Apply auth state FIRST — determines what the user sees
+  // Apply auth state FIRST - sempre loggato
   applyAuthState();
 
-  if (_isLoggedIn) {
-    await bootstrapUser();
-    scrollToBottom();
-  }
+  // Bootstrap utente SEMPRE
+  await bootstrapUser();
+  scrollToBottom();
 
   // Neon flicker — wrap each word of the presence text in a span
   const presenceP = document.querySelector('#presence p');
