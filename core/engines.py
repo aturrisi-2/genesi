@@ -20,6 +20,60 @@ class BaseEngine(ABC):
         """Verifica se può gestire l'intent"""
         pass
 
+class DateTimeEngine(BaseEngine):
+    """
+    DATE_TIME - Solo per data e ora corrente
+    Usa Python datetime, nessun LLM
+    """
+    
+    def __init__(self):
+        pass
+    
+    async def generate(self, message: str, params: Dict[str, Any], context: Optional[Dict] = None) -> str:
+        """
+        Genera risposta con data/ora corrente in italiano
+        """
+        from datetime import datetime
+        import locale
+        
+        try:
+            # Imposta locale italiano
+            locale.setlocale(locale.LC_TIME, 'it_IT.UTF-8')
+        except:
+            pass  # Fallback se locale non disponibile
+        
+        now = datetime.now()
+        
+        # Pattern di richiesta
+        msg_lower = message.lower()
+        
+        if "giorno" in msg_lower:
+            # Nome del giorno
+            day_name = now.strftime("%A")
+            date_str = now.strftime("%d %B %Y")
+            return f"Oggi è {day_name}, {date_str}"
+        
+        elif "ora" in msg_lower:
+            # Ora corrente
+            time_str = now.strftime("%H:%M")
+            return f"Sono le ore {time_str}"
+        
+        elif "data" in msg_lower:
+            # Data completa
+            date_str = now.strftime("%d/%m/%Y")
+            day_name = now.strftime("%A")
+            return f"Oggi è {day_name} {date_str}"
+        
+        else:
+            # Risposta di default
+            date_str = now.strftime("%d/%m/%Y %H:%M")
+            day_name = now.strftime("%A")
+            return f"È {day_name} {date_str}"
+    
+    def can_handle(self, intent_type: str) -> bool:
+        """DateTime gestisce solo date_time"""
+        return intent_type == "date_time"
+
 class GPTFullEngine(BaseEngine):
     """
     GPT-FULL - Solo per fatti verificabili
@@ -89,8 +143,8 @@ REGOLE ASSOLUTE:
 
 class PersonalplexEngine(BaseEngine):
     """
-    PERSONALPLEX - Solo per chat libera
-    Usato per: dialogo naturale, relazione, presenza
+    PERSONALPLEX - SOLO per chat libera e relazione
+    REGOLE RIGIDE: solo italiano, niente emoji, max 2 frasi
     """
     
     def __init__(self):
@@ -99,28 +153,70 @@ class PersonalplexEngine(BaseEngine):
     
     async def generate(self, message: str, params: Dict[str, Any], context: Optional[Dict] = None) -> str:
         """
-        Genera risposta con PersonalPlex - solo per chat libera
+        Genera risposta con PersonalPlex - VINCOLI RIGIDI
         """
-        print(f"[PERSONALPLEX] Generating conversational response", flush=True)
+        print(f"[PERSONALPLEX] Generating chat response", flush=True)
         
         try:
-            # Prompt per PersonalPlex - solo conversazione
-            prompt = self._build_conversational_prompt(message, context)
+            # Prompt rigoroso per PersonalPlex
+            prompt = f"""Rispondi in modo naturale e semplice a: {message}
+
+REGOLE ASSOLUTE:
+- SOLO italiano
+- NIENTE emoji
+- NIENTE simboli (*smile*, *wink*, ecc.)
+- MASSIMO 2 frasi
+- Tono umano e sobrio
+- SOLO conversazione informale"""
             
             response = self.local_llm.generate(
                 prompt=prompt,
-                max_tokens=params.get("max_tokens", 80),
-                temperature=params.get("temperature", 0.7)
+                max_tokens=60,  # Ridotto per risposte brevi
+                temperature=0.6
             )
+            
+            # Post-processing per garantire conformità
+            response = self._enforce_personalplex_rules(response)
             
             return response.strip()
             
         except Exception as e:
             print(f"[PERSONALPLEX] Error: {e}", flush=True)
-            return "Mi dispiace, non riesco a rispondere ora."
+            return "Posso aiutarti in altro modo?"
+    
+    def _enforce_personalplex_rules(self, response: str) -> str:
+        """Applica regole rigide alla risposta PersonalPlex"""
+        if not response:
+            return response
+        
+        # Rimuovi emoji
+        import re
+        emoji_pattern = re.compile(
+            "["
+            "\U0001F600-\U0001F64F"
+            "\U0001F300-\U0001F5FF"
+            "\U0001F680-\U0001F6FF"
+            "\U0001F1E0-\U0001F1FF"
+            "]+", flags=re.UNICODE
+        )
+        response = emoji_pattern.sub('', response)
+        
+        # Rimuovi azioni teatrali
+        theatrical_pattern = re.compile(r'\*[^*]*\*', re.IGNORECASE)
+        response = theatrical_pattern.sub('', response)
+        
+        # Limita a 2 frasi
+        sentences = response.split('.')
+        if len(sentences) > 2:
+            response = '. '.join(sentences[:2]) + '.'
+        
+        # Rimuovi spazi extra
+        response = ' '.join(response.split())
+        
+        return response
     
     def can_handle(self, intent_type: str) -> bool:
-        """Personalplex gestisce solo chat libera"""
+        """PersonalPlex gestisce SOLO chat_free"""
         return intent_type == "chat_free"
     
     def _build_conversational_prompt(self, message: str, context: Optional[Dict] = None) -> str:
@@ -257,7 +353,8 @@ class EngineRegistry:
             "personalplex": PersonalplexEngine(),
             "api_tools": APIToolsEngine(),
             "psychological": PsychologicalEngine(),
-            "verified_knowledge": VerifiedKnowledgeEngine()
+            "verified_knowledge": VerifiedKnowledgeEngine(),
+            "date_time": DateTimeEngine()  # NUOVO
         }
     
     def get_engine(self, engine_type: str) -> BaseEngine:
@@ -281,7 +378,7 @@ class EngineRegistry:
                 # Fallback a GPT-full per API che falliscono
                 print(f"[ENGINE_REGISTRY] Fallback: api_tools -> gpt_full", flush=True)
                 engine = self.get_engine("gpt_full")
-            elif intent_type in ["medical_info", "psychological", "historical_info", "verified_knowledge"]:
+            elif intent_type in ["medical_info", "psychological", "historical_info", "verified_knowledge", "date_time"]:
                 # Retry con stesso motore o errore contestuale
                 print(f"[ENGINE_REGISTRY] Fallback: retry same engine or contextual error", flush=True)
                 return await self._handle_specialist_fallback(intent_type, message, params, context)
@@ -305,7 +402,8 @@ class EngineRegistry:
             "medical_info": "Per questioni mediche è sempre meglio consultare un professionista. Posso aiutarti in altro modo?",
             "psychological": "Sono qui per ascoltarti. In questo momento ho difficoltà a elaborare, ma sono con te.",
             "historical_info": "Non riesco a accedere alle informazioni storiche in questo momento. Vuoi che riprovi?",
-            "verified_knowledge": "Non posso verificare questa informazione ora. Posso aiutarti con altro?"
+            "verified_knowledge": "Non posso verificare questa informazione ora. Posso aiutarti con altro?",
+            "date_time": "Non riesco a ottenere l'ora corrente. Controlla il tuo dispositivo."
         }
         
         return fallback_responses.get(intent_type, "In questo momento non posso elaborare questa richiesta. Posso aiutarti con altro?")

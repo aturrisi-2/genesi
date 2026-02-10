@@ -16,6 +16,7 @@ class IntentType(Enum):
     NEWS = "news"
     EMOTIONAL_SUPPORT = "emotional_support"
     IDENTITY = "identity"
+    DATE_TIME = "date_time"  # NUOVO: per "che giorno è oggi"
     OTHER = "other"
 
 class IntentRouter:
@@ -27,6 +28,29 @@ class IntentRouter:
     def __init__(self):
         # Keyword patterns per ogni categoria
         self.patterns = {
+            IntentType.DATE_TIME: [
+                # Data e ora
+                r"che giorno è oggi",
+                r"che giorno e oggi",
+                r"che giorno è",
+                r"che data è oggi",
+                r"che data è",
+                r"che ora è",
+                r"che ore sono",
+                r"che data e ora",
+                r"giorno della settimana",
+                r"data di oggi",
+                r"ora attuale",
+                r"ora corrente",
+                r"tempo attuale",
+                r"quanto manca a",
+                r"che mese siamo",
+                r"che anno siamo",
+                r"in che giorno siamo",
+                r"ci troviamo a",
+                r"ci troviamo nel"
+            ],
+            
             IntentType.MEDICAL_INFO: [
                 # Sintomi comuni
                 r"mal di testa", r"mal di pancia", r"mal di schiena", r"mal di gola",
@@ -55,7 +79,8 @@ class IntentRouter:
                 r"angoscia", r"angosciato", r"angosciata", r"tormento", r"tormentato",
                 r"burnout", r"esaurimento", r"crollo", r"crollo nervoso",
                 r"piangere", r"piango", r"ho pianto", r"voglio piangere",
-                r"aiutami", r"salvami", r"non so cosa fare", r"sono confuso"
+                r"aiutami", r"salvami", r"non so cosa fare", r"sono confuso",
+                r"oggi sono", r"mi sento", r"sono in", r"sono troppo"
             ],
             
             IntentType.HISTORICAL_INFO: [
@@ -103,14 +128,17 @@ class IntentRouter:
                 r"sono triste", r"sono felice", r"sono arrabbiato", r"sono preoccupato",
                 r"mi sento", r"sentimento", r"emozione", r"ansia", r"stress",
                 r"depressione", r"tristezza", r"felicità", r"rabbia", r"paura",
-                r"aiutami", r"aiuto", r"consiglio", r"parlare con"
+                r"aiutami", r"aiuto", r"consiglio", r"parlare con",
+                # Pattern specifici per distress
+                r"oggi sono depresso", r"oggi sono depressa", r"sono depresso", r"sono depressa",
+                r"mi sento depresso", r"mi sento depressa", r"sentendomi depresso", r"sentendomi depressa"
             ],
             
             IntentType.IDENTITY: [
-                # Identità e nome
-                r"mi chiamo", r"il mio nome è", r"io sono", r"sono [a-z]+",
+                # Identità e nome - pattern più specifici
+                r"mi chiamo", r"il mio nome è", r"il mio cognome è",
                 r"ti ricordi il mio nome", r"ricordi il mio nome", r"come ti chiami",
-                r"il mio nome", r"il cognome", r"chi sono"
+                r"il mio nome", r"il cognome", r"chi sono io", r"dimmi il mio nome"
             ],
             
             IntentType.OTHER: [
@@ -207,6 +235,13 @@ class IntentRouter:
                 "tone": "friendly"
             },
             
+            IntentType.DATE_TIME: {
+                "source": "system_time",
+                "llm_creative": False,
+                "verified_data": True,
+                "tone": "informative"
+            },
+            
             IntentType.OTHER: {
                 "source": "system_time",
                 "llm_creative": False,
@@ -232,6 +267,7 @@ class IntentRouter:
             IntentType.HISTORICAL_INFO,
             IntentType.WEATHER,
             IntentType.NEWS,
+            IntentType.DATE_TIME,  # NUOVO: blocca LLM per data/ora
             IntentType.OTHER,
             IntentType.IDENTITY
         }

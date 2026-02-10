@@ -13,6 +13,7 @@ class EngineType(Enum):
     API_TOOLS = "api_tools"        # Meteo, news API esterne
     VERIFIED_KNOWLEDGE = "verified_knowledge"  # Knowledge base verificato
     PSYCHOLOGICAL = "psychological"  # Supporto emotivo
+    DATE_TIME = "date_time"        # Data e ora corrente
 
 class Proactor:
     """
@@ -46,6 +47,9 @@ class Proactor:
             
             # Richiedono supporto psicologico
             "emotional_support": EngineType.PSYCHOLOGICAL,
+            
+            # Richiede data/ora corrente
+            "date_time": EngineType.DATE_TIME,
             
             # Chat libera → PersonalPlex
             "chat_free": EngineType.PERSONALPLEX,
@@ -88,6 +92,7 @@ class Proactor:
             "news": EngineType.API_TOOLS,
             "verified_knowledge": EngineType.VERIFIED_KNOWLEDGE,
             "emotional_support": EngineType.PSYCHOLOGICAL,
+            "date_time": EngineType.DATE_TIME,  # NUOVO
             "chat_free": EngineType.PERSONALPLEX,
             "identity": EngineType.GPT_FULL,
             "other": EngineType.GPT_FULL,
