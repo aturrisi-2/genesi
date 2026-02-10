@@ -6,6 +6,7 @@ Ogni motore ha UN SOLO compito specifico
 from abc import ABC, abstractmethod
 from typing import Dict, Optional, Any
 import asyncio
+import re
 
 class BaseEngine(ABC):
     """Base class per tutti i motori"""
@@ -332,9 +333,91 @@ class APIToolsEngine(BaseEngine):
             return f"Errore nel recupero dati meteo per {location}."
     
     async def _get_news(self) -> str:
-        """Ottiene notizie"""
-        # Simulazione - in produzione chiamerebbe API reali
-        return "Ultime notizie: Non disponibili al momento."
+        """Ottiene notizie reali da API"""
+        print(f"[DEBUG_NEWS] _get_news called", flush=True)
+        
+        try:
+            from core.tools import fetch_news
+            print(f"[DEBUG_NEWS] calling fetch_news API", flush=True)
+            
+            news_data = await fetch_news("dimmi le notizie di oggi")
+            print(f"[DEBUG_NEWS] API response received", flush=True)
+            
+            if "error" in news_data:
+                print(f"[DEBUG_NEWS] API error: {news_data['error']}", flush=True)
+                return "Al momento non risultano notizie disponibili."
+            
+            # Estrai articoli
+            articles = news_data.get("articles", [])
+            print(f"[DEBUG_NEWS] articles count: {len(articles)}", flush=True)
+            
+            if not articles:
+                print(f"[DEBUG_NEWS] no articles found", flush=True)
+                return "Al momento non risultano notizie rilevanti."
+            
+            # Costruisci risposta TTS friendly con max 2 articoli
+            response_parts = []
+            
+            # Prendi solo i primi 2 articoli
+            for i, article in enumerate(articles[:2]):
+                title = article.get("title", "").strip()
+                description = article.get("description", "").strip()
+                
+                # Rimuovi fonti e date
+                title = self._clean_news_text(title)
+                description = self._clean_news_text(description)
+                
+                if title and len(title) > 10:
+                    if i == 0:
+                        response_parts.append(f"Ultime notizie. {title}.")
+                    else:
+                        response_parts.append(title)
+                
+                if description and len(description) > 20 and i < 2:
+                    # Limita a una frase breve
+                    sentences = description.split('.')
+                    if sentences:
+                        first_sentence = sentences[0].strip()
+                        if len(first_sentence) > 15:
+                            response_parts.append(first_sentence + ".")
+            
+            if response_parts:
+                final_response = " ".join(response_parts[:3])  # Max 3 frasi
+                print(f"[DEBUG_NEWS] response built (TTS friendly): {final_response}", flush=True)
+                return final_response
+            else:
+                print(f"[DEBUG_NEWS] no valid content found", flush=True)
+                return "Al momento non risultano notizie rilevanti."
+                
+        except Exception as e:
+            print(f"[DEBUG_NEWS] Exception in _get_news: {e}", flush=True)
+            return "Non riesco a ottenere notizie in questo momento."
+    
+    def _clean_news_text(self, text: str) -> str:
+        """Pulisce il testo delle notizie per TTS"""
+        if not text:
+            return ""
+        
+        # Rimuovi fonti tra parentesi
+        text = re.sub(r'\s*-\s*[^-]*$', '', text)  # Rimuovi " - Fonte"
+        text = re.sub(r'\([^)]*\)', '', text)  # Rimuovi testo tra parentesi
+        text = re.sub(r'\[[^\]]*\]', '', text)  # Rimuovi testo tra quadre
+        
+        # Rimuovi URL
+        text = re.sub(r'http[s]?://\S+', '', text)
+        
+        # Rimuovi date numeriche
+        text = re.sub(r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}', '', text)
+        text = re.sub(r'\d{1,2}\s*(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)', '', text, flags=re.IGNORECASE)
+        
+        # Rimuovi caratteri problematici
+        text = text.replace('"', '').replace("'", "").replace(":", "").replace(";", "")
+        
+        # Limita lunghezza
+        if len(text) > 100:
+            text = text[:100].rsplit(' ', 1)[0] + "..."
+        
+        return text.strip()
 
 class PsychologicalEngine(BaseEngine):
     """
