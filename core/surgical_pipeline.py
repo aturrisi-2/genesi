@@ -158,50 +158,51 @@ class SurgicalPipeline:
         # 4. POST-FILTER - Pulizia sicurezza (NON normalizzatore)
         print(f"[SURGICAL_PIPELINE] Step 4: Post-filter safety", flush=True)
         
-        # Language guard come sicurezza
+        # Language guard come sicurezza - APPLICATO SOLO A TTS
         guard_result = language_guard.check_and_clean(final_text, {
             "intent": intent_type,
             "user_message": user_message
         })
         
+        # display_text = testo originale con emoji (per UI)
+        display_text = final_text
+        
+        # tts_text = testo pulito per TTS
         if guard_result["is_clean"]:
-            filtered_text = guard_result["cleaned_text"]
+            tts_text = guard_result["cleaned_text"]
         else:
-            # Se contaminato, PULISCE NON SOSTITUISCE
+            # Se contaminato, PULISCE SOLO TTS
             print(f"[SURGICAL_PIPELINE] Contamination detected: {guard_result['issues']}", flush=True)
             
-            # 1. Tentativo di pulizia NON distruttiva
+            # 1. Tentativo di pulizia NON distruttiva SOLO per TTS
             cleaned_text = self._clean_response_safely(final_text, guard_result['issues'], intent_type)
             
             if cleaned_text and len(cleaned_text.strip()) > 3:
-                print(f"[SURGICAL_PIPELINE] Cleaned successfully", flush=True)
-                filtered_text = cleaned_text
+                print(f"[SURGICAL_PIPELINE] TTS Cleaned successfully", flush=True)
+                tts_text = cleaned_text
             else:
-                # 2. Solo se pulizia fallisce completamente, rigenera
-                print(f"[SURGICAL_PIPELINE] Cleaning failed, regenerating", flush=True)
-                filtered_text = await self._regenerate_response_safely(user_message, intent_type)
+                # 2. Solo se pulizia fallisce completamente, rigenera SOLO TTS
+                print(f"[SURGICAL_PIPELINE] TTS Cleaning failed, regenerating", flush=True)
+                tts_text = await self._regenerate_response_safely(user_message, intent_type)
         
-        print(f"[SURGICAL_PIPELINE] Filtered: '{filtered_text[:50]}...'", flush=True)
+        # Sanificazione finale TTS per rimuovere emoji
+        tts_text = sanitize_for_tts(tts_text)
+        
+        print(f"[SURGICAL_PIPELINE] Display: '{display_text[:50]}...'", flush=True)
+        print(f"[SURGICAL_PIPELINE] TTS: '{tts_text[:50]}...'", flush=True)
         
         # 5. TTS - Immutato (gestito dall'esterno)
         print(f"[SURGICAL_PIPELINE] Step 5: Ready for TTS", flush=True)
         
-        # Costruisci risultato finale
-        # 5. TTS - Separazione testo visivo vs TTS
-        print(f"[SURGICAL_PIPELINE] Step 5: Ready for TTS", flush=True)
-        
-        # Testo visivo (con emoji) vs testo TTS (senza emoji)
-        tts_text = sanitize_for_tts(filtered_text)
-        print(f"[SURGICAL_PIPELINE] TTS sanitized: '{tts_text[:50]}...'", flush=True)
-        
+        # Costruisci risultato finale con DUE CAMPI DISTINTI
         result = {
-            "final_text": filtered_text,  # Testo visivo con emoji
-            "tts_text": tts_text,         # Testo TTS senza emoji
+            "display_text": display_text,  # SOLO per UI (con emoji)
+            "tts_text": tts_text,         # SOLO per TTS (senza emoji)
             "intent": intent,
             "engine_used": engine_type,
             "proactor_decision": proactor_decision,
             "original_generated": final_text,
-            "filtered": filtered_text != final_text,
+            "filtered": tts_text != final_text,
             "pipeline": "surgical"
         }
         

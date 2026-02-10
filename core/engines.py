@@ -349,7 +349,7 @@ class APIToolsEngine(BaseEngine):
             return f"Errore nel recupero dati meteo per {location}."
     
     async def _get_news(self, message: str = "") -> str:
-        """Ottiene notizie reali da API con filtro per località"""
+        """Ottiene notizie reali da API con robustezza e fallback"""
         print(f"[DEBUG_NEWS] _get_news called", flush=True)
         
         try:
@@ -359,17 +359,24 @@ class APIToolsEngine(BaseEngine):
             news_data = await fetch_news(message)
             print(f"[DEBUG_NEWS] API response received", flush=True)
             
+            # GESTIONE ERRORI API
             if "error" in news_data:
                 print(f"[DEBUG_NEWS] API error: {news_data['error']}", flush=True)
-                return "Al momento non risultano notizie disponibili."
+                return self._get_news_fallback(message)
+            
+            # GESTIONE PAYLOAD VUOTO
+            if not news_data or not isinstance(news_data, dict):
+                print(f"[DEBUG_NEWS] empty or invalid payload", flush=True)
+                return self._get_news_fallback(message)
             
             # Estrai articoli
             articles = news_data.get("articles", [])
             print(f"[DEBUG_NEWS] total_articles={len(articles)}", flush=True)
             
+            # GESTIONE NESSUN ARTICOLO
             if not articles:
                 print(f"[DEBUG_NEWS] no articles found", flush=True)
-                return "Al momento non risultano notizie rilevanti."
+                return self._get_news_fallback(message)
             
             # Estrai località dal messaggio
             location = self._extract_location_from_message(message)
@@ -383,7 +390,7 @@ class APIToolsEngine(BaseEngine):
                 # Se dopo il filtro ci sono meno di 2 articoli, usa fallback esplicito
                 if len(filtered_articles) < 2:
                     print(f"[DEBUG_NEWS] insufficient local articles: {len(filtered_articles)}", flush=True)
-                    return f"Poche notizie locali oggi a {location}."
+                    return self._get_news_fallback(message)
                 
                 articles = filtered_articles
             else:
@@ -448,11 +455,20 @@ class APIToolsEngine(BaseEngine):
                 return final_response
             else:
                 print(f"[DEBUG_NEWS] no valid content found", flush=True)
-                return "Al momento non risultano notizie rilevanti."
+                return self._get_news_fallback(message)
                 
         except Exception as e:
             print(f"[DEBUG_NEWS] Exception in _get_news: {e}", flush=True)
-            return "Non riesco a ottenere notizie in questo momento."
+            return self._get_news_fallback(message)
+    
+    def _get_news_fallback(self, message: str) -> str:
+        """Fallback strutturato per news"""
+        location = self._extract_location_from_message(message)
+        
+        if location and location.lower() != "italia":
+            return f"📰 **{location} – Attualità**\n👉 Oggi poche notizie locali verificabili su {location}.\n📍 Ecco cosa sta emergendo a livello cittadino: monitoriamo gli eventi principali che potrebbero interessare i residenti."
+        else:
+            return "📰 **Attualità**\n👉 Oggi poche notizie verificabili disponibili.\n📍 Stiamo monitorando gli eventi principali a livello nazionale."
     
     def _extract_location_from_message(self, message: str) -> str:
         """Estrae località dal messaggio news"""
