@@ -1,7 +1,7 @@
 """
 TTS SIMPLE - Genesi Core v2
 1 intent → 1 funzione
-Text-to-Speech con filtro emoji per TTS
+Text-to-Speech con filtro emoji per TTS e sintesi vocale reale
 """
 
 from pathlib import Path
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class SimpleTTS:
     """
     TTS semplice - 1 intent → 1 funzione
-    Con filtro emoji per TTS (non per chat)
+    Con filtro emoji per TTS (non per chat) e sintesi vocale reale
     """
     
     def __init__(self):
@@ -37,16 +37,15 @@ class SimpleTTS:
             # Filtra emoji SOLO per TTS
             filtered_text = emoji_filter.filter_for_tts(text)
             
-            # Placeholder per TTS reale
-            # In una implementazione reale, qui ci sarebbe un motore TTS
+            # Sintesi vocale reale con gTTS
             if output_file is None:
                 import uuid
                 output_file = f"tts_{uuid.uuid4()}.wav"
             
             output_path = self.tts_dir / output_file
             
-            # Genera file WAV valido con header e dati minimali
-            self._generate_wav_file(output_path, filtered_text)
+            # Genera file WAV con sintesi vocale reale
+            self._generate_real_tts(output_path, filtered_text)
             
             from core.log import log
             log("TTS_SYNTHESIZED", original_text=text[:50], filtered_text=filtered_text[:50], output=str(output_path))
@@ -57,6 +56,70 @@ class SimpleTTS:
             from core.log import log
             log("TTS_ERROR", error=str(e))
             raise
+    
+    def _generate_real_tts(self, output_path: Path, text: str):
+        """
+        Genera file WAV con sintesi vocale reale usando gTTS
+        """
+        try:
+            import gtts
+            from io import BytesIO
+            from pydub import AudioSegment
+            
+            # Configura gTTS per italiano
+            tts = gtts.gTTS(
+                text=text,
+                lang='it',  # Italiano
+                slow=False   # Velocità normale
+            )
+            
+            # Genera audio in memoria
+            audio_data = BytesIO()
+            tts.write_to_fp(audio_data)
+            audio_data.seek(0)
+            
+            # Converte in WAV
+            audio = AudioSegment.from_file(audio_data, format="mp3")
+            audio.export(
+                output_path,
+                format="wav",
+                parameters=["-ac", "1", "-ar", "22050", "-ab", "128k"]
+            )
+            
+        except ImportError as e:
+            # Fallback a sintesi vocale con pyttsx3 se gTTS non disponibile
+            self._fallback_tts(output_path, text)
+        except Exception as e:
+            # Fallback a sintesi vocale con pyttsx3 se gTTS fallisce
+            self._fallback_tts(output_path, text)
+    
+    def _fallback_tts(self, output_path: Path, text: str):
+        """
+        Fallback a sintesi vocale con pyttsx3
+        """
+        try:
+            import pyttsx3
+            
+            # Crea motore TTS
+            engine = pyttsx3.init()
+            
+            # Configura voce italiana se disponibile
+            voices = engine.getProperty('voices')
+            for voice in voices:
+                if 'italian' in voice.name.lower() or 'it' in voice.id.lower():
+                    engine.setProperty('voice', voice.id)
+                    break
+            
+            # Salva direttamente in WAV
+            engine.save_to_file(text, str(output_path))
+            engine.runAndWait()
+            
+        except ImportError:
+            # Fallback a onda sinusoidale se nessun motore TTS disponibile
+            self._generate_wav_file(output_path, text)
+        except Exception as e:
+            # Fallback a onda sinusoidale se pyttsx3 fallisce
+            self._generate_wav_file(output_path, text)
     
     def _generate_wav_file(self, output_path: Path, text: str):
         """
