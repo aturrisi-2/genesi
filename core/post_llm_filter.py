@@ -35,13 +35,14 @@ class PostLLMFilter:
             r'\[[^\]]*\]',  # Azioni in quadre
             r'\{[^}]*\}',  # Azioni in graffe
             
-            # Emoji e simboli - TUTTI
-            r'[\U0001F600-\U0001F64F]',  # Emoticoni
-            r'[\U0001F300-\U0001F5FF]',  # Simboli vari
-            r'[\U0001F680-\U0001F6FF]',  # Trasporti e simboli
-            r'[\U0001F1E0-\U0001F1FF]',  # Bandiere
-            r'[\U00002600-\U000026FF]',  # Simboli vari
-            r'[\U00002700-\U000027BF]',  # Dingbats
+            # RIMOSSO: Emoji e simboli - PERMESSI in display_text
+            # Le emoji vengono gestite da sanitize_for_tts() solo per TTS
+            # r'[\U0001F600-\U0001F64F]',  # Emoticoni
+            # r'[\U0001F300-\U0001F5FF]',  # Simboli vari
+            # r'[\U0001F680-\U0001F6FF]',  # Trasporti e simboli
+            # r'[\U0001F1E0-\U0001F1FF]',  # Bandiere
+            # r'[\U00002600-\U000026FF]',  # Simboli vari
+            # r'[\U00002700-\U000027BF]',  # Dingbats
             
             # Affermazioni mediche inappropriate
             r'\b(non preoccuparti|tranquillo|calmati|relax)\b',

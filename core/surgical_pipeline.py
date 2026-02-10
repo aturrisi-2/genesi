@@ -153,7 +153,9 @@ class SurgicalPipeline:
                 # Prova motore successivo
                 final_text = await self._try_fallback_engine(user_message, intent_type, params)
         
-        print(f"[SURGICAL_PIPELINE] Generated: '{final_text[:50]}...'", flush=True)
+        # Rimuovi emoji dai log per evitare crash encoding su Windows
+        safe_log_text = ''.join(c if ord(c) < 128 else '?' for c in final_text)
+        print(f"[SURGICAL_PIPELINE] Generated: '{safe_log_text[:50]}...'", flush=True)
         
         # 4. POST-FILTER - Pulizia sicurezza (NON normalizzatore)
         print(f"[SURGICAL_PIPELINE] Step 4: Post-filter safety", flush=True)
@@ -188,8 +190,12 @@ class SurgicalPipeline:
         # Sanificazione finale TTS per rimuovere emoji
         tts_text = sanitize_for_tts(tts_text)
         
-        print(f"[SURGICAL_PIPELINE] Display: '{display_text[:50]}...'", flush=True)
-        print(f"[SURGICAL_PIPELINE] TTS: '{tts_text[:50]}...'", flush=True)
+        # Rimuovi emoji dai log per evitare crash encoding su Windows
+        safe_display_log = ''.join(c if ord(c) < 128 else '?' for c in display_text)
+        safe_tts_log = ''.join(c if ord(c) < 128 else '?' for c in tts_text)
+        
+        print(f"[SURGICAL_PIPELINE] Display: '{safe_display_log[:50]}...'", flush=True)
+        print(f"[SURGICAL_PIPELINE] TTS: '{safe_tts_log[:50]}...'", flush=True)
         
         # 5. TTS - Immutato (gestito dall'esterno)
         print(f"[SURGICAL_PIPELINE] Step 5: Ready for TTS", flush=True)

@@ -495,36 +495,39 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
         document_context=document_context
     )
     
-    response_text = final_result.get("final_text", "")
+    # Estrai display_text e tts_text dalla pipeline
+    display_text = final_result.get("display_text", "")
+    tts_text = final_result.get("tts_text", "")
     engine_used = final_result.get("engine_used", "unknown")
     
     print(f"[CHAT] Engine used: {engine_used}", flush=True)
-    print(f"[CHAT] Response: '{response_text[:50]}...'", flush=True)
+    print(f"[CHAT] Display: '{display_text[:50]}...'", flush=True)
+    print(f"[CHAT] TTS: '{tts_text[:50]}...'", flush=True)
     
-    # POST-PROCESSOR LINGUISTICO - Pulisci metatesto teatrale prima di tutto
-    if response_text:
-        original_text = response_text
-        response_text = text_post_processor.clean_response(response_text)
+    # POST-PROCESSOR LINGUISTICO - Pulisci SOLO display_text
+    if display_text:
+        original_text = display_text
+        display_text = text_post_processor.clean_response(display_text)
         # Log silenzioso solo se c'è stata pulizia
-        if original_text != response_text:
+        if original_text != display_text:
             log("TEXT_POST_PROCESSOR", user_id=request.user_id, 
-                original_len=len(original_text), cleaned_len=len(response_text))
+                original_len=len(original_text), cleaned_len=len(display_text))
     
     log("PIPELINE_COMPLETED", user_id=request.user_id, 
         path="surgical",
         engine=engine_used,
-        final_text=response_text[:50])
+        final_text=display_text[:50])
     
     # 7. Store system response
     system_affect = compute_affect(
         "system_response",
-        {"text": response_text}
+        {"text": display_text}
     )
 
     store_event(
         user_id=request.user_id,
         type="system_response",
-        content={"text": response_text},
+        content={"text": display_text},
         salience=1.0,
         affect=system_affect
     )
@@ -534,19 +537,20 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     tts_mode = "normal"
     if final_result.get("path") == "tools":
         tts_mode = "informative"
-    elif len(response_text) > 500:
+    elif len(display_text) > 500:
         tts_mode = "informative"
     
     # LOG TTS OBBLIGATORIO
-    print(f"[TTS_MANDATORY] user_id={request.user_id} response_len={len(response_text)} tts_mode={tts_mode}", flush=True)
+    print(f"[TTS_MANDATORY] user_id={request.user_id} response_len={len(display_text)} tts_mode={tts_mode}", flush=True)
     
-    # NUOVO FORMATO API - FINAL_RESPONSE SEMPRE
+    # NUOVO FORMATO API - display_text e tts_text distinti
     return {
-        "response": response_text,  # CAMBIATO: final_text -> response
-        "confidence": "ok",  # Default per pipeline chirurgica
-        "style": "standard",  # Default per pipeline chirurgica
+        "response": display_text,      # UI text (con emoji)
+        "tts_text": tts_text,         # TTS text (senza emoji)
+        "confidence": "ok",           # Default per pipeline chirurgica
+        "style": "standard",          # Default per pipeline chirurgica
         "tts_mode": tts_mode,
-        "should_respond": True,  # Pipeline sempre risponde
+        "should_respond": True,       # Pipeline sempre risponde
         "user_id": request.user_id,
         "timestamp": datetime.now().isoformat(),
         "state": {
