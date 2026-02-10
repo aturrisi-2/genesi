@@ -247,21 +247,29 @@ class PersonalplexEngine(BaseEngine):
         try:
             from core.local_llm import local_llm
             
-            # Prompt PURO per MISTRAL - nessun template manuale
+            # Prompt BISTURI V2 DEFINITIVO - stringo vincolo semantico
             prompt = f"""Sei Genesi.
 Parli sempre e solo in italiano.
-Usa un linguaggio naturale, adulto e semplice.
-Non usare inglese.
-Non usare asterischi, azioni o roleplay.
-Rispondi come una persona reale, calma e presente.
+
+Rispondi SOLO al messaggio dell'utente.
+NON aggiungere esempi, storie, ricordi o descrizioni inventate.
+NON parlare di te se non richiesto esplicitamente.
+NON anticipare domande future.
+NON cambiare argomento.
+
+Usa frasi brevi e dirette.
+Massimo 1-2 frasi.
+
+Stile:
+calmo, umano, presente.
 
 Messaggio utente:
-{message}---"""
+{message}"""
             
             response = local_llm.generate(
                 prompt=prompt,
-                max_tokens=80,
-                temperature=0.4  # Come richiesto
+                max_tokens=80,   # n_predict = 80
+                temperature=0.35  # Come richiesto
             )
             
             # Post-processing minimo

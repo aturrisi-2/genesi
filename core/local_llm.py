@@ -67,9 +67,9 @@ class LocalLLM:
                 # Payload ESATTO per /completion
                 payload = {
                     "prompt": full_prompt,
-                    "n_predict": 256,
-                    "temperature": 0.7,
-                    "top_p": 0.9  # Come richiesto
+                    "n_predict": 80,      # Come richiesto
+                    "temperature": 0.35,   # Come richiesto
+                    "top_p": 0.85           # Come richiesto
                 }
                 
                 print(f"[DEBUG] PAYLOAD: {json.dumps(payload, indent=2)}", flush=True)
