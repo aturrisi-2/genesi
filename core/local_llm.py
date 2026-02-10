@@ -1,6 +1,6 @@
 """
-Local LLM Module - PersonalPlex 7B Integration
-Modulo per analisi cognitiva primaria con modello locale NVIDIA
+Local LLM Module - Qwen2.5-7B-Instruct Integration
+Modulo per dialogo minimale e instruction-following rigoroso
 """
 
 import logging
@@ -12,29 +12,25 @@ from typing import Dict, Any
 logger = logging.getLogger(__name__)
 
 class LocalLLM:
-    """Interfaccia per Mistral 7B Instruct via backend locale NVIDIA"""
+    """Interfaccia per Qwen2.5-7B-Instruct via backend locale"""
     
     def __init__(self, backend_url: str = "http://127.0.0.1:8080/completion", timeout: int = 25, max_retries: int = 2):
         self.backend_url = backend_url
         self.timeout = timeout
         self.max_retries = max_retries
-        # NUOVO MODELLO PIÙ CAPACE
-        self.model_path = "/opt/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"
-        self.ctx_size = 2048  # Aumentato per conversazioni più lunghe
-        self.max_tokens = 150  # Aumentato per risposte più ricche
-        self.temperature = 0.7  # Leggermente aumentato per naturalezza
-        self.top_p = 0.9  # Invariato
+        # Qwen2.5-7B-Instruct - modello affidabile per dialogo minimale
+        self.model_path = "/opt/models/qwen2.5-7b-instruct.Q4_K_M.gguf"
+        self.ctx_size = 2048
+        self.max_tokens = 80  # Breve e diretto
+        self.temperature = 0.35  # Basso per stabilità
+        self.top_p = 0.85  # Controllo output
     
     def is_available(self) -> bool:
         """
         VERIFICA CONFIGURAZIONE SENZA CHIAMATE LLM
         REGOLA D'ORO: MAI testare con chiamate reali
         """
-        # PersonalPlex è considerato disponibile se backend_url è configurato
         return bool(self.backend_url and self.backend_url.startswith("http"))
-    
-        
-    # HEALTH CHECK RIMOSSO - nessuna chiamata ridondante per velocità
     
     def generate(self, prompt: str, max_tokens: int = None, temperature: float = None, mode: str = "normal") -> str:
         """
@@ -67,9 +63,10 @@ class LocalLLM:
                 # Payload ESATTO per /completion
                 payload = {
                     "prompt": full_prompt,
-                    "n_predict": 80,      # Come richiesto
-                    "temperature": 0.35,   # Come richiesto
-                    "top_p": 0.85           # Come richiesto
+                    "n_predict": max_tokens,
+                    "temperature": temperature,
+                    "top_p": self.top_p,
+                    "stop": ["</s>", "<|endoftext|>", "<|im_end|>"]
                 }
                 
                 print(f"[DEBUG] PAYLOAD: {json.dumps(payload, indent=2)}", flush=True)
@@ -89,7 +86,7 @@ class LocalLLM:
                     
                     if content:
                         tokens = len(content.split())
-                        logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens}, model=mistral-7b-instruct")
+                        logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens}, model=qwen2.5-7b-instruct")
                         return content
                     else:
                         print(f"[LOCAL_LLM] Empty content on attempt {attempt + 1}", flush=True)
@@ -115,43 +112,30 @@ class LocalLLM:
         
         return ""
     
-    def generate_chat_response(self, user_message: str) -> str:
+    def generate_chat_response(self, prompt_text: str) -> str:
         """
-        Genera risposta chat conversazionale naturale
+        Genera risposta chat con Qwen2.5-7B-Instruct
         
         Args:
-            user_message: Messaggio utente naturale
+            prompt_text: Testo del prompt lineare
             
         Returns:
-            Risposta conversazionale naturale (1 frase max)
+            Stringa generata dal modello o None se errore
         """
         start_time = time.time()
         
         try:
-            # LOG OBBLIGATORI
-            system_prompt = """Rispondi SEMPRE e SOLO in italiano. MAI parole inglesi.
-REGOLE ASSOLUTE:
-1. SOLO italiano puro - niente inglese, febbraio, monday, smile, wink, giggle
-2. MAI azioni teatrali - niente *smile*, (sussurra), [guarda], {adotta}
-3. MAI emoji - niente 😊, 😎, 📆
-4. MAI descrizioni teatrali - niente "esprime curiosità", "adotta tono"
-5. Risposte brevi e naturali - 1-2 frasi max
-6. SOLO conversazione normale - niente "caridad", "bacio strettissimo"
-
-Tu sei Genesi. Rispondi in modo naturale e conversazionale."""
+            # Prompt lineare per Qwen2.5-7B-Instruct
+            prompt = f"Utente: {prompt_text}\nGenesi:"
             
-            # Costruisci prompt LLaMA puro
-            prompt = f"<s>[INST] {system_prompt}\n\n{user_message} [/INST]"
-            print(f"[DEBUG] CHAT PROMPT: {prompt}", flush=True)
-            
-            # Payload ESATTO per /completion
+            # Payload per llama.cpp con parametri bloccati
             payload = {
                 "prompt": prompt,
-                "n_predict": 256,
-                "temperature": 0.7
+                "n_predict": 80,
+                "temperature": 0.35,
+                "top_p": 0.85,
+                "stop": ["Utente:", "</s>"]
             }
-            
-            print(f"[DEBUG] CHAT PAYLOAD: {json.dumps(payload, indent=2)}", flush=True)
             
             response = requests.post(
                 self.backend_url,
@@ -160,45 +144,29 @@ Tu sei Genesi. Rispondi in modo naturale e conversazionale."""
                 headers={"Content-Type": "application/json"}
             )
             
-            latency = (time.time() - start_time) * 1000
-            
             if response.status_code == 200:
-                result = response.json()
-                print(f"[DEBUG] CHAT RESPONSE: {json.dumps(result, indent=2)}", flush=True)
+                data = response.json()
                 
-                # Parsing RISPOSTA: SOLO response["content"]
-                if "content" in result:
-                    content = result["content"].strip()
-                    
-                    # SE HTTP 200 e content non vuoto → RISPOSTA SEMPRE VALIDA
-                    if not content:
-                        raise Exception("Chat content vuoto da llama-server")
-                    
-                    tokens_count = len(content.split())
-                    
-                    print(f"[DEBUG] CHAT CONTENT_LENGTH: {len(content)} tokens: {tokens_count}", flush=True)
-                    print(f"[DEBUG] CHAT RISPOSTA ACCETTATA: '{content}'", flush=True)
-                    
-                    # Log INFO per risposte accettate anche se lente
-                    if latency > 2000:  # Se più di 2 secondi
-                        logger.info(f"CHAT RISPOSTA LENTA MA ACCETTATA: latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=mistral-7b-instruct, decision=chat")
-                    else:
-                        logger.info(f"latency_ms={latency:.0f}, tokens_generated={tokens_count}, model=mistral-7b-instruct, decision=chat")
-                    
-                    return content
+                # Parsing difensivo per entrambi i formati
+                if "content" in data:
+                    content = data["content"]
+                elif "choices" in data and len(data["choices"]) > 0:
+                    content = data["choices"][0].get("text", "")
                 else:
-                    raise Exception("Chat response senza 'content' da llama-server")
-            else:
-                raise Exception(f"Chat HTTP {response.status_code}: {response.text}")
+                    content = ""
                 
-        except requests.exceptions.Timeout:
-            latency = (time.time() - start_time) * 1000
-            logger.warning(f"latency_ms={latency:.0f}, tokens_generated=0, model=mistral-7b-instruct, error=timeout")
-            return ""  # NESSUN fallback - solo llama.cpp
+                # Restituisci solo se non vuoto
+                if content and content.strip():
+                    return content.strip()
+                else:
+                    logger.error(f"Empty response from llama-server")
+                    return None
+            else:
+                raise Exception(f"HTTP {response.status_code}: {response.text}")
+                
         except Exception as e:
-            latency = (time.time() - start_time) * 1000
-            logger.error(f"latency_ms={latency:.0f}, tokens_generated=0, model=mistral-7b-instruct, error={e}")
-            return ""  # NESSUN fallback - solo llama.cpp
+            logger.error(f"Chat generation error: {e}")
+            return None
     
     def generate_memory_summary(self, memory_context: str) -> str:
         """
