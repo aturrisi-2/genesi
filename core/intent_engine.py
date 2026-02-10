@@ -99,6 +99,7 @@ class IntentEngine:
         re.compile(r"\b(?:quando|dove|come)\b.*\b(?:è|sono|si|nasce|muore|funziona|trova)\b", re.I),
         re.compile(r"\b(?:che|cos['']?è|cosa significa)\b", re.I),
         re.compile(r"\b(?:posso prendere|si può prendere|fa male|fa bene)\b.*\b(?:con|se|la|il)\b", re.I),
+        re.compile(r"\b(?:che giorno|che data|oggi che giorno|oggi che data|che giorno è|che data è|giorno di oggi|data di oggi)\b", re.I),
     ]
 
     def decide(
@@ -268,6 +269,19 @@ class IntentEngine:
             any(kw in msg_lower for kw in self.FACTUAL_KEYWORDS)
             or any(p.search(msg) for p in self.FACTUAL_PATTERNS)
         )
+        
+        # CHECK SPECIFICO PER DATE - route a date_time
+        date_patterns = [
+            r"\b(?:che giorno|che data|oggi che giorno|oggi che data|che giorno è|che data è|giorno di oggi|data di oggi)\b"
+        ]
+        has_date_query = any(re.search(pattern, msg_lower) for pattern in date_patterns)
+        
+        if has_date_query:
+            intent["type"] = "date_time"
+            intent["should_respond"] = True
+            intent["style"] = "factual"
+            intent["depth"] = "diretto"
+            print(f"[INTENT] date_query_detected → date_time", flush=True)
 
         # NESSUN ROUTING COMPLESSO - solo PersonalPlex
         intent["brain_mode"] = "relazione"  # Fisso, non usato
