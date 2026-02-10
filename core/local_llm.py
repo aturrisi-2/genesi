@@ -12,17 +12,18 @@ from typing import Dict, Any
 logger = logging.getLogger(__name__)
 
 class LocalLLM:
-    """Interfaccia per PersonalPlex 7B via backend locale NVIDIA"""
+    """Interfaccia per Mistral 7B Instruct via backend locale NVIDIA"""
     
     def __init__(self, backend_url: str = "http://127.0.0.1:8080/completion", timeout: int = 25, max_retries: int = 2):
         self.backend_url = backend_url
         self.timeout = timeout
         self.max_retries = max_retries
-        self.model_path = "/opt/models/llama-2-7b-chat.Q4_K_M.gguf"
-        self.ctx_size = 512  # Ridotto per velocità
-        self.max_tokens = 32  # Hard limit per < 1200ms
-        self.temperature = 0.6  # Ridotto per risposte brevi
-        self.top_p = 0.9  # Hard limit
+        # NUOVO MODELLO PIÙ CAPACE
+        self.model_path = "/opt/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"
+        self.ctx_size = 2048  # Aumentato per conversazioni più lunghe
+        self.max_tokens = 150  # Aumentato per risposte più ricche
+        self.temperature = 0.7  # Leggermente aumentato per naturalezza
+        self.top_p = 0.9  # Invariato
     
     def is_available(self) -> bool:
         """

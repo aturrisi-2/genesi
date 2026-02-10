@@ -243,19 +243,19 @@ class PersonalplexEngine(BaseEngine):
         print(f"[PERSONALPLEX] Generating chat response", flush=True)
         
         try:
-            # Prompt per PersonalPlex - BLOCCATO CON VINCOLI DURI
-            prompt = f"""Rispondi in italiano.
+            # Prompt per PersonalPlex - FORMATO MISTRAL
+            prompt = f"""[INST] Rispondi in italiano.
 Rispondi solo a quello che l'utente ha appena detto.
 Non introdurre nuovi argomenti.
 Non fare domande se non sono implicite.
 Non usare azioni, asterischi o roleplay.
 
-{message}"""
+{message} [/INST]"""
             
             response = self.local_llm.generate(
                 prompt=prompt,
-                max_tokens=50,   # Controllo stretto
-                temperature=0.3  # Bassa creatività
+                max_tokens=80,   # Aumentato per Mistral
+                temperature=0.5  # Bilanciato per naturalezza
             )
             
             # Post-processing per garantire conformità (MAI rimuovere emoji)
