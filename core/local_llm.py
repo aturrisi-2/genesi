@@ -68,7 +68,8 @@ class LocalLLM:
                 payload = {
                     "prompt": full_prompt,
                     "n_predict": 256,
-                    "temperature": 0.7
+                    "temperature": 0.7,
+                    "top_p": 0.9  # Come richiesto
                 }
                 
                 print(f"[DEBUG] PAYLOAD: {json.dumps(payload, indent=2)}", flush=True)
