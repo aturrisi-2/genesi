@@ -776,15 +776,85 @@ function showThinkingState() {
   }
 }
 
-// PARTE 3: Nascondi stato thinking
 function hideThinkingState() {
   console.log("SYNC_STEP_4_HIDE_THINKING");
   const thinkingDiv = document.getElementById('thinking-state');
   if (thinkingDiv) {
-    thinkingDiv.style.display = 'none';
-    console.log("SYNC_STEP_4_THINKING_HIDDEN");
+    // NON nascondere, trasforma in fumetto assistente
+    const bubble = thinkingDiv.querySelector('.thinking-bubble');
+    if (bubble) {
+      console.log('[CINEMATIC] Starting bubble transformation');
+      
+      // Fase 1: Esplosione controllata
+      bubble.classList.add('exploding');
+      
+      // Fase 2: Trasformazione in messaggio assistente dopo esplosione
+      setTimeout(() => {
+        bubble.classList.remove('exploding');
+        bubble.classList.add('transforming');
+        
+        // Fase 3: Trasformazione completa in messaggio
+        setTimeout(() => {
+          bubble.classList.remove('transforming');
+          bubble.classList.add('assistant-message');
+          
+          // Nascondi thinking state dopo trasformazione
+          setTimeout(() => {
+            thinkingDiv.style.display = 'none';
+            // Resetta classi per prossimo utilizzo
+            bubble.classList.remove('assistant-message');
+          }, 500);
+        }, 120);
+      }, 180);
+      
+      console.log("SYNC_STEP_4_THINKING_HIDDEN");
+    }
   } else {
     console.error("Thinking container not found for hiding!");
+  }
+}
+
+// Funzione per trasformare thinking bubble in messaggio con testo
+function transformThinkingToMessage(text) {
+  console.log('[CINEMATIC] Transforming thinking bubble to message with text:', text.substring(0, 50) + '...');
+  const thinkingDiv = document.getElementById('thinking-state');
+  if (thinkingDiv) {
+    const bubble = thinkingDiv.querySelector('.thinking-bubble');
+    if (bubble) {
+      // Fase 1: Esplosione controllata
+      bubble.classList.add('exploding');
+      
+      // Fase 2: Trasformazione
+      setTimeout(() => {
+        bubble.classList.remove('exploding');
+        bubble.classList.add('transforming');
+        
+        // Fase 3: Sostituisci contenuto con testo finale
+        setTimeout(() => {
+          bubble.classList.remove('transforming');
+          bubble.classList.add('assistant-message');
+          
+          // Sostituisci HTML con testo del messaggio
+          bubble.innerHTML = `<div class="message-content">${text}</div>`;
+          
+          // Nascondi thinking state dopo un po'
+          setTimeout(() => {
+            thinkingDiv.style.display = 'none';
+            // Resetta classi per prossimo utilizzo
+            bubble.classList.remove('assistant-message');
+            // Ripristina contenuto thinking originale
+            bubble.innerHTML = `
+              <div class="thinking-text">Genesi sta pensando...</div>
+              <div class="thinking-dots">
+                <span></span><span></span><span></span>
+              </div>
+            `;
+          }, 1000); // Mantieni visibile per 1 secondo
+        }, 120);
+      }, 180);
+      
+      console.log('[CINEMATIC] Transformation completed');
+    }
   }
 }
 
@@ -815,13 +885,10 @@ async function playTTSWithSync(text, mode, displayText) {
     
     console.log('[TTS_SYNC] Audio started, now showing text');
     
-    // Mostra il testo quando l'audio parte
-    const messageElement = addMessage(displayText, 'genesi');
+    // Trasforma thinking bubble in messaggio con testo
+    transformThinkingToMessage(displayText);
     console.log('FRONTEND_RENDER_TEXT_AND_PLAY');
     console.log("STEP_4_RENDER_TEXT");
-    
-    // Nascondi stato thinking subito
-    hideThinkingState();
     
     // Log thinking time (deve essere < 3 secondi)
     const totalThinkingTime = (Date.now() - thinkingStartTime) / 1000;
