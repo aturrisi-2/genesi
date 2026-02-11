@@ -653,21 +653,25 @@ function addMessage(text, sender) {
 }
 
 function addUserMessage(text) { return addMessage(text, 'user'); }
-function addGenesiMessage(text) { return addMessage(text, 'genesi'); }
 
 // ===============================
 // CHAT API
 // ===============================
 async function sendChatMessage(message) {
-  // Nessun controllo auth - accesso diretto
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: getUserId(), message })
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
-  return data;
+  try {
+    // Nessun controllo auth - accesso diretto
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: getUserId(), message })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data;
+  } catch (e) {
+    console.error('sendChatMessage error:', e);
+    throw e;
+  }
 }
 
 // ===============================
@@ -696,13 +700,16 @@ async function sendMessage() {
 
   addUserMessage(text);
   
-  // PARTE 3: Mostra stato thinking animato
+  // PARTE 1: Mostra animazione thinking
   setState(STATES.THINKING);
   showThinkingState();
+  console.log('FRONTEND_THINKING_START');
 
   try {
+    // PARTE 1: Chiama /api/chat
     const data = await sendChatMessage(text);
     console.log('[FRONTEND] response received - data=', data);
+    console.log('FRONTEND_CHAT_RECEIVED');
     
     // USA SEMPRE response - CONTRATTO API BACKEND
     const botMessage = data.response;
@@ -712,32 +719,26 @@ async function sendMessage() {
     // PARTE 2: Log LLM response length
     console.log(`LLM_RESPONSE_LENGTH: ${botMessage.length} chars`);
     
-    // PARTE 3: NON mostrare testo finché primo chunk TTS non è pronto
-    console.log('[FRONTEND] Chat response received, waiting for TTS before rendering');
+    // PARTE 1: Salva risposta in memoria, NON renderizzare
+    let pendingResponse = botMessage;
+    console.log('[FRONTEND] Response saved, waiting for TTS before rendering');
     
-    // TTS SOLO DOPO rendering confermato
-    if (data && data.response && data.response.trim().length > 0) {
-      console.log('[TTS_MANDATORY] response valida, forcing TTS');
-      console.log('[TTS_CALL] response_len=' + data.response.length + ' tts_mode=' + (data.tts_mode || 'none'));
-      console.log('[TTS_CALL] response_preview=' + data.response.substring(0, 100) + '...');
-      
-      // USA tts_text per il TTS, display_text per la UI
-      const ttsText = data.tts_text || data.response; // Fallback a response se tts_text non disponibile
-      console.log('[TTS_CALL] tts_text_len=' + ttsText.length + ' tts_text_preview=' + ttsText.substring(0, 100) + '...');
-      
-      // PARTE 3: Aspetta primo chunk TTS prima di mostrare testo
-      await playTTSWithSync(ttsText, data.tts_mode, botMessage);
-      
-    } else if (data) {
-      console.log('[TTS_SKIP] response vuota o non valida, skipping TTS');
-      // Mostra comunque il testo se non c'è TTS
-      const messageElement = addGenesiMessage(botMessage);
-      hideThinkingState();
-    }
+    // PARTE 2: Chiama /api/tts PRIMA di mostrare testo
+    console.log('FRONTEND_TTS_REQUESTED');
+    
+    // USA tts_text per il TTS, display_text per la UI
+    const ttsText = data.tts_text || data.response; // Fallback a response se tts_text non disponibile
+    console.log('[TTS_CALL] tts_text_len=' + ttsText.length + ' tts_text_preview=' + ttsText.substring(0, 100) + '...');
+    
+    // PARTE 2: Attendi TTS completamente
+    await playTTSWithSync(ttsText, data.tts_mode, pendingResponse);
+    
   } catch (e) {
     console.error('Chat error:', e);
-    addGenesiMessage("Qualcosa non ha funzionato. Riprova tra poco.");
+    // PARTE 4: Fallback in caso di errore
     hideThinkingState();
+    addGenesiMessage("Qualcosa non ha funzionato. Riprova tra poco.");
+    console.log('TTS_ERROR_FALLBACK');
   } finally {
     setState(STATES.IDLE);
   }
@@ -773,22 +774,23 @@ function hideThinkingState() {
   }
 }
 
-// PARTE 3: TTS sincronizzato con rendering testo
+// PARTE 2: TTS sincronizzato con rendering testo
 async function playTTSWithSync(text, mode, displayText) {
   const thinkingStartTime = Date.now();
   
   try {
     console.log('[TTS_SYNC] Starting TTS with text sync');
+    console.log('FRONTEND_TTS_READY');
     
-    // Prima avvia TTS in background
+    // PARTE 2: Attendi TTS COMPLETAMENTE prima di mostrare testo
     const ttsPromise = playTTS(text, mode);
+    await ttsPromise;
     
-    // Aspetta un breve momento per il primo chunk
-    await new Promise(resolve => setTimeout(resolve, 100));
+    console.log('[TTS_SYNC] TTS completed, now showing text');
     
-    // Mostra il testo
-    console.log('[TTS_SYNC] Showing text after TTS start');
+    // Mostra il testo SOLO dopo TTS completato
     const messageElement = addGenesiMessage(displayText);
+    console.log('FRONTEND_RENDER_TEXT_AND_PLAY');
     
     // PARTE 4: Calcola tempo minimo thinking
     const thinkingElapsed = (Date.now() - thinkingStartTime) / 1000;
@@ -808,10 +810,8 @@ async function playTTSWithSync(text, mode, displayText) {
     const totalThinkingTime = (Date.now() - thinkingStartTime) / 1000;
     console.log(`THINKING_TIME_VISIBLE: ${totalThinkingTime.toFixed(2)}s`);
     
-    // Aspetta completamento TTS
-    await ttsPromise;
-    
-    console.log('[TTS_SYNC] TTS completed');
+    // Avvia audio immediatamente dopo aver mostrato testo
+    // Nota: playTTS è già completato, quindi l'audio è già stato riprodotto
     
   } catch (e) {
     console.error('[TTS_SYNC] Error:', e);
