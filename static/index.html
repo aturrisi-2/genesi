@@ -49,11 +49,11 @@
             }
         }
         
-        .thinking-bubble {
+        /* Thinking bubble as real message in chat flow */
+        .message.genesi.thinking .bubble {
             background: transparent;
             border: none;
             padding: 16px 20px;
-            margin: 12px 0;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -61,11 +61,11 @@
             position: relative;
         }
         
-        .thinking-bubble.exploding {
+        .message.genesi.thinking .bubble.exploding {
             animation: bubbleExplode 180ms ease-out forwards;
         }
         
-        .thinking-bubble.exploding::before {
+        .message.genesi.thinking .bubble.exploding::before {
             content: '';
             position: absolute;
             top: -2px;
@@ -80,13 +80,13 @@
             animation: bubbleExplode 180ms ease-out forwards;
         }
         
-        .thinking-dots {
+        .message.genesi.thinking .thinking-dots {
             display: flex;
             gap: 8px;
             justify-content: center;
         }
         
-        .thinking-dots span {
+        .message.genesi.thinking .thinking-dots .dot {
             width: 8px;
             height: 8px;
             background: rgba(0, 255, 255, 0.8);
@@ -94,23 +94,23 @@
             box-shadow: 0 0 12px rgba(0, 255, 255, 0.6);
         }
         
-        .thinking-dots span:nth-child(1) {
+        .message.genesi.thinking .thinking-dots .dot:nth-child(1) {
             animation: dotPulse 1.6s infinite ease-in-out;
         }
         
-        .thinking-dots span:nth-child(2) {
+        .message.genesi.thinking .thinking-dots .dot:nth-child(2) {
             animation: dotPulse 1.6s infinite ease-in-out 0.2s;
         }
         
-        .thinking-dots span:nth-child(3) {
+        .message.genesi.thinking .thinking-dots .dot:nth-child(3) {
             animation: dotPulse 1.6s infinite ease-in-out 0.4s;
         }
         
-        .thinking-bubble.transforming {
+        .message.genesi.thinking .bubble.transforming {
             animation: none !important;
         }
         
-        .thinking-bubble.transforming .thinking-dots {
+        .message.genesi.thinking .bubble.transforming .thinking-dots {
             opacity: 0;
             transform: scale(0.8);
             transition: all 120ms ease-out;
@@ -135,14 +135,6 @@
 
         <main id="dialogue">
             <!-- messaggi -->
-            <!-- Thinking state container -->
-            <div id="thinking-state" style="display: none;">
-                <div class="thinking-bubble">
-                    <div class="thinking-dots">
-                        <span></span><span></span><span></span>
-                    </div>
-                </div>
-            </div>
         </main>
 
         <div id="status" aria-live="polite"></div>
@@ -186,6 +178,6 @@
         </form>
     </div>
 
-    <script src="/static/app.v2.js?v=21"></script>
+    <script src="/static/app.v2.js?v=22"></script>
 </body>
 </html>
