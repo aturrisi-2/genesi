@@ -1,7 +1,7 @@
 """
 TTS API - Genesi Core v2
 1 intent → 1 funzione
-Text-to-Speech API streaming - restituisce audio binario WAV in streaming
+Text-to-Speech API streaming ottimizzato con parallelizzazione CPU
 """
 
 from fastapi import APIRouter, HTTPException
@@ -10,9 +10,8 @@ from pydantic import BaseModel
 from pathlib import Path
 from tts.simple_tts import simple_tts
 from core.log import log
-import re
 import asyncio
-import io
+from concurrent.futures import ThreadPoolExecutor
 
 router = APIRouter(prefix="/tts")
 
@@ -20,11 +19,14 @@ class TTSRequest(BaseModel):
     text: str
     voice: str = "default"
 
+# 3️⃣ PARALLELIZZAZIONE CPU
+executor = ThreadPoolExecutor(max_workers=2)
+
 @router.post("/")
 async def text_to_speech(request: TTSRequest):
     """
-    Text-to-Speech - 1 intent → 1 funzione con streaming reale
-    Restituisce audio WAV in streaming progressivo
+    Text-to-Speech - 1 intent → 1 funzione con streaming ottimizzato
+    Restituisce audio WAV in streaming con parallelizzazione
     
     Args:
         request: Richiesta TTS
@@ -35,34 +37,43 @@ async def text_to_speech(request: TTSRequest):
     try:
         print("STREAM_TTS_START")
         
-        # FASE 2: CHUNK INTELLIGENTE PER LUNGHEZZA (250-300 char)
-        chunks = _split_text_by_length(request.text, max_length=280)
-        print(f"STREAM_TTS_CHUNK_COUNT: {len(chunks)}")
+        # Usa chunking intelligente da simple_tts
+        from tts.simple_tts import smart_chunk_text, clean_tts_text
+        
+        # 1️⃣ NORMALIZZAZIONE TESTO
+        cleaned_text = clean_tts_text(request.text)
+        
+        # 2️⃣ CHUNKING INTELLIGENTE
+        chunks = smart_chunk_text(cleaned_text)
         
         async def audio_generator():
-            """Generatore streaming audio"""
-            for i, chunk in enumerate(chunks):
-                if chunk.strip():
-                    print(f"STREAM_TTS_CHUNK_READY {i+1}")
+            """Generatore streaming audio con parallelizzazione"""
+            # Genera primo chunk immediatamente
+            if chunks:
+                first_chunk_path = await asyncio.get_event_loop().run_in_executor(
+                    executor, simple_tts.synthesize, chunks[0]
+                )
+                
+                with open(first_chunk_path, 'rb') as f:
+                    yield f.read()
+                
+                # 3️⃣ PARALLELIZZAZIONE: genera chunk successivi in background
+                for i in range(1, len(chunks)):
+                    chunk_path = await asyncio.get_event_loop().run_in_executor(
+                        executor, simple_tts.synthesize, chunks[i]
+                    )
                     
-                    # Genera WAV singolo
-                    chunk_path = simple_tts.synthesize(chunk.strip())
-                    
-                    # Leggi e invia chunk immediatamente
                     with open(chunk_path, 'rb') as f:
-                        chunk_data = f.read()
-                    
-                    print(f"STREAM_TTS_CHUNK_SENT {i+1}")
-                    yield chunk_data
+                        yield f.read()
             
             print("STREAM_TTS_COMPLETE")
         
-        # StreamingResponse con Content-Type audio/wav
+        # StreamingResponse ottimizzato
         return StreamingResponse(
             audio_generator(),
             media_type="audio/wav",
             headers={
-                "Content-Disposition": "inline; filename=tts_stream.wav",
+                "Content-Disposition": "inline; filename=tts_optimized.wav",
                 "Cache-Control": "no-cache",
                 "Transfer-Encoding": "chunked"
             }
@@ -70,31 +81,4 @@ async def text_to_speech(request: TTSRequest):
         
     except Exception as e:
         log("TTS_API_ERROR", error=str(e))
-        raise HTTPException(status_code=500, detail="TTS streaming error")
-
-def _split_text_by_length(text: str, max_length: int = 280) -> list:
-    """
-    Split intelligente per lunghezza mantenendo parole intere
-    Evita split su singola frase, preferisce split per lunghezza
-    """
-    if len(text) <= max_length:
-        return [text]
-    
-    chunks = []
-    current_chunk = ""
-    words = text.split()
-    
-    for word in words:
-        test_chunk = current_chunk + " " + word if current_chunk else word
-        
-        if len(test_chunk) <= max_length:
-            current_chunk = test_chunk
-        else:
-            if current_chunk:
-                chunks.append(current_chunk.strip())
-            current_chunk = word
-    
-    if current_chunk:
-        chunks.append(current_chunk.strip())
-    
-    return chunks
+        raise HTTPException(status_code=500, detail="TTS optimized streaming error")
