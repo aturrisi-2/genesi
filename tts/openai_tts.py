@@ -31,21 +31,19 @@ async def stream_openai_tts(text: str):
         # Cleanup testo per OpenAI TTS
         cleaned_text = text.strip()[:4096]  # OpenAI limit
         
-        # Streaming con OpenAI SDK v2.x
-        response = await client.audio.speech.with_streaming_response.create(
-            model="gpt-4o-mini-tts",
-            voice="alloy",
-            input=cleaned_text,
-            response_format="mp3"
-        )
-        
-        print("OPENAI_TTS_STREAMING")
-        
         async def audio_generator():
             """Generatore streaming MP3 da OpenAI"""
             try:
-                async for chunk in response.iter_bytes():
-                    yield chunk
+                print("OPENAI_TTS_STREAMING")
+                
+                async with client.audio.speech.with_streaming_response.create(
+                    model="gpt-4o-mini-tts",
+                    voice="alloy",
+                    input=cleaned_text,
+                    response_format="mp3"
+                ) as response:
+                    async for chunk in response.iter_bytes():
+                        yield chunk
                 
                 print("OPENAI_TTS_COMPLETE")
                 
