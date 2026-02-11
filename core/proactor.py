@@ -154,7 +154,7 @@ class Proactor:
             full_profile = await semantic_memory.get_user_profile(user_id)
             
             # Genera risposta con contesto utente
-            return await llm_service.generate_response_with_context(message, full_profile)
+            return await llm_service.generate_response_with_context(message, full_profile, user_id)
             
         except Exception as e:
             log("PROACTOR_LLM_ERROR", error=str(e), user_id=user_id)

@@ -42,6 +42,9 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         # 6️⃣ Caricamento profilo completo utente
         full_profile = await semantic_memory.get_user_profile(user_id)
         
+        # Log caricamento profilo
+        log("PROFILE_LOADED", user_id=user_id, has_name=bool(full_profile.get("name")), name=full_profile.get("name"))
+        
         # 7️⃣ Costruzione prompt con memoria completa
         prompt = build_identity_safe_prompt(full_profile, state, emotion, message)
         
@@ -56,6 +59,10 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         
         # 9️⃣ FILTRO IDENTITÀ - controllo post-processing
         filtered_response = await filter_response_identity(user_id, full_profile, message, generated_response)
+        
+        # Log uso nome nella risposta
+        if full_profile.get("name") and full_profile["name"] in filtered_response:
+            log("RELATIONAL_RESPONSE", user_id=user_id, name_used=full_profile["name"])
         
         # 10️⃣ Log per monitoring
         _log_relational_interaction(user_id, message, emotion, state, filtered_response)

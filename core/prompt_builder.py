@@ -3,6 +3,31 @@ PROMPT BUILDER - Relational Engine v1
 Costruzione prompt contestuale per risposte evolutive
 """
 
+def _is_identity_question(message: str) -> bool:
+    """
+    Controlla se il messaggio è una domanda sull'identità
+    
+    Args:
+        message: Messaggio utente
+        
+    Returns:
+        bool: True se è domanda identità
+    """
+    identity_keywords = [
+        "chi sei", "cosa sei", "chi è genesis", "cosa è genesis",
+        "sei un", "sei una", "tu sei", "chi ti ha creato",
+        "da dove vieni", "di cosa sei fatto",
+        "ti ricordi come mi chiamo", "come mi chiamo", "ricordi il mio nome"
+    ]
+    
+    message_lower = message.lower().strip()
+    
+    for keyword in identity_keywords:
+        if keyword in message_lower:
+            return True
+    
+    return False
+
 def build_prompt(user_profile: dict, state: dict, emotion_data: dict, user_message: str) -> str:
     """
     Costruisce prompt completo per generazione risposta relazionale
@@ -28,6 +53,20 @@ Non sei teatrale.
 Non crei dipendenza emotiva.
 Non sostituisci relazioni reali.
 """
+
+    # Contesto utente - CRITICO per memoria
+    user_context = ""
+    if user_profile.get("name"):
+        user_context = f"Nome utente: {user_profile['name']}\n"
+    
+    if user_profile.get("profession"):
+        user_context += f"Professione: {user_profile['profession']}\n"
+    
+    if user_profile.get("city"):
+        user_context += f"Città: {user_profile['city']}\n"
+    
+    if user_profile.get("age"):
+        user_context += f"Età: {user_profile['age']}\n"
 
     # Contesto relazionale dinamico
     relational_context = f"""
@@ -55,14 +94,37 @@ Ricorda l'importanza di connessioni umane esterne.
     # Direttive specifiche basate su stato
     state_directives = _get_state_directives(state, emotion_data)
 
+    # Direttive memoria - FONDAMENTALI
+    memory_directives = ""
+    if user_profile.get("name"):
+        memory_directives = """
+Ricorda il nome dell'utente e usalo quando appropriato.
+Se l'utente chiede come si chiama, rispondi con il suo nome.
+Non dire di non ricordare il nome se è salvato nel profilo.
+"""
+    
+    # Controllo domande identità
+    identity_question = ""
+    if _is_identity_question(user_message):
+        if user_profile.get("name"):
+            identity_question = f"L'utente si chiama {user_profile['name']}. Usa il suo nome nella risposta."
+        else:
+            identity_question = "L'utente non ha ancora comunicato il suo nome."
+
     final_prompt = f"""
 {identity}
+
+{user_context}
 
 {relational_context}
 
 {balancing_rule}
 
 {state_directives}
+
+{memory_directives}
+
+{identity_question}
 
 Rispondi in modo coerente con la profondità emotiva dell'utente.
 Sii autentico, diretto, empatico.

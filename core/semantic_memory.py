@@ -121,7 +121,7 @@ class SemanticMemory:
             Profilo utente
         """
         try:
-            profile_data = await storage.get(f"user_profile:{user_id}")
+            profile_data = await storage.get(f"long_term_profile:{user_id}")
             if profile_data:
                 return json.loads(profile_data)
             else:
@@ -153,7 +153,7 @@ class SemanticMemory:
         """
         try:
             profile["updated_at"] = datetime.now().isoformat()
-            await storage.set(f"user_profile:{user_id}", json.dumps(profile))
+            await storage.set(f"long_term_profile:{user_id}", json.dumps(profile))
             
             log("PROFILE_PERSISTED", user_id=user_id, fields=list(profile.keys()))
             return True

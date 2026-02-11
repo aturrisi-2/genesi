@@ -54,19 +54,24 @@ Domanda: {message}
             log("LLM_SERVICE_ERROR", error=str(e))
             return "Mi dispiace, ho avuto un problema tecnico. Riprova più tardi."
     
-    async def generate_response_with_context(self, message: str, user_profile: dict) -> str:
+    async def generate_response_with_context(self, message: str, user_profile: dict, user_id: str) -> str:
         """
         Genera risposta LLM con contesto utente
         
         Args:
             message: Messaggio utente
             user_profile: Profilo utente completo
+            user_id: ID utente reale
             
         Returns:
             Risposta tecnica con contesto personalizzato
         """
         try:
-            log("LLM_SERVICE_CONTEXT_REQUEST", message=message[:50], user_id=user_profile.get("id", "unknown"))
+            # Enforce user_id reale
+            if not user_id:
+                raise ValueError("LLM service received empty user_id")
+            
+            log("LLM_SERVICE_CONTEXT_REQUEST", message=message[:50], user_id=user_id)
             
             # Costruisci contesto utente
             context = self._build_user_context(user_profile)
