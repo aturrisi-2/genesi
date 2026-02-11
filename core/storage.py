@@ -83,6 +83,9 @@ class MemoryStorage:
             category, subkey = parts
             file_path = self._get_file_path(category, subkey)
             
+            # Assicura che directory esista
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(value)
             

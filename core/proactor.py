@@ -51,13 +51,10 @@ class Proactor:
             Risposta orchestrata
         """
         try:
-            # Estrai user ID reale - MAI anonymous
-            user_id = user.get("id", "unknown")
-            if user_id == "anonymous":
-                # Genera ID temporaneo se mancante
-                user_id = f"temp_{hash(message)}_{len(message)}"
-                user["id"] = user_id
-                log("PROACTOR_TEMP_ID", temp_id=user_id)
+            # Estrai user ID reale - MAI anonymous o unknown
+            user_id = user.get("id")
+            if not user_id:
+                raise ValueError("Proactor received empty user_id")
             
             log("PROACTOR_HANDLE", user_id=user_id, intent=intent)
             
@@ -77,7 +74,7 @@ class Proactor:
                 return await self._handle_llm(user_id, user, message)
                 
         except Exception as e:
-            log("PROACTOR_ERROR", error=str(e), intent=intent, user_id=user.get("id", "unknown"))
+            log("PROACTOR_ERROR", error=str(e), intent=intent, user_id=user_id)
             return "Mi dispiace, ho avuto un problema. Riprova più tardi."
     
     async def _handle_tool(self, intent: str, message: str, user_id: str) -> str:

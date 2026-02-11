@@ -29,8 +29,11 @@ async def simple_chat_handler(message: str, user_id: Optional[str] = None) -> st
         # 1️⃣ Intent classification
         intent = intent_classifier.classify(message)
         
-        # 2️⃣ Proactor orchestration
-        user_data = user_manager.get_user(user_id) if user_id else {}
+        # 2️⃣ Proactor orchestration - user_id reale obbligatorio
+        if not user_id:
+            raise ValueError("simple_chat_handler received empty user_id")
+        
+        user_data = user_manager.get_user(user_id) or {}
         response = await proactor.handle(
             message=message,
             user=user_data,
@@ -39,7 +42,7 @@ async def simple_chat_handler(message: str, user_id: Optional[str] = None) -> st
         
         # 3️⃣ Identity filter POST-PROACTOR
         filtered_response = await filter_response_identity(
-            user_id=user_id or "anonymous",
+            user_id=user_id,
             user_profile=user_data,
             message=message,
             response=response
