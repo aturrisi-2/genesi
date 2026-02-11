@@ -695,7 +695,10 @@ async function sendMessage() {
   ic.classList.add('pulse');
 
   addUserMessage(text);
+  
+  // PARTE 3: Mostra stato thinking animato
   setState(STATES.THINKING);
+  showThinkingState();
 
   try {
     const data = await sendChatMessage(text);
@@ -706,15 +709,8 @@ async function sendMessage() {
     
     if (!botMessage || botMessage.trim().length === 0) return;
     
-    // RENDERING GARANTITO: aggiungi messaggio e verifica sia visibile
-    console.log('[FRONTEND] CHAT RESPONSE RENDERED:', data.response);
-    const messageElement = addGenesiMessage(botMessage);
-    
-    // VERIFICA: assicura che il messaggio sia nel DOM
-    if (!messageElement || !document.contains(messageElement)) {
-      console.error('[RENDER_ERROR] Message element not found in DOM after insertion');
-      return;
-    }
+    // PARTE 3: NON mostrare testo finché primo chunk TTS non è pronto
+    console.log('[FRONTEND] Chat response received, waiting for TTS before rendering');
     
     // TTS SOLO DOPO rendering confermato
     if (data && data.response && data.response.trim().length > 0) {
@@ -726,27 +722,84 @@ async function sendMessage() {
       const ttsText = data.tts_text || data.response; // Fallback a response se tts_text non disponibile
       console.log('[TTS_CALL] tts_text_len=' + ttsText.length + ' tts_text_preview=' + ttsText.substring(0, 100) + '...');
       
-      // TTS asincrono non bloccante - non interferisce con il rendering
-      setTimeout(() => {
-        try {
-          console.log('[TTS_CALL] about_to_call_playTTS');
-          playTTS(ttsText, data.tts_mode);
-          console.log('[TTS_CALL] playTTS_returned_successfully');
-        } catch (e) {
-          console.error('[TTS_ABORT] reason=exception_in_playTTS error=', e);
-          console.error('[TTS_ABORT] error_stack=', e.stack);
-        }
-      }, 50); // piccolo delay per garantire rendering completo
+      // PARTE 3: Aspetta primo chunk TTS prima di mostrare testo
+      await playTTSWithSync(ttsText, data.tts_mode, botMessage);
+      
     } else if (data) {
       console.log('[TTS_SKIP] response vuota o non valida, skipping TTS');
+      // Mostra comunque il testo se non c'è TTS
+      const messageElement = addGenesiMessage(botMessage);
+      hideThinkingState();
     }
   } catch (e) {
     console.error('Chat error:', e);
     addGenesiMessage("Qualcosa non ha funzionato. Riprova tra poco.");
+    hideThinkingState();
   } finally {
     setState(STATES.IDLE);
   }
 }
+
+// PARTE 3: Funzione per mostrare stato thinking animato
+function showThinkingState() {
+  const thinkingDiv = document.createElement('div');
+  thinkingDiv.id = 'thinking-state';
+  thinkingDiv.className = 'thinking-state';
+  thinkingDiv.innerHTML = `
+    <div class="thinking-bubble">
+      <div class="thinking-text">Genesi sta pensando...</div>
+      <div class="thinking-dots">
+        <span>.</span><span>.</span><span>.</span>
+      </div>
+    </div>
+  `;
+  
+  // Aggiungi al chat container
+  const chatContainer = document.getElementById('chat');
+  if (chatContainer) {
+    chatContainer.appendChild(thinkingDiv);
+    scrollToBottom();
+  }
+}
+
+// PARTE 3: Nascondi stato thinking
+function hideThinkingState() {
+  const thinkingDiv = document.getElementById('thinking-state');
+  if (thinkingDiv) {
+    thinkingDiv.remove();
+  }
+}
+
+// PARTE 3: TTS sincronizzato con rendering testo
+async function playTTSWithSync(text, mode, displayText) {
+  try {
+    console.log('[TTS_SYNC] Starting TTS with text sync');
+    
+    // Prima avvia TTS in background
+    const ttsPromise = playTTS(text, mode);
+    
+    // Aspetta un breve momento per il primo chunk
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Mostra il testo
+    console.log('[TTS_SYNC] Showing text after TTS start');
+    const messageElement = addGenesiMessage(displayText);
+    
+    // Nascondi stato thinking
+    hideThinkingState();
+    
+    // Aspetta completamento TTS
+    await ttsPromise;
+    
+    console.log('[TTS_SYNC] TTS completed');
+    
+  } catch (e) {
+    console.error('[TTS_SYNC] Error:', e);
+    // In caso di errore, mostra comunque il testo
+    const messageElement = addGenesiMessage(displayText);
+    hideThinkingState();
+  }
+} // <--- Added closing brace here
 
 chatForm.addEventListener('submit', (e) => {
   e.preventDefault();

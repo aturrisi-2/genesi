@@ -143,6 +143,9 @@ class SimpleTTS:
         # 1️⃣ CARICAMENTO MODELLO UNA SOLA VOLTA (Warm Load)
         self.tts = None
         self._init_xtts()
+        
+        # PARTE 1: Flag primo TTS sessione
+        self.session_first_tts = True
     
     def _init_xtts(self):
         """1️⃣ Inizializza XTTS v2 - UNICA VOLTA con ottimizzazioni CPU"""
@@ -197,6 +200,10 @@ class SimpleTTS:
         try:
             # Filtra emoji SOLO per TTS
             filtered_text = emoji_filter.filter_for_tts(text)
+            
+            # PARTE 2: Log per troncamento testo
+            print(f"LOG_FULL_RESPONSE_LENGTH: {len(text)} chars")
+            print(f"LOG_TTS_INPUT_LENGTH: {len(filtered_text)} chars")
             
             if not filtered_text.strip():
                 raise ValueError("Empty text after filtering")
@@ -275,6 +282,12 @@ class SimpleTTS:
                 # NON tocchiamo: speaker, sample_rate, modello
             )
             
+            # PARTE 1: Micro fade-in per primo TTS della sessione
+            if self.session_first_tts:
+                wav = self._apply_fade_in(wav)
+                self.session_first_tts = False
+                print("FADE_IN_APPLIED: First session TTS")
+            
             # SALVATAGGIO ORIGINALE - 24000Hz FISSO
             import soundfile as sf
             sf.write(str(output_path), wav, VOICE_SAMPLE_RATE)
@@ -287,6 +300,26 @@ class SimpleTTS:
         except Exception as e:
             logger.error(f"Single chunk synthesis failed: {e}")
             raise
+    
+    def _apply_fade_in(self, wav):
+        """
+        PARTE 1: Applica micro fade-in lineare di 80-120ms
+        Solo al primo TTS della sessione
+        """
+        import numpy as np
+        
+        fade_samples = int(0.1 * VOICE_SAMPLE_RATE)  # 100ms fade-in
+        if len(wav) < fade_samples:
+            fade_samples = len(wav) // 2  # Metà se troppo corto
+        
+        # Crea envelope lineare
+        fade_envelope = np.linspace(0, 1, fade_samples)
+        
+        # Applica fade-in ai primi campioni
+        wav_array = np.array(wav)
+        wav_array[:fade_samples] *= fade_envelope
+        
+        return wav_array.tolist()
     
     def _synthesize_first_chunk(self, output_path: Path, text: str):
         """Sintesi primo chunk per streaming - ottimizzata"""
