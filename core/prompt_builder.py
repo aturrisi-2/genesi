@@ -133,6 +133,16 @@ Messaggio utente:
 {user_message}
 """
 
+    # Log obbligatorio per debugging
+    from core.log import log
+    log("PROMPT_BUILDER_OUTPUT", length=len(final_prompt))
+    if user_profile.get("name"):
+        log("PROMPT_BUILDER_PROFILE", name=user_profile["name"])
+    
+    # Blocca se prompt vuoto
+    if len(final_prompt) == 0:
+        raise RuntimeError("Prompt builder generated empty prompt")
+    
     return final_prompt
 
 def _get_state_directives(state: dict, emotion_data: dict) -> str:

@@ -70,8 +70,9 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         return filtered_response
         
     except Exception as e:
-        # Fallback sicuro in caso di errore
-        return "Mi dispiace, sto avendo qualche difficoltà. Potresti ripetere?"
+        # Log errore esplicito e rilancia - nessun fallback silenzioso
+        log("RELATIONAL_ENGINE_ERROR", error=str(e), user_id=user_id, message=message[:50])
+        raise RuntimeError(f"Relational engine failed: {str(e)}")
 
 def _log_relational_interaction(user_id: str, message: str, emotion: dict, state: dict, response: str):
     """
