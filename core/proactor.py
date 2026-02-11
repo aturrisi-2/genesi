@@ -1,151 +1,152 @@
 """
 PROACTOR - Genesi Core v2
-Orchestratore centrale per smistamento modelli
-Chat libera → Qwen2.5-7B-Instruct
-Tecnica → GPT/GPT-Mini
-Fallback → GPT
+Orchestratore centrale per smistamento modelli e servizi
 """
 
 from typing import Optional, Dict, Any
-from core.local_llm import LocalLLM
 from core.log import log
+from core.relational_engine import generate_relational_response
+from core.llm_service import llm_service
+from core.tool_services import tool_service
 
 class Proactor:
     """
-    Proactor - Cervello di smistamento
-    Decide IL modello in base a intent e complessità
+    Proactor - Cervello di smistamento centrale
+    Orchestrazione: Tools → Relational → LLM
     """
     
     def __init__(self):
-        self.qwen = LocalLLM()
-        self.gpt_available = False  # TODO: implementare GPT client
-        
-        # Intent per Qwen2.5-7B-Instruct (chat libera)
-        self.qwen_intents = [
-            "chat_free",
-            "greeting", 
-            "how_are_you",
-            "identity",
-            "goodbye",
-            "help"
+        # Intent per tool services
+        self.tool_intents = [
+            "weather", "news", "time", "date"
         ]
         
-        # Intent per GPT (tecnica)
-        self.gpt_intents = [
-            "tecnica",
-            "debug",
-            "spiegazione",
-            "architettura",
-            "istruzioni_complesse"
+        # Intent per relational engine
+        self.relational_intents = [
+            "relational", "greeting", "how_are_you", "identity", 
+            "goodbye", "help", "chat_free"
         ]
+        
+        # Intent per LLM service
+        self.llm_intents = [
+            "tecnica", "debug", "spiegazione", "architettura"
+        ]
+        
+        log("PROACTOR_ACTIVE", tool_services=len(self.tool_intents), 
+            relational_services=len(self.relational_intents), 
+            llm_services=len(self.llm_intents))
     
-    def decide_engine(self, intent: str, message: str = "") -> str:
+    async def handle(self, message: str, user: Dict[str, Any], intent: str) -> str:
         """
-        Decide IL modello - logica MINIMA
+        Orchestrazione centrale basata su intent
         
         Args:
+            message: Messaggio utente
+            user: Profilo utente
             intent: Intent classificato
-            message: Messaggio originale (per fallback)
             
         Returns:
-            Engine: "QWEN", "GPT", o "GPT_FALLBACK"
+            Risposta orchestrata
         """
         try:
-            # Logica MINIMA come richiesto
-            if intent in self.qwen_intents:
-                engine = "QWEN"
-            elif intent in self.gpt_intents:
-                engine = "GPT"
+            # 1️⃣ Tool services routing
+            if intent in self.tool_intents:
+                log("PROACTOR_ROUTE", route="tool", intent=intent, service=intent)
+                return await self._handle_tool(intent, message)
+            
+            # 2️⃣ Relational engine routing
+            elif intent in self.relational_intents:
+                log("PROACTOR_ROUTE", route="relational", intent=intent)
+                return await self._handle_relational(user.get("id", "anonymous"), user, message)
+            
+            # 3️⃣ LLM service routing
             else:
-                # Default: Qwen per tutto il resto
-                engine = "QWEN"
-            
-            log("PROACTOR_DECISION", intent=intent, engine=engine, message=message[:50])
-            return engine
-            
-        except Exception as e:
-            log("PROACTOR_ERROR", error=str(e))
-            return "QWEN"  # Fallback sicuro
-    
-    def generate_response(self, intent: str, message: str) -> Optional[str]:
-        """
-        Genera risposta usando IL modello deciso
-        
-        Args:
-            intent: Intent classificato
-            message: Messaggio originale
-            
-        Returns:
-            Risposta generata o None
-        """
-        engine = self.decide_engine(intent, message)
-        
-        try:
-            if engine == "QWEN":
-                return self._generate_qwen(message)
-            elif engine == "GPT":
-                return self._generate_gpt(message)
-            elif engine == "GPT_FALLBACK":
-                return self._generate_gpt_fallback(message)
-            else:
-                return None
+                log("PROACTOR_ROUTE", route="llm", intent=intent)
+                return await self._handle_llm(message)
                 
         except Exception as e:
-            log("PROACTOR_GENERATION_ERROR", engine=engine, error=str(e))
-            return None
+            log("PROACTOR_ERROR", error=str(e), intent=intent)
+            return "Mi dispiace, ho avuto un problema. Riprova più tardi."
     
-    def _generate_qwen(self, message: str) -> Optional[str]:
+    async def _handle_tool(self, intent: str, message: str) -> str:
         """
-        Genera con Qwen2.5-7B-Instruct
-        Chat libera, saluti, relazione, presenza
+        Gestione tool services
+        
+        Args:
+            intent: Intent tool
+            message: Messaggio utente
+            
+        Returns:
+            Risposta tool service
         """
         try:
-            # Prompt lineare per Qwen come richiesto
-            prompt = f"<|im_start|>user\n{message}\n<|im_end|>\n<|im_start|>assistant\n"
-            
-            response = self.qwen.generate_chat_response(prompt)
-            return response
-            
+            if intent == "weather":
+                return await tool_service.get_weather(message)
+            elif intent == "news":
+                return await tool_service.get_news(message)
+            elif intent == "time":
+                return await tool_service.get_time()
+            elif intent == "date":
+                return await tool_service.get_date()
+            else:
+                return "Tool non disponibile."
+                
         except Exception as e:
-            log("QWEN_GENERATION_ERROR", error=str(e))
-            return None
+            log("PROACTOR_TOOL_ERROR", intent=intent, error=str(e))
+            return f"Errore nel servizio {intent}."
     
-    def _generate_gpt(self, message: str) -> Optional[str]:
+    async def _handle_relational(self, user_id: str, user_profile: Dict[str, Any], message: str) -> str:
         """
-        Genera con GPT
-        Tecnica, spiegazioni, debugging, architettura
+        Gestione relational engine
+        
+        Args:
+            user_id: ID utente
+            user_profile: Profilo utente
+            message: Messaggio utente
+            
+        Returns:
+            Risposta relational engine
         """
         try:
-            # TODO: Implementare client GPT
-            log("GPT_NOT_IMPLEMENTED", message=message[:50])
-            return "GPT non ancora implementato. Uso Qwen come fallback."
+            return await generate_relational_response(
+                user_id=user_id,
+                user_profile=user_profile,
+                message=message
+            )
             
         except Exception as e:
-            log("GPT_GENERATION_ERROR", error=str(e))
-            return None
+            log("PROACTOR_RELATIONAL_ERROR", error=str(e))
+            return "Mi dispiace, ho avuto un problema relazionale."
     
-    def _generate_gpt_fallback(self, message: str) -> Optional[str]:
+    async def _handle_llm(self, message: str) -> str:
         """
-        Fallback GPT in caso di errore locale
+        Gestione LLM service
+        
+        Args:
+            message: Messaggio utente
+            
+        Returns:
+            Risposta LLM service
         """
         try:
-            # TODO: Implementare client GPT fallback
-            log("GPT_FALLBACK_NOT_IMPLEMENTED", message=message[:50])
-            return "GPT fallback non ancora implementato."
+            return await llm_service.generate_response(message)
             
         except Exception as e:
-            log("GPT_FALLBACK_ERROR", error=str(e))
-            return None
+            log("PROACTOR_LLM_ERROR", error=str(e))
+            return "Mi dispiace, ho avuto un problema tecnico."
     
-    def get_engine_stats(self) -> Dict[str, Any]:
+    def get_routing_stats(self) -> Dict[str, Any]:
         """
-        Statistiche motori disponibili
+        Statistiche routing Proactor
+        
+        Returns:
+            Dict con statistiche routing
         """
         return {
-            "qwen_available": self.qwen.is_available(),
-            "gpt_available": self.gpt_available,
-            "qwen_intents": self.qwen_intents,
-            "gpt_intents": self.gpt_intents
+            "tool_intents": self.tool_intents,
+            "relational_intents": self.relational_intents,
+            "llm_intents": self.llm_intents,
+            "total_routes": len(self.tool_intents) + len(self.relational_intents) + len(self.llm_intents)
         }
 
 # Istanza globale
