@@ -28,12 +28,12 @@ class SimpleTTS:
         try:
             from TTS.api import TTS
             
-            # Inizializza Coqui TTS con modello italiano
+            # Inizializza Coqui TTS con modello VITS italiano (voce umana naturale)
             self.tts = TTS(
-                model_name="tts_models/it/mai_female/glow-tts",
+                model_name="tts_models/it/mai_female/vits",
                 progress_bar=False
             )
-            logger.info("Coqui TTS initialized with Italian model: tts_models/it/mai_female/glow-tts")
+            logger.info("Coqui TTS initialized with VITS Italian model: tts_models/it/mai_female/vits")
             
         except ImportError:
             logger.error("TTS package not available - install with: pip install TTS==0.22.0")
