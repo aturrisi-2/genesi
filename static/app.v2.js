@@ -538,13 +538,10 @@ async function _playTTSChunk(text) {
     
   } catch (e) {
     console.log('[TTS_FLOW] step=ERROR chunk_exception');
-    console.error('[TTS] _playTTSChunk error:', e);
-    _ttsSource = null;
-  }
-}
 
 async function playTTS(text, tts_mode = 'normal') {
   console.log('[TTS_FLOW] step=1 playTTS_start len=' + text.length + ' mode=' + tts_mode);
+  console.log("STEP_2_TTS_REQUESTED");
   
   if (!text || text.trim().length === 0) {
     console.log('[TTS_ABORT] reason=empty_text text_len=' + (text ? text.length : 0));
@@ -557,19 +554,41 @@ async function playTTS(text, tts_mode = 'normal') {
   // FORZA segmentazione per testi informativi, psychological o lunghi
   console.log('[TTS_FLOW] step=3.5 checking_conditions tts_mode=' + tts_mode + ' len=' + text.length);
   
-  if (tts_mode === 'informative' || tts_mode === 'psychological' || text.length > 500) {
-    console.log('[TTS_FLOW] step=4 playTTS_calling_segmented');
-    console.log('[TTS_DEBUG] _ttsSource_before_segmented=' + _ttsSource);
-    await playTTSSegmented(text, tts_mode);
-    console.log('[TTS_FLOW] step=5 playTTS_segmented_completed');
-  } else {
-    console.log('[TTS_FLOW] step=4 playTTS_calling_single_chunk');
-    // Testi brevi normali: playback normale
-    await _playTTSChunk(text);
-    console.log('[TTS_FLOW] step=5 playTTS_single_chunk_completed');
-  }
-  
-  console.log('[TTS_FLOW] step=6 playTTS_finished');
+  return new Promise((resolve, reject) => {
+    const executeTTS = async () => {
+      try {
+        if (tts_mode === 'informative' || tts_mode === 'psychological' || text.length > 500) {
+          console.log('[TTS_FLOW] step=4 playTTS_calling_segmented');
+          console.log('[TTS_DEBUG] _ttsSource_before_segmented=' + _ttsSource);
+          await playTTSSegmented(text, tts_mode);
+          console.log('[TTS_FLOW] step=5 playTTS_segmented_completed');
+        } else {
+          console.log('[TTS_FLOW] step=4 playTTS_calling_single_chunk');
+          // Testi brevi normali: playback normale
+          await _playTTSChunk(text);
+          console.log('[TTS_FLOW] step=5 playTTS_single_chunk_completed');
+        }
+        
+        console.log('[TTS_FLOW] step=6 playTTS_finished');
+        console.log("STEP_3_TTS_READY");
+        resolve();
+        
+      } catch (error) {
+        console.error('[TTS] Error in playTTS:', error);
+        resolve(); // NON bloccare UI anche in caso di errore
+      }
+    };
+    
+    // Fallback timeout massimo 10s
+    const timeout = setTimeout(() => {
+      console.log('[TTS] TIMEOUT - forcing resolve after 10s');
+      resolve();
+    }, 10000);
+    
+    executeTTS().finally(() => {
+      clearTimeout(timeout);
+    });
+  });
 }
 
 // ===============================
@@ -790,7 +809,7 @@ async function playTTSWithSync(text, mode, displayText) {
     // Mostra il testo SOLO dopo TTS completato
     const messageElement = addGenesiMessage(displayText);
     console.log('FRONTEND_RENDER_TEXT_AND_PLAY');
-    console.log("SYNC_STEP_3_RENDER_TEXT");
+    console.log("STEP_4_RENDER_TEXT");
     
     // PARTE 4: Calcola tempo minimo thinking
     const thinkingElapsed = (Date.now() - thinkingStartTime) / 1000;
