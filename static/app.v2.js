@@ -538,6 +538,10 @@ async function _playTTSChunk(text) {
     
   } catch (e) {
     console.log('[TTS_FLOW] step=ERROR chunk_exception');
+    console.error('[TTS] _playTTSChunk error:', e);
+    _ttsSource = null;
+  }
+}
 
 async function playTTS(text, tts_mode = 'normal') {
   console.log('[TTS_FLOW] step=1 playTTS_start len=' + text.length + ' mode=' + tts_mode);
