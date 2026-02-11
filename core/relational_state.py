@@ -124,6 +124,7 @@ class RelationalState:
             
             # Salva stato aggiornato
             await self._save_state(user_id, state)
+            log("RELATIONAL_STATE_SAVE", user_id=user_id, trust=state["trust_level"])
             
             log("RELATIONAL_UPDATE", 
                 user_id=user_id,

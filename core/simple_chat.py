@@ -36,8 +36,8 @@ async def simple_chat_handler(message: str, user_id: Optional[str] = None) -> st
         user_data = user_manager.get_user(user_id) or {}
         response = await proactor.handle(
             message=message,
-            user=user_data,
-            intent=intent
+            intent=intent,
+            user_id=user_id
         )
         
         # 3️⃣ Identity filter POST-PROACTOR

@@ -101,6 +101,7 @@ class SemanticMemory:
                             
                             # Salva immediatamente
                             await self._save_user_profile(user_id, profile)
+                            log("SEMANTIC_MEMORY_SAVE", user_id=user_id, field=field, value=value)
                             break
             
             return extracted

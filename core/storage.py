@@ -89,6 +89,7 @@ class MemoryStorage:
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(value)
             
+            log("STORAGE_WRITE", path=file_path, category=category, subkey=subkey)
             return True
             
         except Exception as e:

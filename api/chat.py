@@ -28,7 +28,7 @@ class ChatResponse(BaseModel):
 @router.post("/", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     """
-    Chat endpoint - 1 intent → 1 funzione
+    Chat endpoint - 1 intent → 1 funzione con user_id reale obbligatorio
     
     Args:
         request: Chat request con messaggio e user_id
@@ -37,8 +37,12 @@ async def chat_endpoint(request: ChatRequest):
         Risposta diretta senza orchestrazione
     """
     try:
-        # Log request
-        log("API_CHAT", message=request.message[:100], user_id=request.user_id or "anonymous")
+        # Enforce user_id reale - nessun fallback
+        if not request.user_id:
+            raise ValueError("Chat endpoint received empty user_id")
+        
+        # Log request con user_id reale
+        log("API_CHAT", message=request.message[:100], user_id=request.user_id)
         
         # 1 intent → 1 funzione con memory
         response = await simple_chat_handler(request.message, request.user_id)
@@ -50,7 +54,7 @@ async def chat_endpoint(request: ChatRequest):
         )
         
     except Exception as e:
-        log("API_CHAT_ERROR", error=str(e), user_id=request.user_id or "anonymous")
+        log("API_CHAT_ERROR", error=str(e), user_id=request.user_id or "unknown")
         raise HTTPException(status_code=500, detail="Chat error")
 
 @router.get("/user/{user_id}/info")

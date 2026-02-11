@@ -38,25 +38,28 @@ class Proactor:
             relational_services=len(self.relational_intents), 
             llm_services=len(self.llm_intents))
     
-    async def handle(self, message: str, user: Dict[str, Any], intent: str) -> str:
+    async def handle(self, message: str, intent: str, user_id: str) -> str:
         """
         Orchestrazione centrale con memoria persistente
         
         Args:
             message: Messaggio utente
-            user: Profilo utente con ID reale
             intent: Intent classificato
+            user_id: ID utente reale obbligatorio
             
         Returns:
             Risposta orchestrata
         """
         try:
-            # Estrai user ID reale - MAI anonymous o unknown
-            user_id = user.get("id")
+            # Enforce user_id reale - MAI None o unknown
             if not user_id:
                 raise ValueError("Proactor received empty user_id")
             
             log("PROACTOR_HANDLE", user_id=user_id, intent=intent)
+            
+            # Carica profilo utente per context
+            from core.semantic_memory import semantic_memory
+            user_profile = await semantic_memory.get_user_profile(user_id)
             
             # 1️⃣ Tool services routing
             if intent in self.tool_intents:
@@ -66,12 +69,12 @@ class Proactor:
             # 2️⃣ Relational engine routing
             elif intent in self.relational_intents:
                 log("PROACTOR_ROUTE", route="relational", intent=intent)
-                return await self._handle_relational(user_id, user, message)
+                return await self._handle_relational(user_id, user_profile, message)
             
             # 3️⃣ LLM service routing
             else:
                 log("PROACTOR_ROUTE", route="llm", intent=intent)
-                return await self._handle_llm(user_id, user, message)
+                return await self._handle_llm(user_id, user_profile, message)
                 
         except Exception as e:
             log("PROACTOR_ERROR", error=str(e), intent=intent, user_id=user_id)
@@ -114,7 +117,7 @@ class Proactor:
         
         Args:
             user_id: ID utente reale
-            user_profile: Profilo utente
+            user_profile: Profilo utente completo
             message: Messaggio utente
             
         Returns:
