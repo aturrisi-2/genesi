@@ -12,6 +12,7 @@ import re
 import torch
 import hashlib
 import time
+from tts.f5_engine import synthesize_f5
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +250,7 @@ class SimpleTTS:
     
     def _synthesize_ottimizzato(self, output_path: Path, text: str):
         """
-        Sintesi OTTIMIZZATA - Alexandra Hisakawa 24000Hz
+        Sintesi OTTIMIZZATA - F5-TTS primary, XTTS fallback
         """
         try:
             start_time = time.time()
@@ -261,11 +262,31 @@ class SimpleTTS:
             chunks = smart_chunk_text(text)
             
             if len(chunks) == 1:
-                # Testo breve: sintesi diretta
-                self._synthesize_single_chunk(output_path, chunks[0])
+                # Testo breve: prova F5-TTS prima
+                try:
+                    output_path = synthesize_f5(chunks[0], str(output_path))
+                    print("TTS_ENGINE_SELECTED: F5")
+                    total_time = time.time() - start_time
+                    print(f"TTS_SYNTHESIS_TIME: {total_time:.2f}s for {len(text)} chars")
+                    return
+                except Exception as e:
+                    print("F5_FAILED - fallback to XTTS", e)
+                    print("TTS_ENGINE_FALLBACK: XTTS")
+                    # Fallback a XTTS
+                    self._synthesize_single_chunk(output_path, chunks[0])
             else:
-                # Testo lungo: gestisci primo chunk
-                self._synthesize_first_chunk(output_path, chunks[0])
+                # Testo lungo: gestisci primo chunk con F5-TTS
+                try:
+                    output_path = synthesize_f5(chunks[0], str(output_path))
+                    print("TTS_ENGINE_SELECTED: F5")
+                    total_time = time.time() - start_time
+                    print(f"TTS_SYNTHESIS_TIME: {total_time:.2f}s for {len(text)} chars")
+                    return
+                except Exception as e:
+                    print("F5_FAILED - fallback to XTTS", e)
+                    print("TTS_ENGINE_FALLBACK: XTTS")
+                    # Fallback a XTTS
+                    self._synthesize_first_chunk(output_path, chunks[0])
             
             total_time = time.time() - start_time
             print(f"TTS_SYNTHESIS_TIME: {total_time:.2f}s for {len(text)} chars")
