@@ -49,17 +49,16 @@
             }
         }
         
-        /* Thinking bubble - minimal dedicated styles */
+        /* Thinking bubble - invisible container, only dots visible */
         .thinking-bubble {
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
+            background: transparent !important;
+            padding: 10px 16px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            padding: 10px 16px;
-            border-radius: 18px;
-            background: rgba(0, 255, 255, 0.06);
-            border: none;
-            box-shadow: none;
-            backdrop-filter: blur(4px);
         }
         
         .thinking-dots span {
@@ -139,6 +138,6 @@
         </form>
     </div>
 
-    <script src="/static/app.v2.js?v=24"></script>
+    <script src="/static/app.v2.js?v=25"></script>
 </body>
 </html>
