@@ -134,10 +134,12 @@ Messaggio utente:
 """
 
     # Log obbligatorio per debugging
-    from core.log import log
-    log("PROMPT_BUILDER_OUTPUT", length=len(final_prompt))
-    if user_profile.get("name"):
-        log("PROMPT_BUILDER_PROFILE", name=user_profile["name"])
+    # Note: Logging disabilitato per evitare NameError
+    # TODO: Implementare logger standardizzato
+    # from core.log import log
+    # log("PROMPT_BUILDER_OUTPUT", length=len(final_prompt))
+    # if user_profile.get("name"):
+    #     log("PROMPT_BUILDER_PROFILE", name=user_profile["name"])
     
     # Blocca se prompt vuoto
     if len(final_prompt) == 0:
