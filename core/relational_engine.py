@@ -1,23 +1,23 @@
 """
 RELATIONAL ENGINE - Relational Engine v1
-Motore principale per generazione risposte evolutive con filtro identità
+Motore principale per generazione risposte evolutive con memoria persistente
 """
 
 from openai import AsyncOpenAI
 from core.emotion_analyzer import analyze_emotion
-from core.relational_state import load_state, update_state, get_state_summary
+from core.relational_state import relational_state
+from core.semantic_memory import semantic_memory
 from core.identity_filter import filter_response_identity, build_identity_safe_prompt
 
 client = AsyncOpenAI()
 
 async def generate_relational_response(user_id: str, user_profile: dict, message: str) -> str:
     """
-    Genera risposta relazionale evolutiva basata su stato emotivo e contesto
-    con filtro identità per rimuovere riferimenti AI
+    Genera risposta relazionale evolutiva con memoria persistente
     
     Args:
-        user_id: ID utente
-        user_profile: Profilo utente
+        user_id: ID utente reale (no anonymous)
+        user_profile: Profilo utente completo
         message: Messaggio utente
         
     Returns:
@@ -27,16 +27,25 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         # 1️⃣ Analisi emotiva messaggio
         emotion = await analyze_emotion(message)
         
-        # 2️⃣ Caricamento stato relazionale
-        state = load_state(user_id)
+        # 2️⃣ Estrazione e salvataggio dati semantici
+        await semantic_memory.extract_and_store_personal_data(message, user_id)
         
-        # 3️⃣ Aggiornamento stato basato su emozioni
-        state = update_state(user_id, emotion)
+        # 3️⃣ Caricamento stato relazionale persistente
+        state = await relational_state.load_state(user_id)
         
-        # 4️⃣ Costruzione prompt sicuro per identità
-        prompt = build_identity_safe_prompt(user_profile, state, emotion, message)
+        # 4️⃣ Aggiornamento stato relazionale
+        state = await relational_state.update_state(user_id, emotion)
         
-        # 5️⃣ Generazione risposta con GPT-4
+        # 5️⃣ Aggiornamento pattern emotivi nel profilo
+        await semantic_memory.update_emotional_pattern(user_id, emotion.get("emotion", "neutral"), emotion.get("intensity", 0.3))
+        
+        # 6️⃣ Caricamento profilo completo utente
+        full_profile = await semantic_memory.get_user_profile(user_id)
+        
+        # 7️⃣ Costruzione prompt con memoria completa
+        prompt = build_identity_safe_prompt(full_profile, state, emotion, message)
+        
+        # 8️⃣ Generazione risposta con GPT-4
         response = await client.chat.completions.create(
             model="gpt-4",
             messages=[{"role": "system", "content": prompt}],
@@ -45,10 +54,10 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         
         generated_response = response.choices[0].message.content.strip()
         
-        # 6️⃣ FILTRO IDENTITÀ - controllo post-processing
-        filtered_response = await filter_response_identity(user_id, user_profile, message, generated_response)
+        # 9️⃣ FILTRO IDENTITÀ - controllo post-processing
+        filtered_response = await filter_response_identity(user_id, full_profile, message, generated_response)
         
-        # 7️⃣ Log per monitoring
+        # 10️⃣ Log per monitoring
         _log_relational_interaction(user_id, message, emotion, state, filtered_response)
         
         return filtered_response
@@ -71,32 +80,41 @@ def _log_relational_interaction(user_id: str, message: str, emotion: dict, state
     print(f"RELATIONAL_ENGINE: user_id={user_id}")
     print(f"RELATIONAL_EMOTION: {emotion['emotion']} (intensity={emotion['intensity']})")
     print(f"RELATIONAL_STATE: trust={state['trust_level']:.2f}, depth={state['emotional_depth']:.2f}, risk={state['attachment_risk']:.2f}")
+    print(f"RELATIONAL_HISTORY: messages={state['relationship_history']['total_messages']}")
     print(f"RELATIONAL_RESPONSE_LENGTH: {len(response)} chars (identity filtered)")
 
 async def get_relational_insights(user_id: str) -> dict:
     """
-    Ottieni insights relazionali per monitoring
+    Ottieni insights relazionali completi per monitoring
     
     Args:
         user_id: ID utente
         
     Returns:
-        dict: Insights relazionali
+        dict: Insights relazionali e memoria
     """
-    state_summary = get_state_summary(user_id)
-    
-    return {
-        "user_id": user_id,
-        "relational_state": state_summary,
-        "engine_version": "v1",
-        "capabilities": [
-            "emotion_analysis",
-            "relational_memory", 
-            "adaptive_prompting",
-            "attachment_monitoring",
-            "identity_filtering"
-        ]
-    }
+    try:
+        # Stato relazionale
+        state_summary = await relational_state.get_state_summary(user_id)
+        
+        # Memoria semantica
+        memory_summary = await semantic_memory.get_memory_summary(user_id)
+        
+        return {
+            "user_id": user_id,
+            "relational_state": state_summary,
+            "semantic_memory": memory_summary,
+            "engine_version": "v1",
+            "capabilities": [
+                "emotion_analysis",
+                "relational_memory", 
+                "semantic_memory",
+                "persistent_state",
+                "identity_filtering"
+            ]
+        }
+    except Exception as e:
+        return {"error": str(e), "user_id": user_id}
 
 def reset_relational_state(user_id: str):
     """
@@ -105,10 +123,12 @@ def reset_relational_state(user_id: str):
     Args:
         user_id: ID utente
     """
-    from core.relational_state import _relational_memory
-    if user_id in _relational_memory:
-        del _relational_memory[user_id]
+    from core.storage import storage
+    # Resetta stato relazionale
+    storage.delete(f"relational_state:{user_id}")
+    # Resetta profilo utente
+    storage.delete(f"long_term_profile:{user_id}")
     print(f"RELATIONAL_STATE_RESET: user_id={user_id}")
 
 # Test configurazione
-print("RELATIONAL_ENGINE: Ready with identity filtering for pure relational responses")
+print("RELATIONAL_ENGINE: Ready with persistent memory and semantic extraction")

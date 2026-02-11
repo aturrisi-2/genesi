@@ -1,6 +1,6 @@
 """
 PROACTOR - Genesi Core v2
-Orchestratore centrale per smistamento modelli e servizi
+Orchestratore centrale con memoria persistente e user ID reali
 """
 
 from typing import Optional, Dict, Any
@@ -8,11 +8,13 @@ from core.log import log
 from core.relational_engine import generate_relational_response
 from core.llm_service import llm_service
 from core.tool_services import tool_service
+from core.semantic_memory import semantic_memory
+from core.storage import storage
 
 class Proactor:
     """
-    Proactor - Cervello di smistamento centrale
-    Orchestrazione: Tools → Relational → LLM
+    Proactor - Cervello di smistamento centrale con memoria persistente
+    Orchestrazione completa: Memory → Tools → Relational → LLM
     """
     
     def __init__(self):
@@ -38,48 +40,62 @@ class Proactor:
     
     async def handle(self, message: str, user: Dict[str, Any], intent: str) -> str:
         """
-        Orchestrazione centrale basata su intent
+        Orchestrazione centrale con memoria persistente
         
         Args:
             message: Messaggio utente
-            user: Profilo utente
+            user: Profilo utente con ID reale
             intent: Intent classificato
             
         Returns:
             Risposta orchestrata
         """
         try:
+            # Estrai user ID reale - MAI anonymous
+            user_id = user.get("id", "unknown")
+            if user_id == "anonymous":
+                # Genera ID temporaneo se mancante
+                user_id = f"temp_{hash(message)}_{len(message)}"
+                user["id"] = user_id
+                log("PROACTOR_TEMP_ID", temp_id=user_id)
+            
+            log("PROACTOR_HANDLE", user_id=user_id, intent=intent)
+            
             # 1️⃣ Tool services routing
             if intent in self.tool_intents:
                 log("PROACTOR_ROUTE", route="tool", intent=intent, service=intent)
-                return await self._handle_tool(intent, message)
+                return await self._handle_tool(intent, message, user_id)
             
             # 2️⃣ Relational engine routing
             elif intent in self.relational_intents:
                 log("PROACTOR_ROUTE", route="relational", intent=intent)
-                return await self._handle_relational(user.get("id", "anonymous"), user, message)
+                return await self._handle_relational(user_id, user, message)
             
             # 3️⃣ LLM service routing
             else:
                 log("PROACTOR_ROUTE", route="llm", intent=intent)
-                return await self._handle_llm(message)
+                return await self._handle_llm(user_id, user, message)
                 
         except Exception as e:
-            log("PROACTOR_ERROR", error=str(e), intent=intent)
+            log("PROACTOR_ERROR", error=str(e), intent=intent, user_id=user.get("id", "unknown"))
             return "Mi dispiace, ho avuto un problema. Riprova più tardi."
     
-    async def _handle_tool(self, intent: str, message: str) -> str:
+    async def _handle_tool(self, intent: str, message: str, user_id: str) -> str:
         """
-        Gestione tool services
+        Gestione tool services con user ID
         
         Args:
             intent: Intent tool
             message: Messaggio utente
+            user_id: ID utente reale
             
         Returns:
             Risposta tool service
         """
         try:
+            # Estrai dati semantici anche per tools
+            await semantic_memory.extract_and_store_personal_data(message, user_id)
+            
             if intent == "weather":
                 return await tool_service.get_weather(message)
             elif intent == "news":
@@ -92,15 +108,15 @@ class Proactor:
                 return "Tool non disponibile."
                 
         except Exception as e:
-            log("PROACTOR_TOOL_ERROR", intent=intent, error=str(e))
+            log("PROACTOR_TOOL_ERROR", intent=intent, error=str(e), user_id=user_id)
             return f"Errore nel servizio {intent}."
     
     async def _handle_relational(self, user_id: str, user_profile: Dict[str, Any], message: str) -> str:
         """
-        Gestione relational engine
+        Gestione relational engine con memoria persistente
         
         Args:
-            user_id: ID utente
+            user_id: ID utente reale
             user_profile: Profilo utente
             message: Messaggio utente
             
@@ -115,25 +131,66 @@ class Proactor:
             )
             
         except Exception as e:
-            log("PROACTOR_RELATIONAL_ERROR", error=str(e))
+            log("PROACTOR_RELATIONAL_ERROR", error=str(e), user_id=user_id)
             return "Mi dispiace, ho avuto un problema relazionale."
     
-    async def _handle_llm(self, message: str) -> str:
+    async def _handle_llm(self, user_id: str, user_profile: Dict[str, Any], message: str) -> str:
         """
-        Gestione LLM service
+        Gestione LLM service con memoria contestuale
         
         Args:
+            user_id: ID utente reale
+            user_profile: Profilo utente
             message: Messaggio utente
             
         Returns:
             Risposta LLM service
         """
         try:
-            return await llm_service.generate_response(message)
+            # Estrai dati semantici anche per LLM
+            await semantic_memory.extract_and_store_personal_data(message, user_id)
+            
+            # Carica profilo completo per context
+            full_profile = await semantic_memory.get_user_profile(user_id)
+            
+            # Genera risposta con contesto utente
+            return await llm_service.generate_response_with_context(message, full_profile)
             
         except Exception as e:
-            log("PROACTOR_LLM_ERROR", error=str(e))
+            log("PROACTOR_LLM_ERROR", error=str(e), user_id=user_id)
             return "Mi dispiace, ho avuto un problema tecnico."
+    
+    async def get_user_memory_summary(self, user_id: str) -> Dict[str, Any]:
+        """
+        Ottieni riepilogo memoria completa utente
+        
+        Args:
+            user_id: ID utente
+            
+        Returns:
+            Riepilogo memoria utente
+        """
+        try:
+            # Profilo semantico
+            profile = await semantic_memory.get_user_profile(user_id)
+            
+            # Stato relazionale
+            from core.relational_state import relational_state
+            state_summary = await relational_state.get_state_summary(user_id)
+            
+            # Storage stats
+            storage_stats = await storage.get_storage_stats()
+            
+            return {
+                "user_id": user_id,
+                "profile": profile,
+                "relational_state": state_summary,
+                "storage_stats": storage_stats
+            }
+            
+        except Exception as e:
+            log("PROACTOR_MEMORY_ERROR", error=str(e), user_id=user_id)
+            return {"error": str(e)}
     
     def get_routing_stats(self) -> Dict[str, Any]:
         """
