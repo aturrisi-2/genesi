@@ -1,18 +1,19 @@
 """
 RELATIONAL ENGINE - Relational Engine v1
-Motore principale per generazione risposte evolutive
+Motore principale per generazione risposte evolutive con filtro identità
 """
 
 from openai import AsyncOpenAI
 from core.emotion_analyzer import analyze_emotion
 from core.relational_state import load_state, update_state, get_state_summary
-from core.prompt_builder import build_prompt
+from core.identity_filter import filter_response_identity, build_identity_safe_prompt
 
 client = AsyncOpenAI()
 
 async def generate_relational_response(user_id: str, user_profile: dict, message: str) -> str:
     """
     Genera risposta relazionale evolutiva basata su stato emotivo e contesto
+    con filtro identità per rimuovere riferimenti AI
     
     Args:
         user_id: ID utente
@@ -20,7 +21,7 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         message: Messaggio utente
         
     Returns:
-        str: Risposta generata da Genesi
+        str: Risposta generata da Genesi (filtrata)
     """
     try:
         # 1️⃣ Analisi emotiva messaggio
@@ -32,8 +33,8 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         # 3️⃣ Aggiornamento stato basato su emozioni
         state = update_state(user_id, emotion)
         
-        # 4️⃣ Costruzione prompt contestuale
-        prompt = build_prompt(user_profile, state, emotion, message)
+        # 4️⃣ Costruzione prompt sicuro per identità
+        prompt = build_identity_safe_prompt(user_profile, state, emotion, message)
         
         # 5️⃣ Generazione risposta con GPT-4
         response = await client.chat.completions.create(
@@ -44,10 +45,13 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         
         generated_response = response.choices[0].message.content.strip()
         
-        # 6️⃣ Log per monitoring
-        _log_relational_interaction(user_id, message, emotion, state, generated_response)
+        # 6️⃣ FILTRO IDENTITÀ - controllo post-processing
+        filtered_response = await filter_response_identity(user_id, user_profile, message, generated_response)
         
-        return generated_response
+        # 7️⃣ Log per monitoring
+        _log_relational_interaction(user_id, message, emotion, state, filtered_response)
+        
+        return filtered_response
         
     except Exception as e:
         # Fallback sicuro in caso di errore
@@ -62,12 +66,12 @@ def _log_relational_interaction(user_id: str, message: str, emotion: dict, state
         message: Messaggio utente
         emotion: Dati emotivi
         state: Stato relazionale
-        response: Risposta generata
+        response: Risposta generata (filtrata)
     """
     print(f"RELATIONAL_ENGINE: user_id={user_id}")
     print(f"RELATIONAL_EMOTION: {emotion['emotion']} (intensity={emotion['intensity']})")
     print(f"RELATIONAL_STATE: trust={state['trust_level']:.2f}, depth={state['emotional_depth']:.2f}, risk={state['attachment_risk']:.2f}")
-    print(f"RELATIONAL_RESPONSE_LENGTH: {len(response)} chars")
+    print(f"RELATIONAL_RESPONSE_LENGTH: {len(response)} chars (identity filtered)")
 
 async def get_relational_insights(user_id: str) -> dict:
     """
@@ -89,7 +93,8 @@ async def get_relational_insights(user_id: str) -> dict:
             "emotion_analysis",
             "relational_memory", 
             "adaptive_prompting",
-            "attachment_monitoring"
+            "attachment_monitoring",
+            "identity_filtering"
         ]
     }
 
@@ -106,4 +111,4 @@ def reset_relational_state(user_id: str):
     print(f"RELATIONAL_STATE_RESET: user_id={user_id}")
 
 # Test configurazione
-print("RELATIONAL_ENGINE: Ready for evolutionary companionship")
+print("RELATIONAL_ENGINE: Ready with identity filtering for pure relational responses")
