@@ -11,10 +11,6 @@ from pathlib import Path
 from typing import Optional
 from core.log import log
 
-# Configurazione thread per 6 core
-torch.set_num_threads(6)
-torch.set_num_interop_threads(2)
-
 logger = logging.getLogger(__name__)
 
 # Configurazione F5-TTS

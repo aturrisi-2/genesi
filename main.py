@@ -10,6 +10,12 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 import uvicorn
 
+# Global Torch thread configuration - PRIMA di qualsiasi import TTS
+import torch
+torch.set_num_threads(6)
+torch.set_num_interop_threads(2)
+print("TORCH GLOBAL THREAD CONFIG APPLIED")
+
 # Import base
 from api.user import router as user_router
 from api.chat import router as chat_router

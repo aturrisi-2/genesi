@@ -22,14 +22,6 @@ VOICE_SPEAKER = "Alexandra Hisakawa"
 VOICE_LANGUAGE = "it"
 VOICE_SAMPLE_RATE = 24000  # FISSO - NON MODIFICARE
 
-# 2️⃣ TORCH THREADS OTTIMIZZATI per 6 core CPU
-torch.set_num_threads(6)  # Sfrutta tutti i 6 core disponibili
-torch.set_num_interop_threads(2)  # Riduci overhead ma mantieni parallelismo
-
-# Log espliciti configurazione thread
-print(f"TORCH THREADS SET TO: {torch.get_num_threads()}")
-print(f"TORCH INTEROP THREADS: {torch.get_num_interop_threads()}")
-
 # 5️⃣ CACHE INTELLIGENTE
 _tts_cache: Dict[str, str] = {}
 _cache_max_size = 50
