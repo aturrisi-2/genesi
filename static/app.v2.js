@@ -764,7 +764,7 @@ async function sendMessage() {
     console.error('Chat error:', e);
     // PARTE 4: Fallback in caso di errore
     hideThinkingState();
-    addGenesiMessage("Qualcosa non ha funzionato. Riprova tra poco.");
+    addMessage("Qualcosa non ha funzionato. Riprova tra poco.", 'genesi');
     console.log('TTS_ERROR_FALLBACK');
   } finally {
     setState(STATES.IDLE);
@@ -811,7 +811,7 @@ async function playTTSWithSync(text, mode, displayText) {
     console.log('[TTS_SYNC] TTS completed, now showing text');
     
     // Mostra il testo SOLO dopo TTS completato
-    const messageElement = addGenesiMessage(displayText);
+    const messageElement = addMessage(displayText, 'genesi');
     console.log('FRONTEND_RENDER_TEXT_AND_PLAY');
     console.log("STEP_4_RENDER_TEXT");
     
@@ -839,7 +839,7 @@ async function playTTSWithSync(text, mode, displayText) {
   } catch (e) {
     console.error('[TTS_SYNC] Error:', e);
     // In caso di errore, mostra comunque il testo
-    const messageElement = addGenesiMessage(displayText);
+    const messageElement = addMessage(displayText, 'genesi');
     hideThinkingState();
     
     // Log anche in caso di errore
@@ -1610,7 +1610,7 @@ function handleFileUpload() {
       _showFileBubble(file, 'Genesi sta guardando...');
     } catch (_) { /* bubble is cosmetic, never block upload */ }
 
-    loadingMsg = addGenesiMessage("Sto analizzando il file...");
+    loadingMsg = addMessage("Sto analizzando il file...", 'genesi');
     setState(STATES.THINKING);
 
     const fd = new FormData();
@@ -1630,7 +1630,7 @@ function handleFileUpload() {
       } catch (_) { /* cosmetic */ }
 
       // Full analysis in chat message (not in bubble)
-      addGenesiMessage(result.response || "File ricevuto.");
+      addMessage(result.response || "File ricevuto.", 'genesi');
 
       // Auto-dismiss bubble after 6s
       setTimeout(() => { try { _dismissFileBubble(); } catch(_){} }, 6000);
@@ -1638,7 +1638,7 @@ function handleFileUpload() {
       console.error('Upload error:', e);
       if (loadingMsg) loadingMsg.remove();
       try { _updateBubbleStatus('Errore'); } catch(_){}
-      addGenesiMessage("Errore nel caricamento. Riprova.");
+      addMessage("Errore nel caricamento. Riprova.", 'genesi');
       setTimeout(() => { try { _dismissFileBubble(); } catch(_){} }, 3000);
     } finally {
       setState(STATES.IDLE);
@@ -1734,19 +1734,14 @@ function isAudioUnlocked() {
 }
 
 // ===============================
-// TTS AUDIO PLAYBACK - STREAMING (MediaSource API)
+// TTS AUDIO PLAYBACK - SIMPLE HTMLAudioElement
 // ===============================
 async function playTTSAudio(blob) {
   console.log('[TTS] TTS blob ricevuto - size=' + blob.size + ' type=' + blob.type);
   
   try {
-    // STREAMING: Usa MediaSource per riproduzione progressiva
-    if ('MediaSource' in window && blob.type.includes('audio/wav')) {
-      await playStreamingAudio(blob);
-    } else {
-      // Fallback HTMLAudioElement per compatibilità
-      await playFallbackAudio(blob);
-    }
+    // SIMPLE PLAYBACK: Usa HTMLAudioElement diretto
+    await playSimpleAudio(blob);
     
   } catch (error) {
     console.error('[TTS] Errore durante playback TTS:', error);
@@ -1756,77 +1751,31 @@ async function playTTSAudio(blob) {
   }
 }
 
-async function playStreamingAudio(blob) {
-  console.log('[TTS] Avvio streaming con MediaSource API');
+async function playSimpleAudio(blob) {
+  console.log('[TTS] Avvio semplice playback con HTMLAudioElement');
   
-  // Crea MediaSource e AudioContext
-  const mediaSource = new MediaSource();
-  const audioUrl = URL.createObjectURL(mediaSource);
-  
+  // Crea URL e Audio element
+  const audioUrl = URL.createObjectURL(blob);
   const audio = new Audio(audioUrl);
-  console.log('[TTS] Audio element creato per streaming');
+  console.log('[TTS] Audio element creato per semplice playback');
   
   // Configura eventi
   audio.onended = () => {
-    console.log('[TTS] Streaming playback completato');
+    console.log('[TTS] Semplice playback completato');
     URL.revokeObjectURL(audioUrl);
     _ttsSource = null;
     _isPlayingChunk = false;
   };
   
   audio.onerror = (error) => {
-    console.error('[TTS] Errore streaming audio:', error);
+    console.error('[TTS] Errore semplice audio:', error);
     URL.revokeObjectURL(audioUrl);
     _ttsSource = null;
     _isPlayingChunk = false;
   };
   
-  // MediaSource ready per aggiungere source buffer
-  mediaSource.addEventListener('sourceopen', () => {
-    console.log('[TTS] MediaSource open, aggiungo SourceBuffer');
-    
-    try {
-      const sourceBuffer = mediaSource.addSourceBuffer('audio/wav');
-      
-      // Configura eventi SourceBuffer
-      sourceBuffer.addEventListener('updateend', () => {
-        console.log('[TTS] Chunk aggiunto al buffer');
-      });
-      
-      sourceBuffer.addEventListener('error', (e) => {
-        console.error('[TTS] SourceBuffer error:', e);
-      });
-      
-      // Aggiungi chunk al buffer progressivamente
-      const reader = new FileReader();
-      
-      reader.onload = () => {
-        const arrayBuffer = reader.result;
-        try {
-          sourceBuffer.appendBuffer(arrayBuffer);
-          console.log('[TTS] Buffer audio aggiunto con successo');
-        } catch (e) {
-          console.error('[TTS] Errore appendBuffer:', e);
-        }
-      };
-      
-      reader.onerror = (e) => {
-        console.error('[TTS] Errore FileReader:', e);
-      };
-      
-      reader.readAsArrayBuffer(blob);
-      
-    } catch (e) {
-      console.error('[TTS] Errore creazione SourceBuffer:', e);
-    }
-  });
-  
-  mediaSource.addEventListener('error', (e) => {
-    console.error('[TTS] MediaSource error:', e);
-  });
-  
   // Avvia playback
-  console.log('[TTS] Avvio streaming playback');
+  console.log('[TTS] Avvio semplice playback');
   await audio.play();
   
   // Aggiorna stato TTS
@@ -1834,37 +1783,7 @@ async function playStreamingAudio(blob) {
   _isPlayingChunk = true;
   _wasPlayingChunk = true;
   
-  console.log('[TTS] Streaming audio avviato con successo');
-}
-
-async function playFallbackAudio(blob) {
-  console.log('[TTS] Fallback HTMLAudioElement');
-  
-  // Fallback HTMLAudioElement
-  const audioUrl = URL.createObjectURL(blob);
-  const audio = new Audio(audioUrl);
-  
-  audio.onended = () => {
-    console.log('[TTS] Fallback playback completato');
-    URL.revokeObjectURL(audioUrl);
-    _ttsSource = null;
-    _isPlayingChunk = false;
-  };
-  
-  audio.onerror = (error) => {
-    console.error('[TTS] Fallback audio error:', error);
-    URL.revokeObjectURL(audioUrl);
-    _ttsSource = null;
-    _isPlayingChunk = false;
-  };
-  
-  await audio.play();
-  
-  _ttsSource = audio;
-  _isPlayingChunk = true;
-  _wasPlayingChunk = true;
-  
-  console.log('[TTS] Fallback audio avviato');
+  console.log('[TTS] Semplice audio avviato con successo');
 }
 
 // iOS: pre-unlock AudioContext on very first user interaction
