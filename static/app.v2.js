@@ -831,16 +831,15 @@ function addThinkingBubble() {
   
   // Create bubble with dots
   const bubble = document.createElement('div');
-  bubble.className = 'bubble thinking-bubble';
+  bubble.className = 'thinking-bubble';
   
   // Create dots container
   const dots = document.createElement('div');
   dots.className = 'thinking-dots';
   
-  // Add three dots
+  // Add three dots as span elements
   for (let i = 0; i < 3; i++) {
-    const dot = document.createElement('div');
-    dot.className = 'dot';
+    const dot = document.createElement('span');
     dots.appendChild(dot);
   }
   

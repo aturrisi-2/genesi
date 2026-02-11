@@ -49,78 +49,32 @@
             }
         }
         
-        /* Thinking bubble as real message in chat flow */
-        .message.genesi.thinking .bubble {
-            background: rgba(0, 20, 30, 0.6);
-            border: 1px solid rgba(0, 255, 255, 0.25);
-            padding: 8px 14px;
-            max-width: 70px;
-            display: flex;
-            justify-content: center;
+        /* Thinking bubble - minimal dedicated styles */
+        .thinking-bubble {
+            display: inline-flex;
             align-items: center;
-            animation: subtleBreath 2.5s ease-in-out infinite;
-            position: relative;
-            box-shadow: 0 0 6px rgba(0, 255, 255, 0.15);
-        }
-        
-        @keyframes subtleBreath {
-            0% { transform: scale(0.98); opacity: 0.7; }
-            50% { transform: scale(1); opacity: 1; }
-            100% { transform: scale(0.98); opacity: 0.7; }
-        }
-        
-        .message.genesi.thinking .bubble.exploding {
-            animation: bubbleExplode 180ms ease-out forwards;
-        }
-        
-        .message.genesi.thinking .bubble.exploding::before {
-            content: '';
-            position: absolute;
-            top: -2px;
-            left: -2px;
-            right: -2px;
-            bottom: -2px;
-            background: linear-gradient(45deg, 
-                transparent, 
-                rgba(0, 255, 255, 0.1), 
-                transparent);
-            border-radius: 50%;
-            animation: bubbleExplode 180ms ease-out forwards;
-        }
-        
-        .message.genesi.thinking .thinking-dots {
-            display: flex;
-            gap: 8px;
             justify-content: center;
+            padding: 10px 16px;
+            border-radius: 18px;
+            background: rgba(0, 255, 255, 0.06);
+            border: none;
+            box-shadow: none;
+            backdrop-filter: blur(4px);
         }
         
-        .message.genesi.thinking .thinking-dots .dot {
+        .thinking-dots span {
             width: 6px;
             height: 6px;
-            background: rgba(0, 255, 255, 0.6);
+            margin: 0 3px;
             border-radius: 50%;
+            background: #00ffff;
+            opacity: 0.6;
+            animation: pulseDot 1.4s infinite ease-in-out;
         }
         
-        .message.genesi.thinking .thinking-dots .dot:nth-child(1) {
-            animation: dotPulse 1.6s infinite ease-in-out;
-        }
-        
-        .message.genesi.thinking .thinking-dots .dot:nth-child(2) {
-            animation: dotPulse 1.6s infinite ease-in-out 0.2s;
-        }
-        
-        .message.genesi.thinking .thinking-dots .dot:nth-child(3) {
-            animation: dotPulse 1.6s infinite ease-in-out 0.4s;
-        }
-        
-        .message.genesi.thinking .bubble.transforming {
-            animation: none !important;
-        }
-        
-        .message.genesi.thinking .bubble.transforming .thinking-dots {
-            opacity: 0;
-            transform: scale(0.8);
-            transition: all 120ms ease-out;
+        @keyframes pulseDot {
+            0%, 100% { transform: scale(0.8); opacity: 0.3; }
+            50% { transform: scale(1.3); opacity: 1; }
         }
     </style>
 </head>
@@ -185,6 +139,6 @@
         </form>
     </div>
 
-    <script src="/static/app.v2.js?v=23"></script>
+    <script src="/static/app.v2.js?v=24"></script>
 </body>
 </html>
