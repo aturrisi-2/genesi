@@ -1,17 +1,18 @@
 """
 TTS API - Genesi Core v2
 1 intent → 1 funzione
-Text-to-Speech API semplice - restituisce audio binario WAV con chunking
+Text-to-Speech API streaming - restituisce audio binario WAV in streaming
 """
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pathlib import Path
 from tts.simple_tts import simple_tts
 from core.log import log
 import re
-import numpy as np
+import asyncio
+import io
 
 router = APIRouter(prefix="/tts")
 
@@ -22,101 +23,78 @@ class TTSRequest(BaseModel):
 @router.post("/")
 async def text_to_speech(request: TTSRequest):
     """
-    Text-to-Speech - 1 intent → 1 funzione con chunking intelligente
-    Restituisce SOLO audio binario WAV
+    Text-to-Speech - 1 intent → 1 funzione con streaming reale
+    Restituisce audio WAV in streaming progressivo
     
     Args:
         request: Richiesta TTS
         
     Returns:
-        File audio WAV binario
+        StreamingResponse audio WAV
     """
     try:
-        # FASE 2: CHUNKING INTELLIGENTE
-        chunks = re.split(r'(?<=[.!?]) +', request.text)
-        print(f"VOICE CHUNK COUNT: {len(chunks)}")
+        print("STREAM_TTS_START")
         
-        chunk_wavs = []
+        # FASE 2: CHUNK INTELLIGENTE PER LUNGHEZZA (250-300 char)
+        chunks = _split_text_by_length(request.text, max_length=280)
+        print(f"STREAM_TTS_CHUNK_COUNT: {len(chunks)}")
         
-        # Genera WAV per ogni chunk
-        for chunk in chunks:
-            if chunk.strip():
-                chunk_path = simple_tts.synthesize(chunk.strip())
-                chunk_wavs.append(chunk_path)
+        async def audio_generator():
+            """Generatore streaming audio"""
+            for i, chunk in enumerate(chunks):
+                if chunk.strip():
+                    print(f"STREAM_TTS_CHUNK_READY {i+1}")
+                    
+                    # Genera WAV singolo
+                    chunk_path = simple_tts.synthesize(chunk.strip())
+                    
+                    # Leggi e invia chunk immediatamente
+                    with open(chunk_path, 'rb') as f:
+                        chunk_data = f.read()
+                    
+                    print(f"STREAM_TTS_CHUNK_SENT {i+1}")
+                    yield chunk_data
+            
+            print("STREAM_TTS_COMPLETE")
         
-        # Concatena WAV con pausa naturale
-        if len(chunk_wavs) > 1:
-            final_wav = _concatenate_wavs_with_pause(chunk_wavs)
-            final_path = _save_final_wav(final_wav)
-        else:
-            final_path = chunk_wavs[0] if chunk_wavs else None
-        
-        if not final_path:
-            raise HTTPException(status_code=500, detail="No audio generated")
-        
-        # Verifica esistenza file
-        path_obj = Path(final_path)
-        if not path_obj.exists():
-            log("TTS_FILE_NOT_FOUND", audio_path=final_path)
-            raise HTTPException(status_code=500, detail="Audio file not found")
-        
-        # Verifica size file - CRITICO
-        file_size = path_obj.stat().st_size
-        if file_size == 0:
-            log("TTS_FILE_EMPTY", audio_path=final_path, size=file_size)
-            raise HTTPException(status_code=500, detail="Audio file is empty")
-        
-        log("TTS_API", text=request.text[:50], audio_path=final_path, size=file_size, chunks=len(chunks))
-        
-        # Restituisci SOLO file audio binario WAV se size > 0
-        return FileResponse(
-            path=final_path,
+        # StreamingResponse con Content-Type audio/wav
+        return StreamingResponse(
+            audio_generator(),
             media_type="audio/wav",
-            filename="tts_output.wav"
+            headers={
+                "Content-Disposition": "inline; filename=tts_stream.wav",
+                "Cache-Control": "no-cache",
+                "Transfer-Encoding": "chunked"
+            }
         )
         
     except Exception as e:
         log("TTS_API_ERROR", error=str(e))
-        raise HTTPException(status_code=500, detail="TTS error")
+        raise HTTPException(status_code=500, detail="TTS streaming error")
 
-def _concatenate_wavs_with_pause(chunk_paths):
-    """Concatena WAV con pausa naturale tra chunk"""
-    import soundfile as sf
+def _split_text_by_length(text: str, max_length: int = 280) -> list:
+    """
+    Split intelligente per lunghezza mantenendo parole intere
+    Evita split su singola frase, preferisce split per lunghezza
+    """
+    if len(text) <= max_length:
+        return [text]
     
-    all_audio = []
-    sample_rate = 24000  # Sample rate fisso XTTS
+    chunks = []
+    current_chunk = ""
+    words = text.split()
     
-    # Pausa naturale di 150ms
-    pause = np.zeros(int(0.15 * sample_rate))
-    
-    for i, chunk_path in enumerate(chunk_paths):
-        # Carica chunk
-        data, sr = sf.read(chunk_path)
+    for word in words:
+        test_chunk = current_chunk + " " + word if current_chunk else word
         
-        # Assicura sample rate corretto
-        if sr != sample_rate:
-            import librosa
-            data = librosa.resample(data, orig_sr=sr, target_sr=sample_rate)
-        
-        all_audio.append(data)
-        
-        # Aggiungi pausa tra chunk (non dopo l'ultimo)
-        if i < len(chunk_paths) - 1:
-            all_audio.append(pause)
+        if len(test_chunk) <= max_length:
+            current_chunk = test_chunk
+        else:
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+            current_chunk = word
     
-    # Concatena tutto
-    final_audio = np.concatenate(all_audio)
-    return final_audio
-
-def _save_final_wav(audio_data):
-    """Salva WAV finale concatenato"""
-    import soundfile as sf
-    import uuid
+    if current_chunk:
+        chunks.append(current_chunk.strip())
     
-    output_file = f"tts_final_{uuid.uuid4()}.wav"
-    output_path = Path("tts_cache") / output_file
-    output_path.parent.mkdir(exist_ok=True)
-    
-    # Salva con sample rate fisso 24000Hz
-    sf.write(str(output_path), audio_data, 24000)
-    return str(output_path)
+    return chunks
