@@ -704,12 +704,14 @@ async function sendMessage() {
   setState(STATES.THINKING);
   showThinkingState();
   console.log('FRONTEND_THINKING_START');
+  console.log("SYNC_STEP_1_THINKING_START");
 
   try {
     // PARTE 1: Chiama /api/chat
+    console.log("SYNC_STEP_1_CHAT_REQUEST");
     const data = await sendChatMessage(text);
     console.log('[FRONTEND] response received - data=', data);
-    console.log('FRONTEND_CHAT_RECEIVED');
+    console.log("SYNC_STEP_2_CHAT_RECEIVED");
     
     // USA SEMPRE response - CONTRATTO API BACKEND
     const botMessage = data.response;
@@ -722,9 +724,11 @@ async function sendMessage() {
     // PARTE 1: Salva risposta in memoria, NON renderizzare
     let pendingResponse = botMessage;
     console.log('[FRONTEND] Response saved, waiting for TTS before rendering');
+    console.log("SYNC_STEP_3_RESPONSE_SAVED_NO_RENDER");
     
     // PARTE 2: Chiama /api/tts PRIMA di mostrare testo
     console.log('FRONTEND_TTS_REQUESTED');
+    console.log("SYNC_STEP_4_TTS_REQUESTED");
     
     // USA tts_text per il TTS, display_text per la UI
     const ttsText = data.tts_text || data.response; // Fallback a response se tts_text non disponibile
@@ -746,31 +750,26 @@ async function sendMessage() {
 
 // PARTE 3: Funzione per mostrare stato thinking animato
 function showThinkingState() {
-  const thinkingDiv = document.createElement('div');
-  thinkingDiv.id = 'thinking-state';
-  thinkingDiv.className = 'thinking-state';
-  thinkingDiv.innerHTML = `
-    <div class="thinking-bubble">
-      <div class="thinking-text">Genesi sta pensando...</div>
-      <div class="thinking-dots">
-        <span>.</span><span>.</span><span>.</span>
-      </div>
-    </div>
-  `;
-  
-  // Aggiungi al chat container
-  const chatContainer = document.getElementById('chat');
-  if (chatContainer) {
-    chatContainer.appendChild(thinkingDiv);
+  console.log("SYNC_STEP_1_THINKING_START");
+  const thinkingDiv = document.getElementById('thinking-state');
+  if (thinkingDiv) {
+    thinkingDiv.style.display = 'block';
     scrollToBottom();
+    console.log("SYNC_STEP_1_THINKING_VISIBLE");
+  } else {
+    console.error("Thinking container not found!");
   }
 }
 
 // PARTE 3: Nascondi stato thinking
 function hideThinkingState() {
+  console.log("SYNC_STEP_4_HIDE_THINKING");
   const thinkingDiv = document.getElementById('thinking-state');
   if (thinkingDiv) {
-    thinkingDiv.remove();
+    thinkingDiv.style.display = 'none';
+    console.log("SYNC_STEP_4_THINKING_HIDDEN");
+  } else {
+    console.error("Thinking container not found for hiding!");
   }
 }
 
@@ -791,6 +790,7 @@ async function playTTSWithSync(text, mode, displayText) {
     // Mostra il testo SOLO dopo TTS completato
     const messageElement = addGenesiMessage(displayText);
     console.log('FRONTEND_RENDER_TEXT_AND_PLAY');
+    console.log("SYNC_STEP_3_RENDER_TEXT");
     
     // PARTE 4: Calcola tempo minimo thinking
     const thinkingElapsed = (Date.now() - thinkingStartTime) / 1000;
