@@ -51,14 +51,22 @@
         
         /* Thinking bubble as real message in chat flow */
         .message.genesi.thinking .bubble {
-            background: transparent;
-            border: none;
-            padding: 16px 20px;
+            background: rgba(0, 20, 30, 0.6);
+            border: 1px solid rgba(0, 255, 255, 0.25);
+            padding: 8px 14px;
+            max-width: 70px;
             display: flex;
             justify-content: center;
             align-items: center;
-            animation: bubbleBreath 3s infinite ease-in-out;
+            animation: subtleBreath 2.5s ease-in-out infinite;
             position: relative;
+            box-shadow: 0 0 6px rgba(0, 255, 255, 0.15);
+        }
+        
+        @keyframes subtleBreath {
+            0% { transform: scale(0.98); opacity: 0.7; }
+            50% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(0.98); opacity: 0.7; }
         }
         
         .message.genesi.thinking .bubble.exploding {
@@ -87,11 +95,10 @@
         }
         
         .message.genesi.thinking .thinking-dots .dot {
-            width: 8px;
-            height: 8px;
-            background: rgba(0, 255, 255, 0.8);
+            width: 6px;
+            height: 6px;
+            background: rgba(0, 255, 255, 0.6);
             border-radius: 50%;
-            box-shadow: 0 0 12px rgba(0, 255, 255, 0.6);
         }
         
         .message.genesi.thinking .thinking-dots .dot:nth-child(1) {
@@ -178,6 +185,6 @@
         </form>
     </div>
 
-    <script src="/static/app.v2.js?v=22"></script>
+    <script src="/static/app.v2.js?v=23"></script>
 </body>
 </html>
