@@ -709,6 +709,9 @@ async function sendMessage() {
     
     if (!botMessage || botMessage.trim().length === 0) return;
     
+    // PARTE 2: Log LLM response length
+    console.log(`LLM_RESPONSE_LENGTH: ${botMessage.length} chars`);
+    
     // PARTE 3: NON mostrare testo finché primo chunk TTS non è pronto
     console.log('[FRONTEND] Chat response received, waiting for TTS before rendering');
     
@@ -772,6 +775,8 @@ function hideThinkingState() {
 
 // PARTE 3: TTS sincronizzato con rendering testo
 async function playTTSWithSync(text, mode, displayText) {
+  const thinkingStartTime = Date.now();
+  
   try {
     console.log('[TTS_SYNC] Starting TTS with text sync');
     
@@ -785,8 +790,23 @@ async function playTTSWithSync(text, mode, displayText) {
     console.log('[TTS_SYNC] Showing text after TTS start');
     const messageElement = addGenesiMessage(displayText);
     
+    // PARTE 4: Calcola tempo minimo thinking
+    const thinkingElapsed = (Date.now() - thinkingStartTime) / 1000;
+    const minThinkingTime = 2.5; // 2.5 secondi minimi
+    const remainingTime = Math.max(0, minThinkingTime - thinkingElapsed);
+    
+    // PARTE 4: Aspetta tempo minimo se necessario
+    if (remainingTime > 0) {
+      console.log(`THINKING_DELAY: waiting ${remainingTime.toFixed(2)}s to reach minimum`);
+      await new Promise(resolve => setTimeout(resolve, remainingTime * 1000));
+    }
+    
     // Nascondi stato thinking
     hideThinkingState();
+    
+    // PARTE 5: Log thinking time visible
+    const totalThinkingTime = (Date.now() - thinkingStartTime) / 1000;
+    console.log(`THINKING_TIME_VISIBLE: ${totalThinkingTime.toFixed(2)}s`);
     
     // Aspetta completamento TTS
     await ttsPromise;
@@ -798,6 +818,10 @@ async function playTTSWithSync(text, mode, displayText) {
     // In caso di errore, mostra comunque il testo
     const messageElement = addGenesiMessage(displayText);
     hideThinkingState();
+    
+    // Log anche in caso di errore
+    const totalThinkingTime = (Date.now() - thinkingStartTime) / 1000;
+    console.log(`THINKING_TIME_VISIBLE_ERROR: ${totalThinkingTime.toFixed(2)}s`);
   }
 } // <--- Added closing brace here
 

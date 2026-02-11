@@ -78,9 +78,10 @@ def _numero_italiano(n: int) -> str:
 def smart_chunk_text(text: str) -> list:
     """
     3️⃣ DISABILITARE SPLIT AGGRESSIVO - chunk per lunghezza, non per punteggiatura
+    PARTE 1: Rimozione chunk inutili
     """
-    if len(text) < 180:
-        print("SMART_CHUNK_COUNT 1 (no chunk)")
+    if len(text) < 300:
+        print("SMART_CHUNK_DISABLED_SMALL_TEXT")
         return [text]
     
     # Split in blocchi 180-220 caratteri mantenendo parole intere
@@ -263,7 +264,7 @@ class SimpleTTS:
                 self._synthesize_first_chunk(output_path, chunks[0])
             
             total_time = time.time() - start_time
-            print(f"SYNTHESIS_TIME: {total_time:.2f}s for {len(text)} chars")
+            print(f"TTS_SYNTHESIS_TIME: {total_time:.2f}s for {len(text)} chars")
             
         except Exception as e:
             logger.error(f"Optimized synthesis failed: {e}")
@@ -272,6 +273,8 @@ class SimpleTTS:
     def _synthesize_single_chunk(self, output_path: Path, text: str):
         """Sintesi singolo chunk - ottimizzata con parametri velocità"""
         try:
+            synthesis_start = time.time()
+            
             # 6️⃣ PARAMETRI XTTS VELOCITÀ (senza cambiare timbro)
             wav = self.tts.tts(
                 text=text,
@@ -281,6 +284,8 @@ class SimpleTTS:
                 speed=1.1,  # Leggermente più veloce
                 # NON tocchiamo: speaker, sample_rate, modello
             )
+            
+            synthesis_time = time.time() - synthesis_start
             
             # PARTE 1: Micro fade-in per primo TTS della sessione
             if self.session_first_tts:
@@ -295,6 +300,11 @@ class SimpleTTS:
             # LOG SINTESI ORIGINALE
             duration = len(wav) / VOICE_SAMPLE_RATE
             rtf = duration / (len(text) / 10.0)  # RTF approssimativo (10 char/sec)
+            
+            # PARTE 5: Log completi
+            print(f"FINAL_AUDIO_DURATION: {duration:.2f}s")
+            print(f"TTS_CHUNK_SYNTHESIS_TIME: {synthesis_time:.2f}s")
+            
             logger.info(f"[VOICE_OPT_SINGLE] speaker={VOICE_SPEAKER} lang={VOICE_LANGUAGE} sr={VOICE_SAMPLE_RATE}Hz duration={duration:.2f}s samples={len(wav)} rtf={rtf:.2f}")
             
         except Exception as e:
