@@ -717,7 +717,7 @@ async function sendMessage() {
   
   // PARTE 1: Mostra animazione thinking come messaggio reale
   setState(STATES.THINKING);
-  addThinkingBubble();
+  showThinking();
   console.log('FRONTEND_THINKING_START');
   console.log("SYNC_STEP_1_THINKING_START");
 
@@ -755,7 +755,7 @@ async function sendMessage() {
   } catch (e) {
     console.error('Chat error:', e);
     // PARTE 4: Fallback in caso di errore
-    removeThinkingBubble();
+    hideThinking();
     addMessage("Qualcosa non ha funzionato. Riprova tra poco.", 'genesi');
     console.log('TTS_ERROR_FALLBACK');
   } finally {
@@ -794,7 +794,7 @@ async function playTTSWithSync(text, mode, displayText) {
     console.log('[TTS_SYNC] Audio started, now showing text');
     
     // Rimuovi thinking bubble e mostra messaggio assistente
-    removeThinkingBubble();
+    hideThinking();
     const messageElement = addMessage(displayText, 'genesi');
     console.log('FRONTEND_RENDER_TEXT_AND_PLAY');
     console.log("STEP_4_RENDER_TEXT");
@@ -809,7 +809,7 @@ async function playTTSWithSync(text, mode, displayText) {
     console.error('[TTS_SYNC] Error:', e);
     // In caso di errore, mostra comunque il testo
     const messageElement = addMessage(displayText, 'genesi');
-    removeThinkingBubble();
+    hideThinking();
     
     // Log anche in caso di errore
     const totalThinkingTime = (Date.now() - thinkingStartTime) / 1000;
@@ -818,59 +818,28 @@ async function playTTSWithSync(text, mode, displayText) {
 }
 
 // ===============================
-// THINKING BUBBLE
+// THINKING DOTS - INDEPENDENT ROW
 // ===============================
-let currentThinkingElement = null;
+function showThinking() {
+  const thinking = document.createElement("div");
+  thinking.className = "thinking-row";
+  thinking.id = "genesi-thinking";
 
-function addThinkingBubble() {
-  console.log("SYNC_STEP_1_THINKING_START");
-  
-  // Create thinking message element like a real assistant message
-  const thinkingEl = document.createElement('div');
-  thinkingEl.className = 'message genesi thinking';
-  
-  // Create bubble with dots
-  const bubble = document.createElement('div');
-  bubble.className = 'thinking-bubble';
-  
-  // Create dots container
-  const dots = document.createElement('div');
-  dots.className = 'thinking-dots';
-  
-  // Add three dots as span elements
-  for (let i = 0; i < 3; i++) {
-    const dot = document.createElement('span');
-    dots.appendChild(dot);
-  }
-  
-  // Assemble structure
-  bubble.appendChild(dots);
-  thinkingEl.appendChild(bubble);
-  
-  // Add to dialogue like a real message
-  dialogue.appendChild(thinkingEl);
-  
-  // Auto scroll
-  requestAnimationFrame(() => scrollToBottom());
-  
-  // Store reference for removal
-  currentThinkingElement = thinkingEl;
-  
-  console.log("SYNC_STEP_1_THINKING_VISIBLE");
-  return thinkingEl;
+  thinking.innerHTML = `
+    <div class="thinking-dots">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+  `;
+
+  dialogue.appendChild(thinking);
+  dialogue.scrollTop = dialogue.scrollHeight;
 }
 
-function removeThinkingBubble() {
-  console.log("SYNC_STEP_4_HIDE_THINKING");
-  
-  if (currentThinkingElement && currentThinkingElement.parentNode) {
-    currentThinkingElement.parentNode.removeChild(currentThinkingElement);
-    console.log("SYNC_STEP_4_THINKING_HIDDEN");
-  } else {
-    console.error("Thinking element not found for removal!");
-  }
-  
-  currentThinkingElement = null;
+function hideThinking() {
+  const thinking = document.getElementById("genesi-thinking");
+  if (thinking) thinking.remove();
 }
 
 // ===============================
