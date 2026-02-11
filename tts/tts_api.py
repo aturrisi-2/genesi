@@ -1,6 +1,6 @@
 """
 TTS API - Genesi Core v2
-OpenAI TTS Streaming - architettura semplificata
+OpenAI TTS Streaming - architettura definitiva
 """
 
 from fastapi import APIRouter, HTTPException

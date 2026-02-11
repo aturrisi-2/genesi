@@ -1,34 +1,25 @@
 """
 OPENAI TTS STREAMING - Genesi Core v2
-Streaming TTS con OpenAI API - elimina XTTS/F5/Torch stress
-Architettura semplificata: Genesi → OpenAI TTS → Browser
+Streaming TTS con OpenAI SDK v2.x - architettura definitiva
 """
 
-import openai
-import asyncio
-from fastapi import HTTPException
+from openai import AsyncOpenAI
 from fastapi.responses import StreamingResponse
+import os
 from core.log import log
-import io
 
-# Configurazione OpenAI TTS
-OPENAI_MODEL = "tts-1"  # Modello OpenAI TTS
-OPENAI_VOICE = "alloy"  # Voce naturale moderna
-OPENAI_RESPONSE_FORMAT = "mp3"  # Streaming MP3 per Safari
-OPENAI_SPEED = 1.0  # Velocità normale
+# Client OpenAI asincrono
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 async def stream_openai_tts(text: str):
     """
-    Streaming OpenAI TTS - audio MP3 diretto al browser
+    Streaming OpenAI TTS con SDK v2.x - MP3 diretto al browser
     
     Args:
         text: Testo da sintetizzare
         
     Returns:
         StreamingResponse audio/mpeg
-        
-    Raises:
-        HTTPException: Se OpenAI TTS fallisce
     """
     try:
         print("OPENAI_TTS_START")
@@ -38,33 +29,22 @@ async def stream_openai_tts(text: str):
             raise ValueError("Empty text for TTS")
         
         # Cleanup testo per OpenAI TTS
-        cleaned_text = text.strip()[:4096]  # OpenAI limit: 4096 characters
+        cleaned_text = text.strip()[:4096]  # OpenAI limit
         
-        # Client OpenAI
-        client = openai.OpenAI()
-        
-        # Genera streaming audio MP3
-        response = client.audio.speech.create(
-            model=OPENAI_MODEL,
-            voice=OPENAI_VOICE,
+        # Streaming con OpenAI SDK v2.x
+        response = await client.audio.speech.with_streaming_response.create(
+            model="gpt-4o-mini-tts",
+            voice="alloy",
             input=cleaned_text,
-            response_format=OPENAI_RESPONSE_FORMAT,
-            speed=OPENAI_SPEED
+            format="mp3"
         )
         
         print("OPENAI_TTS_STREAMING")
         
-        # Streaming response per FastAPI
-        async def audio_stream():
-            """Generatore streaming MP3"""
+        async def audio_generator():
+            """Generatore streaming MP3 da OpenAI"""
             try:
-                # OpenAI restituisce bytes diretti
-                audio_data = response.content
-                
-                # Stream in chunks per ottimizzare memoria
-                chunk_size = 8192
-                for i in range(0, len(audio_data), chunk_size):
-                    chunk = audio_data[i:i + chunk_size]
+                async for chunk in response.iter_bytes():
                     yield chunk
                 
                 print("OPENAI_TTS_COMPLETE")
@@ -72,9 +52,8 @@ async def stream_openai_tts(text: str):
                 # Log completamento
                 log("OPENAI_TTS_STREAMED", 
                     text_length=len(cleaned_text),
-                    audio_size=len(audio_data),
-                    model=OPENAI_MODEL,
-                    voice=OPENAI_VOICE
+                    model="gpt-4o-mini-tts",
+                    voice="alloy"
                 )
                 
             except Exception as e:
@@ -82,37 +61,31 @@ async def stream_openai_tts(text: str):
                 log("OPENAI_TTS_ERROR", error=str(e))
                 raise
         
-        # StreamingResponse ottimizzato per Safari iPhone
+        # StreamingResponse ottimizzato
         return StreamingResponse(
-            audio_stream(),
+            audio_generator(),
             media_type="audio/mpeg",
             headers={
                 "Content-Disposition": "inline; filename=openai_tts.mp3",
                 "Cache-Control": "no-cache",
-                "Transfer-Encoding": "chunked",
-                "Access-Control-Allow-Origin": "*"
+                "Transfer-Encoding": "chunked"
             }
         )
-        
-    except openai.OpenAIError as e:
-        print(f"OPENAI_TTS_API_ERROR: {e}")
-        log("OPENAI_TTS_API_ERROR", error=str(e))
-        raise HTTPException(status_code=500, detail="OpenAI TTS API error")
         
     except Exception as e:
         print(f"OPENAI_TTS_ERROR: {e}")
         log("OPENAI_TTS_ERROR", error=str(e))
-        raise HTTPException(status_code=500, detail="OpenAI TTS streaming error")
+        raise
 
 def get_openai_tts_info():
     """Informazioni configurazione OpenAI TTS"""
     return {
-        "model": OPENAI_MODEL,
-        "voice": OPENAI_VOICE,
-        "format": OPENAI_RESPONSE_FORMAT,
-        "speed": OPENAI_SPEED,
-        "provider": "OpenAI"
+        "model": "gpt-4o-mini-tts",
+        "voice": "alloy",
+        "format": "mp3",
+        "provider": "OpenAI",
+        "sdk_version": "v2.x"
     }
 
 # Test configurazione
-print("OPENAI_TTS_ENGINE: Ready for streaming")
+print("OPENAI_TTS_ENGINE: Ready with v2.x SDK")
