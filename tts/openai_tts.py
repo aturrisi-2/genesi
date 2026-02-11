@@ -11,6 +11,10 @@ from core.log import log
 # Client OpenAI asincrono
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# Configurazione TTS - facilmente modificabile
+TTS_SPEED = 1.25  # Velocità voce (1.0 = normale, >1.0 = più veloce)
+TTS_VOICE = "nova"  # Voce più dinamica rispetto ad alloy
+
 async def stream_openai_tts(text: str):
     """
     Streaming OpenAI TTS con SDK v2.x - MP3 diretto al browser
@@ -38,9 +42,10 @@ async def stream_openai_tts(text: str):
                 
                 async with client.audio.speech.with_streaming_response.create(
                     model="gpt-4o-mini-tts",
-                    voice="alloy",
+                    voice=TTS_VOICE,
                     input=cleaned_text,
-                    response_format="mp3"
+                    response_format="mp3",
+                    speed=TTS_SPEED
                 ) as response:
                     async for chunk in response.iter_bytes():
                         yield chunk
@@ -51,7 +56,8 @@ async def stream_openai_tts(text: str):
                 log("OPENAI_TTS_STREAMED", 
                     text_length=len(cleaned_text),
                     model="gpt-4o-mini-tts",
-                    voice="alloy"
+                    voice=TTS_VOICE,
+                    speed=TTS_SPEED
                 )
                 
             except Exception as e:
@@ -79,11 +85,12 @@ def get_openai_tts_info():
     """Informazioni configurazione OpenAI TTS"""
     return {
         "model": "gpt-4o-mini-tts",
-        "voice": "alloy",
+        "voice": TTS_VOICE,
+        "speed": TTS_SPEED,
         "format": "mp3",
         "provider": "OpenAI",
         "sdk_version": "v2.x"
     }
 
 # Test configurazione
-print("OPENAI_TTS_ENGINE: Ready with v2.x SDK")
+print(f"OPENAI_TTS_ENGINE: Ready with {TTS_VOICE} voice at {TTS_SPEED}x speed")
