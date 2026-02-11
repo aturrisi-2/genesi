@@ -152,18 +152,20 @@ class SimpleTTS:
             print("VOICE_WARM_LOAD: Starting XTTS v2 initialization...")
             start_time = time.time()
             
-            # CONFIGURAZIONE ORIGINALE - XTTS v2 con ottimizzazioni
+            # CONFIGURAZIONE ORIGINALE - XTTS v2 senza parametri CUDA
             self.tts = TTS(
-                model_name=VOICE_MODEL,
-                use_cuda=False,  # Forza CPU per stabilità
-                gpu=False
+                model_name=VOICE_MODEL
             )
+            
+            # Forza CPU se necessario
+            if hasattr(self.tts, 'to'):
+                self.tts.to("cpu")
             
             init_time = time.time() - start_time
             print(f"VOICE_WARM_LOAD: XTTS v2 initialized in {init_time:.2f}s")
             
             # LOG DI CONFERMA BOOT
-            print("VOICE MODEL ACTIVE: XTTS v2 (CPU optimized)")
+            print("VOICE MODEL ACTIVE: XTTS v2")
             print(f"VOICE SPEAKER ACTIVE: {VOICE_SPEAKER}")
             print(f"VOICE SAMPLE RATE: {VOICE_SAMPLE_RATE}")
             print(f"TORCH THREADS: {torch.get_num_threads()}")
