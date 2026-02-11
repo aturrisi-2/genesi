@@ -1,7 +1,7 @@
 """
 TTS SIMPLE - Genesi Core v2
 1 intent → 1 funzione
-Text-to-Speech con XTTS v2 - voce seria senza compromessi
+Text-to-Speech con XTTS v2 - speaker Alexandra Hisakawa lock definitivo
 """
 
 from pathlib import Path
@@ -11,46 +11,47 @@ from core.emoji_filter import emoji_filter
 
 logger = logging.getLogger(__name__)
 
+# LOCK VOCALE DEFINITIVO
+DEFAULT_SPEAKER = "Alexandra Hisakawa"
+DEFAULT_LANGUAGE = "it"
+
 class SimpleTTS:
     """
     TTS semplice - 1 intent → 1 funzione
-    Con filtro emoji per TTS (non per chat) e XTTS v2
+    Con filtro emoji per TTS (non per chat) e XTTS v2 speaker lock
     """
     
     def __init__(self):
         self.tts_dir = Path("tts_cache")
         self.tts_dir.mkdir(exist_ok=True)
-        # Inizializza Coqui TTS con modello superiore
-        self._init_coqui()
+        # Inizializza XTTS v2 una sola volta all'avvio
+        self.model = None
+        self._init_xtts()
     
-    def _init_coqui(self):
-        """Inizializza Coqui TTS con modello XTTS v2 (voce seria)"""
+    def _init_xtts(self):
+        """Inizializza XTTS v2 con speaker Alexandra Hisakawa lock definitivo"""
         try:
             from TTS.api import TTS
             
-            # FASE 2: Modello superiore XTTS v2
-            self.tts = TTS(
+            # Inizializza XTTS v2
+            self.model = TTS(
                 model_name="tts_models/multilingual/multi-dataset/xtts_v2",
                 progress_bar=False
             )
-            logger.info("Coqui TTS initialized with XTTS v2: tts_models/multilingual/multi-dataset/xtts_v2")
+            
+            # LOCK VOCALE DEFINITIVO
+            logger.info("[TTS_INIT] XTTS v2 loaded")
+            logger.info(f"[TTS_INIT] Speaker locked: {DEFAULT_SPEAKER}")
+            logger.info("[TTS_INIT] Mode: lucida_super_partes")
             
         except ImportError:
             logger.error("TTS package not available - install with: pip install TTS==0.22.0")
-            self.tts = None
+            self.model = None
+            raise
         except Exception as e:
             logger.error(f"Failed to initialize XTTS v2: {e}")
-            # FASE 2: Fallback a modello italiano VITS migliore
-            try:
-                from TTS.api import TTS
-                self.tts = TTS(
-                    model_name="tts_models/it/mai_male/vits",
-                    progress_bar=False
-                )
-                logger.info("Fallback to Italian male VITS: tts_models/it/mai_male/vits")
-            except Exception as fallback_error:
-                logger.error(f"Failed to initialize fallback model: {fallback_error}")
-                self.tts = None
+            self.model = None
+            raise
     
     def synthesize(self, text: str, output_file: Optional[str] = None) -> str:
         """
@@ -71,10 +72,10 @@ class SimpleTTS:
             if not filtered_text.strip():
                 raise ValueError("Empty text after filtering")
             
-            # Verifica che TTS sia disponibile
-            if not self.tts:
-                logger.error("TTS not available - cannot synthesize")
-                raise RuntimeError("TTS not initialized")
+            # Verifica che XTTS sia disponibile
+            if not self.model:
+                logger.error("XTTS v2 not available - cannot synthesize")
+                raise RuntimeError("XTTS v2 not initialized")
             
             # Genera filename se non fornito
             if output_file is None:
@@ -83,8 +84,8 @@ class SimpleTTS:
             
             output_path = self.tts_dir / output_file
             
-            # FASE 3: Audio puro - nessuna manipolazione
-            self._synthesize_pure_audio(output_path, filtered_text)
+            # Sintesi con speaker lock definitivo
+            self._synthesize_lock_vocale(output_path, filtered_text)
             
             from core.log import log
             log("TTS_SYNTHESIZED", original_text=text[:50], filtered_text=filtered_text[:50], output=str(output_path))
@@ -96,35 +97,37 @@ class SimpleTTS:
             log("TTS_ERROR", error=str(e))
             raise
     
-    def _synthesize_pure_audio(self, output_path: Path, text: str):
+    def _synthesize_lock_vocale(self, output_path: Path, text: str):
         """
-        FASE 3: Audio puro - nessuna normalizzazione, trim, o manipolazione
+        Sintesi con speaker Alexandra Hisakawa lock definitivo
         """
         try:
-            # Genera WAV con XTTS v2
-            wav = self.tts.tts(text=text)
+            # Sintesi ESATTA come test manuale
+            wav = self.model.tts(
+                text=text,
+                speaker=DEFAULT_SPEAKER,
+                language=DEFAULT_LANGUAGE
+            )
             
-            # FASE 3: Sample rate nativo del modello
-            sample_rate = self.tts.synthesizer.output_sample_rate
+            # Sample rate nativo del modello (nessun forcing)
+            sample_rate = getattr(self.model.synthesizer, 'output_sample_rate', 24000)
             
-            # FASE 3: Salva WAV PCM 16-bit standard - nessuna manipolazione
+            # Salva WAV PCM 16-bit standard (nessuna manipolazione)
             import soundfile as sf
             sf.write(str(output_path), wav, sample_rate, subtype='PCM_16')
             
-            # FASE 4: Logging dettagliato
-            duration = len(wav) / sample_rate
-            logger.info(f"XTTS AUDIO PURO - model={self.tts.model_name}, sample_rate={sample_rate}, duration={duration:.2f}s, samples={len(wav)}")
+            # Log obbligatorio per ogni sintesi
+            logger.info(f"[TTS_SYNTH] speaker={DEFAULT_SPEAKER} lang={DEFAULT_LANGUAGE} text_len={len(text)} duration={len(wav)/sample_rate:.2f}s samples={len(wav)}")
             
         except Exception as e:
-            logger.error(f"Pure audio synthesis failed: {e}")
+            logger.error(f"Lock vocale synthesis failed: {e}")
             raise
     
     def _generate_wav_file(self, output_path: Path, text: str):
         """
         Metodo legacy - NON USATO
-        Mantenuto solo per compatibilità ma non chiamato
         """
-        raise NotImplementedError("Use XTTS v2 instead")
+        raise NotImplementedError("Use XTTS v2 with Alexandra Hisakawa lock")
 
-# Istanza globale
+# Istanza globale con lock vocale definitivo
 simple_tts = SimpleTTS()
