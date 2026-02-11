@@ -36,7 +36,7 @@ async def stream_openai_tts(text: str):
             model="gpt-4o-mini-tts",
             voice="alloy",
             input=cleaned_text,
-            format="mp3"
+            response_format="mp3"
         )
         
         print("OPENAI_TTS_STREAMING")
