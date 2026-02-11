@@ -583,15 +583,7 @@ async function playTTS(text, tts_mode = 'normal') {
       }
     };
     
-    // Fallback timeout massimo 10s
-    const timeout = setTimeout(() => {
-      console.log('[TTS] TIMEOUT - forcing resolve after 10s');
-      resolve();
-    }, 10000);
-    
-    executeTTS().finally(() => {
-      clearTimeout(timeout);
-    });
+    executeTTS();
   });
 }
 
@@ -804,37 +796,38 @@ async function playTTSWithSync(text, mode, displayText) {
     console.log('[TTS_SYNC] Starting TTS with text sync');
     console.log('FRONTEND_TTS_READY');
     
-    // PARTE 2: Attendi TTS COMPLETAMENTE prima di mostrare testo
+    // PARTE 2: Attendi TTS AVVIO (non completamento)
     const ttsPromise = playTTS(text, mode);
-    await ttsPromise;
     
-    console.log('[TTS_SYNC] TTS completed, now showing text');
+    // NON attendere completamento, attendi solo avvio audio
+    await new Promise(resolve => {
+      // Monitora quando l'audio inizia a suonare
+      const checkAudioStart = () => {
+        if (_ttsSource && _isPlayingChunk) {
+          console.log('[TTS_SYNC] Audio started playing, showing text now');
+          resolve();
+        } else {
+          setTimeout(checkAudioStart, 50); // Controlla ogni 50ms
+        }
+      };
+      checkAudioStart();
+    });
     
-    // Mostra il testo SOLO dopo TTS completato
+    console.log('[TTS_SYNC] Audio started, now showing text');
+    
+    // Mostra il testo quando l'audio parte
     const messageElement = addMessage(displayText, 'genesi');
     console.log('FRONTEND_RENDER_TEXT_AND_PLAY');
     console.log("STEP_4_RENDER_TEXT");
     
-    // PARTE 4: Calcola tempo minimo thinking
-    const thinkingElapsed = (Date.now() - thinkingStartTime) / 1000;
-    const minThinkingTime = 2.5; // 2.5 secondi minimi
-    const remainingTime = Math.max(0, minThinkingTime - thinkingElapsed);
-    
-    // PARTE 4: Aspetta tempo minimo se necessario
-    if (remainingTime > 0) {
-      console.log(`THINKING_DELAY: waiting ${remainingTime.toFixed(2)}s to reach minimum`);
-      await new Promise(resolve => setTimeout(resolve, remainingTime * 1000));
-    }
-    
-    // Nascondi stato thinking
+    // Nascondi stato thinking subito
     hideThinkingState();
     
-    // PARTE 5: Log thinking time visible
+    // Log thinking time (deve essere < 3 secondi)
     const totalThinkingTime = (Date.now() - thinkingStartTime) / 1000;
     console.log(`THINKING_TIME_VISIBLE: ${totalThinkingTime.toFixed(2)}s`);
     
-    // Avvia audio immediatamente dopo aver mostrato testo
-    // Nota: playTTS è già completato, quindi l'audio è già stato riprodotto
+    // L'audio continua in background senza bloccare UI
     
   } catch (e) {
     console.error('[TTS_SYNC] Error:', e);
