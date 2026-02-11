@@ -16,6 +16,7 @@ from api.chat import router as chat_router
 from api.memory import router as memory_router
 from api.proactor_api import router as proactor_router
 from tts.tts_api import router as tts_router
+from tts.tts_stream_api import router as tts_stream_router
 from core.log import log
 
 # ===============================
@@ -38,6 +39,7 @@ app.include_router(chat_router, prefix="/api")
 app.include_router(memory_router, prefix="/api")
 app.include_router(proactor_router, prefix="/api")
 app.include_router(tts_router, prefix="/api")
+app.include_router(tts_stream_router, prefix="/api")
 
 # ===============================
 # Health check
