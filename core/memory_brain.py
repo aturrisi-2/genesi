@@ -17,6 +17,38 @@ logger = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════════════
+# SAFE EMOTION NORMALIZATION — module-level, usable by all layers
+# ═══════════════════════════════════════════════════════════════
+
+def _safe_emotion_label(episode_or_raw) -> str:
+    """
+    Normalizza emotion a stringa hashabile.
+    Accetta: str, dict, None, qualsiasi tipo.
+    Non lancia mai eccezioni.
+    """
+    try:
+        # Se è un episodio dict con chiave "emotion"
+        if isinstance(episode_or_raw, dict) and "emotion" in episode_or_raw:
+            raw = episode_or_raw["emotion"]
+        else:
+            raw = episode_or_raw
+
+        if raw is None:
+            return "neutral"
+        if isinstance(raw, str):
+            return raw
+        if isinstance(raw, dict):
+            label = raw.get("label") or raw.get("emotion") or "neutral"
+            logger.debug("MEMORY_EMOTION_NORMALIZED value=%s", label)
+            return str(label)
+        # Qualsiasi altro tipo
+        logger.debug("MEMORY_EMOTION_NORMALIZED value=%s from_type=%s", str(raw), type(raw).__name__)
+        return str(raw)
+    except Exception:
+        return "neutral"
+
+
+# ═══════════════════════════════════════════════════════════════
 # LAYER 1 — EPISODIC MEMORY
 # Eventi concreti con timestamp, peso, collegamenti tematici
 # ═══════════════════════════════════════════════════════════════
@@ -285,7 +317,7 @@ class RelationalLayer:
     def _calc_consistency(self, timeline: list) -> float:
         if len(timeline) < 3:
             return 0.5
-        recent = [e["emotion"] for e in timeline[-10:]]
+        recent = [_safe_emotion_label(e) for e in timeline[-10:]]
         most_common = Counter(recent).most_common(1)[0][1]
         return most_common / len(recent)
 
@@ -504,24 +536,10 @@ class ConsolidationEngine:
         logger.info("CONSOLIDATION_DONE user=%s %s", user_id, result)
         return result
 
-    @staticmethod
-    def _normalize_emotion(raw) -> str:
-        """Normalizza emotion a stringa hashabile. Gestisce str, dict, None."""
-        if raw is None:
-            return "neutral"
-        if isinstance(raw, str):
-            return raw
-        if isinstance(raw, dict):
-            label = raw.get("label") or raw.get("emotion") or "neutral"
-            logger.debug("MEMORY_EMOTION_NORMALIZED value=%s from_dict=%s", label, raw)
-            return str(label)
-        logger.debug("MEMORY_EMOTION_NORMALIZED value=neutral from_type=%s", type(raw).__name__)
-        return "neutral"
-
     def _extract_patterns(self, episodes: List[Dict]) -> List[Dict]:
         patterns = []
         # Emotion patterns
-        emotion_counts = Counter(self._normalize_emotion(e.get("emotion", "neutral")) for e in episodes)
+        emotion_counts = Counter(_safe_emotion_label(e) for e in episodes)
         for emo, count in emotion_counts.items():
             if emo != "neutral" and count >= 2:
                 patterns.append({"type": "emotion", "key": emo, "frequency": count,
@@ -549,8 +567,8 @@ class ConsolidationEngine:
         traits.append({"type": "communication", "style": style, "avg_length": avg_len, "description": desc})
 
         # Dominant emotion trait
-        emo_counts = Counter(self._normalize_emotion(e.get("emotion", "neutral")) for e in episodes
-                             if self._normalize_emotion(e.get("emotion")) != "neutral")
+        emo_counts = Counter(_safe_emotion_label(e) for e in episodes
+                             if _safe_emotion_label(e) != "neutral")
         if emo_counts:
             dominant, count = emo_counts.most_common(1)[0]
             conf = count / len(episodes)
@@ -752,10 +770,14 @@ class MemoryBrain:
             await self.linking.link_new_episode(user_id, episode_id)
             await self.linking.update_entity_weight(user_id, message)
 
-        # 6. Consolidation check
+        # 6. Consolidation check (fail-safe: never blocks chat)
         consolidation_result = None
-        if await self.consolidation.should_consolidate(user_id):
-            consolidation_result = await self.consolidation.consolidate(user_id)
+        try:
+            if await self.consolidation.should_consolidate(user_id):
+                consolidation_result = await self.consolidation.consolidate(user_id)
+        except Exception as e:
+            logger.error("MEMORY_CONSOLIDATION_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
+            consolidation_result = {"error": str(e)}
 
         # 7. Build brain state
         profile = await self.semantic.get_profile(user_id)
