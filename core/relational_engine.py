@@ -4,6 +4,7 @@ Motore principale per generazione risposte evolutive con memoria persistente
 """
 
 import logging
+from typing import Optional, Dict, Any
 from openai import AsyncOpenAI
 from core.emotion_analyzer import analyze_emotion
 from core.relational_state import relational_state
