@@ -203,16 +203,16 @@ Rispondi sempre in modo puramente relazionale, umano, autentico.
 
     # Contesto relazionale
     relational_context = f"""
-Trust level: {state['trust_level']}
-Emotional depth: {state['emotional_depth']}
-Attachment risk: {state['attachment_risk']}
-User emotion: {emotion_data['emotion']}
-Emotion intensity: {emotion_data['intensity']}
+Trust level: {state.get('trust_level', 0.2)}
+Emotional depth: {state.get('emotional_depth', 0.2)}
+Attachment risk: {state.get('attachment_risk', 0.0)}
+User emotion: {emotion_data.get('emotion', 'neutral')}
+Emotion intensity: {emotion_data.get('intensity', 0.3)}
 """
 
     # Regole bilanciamento
     balancing_rule = ""
-    if state["attachment_risk"] > 0.7:
+    if state.get("attachment_risk", 0.0) > 0.7:
         balancing_rule = """
 Mantieni equilibrio.
 Incoraggia relazioni reali.

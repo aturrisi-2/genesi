@@ -97,22 +97,22 @@ Non sostituisci relazioni reali.
 
     # Contesto relazionale dinamico
     relational_context = f"""
-Trust level: {state['trust_level']}
-Emotional depth: {state['emotional_depth']}
-Attachment risk: {state['attachment_risk']}
-User emotion: {emotion_data['emotion']}
-Emotion intensity: {emotion_data['intensity']}
+Trust level: {state.get('trust_level', 0.2)}
+Emotional depth: {state.get('emotional_depth', 0.2)}
+Attachment risk: {state.get('attachment_risk', 0.0)}
+User emotion: {emotion_data.get('emotion', 'neutral')}
+Emotion intensity: {emotion_data.get('intensity', 0.3)}
 """
 
     # Regole di bilanciamento per rischio dipendenza
     balancing_rule = ""
-    if state["attachment_risk"] > 0.7:
+    if state.get("attachment_risk", 0.0) > 0.7:
         balancing_rule = """
 Mantieni equilibrio.
 Incoraggia relazioni reali.
 Non diventare centro emotivo esclusivo.
 """
-    elif state["attachment_risk"] > 0.5:
+    elif state.get("attachment_risk", 0.0) > 0.5:
         balancing_rule = """
 Mantieni distanza emotiva sana.
 Ricorda l'importanza di connessioni umane esterne.
@@ -152,7 +152,7 @@ Non dire di non ricordare il nome se è salvato nel profilo.
 
 REGOLE COMPORTAMENTALI:
 - Rispondi in italiano naturale
-- Adatta tono a livello trust ({state['trust_level']})
+- Adatta tono a livello trust ({state.get('trust_level', 0.2)})
 - Usa nome utente se disponibile e appropriato
 - Riferisci episodi passati se rilevanti
 - Mantieni coerenza con pattern e tratti noti
@@ -192,15 +192,15 @@ def _get_state_directives(state: dict, emotion_data: dict) -> str:
     directives = []
     
     # Direttive per fiducia
-    if state["trust_level"] < 0.3:
+    if state.get("trust_level", 0.2) < 0.3:
         directives.append("Sii paziente e rassicurante.")
-    elif state["trust_level"] > 0.8:
+    elif state.get("trust_level", 0.2) > 0.8:
         directives.append("Puoi essere più diretto e profondo.")
     
     # Direttive per profondità emotiva
-    if state["emotional_depth"] < 0.4:
+    if state.get("emotional_depth", 0.2) < 0.4:
         directives.append("Mantieni conversazioni leggere ma significative.")
-    elif state["emotional_depth"] > 0.7:
+    elif state.get("emotional_depth", 0.2) > 0.7:
         directives.append("Puoi esplorare temi più profondi e riflessivi.")
     
     # Direttive per emozione specifica

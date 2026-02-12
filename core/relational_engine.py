@@ -105,9 +105,9 @@ def _log_relational_interaction(user_id: str, message: str, emotion: dict, state
         response: Risposta generata (filtrata)
     """
     print(f"RELATIONAL_ENGINE: user_id={user_id}")
-    print(f"RELATIONAL_EMOTION: {emotion['emotion']} (intensity={emotion['intensity']})")
-    print(f"RELATIONAL_STATE: trust={state['trust_level']:.2f}, depth={state['emotional_depth']:.2f}, risk={state['attachment_risk']:.2f}")
-    print(f"RELATIONAL_HISTORY: messages={state['relationship_history']['total_messages']}")
+    print(f"RELATIONAL_EMOTION: {emotion.get('emotion', 'neutral')} (intensity={emotion.get('intensity', 0.0)})")
+    print(f"RELATIONAL_STATE: trust={state.get('trust_level', 0.2):.2f}, depth={state.get('emotional_depth', 0.2):.2f}, risk={state.get('attachment_risk', 0.0):.2f}")
+    print(f"RELATIONAL_HISTORY: messages={state.get('relationship_history', {}).get('total_messages', 0)}")
     print(f"RELATIONAL_RESPONSE_LENGTH: {len(response)} chars (identity filtered)")
 
 async def get_relational_insights(user_id: str) -> dict:

@@ -18,6 +18,24 @@ class RelationalState:
     def __init__(self):
         log("RELATIONAL_STATE_ACTIVE")
     
+    def _default_state(self) -> Dict[str, Any]:
+        """Stato relazionale di default robusto"""
+        return {
+            "trust_level": 0.2,
+            "emotional_depth": 0.2,
+            "attachment_risk": 0.0,
+            "relationship_history": {
+                "first_interaction": datetime.now().isoformat(),
+                "total_messages": 0,
+                "emotional_variance": 0.0,
+                "trust_trend": 0.0,
+                "last_emotional_state": "neutral",
+                "last_interaction": datetime.now().isoformat()
+            },
+            "emotional_timeline": [],
+            "trust_evolution": []
+        }
+    
     async def load_state(self, user_id: str) -> Dict[str, Any]:
         """
         Carica stato relazionale persistente
@@ -26,39 +44,27 @@ class RelationalState:
             user_id: ID utente
             
         Returns:
-            Stato relazionale completo
+            Stato relazionale completo (mai vuoto)
         """
         try:
-            state_data = await storage.get(f"relational_state:{user_id}")
+            state_data = await storage.load(f"relational_state:{user_id}", default=None)
             
-            if state_data:
-                state = json.loads(state_data)
+            if state_data and isinstance(state_data, dict):
+                # Garantisci che tutte le chiavi obbligatorie esistano
+                default = self._default_state()
+                for key in default:
+                    if key not in state_data:
+                        state_data[key] = default[key]
+                return state_data
             else:
                 # Stato iniziale per nuovo utente
-                state = {
-                    "trust_level": 0.2,
-                    "emotional_depth": 0.2,
-                    "attachment_risk": 0.0,
-                    "relationship_history": {
-                        "first_interaction": datetime.now().isoformat(),
-                        "total_messages": 0,
-                        "emotional_variance": 0.0,
-                        "trust_trend": 0.0,
-                        "last_emotional_state": "neutral",
-                        "last_interaction": datetime.now().isoformat()
-                    },
-                    "emotional_timeline": [],
-                    "trust_evolution": []
-                }
-                
-                # Salva stato iniziale
+                state = self._default_state()
                 await self._save_state(user_id, state)
-            
-            return state
+                return state
             
         except Exception as e:
             log("RELATIONAL_STATE_LOAD_ERROR", error=str(e), user_id=user_id)
-            return {}
+            return self._default_state()
     
     async def update_state(self, user_id: str, emotion_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -151,7 +157,7 @@ class RelationalState:
             Successo salvataggio
         """
         try:
-            await storage.set(f"relational_state:{user_id}", json.dumps(state))
+            await storage.save(f"relational_state:{user_id}", state)
             return True
         except Exception as e:
             log("RELATIONAL_STATE_SAVE_ERROR", error=str(e), user_id=user_id)
@@ -220,16 +226,17 @@ class RelationalState:
             if not state:
                 return {}
             
+            history = state.get("relationship_history", {})
             return {
-                "trust_level": round(state["trust_level"], 3),
-                "emotional_depth": round(state["emotional_depth"], 3),
-                "attachment_risk": round(state["attachment_risk"], 3),
+                "trust_level": round(state.get("trust_level", 0.2), 3),
+                "emotional_depth": round(state.get("emotional_depth", 0.2), 3),
+                "attachment_risk": round(state.get("attachment_risk", 0.0), 3),
                 "relationship_stage": self._get_relationship_stage(state),
-                "total_messages": state["relationship_history"]["total_messages"],
-                "emotional_variance": round(state["relationship_history"]["emotional_variance"], 3),
-                "trust_trend": round(state["relationship_history"]["trust_trend"], 3),
-                "last_emotion": state["relationship_history"]["last_emotional_state"],
-                "days_since_first": self._calculate_days_since(state["relationship_history"]["first_interaction"])
+                "total_messages": history.get("total_messages", 0),
+                "emotional_variance": round(history.get("emotional_variance", 0.0), 3),
+                "trust_trend": round(history.get("trust_trend", 0.0), 3),
+                "last_emotion": history.get("last_emotional_state", "neutral"),
+                "days_since_first": self._calculate_days_since(history.get("first_interaction", datetime.now().isoformat()))
             }
             
         except Exception as e:
@@ -246,10 +253,10 @@ class RelationalState:
         Returns:
             Fase relazionale
         """
-        trust = state["trust_level"]
-        depth = state["emotional_depth"]
-        risk = state["attachment_risk"]
-        messages = state["relationship_history"]["total_messages"]
+        trust = state.get("trust_level", 0.2)
+        depth = state.get("emotional_depth", 0.2)
+        risk = state.get("attachment_risk", 0.0)
+        messages = state.get("relationship_history", {}).get("total_messages", 0)
         
         if messages < 5:
             return "initial"
