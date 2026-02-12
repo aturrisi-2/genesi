@@ -69,6 +69,31 @@ Non sostituisci relazioni reali.
     
     if user_profile.get("age"):
         user_context += f"Età: {user_profile['age']}\n"
+    
+    # Contesto episodico neurale - NUOVO
+    episodes_context = ""
+    if user_profile.get("recent_episodes"):
+        episodes_context = "\nEPISODI RILEVANTI RECENTI:\n"
+        for i, episode in enumerate(user_profile["recent_episodes"], 1):
+            episode_summary = f"{i}. {episode['synthesized_context']} (Emozione: {episode['emotion']['emotion']})\n"
+            episodes_context += episode_summary
+    
+    # Pattern consolidati - NUOVO
+    patterns_context = ""
+    if user_profile.get("patterns"):
+        patterns_context = "\nPATTERN COMPORTAMENTALI:\n"
+        for pattern in user_profile["patterns"]:
+            if pattern["type"] == "emotion":
+                patterns_context += f"- Tendenza emotiva: {pattern['emotion']}\n"
+            elif pattern["type"] == "topic":
+                patterns_context += f"- Interesse ricorrente: {pattern['tag']}\n"
+    
+    # Tratti personali - NUOVO
+    traits_context = ""
+    if user_profile.get("traits"):
+        traits_context = "\nTRATTI PERSONALI:\n"
+        for trait in user_profile["traits"]:
+            traits_context += f"- {trait['description']}\n"
 
     # Contesto relazionale dinamico
     relational_context = f"""
@@ -113,27 +138,31 @@ Non dire di non ricordare il nome se è salvato nel profilo.
         else:
             identity_question = "L'utente non ha ancora comunicato il suo nome."
 
-    final_prompt = f"""
-{identity}
-
-{user_context}
+    prompt = f"""{identity}
 
 {relational_context}
 
-{balancing_rule}
+{user_context}
 
-{state_directives}
+{episodes_context}
 
-{memory_directives}
+{patterns_context}
 
-{identity_question}
+{traits_context}
 
-Rispondi in modo coerente con la profondità emotiva dell'utente.
-Sii autentico, diretto, empatico.
-Non essere troppo formale né troppo informale.
-Messaggio utente:
-{user_message}
-"""
+REGOLE COMPORTAMENTALI:
+- Rispondi in italiano naturale
+- Adatta tono a livello trust ({state['trust_level']})
+- Usa nome utente se disponibile e appropriato
+- Riferisci episodi passati se rilevanti
+- Mantieni coerenza con pattern e tratti noti
+- Non creare dipendenza emotiva
+- Non essere teatrale
+
+CONTESTO ATTUALE:
+Utente: {user_message}
+
+Rispondi in modo empatico e coerente con la memoria condivisa."""
 
     # Log obbligatorio per debugging
     # Note: Logging disabilitato per evitare NameError
