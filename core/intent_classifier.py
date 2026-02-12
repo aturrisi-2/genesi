@@ -49,6 +49,11 @@ class IntentClassifier:
                 "oggi che giorno è", "oggi che giorno e'",
                 "dimmi la data", "dimmi che giorno è", "dimmi che giorno e'"
             ],
+            "news": [
+                "notizie", "news", "cosa succede", "aggiornamenti",
+                "ultime notizie", "cosa sta succedendo",
+                "che notizie", "ultime news", "novita'", "novità"
+            ],
             "weather": [
                 "che tempo fa", "com'è il meteo", "previsioni meteo",
                 "piove", "nevica", "fa caldo", "fa freddo"
