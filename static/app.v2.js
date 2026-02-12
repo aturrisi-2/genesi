@@ -142,6 +142,7 @@ let _ttsSource = null;
 let _isPlayingChunk = false;
 let _wasPlayingChunk = false;
 let ttsEnabled = true;
+let _ttsAborted = false;  // Abort flag for segmented chunk loop
 
 // ===============================
 // TTS TEXT NORMALIZATION
@@ -226,11 +227,33 @@ function stopAudio() {
 // ===============================
 // BARGE-IN — immediate TTS interruption on user input
 // ===============================
-function _interruptTTS(reason) {
+function stopCurrentTTS() {
+  const wasPlaying = !!_ttsSource || _isPlayingChunk;
+  
+  // Stop current audio source (HTMLAudioElement)
   if (_ttsSource) {
-    console.log('[BARGE-IN] interrupt reason=' + reason);
-    try { _ttsSource.stop(); } catch (e) {}
+    try {
+      _ttsSource.pause();
+      _ttsSource.currentTime = 0;
+      _ttsSource.src = '';
+    } catch (e) {}
     _ttsSource = null;
+  }
+  
+  // Abort segmented chunk queue
+  _ttsAborted = true;
+  _isPlayingChunk = false;
+  _wasPlayingChunk = false;
+  
+  if (wasPlaying) {
+    console.log('[TTS_INTERRUPTED_BY_USER]');
+  }
+}
+
+function _interruptTTS(reason) {
+  if (_ttsSource || _isPlayingChunk) {
+    console.log('[BARGE-IN] interrupt reason=' + reason);
+    stopCurrentTTS();
   }
 }
 
@@ -280,6 +303,9 @@ function _splitTextForTTS(text, tts_mode = 'normal') {
 async function playTTSSegmented(text, tts_mode = 'normal') {
   console.log('[TTS_FLOW] step=1 segmented_start len=' + text.length + ' mode=' + tts_mode);
   
+  // Reset abort flag at start of new segmented playback
+  _ttsAborted = false;
+  
   if (!text || text.trim().length === 0) {
     console.log('[TTS_ABORT] reason=segmented_empty_text text_len=' + (text ? text.length : 0));
     console.log('[TTS_FLOW] step=2 segmented_skip_empty_text');
@@ -296,6 +322,7 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
   
   // Funzione per fetch di un chunk
   const fetchChunk = async (index) => {
+    if (_ttsAborted) return;  // Don't fetch if aborted
     const chunk = chunks[index];
     const normalizedChunk = normalizeTextForTTS(chunk);
     console.log('[TTS_PREFETCH] index=' + (index + 1) + '/total=' + chunks.length + ' len=' + chunk.length);
@@ -325,14 +352,13 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
   
   // Ciclo principale con prefetch
   for (let i = 0; i < chunks.length; i++) {
-    console.log('[TTS_FLOW] step=4.' + (i + 1) + ' processing_chunk_' + (i + 1) + '/' + chunks.length);
-    
-    // VERIFICA INPUT UTENTE PRIMA DI OGNI CHUNK (escluso primo chunk)
-    // Interruzione utente solo se _ttsSource=null e non siamo in un ciclo naturale
-    if (i > 0 && _ttsSource === null && !_isPlayingChunk && !_wasPlayingChunk) {
-      console.log('[TTS_FLOW] step=5.' + (i + 1) + ' interrupted_before_chunk_' + (i + 1));
+    // CHECK ABORT FLAG before every chunk
+    if (_ttsAborted) {
+      console.log('[TTS_FLOW] step=ABORTED chunk_' + (i + 1) + '/' + chunks.length + ' _ttsAborted=true');
       break;
     }
+    
+    console.log('[TTS_FLOW] step=4.' + (i + 1) + ' processing_chunk_' + (i + 1) + '/' + chunks.length);
     
     // Avvia prefetch del chunk successivo mentre questo suona
     if (i < chunks.length - 1) {
@@ -357,8 +383,8 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
       
       console.log('[TTS_FLOW] step=7.' + (i + 1) + ' playTTSChunk_completed duration=' + chunkDuration.toFixed(2) + 'ms');
       
-      // PAUSA LUNGA per psychological tra chunk
-      if (tts_mode === 'psychological' && i < chunks.length - 1) {
+      // PAUSA LUNGA per psychological tra chunk — but check abort
+      if (tts_mode === 'psychological' && i < chunks.length - 1 && !_ttsAborted) {
         console.log('[TTS_FLOW] step=8.' + (i + 1) + ' psychological_pause');
         await new Promise(resolve => setTimeout(resolve, 800)); // 800ms pause
         console.log('[TTS_FLOW] step=9.' + (i + 1) + ' psychological_pause_completed');
@@ -367,13 +393,9 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
       console.error('[TTS_FLOW] step=ERROR.' + (i + 1) + ' chunk_error:', e);
       break;
     }
-    
-    // VERIFICA INPUT UTENTE DOPO OGNI CHUNK
-    // NOTA: _ttsSource=null dopo chunk completato è normale (audio finito)
-    // L'interruzione utente viene gestita prima del prossimo chunk
   }
   
-  console.log('[TTS_FLOW] step=11 segmented_finished');
+  console.log('[TTS_FLOW] step=11 segmented_finished aborted=' + _ttsAborted);
   console.log('[TTS_DONE] total_chunks=' + chunks.length);
   // Resetta stato solo alla fine di tutti i chunk
   _wasPlayingChunk = false;
@@ -547,6 +569,11 @@ async function playTTS(text, tts_mode = 'normal') {
   console.log('[TTS_FLOW] step=1 playTTS_start len=' + text.length + ' mode=' + tts_mode);
   console.log("STEP_2_TTS_REQUESTED");
   
+  if (_ttsAborted) {
+    console.log('[TTS_ABORT] reason=aborted_before_start');
+    return;
+  }
+  
   if (!text || text.trim().length === 0) {
     console.log('[TTS_ABORT] reason=empty_text text_len=' + (text ? text.length : 0));
     console.log('[TTS_FLOW] step=2 playTTS_skip_empty_text');
@@ -696,8 +723,8 @@ async function sendMessage() {
   // Audio Priming: previeni NotAllowedError su Safari/iOS
   primeAudio();
   
-  // Barge-in: interrompi TTS su input utente
-  _interruptTTS('user_input');
+  // Barge-in: interrompi TTS e svuota chunk queue
+  stopCurrentTTS();
 
   // Warm AudioContext NOW (sync, during user gesture) — iOS requires this
   _warmTTSCtx();
@@ -757,6 +784,9 @@ async function sendMessage() {
 // TTS ASYNC — completamente scollegato dal render
 // ===============================
 function playTTSAsync(text, mode) {
+  // Reset abort flag before starting new TTS
+  _ttsAborted = false;
+  
   // Fire-and-forget: TTS non blocca MAI il render del testo
   (async () => {
     try {
