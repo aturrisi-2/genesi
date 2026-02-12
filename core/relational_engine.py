@@ -3,11 +3,14 @@ RELATIONAL ENGINE - Relational Engine v1
 Motore principale per generazione risposte evolutive con memoria persistente
 """
 
+import logging
 from openai import AsyncOpenAI
 from core.emotion_analyzer import analyze_emotion
 from core.relational_state import relational_state
 from core.semantic_memory import semantic_memory
 from core.identity_filter import filter_response_identity, build_identity_safe_prompt
+
+logger = logging.getLogger(__name__)
 
 client = AsyncOpenAI()
 
@@ -43,7 +46,7 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         full_profile = await semantic_memory.get_user_profile(user_id)
         
         # Log caricamento profilo
-        log("PROFILE_LOADED", user_id=user_id, has_name=bool(full_profile.get("name")), name=full_profile.get("name"))
+        logger.info(f"PROFILE_LOADED user_id={user_id} has_name={bool(full_profile.get('name'))} name={full_profile.get('name')}")
         
         # 7️⃣ Costruzione prompt con memoria completa
         prompt = build_identity_safe_prompt(full_profile, state, emotion, message)
@@ -62,7 +65,7 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         
         # Log uso nome nella risposta
         if full_profile.get("name") and full_profile["name"] in filtered_response:
-            log("RELATIONAL_RESPONSE", user_id=user_id, name_used=full_profile["name"])
+            logger.info(f"RELATIONAL_RESPONSE user_id={user_id} name_used={full_profile['name']}")
         
         # 10️⃣ Log per monitoring
         _log_relational_interaction(user_id, message, emotion, state, filtered_response)
@@ -71,7 +74,7 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         
     except Exception as e:
         # Log errore esplicito e rilancia - nessun fallback silenzioso
-        log("RELATIONAL_ENGINE_ERROR", error=str(e), user_id=user_id, message=message[:50])
+        logger.error(f"RELATIONAL_ENGINE_ERROR user_id={user_id} error={str(e)} message={message[:50]}")
         raise RuntimeError(f"Relational engine failed: {str(e)}")
 
 def _log_relational_interaction(user_id: str, message: str, emotion: dict, state: dict, response: str):
