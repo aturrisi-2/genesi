@@ -112,7 +112,7 @@ class SemanticMemory:
     
     async def _load_user_profile(self, user_id: str) -> Dict[str, Any]:
         """
-        Carica profilo utente dallo storage
+        Carica profilo utente dallo storage con API unificata
         
         Args:
             user_id: ID utente
@@ -121,9 +121,10 @@ class SemanticMemory:
             Profilo utente
         """
         try:
-            profile_data = await storage.get(f"long_term_profile:{user_id}")
+            # Usa API unificata load
+            profile_data = await storage.load(f"long_term_profile:{user_id}", default=None)
             if profile_data:
-                return json.loads(profile_data)
+                return profile_data
             else:
                 # Profilo vuoto di default
                 return {
@@ -142,7 +143,7 @@ class SemanticMemory:
     
     async def _save_user_profile(self, user_id: str, profile: Dict[str, Any]) -> bool:
         """
-        Salva profilo utente nello storage
+        Salva profilo utente nello storage con API unificata
         
         Args:
             user_id: ID utente
@@ -153,10 +154,12 @@ class SemanticMemory:
         """
         try:
             profile["updated_at"] = datetime.now().isoformat()
-            await storage.set(f"long_term_profile:{user_id}", json.dumps(profile))
+            # Usa API unificata save
+            success = await storage.save(f"long_term_profile:{user_id}", profile)
             
-            log("PROFILE_PERSISTED", user_id=user_id, fields=list(profile.keys()))
-            return True
+            if success:
+                log("PROFILE_PERSISTED", user_id=user_id, fields=list(profile.keys()))
+            return success
             
         except Exception as e:
             log("SEMANTIC_MEMORY_SAVE_ERROR", error=str(e), user_id=user_id)
@@ -173,6 +176,19 @@ class SemanticMemory:
             Profilo utente
         """
         return await self._load_user_profile(user_id)
+    
+    async def save_user_profile(self, user_id: str, profile: Dict[str, Any]) -> bool:
+        """
+        Salva profilo utente completo con API unificata
+        
+        Args:
+            user_id: ID utente
+            profile: Profilo da salvare
+            
+        Returns:
+            Successo salvataggio
+        """
+        return await self._save_user_profile(user_id, profile)
     
     async def update_emotional_pattern(self, user_id: str, emotion: str, intensity: float):
         """
