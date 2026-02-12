@@ -120,8 +120,8 @@ class ToolService:
             city = self._extract_city(message) or "Roma"
 
             if not OPENWEATHER_API_KEY:
-                logger.error("TOOL_WEATHER_HTTP_ERROR error=OPENWEATHER_API_KEY non configurata")
-                return "Servizio meteo temporaneamente non disponibile."
+                logger.error("TOOL_WEATHER_MISSING_KEY error=OPENWEATHER_API_KEY non configurata")
+                return "Servizio meteo non configurato."
 
             url = "https://api.openweathermap.org/data/2.5/weather"
             params = {
@@ -200,8 +200,8 @@ class ToolService:
             log("TOOL_NEWS_REQUEST", message=message[:50])
 
             if not NEWSAPI_KEY:
-                logger.error("TOOL_NEWS_HTTP_ERROR error=NEWSAPI_KEY non configurata")
-                return "Servizio notizie temporaneamente non disponibile."
+                logger.error("TOOL_NEWS_MISSING_KEY error=NEWSAPI_KEY non configurata")
+                return "Servizio notizie non configurato."
 
             topic = self._extract_topic(message)
             city = self._extract_city(message)

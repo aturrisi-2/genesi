@@ -92,10 +92,13 @@ class Proactor:
             return response
 
         except Exception as e:
-            logger.error("PROACTOR_ERROR", exc_info=True, extra={"error": str(e), "intent": intent, "user_id": user_id})
-            # Fallback di ultima istanza — mai risposta vuota
-            profile = await memory_brain.semantic.get_profile(user_id)
-            name = profile.get("name", "")
+            logger.error("PROACTOR_ERROR_FULL user=%s intent=%s error=%s", user_id, intent, str(e), exc_info=True)
+            # Fallback di ultima istanza — mai risposta vuota, ma sempre loggato
+            try:
+                profile = await memory_brain.semantic.get_profile(user_id)
+                name = profile.get("name", "")
+            except Exception:
+                name = ""
             prefix = f"{name}, " if name else ""
             return f"{prefix}mi dispiace, ho avuto un problema. Riprova tra poco."
 
@@ -114,7 +117,7 @@ class Proactor:
             else:
                 return "Tool non disponibile."
         except Exception as e:
-            logger.error("PROACTOR_TOOL_ERROR", exc_info=True, extra={"intent": intent, "error": str(e), "user_id": user_id})
+            logger.error("PROACTOR_TOOL_ERROR intent=%s user=%s error=%s", intent, user_id, str(e), exc_info=True)
             return f"Errore nel servizio {intent}."
 
     def _extract_episode_tags(self, brain_state: Dict[str, Any]) -> list:
