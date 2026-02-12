@@ -1,6 +1,6 @@
 """
 MEMORY CONSOLIDATION - Genesi Neural Memory v1
-Sistema di consolidamento memoria da episodica a lungo termine
+Sistema di consolidamento memoria con storage API unificata
 """
 
 import logging
@@ -38,6 +38,7 @@ class MemoryConsolidation:
             True se consolidamento necessario
         """
         try:
+            # Carica episodi con API unificata
             episodes = await storage.load(f"episodes/{user_id}", default=[])
             
             # Controlla numero episodi non consolidati
@@ -74,7 +75,7 @@ class MemoryConsolidation:
         try:
             logger.info("CONSOLIDATION_STARTED", extra={"user_id": user_id})
             
-            # 1️⃣ Recupera episodi da consolidare
+            # 1️⃣ Recupera episodi da consolidare con API unificata
             episodes_to_consolidate = await self._get_episodes_to_consolidate(user_id)
             
             if not episodes_to_consolidate:
@@ -116,7 +117,7 @@ class MemoryConsolidation:
     
     async def _get_episodes_to_consolidate(self, user_id: str) -> List[Dict[str, Any]]:
         """
-        Recupera episodi da consolidare
+        Recupera episodi da consolidare con API unificata
         
         Args:
             user_id: ID utente
@@ -125,6 +126,7 @@ class MemoryConsolidation:
             Lista episodi da consolidare
         """
         try:
+            # Carica episodi con API unificata
             episodes = await storage.load(f"episodes/{user_id}", default=[])
             
             # Filtra episodi non consolidati
@@ -587,14 +589,14 @@ class MemoryConsolidation:
     
     async def _mark_episodes_consolidated(self, user_id: str, episodes: List[Dict[str, Any]]):
         """
-        Marca episodi come consolidati
+        Marca episodi come consolidati con API unificata
         
         Args:
             user_id: ID utente
             episodes: Episodi da marcare
         """
         try:
-            # Carica tutti gli episodi
+            # Carica tutti gli episodi con API unificata
             all_episodes = await storage.load(f"episodes/{user_id}", default=[])
             
             # Marca episodi specifici come consolidati
@@ -605,7 +607,7 @@ class MemoryConsolidation:
                     episode["consolidated"] = True
                     episode["consolidated_at"] = datetime.now().isoformat()
             
-            # Salva episodi aggiornati
+            # Salva episodi aggiornati con API unificata
             await storage.save(f"episodes/{user_id}", all_episodes)
             
             logger.info("EPISODES_MARKED_CONSOLIDATED", extra={
@@ -618,12 +620,13 @@ class MemoryConsolidation:
     
     async def _cleanup_old_episodes(self, user_id: str):
         """
-        Pulisce episodi vecchi e irrilevanti
+        Pulisce episodi vecchi e irrilevanti con API unificata
         
         Args:
             user_id: ID utente
         """
         try:
+            # Carica episodi con API unificata
             episodes = await storage.load(f"episodes/{user_id}", default=[])
             
             # Filtra episodi vecchi e già consolidati
@@ -655,7 +658,7 @@ class MemoryConsolidation:
                         "reason": "old_consolidated_low_relevance"
                     })
             
-            # Salva episodi puliti
+            # Salva episodi puliti con API unificata
             await storage.save(f"episodes/{user_id}", cleaned_episodes)
             
             if removed_count > 0:

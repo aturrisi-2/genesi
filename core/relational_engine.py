@@ -14,7 +14,9 @@ logger = logging.getLogger(__name__)
 
 client = AsyncOpenAI()
 
-async def generate_relational_response(user_id: str, user_profile: dict, message: str) -> str:
+async def generate_relational_response(user_id: str, user_profile: dict, message: str, 
+                                      emotion: Optional[Dict[str, Any]] = None, 
+                                      context: Optional[Dict[str, Any]] = None) -> str:
     """
     Genera risposta relazionale evolutiva con memoria persistente
     
@@ -22,6 +24,8 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         user_id: ID utente reale (no anonymous)
         user_profile: Profilo utente completo
         message: Messaggio utente
+        emotion: Dati emotivi (opzionale)
+        context: Contesto episodico (opzionale)
         
     Returns:
         str: Risposta generata da Genesi (filtrata)
@@ -40,8 +44,9 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
                 logger.info(f"NAME_QUESTION_NO_PROFILE user_id={user_id}")
                 return "Non ho ancora imparato come ti chiami. Come ti chiami?"
         
-        # 1️⃣ Analisi emotiva messaggio
-        emotion = await analyze_emotion(message)
+        # 1️⃣ Analisi emotiva messaggio (se non fornita)
+        if emotion is None:
+            emotion = await analyze_emotion(message)
         
         # 2️⃣ Estrazione e salvataggio dati semantici
         await semantic_memory.extract_and_store_personal_data(message, user_id)

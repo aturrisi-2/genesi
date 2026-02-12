@@ -1,6 +1,6 @@
 """
 EPISODIC MEMORY - Genesi Neural Memory v1
-Memoria episodica strutturata ispirata al funzionamento umano
+Memoria episodica strutturata con storage API unificata
 """
 
 import logging
@@ -66,7 +66,7 @@ class EpisodicMemory:
                 "decay_factor": 1.0  # Iniziale, decade nel tempo
             }
             
-            # Salvataggio episodio
+            # Salvataggio episodio con API unificata
             await self._save_episode(user_id, episode)
             
             logger.info("EPISODE_CREATED", extra={
@@ -94,6 +94,7 @@ class EpisodicMemory:
             Lista episodi rilevanti ordinati per rilevanza
         """
         try:
+            # Carica episodi con API unificata
             episodes = await storage.load(f"episodes/{user_id}", default=[])
             
             # Filtra per decay e ordina per rilevanza
@@ -121,6 +122,7 @@ class EpisodicMemory:
             user_id: ID utente
         """
         try:
+            # Carica episodi con API unificata
             episodes = await storage.load(f"episodes/{user_id}", default=[])
             updated_episodes = []
             forgotten_count = 0
@@ -145,7 +147,7 @@ class EpisodicMemory:
                         "reason": "decay_below_threshold"
                     })
             
-            # Salva episodi aggiornati
+            # Salva episodi aggiornati con API unificata
             await storage.save(f"episodes/{user_id}", updated_episodes)
             
             if forgotten_count > 0:
@@ -376,14 +378,14 @@ class EpisodicMemory:
     
     async def _save_episode(self, user_id: str, episode: Dict[str, Any]):
         """
-        Salva episodio nel storage
+        Salva episodio nel storage con API unificata
         
         Args:
             user_id: ID utente
             episode: Dati episodio
         """
         try:
-            # Carica episodi esistenti
+            # Carica episodi esistenti con API unificata
             episodes = await storage.load(f"episodes/{user_id}", default=[])
             
             # Aggiungi nuovo episodio
@@ -399,7 +401,7 @@ class EpisodicMemory:
                     "removed_count": len(episodes) - self.max_episodes_per_user
                 })
             
-            # Salva episodi aggiornati
+            # Salva episodi aggiornati con API unificata
             await storage.save(f"episodes/{user_id}", episodes)
             
         except Exception as e:

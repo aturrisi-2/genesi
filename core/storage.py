@@ -1,6 +1,7 @@
 """
 MEMORY STORAGE - Genesi Core v2
 Storage persistente per memoria strutturata
+API unificata per tutti i moduli neurali
 """
 
 import json
@@ -12,7 +13,7 @@ from core.log import log
 class MemoryStorage:
     """
     Memory Storage - Persistenza strutturata per profili e stati relazionali
-    Separazione netta tra chat log e memoria persistente
+    API unificata: load/save per compatibilità con tutti i moduli
     """
     
     def __init__(self):
@@ -26,7 +27,8 @@ class MemoryStorage:
             f"{self.base_path}/short_term_chat",
             f"{self.base_path}/long_term_profile", 
             f"{self.base_path}/relational_state",
-            f"{self.base_path}/semantic_facts"
+            f"{self.base_path}/semantic_facts",
+            f"{self.base_path}/episodes",  # NUOVO per memoria episodica
         ]
         
         for directory in directories:
@@ -36,37 +38,48 @@ class MemoryStorage:
         """Ottieni percorso file per categoria e chiave"""
         return f"{self.base_path}/{category}/{key}.json"
     
-    async def get(self, key: str) -> Optional[str]:
+    async def load(self, key: str, default: Any = None) -> Any:
         """
-        Ottieni valore dallo storage
+        Carica dati dallo storage - API unificata
         
         Args:
             key: Chiave storage (formato: categoria:subchiave)
+            default: Valore di default se non trovato
             
         Returns:
-            Valore salvato o None
+            Dati caricati o default
         """
         try:
-            parts = key.split(":", 1)
-            if len(parts) != 2:
-                return None
-            
-            category, subkey = parts
-            file_path = self._get_file_path(category, subkey)
+            # Supporta sia formato "categoria:subchiave" sia path diretto
+            if ":" in key:
+                category, subkey = key.split(":", 1)
+                file_path = self._get_file_path(category, subkey)
+            else:
+                # Path diretto (es: "episodes/user123")
+                if "/" in key:
+                    category, filename = key.rsplit("/", 1)
+                    file_path = f"{self.base_path}/{category}/{filename}.json"
+                else:
+                    # Fallback a long_term_profile
+                    file_path = self._get_file_path("long_term_profile", key)
             
             if os.path.exists(file_path):
                 with open(file_path, 'r', encoding='utf-8') as f:
-                    return f.read()
+                    content = f.read()
+                    if content.strip():  # Non vuoto
+                        return json.loads(content)
+                    else:
+                        return default
             
-            return None
+            return default
             
         except Exception as e:
-            log("MEMORY_STORAGE_GET_ERROR", error=str(e), key=key)
-            return None
+            log("MEMORY_LOAD_ERROR", error=str(e), key=key)
+            return default
     
-    async def set(self, key: str, value: str) -> bool:
+    async def save(self, key: str, value: Any) -> bool:
         """
-        Salva valore nello storage
+        Salva dati nello storage - API unificata
         
         Args:
             key: Chiave storage (formato: categoria:subchiave)
@@ -76,24 +89,31 @@ class MemoryStorage:
             Successo salvataggio
         """
         try:
-            parts = key.split(":", 1)
-            if len(parts) != 2:
-                return False
-            
-            category, subkey = parts
-            file_path = self._get_file_path(category, subkey)
+            # Supporta sia formato "categoria:subchiave" sia path diretto
+            if ":" in key:
+                category, subkey = key.split(":", 1)
+                file_path = self._get_file_path(category, subkey)
+            else:
+                # Path diretto (es: "episodes/user123")
+                if "/" in key:
+                    category, filename = key.rsplit("/", 1)
+                    file_path = f"{self.base_path}/{category}/{filename}.json"
+                else:
+                    # Fallback a long_term_profile
+                    file_path = self._get_file_path("long_term_profile", key)
             
             # Assicura che directory esista
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             
+            # Salva come JSON
             with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(value)
+                json.dump(value, f, ensure_ascii=False, indent=2)
             
-            log("STORAGE_WRITE", path=file_path, category=category, subkey=subkey)
+            log("STORAGE_SAVE", path=file_path, key=key)
             return True
             
         except Exception as e:
-            log("MEMORY_STORAGE_SET_ERROR", error=str(e), key=key)
+            log("MEMORY_SAVE_ERROR", error=str(e), key=key)
             return False
     
     async def delete(self, key: str) -> bool:
