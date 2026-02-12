@@ -247,6 +247,10 @@ class ToolService:
         logger.info("TOOL_NEWS_HTTP_STATUS status=%d query=%s", resp.status_code, q)
         log("TOOL_NEWS_HTTP_STATUS", status=resp.status_code, query=q)
 
+        if resp.status_code == 401:
+            logger.error("TOOL_NEWS_API_KEY_INVALID status=401 body=%s", resp.text[:200])
+            log("TOOL_NEWS_API_KEY_INVALID", status=401, error=resp.text[:200])
+            return "Chiave News API non valida."
         if resp.status_code != 200:
             logger.error("TOOL_NEWS_HTTP_ERROR status=%d body=%s", resp.status_code, resp.text[:200])
             log("TOOL_NEWS_HTTP_ERROR", status=resp.status_code, error=resp.text[:200])
@@ -276,6 +280,10 @@ class ToolService:
         logger.info("TOOL_NEWS_HTTP_STATUS status=%d category=%s", resp.status_code, category)
         log("TOOL_NEWS_HTTP_STATUS", status=resp.status_code, category=category)
 
+        if resp.status_code == 401:
+            logger.error("TOOL_NEWS_API_KEY_INVALID status=401 body=%s", resp.text[:200])
+            log("TOOL_NEWS_API_KEY_INVALID", status=401, error=resp.text[:200])
+            return "Chiave News API non valida."
         if resp.status_code != 200:
             logger.error("TOOL_NEWS_HTTP_ERROR status=%d body=%s", resp.status_code, resp.text[:200])
             log("TOOL_NEWS_HTTP_ERROR", status=resp.status_code, error=resp.text[:200])
@@ -302,6 +310,10 @@ class ToolService:
         logger.info("TOOL_NEWS_HTTP_STATUS status=%d", resp.status_code)
         log("TOOL_NEWS_HTTP_STATUS", status=resp.status_code)
 
+        if resp.status_code == 401:
+            logger.error("TOOL_NEWS_API_KEY_INVALID status=401 body=%s", resp.text[:200])
+            log("TOOL_NEWS_API_KEY_INVALID", status=401, error=resp.text[:200])
+            return "Chiave News API non valida."
         if resp.status_code != 200:
             logger.error("TOOL_NEWS_HTTP_ERROR status=%d body=%s", resp.status_code, resp.text[:200])
             log("TOOL_NEWS_HTTP_ERROR", status=resp.status_code, error=resp.text[:200])

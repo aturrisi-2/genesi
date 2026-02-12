@@ -36,16 +36,17 @@ class Proactor:
         Orchestrazione centrale v3.
         1. memory_brain.update_brain()
         2. latent_state_engine.update_latent_state()
-        3. evolution_engine.generate_response_from_brain()
-        4. curiosity_engine.inject()
-        5. emotional_intensity_engine.enhance()
-        6. drift_modulator.modulate_response_style()
+        3. _build_relational_context() → inject into brain_state
+        4. evolution_engine.generate_response_from_brain()
+        5. curiosity_engine.inject()
+        6. emotional_intensity_engine.enhance()
+        7. drift_modulator.modulate_response_style()
         """
         try:
             if not user_id:
                 raise ValueError("Proactor received empty user_id")
 
-            logger.info("PROACTOR_HANDLE", extra={"user_id": user_id, "intent": intent})
+            logger.info("PROACTOR_HANDLE user=%s intent=%s", user_id, intent)
 
             # ── 1. BRAIN UPDATE (emotion locale, semantic, episodic, relational, consolidation) ──
             brain_state = await memory_brain.update_brain(user_id, message)
@@ -63,20 +64,25 @@ class Proactor:
 
             # ── 3. TOOL ROUTING ──
             if intent in self.tool_intents:
-                logger.info("PROACTOR_ROUTE", extra={"route": "tool", "intent": intent})
+                logger.info("PROACTOR_ROUTE route=tool intent=%s user=%s", intent, user_id)
                 return await self._handle_tool(intent, message, user_id)
 
-            # ── 4. EVOLUTION ENGINE (relational + LLM gate) ──
-            logger.info("PROACTOR_ROUTE", extra={"route": "evolution", "intent": intent})
+            # ── 4. BUILD RELATIONAL CONTEXT — injected into brain_state for LLM ──
+            relational_context = self._build_relational_context(brain_state)
+            brain_state["relational_context"] = relational_context
+            logger.info("PROACTOR_CONTEXT_BUILT user=%s context_len=%d", user_id, len(relational_context))
+
+            # ── 5. EVOLUTION ENGINE (relational + LLM gate) ──
+            logger.info("PROACTOR_ROUTE route=evolution intent=%s user=%s", intent, user_id)
             base_response = await generate_response_from_brain(user_id, message, brain_state)
 
-            # ── 5. CURIOSITY ENGINE (selective exploration, targeted questions) ──
+            # ── 6. CURIOSITY ENGINE (selective exploration, targeted questions) ──
             curious_response = curiosity_engine.inject(base_response, message, brain_state)
 
-            # ── 6. EMOTIONAL INTENSITY (expand, explore, anti-passive) ──
+            # ── 7. EMOTIONAL INTENSITY (expand, explore, anti-passive) ──
             enhanced_response = emotional_intensity_engine.enhance(curious_response, message, brain_state)
 
-            # ── 7. DRIFT MODULATOR (probabilistic tone modulation) ──
+            # ── 8. DRIFT MODULATOR (probabilistic tone modulation) ──
             latent_vector = latent_state_engine.get_vector(latent)
             response = drift_modulator.modulate_response_style(
                 latent_state=latent_vector,
@@ -119,6 +125,83 @@ class Proactor:
         except Exception as e:
             logger.error("PROACTOR_TOOL_ERROR intent=%s user=%s error=%s", intent, user_id, str(e), exc_info=True)
             return f"Errore nel servizio {intent}."
+
+    @staticmethod
+    def _build_relational_context(brain_state: Dict[str, Any]) -> str:
+        """
+        Costruisce blocco di contesto relazionale per il prompt LLM.
+        Include: profilo utente, stato relazionale, ultimi 3 episodi, tono.
+        """
+        profile = brain_state.get("profile", {})
+        rel = brain_state.get("relational", {})
+        emotion = brain_state.get("emotion", {})
+        episodes = brain_state.get("episodes", [])
+        latent = brain_state.get("latent", {})
+
+        parts = []
+
+        # -- Profilo utente --
+        user_facts = []
+        if profile.get("name"):
+            user_facts.append(f"Nome: {profile['name']}")
+        if profile.get("age"):
+            user_facts.append(f"Eta': {profile['age']}")
+        if profile.get("city"):
+            user_facts.append(f"Citta': {profile['city']}")
+        if profile.get("profession"):
+            user_facts.append(f"Professione: {profile['profession']}")
+        entities = profile.get("entities", {})
+        for role, data in entities.items():
+            name = data.get("name")
+            if name:
+                user_facts.append(f"{role}: {name}")
+        if user_facts:
+            parts.append("PROFILO UTENTE:\n" + "\n".join(user_facts))
+
+        # -- Stato relazionale --
+        trust = rel.get("trust", 0.15)
+        depth = rel.get("depth", 0.1)
+        stage = rel.get("stage", "initial")
+        msgs = rel.get("history", {}).get("total_msgs", 0)
+        parts.append(
+            f"STATO RELAZIONALE:\n"
+            f"Trust: {trust:.2f}\n"
+            f"Profondita': {depth:.2f}\n"
+            f"Fase: {stage}\n"
+            f"Messaggi totali: {msgs}\n"
+            f"Emozione corrente: {emotion.get('emotion', 'neutral')} (intensita': {emotion.get('intensity', 0.3):.2f})"
+        )
+
+        # -- Ultimi 3 episodi --
+        if episodes:
+            ep_lines = ["EPISODI RECENTI:"]
+            for i, ep in enumerate(episodes[:3], 1):
+                ep_lines.append(f"{i}. \"{ep.get('msg', '')[:80]}\" (emozione: {ep.get('emotion', 'neutral')})")
+            parts.append("\n".join(ep_lines))
+
+        # -- Pattern comportamentali --
+        patterns = profile.get("patterns", [])
+        if patterns:
+            p_lines = ["PATTERN COMPORTAMENTALI:"]
+            for p in patterns[:5]:
+                if p.get("type") == "emotion":
+                    p_lines.append(f"- Tendenza emotiva: {p.get('key', '')}")
+                elif p.get("type") == "topic":
+                    p_lines.append(f"- Interesse: {p.get('key', '')}")
+            parts.append("\n".join(p_lines))
+
+        # -- Tono relazionale suggerito --
+        if trust >= 0.65:
+            tone = "Intimo, diretto, profondo. Usa il nome dell'utente."
+        elif trust >= 0.35:
+            tone = "Caldo, empatico, aperto. Riferisci a episodi passati."
+        else:
+            tone = "Accogliente, curioso, rispettoso. Costruisci fiducia."
+        parts.append(f"TONO RELAZIONALE: {tone}")
+
+        context = "\n\n".join(parts)
+        logger.info("PROACTOR_RELATIONAL_INJECTED context_len=%d trust=%.2f stage=%s", len(context), trust, stage)
+        return context
 
     def _extract_episode_tags(self, brain_state: Dict[str, Any]) -> list:
         """Estrae tags dall'episodio appena creato."""

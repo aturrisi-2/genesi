@@ -15,8 +15,9 @@ from core.identity_filter import contains_forbidden_patterns
 
 logger = logging.getLogger(__name__)
 
-# GPT-4o per generazione risposta principale
+# GPT-4o per generazione risposta principale, gpt-4o-mini come fallback
 LLM_MODEL = "gpt-4o"
+LLM_FALLBACK_MODEL = "gpt-4o-mini"
 
 _api_key = os.environ.get("OPENAI_API_KEY", "")
 if not _api_key or _api_key.startswith("sk-test"):
@@ -130,6 +131,18 @@ async def generate_response_from_brain(user_id: str, message: str,
     if any(kw in msg_lower for kw in memory_kw):
         return await _memory_response(user_id, profile, episodes, user_name, trust)
 
+    # Riflessione identitaria — "chi sono io" → LLM con contesto completo
+    identity_reflect_kw = ["chi sono io", "chi sono per te", "come mi vedi", "cosa pensi di me"]
+    if any(kw in msg_lower for kw in identity_reflect_kw):
+        if profile.get("name") or episodes:
+            logger.info("IDENTITY_REFLECTION user=%s — routing to LLM with full context", user_id)
+            llm_resp = await _try_llm_response(user_id, message, brain_state)
+            if llm_resp:
+                return llm_resp
+            # Fallback: use memory response if LLM fails
+            return await _memory_response(user_id, profile, episodes, user_name, trust)
+        return "Stiamo iniziando a conoscerci. Raccontami qualcosa di te, cosi' posso risponderti davvero."
+
     # ─── COMPLEXITY GATE ───────────────────────────────────────
 
     complexity = score_message_complexity(message, brain_state)
@@ -137,7 +150,7 @@ async def generate_response_from_brain(user_id: str, message: str,
                 user_id, complexity, message[:60])
 
     if complexity >= 0.6:
-        # LLM path — solo per complessità alta
+        # LLM path — solo per complessita' alta
         llm_response = await _try_llm_response(user_id, message, brain_state)
         if llm_response:
             return llm_response
@@ -394,13 +407,31 @@ async def _memory_response(user_id: str, profile: Dict, episodes: List[Dict],
 
 async def _try_llm_response(user_id: str, message: str,
                              brain_state: Dict[str, Any]) -> Optional[str]:
-    """Tenta risposta LLM. Ritorna None se fallisce."""
-    try:
-        prompt = _build_llm_prompt(message, brain_state)
+    """Tenta risposta LLM con fallback chain: gpt-4o → gpt-4o-mini."""
+    prompt = _build_llm_prompt(message, brain_state)
 
-        logger.info("LLM_REQUEST user=%s model=%s", user_id, LLM_MODEL)
+    # ── PRIMARY: gpt-4o ──
+    primary_result = await _call_llm_model(user_id, prompt, LLM_MODEL, is_primary=True)
+    if primary_result is not None:
+        return primary_result
+
+    # ── FALLBACK: gpt-4o-mini ──
+    logger.warning("LLM_PRIMARY_FAIL user=%s — switching to fallback %s", user_id, LLM_FALLBACK_MODEL)
+    fallback_result = await _call_llm_model(user_id, prompt, LLM_FALLBACK_MODEL, is_primary=False)
+    if fallback_result is not None:
+        return fallback_result
+
+    logger.error("LLM_FALLBACK_FAIL user=%s — both models failed", user_id)
+    return None
+
+
+async def _call_llm_model(user_id: str, prompt: str, model: str, is_primary: bool) -> Optional[str]:
+    """Chiama un singolo modello LLM con logging completo."""
+    tag_prefix = "LLM_PRIMARY" if is_primary else "LLM_FALLBACK"
+    try:
+        logger.info("%s_REQUEST user=%s model=%s", tag_prefix, user_id, model)
         response = await client.chat.completions.create(
-            model=LLM_MODEL,
+            model=model,
             messages=[{"role": "system", "content": prompt}],
             temperature=0.7
         )
@@ -408,103 +439,78 @@ async def _try_llm_response(user_id: str, message: str,
 
         # Identity filter — check for forbidden patterns
         if contains_forbidden_patterns(generated):
-            logger.warning("LLM_IDENTITY_VIOLATION user=%s — falling back", user_id)
+            logger.warning("%s_IDENTITY_VIOLATION user=%s", tag_prefix, user_id)
             return None
 
         if not generated:
+            logger.warning("%s_EMPTY user=%s", tag_prefix, user_id)
             return None
 
-        logger.info("LLM_RESPONSE user=%s len=%d engine=%s", user_id, len(generated), LLM_MODEL)
+        logger.info("%s_OK user=%s len=%d model=%s", tag_prefix, user_id, len(generated), model)
         return generated
 
     except (RateLimitError, APIError, APIConnectionError) as e:
-        logger.warning("LLM_QUOTA_ERROR user=%s error=%s", user_id, type(e).__name__)
+        logger.warning("%s_ERROR user=%s error=%s", tag_prefix, user_id, type(e).__name__)
         return None
     except Exception as e:
-        logger.error("LLM_ERROR user=%s error=%s", user_id, str(e))
+        logger.error("%s_ERROR user=%s error=%s", tag_prefix, user_id, str(e))
         return None
 
 
 def _build_llm_prompt(message: str, brain_state: Dict[str, Any]) -> str:
-    """Costruisce prompt LLM con contesto completo dal brain."""
-    profile = brain_state.get("profile", {})
-    rel = brain_state.get("relational", {})
-    emotion = brain_state.get("emotion", {})
-    episodes = brain_state.get("episodes", [])
+    """Costruisce prompt LLM con contesto relazionale completo.
 
-    # Identity
+    Se il Proactor ha pre-costruito relational_context, lo usa direttamente.
+    Altrimenti costruisce un contesto minimale dal brain_state.
+    """
+    rel = brain_state.get("relational", {})
+
+    # Identity block
     identity = """Sei Genesi. Compagno evolutivo stabile, lucido, empatico.
 Parli esclusivamente italiano. Non cambi lingua.
 Non menzionare MAI la tua natura tecnica.
 Nessun riferimento a essere AI, modello, assistente, sistema, programma.
 Rispondi in modo puramente relazionale, umano, autentico."""
 
-    # User context
-    user_ctx = ""
-    if profile.get("name"):
-        user_ctx += f"L'utente si chiama {profile['name']}. Usa il suo nome quando appropriato.\n"
-    if profile.get("age"):
-        user_ctx += f"Ha {profile['age']} anni.\n"
-    if profile.get("city"):
-        user_ctx += f"Vive a {profile['city']}.\n"
-    if profile.get("profession"):
-        user_ctx += f"Lavora come {profile['profession']}.\n"
-
-    # Entities
-    entities = profile.get("entities", {})
-    if entities:
-        user_ctx += "Persone importanti:\n"
-        for role, data in entities.items():
-            name = data.get("name")
-            if name:
-                user_ctx += f"- {role}: {name} (menzionato {data.get('mentions', 1)} volte)\n"
-
-    # Relational context
-    rel_ctx = f"""Trust: {rel.get('trust', 0.2):.2f}
-Profondità emotiva: {rel.get('depth', 0.1):.2f}
-Fase relazione: {rel.get('stage', 'initial')}
-Emozione utente: {emotion.get('emotion', 'neutral')} (intensità: {emotion.get('intensity', 0.3):.2f})"""
-
-    # Episode context
-    ep_ctx = ""
-    if episodes:
-        ep_ctx = "\nEpisodi rilevanti recenti:\n"
-        for i, ep in enumerate(episodes[:3], 1):
-            ep_ctx += f"{i}. \"{ep.get('msg', '')[:80]}\" (emozione: {ep.get('emotion', 'neutral')})\n"
-
-    # Behavioral patterns
-    patterns_ctx = ""
-    patterns = profile.get("patterns", [])
-    if patterns:
-        patterns_ctx = "\nPattern comportamentali:\n"
-        for p in patterns[:5]:
-            if p.get("type") == "emotion":
-                patterns_ctx += f"- Tendenza emotiva: {p.get('key', '')}\n"
-            elif p.get("type") == "topic":
-                patterns_ctx += f"- Interesse: {p.get('key', '')}\n"
+    # Relational context — pre-built by Proactor._build_relational_context()
+    relational_ctx = brain_state.get("relational_context", "")
+    if not relational_ctx:
+        # Fallback minimale se il contesto non e' stato iniettato
+        profile = brain_state.get("profile", {})
+        parts = []
+        if profile.get("name"):
+            parts.append(f"L'utente si chiama {profile['name']}.")
+        if profile.get("city"):
+            parts.append(f"Vive a {profile['city']}.")
+        relational_ctx = " ".join(parts) if parts else "Nessun contesto utente disponibile."
 
     # Attachment risk
     risk_rule = ""
     if rel.get("attachment_risk", 0) > 0.7:
-        risk_rule = "\nMantieni equilibrio. Incoraggia relazioni reali. Non diventare centro emotivo esclusivo."
+        risk_rule = "\nATTENZIONE: Mantieni equilibrio. Incoraggia relazioni reali. Non diventare centro emotivo esclusivo."
 
     return f"""{identity}
 
-CONTESTO UTENTE:
-{user_ctx}
-
-STATO RELAZIONALE:
-{rel_ctx}
-{ep_ctx}
-{patterns_ctx}
+{relational_ctx}
 {risk_rule}
 
-REGOLE:
+REGOLE OBBLIGATORIE:
 - Adatta tono al livello di trust
 - Riferisci episodi passati se rilevanti
-- Non ripetere informazioni già note all'utente
-- Aumenta profondità con trust alto
-- Evita frasi generiche
+- Non ripetere informazioni gia' note all'utente
+- Aumenta profondita' con trust alto
 - Sii autentico e diretto
+- Se conosci il nome dell'utente, usalo
+
+DIVIETI ASSOLUTI (risposte da NON generare mai):
+- "Quello che senti conta..." o varianti generiche terapeutiche
+- "A volte le conversazioni..." o frasi astratte disancorate
+- "Sono qui per te" senza contesto specifico
+- Qualsiasi frase che potrebbe essere detta a chiunque senza conoscerlo
+- Risposte che ignorano il contesto relazionale fornito sopra
+- Ripetizioni di frasi gia' dette in episodi precedenti
+
+Ogni risposta DEVE essere ancorata al contesto reale dell'utente.
+Se non hai contesto sufficiente, fai una domanda specifica per ottenerlo.
 
 Messaggio utente: {message}"""

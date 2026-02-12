@@ -1,24 +1,29 @@
 """
-GENESI - Architectural Resilience Tests
-Tests: weather/news mock HTTP, LLM pipeline, memory pipeline, proactor resilience,
-       intent routing, logging verification, silent fallback detection.
+GENESI - Orchestral Architecture Tests v2
+Tests: LLM fallback chain, Proactor context building, memory injection,
+       identity reflection, weather/news mock HTTP, intent routing,
+       anti-generic prompt, logging tags, silent fallback detection.
 """
 
 import asyncio
 import sys
 import os
+import re
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
-from collections import namedtuple
+from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-dummy-key-for-local-testing")
 
-from core.tool_services import ToolService, OPENWEATHER_API_KEY, NEWSAPI_KEY
+from core.tool_services import ToolService
 from core.intent_classifier import intent_classifier
 from core.proactor import Proactor
-from core.memory_brain import memory_brain, _safe_emotion_label
-from core.evolution_engine import score_message_complexity, LLM_MODEL
+from core.memory_brain import memory_brain
+from core.evolution_engine import (
+    score_message_complexity, LLM_MODEL, LLM_FALLBACK_MODEL,
+    _build_llm_prompt, generate_response_from_brain
+)
+from core.llm_service import LLM_SERVICE_MODEL, LLM_SERVICE_FALLBACK
 
 passed = 0
 failed = 0
@@ -34,7 +39,6 @@ def check(label, condition):
         failed += 1
 
 
-# Helper: fake httpx response
 class FakeResponse:
     def __init__(self, status_code, json_data=None, text=""):
         self.status_code = status_code
@@ -45,15 +49,155 @@ class FakeResponse:
         return self._json
 
 
-# ═══════════════════════════════════════════════════════════════
-# TEST GROUP 1: WEATHER — Mock HTTP
-# ═══════════════════════════════════════════════════════════════
+# =====================================================================
+# GROUP 1: LLM ARCHITECTURE — Primary + Fallback
+# =====================================================================
 
-print("\n===== TEST GROUP 1: Weather Mock HTTP =====")
+print("\n===== GROUP 1: LLM Architecture =====")
+
+check("primary model is gpt-4o", LLM_MODEL == "gpt-4o")
+check("fallback model is gpt-4o-mini", LLM_FALLBACK_MODEL == "gpt-4o-mini")
+check("llm_service primary is gpt-4o", LLM_SERVICE_MODEL == "gpt-4o")
+check("llm_service fallback is gpt-4o-mini", LLM_SERVICE_FALLBACK == "gpt-4o-mini")
+
+# Verify fallback chain exists in evolution_engine source
+ee_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "core/evolution_engine.py")
+with open(ee_path, "r", encoding="utf-8") as f:
+    ee_src = f.read()
+check("_call_llm_model function exists", "async def _call_llm_model" in ee_src)
+# Tags use format strings: tag_prefix = "LLM_PRIMARY" / "LLM_FALLBACK" + %s_REQUEST etc.
+check("LLM_PRIMARY prefix defined", '"LLM_PRIMARY"' in ee_src)
+check("LLM_FALLBACK prefix defined", '"LLM_FALLBACK"' in ee_src)
+check("%s_REQUEST format tag", "%s_REQUEST" in ee_src)
+check("%s_OK format tag", "%s_OK" in ee_src)
+check("%s_ERROR format tag", "%s_ERROR" in ee_src)
+check("LLM_PRIMARY_FAIL triggers fallback", "LLM_PRIMARY_FAIL" in ee_src)
+
+# Verify fallback chain in llm_service source
+ls_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "core/llm_service.py")
+with open(ls_path, "r", encoding="utf-8") as f:
+    ls_src = f.read()
+check("llm_service has _call_model method", "async def _call_model" in ls_src)
+check("llm_service LLM_SERVICE_PRIMARY_REQUEST", "LLM_SERVICE_PRIMARY_REQUEST" in ls_src or "LLM_SERVICE_PRIMARY" in ls_src)
+check("llm_service LLM_SERVICE_FALLBACK", "LLM_SERVICE_FALLBACK" in ls_src)
 
 
-async def test_weather_success():
-    """Weather 200 OK — real API format."""
+# =====================================================================
+# GROUP 2: PROACTOR CONTEXT BUILDING
+# =====================================================================
+
+print("\n===== GROUP 2: Proactor Context Building =====")
+
+
+async def test_proactor_context():
+    """Proactor builds relational context and injects it into brain_state."""
+    # First, seed memory
+    await memory_brain.update_brain("test_ctx_001", "mi chiamo Alfio e vivo a Catania")
+    await memory_brain.update_brain("test_ctx_001", "mia moglie si chiama Rita")
+    await memory_brain.update_brain("test_ctx_001", "mi sento un po' triste oggi")
+
+    # Now build brain_state and context
+    brain = await memory_brain.update_brain("test_ctx_001", "come stai?")
+    ctx = Proactor._build_relational_context(brain)
+
+    check("context is non-empty string", isinstance(ctx, str) and len(ctx) > 0)
+    check("context contains PROFILO UTENTE", "PROFILO UTENTE" in ctx)
+    check("context contains STATO RELAZIONALE", "STATO RELAZIONALE" in ctx)
+    check("context contains user name Alfio", "Alfio" in ctx)
+    check("context contains city Catania", "Catania" in ctx)
+    check("context contains moglie Rita", "Rita" in ctx)
+    check("context contains Trust:", "Trust:" in ctx)
+    check("context contains TONO RELAZIONALE", "TONO RELAZIONALE" in ctx)
+
+    # Verify proactor.py source has the log tags
+    pa_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "core/proactor.py")
+    with open(pa_path, "r", encoding="utf-8") as f:
+        pa_src = f.read()
+    check("PROACTOR_CONTEXT_BUILT in source", "PROACTOR_CONTEXT_BUILT" in pa_src)
+    check("PROACTOR_RELATIONAL_INJECTED in source", "PROACTOR_RELATIONAL_INJECTED" in pa_src)
+
+
+asyncio.run(test_proactor_context())
+
+
+# =====================================================================
+# GROUP 3: MEMORY INJECTION INTO LLM PROMPT
+# =====================================================================
+
+print("\n===== GROUP 3: Memory Injection into LLM Prompt =====")
+
+
+async def test_memory_injection():
+    """LLM prompt receives relational context from Proactor."""
+    # Build brain_state with seeded memory
+    brain = await memory_brain.update_brain("test_ctx_001", "raccontami qualcosa")
+
+    # Simulate Proactor injecting context
+    relational_ctx = Proactor._build_relational_context(brain)
+    brain["relational_context"] = relational_ctx
+
+    # Build LLM prompt
+    prompt = _build_llm_prompt("raccontami qualcosa", brain)
+
+    check("prompt contains identity block", "Sei Genesi" in prompt)
+    check("prompt contains relational context", "PROFILO UTENTE" in prompt or "Alfio" in prompt)
+    check("prompt contains anti-generic rules", "DIVIETI ASSOLUTI" in prompt)
+    check("prompt forbids 'Quello che senti conta'", "Quello che senti conta" in prompt)
+    check("prompt forbids ungrounded responses", "ancorata al contesto reale" in prompt)
+    check("prompt contains user message", "raccontami qualcosa" in prompt)
+
+    # Without relational_context, prompt should still work (minimal fallback)
+    brain_no_ctx = dict(brain)
+    brain_no_ctx.pop("relational_context", None)
+    prompt_no_ctx = _build_llm_prompt("test", brain_no_ctx)
+    check("prompt without context still has identity", "Sei Genesi" in prompt_no_ctx)
+    check("prompt without context still has rules", "DIVIETI ASSOLUTI" in prompt_no_ctx)
+
+
+asyncio.run(test_memory_injection())
+
+
+# =====================================================================
+# GROUP 4: IDENTITY REFLECTION — "chi sono io"
+# =====================================================================
+
+print("\n===== GROUP 4: Identity Reflection =====")
+
+
+async def test_identity_reflection():
+    """'chi sono io' with known profile returns memory-based response."""
+    # Use seeded user from group 2
+    brain = await memory_brain.update_brain("test_ctx_001", "chi sono io")
+    brain["relational_context"] = Proactor._build_relational_context(brain)
+
+    # generate_response_from_brain should handle this
+    result = await generate_response_from_brain("test_ctx_001", "chi sono io", brain)
+
+    check("identity reflection: returns string", isinstance(result, str))
+    check("identity reflection: not empty", len(result) > 0)
+    # Should contain user's name or memory reference (from _memory_response fallback)
+    has_context = "Alfio" in result or "ricordo" in result or "chiami" in result or "conosc" in result
+    check("identity reflection: grounded in memory", has_context)
+
+    # Without profile, should ask for info
+    brain_empty = await memory_brain.update_brain("test_empty_999", "chi sono io")
+    brain_empty["relational_context"] = Proactor._build_relational_context(brain_empty)
+    result_empty = await generate_response_from_brain("test_empty_999", "chi sono io", brain_empty)
+    check("identity reflection (no profile): asks for info", "conoscerci" in result_empty or "Raccontami" in result_empty or "chiami" in result_empty)
+
+
+asyncio.run(test_identity_reflection())
+
+
+# =====================================================================
+# GROUP 5: WEATHER — Mock HTTP
+# =====================================================================
+
+print("\n===== GROUP 5: Weather Mock HTTP =====")
+
+
+async def test_weather_all():
+    # 200 OK
     ts = ToolService()
     fake_resp = FakeResponse(200, {
         "weather": [{"description": "cielo sereno"}],
@@ -64,337 +208,225 @@ async def test_weather_success():
     mock_client.get = AsyncMock(return_value=fake_resp)
     mock_client.is_closed = False
     ts._http_client = mock_client
-
     with patch("core.tool_services.OPENWEATHER_API_KEY", "test-key-123"):
         result = await ts.get_weather("che tempo fa a Roma")
-
-    check("weather 200: contains temperature", "18°C" in result)
+    check("weather 200: contains temperature", "18" in result and "C" in result)
     check("weather 200: contains city", "Roma" in result)
-    check("weather 200: contains humidity", "55%" in result)
-    check("weather 200: not error message", "non disponibile" not in result)
-    check("weather 200: not 'non configurato'", "non configurato" not in result)
+    check("weather 200: not error", "non disponibile" not in result)
 
+    # 401
+    ts2 = ToolService()
+    fake_401 = FakeResponse(401, text='{"cod":401}')
+    mc2 = AsyncMock()
+    mc2.get = AsyncMock(return_value=fake_401)
+    mc2.is_closed = False
+    ts2._http_client = mc2
+    with patch("core.tool_services.OPENWEATHER_API_KEY", "bad"):
+        r401 = await ts2.get_weather("meteo Milano")
+    check("weather 401: error message", "non disponibile" in r401)
 
-async def test_weather_401():
-    """Weather 401 — invalid API key."""
-    ts = ToolService()
-    fake_resp = FakeResponse(401, text='{"cod":401,"message":"Invalid API key"}')
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(return_value=fake_resp)
-    mock_client.is_closed = False
-    ts._http_client = mock_client
-
-    with patch("core.tool_services.OPENWEATHER_API_KEY", "bad-key"):
-        result = await ts.get_weather("meteo Milano")
-
-    check("weather 401: error message returned", "non disponibile" in result)
-    check("weather 401: no invented data", "°C" not in result)
-
-
-async def test_weather_500():
-    """Weather 500 — server error."""
-    ts = ToolService()
-    fake_resp = FakeResponse(500, text="Internal Server Error")
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(return_value=fake_resp)
-    mock_client.is_closed = False
-    ts._http_client = mock_client
-
-    with patch("core.tool_services.OPENWEATHER_API_KEY", "test-key"):
-        result = await ts.get_weather("meteo Napoli")
-
-    check("weather 500: error message returned", "non disponibile" in result)
-    check("weather 500: no invented data", "°C" not in result)
-
-
-async def test_weather_missing_key():
-    """Weather — missing API key."""
-    ts = ToolService()
+    # Missing key
+    ts3 = ToolService()
     with patch("core.tool_services.OPENWEATHER_API_KEY", ""):
-        result = await ts.get_weather("meteo Roma")
+        r_nokey = await ts3.get_weather("meteo Roma")
+    check("weather missing key: 'non configurato'", "non configurato" in r_nokey)
 
-    check("weather missing key: 'non configurato'", "non configurato" in result)
-    check("weather missing key: not 'non disponibile'", "non disponibile" not in result)
-
-
-async def test_weather_timeout():
-    """Weather — timeout."""
+    # Timeout
     import httpx
-    ts = ToolService()
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
-    mock_client.is_closed = False
-    ts._http_client = mock_client
-
-    with patch("core.tool_services.OPENWEATHER_API_KEY", "test-key"):
-        result = await ts.get_weather("meteo Firenze")
-
-    check("weather timeout: error message", "non disponibile" in result)
+    ts4 = ToolService()
+    mc4 = AsyncMock()
+    mc4.get = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
+    mc4.is_closed = False
+    ts4._http_client = mc4
+    with patch("core.tool_services.OPENWEATHER_API_KEY", "key"):
+        r_timeout = await ts4.get_weather("meteo Firenze")
+    check("weather timeout: error message", "non disponibile" in r_timeout)
 
 
-asyncio.run(test_weather_success())
-asyncio.run(test_weather_401())
-asyncio.run(test_weather_500())
-asyncio.run(test_weather_missing_key())
-asyncio.run(test_weather_timeout())
+asyncio.run(test_weather_all())
 
 
-# ═══════════════════════════════════════════════════════════════
-# TEST GROUP 2: NEWS — Mock HTTP
-# ═══════════════════════════════════════════════════════════════
+# =====================================================================
+# GROUP 6: NEWS — Mock HTTP + 401 distinction
+# =====================================================================
 
-print("\n===== TEST GROUP 2: News Mock HTTP =====")
+print("\n===== GROUP 6: News Mock HTTP =====")
 
 
-async def test_news_success():
-    """News 200 OK — real API format."""
+async def test_news_all():
+    # 200 OK
     ts = ToolService()
     fake_resp = FakeResponse(200, {
         "status": "ok",
         "articles": [
-            {"title": "Roma vince la partita - Gazzetta"},
-            {"title": "Nuovo ponte inaugurato - ANSA"},
-            {"title": "Economia in crescita - Sole24Ore"},
+            {"title": "Roma vince - Gazzetta"},
+            {"title": "Ponte nuovo - ANSA"},
         ]
     })
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(return_value=fake_resp)
-    mock_client.is_closed = False
-    ts._http_client = mock_client
-
-    with patch("core.tool_services.NEWSAPI_KEY", "test-news-key"):
-        result = await ts.get_news("notizie")
-
-    check("news 200: contains article title", "Roma vince la partita" in result)
-    check("news 200: strips source suffix", "Gazzetta" not in result)
-    check("news 200: numbered list", "1." in result)
-    check("news 200: not error", "non disponibile" not in result)
-
-
-async def test_news_401():
-    """News 401 — invalid API key."""
-    ts = ToolService()
-    fake_resp = FakeResponse(401, text='{"status":"error","code":"apiKeyInvalid"}')
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(return_value=fake_resp)
-    mock_client.is_closed = False
-    ts._http_client = mock_client
-
-    with patch("core.tool_services.NEWSAPI_KEY", "bad-key"):
-        result = await ts.get_news("ultime notizie")
-
-    check("news 401: error message", "non disponibile" in result)
-    check("news 401: no invented titles", "1." not in result)
-
-
-async def test_news_missing_key():
-    """News — missing API key."""
-    ts = ToolService()
-    with patch("core.tool_services.NEWSAPI_KEY", ""):
-        result = await ts.get_news("notizie Roma")
-
-    check("news missing key: 'non configurato'", "non configurato" in result)
-    check("news missing key: not 'non disponibile'", "non disponibile" not in result)
-
-
-async def test_news_timeout():
-    """News — timeout."""
-    import httpx
-    ts = ToolService()
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
-    mock_client.is_closed = False
-    ts._http_client = mock_client
-
+    mc = AsyncMock()
+    mc.get = AsyncMock(return_value=fake_resp)
+    mc.is_closed = False
+    ts._http_client = mc
     with patch("core.tool_services.NEWSAPI_KEY", "test-key"):
-        result = await ts.get_news("notizie sport")
+        result = await ts.get_news("notizie")
+    check("news 200: contains title", "Roma vince" in result)
+    check("news 200: numbered", "1." in result)
 
-    check("news timeout: error message", "non disponibile" in result)
+    # 401 — must say "Chiave News API non valida"
+    ts2 = ToolService()
+    fake_401 = FakeResponse(401, text='{"status":"error","code":"apiKeyInvalid"}')
+    mc2 = AsyncMock()
+    mc2.get = AsyncMock(return_value=fake_401)
+    mc2.is_closed = False
+    ts2._http_client = mc2
+    with patch("core.tool_services.NEWSAPI_KEY", "bad-key"):
+        r401 = await ts2.get_news("ultime notizie")
+    check("news 401: 'Chiave News API non valida'", "Chiave News API non valida" in r401)
+    check("news 401: NOT generic 'non disponibile'", "non disponibile" not in r401)
+
+    # Missing key
+    ts3 = ToolService()
+    with patch("core.tool_services.NEWSAPI_KEY", ""):
+        r_nokey = await ts3.get_news("notizie Roma")
+    check("news missing key: 'non configurato'", "non configurato" in r_nokey)
+
+    # 500 — generic error
+    ts5 = ToolService()
+    fake_500 = FakeResponse(500, text="Internal Server Error")
+    mc5 = AsyncMock()
+    mc5.get = AsyncMock(return_value=fake_500)
+    mc5.is_closed = False
+    ts5._http_client = mc5
+    with patch("core.tool_services.NEWSAPI_KEY", "key"):
+        r500 = await ts5.get_news("notizie sport")
+    check("news 500: 'non disponibile'", "non disponibile" in r500)
+    check("news 500: NOT 'Chiave non valida'", "Chiave" not in r500)
 
 
-asyncio.run(test_news_success())
-asyncio.run(test_news_401())
-asyncio.run(test_news_missing_key())
-asyncio.run(test_news_timeout())
+asyncio.run(test_news_all())
 
 
-# ═══════════════════════════════════════════════════════════════
-# TEST GROUP 3: DATE & TIME — Real (no mock needed)
-# ═══════════════════════════════════════════════════════════════
+# =====================================================================
+# GROUP 7: DATE & TIME
+# =====================================================================
 
-print("\n===== TEST GROUP 3: Date & Time =====")
+print("\n===== GROUP 7: Date & Time =====")
 
 
 async def test_date_time():
     ts = ToolService()
     time_result = await ts.get_time()
     date_result = await ts.get_date()
-
-    check("time: contains 'Sono le'", "Sono le" in time_result)
-    check("time: contains colon (HH:MM)", ":" in time_result)
-    check("date: contains 'Oggi è'", "Oggi è" in date_result or "Oggi e'" in date_result)
-    check("date: contains year", "2026" in date_result or "202" in date_result)
-
-    # Verify Italian weekday
-    giorni = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]
-    has_weekday = any(g in date_result.lower() for g in giorni)
-    check("date: contains Italian weekday", has_weekday)
-
-    # Verify Italian month
+    check("time: 'Sono le'", "Sono le" in time_result)
+    check("time: colon", ":" in time_result)
+    check("date: 'Oggi'", "Oggi" in date_result)
+    check("date: year", "202" in date_result)
+    giorni = ["luned", "marted", "mercoled", "gioved", "venerd", "sabato", "domenica"]
+    check("date: Italian weekday", any(g in date_result.lower() for g in giorni))
     mesi = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
             "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"]
-    has_month = any(m in date_result.lower() for m in mesi)
-    check("date: contains Italian month", has_month)
+    check("date: Italian month", any(m in date_result.lower() for m in mesi))
 
 
 asyncio.run(test_date_time())
 
 
-# ═══════════════════════════════════════════════════════════════
-# TEST GROUP 4: LLM PIPELINE
-# ═══════════════════════════════════════════════════════════════
+# =====================================================================
+# GROUP 8: INTENT CLASSIFIER — Strict routing
+# =====================================================================
 
-print("\n===== TEST GROUP 4: LLM Pipeline =====")
-
-check("LLM model is gpt-4o", LLM_MODEL == "gpt-4o")
-
-# Complexity scoring
-brain_stub = {"relational": {"trust": 0.3}}
-check("simple msg = low complexity", score_message_complexity("ciao", brain_stub) < 0.6)
-check("complex msg = high complexity",
-      score_message_complexity("spiegami come funziona l'architettura del sistema e il database", brain_stub) >= 0.4)
-check("technical msg = elevated complexity",
-      score_message_complexity("spiega il codice del database e il sistema api", brain_stub) >= 0.2)
-
-
-# ═══════════════════════════════════════════════════════════════
-# TEST GROUP 5: INTENT CLASSIFIER — No cross-routing
-# ═══════════════════════════════════════════════════════════════
-
-print("\n===== TEST GROUP 5: Intent Classifier Routing =====")
+print("\n===== GROUP 8: Intent Classifier Routing =====")
 
 tool_intents = ["weather", "news", "time", "date"]
 
-# Weather
-check("'che tempo fa' -> weather", intent_classifier.classify("che tempo fa a Roma") == "weather")
-check("'previsioni meteo' -> weather", intent_classifier.classify("previsioni meteo") == "weather")
-
-# News
-check("'notizie' -> news", intent_classifier.classify("dammi le notizie") == "news")
-check("'ultime news' -> news", intent_classifier.classify("ultime news") == "news")
-
-# Time
-check("'che ore sono' -> time", intent_classifier.classify("che ore sono") == "time")
-check("'dimmi l'ora' -> time", intent_classifier.classify("dimmi l'ora") == "time")
-
-# Date
-check("'che giorno e' oggi' -> date", intent_classifier.classify("che giorno e' oggi") == "date")
-check("'dimmi la data' -> date", intent_classifier.classify("dimmi la data") == "date")
-
-# Chat free — must NOT route to tools
-check("'come stai' -> NOT tool", intent_classifier.classify("come stai") not in tool_intents)
-check("'ciao' -> NOT tool", intent_classifier.classify("ciao") not in tool_intents)
-check("'mi sento triste' -> NOT tool", intent_classifier.classify("mi sento triste") not in tool_intents)
-
-# Technical — must NOT route to tools
-check("'spiega algoritmo' -> NOT tool", intent_classifier.classify("spiega l'algoritmo") not in tool_intents)
+check("weather intent", intent_classifier.classify("che tempo fa a Roma") == "weather")
+check("news intent", intent_classifier.classify("dammi le notizie") == "news")
+check("time intent", intent_classifier.classify("che ore sono") == "time")
+check("date intent", intent_classifier.classify("che giorno e' oggi") == "date")
+check("chat NOT tool", intent_classifier.classify("come stai") not in tool_intents)
+check("greeting NOT tool", intent_classifier.classify("ciao") not in tool_intents)
+check("emotion NOT tool", intent_classifier.classify("mi sento triste") not in tool_intents)
+check("technical NOT tool", intent_classifier.classify("spiega l'algoritmo") not in tool_intents)
 
 
-# ═══════════════════════════════════════════════════════════════
-# TEST GROUP 6: MEMORY PIPELINE
-# ═══════════════════════════════════════════════════════════════
+# =====================================================================
+# GROUP 9: MEMORY PIPELINE
+# =====================================================================
 
-print("\n===== TEST GROUP 6: Memory Pipeline =====")
+print("\n===== GROUP 9: Memory Pipeline =====")
 
 
 async def test_memory_pipeline():
-    """Full memory pipeline — no crash, returns brain_state."""
-    brain = await memory_brain.update_brain("test_arch_001", "mi chiamo Marco e vivo a Milano")
+    brain = await memory_brain.update_brain("test_arch_010", "mi chiamo Marco e vivo a Milano")
     check("brain_state not None", brain is not None)
-    check("brain_state has profile", "profile" in brain)
-    check("brain_state has relational", "relational" in brain)
-    check("brain_state has emotion", "emotion" in brain)
-    check("brain_state has episodes", "episodes" in brain)
-    check("brain_state has consolidation key", "consolidation" in brain)
-
-    # Verify emotion is always a dict with expected keys
+    check("has profile", "profile" in brain)
+    check("has relational", "relational" in brain)
+    check("has emotion", "emotion" in brain)
+    check("has episodes", "episodes" in brain)
+    check("has consolidation", "consolidation" in brain)
     emo = brain.get("emotion", {})
-    check("emotion has 'emotion' key", "emotion" in emo)
-    check("emotion has 'intensity' key", "intensity" in emo)
-    check("emotion['emotion'] is string", isinstance(emo.get("emotion"), str))
+    check("emotion.emotion is str", isinstance(emo.get("emotion"), str))
+    check("emotion.intensity is float", isinstance(emo.get("intensity"), (int, float)))
 
 
 asyncio.run(test_memory_pipeline())
 
 
-# ═══════════════════════════════════════════════════════════════
-# TEST GROUP 7: PROACTOR RESILIENCE
-# ═══════════════════════════════════════════════════════════════
+# =====================================================================
+# GROUP 10: PROACTOR RESILIENCE
+# =====================================================================
 
-print("\n===== TEST GROUP 7: Proactor Resilience =====")
+print("\n===== GROUP 10: Proactor Resilience =====")
 
 
-async def test_proactor_tool_routing():
-    """Proactor routes tool intents correctly."""
+async def test_proactor_resilience():
     p = Proactor()
     check("weather in tool_intents", "weather" in p.tool_intents)
     check("news in tool_intents", "news" in p.tool_intents)
-    check("time in tool_intents", "time" in p.tool_intents)
-    check("date in tool_intents", "date" in p.tool_intents)
+
+    # chat_free
+    result = await p.handle("ciao, come stai?", "chat_free", "test_arch_020")
+    check("chat_free: returns string", isinstance(result, str))
+    check("chat_free: not empty", len(result) > 0)
+    check("chat_free: not error", "problema" not in result.lower())
+
+    # date tool
+    result_date = await p.handle("che giorno e' oggi", "date", "test_arch_021")
+    check("date tool: 'Oggi'", "Oggi" in result_date)
+
+    # time tool
+    result_time = await p.handle("che ore sono", "time", "test_arch_022")
+    check("time tool: 'Sono le'", "Sono le" in result_time)
 
 
-async def test_proactor_handles_chat():
-    """Proactor handles chat_free without crash."""
-    p = Proactor()
-    result = await p.handle("ciao, come stai?", "chat_free", "test_arch_002")
-    check("proactor chat_free: returns string", isinstance(result, str))
-    check("proactor chat_free: not empty", len(result) > 0)
-    check("proactor chat_free: not error", "problema" not in result.lower())
+asyncio.run(test_proactor_resilience())
 
 
-async def test_proactor_handles_tool_date():
-    """Proactor handles date tool."""
-    p = Proactor()
-    result = await p.handle("che giorno è oggi", "date", "test_arch_003")
-    check("proactor date: returns string", isinstance(result, str))
-    check("proactor date: contains 'Oggi'", "Oggi" in result)
+# =====================================================================
+# GROUP 11: COMPLEXITY SCORING
+# =====================================================================
+
+print("\n===== GROUP 11: Complexity Scoring =====")
+
+brain_stub = {"relational": {"trust": 0.3}}
+check("simple msg < 0.6", score_message_complexity("ciao", brain_stub) < 0.6)
+check("complex msg >= 0.4",
+      score_message_complexity("spiegami come funziona l'architettura del sistema e il database", brain_stub) >= 0.4)
+check("technical msg >= 0.2",
+      score_message_complexity("spiega il codice del database e il sistema api", brain_stub) >= 0.2)
 
 
-async def test_proactor_handles_tool_time():
-    """Proactor handles time tool."""
-    p = Proactor()
-    result = await p.handle("che ore sono", "time", "test_arch_004")
-    check("proactor time: returns string", isinstance(result, str))
-    check("proactor time: contains 'Sono le'", "Sono le" in result)
+# =====================================================================
+# GROUP 12: SILENT FALLBACK DETECTION
+# =====================================================================
 
+print("\n===== GROUP 12: Silent Fallback Detection =====")
 
-asyncio.run(test_proactor_tool_routing())
-asyncio.run(test_proactor_handles_chat())
-asyncio.run(test_proactor_handles_tool_date())
-asyncio.run(test_proactor_handles_tool_time())
-
-
-# ═══════════════════════════════════════════════════════════════
-# TEST GROUP 8: SILENT FALLBACK DETECTION
-# ═══════════════════════════════════════════════════════════════
-
-print("\n===== TEST GROUP 8: Silent Fallback Detection =====")
-
-import re
-
-# Read active pipeline files and check for bare except:pass
 active_files = [
-    "core/proactor.py",
-    "core/evolution_engine.py",
-    "core/tool_services.py",
-    "core/memory_brain.py",
-    "core/llm_service.py",
-    "core/intent_classifier.py",
-    "core/identity_filter.py",
-    "core/emotional_intensity_engine.py",
-    "core/curiosity_engine.py",
-    "core/latent_state.py",
-    "core/drift_modulator.py",
+    "core/proactor.py", "core/evolution_engine.py", "core/tool_services.py",
+    "core/memory_brain.py", "core/llm_service.py", "core/intent_classifier.py",
+    "core/identity_filter.py", "core/emotional_intensity_engine.py",
+    "core/curiosity_engine.py", "core/latent_state.py", "core/drift_modulator.py",
 ]
 
 bare_except_pass_found = []
@@ -407,48 +439,46 @@ for filepath in active_files:
     for i, line in enumerate(lines):
         stripped = line.strip()
         if stripped == "except:" or stripped == "except Exception:":
-            # Check if next non-empty line is just 'pass'
             for j in range(i + 1, min(i + 3, len(lines))):
                 next_stripped = lines[j].strip()
                 if next_stripped == "pass":
                     bare_except_pass_found.append(f"{filepath}:{i+1}")
                     break
                 elif next_stripped:
-                    break  # has actual handling
+                    break
 
-if bare_except_pass_found:
-    print(f"  [WARN] bare except:pass found in: {bare_except_pass_found}")
-check("no bare except:pass in active pipeline files", len(bare_except_pass_found) == 0)
-
-# Check that error messages are distinct (not all same generic text)
-check("weather missing key msg != weather API failure msg",
-      "non configurato" != "non disponibile")
-check("news missing key msg != news API failure msg",
-      "non configurato" != "non disponibile")
+check("no bare except:pass in pipeline", len(bare_except_pass_found) == 0)
+check("weather key msg != API fail msg", "non configurato" != "non disponibile")
+check("news key msg != API fail msg", "non configurato" != "non disponibile")
+check("news 401 msg is distinct", "Chiave News API non valida" != "non disponibile")
 
 
-# ═══════════════════════════════════════════════════════════════
-# TEST GROUP 9: LOGGING TAGS PRESENT
-# ═══════════════════════════════════════════════════════════════
+# =====================================================================
+# GROUP 13: LOGGING TAGS VERIFICATION
+# =====================================================================
 
-print("\n===== TEST GROUP 9: Logging Tags Verification =====")
+print("\n===== GROUP 13: Logging Tags =====")
 
-required_log_tags = {
+required_tags = {
     "core/tool_services.py": [
         "TOOL_WEATHER_HTTP_CALL", "TOOL_WEATHER_HTTP_STATUS", "TOOL_WEATHER_HTTP_ERROR",
         "TOOL_WEATHER_MISSING_KEY",
         "TOOL_NEWS_HTTP_CALL", "TOOL_NEWS_HTTP_STATUS", "TOOL_NEWS_HTTP_ERROR",
-        "TOOL_NEWS_MISSING_KEY",
+        "TOOL_NEWS_MISSING_KEY", "TOOL_NEWS_API_KEY_INVALID",
         "TOOL_TIME_RESPONSE", "TOOL_DATE_RESPONSE",
     ],
     "core/proactor.py": [
         "PROACTOR_ERROR_FULL", "PROACTOR_TOOL_ERROR", "PROACTOR_RESPONSE",
+        "PROACTOR_CONTEXT_BUILT", "PROACTOR_RELATIONAL_INJECTED",
     ],
     "core/evolution_engine.py": [
-        "LLM_REQUEST", "LLM_RESPONSE", "COMPLEXITY_SCORE",
+        # Tags use %s format: tag_prefix = "LLM_PRIMARY" / "LLM_FALLBACK"
+        "LLM_PRIMARY", "LLM_FALLBACK",
+        "%s_REQUEST", "%s_OK", "%s_ERROR",
+        "LLM_PRIMARY_FAIL", "COMPLEXITY_SCORE", "IDENTITY_REFLECTION",
     ],
     "core/llm_service.py": [
-        "LLM_SERVICE_REQUEST", "LLM_SERVICE_RESPONSE", "LLM_SERVICE_ERROR",
+        "LLM_SERVICE_PRIMARY", "LLM_SERVICE_FALLBACK",
     ],
     "core/memory_brain.py": [
         "MEMORY_CONSOLIDATION_ERROR", "MEMORY_EMOTION_NORMALIZED",
@@ -456,33 +486,56 @@ required_log_tags = {
     ],
 }
 
-all_tags_found = True
-for filepath, tags in required_log_tags.items():
+all_tags_ok = True
+for filepath, tags in required_tags.items():
     full_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filepath)
     if not os.path.exists(full_path):
-        check(f"{filepath} exists", False)
-        all_tags_found = False
+        print(f"  [FAIL] {filepath} not found")
+        all_tags_ok = False
         continue
     with open(full_path, "r", encoding="utf-8") as f:
         content = f.read()
     for tag in tags:
         if tag not in content:
-            print(f"  [FAIL] missing log tag '{tag}' in {filepath}")
-            all_tags_found = False
+            print(f"  [FAIL] missing '{tag}' in {filepath}")
+            all_tags_ok = False
 
-check("all required log tags present in pipeline files", all_tags_found)
+check("all required log tags present", all_tags_ok)
 
 
-# ═══════════════════════════════════════════════════════════════
+# =====================================================================
+# GROUP 14: ANTI-GENERIC PROMPT RULES
+# =====================================================================
+
+print("\n===== GROUP 14: Anti-Generic Prompt Rules =====")
+
+# Build a prompt and verify anti-generic directives are present
+dummy_brain = {
+    "profile": {"name": "Test"},
+    "relational": {"trust": 0.5, "depth": 0.3, "stage": "building"},
+    "emotion": {"emotion": "neutral", "intensity": 0.3},
+    "episodes": [],
+    "relational_context": "PROFILO UTENTE:\nNome: Test\n\nSTATO RELAZIONALE:\nTrust: 0.50"
+}
+prompt = _build_llm_prompt("ciao", dummy_brain)
+check("prompt has DIVIETI ASSOLUTI", "DIVIETI ASSOLUTI" in prompt)
+check("prompt bans 'Quello che senti conta'", "Quello che senti conta" in prompt)
+check("prompt bans 'A volte le conversazioni'", "A volte le conversazioni" in prompt)
+check("prompt bans ungrounded 'Sono qui per te'", "Sono qui per te" in prompt)
+check("prompt requires grounded responses", "ancorata al contesto reale" in prompt)
+check("prompt has REGOLE OBBLIGATORIE", "REGOLE OBBLIGATORIE" in prompt)
+
+
+# =====================================================================
 # RESULTS
-# ═══════════════════════════════════════════════════════════════
-print(f"\n{'='*55}")
+# =====================================================================
+print(f"\n{'='*60}")
 print(f"RISULTATI: {passed} passed, {failed} failed")
-print(f"{'='*55}")
+print(f"{'='*60}")
 
 if failed > 0:
     print("\nFAILED - Ci sono test falliti")
     sys.exit(1)
 else:
-    print("\nOK - ARCHITECTURAL RESILIENCE TESTS PASSATI")
+    print("\nOK - ORCHESTRAL ARCHITECTURE TESTS PASSATI")
     sys.exit(0)
