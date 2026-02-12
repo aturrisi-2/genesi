@@ -4,8 +4,8 @@ Streaming TTS con OpenAI SDK v2.x - architettura definitiva
 """
 
 import logging
-from openai import AsyncOpenAI
-from fastapi.responses import StreamingResponse
+from openai import AsyncOpenAI, RateLimitError, APIError, APIConnectionError
+from fastapi.responses import StreamingResponse, JSONResponse
 import os
 from core.log import log
 
@@ -64,10 +64,18 @@ async def stream_openai_tts(text: str):
                         "speed": TTS_SPEED
                     })
                 
+            except (RateLimitError, APIError, APIConnectionError) as api_err:
+                print(f"OPENAI_TTS_QUOTA_ERROR: {type(api_err).__name__}")
+                logger.warning("TTS_FALLBACK_ACTIVATED", extra={
+                    "error_type": type(api_err).__name__,
+                    "error": str(api_err)[:100]
+                })
+                # Yield empty bytes - stream chiuso pulito, nessun crash ASGI
+                return
             except Exception as e:
                 print(f"OPENAI_TTS_STREAM_ERROR: {e}")
                 logger.error("OPENAI_TTS_ERROR", exc_info=True, extra={"error": str(e)})
-                raise
+                return
         
         # StreamingResponse ottimizzato
         return StreamingResponse(
@@ -80,10 +88,26 @@ async def stream_openai_tts(text: str):
             }
         )
         
+    except (RateLimitError, APIError, APIConnectionError) as api_err:
+        print(f"OPENAI_TTS_QUOTA_ERROR: {type(api_err).__name__}")
+        logger.warning("TTS_FALLBACK_ACTIVATED", extra={
+            "error_type": type(api_err).__name__,
+            "error": str(api_err)[:100]
+        })
+        # Ritorna risposta vuota invece di crash
+        return JSONResponse(
+            status_code=200,
+            content={"tts_status": "unavailable", "reason": "quota_exceeded"},
+            headers={"X-TTS-Fallback": "true"}
+        )
     except Exception as e:
         print(f"OPENAI_TTS_ERROR: {e}")
         logger.error("OPENAI_TTS_ERROR", exc_info=True, extra={"error": str(e)})
-        raise
+        return JSONResponse(
+            status_code=200,
+            content={"tts_status": "unavailable", "reason": "error"},
+            headers={"X-TTS-Fallback": "true"}
+        )
 
 def get_openai_tts_info():
     """Informazioni configurazione OpenAI TTS"""

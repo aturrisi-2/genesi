@@ -26,12 +26,18 @@ async def tts_endpoint(request: TTSRequest):
         # Log richiesta
         logger.info("TTS_REQUEST", extra={"text_length": len(request.text), "voice": request.voice})
         
-        # Streaming OpenAI TTS
+        # Streaming OpenAI TTS (gestisce internamente 429/API errors)
         return await stream_openai_tts(request.text)
         
     except Exception as e:
         logger.error("TTS_API_ERROR", exc_info=True, extra={"error": str(e)})
-        raise HTTPException(status_code=500, detail="OpenAI TTS streaming error")
+        # Risposta pulita invece di 500 - il frontend gestisce l'assenza di audio
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=200,
+            content={"tts_status": "unavailable", "reason": "error"},
+            headers={"X-TTS-Fallback": "true"}
+        )
 
 @router.get("/info")
 async def tts_info():
