@@ -719,14 +719,11 @@ async function sendMessage() {
   setState(STATES.THINKING);
   showThinking();
   console.log('FRONTEND_THINKING_START');
-  console.log("SYNC_STEP_1_THINKING_START");
 
   try {
     // PARTE 1: Chiama /api/chat
-    console.log("SYNC_STEP_1_CHAT_REQUEST");
     const data = await sendChatMessage(text);
-    console.log('[FRONTEND] response received - data=', data);
-    console.log("SYNC_STEP_2_CHAT_RECEIVED");
+    console.log('[FRONTEND] response received');
     
     // USA SEMPRE response - CONTRATTO API BACKEND
     const botMessage = data.response;
