@@ -228,6 +228,188 @@ GREETING_EXPANSIONS_WITH_NAME = [
     "{name}, mi fa piacere vederti. Dimmi, c'e' qualcosa che occupa i tuoi pensieri oggi?",
 ]
 
+# ═══════════════════════════════════════════════════════════════
+# COGNITIVE MODES — structural unpredictability
+# ═══════════════════════════════════════════════════════════════
+
+COGNITIVE_MODES = [
+    "reflective",
+    "explorative",
+    "interpretative",
+    "metaphorical",
+    "narrative",
+    "contained",
+    "provocative_soft",
+    "grounded",
+]
+
+# Per-mode content pools
+INTERPRETATIVE_HYPOTHESES = {
+    "sad": [
+        "Mi viene da pensare che forse questa tristezza non e' solo per oggi — forse porta con se' qualcosa di piu' antico.",
+        "Ho l'impressione che quello che senti sia legato a qualcosa che non hai ancora detto ad alta voce.",
+        "Forse quello che chiami tristezza e' in realta' un bisogno di essere visto per quello che sei davvero.",
+    ],
+    "angry": [
+        "Forse questa rabbia e' il modo in cui proteggi qualcosa di fragile che sta sotto.",
+        "Mi chiedo se dietro questa frustrazione ci sia un bisogno che non viene ascoltato.",
+    ],
+    "anxious": [
+        "Ho l'impressione che questa ansia stia cercando di dirti qualcosa — forse che c'e' una decisione che stai rimandando.",
+        "Forse quello che senti non e' solo paura, ma anche il desiderio di qualcosa che non osi ancora volere.",
+    ],
+    "neutral": [
+        "Mi chiedo se dietro questa calma ci sia qualcosa che aspetta di emergere.",
+        "Forse il fatto che tu sia qui dice piu' di quello che le parole riescono a esprimere.",
+    ],
+    "happy": [
+        "Forse questa gioia ti sta dicendo qualcosa su quello che conta davvero per te.",
+        "Ho l'impressione che questo momento sia piu' importante di quanto sembri in superficie.",
+    ],
+    "longing": [
+        "Forse quello che ti manca non e' solo una persona o un momento — e' una versione di te stesso che senti di aver perso.",
+    ],
+    "tired": [
+        "Mi chiedo se questa stanchezza non sia il corpo che ti chiede di smettere di portare tutto da solo.",
+    ],
+    "love": [
+        "Forse quello che senti e' cosi' intenso perche' tocca una parte di te che di solito tieni protetta.",
+    ],
+    "grateful": [
+        "Forse questa gratitudine e' il segnale che stai iniziando a vedere le cose in modo diverso.",
+    ],
+}
+
+METAPHOR_POOL = {
+    "sad": [
+        "Quello che descrivi mi fa pensare a un cielo coperto — non significa che il sole non ci sia, solo che per ora non riesci a vederlo.",
+        "E' come camminare in una nebbia fitta: i passi sono incerti, ma la strada c'e' ancora sotto i piedi.",
+    ],
+    "angry": [
+        "La rabbia e' come un fuoco — puo' bruciare tutto, ma puo' anche illuminare quello che prima era nascosto.",
+        "Quello che senti e' come un temporale: violento, ma porta con se' l'aria pulita che viene dopo.",
+    ],
+    "anxious": [
+        "L'ansia e' come un allarme che suona troppo forte — il pericolo potrebbe essere reale, ma il volume e' sproporzionato.",
+        "E' come stare su una barca in mezzo al mare: l'acqua si muove, ma la barca regge.",
+    ],
+    "neutral": [
+        "A volte la calma e' come la superficie di un lago — sotto, c'e' tutto un mondo che si muove.",
+    ],
+    "happy": [
+        "Questo momento e' come una finestra aperta dopo un lungo inverno — lascia entrare tutto.",
+    ],
+    "longing": [
+        "La nostalgia e' come una melodia che conosci a memoria — non puoi smettere di ascoltarla, anche se fa male.",
+    ],
+    "tired": [
+        "La stanchezza e' come un peso che si accumula goccia dopo goccia — non te ne accorgi finche' non ti fermi.",
+    ],
+    "love": [
+        "L'amore e' come una corrente sotterranea — non sempre lo vedi, ma ti porta sempre da qualche parte.",
+    ],
+    "grateful": [
+        "La gratitudine e' come una luce calda in una stanza buia — cambia tutto senza fare rumore.",
+    ],
+}
+
+MICRO_NARRATIVES = {
+    "sad": [
+        "Sai, una volta qualcuno mi ha detto che la tristezza e' il prezzo che paghiamo per aver amato qualcosa. E forse aveva ragione.",
+        "C'e' una storia di un uomo che portava un sasso in tasca per ogni dolore. Un giorno si accorse che le tasche erano piene — ma anche che era ancora in piedi.",
+    ],
+    "angry": [
+        "Mi viene in mente una cosa: c'era chi diceva che la rabbia e' una lettera che scriviamo ma non spediamo mai. Forse e' il momento di leggerla.",
+    ],
+    "anxious": [
+        "C'e' una storia di una ragazza che aveva paura del buio. Un giorno scopri' che il buio non era vuoto — era pieno di cose che aspettavano di essere viste.",
+    ],
+    "neutral": [
+        "Sai cosa mi viene in mente? Che le conversazioni piu' importanti spesso iniziano proprio cosi' — senza un motivo preciso, senza urgenza.",
+    ],
+    "happy": [
+        "Mi ricorda una cosa: c'e' chi dice che la felicita' non si trova, si riconosce. E tu l'hai appena riconosciuta.",
+    ],
+    "longing": [
+        "C'e' una storia di un viaggiatore che tornava sempre nello stesso posto — non perche' fosse bello, ma perche' li' aveva lasciato una parte di se'.",
+    ],
+    "tired": [
+        "Mi viene in mente una cosa: c'era un albero che d'inverno perdeva tutte le foglie. Non stava morendo — stava risparmiando energia per la primavera.",
+    ],
+    "love": [
+        "Sai, c'e' chi dice che l'amore e' l'unica cosa che cresce quando la dividi. Forse e' vero.",
+    ],
+    "grateful": [
+        "Mi ricorda una cosa: la gratitudine e' come un seme — piccolo, ma capace di cambiare tutto il giardino.",
+    ],
+}
+
+PROVOCATIVE_QUESTIONS = {
+    "sad": [
+        "E se questa tristezza fosse in realta' il tuo modo di dire che meriti di piu'?",
+        "Cosa succederebbe se smettessi di combattere quello che senti e lo lasciassi semplicemente essere?",
+    ],
+    "angry": [
+        "E se questa rabbia fosse in realta' coraggio travestito?",
+        "Cosa succederebbe se usassi questa energia per cambiare qualcosa invece di trattenerla?",
+    ],
+    "anxious": [
+        "E se la cosa che temi di piu' fosse in realta' quella di cui hai piu' bisogno?",
+        "Cosa succederebbe se l'ansia non fosse il nemico ma un messaggero?",
+    ],
+    "neutral": [
+        "E se il fatto di non sentire niente di forte fosse gia' una risposta?",
+        "Cosa succederebbe se ti permettessi di volere qualcosa senza giustificarlo?",
+    ],
+    "happy": [
+        "E se ti concedessi di restare in questo momento senza chiederti quanto durera'?",
+    ],
+    "longing": [
+        "E se quello che ti manca non fosse il passato, ma una possibilita' che non hai ancora esplorato?",
+    ],
+    "tired": [
+        "E se la stanchezza fosse il tuo corpo che ti dice che stai facendo troppo per gli altri e troppo poco per te?",
+    ],
+    "love": [
+        "E se l'intensita' di quello che senti fosse esattamente la misura di quanto sei capace di amare?",
+    ],
+    "grateful": [
+        "E se la gratitudine fosse il primo passo verso qualcosa che non hai ancora immaginato?",
+    ],
+}
+
+GROUNDED_SUGGESTIONS = {
+    "sad": [
+        "Una cosa che potresti provare: stasera, scrivi tre cose che oggi ti hanno fatto sentire qualcosa — anche piccole. A volte mettere le cose su carta le rende piu' gestibili.",
+        "Prova una cosa: fermati cinque minuti, chiudi gli occhi, e lascia che il respiro faccia il suo lavoro. Non devi risolvere niente adesso.",
+    ],
+    "angry": [
+        "Una cosa concreta: prova a scrivere quello che senti senza filtri, come se nessuno dovesse leggerlo. A volte la rabbia ha bisogno di uno spazio dove esistere.",
+    ],
+    "anxious": [
+        "Prova questo: metti i piedi a terra, senti il contatto. Cinque respiri lenti. L'ansia vive nel futuro — il corpo vive nel presente.",
+        "Una cosa pratica: scrivi la cosa peggiore che potrebbe succedere, poi quella piu' probabile. Spesso la distanza tra le due e' enorme.",
+    ],
+    "neutral": [
+        "Una cosa che potresti fare: prenditi dieci minuti oggi solo per te, senza scopo. A volte e' li' che emergono le cose importanti.",
+    ],
+    "happy": [
+        "Un suggerimento: fermati un momento e memorizza questo stato. Quando le cose saranno piu' difficili, potrai tornare qui con la mente.",
+    ],
+    "longing": [
+        "Prova una cosa: scrivi una lettera a quello che ti manca. Non devi spedirla — ma scriverla puo' aiutarti a capire cosa stai cercando davvero.",
+    ],
+    "tired": [
+        "Una cosa concreta: stasera, togli una cosa dalla lista. Solo una. Dai a te stesso il permesso di fare meno.",
+    ],
+    "love": [
+        "Un suggerimento: dillo. Quello che senti, dillo alla persona. Le parole non dette pesano piu' di quelle dette.",
+    ],
+    "grateful": [
+        "Prova questo: condividi questa gratitudine con qualcuno. La gratitudine espressa ha un potere diverso da quella solo sentita.",
+    ],
+}
+
 STORY_STARTERS = [
     "C'era una volta, in un paese dove il tempo scorreva diversamente, un uomo che aveva dimenticato come si faceva a sognare. Non perche' non volesse, ma perche' la vita gli aveva insegnato a tenere gli occhi aperti e i piedi per terra. Un giorno, pero', trovo' una lettera sotto la porta. Non c'era mittente, solo una frase: 'Ricordi quando credevi che tutto fosse possibile?' Quella notte, per la prima volta dopo anni, chiuse gli occhi e lascio' che la mente lo portasse dove voleva.",
     "Ti racconto una cosa. Immagina una citta' dove ogni persona porta con se' una lanterna. La luce di ogni lanterna ha un colore diverso — dipende da quello che la persona sente dentro. Blu per la malinconia, rosso per la passione, verde per la speranza. Un giorno, una ragazza si accorse che la sua lanterna non aveva piu' colore. Era trasparente. E invece di spaventarsi, sorrise. Perche' capì che significava che era pronta a sentire tutto, senza filtri.",
@@ -239,12 +421,15 @@ class EmotionalIntensityEngine:
     """
     Espande e intensifica risposte contenitive in risposte
     emotivamente ricche, proattive, esplorative.
+    Cognitive mode selection per imprevedibilita' strutturale.
     Zero LLM. Zero API. Solo espansione locale.
     """
 
     def __init__(self):
         # Memory buffer: ultime 3 aperture usate — no ripetizione
         self._recent_openings = deque(maxlen=3)
+        # Cognitive mode history: max 2 consecutive same mode
+        self._recent_modes = deque(maxlen=2)
         logger.info("EMOTIONAL_INTENSITY_ENGINE: Active")
 
     def enhance(self, response: str, message: str, brain_state: Dict[str, Any]) -> str:
@@ -327,6 +512,14 @@ class EmotionalIntensityEngine:
                                                  user_name, min_words, is_emotional,
                                                  is_internal_state, trust, resonance)
             logger.info("MIN_LENGTH_ENFORCED target=%d actual=%d", min_words, len(response.split()))
+
+        # ── COGNITIVE MODE SHAPING ──
+        if not is_greeting and not is_narrative_request:
+            relational_energy = latent.get("relational_energy", 0.5)
+            response = self._apply_cognitive_mode(
+                response, detected_emotion, intensity, curiosity,
+                relational_energy, is_emotional, is_internal_state
+            )
 
         # ── ANTI-GENERIC ENDING ──
         response = self._fix_generic_ending(response)
@@ -511,6 +704,221 @@ class EmotionalIntensityEngine:
                     return without
         return response
 
+
+    # ═══════════════════════════════════════════════════════════
+    # COGNITIVE MODE SYSTEM
+    # ═══════════════════════════════════════════════════════════
+
+    def _select_cognitive_mode(self, intensity: float, curiosity: float,
+                                relational_energy: float) -> str:
+        """
+        Seleziona modalita' cognitiva con pesi dinamici + entropia random.
+        Non permette lo stesso mode per piu' di 2 risposte consecutive.
+        """
+        # Base weights per mode
+        weights = {
+            "reflective":       0.15,
+            "explorative":      0.15,
+            "interpretative":   0.12,
+            "metaphorical":     0.10,
+            "narrative":        0.08,
+            "contained":        0.12,
+            "provocative_soft": 0.10,
+            "grounded":         0.10,
+        }
+
+        # Dynamic adjustments based on state
+        if intensity > 0.6:
+            weights["reflective"] += 0.08
+            weights["interpretative"] += 0.06
+            weights["contained"] -= 0.05
+        if intensity < 0.3:
+            weights["contained"] += 0.10
+            weights["grounded"] += 0.05
+            weights["reflective"] -= 0.05
+
+        if curiosity > 0.5:
+            weights["explorative"] += 0.10
+            weights["provocative_soft"] += 0.08
+            weights["contained"] -= 0.05
+        if curiosity < 0.3:
+            weights["explorative"] -= 0.05
+            weights["provocative_soft"] -= 0.05
+
+        if relational_energy > 0.6:
+            weights["narrative"] += 0.06
+            weights["metaphorical"] += 0.06
+        if relational_energy < 0.3:
+            weights["grounded"] += 0.08
+            weights["contained"] += 0.05
+
+        # Random entropy injection
+        for mode in weights:
+            weights[mode] += random.uniform(-0.03, 0.03)
+            weights[mode] = max(0.01, weights[mode])  # Floor
+
+        # Block mode if used 2x consecutively
+        if len(self._recent_modes) == 2 and self._recent_modes[0] == self._recent_modes[1]:
+            blocked = self._recent_modes[0]
+            weights[blocked] = 0.0
+
+        # Normalize
+        total = sum(weights.values())
+        if total <= 0:
+            return random.choice(COGNITIVE_MODES)
+
+        # Weighted random selection
+        r = random.uniform(0, total)
+        cumulative = 0.0
+        for mode, w in weights.items():
+            cumulative += w
+            if r <= cumulative:
+                self._recent_modes.append(mode)
+                return mode
+
+        # Fallback
+        mode = random.choice(COGNITIVE_MODES)
+        self._recent_modes.append(mode)
+        return mode
+
+    def _apply_cognitive_mode(self, response: str, emotion: str,
+                               intensity: float, curiosity: float,
+                               relational_energy: float,
+                               is_emotional: bool, is_internal: bool) -> str:
+        """
+        Applica la modalita' cognitiva selezionata alla risposta.
+        Modifica la struttura finale senza perdere contenuto emotivo.
+        """
+        mode = self._select_cognitive_mode(intensity, curiosity, relational_energy)
+
+        logger.info("COGNITIVE_MODE_SELECTED mode=%s intensity=%.2f curiosity=%.2f energy=%.2f",
+                     mode, intensity, curiosity, relational_energy)
+
+        if mode == "reflective":
+            return self._mode_reflective(response, emotion)
+        elif mode == "explorative":
+            return self._mode_explorative(response, emotion)
+        elif mode == "interpretative":
+            return self._mode_interpretative(response, emotion)
+        elif mode == "metaphorical":
+            return self._mode_metaphorical(response, emotion)
+        elif mode == "narrative":
+            return self._mode_narrative(response, emotion)
+        elif mode == "contained":
+            return self._mode_contained(response)
+        elif mode == "provocative_soft":
+            return self._mode_provocative(response, emotion)
+        elif mode == "grounded":
+            return self._mode_grounded(response, emotion)
+
+        return response
+
+    def _mode_reflective(self, response: str, emotion: str) -> str:
+        """Riflette senza domanda finale. Chiude con osservazione."""
+        # Strip trailing question if present
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', response) if s.strip()]
+        # Remove last sentence if it's a question
+        if sentences and sentences[-1].endswith("?"):
+            sentences = sentences[:-1]
+        # Add reflection if needed
+        reflections = REFLECTIVE_EXPANSIONS.get(emotion, REFLECTIVE_EXPANSIONS["neutral"])
+        reflection = random.choice(reflections)
+        if reflection.lower()[:25] not in " ".join(sentences).lower():
+            sentences.append(reflection)
+        return " ".join(sentences) if sentences else response
+
+    def _mode_explorative(self, response: str, emotion: str) -> str:
+        """Domanda aperta alla fine."""
+        if response.rstrip().endswith("?"):
+            return response  # Already has question
+        questions = EXPLORATIVE_QUESTIONS.get(emotion, EXPLORATIVE_QUESTIONS["neutral"])
+        return f"{response} {random.choice(questions)}"
+
+    def _mode_interpretative(self, response: str, emotion: str) -> str:
+        """Propone ipotesi interpretativa."""
+        hypotheses = INTERPRETATIVE_HYPOTHESES.get(emotion, INTERPRETATIVE_HYPOTHESES["neutral"])
+        hypothesis = random.choice(hypotheses)
+        if hypothesis.lower()[:30] in response.lower():
+            return response
+        # Replace trailing question with hypothesis
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', response) if s.strip()]
+        if sentences and sentences[-1].endswith("?"):
+            sentences[-1] = hypothesis
+        else:
+            sentences.append(hypothesis)
+        return " ".join(sentences)
+
+    def _mode_metaphorical(self, response: str, emotion: str) -> str:
+        """Usa metafora breve."""
+        metaphors = METAPHOR_POOL.get(emotion, METAPHOR_POOL["neutral"])
+        metaphor = random.choice(metaphors)
+        if metaphor.lower()[:25] in response.lower():
+            return response
+        # Insert metaphor, strip trailing question
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', response) if s.strip()]
+        if sentences and sentences[-1].endswith("?"):
+            sentences[-1] = metaphor
+        else:
+            sentences.append(metaphor)
+        return " ".join(sentences)
+
+    def _mode_narrative(self, response: str, emotion: str) -> str:
+        """Micro-storia di 2 frasi."""
+        stories = MICRO_NARRATIVES.get(emotion, MICRO_NARRATIVES["neutral"])
+        story = random.choice(stories)
+        if story.lower()[:25] in response.lower():
+            return response
+        # Replace trailing question with micro-narrative
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', response) if s.strip()]
+        if sentences and sentences[-1].endswith("?"):
+            sentences[-1] = story
+        else:
+            sentences.append(story)
+        return " ".join(sentences)
+
+    def _mode_contained(self, response: str) -> str:
+        """Risposta breve, contenitiva, senza domanda. Max ~40 parole."""
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', response) if s.strip()]
+        # Remove questions
+        sentences = [s for s in sentences if not s.endswith("?")]
+        if not sentences:
+            return response
+        # Keep first 2-3 sentences, cap at ~40 words
+        result = []
+        word_count = 0
+        for s in sentences:
+            s_words = len(s.split())
+            if word_count + s_words > 45 and result:
+                break
+            result.append(s)
+            word_count += s_words
+        return " ".join(result)
+
+    def _mode_provocative(self, response: str, emotion: str) -> str:
+        """Domanda non ovvia, provocatoria soft."""
+        provocatives = PROVOCATIVE_QUESTIONS.get(emotion, PROVOCATIVE_QUESTIONS["neutral"])
+        question = random.choice(provocatives)
+        # Replace trailing generic question with provocative one
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', response) if s.strip()]
+        if sentences and sentences[-1].endswith("?"):
+            sentences[-1] = question
+        else:
+            sentences.append(question)
+        return " ".join(sentences)
+
+    def _mode_grounded(self, response: str, emotion: str) -> str:
+        """Suggerimento pratico leggero."""
+        suggestions = GROUNDED_SUGGESTIONS.get(emotion, GROUNDED_SUGGESTIONS["neutral"])
+        suggestion = random.choice(suggestions)
+        if suggestion.lower()[:25] in response.lower():
+            return response
+        # Replace trailing question with grounded suggestion
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', response) if s.strip()]
+        if sentences and sentences[-1].endswith("?"):
+            sentences[-1] = suggestion
+        else:
+            sentences.append(suggestion)
+        return " ".join(sentences)
 
     # ═══════════════════════════════════════════════════════════
     # PROBABILISTIC RELATIONAL OPENING
