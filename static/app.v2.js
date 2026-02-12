@@ -142,7 +142,10 @@ let _ttsSource = null;
 let _isPlayingChunk = false;
 let _wasPlayingChunk = false;
 let ttsEnabled = true;
-let _ttsAborted = false;  // Abort flag for segmented chunk loop
+let _ttsAborted = false;
+let activeTTSSources = [];           // ALL active Audio elements
+let currentTTSAbortController = null; // AbortController for in-flight fetches
+let ttsGenerationId = 0;              // Monotonic ID — stale async skips playback
 
 // ===============================
 // TTS TEXT NORMALIZATION
@@ -227,10 +230,26 @@ function stopAudio() {
 // ===============================
 // BARGE-IN — immediate TTS interruption on user input
 // ===============================
-function stopCurrentTTS() {
-  const wasPlaying = !!_ttsSource || _isPlayingChunk;
-  
-  // Stop current audio source (HTMLAudioElement)
+function stopAllTTS() {
+  console.log('[TTS_FORCE_STOP] sources=' + activeTTSSources.length + ' playing=' + _isPlayingChunk);
+
+  // 1. Abort all in-flight TTS fetch requests
+  if (currentTTSAbortController) {
+    try { currentTTSAbortController.abort(); } catch (e) {}
+    currentTTSAbortController = null;
+  }
+
+  // 2. Stop ALL tracked audio sources
+  activeTTSSources.forEach(src => {
+    try {
+      src.pause();
+      src.currentTime = 0;
+      src.src = '';
+    } catch (e) {}
+  });
+  activeTTSSources = [];
+
+  // 3. Stop legacy _ttsSource if somehow not in array
   if (_ttsSource) {
     try {
       _ttsSource.pause();
@@ -239,21 +258,19 @@ function stopCurrentTTS() {
     } catch (e) {}
     _ttsSource = null;
   }
-  
-  // Abort segmented chunk queue
+
+  // 4. Abort chunk queue + reset flags
   _ttsAborted = true;
   _isPlayingChunk = false;
   _wasPlayingChunk = false;
-  
-  if (wasPlaying) {
-    console.log('[TTS_INTERRUPTED_BY_USER]');
-  }
+
+  console.log('[TTS_INTERRUPTED_BY_USER]');
 }
 
 function _interruptTTS(reason) {
-  if (_ttsSource || _isPlayingChunk) {
+  if (_ttsSource || _isPlayingChunk || activeTTSSources.length > 0) {
     console.log('[BARGE-IN] interrupt reason=' + reason);
-    stopCurrentTTS();
+    stopAllTTS();
   }
 }
 
@@ -320,18 +337,22 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
   // Array per i blob pre-caricati
   const chunkBlobs = new Array(chunks.length);
   
+  // Capture generationId at start of this segmented session
+  const myGenId = ttsGenerationId;
+
   // Funzione per fetch di un chunk
   const fetchChunk = async (index) => {
-    if (_ttsAborted) return;  // Don't fetch if aborted
+    if (_ttsAborted || ttsGenerationId !== myGenId) return;
     const chunk = chunks[index];
     const normalizedChunk = normalizeTextForTTS(chunk);
-    console.log('[TTS_PREFETCH] index=' + (index + 1) + '/total=' + chunks.length + ' len=' + chunk.length);
+    console.log('[TTS_PREFETCH] index=' + (index + 1) + '/total=' + chunks.length + ' len=' + chunk.length + ' genId=' + myGenId);
     
     try {
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: normalizedChunk })
+        body: JSON.stringify({ text: normalizedChunk }),
+        signal: currentTTSAbortController ? currentTTSAbortController.signal : undefined
       });
       
       if (!response.ok) {
@@ -342,7 +363,11 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
       chunkBlobs[index] = blob;
       console.log('[TTS_PREFETCH_DONE] index=' + (index + 1) + ' size=' + blob.size);
     } catch (e) {
-      console.error('[TTS_PREFETCH_ERROR] index=' + (index + 1), e);
+      if (e.name === 'AbortError') {
+        console.log('[TTS_PREFETCH_ABORTED] index=' + (index + 1));
+      } else {
+        console.error('[TTS_PREFETCH_ERROR] index=' + (index + 1), e);
+      }
       chunkBlobs[index] = null;
     }
   };
@@ -352,9 +377,9 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
   
   // Ciclo principale con prefetch
   for (let i = 0; i < chunks.length; i++) {
-    // CHECK ABORT FLAG before every chunk
-    if (_ttsAborted) {
-      console.log('[TTS_FLOW] step=ABORTED chunk_' + (i + 1) + '/' + chunks.length + ' _ttsAborted=true');
+    // CHECK ABORT FLAG + GENERATION ID before every chunk
+    if (_ttsAborted || ttsGenerationId !== myGenId) {
+      console.log('[TTS_FLOW] step=ABORTED chunk_' + (i + 1) + '/' + chunks.length + ' aborted=' + _ttsAborted + ' genStale=' + (ttsGenerationId !== myGenId));
       break;
     }
     
@@ -384,13 +409,13 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
       console.log('[TTS_FLOW] step=7.' + (i + 1) + ' playTTSChunk_completed duration=' + chunkDuration.toFixed(2) + 'ms');
       
       // PAUSA LUNGA per psychological tra chunk — but check abort
-      if (tts_mode === 'psychological' && i < chunks.length - 1 && !_ttsAborted) {
+      if (tts_mode === 'psychological' && i < chunks.length - 1 && !_ttsAborted && ttsGenerationId === myGenId) {
         console.log('[TTS_FLOW] step=8.' + (i + 1) + ' psychological_pause');
         await new Promise(resolve => setTimeout(resolve, 800)); // 800ms pause
         console.log('[TTS_FLOW] step=9.' + (i + 1) + ' psychological_pause_completed');
       }
     } catch (e) {
-      console.error('[TTS_FLOW] step=ERROR.' + (i + 1) + ' chunk_error:', e);
+      console.log('[TTS_FLOW] step=ERROR.' + (i + 1) + ' chunk_error:', e);
       break;
     }
   }
@@ -514,7 +539,8 @@ async function _playTTSChunk(text) {
     const response = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: normalizedText })
+      body: JSON.stringify({ text: normalizedText }),
+      signal: currentTTSAbortController ? currentTTSAbortController.signal : undefined
     });
     
     console.log('[TTS_FLOW] step=4 fetch_response_received');
@@ -723,8 +749,9 @@ async function sendMessage() {
   // Audio Priming: previeni NotAllowedError su Safari/iOS
   primeAudio();
   
-  // Barge-in: interrompi TTS e svuota chunk queue
-  stopCurrentTTS();
+  // Barge-in: increment generation + force-stop ALL TTS
+  ttsGenerationId++;
+  stopAllTTS();
 
   // Warm AudioContext NOW (sync, during user gesture) — iOS requires this
   _warmTTSCtx();
@@ -784,18 +811,24 @@ async function sendMessage() {
 // TTS ASYNC — completamente scollegato dal render
 // ===============================
 function playTTSAsync(text, mode) {
-  // Reset abort flag before starting new TTS
+  // Reset abort flag + create fresh AbortController for this generation
   _ttsAborted = false;
+  currentTTSAbortController = new AbortController();
+  const myGenId = ttsGenerationId;
   
   // Fire-and-forget: TTS non blocca MAI il render del testo
   (async () => {
     try {
-      console.log('[TTS_ASYNC] Starting TTS in background, len=' + text.length + ' mode=' + mode);
+      console.log('[TTS_ASYNC] Starting TTS genId=' + myGenId + ' len=' + text.length + ' mode=' + mode);
       await playTTS(text, mode);
-      console.log('[TTS_ASYNC] TTS completed successfully');
+      console.log('[TTS_ASYNC] TTS completed genId=' + myGenId);
     } catch (e) {
-      console.warn('[TTS_ASYNC] TTS failed (non-blocking):', e.message);
-      console.log('[TTS_PLAY_FAILED] error=' + e.message);
+      if (e.name === 'AbortError') {
+        console.log('[TTS_ASYNC] TTS aborted genId=' + myGenId);
+      } else {
+        console.warn('[TTS_ASYNC] TTS failed (non-blocking):', e.message);
+        console.log('[TTS_PLAY_FAILED] error=' + e.message);
+      }
     }
   })();
 }
@@ -1660,7 +1693,7 @@ textInput.addEventListener('focus', () => {
 
 // Barge-in su ogni digitazione (solo se TTS sta suonando)
 textInput.addEventListener('input', () => {
-  if (_ttsSource) {
+  if (_ttsSource || activeTTSSources.length > 0) {
     _interruptTTS('text_typing');
   }
 });
@@ -1726,28 +1759,49 @@ async function playTTSAudio(blob) {
 async function playSimpleAudio(blob) {
   console.log('[TTS] Avvio semplice playback con HTMLAudioElement');
   
+  // Guard: skip if generation changed during async
+  const myGenId = ttsGenerationId;
+  if (_ttsAborted) {
+    console.log('[TTS] playSimpleAudio skipped — aborted');
+    return;
+  }
+  
   // Crea URL e Audio element
   const audioUrl = URL.createObjectURL(blob);
   const audio = new Audio(audioUrl);
-  console.log('[TTS] Audio element creato per semplice playback');
+  console.log('[TTS] Audio element creato genId=' + myGenId);
+  
+  // Track in activeTTSSources
+  activeTTSSources.push(audio);
+  
+  // Cleanup helper
+  const cleanup = () => {
+    URL.revokeObjectURL(audioUrl);
+    activeTTSSources = activeTTSSources.filter(s => s !== audio);
+    if (_ttsSource === audio) _ttsSource = null;
+    _isPlayingChunk = false;
+  };
   
   // Configura eventi
   audio.onended = () => {
-    console.log('[TTS] Semplice playback completato');
-    URL.revokeObjectURL(audioUrl);
-    _ttsSource = null;
-    _isPlayingChunk = false;
+    console.log('[TTS] Playback completato genId=' + myGenId);
+    cleanup();
   };
   
   audio.onerror = (error) => {
-    console.error('[TTS] Errore semplice audio:', error);
-    URL.revokeObjectURL(audioUrl);
-    _ttsSource = null;
-    _isPlayingChunk = false;
+    console.error('[TTS] Errore audio genId=' + myGenId, error);
+    cleanup();
   };
   
+  // Final generation check before play
+  if (ttsGenerationId !== myGenId) {
+    console.log('[TTS] playSimpleAudio skipped — stale genId=' + myGenId + ' current=' + ttsGenerationId);
+    cleanup();
+    return;
+  }
+  
   // Avvia playback
-  console.log('[TTS] Avvio semplice playback');
+  console.log('[TTS] Avvio playback genId=' + myGenId);
   await audio.play();
   
   // Aggiorna stato TTS
@@ -1755,7 +1809,7 @@ async function playSimpleAudio(blob) {
   _isPlayingChunk = true;
   _wasPlayingChunk = true;
   
-  console.log('[TTS] Semplice audio avviato con successo');
+  console.log('[TTS] Audio avviato genId=' + myGenId + ' activeSources=' + activeTTSSources.length);
 }
 
 // iOS: pre-unlock AudioContext on very first user interaction
