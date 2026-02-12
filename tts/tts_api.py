@@ -1,6 +1,6 @@
 """
 TTS API - Genesi Cognitive System v3
-Piper TTS locale. Zero cloud. Zero quota.
+Piper TTS locale. Zero cloud. Zero quota. Zero fallback.
 """
 
 import io
@@ -8,7 +8,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from tts.local_piper_tts import generate_piper_audio, get_piper_tts_info
+from tts.piper_tts import piper_tts_engine
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +28,14 @@ async def tts_endpoint(request: TTSRequest):
     try:
         logger.info("TTS_REQUEST text_len=%d", len(request.text))
 
-        audio_bytes = await generate_piper_audio(request.text)
+        wav_bytes = await piper_tts_engine.synthesize(request.text)
 
         return StreamingResponse(
-            io.BytesIO(audio_bytes),
+            io.BytesIO(wav_bytes),
             media_type="audio/wav",
             headers={
                 "Content-Disposition": "inline; filename=piper_tts.wav",
-                "Content-Length": str(len(audio_bytes)),
+                "Content-Length": str(len(wav_bytes)),
                 "Cache-Control": "no-cache"
             }
         )
@@ -48,4 +48,4 @@ async def tts_endpoint(request: TTSRequest):
 @router.get("/info")
 async def tts_info():
     """Informazioni configurazione Piper TTS locale."""
-    return get_piper_tts_info()
+    return piper_tts_engine.info()
