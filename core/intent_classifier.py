@@ -4,6 +4,7 @@ Architettura separata: Chat libera vs Tecnica
 1 intent → 1 funzione con Proactor
 """
 
+import re
 from typing import Dict, Optional
 from core.log import log
 
@@ -14,6 +15,14 @@ class IntentClassifier:
     """
     
     def __init__(self):
+        # Pattern memoria/ricordo - hanno priorità massima
+        self.memory_patterns = [
+            "ricordi", "ricordo", "ricordare", "ricordati",
+            "memoria", "detto", "finora", "fin ora",
+            "ti ho detto", "cosa sai di me", "ricordi di me",
+            "cosa ti ricordi", "ti ricordi"
+        ]
+        
         # Pattern per Qwen2.5-7B-Instruct (chat libera)
         self.qwen_patterns = {
             "greeting": [
@@ -26,19 +35,26 @@ class IntentClassifier:
                 "chi sei", "chi è", "tu chi sei", "presentati"
             ],
             "time": [
-                "che ore sono", "che ora è", "orario", "ora"
+                "che ore sono", "che ora è", "che ora e'",
+                "dimmi l'ora", "dimmi l'orario",
+                "dimmi che ore sono", "sai che ore sono", "sai l'ora"
             ],
             "date": [
-                "che giorno è", "giorno", "data", "oggi che giorno è"
+                "che giorno è oggi", "che giorno e' oggi",
+                "che data è", "che data e'",
+                "che data è oggi", "che data e' oggi",
+                "oggi che giorno è", "oggi che giorno e'",
+                "dimmi la data", "dimmi che giorno è", "dimmi che giorno e'"
             ],
             "weather": [
-                "tempo", "meteo", "piove", "sole", "nuvole"
+                "che tempo fa", "com'è il meteo", "previsioni meteo",
+                "piove", "nevica", "fa caldo", "fa freddo"
             ],
             "help": [
                 "aiuto", "help", "aiutami", "cosa sai fare"
             ],
             "goodbye": [
-                "arrivederci", "ciao", "addio", "a dopo"
+                "arrivederci", "addio", "a dopo", "ci vediamo"
             ]
         }
         
@@ -61,7 +77,7 @@ class IntentClassifier:
     
     def classify(self, message: str) -> str:
         """
-        Classifica intent - logica MINIMA
+        Classifica intent - logica MINIMA con priorità memoria
         
         Args:
             message: Messaggio utente
@@ -71,19 +87,24 @@ class IntentClassifier:
         """
         message_lower = message.lower().strip()
         
-        # Prima controlla pattern tecnici (GPT)
+        # 0️⃣ PRIORITA' MASSIMA: pattern memoria/ricordo
+        if any(pattern in message_lower for pattern in self.memory_patterns):
+            log("INTENT_CLASSIFIED", intent="chat_free", engine="QWEN", message=message[:50], override="memory_context")
+            return "chat_free"
+        
+        # 1️⃣ Pattern tecnici (GPT)
         for intent, keywords in self.gpt_patterns.items():
             if any(keyword in message_lower for keyword in keywords):
                 log("INTENT_CLASSIFIED", intent=intent, engine="GPT", message=message[:50])
                 return intent
         
-        # Poi controlla pattern chat (Qwen)
+        # 2️⃣ Pattern chat (Qwen) - match esatto su frasi complete
         for intent, keywords in self.qwen_patterns.items():
             if any(keyword in message_lower for keyword in keywords):
                 log("INTENT_CLASSIFIED", intent=intent, engine="QWEN", message=message[:50])
                 return intent
         
-        # Default: chat libera (Qwen)
+        # 3️⃣ Default: chat libera (Qwen)
         log("INTENT_DEFAULT", intent="chat_free", engine="QWEN", message=message[:50])
         return "chat_free"
     
