@@ -3,10 +3,13 @@ OPENAI TTS STREAMING - Genesi Core v2
 Streaming TTS con OpenAI SDK v2.x - architettura definitiva
 """
 
+import logging
 from openai import AsyncOpenAI
 from fastapi.responses import StreamingResponse
 import os
 from core.log import log
+
+logger = logging.getLogger(__name__)
 
 # Client OpenAI asincrono
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -53,16 +56,17 @@ async def stream_openai_tts(text: str):
                 print("OPENAI_TTS_COMPLETE")
                 
                 # Log completamento
-                log("OPENAI_TTS_STREAMED", 
-                    text_length=len(cleaned_text),
-                    model="gpt-4o-mini-tts",
-                    voice=TTS_VOICE,
-                    speed=TTS_SPEED
-                )
+                logger.info("OPENAI_TTS_STREAMED", 
+                    extra={
+                        "text_length": len(cleaned_text),
+                        "model": "gpt-4o-mini-tts",
+                        "voice": TTS_VOICE,
+                        "speed": TTS_SPEED
+                    })
                 
             except Exception as e:
                 print(f"OPENAI_TTS_STREAM_ERROR: {e}")
-                log("OPENAI_TTS_ERROR", error=str(e))
+                logger.error("OPENAI_TTS_ERROR", exc_info=True, extra={"error": str(e)})
                 raise
         
         # StreamingResponse ottimizzato
@@ -78,7 +82,7 @@ async def stream_openai_tts(text: str):
         
     except Exception as e:
         print(f"OPENAI_TTS_ERROR: {e}")
-        log("OPENAI_TTS_ERROR", error=str(e))
+        logger.error("OPENAI_TTS_ERROR", exc_info=True, extra={"error": str(e)})
         raise
 
 def get_openai_tts_info():

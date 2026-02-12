@@ -1,13 +1,14 @@
 """
 MEMORY STORAGE - Genesi Core v2
-Storage in-memory per validazione comportamento
-Zero I/O, zero effetti collaterali, zero persistenza fantasma
+Storage in-memory thread-safe con validazione
 """
 
-from typing import Dict, Any, Optional, List
-from datetime import datetime
+import logging
 import threading
-from core.log import log
+from datetime import datetime
+from typing import Dict, Any, Optional, List
+
+logger = logging.getLogger(__name__)
 
 class MemoryStorage:
     """
@@ -20,7 +21,7 @@ class MemoryStorage:
         self._lock = threading.RLock()
         self._created_at = datetime.now()
         
-        log("MEMORY_STORAGE_INIT", status="ready")
+        logger.info("MEMORY_STORAGE_INIT", extra={"status": "ready"})
     
     def save(self, key: str, value: Any) -> bool:
         """
@@ -41,11 +42,11 @@ class MemoryStorage:
                     "operation": "save"
                 }
             
-            log("MEMORY_SAVE", key=key, value_type=type(value).__name__)
+            logger.info("MEMORY_SAVE", extra={"key": key, "value_type": type(value).__name__})
             return True
             
         except Exception as e:
-            log("MEMORY_SAVE_ERROR", key=key, error=str(e))
+            logger.error("MEMORY_SAVE_ERROR", exc_info=True, extra={"key": key, "error": str(e)})
             return False
     
     def load(self, key: str) -> Optional[Any]:
@@ -64,11 +65,11 @@ class MemoryStorage:
                     return None
                 
                 entry = self._data[key]
-                log("MEMORY_LOAD", key=key, value_type=type(entry["value"]).__name__)
+                logger.info("MEMORY_LOAD", extra={"key": key, "value_type": type(entry["value"]).__name__})
                 return entry["value"]
                 
         except Exception as e:
-            log("MEMORY_LOAD_ERROR", key=key, error=str(e))
+            logger.error("MEMORY_LOAD_ERROR", exc_info=True, extra={"key": key, "error": str(e)})
             return None
     
     def delete(self, key: str) -> bool:
@@ -85,12 +86,12 @@ class MemoryStorage:
             with self._lock:
                 if key in self._data:
                     del self._data[key]
-                    log("MEMORY_DELETE", key=key)
+                    logger.info("MEMORY_DELETE", extra={"key": key})
                     return True
                 return False
                 
         except Exception as e:
-            log("MEMORY_DELETE_ERROR", key=key, error=str(e))
+            logger.error("MEMORY_DELETE_ERROR", exc_info=True, extra={"key": key, "error": str(e)})
             return False
     
     def exists(self, key: str) -> bool:
@@ -106,11 +107,11 @@ class MemoryStorage:
         try:
             with self._lock:
                 exists = key in self._data
-                log("MEMORY_EXISTS", key=key, exists=exists)
+                logger.info("MEMORY_EXISTS", extra={"key": key, "exists": exists})
                 return exists
                 
         except Exception as e:
-            log("MEMORY_EXISTS_ERROR", key=key, error=str(e))
+            logger.error("MEMORY_EXISTS_ERROR", exc_info=True, extra={"key": key, "error": str(e)})
             return False
     
     def list_keys(self) -> List[str]:
@@ -123,11 +124,11 @@ class MemoryStorage:
         try:
             with self._lock:
                 keys = list(self._data.keys())
-                log("MEMORY_LIST_KEYS", count=len(keys))
+                logger.info("MEMORY_LIST_KEYS", extra={"count": len(keys)})
                 return keys
                 
         except Exception as e:
-            log("MEMORY_LIST_KEYS_ERROR", error=str(e))
+            logger.error("MEMORY_LIST_KEYS_ERROR", exc_info=True, extra={"error": str(e)})
             return []
     
     def clear(self) -> bool:
@@ -141,11 +142,11 @@ class MemoryStorage:
             with self._lock:
                 count = len(self._data)
                 self._data.clear()
-                log("MEMORY_CLEAR", removed_count=count)
+                logger.info("MEMORY_CLEAR", extra={"removed_count": count})
                 return True
                 
         except Exception as e:
-            log("MEMORY_CLEAR_ERROR", error=str(e))
+            logger.error("MEMORY_CLEAR_ERROR", exc_info=True, extra={"error": str(e)})
             return False
     
     def get_stats(self) -> Dict[str, Any]:
@@ -163,11 +164,11 @@ class MemoryStorage:
                     "uptime_seconds": (datetime.now() - self._created_at).total_seconds(),
                     "keys": list(self._data.keys())
                 }
-                log("MEMORY_STATS", **stats)
+                logger.info("MEMORY_STATS", extra=stats)
                 return stats
                 
         except Exception as e:
-            log("MEMORY_STATS_ERROR", error=str(e))
+            logger.error("MEMORY_STATS_ERROR", exc_info=True, extra={"error": str(e)})
             return {}
 
 # Istanza globale singleton

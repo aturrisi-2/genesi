@@ -4,6 +4,7 @@ TTS API - Genesi Core v2
 Text-to-Speech API streaming ottimizzato con parallelizzazione CPU
 """
 
+import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -14,6 +15,8 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 router = APIRouter(prefix="/tts")
+
+logger = logging.getLogger(__name__)
 
 class TTSRequest(BaseModel):
     text: str
@@ -80,5 +83,5 @@ async def text_to_speech(request: TTSRequest):
         )
         
     except Exception as e:
-        log("TTS_API_ERROR", error=str(e))
+        logger.error("TTS_API_ERROR", exc_info=True, extra={"error": str(e)})
         raise HTTPException(status_code=500, detail="TTS optimized streaming error")
