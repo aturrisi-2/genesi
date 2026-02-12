@@ -3,9 +3,17 @@ TOOL SERVICES - Genesi Core v2
 Servizi tool per weather, news, time, date
 """
 
+import logging
 from datetime import datetime
 from typing import Dict, Any
 from core.log import log
+
+logger = logging.getLogger(__name__)
+
+# Nomi italiani — nessuna dipendenza da locale OS
+GIORNI_IT = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]
+MESI_IT = ["", "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
+           "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"]
 
 class ToolService:
     """
@@ -70,18 +78,18 @@ class ToolService:
     
     async def get_time(self) -> str:
         """
-        Ottieni ora corrente
-        
-        Returns:
-            Ora corrente
+        Ottieni ora corrente in italiano.
+        Formato: "Sono le 20:15."
         """
         try:
             log("TOOL_TIME_REQUEST")
             
-            current_time = datetime.now().strftime("%H:%M")
-            time_info = f"Sono le {current_time}."
+            now = datetime.now()
+            ora = now.strftime("%H:%M")
+            time_info = f"Sono le {ora}."
             
-            log("TOOL_TIME_RESPONSE", time=current_time)
+            log("TOOL_TIME_RESPONSE", time=ora)
+            logger.info("TOOL_TIME_RESPONSE time=%s", ora)
             return time_info
             
         except Exception as e:
@@ -90,20 +98,22 @@ class ToolService:
     
     async def get_date(self) -> str:
         """
-        Ottieni data corrente
-        
-        Returns:
-            Data corrente
+        Ottieni data corrente in italiano.
+        Formato: "Oggi è giovedì 12 febbraio 2026."
         """
         try:
             log("TOOL_DATE_REQUEST")
             
-            current_date = datetime.now().strftime("%d/%m/%Y")
-            weekday = datetime.now().strftime("%A")
+            now = datetime.now()
+            weekday = GIORNI_IT[now.weekday()]
+            giorno = now.day
+            mese = MESI_IT[now.month]
+            anno = now.year
             
-            date_info = f"Oggi è {weekday}, {current_date}."
+            date_info = f"Oggi è {weekday} {giorno} {mese} {anno}."
             
-            log("TOOL_DATE_RESPONSE", date=current_date, weekday=weekday)
+            log("TOOL_DATE_RESPONSE", weekday=weekday, date=f"{giorno} {mese} {anno}")
+            logger.info("TOOL_DATE_RESPONSE weekday=%s", weekday)
             return date_info
             
         except Exception as e:
