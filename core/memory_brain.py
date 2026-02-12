@@ -504,10 +504,24 @@ class ConsolidationEngine:
         logger.info("CONSOLIDATION_DONE user=%s %s", user_id, result)
         return result
 
+    @staticmethod
+    def _normalize_emotion(raw) -> str:
+        """Normalizza emotion a stringa hashabile. Gestisce str, dict, None."""
+        if raw is None:
+            return "neutral"
+        if isinstance(raw, str):
+            return raw
+        if isinstance(raw, dict):
+            label = raw.get("label") or raw.get("emotion") or "neutral"
+            logger.debug("MEMORY_EMOTION_NORMALIZED value=%s from_dict=%s", label, raw)
+            return str(label)
+        logger.debug("MEMORY_EMOTION_NORMALIZED value=neutral from_type=%s", type(raw).__name__)
+        return "neutral"
+
     def _extract_patterns(self, episodes: List[Dict]) -> List[Dict]:
         patterns = []
         # Emotion patterns
-        emotion_counts = Counter(e.get("emotion", "neutral") for e in episodes)
+        emotion_counts = Counter(self._normalize_emotion(e.get("emotion", "neutral")) for e in episodes)
         for emo, count in emotion_counts.items():
             if emo != "neutral" and count >= 2:
                 patterns.append({"type": "emotion", "key": emo, "frequency": count,
@@ -535,7 +549,8 @@ class ConsolidationEngine:
         traits.append({"type": "communication", "style": style, "avg_length": avg_len, "description": desc})
 
         # Dominant emotion trait
-        emo_counts = Counter(e.get("emotion", "neutral") for e in episodes if e.get("emotion") != "neutral")
+        emo_counts = Counter(self._normalize_emotion(e.get("emotion", "neutral")) for e in episodes
+                             if self._normalize_emotion(e.get("emotion")) != "neutral")
         if emo_counts:
             dominant, count = emo_counts.most_common(1)[0]
             conf = count / len(episodes)
