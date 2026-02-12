@@ -60,6 +60,17 @@ class EpisodicLayer:
         logger.info("EPISODE_STORED id=%s relevance=%.2f user=%s", episode["id"], relevance, user_id)
         return episode["id"]
 
+    @staticmethod
+    def _safe_age_days(ep: Dict[str, Any], now: datetime) -> int:
+        """Backward-compatible timestamp parsing. Never crashes."""
+        ts_value = ep.get("ts") or ep.get("created_at")
+        if not ts_value:
+            ts_value = datetime.utcnow().isoformat()
+        try:
+            return max(0, (now - datetime.fromisoformat(ts_value)).days)
+        except (ValueError, TypeError):
+            return 0
+
     async def recall(self, user_id: str, query: str = "", limit: int = 5,
                      min_relevance: float = 0.1) -> List[Dict[str, Any]]:
         """Recupera episodi rilevanti, applicando decay temporale."""
@@ -68,15 +79,15 @@ class EpisodicLayer:
 
         scored = []
         for ep in episodes:
-            age_days = max(0, (now - datetime.fromisoformat(ep["ts"])).days)
+            age_days = self._safe_age_days(ep, now)
             decay = max(0.05, 1.0 - age_days * self.DECAY_RATE_PER_DAY)
             ep["decay"] = decay
-            effective = ep["relevance"] * decay
+            effective = ep.get("relevance", 0.0) * decay
 
             # Query boost: if query words overlap with episode
             if query:
                 query_words = set(query.lower().split())
-                ep_words = set(ep["msg"].lower().split())
+                ep_words = set(ep.get("msg", "").lower().split())
                 overlap = len(query_words & ep_words)
                 if overlap > 0:
                     effective += min(0.3, overlap * 0.1)
@@ -95,10 +106,10 @@ class EpisodicLayer:
         kept, forgotten = [], 0
 
         for ep in episodes:
-            age_days = max(0, (now - datetime.fromisoformat(ep["ts"])).days)
+            age_days = self._safe_age_days(ep, now)
             decay = max(0.05, 1.0 - age_days * self.DECAY_RATE_PER_DAY)
             ep["decay"] = decay
-            if ep["relevance"] * decay > 0.05:
+            if ep.get("relevance", 0.0) * decay > 0.05:
                 kept.append(ep)
             else:
                 forgotten += 1

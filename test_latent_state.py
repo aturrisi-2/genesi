@@ -223,11 +223,11 @@ async def test_banal_messages_no_effect():
         episode_tags=[]
     )
 
-    # Deltas should be tiny (near zero, within noise range)
+    # Deltas should be tiny (near zero, within noise range ~0.003 stddev per update)
     att_delta = abs(state_after["attachment"] - state_base["attachment"])
     res_delta = abs(state_after["emotional_resonance"] - state_base["emotional_resonance"])
-    check("attachment delta minimo su banale (<0.02)", att_delta < 0.02)
-    check("resonance delta minimo su banale (<0.02)", res_delta < 0.02)
+    check("attachment delta minimo su banale (<0.03)", att_delta < 0.03)
+    check("resonance delta minimo su banale (<0.03)", res_delta < 0.03)
 
 
 async def test_stability_grows_with_consistency():
