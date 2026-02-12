@@ -9,9 +9,62 @@ Pipeline position: dopo evolution_engine, prima di drift_modulator.
 import logging
 import random
 import re
+from collections import deque
 from typing import Dict, Any, Optional, List
 
 logger = logging.getLogger(__name__)
+
+# ═══════════════════════════════════════════════════════════════
+# RELATIONAL OPENING SYSTEM — probabilistic, non-repetitive
+# ═══════════════════════════════════════════════════════════════
+
+RELATIONAL_OPENING_PROBABILITY = 0.35
+
+# 12 varianti minime — nessun template fisso
+RELATIONAL_OPENINGS_WITH_NAME = [
+    "{name}, ",
+    "{name}... ",
+    "Sai {name}, ",
+    "Ascolta {name}, ",
+    "Ecco {name}, ",
+    "Guarda {name}, ",
+    "{name}, sento che ",
+    "{name}, capisco — ",
+    "Dimmi {name}, ",
+    "{name}, fermati un attimo. ",
+    "Ehi {name}, ",
+    "{name}, pensavo a quello che dici. ",
+]
+
+RELATIONAL_OPENINGS_NO_NAME = [
+    "Sai, ",
+    "Ascolta, ",
+    "Ecco, ",
+    "Guarda, ",
+    "Sento che ",
+    "Capisco — ",
+    "Dimmi, ",
+    "Fermati un attimo. ",
+    "Ehi, ",
+    "Pensavo a quello che dici. ",
+    "Sai cosa penso? ",
+    "Lasciami dire una cosa. ",
+]
+
+# Aperture piu' calde per intensita' > 0.7
+WARM_OPENINGS_WITH_NAME = [
+    "{name}, quello che dici mi tocca. ",
+    "{name}, sento il peso di quello che porti. ",
+    "{name}, non sottovalutare quello che senti. ",
+    "{name}, c'e' qualcosa di profondo in quello che dici. ",
+]
+
+WARM_OPENINGS_NO_NAME = [
+    "Quello che dici mi tocca. ",
+    "Sento il peso di quello che porti. ",
+    "Non sottovalutare quello che senti. ",
+    "C'e' qualcosa di profondo in quello che dici. ",
+]
 
 # ═══════════════════════════════════════════════════════════════
 # PASSIVE PATTERNS — frasi standalone vietate
@@ -190,6 +243,8 @@ class EmotionalIntensityEngine:
     """
 
     def __init__(self):
+        # Memory buffer: ultime 3 aperture usate — no ripetizione
+        self._recent_openings = deque(maxlen=3)
         logger.info("EMOTIONAL_INTENSITY_ENGINE: Active")
 
     def enhance(self, response: str, message: str, brain_state: Dict[str, Any]) -> str:
@@ -276,6 +331,9 @@ class EmotionalIntensityEngine:
         # ── ANTI-GENERIC ENDING ──
         response = self._fix_generic_ending(response)
 
+        # ── PROBABILISTIC RELATIONAL OPENING ──
+        response = self._maybe_add_opening(response, user_name, intensity, resonance, is_greeting)
+
         logger.info("EMOTIONAL_INTENSITY_APPLIED words=%d emotion=%s resonance=%.2f",
                      len(response.split()), detected_emotion, resonance)
         return response
@@ -337,21 +395,19 @@ class EmotionalIntensityEngine:
     def _expand_passive(self, response: str, emotion: str, name: str,
                         is_emotional: bool, is_internal: bool, trust: float) -> str:
         """Replace passive standalone with substantive content."""
-        prefix = f"{name}, " if name else ""
-
         if is_emotional or is_internal:
             # Emotional context: validate + reflect + explore
             reflections = REFLECTIVE_EXPANSIONS.get(emotion, REFLECTIVE_EXPANSIONS["neutral"])
             questions = EXPLORATIVE_QUESTIONS.get(emotion, EXPLORATIVE_QUESTIONS["neutral"])
             reflection = random.choice(reflections)
             question = random.choice(questions)
-            return f"{prefix}sono qui con te, e quello che senti conta. {reflection} {question}"
+            return f"Quello che senti conta. {reflection} {question}"
         else:
             # General context: show presence + open exploration
             openers = [
-                f"{prefix}sono qui, e mi interessa davvero quello che hai da dire. Non devi avere un motivo preciso per parlare — a volte le cose piu' importanti emergono quando ci si lascia andare. Cosa ti passa per la mente in questo momento?",
-                f"{prefix}non devi per forza avere qualcosa di specifico da dirmi. A volte basta stare insieme e vedere cosa emerge. Come ti senti adesso, in questo preciso momento?",
-                f"{prefix}sono qui con te. Sai, a volte le conversazioni piu' importanti iniziano senza un motivo preciso. C'e' qualcosa che ti sta a cuore ultimamente?",
+                "Mi interessa davvero quello che hai da dire. Non devi avere un motivo preciso per parlare — a volte le cose piu' importanti emergono quando ci si lascia andare. Cosa ti passa per la mente in questo momento?",
+                "Non devi per forza avere qualcosa di specifico da dirmi. A volte basta stare insieme e vedere cosa emerge. Come ti senti adesso, in questo preciso momento?",
+                "Sai, a volte le conversazioni piu' importanti iniziano senza un motivo preciso. C'e' qualcosa che ti sta a cuore ultimamente?",
             ]
             return random.choice(openers)
 
@@ -389,7 +445,6 @@ class EmotionalIntensityEngine:
                             min_words: int, is_emotional: bool, is_internal: bool,
                             trust: float, resonance: float) -> str:
         """Expand response to meet minimum word count."""
-        prefix = f"{name}, " if name and name.lower() not in response.lower()[:50] else ""
 
         reflections = list(REFLECTIVE_EXPANSIONS.get(emotion, REFLECTIVE_EXPANSIONS["neutral"]))
         questions = list(EXPLORATIVE_QUESTIONS.get(emotion, EXPLORATIVE_QUESTIONS["neutral"]))
@@ -439,8 +494,6 @@ class EmotionalIntensityEngine:
                 parts.append(d)
 
         result = " ".join(parts)
-        if prefix and prefix.strip().rstrip(",") not in result[:50]:
-            result = prefix + result[0].lower() + result[1:]
         return result
 
     def _fix_generic_ending(self, response: str) -> str:
@@ -457,6 +510,71 @@ class EmotionalIntensityEngine:
                 if len(without.split()) >= 30:
                     return without
         return response
+
+
+    # ═══════════════════════════════════════════════════════════
+    # PROBABILISTIC RELATIONAL OPENING
+    # ═══════════════════════════════════════════════════════════
+
+    def _maybe_add_opening(self, response: str, name: str, intensity: float,
+                            resonance: float, is_greeting: bool) -> str:
+        """
+        Aggiunge apertura relazionale probabilistica.
+        - probability = 0.35 base
+        - intensity < 0.4 → NESSUN opening
+        - intensity > 0.7 → opening piu' caldo
+        - No ripetizione ultime 3
+        """
+        # Greetings already have their own opening
+        if is_greeting:
+            return response
+
+        # Low intensity → skip opening entirely
+        if intensity < 0.4:
+            logger.info("RESPONSE_OPENING_SKIPPED intensity=%.2f", intensity)
+            return response
+
+        # Roll probability
+        roll = random.random()
+        if roll > RELATIONAL_OPENING_PROBABILITY:
+            logger.info("RESPONSE_OPENING_SKIPPED probability=%.2f roll=%.2f", RELATIONAL_OPENING_PROBABILITY, roll)
+            return response
+
+        # Select pool based on intensity
+        if intensity > 0.7:
+            pool = WARM_OPENINGS_WITH_NAME if name else WARM_OPENINGS_NO_NAME
+        else:
+            pool = RELATIONAL_OPENINGS_WITH_NAME if name else RELATIONAL_OPENINGS_NO_NAME
+
+        # Filter out recently used
+        available = [o for o in pool if o not in self._recent_openings]
+        if not available:
+            available = pool  # All used recently, reset
+
+        opening = random.choice(available)
+
+        # Format with name if needed
+        if name and "{name}" in opening:
+            opening = opening.format(name=name)
+
+        # Don't add opening if response already starts with name or similar
+        resp_start = response[:30].lower()
+        if name and name.lower() in resp_start:
+            logger.info("RESPONSE_OPENING_SKIPPED already_has_name")
+            return response
+
+        # Store in memory buffer
+        self._recent_openings.append(opening)
+
+        # Prepend opening — lowercase first char of response if it was uppercase
+        if response and response[0].isupper():
+            result = f"{opening}{response[0].lower()}{response[1:]}"
+        else:
+            result = f"{opening}{response}"
+
+        logger.info('RESPONSE_OPENING selected="%s" probability=%.2f intensity=%.2f',
+                     opening.strip()[:40], RELATIONAL_OPENING_PROBABILITY, intensity)
+        return result
 
 
 # Singleton

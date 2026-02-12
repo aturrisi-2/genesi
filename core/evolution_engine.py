@@ -152,7 +152,7 @@ def _generate_autonomous_response(user_name: str, trust: float, stage: str,
                                    message: str, episodes: List[Dict],
                                    profile: Dict) -> str:
     """Genera risposta autonoma basata su memoria e stato relazionale."""
-    prefix = f"{user_name}, " if user_name else ""
+    prefix = ""  # Opening handled by emotional_intensity_engine
     msg_lower = message.lower()
 
     # ─── SALUTI ────────────────────────────────────────────────
@@ -214,37 +214,37 @@ def _greeting_response(prefix: str, name: str, trust: float, stage: str) -> str:
 def _emotional_response(prefix: str, emotion: str, intensity: float, trust: float) -> Optional[str]:
     responses = {
         "sad": [
-            f"{prefix}sono qui con te. Non devi affrontare tutto da solo.",
-            f"{prefix}capisco che sia un momento difficile. Sono qui.",
-            f"{prefix}quello che senti ha valore. Ti ascolto."
+            "Quello che senti ha un peso reale. Non devi affrontare tutto da solo.",
+            "Capisco che sia un momento difficile.",
+            "Quello che senti ha valore."
         ],
         "angry": [
-            f"{prefix}capisco la tua frustrazione. Vuoi raccontarmi cosa e' successo?",
-            f"{prefix}e' comprensibile sentirsi cosi'. Sono qui per ascoltarti."
+            "Capisco la tua frustrazione. Vuoi raccontarmi cosa e' successo?",
+            "E' comprensibile sentirsi cosi'."
         ],
         "happy": [
-            f"{prefix}che bello sentirti cosi'! Raccontami di piu'.",
-            f"{prefix}mi fa piacere. Cosa ti ha reso felice?"
+            "Che bello sentirti cosi'! Raccontami di piu'.",
+            "Mi fa piacere. Cosa ti ha reso felice?"
         ],
         "anxious": [
-            f"{prefix}respira. Sono qui. Vuoi dirmi cosa ti preoccupa?",
-            f"{prefix}capisco che sei preoccupato. Parliamone insieme."
+            "Respira. Vuoi dirmi cosa ti preoccupa?",
+            "Capisco che sei preoccupato. Parliamone insieme."
         ],
         "love": [
-            f"{prefix}e' bello sentire queste parole.",
-            f"{prefix}l'amore e' una forza potente. Raccontami."
+            "E' bello sentire queste parole.",
+            "L'amore e' una forza potente."
         ],
         "longing": [
-            f"{prefix}la nostalgia dice molto di quanto tieni a qualcosa.",
-            f"{prefix}capisco quel sentimento. Vuoi parlarne?"
+            "La nostalgia dice molto di quanto tieni a qualcosa.",
+            "Capisco quel sentimento. Vuoi parlarne?"
         ],
         "tired": [
-            f"{prefix}e' importante ascoltare il proprio corpo. Come posso aiutarti?",
-            f"{prefix}a volte fermarsi e' la cosa piu' coraggiosa. Sono qui."
+            "E' importante ascoltare il proprio corpo. Come posso aiutarti?",
+            "A volte fermarsi e' la cosa piu' coraggiosa."
         ],
         "grateful": [
-            f"{prefix}la gratitudine e' un sentimento bellissimo.",
-            f"{prefix}mi fa piacere che tu senta questo."
+            "La gratitudine e' un sentimento bellissimo.",
+            "Mi fa piacere che tu senta questo."
         ]
     }
 
@@ -274,9 +274,9 @@ def _entity_reference_response(prefix: str, name: str, role: str, trust: float) 
     }
     label = role_labels.get(role, role)
     options = [
-        f"{prefix}mi hai parlato di {name}, {label}. Raccontami di piu'.",
-        f"{prefix}ricordo {name}. Come sta?",
-        f"{prefix}{name}... dimmi, cosa e' successo?"
+        f"Mi hai parlato di {name}, {label}. Raccontami di piu'.",
+        f"Ricordo {name}. Come sta?",
+        f"{name}... dimmi, cosa e' successo?"
     ]
     return random.choice(options)
 
@@ -290,12 +290,10 @@ def _episode_aware_response(prefix: str, message: str, episodes: List[Dict],
         ep_words = set(ep.get("msg", "").lower().split())
         overlap = msg_words & ep_words - {"il", "la", "di", "che", "e", "a", "in", "per", "un", "una", "non", "mi", "ti", "si"}
         if len(overlap) >= 2:
-            # Found a relevant past episode
-            topic_hint = " ".join(list(overlap)[:3])
             options = [
-                f"{prefix}mi sembra che ne abbiamo gia' parlato. Dimmi di piu'.",
-                f"{prefix}ricordo qualcosa a riguardo. Continua, ti ascolto.",
-                f"{prefix}questo mi ricorda qualcosa che mi hai detto. Vai avanti."
+                "Mi sembra che ne abbiamo gia' parlato. Dimmi di piu'.",
+                "Ricordo qualcosa a riguardo. Continua.",
+                "Questo mi ricorda qualcosa che mi hai detto."
             ]
             return random.choice(options)
     return None
@@ -304,15 +302,15 @@ def _episode_aware_response(prefix: str, message: str, episodes: List[Dict],
 def _base_relational_response(prefix: str, trust: float, stage: str) -> str:
     if stage == "mature":
         options = [
-            f"{prefix}raccontami. Ti ascolto con attenzione.",
-            f"{prefix}sono qui per te. Dimmi tutto.",
-            f"{prefix}ti ascolto. Vai avanti."
+            "Raccontami. Ti ascolto con attenzione.",
+            "Dimmi tutto.",
+            "Ti ascolto."
         ]
     elif trust > 0.4:
         options = [
-            f"{prefix}dimmi di piu'.",
-            f"{prefix}sono qui. Continua pure.",
-            f"{prefix}ti ascolto."
+            "Dimmi di piu'.",
+            "Continua pure.",
+            "Ti ascolto."
         ]
     else:
         options = [
@@ -326,7 +324,7 @@ def _base_relational_response(prefix: str, trust: float, stage: str) -> str:
 async def _memory_response(user_id: str, profile: Dict, episodes: List[Dict],
                             user_name: str, trust: float) -> str:
     """Risposta a domande sulla memoria — usa dati reali."""
-    prefix = f"{user_name}, " if user_name else ""
+    prefix = ""  # Opening handled by emotional_intensity_engine
     parts = []
 
     # Known facts
