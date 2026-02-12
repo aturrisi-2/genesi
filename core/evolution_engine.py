@@ -236,37 +236,36 @@ def _greeting_response(prefix: str, name: str, trust: float, stage: str) -> str:
 def _emotional_response(prefix: str, emotion: str, intensity: float, trust: float) -> Optional[str]:
     responses = {
         "sad": [
-            "Quello che senti ha un peso reale. Non devi affrontare tutto da solo.",
-            "Capisco che sia un momento difficile.",
-            "Quello che senti ha valore."
+            "Capisco. Cosa e' successo?",
+            "Capisco che non sia facile. Cosa ti pesa di piu'?",
         ],
         "angry": [
-            "Capisco la tua frustrazione. Vuoi raccontarmi cosa e' successo?",
-            "E' comprensibile sentirsi cosi'."
+            "Cosa e' successo?",
+            "Capisco la frustrazione. Cosa l'ha provocata?",
         ],
         "happy": [
-            "Che bello sentirti cosi'! Raccontami di piu'.",
-            "Mi fa piacere. Cosa ti ha reso felice?"
+            "Bene! Cosa ti ha reso felice?",
+            "Mi fa piacere. Cosa e' successo di bello?",
         ],
         "anxious": [
-            "Respira. Vuoi dirmi cosa ti preoccupa?",
-            "Capisco che sei preoccupato. Parliamone insieme."
+            "Cosa ti preoccupa nello specifico?",
+            "Capisco. Qual e' la cosa che ti pesa di piu'?",
         ],
         "love": [
-            "E' bello sentire queste parole.",
-            "L'amore e' una forza potente."
+            "Bello. Di chi stai parlando?",
+            "Raccontami.",
         ],
         "longing": [
-            "La nostalgia dice molto di quanto tieni a qualcosa.",
-            "Capisco quel sentimento. Vuoi parlarne?"
+            "Cosa ti manca esattamente?",
+            "Capisco. A cosa stai pensando?",
         ],
         "tired": [
-            "E' importante ascoltare il proprio corpo. Come posso aiutarti?",
-            "A volte fermarsi e' la cosa piu' coraggiosa."
+            "Giornata pesante? Cosa e' successo?",
+            "Capisco. Cosa ti ha stancato?",
         ],
         "grateful": [
-            "La gratitudine e' un sentimento bellissimo.",
-            "Mi fa piacere che tu senta questo."
+            "Per cosa sei grato?",
+            "Mi fa piacere. Cosa e' successo?",
         ]
     }
 
@@ -324,21 +323,21 @@ def _episode_aware_response(prefix: str, message: str, episodes: List[Dict],
 def _base_relational_response(prefix: str, trust: float, stage: str) -> str:
     if stage == "mature":
         options = [
-            "Raccontami. Ti ascolto con attenzione.",
-            "Dimmi tutto.",
-            "Ti ascolto."
+            "Cosa mi vuoi raccontare?",
+            "Di cosa vuoi parlare?",
+            "Cosa hai in mente?"
         ]
     elif trust > 0.4:
         options = [
-            "Dimmi di piu'.",
-            "Continua pure.",
-            "Ti ascolto."
+            "Cosa intendi?",
+            "Spiegami meglio.",
+            "Di cosa si tratta?"
         ]
     else:
         options = [
-            "Sono qui. Dimmi pure.",
-            "Ti ascolto. Continua.",
-            "Raccontami."
+            "Di cosa vuoi parlare?",
+            "Cosa ti interessa?",
+            "Su cosa posso aiutarti?"
         ]
     return random.choice(options)
 
@@ -475,6 +474,7 @@ Rispondi in modo puramente relazionale, umano, autentico."""
     # Relational context — pre-built by Proactor._build_relational_context()
     relational_ctx = brain_state.get("relational_context", "")
     if not relational_ctx:
+        logger.warning("LLM_CONTEXT_MISSING — no relational_context in brain_state, using minimal fallback")
         # Fallback minimale se il contesto non e' stato iniettato
         profile = brain_state.get("profile", {})
         parts = []
@@ -495,20 +495,25 @@ Rispondi in modo puramente relazionale, umano, autentico."""
 {risk_rule}
 
 REGOLE OBBLIGATORIE:
+- Massimo 5 frasi per risposta. Sii conciso e diretto.
 - Adatta tono al livello di trust
 - Riferisci episodi passati se rilevanti
 - Non ripetere informazioni gia' note all'utente
-- Aumenta profondita' con trust alto
-- Sii autentico e diretto
 - Se conosci il nome dell'utente, usalo
+- Se la domanda e' informativa (cos'e', come funziona, spiega) -> rispondi con informazione concreta
+- Se la domanda e' emotiva -> empatia concreta + massimo 1 domanda di approfondimento
+- Niente metafore inutili, niente frasi da counselor generico
+- Mai rispondere con frasi passive tipo "Dimmi di piu'" o "Raccontami" da sole
 
 DIVIETI ASSOLUTI (risposte da NON generare mai):
 - "Quello che senti conta..." o varianti generiche terapeutiche
 - "A volte le conversazioni..." o frasi astratte disancorate
 - "Sono qui per te" senza contesto specifico
+- "Dimmi di piu'" come risposta completa
 - Qualsiasi frase che potrebbe essere detta a chiunque senza conoscerlo
 - Risposte che ignorano il contesto relazionale fornito sopra
 - Ripetizioni di frasi gia' dette in episodi precedenti
+- Metafore generiche (es. "un viaggio", "un percorso", "una luce")
 
 Ogni risposta DEVE essere ancorata al contesto reale dell'utente.
 Se non hai contesto sufficiente, fai una domanda specifica per ottenerlo.

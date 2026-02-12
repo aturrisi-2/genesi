@@ -46,10 +46,15 @@ class Proactor:
             if not user_id:
                 raise ValueError("Proactor received empty user_id")
 
-            logger.info("PROACTOR_HANDLE user=%s intent=%s", user_id, intent)
+            logger.info("PROACTOR_START user=%s intent=%s msg_len=%d", user_id, intent, len(message))
 
             # ── 1. BRAIN UPDATE (emotion locale, semantic, episodic, relational, consolidation) ──
             brain_state = await memory_brain.update_brain(user_id, message)
+            logger.info("PROACTOR_MEMORY_UPDATED user=%s profile_name=%s trust=%.3f episodes=%d",
+                        user_id,
+                        brain_state.get('profile', {}).get('name', 'unknown'),
+                        brain_state.get('relational', {}).get('trust', 0),
+                        len(brain_state.get('episodes', [])))
 
             # ── 2. LATENT STATE UPDATE (zero LLM) ──
             latent = await latent_state_engine.update_latent_state(
@@ -69,12 +74,15 @@ class Proactor:
 
             # ── 4. BUILD RELATIONAL CONTEXT — injected into brain_state for LLM ──
             relational_context = self._build_relational_context(brain_state)
+            if not relational_context:
+                logger.error("PROACTOR_CONTEXT_EMPTY user=%s — context builder returned empty", user_id)
             brain_state["relational_context"] = relational_context
             logger.info("PROACTOR_CONTEXT_BUILT user=%s context_len=%d", user_id, len(relational_context))
 
             # ── 5. EVOLUTION ENGINE (relational + LLM gate) ──
-            logger.info("PROACTOR_ROUTE route=evolution intent=%s user=%s", intent, user_id)
+            logger.info("PROACTOR_LLM_CALL user=%s intent=%s context_len=%d", user_id, intent, len(relational_context))
             base_response = await generate_response_from_brain(user_id, message, brain_state)
+            logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d", user_id, len(base_response))
 
             # ── 6. CURIOSITY ENGINE (selective exploration, targeted questions) ──
             curious_response = curiosity_engine.inject(base_response, message, brain_state)

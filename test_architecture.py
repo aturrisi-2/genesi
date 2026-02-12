@@ -468,14 +468,18 @@ required_tags = {
         "TOOL_TIME_RESPONSE", "TOOL_DATE_RESPONSE",
     ],
     "core/proactor.py": [
-        "PROACTOR_ERROR_FULL", "PROACTOR_TOOL_ERROR", "PROACTOR_RESPONSE",
+        "PROACTOR_START", "PROACTOR_MEMORY_UPDATED",
         "PROACTOR_CONTEXT_BUILT", "PROACTOR_RELATIONAL_INJECTED",
+        "PROACTOR_LLM_CALL", "PROACTOR_LLM_RESPONSE",
+        "PROACTOR_ERROR_FULL", "PROACTOR_TOOL_ERROR", "PROACTOR_RESPONSE",
+        "PROACTOR_CONTEXT_EMPTY",
     ],
     "core/evolution_engine.py": [
         # Tags use %s format: tag_prefix = "LLM_PRIMARY" / "LLM_FALLBACK"
         "LLM_PRIMARY", "LLM_FALLBACK",
         "%s_REQUEST", "%s_OK", "%s_ERROR",
         "LLM_PRIMARY_FAIL", "COMPLEXITY_SCORE", "IDENTITY_REFLECTION",
+        "LLM_CONTEXT_MISSING",
     ],
     "core/llm_service.py": [
         "LLM_SERVICE_PRIMARY", "LLM_SERVICE_FALLBACK",
@@ -522,8 +526,89 @@ check("prompt has DIVIETI ASSOLUTI", "DIVIETI ASSOLUTI" in prompt)
 check("prompt bans 'Quello che senti conta'", "Quello che senti conta" in prompt)
 check("prompt bans 'A volte le conversazioni'", "A volte le conversazioni" in prompt)
 check("prompt bans ungrounded 'Sono qui per te'", "Sono qui per te" in prompt)
+check("prompt bans 'Dimmi di piu' standalone", "Dimmi di piu'" in prompt)
+check("prompt bans generic metaphors", "Metafore generiche" in prompt)
 check("prompt requires grounded responses", "ancorata al contesto reale" in prompt)
 check("prompt has REGOLE OBBLIGATORIE", "REGOLE OBBLIGATORIE" in prompt)
+check("prompt: max 5 frasi rule", "Massimo 5 frasi" in prompt)
+check("prompt: informativa -> informativa", "informativa" in prompt)
+check("prompt: emotiva -> empatia + 1 domanda", "empatia concreta" in prompt)
+check("prompt: no metafore inutili", "metafore inutili" in prompt)
+
+
+# =====================================================================
+# GROUP 15: MANDATORY E2E TESTS
+# =====================================================================
+
+print("\n===== GROUP 15: Mandatory E2E Tests =====")
+
+
+async def test_e2e_mandatory():
+    """5 mandatory E2E tests per the architectural spec."""
+
+    # --- Test 1: "Mi chiamo Marco" -> saved in profile ---
+    brain_marco = await memory_brain.update_brain("test_e2e_marco", "mi chiamo Marco e vivo a Milano")
+    profile_marco = brain_marco.get("profile", {})
+    check("E2E-1: 'Mi chiamo Marco' -> name saved", profile_marco.get("name") == "Marco")
+    check("E2E-1: 'vivo a Milano' -> city saved", profile_marco.get("city") == "Milano")
+
+    # --- Test 2: "Chi sono?" -> must contain Marco ---
+    brain_chi = await memory_brain.update_brain("test_e2e_marco", "chi sono io")
+    brain_chi["relational_context"] = Proactor._build_relational_context(brain_chi)
+    result_chi = await generate_response_from_brain("test_e2e_marco", "chi sono io", brain_chi)
+    has_marco = "Marco" in result_chi or "chiami" in result_chi or "ricordo" in result_chi
+    check("E2E-2: 'Chi sono?' -> contains Marco or memory ref", has_marco)
+    check("E2E-2: response is not empty", len(result_chi) > 0)
+
+    # --- Test 3: "Che tempo fa a Roma?" -> tool call (mock) ---
+    ts = ToolService()
+    fake_weather = FakeResponse(200, {
+        "weather": [{"description": "pioggia leggera"}],
+        "main": {"temp": 14.2, "feels_like": 12.8, "humidity": 78},
+        "wind": {"speed": 5.1}
+    })
+    mc = AsyncMock()
+    mc.get = AsyncMock(return_value=fake_weather)
+    mc.is_closed = False
+    ts._http_client = mc
+    with patch("core.tool_services.OPENWEATHER_API_KEY", "test-key"):
+        weather_result = await ts.get_weather("che tempo fa a Roma")
+    check("E2E-3: weather contains Roma", "Roma" in weather_result)
+    check("E2E-3: weather contains temperature", "14" in weather_result)
+    check("E2E-3: weather not error", "non disponibile" not in weather_result)
+
+    # --- Test 4: "Dammi notizie su Roma" -> news tool call (mock) ---
+    ts2 = ToolService()
+    fake_news = FakeResponse(200, {
+        "status": "ok",
+        "articles": [
+            {"title": "Roma inaugura nuovo parco - Repubblica"},
+            {"title": "Traffico in centro - Corriere"},
+        ]
+    })
+    mc2 = AsyncMock()
+    mc2.get = AsyncMock(return_value=fake_news)
+    mc2.is_closed = False
+    ts2._http_client = mc2
+    with patch("core.tool_services.NEWSAPI_KEY", "test-key"):
+        news_result = await ts2.get_news("dammi notizie su Roma")
+    check("E2E-4: news contains article", "Roma inaugura" in news_result)
+    check("E2E-4: news numbered", "1." in news_result)
+    check("E2E-4: news not error", "non disponibile" not in news_result)
+
+    # --- Test 5: "Cos'e' un bug?" -> informative, not therapeutic ---
+    brain_info = await memory_brain.update_brain("test_e2e_info", "cos'e' un bug nel software")
+    brain_info["relational_context"] = Proactor._build_relational_context(brain_info)
+    result_info = await generate_response_from_brain("test_e2e_info", "cos'e' un bug nel software", brain_info)
+    check("E2E-5: informative response is string", isinstance(result_info, str))
+    check("E2E-5: response not empty", len(result_info) > 0)
+    # Must NOT contain therapeutic phrases
+    therapeutic = ["Quello che senti", "Sono qui per te", "Dimmi di piu'"]
+    has_therapeutic = any(t in result_info for t in therapeutic)
+    check("E2E-5: NO therapeutic phrases in informative response", not has_therapeutic)
+
+
+asyncio.run(test_e2e_mandatory())
 
 
 # =====================================================================
