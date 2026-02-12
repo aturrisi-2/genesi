@@ -109,6 +109,32 @@ INTERNAL_STATE_KEYWORDS = [
 QUESTION_WORDS = ["?", "perche", "perché", "come", "cosa", "quando", "dove", "chi"]
 
 # ═══════════════════════════════════════════════════════════════
+# BANNED EMPATHIC PHRASES — vietate se ripetute
+# ═══════════════════════════════════════════════════════════════
+
+BANNED_EMPATHIC_PATTERNS = [
+    "sono qui con te",
+    "quello che senti conta",
+    "ti ascolto",
+    "sono qui per te",
+    "non sei solo",
+    "non sei sola",
+    "quello che provi e' valido",
+    "quello che provi è valido",
+]
+
+# Direct-style responses for repeated input (3x same message)
+DIRECT_STYLE_RESPONSES = [
+    "Me lo hai gia' detto. Cosa vuoi fare concretamente?",
+    "Lo so. Me lo hai detto. Adesso dimmi: cosa cambi?",
+    "Stai ripetendo la stessa cosa. Forse il punto non e' dirlo, ma decidere qualcosa.",
+    "Ok, l'ho capito. Ma ripeterlo non cambia niente. Cosa vuoi che succeda?",
+    "Tre volte la stessa cosa. Forse non hai bisogno di parlarne ancora — hai bisogno di agire.",
+    "Ti ho sentito. Adesso la domanda e': cosa fai con quello che senti?",
+    "Lo sento. Ma continuare a dirlo non ti porta da nessuna parte. Qual e' il prossimo passo?",
+]
+
+# ═══════════════════════════════════════════════════════════════
 # EXPANSION POOLS — materiale per espandere risposte
 # ═══════════════════════════════════════════════════════════════
 
@@ -430,6 +456,10 @@ class EmotionalIntensityEngine:
         self._recent_openings = deque(maxlen=3)
         # Cognitive mode history: max 2 consecutive same mode
         self._recent_modes = deque(maxlen=2)
+        # Empathic phrase history: track last 5 responses for banned phrases
+        self._recent_responses = deque(maxlen=5)
+        # Input repetition tracker: last 5 user messages
+        self._recent_inputs = deque(maxlen=5)
         logger.info("EMOTIONAL_INTENSITY_ENGINE: Active")
 
     def enhance(self, response: str, message: str, brain_state: Dict[str, Any]) -> str:
@@ -461,6 +491,9 @@ class EmotionalIntensityEngine:
         msg_lower = message.lower().strip()
         resp_lower = response.lower().strip()
 
+        # ── Track input for repetition detection ──
+        self._recent_inputs.append(msg_lower)
+
         # ── Detect message type ──
         is_emotional = self._is_emotional_message(msg_lower)
         is_narrative_request = self._is_narrative_request(msg_lower)
@@ -468,10 +501,15 @@ class EmotionalIntensityEngine:
         is_internal_state = self._is_internal_state(msg_lower)
         has_vulnerability = vulnerability > 0.3 or intensity > 0.5
 
-        # ── Determine min length ──
-        min_words = 60
-        if has_vulnerability or is_emotional:
-            min_words = 90
+        # ── REPEATED INPUT DETECTION (3x same) → direct style ──
+        if self._is_repeated_input(msg_lower):
+            direct = random.choice(DIRECT_STYLE_RESPONSES)
+            logger.info("RESPONSE_MODE=direct reason=repeated_input_3x")
+            self._recent_responses.append(direct.lower())
+            return direct
+
+        # ── SELECT RESPONSE MODE: short(40%) / medium(40%) / deep(20%) ──
+        response_mode = self._select_response_mode(intensity, has_vulnerability)
 
         # ── NARRATIVE REQUEST — generate story, don't redirect ──
         if is_narrative_request:
@@ -482,7 +520,6 @@ class EmotionalIntensityEngine:
         # ── GREETING — expand beyond minimal salute ──
         if is_greeting:
             response = self._handle_greeting(response, user_name, trust)
-            min_words = 40
             logger.info("INITIATIVE_TRIGGERED type=greeting len=%d", len(response.split()))
 
         # ── ANTI-PASSIVE: expand standalone passive phrases ──
@@ -491,27 +528,30 @@ class EmotionalIntensityEngine:
                                             is_emotional, is_internal_state, trust)
             logger.info("INITIATIVE_TRIGGERED type=anti_passive")
 
-        # ── EMOTIONAL / INTERNAL STATE: add exploration ──
-        if (is_emotional or is_internal_state) and not self._has_question(response):
-            response = self._add_exploration(response, detected_emotion, resonance)
-            logger.info("INITIATIVE_TRIGGERED type=exploration emotion=%s", detected_emotion)
-
-        # ── RESONANCE INTENSIFICATION ──
-        if resonance > 0.5 and (is_emotional or is_internal_state):
-            response = self._intensify_with_reflection(response, detected_emotion, resonance)
-
-        # ── CURIOSITY: add question if missing ──
-        if curiosity > 0.4 and not self._has_question(response) and not is_narrative_request:
-            response = self._add_curiosity_question(response, detected_emotion, msg_lower)
-            logger.info("INITIATIVE_TRIGGERED type=curiosity")
-
-        # ── MIN LENGTH ENFORCEMENT ──
-        word_count = len(response.split())
-        if word_count < min_words:
-            response = self._enforce_min_length(response, detected_emotion,
-                                                 user_name, min_words, is_emotional,
-                                                 is_internal_state, trust, resonance)
-            logger.info("MIN_LENGTH_ENFORCED target=%d actual=%d", min_words, len(response.split()))
+        # ── MODE-BASED EXPANSION ──
+        if response_mode == "short":
+            # Short: 1-2 sentences, no forced question, no forced reflection
+            response = self._trim_to_short(response)
+        elif response_mode == "medium":
+            # Medium: allow exploration OR reflection, not both
+            if (is_emotional or is_internal_state) and not self._has_question(response):
+                if random.random() < 0.6:  # 60% chance of question
+                    response = self._add_exploration(response, detected_emotion, resonance)
+                    logger.info("INITIATIVE_TRIGGERED type=exploration emotion=%s", detected_emotion)
+            elif curiosity > 0.4 and not self._has_question(response) and not is_narrative_request:
+                if random.random() < 0.5:  # 50% chance
+                    response = self._add_curiosity_question(response, detected_emotion, msg_lower)
+                    logger.info("INITIATIVE_TRIGGERED type=curiosity")
+        elif response_mode == "deep":
+            # Deep: full expansion pipeline
+            if (is_emotional or is_internal_state) and not self._has_question(response):
+                response = self._add_exploration(response, detected_emotion, resonance)
+                logger.info("INITIATIVE_TRIGGERED type=exploration emotion=%s", detected_emotion)
+            if resonance > 0.5 and (is_emotional or is_internal_state):
+                response = self._intensify_with_reflection(response, detected_emotion, resonance)
+            if curiosity > 0.4 and not self._has_question(response) and not is_narrative_request:
+                response = self._add_curiosity_question(response, detected_emotion, msg_lower)
+                logger.info("INITIATIVE_TRIGGERED type=curiosity")
 
         # ── COGNITIVE MODE SHAPING ──
         if not is_greeting and not is_narrative_request:
@@ -524,11 +564,17 @@ class EmotionalIntensityEngine:
         # ── ANTI-GENERIC ENDING ──
         response = self._fix_generic_ending(response)
 
+        # ── STRIP BANNED EMPATHIC PHRASES ──
+        response = self._strip_banned_empathic(response)
+
         # ── PROBABILISTIC RELATIONAL OPENING ──
         response = self._maybe_add_opening(response, user_name, intensity, resonance, is_greeting)
 
-        logger.info("EMOTIONAL_INTENSITY_APPLIED words=%d emotion=%s resonance=%.2f",
-                     len(response.split()), detected_emotion, resonance)
+        # ── Track response for empathic repetition detection ──
+        self._recent_responses.append(response.lower())
+
+        logger.info("EMOTIONAL_INTENSITY_APPLIED words=%d emotion=%s resonance=%.2f RESPONSE_MODE=%s",
+                     len(response.split()), detected_emotion, resonance, response_mode)
         return response
 
     # ═══════════════════════════════════════════════════════════
@@ -565,6 +611,68 @@ class EmotionalIntensityEngine:
 
     def _has_question(self, text: str) -> bool:
         return "?" in text
+
+    def _is_repeated_input(self, msg: str) -> bool:
+        """Detect if same input was sent 3+ times in recent history."""
+        count = sum(1 for m in self._recent_inputs if m == msg)
+        return count >= 3
+
+    def _select_response_mode(self, intensity: float, has_vulnerability: bool) -> str:
+        """
+        Probabilistic response mode selection.
+        40% short (1-2 frasi), 40% medium, 20% deep.
+        High vulnerability biases toward medium/deep.
+        """
+        roll = random.random()
+        if has_vulnerability:
+            # Shift: 20% short, 45% medium, 35% deep
+            if roll < 0.20:
+                return "short"
+            elif roll < 0.65:
+                return "medium"
+            else:
+                return "deep"
+        else:
+            # Default: 40% short, 40% medium, 20% deep
+            if roll < 0.40:
+                return "short"
+            elif roll < 0.80:
+                return "medium"
+            else:
+                return "deep"
+
+    def _trim_to_short(self, response: str) -> str:
+        """Trim response to 1-2 sentences for short mode."""
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', response) if s.strip()]
+        if len(sentences) <= 2:
+            return response
+        # Keep first 1-2 sentences, prefer keeping a question if present
+        kept = sentences[:2]
+        return " ".join(kept)
+
+    def _strip_banned_empathic(self, response: str) -> str:
+        """
+        Remove banned empathic phrases if they appeared in recent responses.
+        Only strips if the phrase was already used recently.
+        """
+        resp_lower = response.lower()
+        recent_text = " ".join(self._recent_responses)
+
+        for phrase in BANNED_EMPATHIC_PATTERNS:
+            if phrase in resp_lower and phrase in recent_text:
+                # Remove the phrase (case-insensitive)
+                pattern = re.compile(re.escape(phrase), re.IGNORECASE)
+                response = pattern.sub("", response)
+                # Clean up double spaces and leading punctuation
+                response = re.sub(r'\s{2,}', ' ', response).strip()
+                response = re.sub(r'^[,\.\s]+', '', response).strip()
+                logger.info("EMPATHIC_PHRASE_BLOCKED phrase='%s'", phrase)
+
+        # Ensure first char is uppercase after stripping
+        if response and response[0].islower():
+            response = response[0].upper() + response[1:]
+
+        return response
 
     # ═══════════════════════════════════════════════════════════
     # EXPANSION METHODS

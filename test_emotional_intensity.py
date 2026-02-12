@@ -1,10 +1,13 @@
 """
 TEST EMOTIONAL INTENSITY ENGINE - Genesi Cognitive System v3
 Verifica:
-- Input depresso: >=80 parole, contiene domanda, contiene validazione, no invito generico
+- Input depresso: contiene validazione, no invito generico
 - Input narrativo: genera storia vera, non rimanda all'utente
-- Input ciao: saluto + espansione >=40 parole
+- Input ciao: saluto espanso (non solo 'Ciao!')
 - Anti-passive: frasi standalone espanse
+- Response mode: short/medium/deep probabilistic
+- Empathic phrase blocker: no repeated banned phrases
+- Repeated input 3x: switches to direct style
 - No regressioni su test v2/v3
 """
 
@@ -89,8 +92,7 @@ async def test_depressed_input():
     ends_generic = any(resp_lower.rstrip().endswith(g) for g in generic_endings)
 
     print(f"  -> Risposta ({word_count} parole): {response[:200]}...")
-    check(">=80 parole", word_count >= 80, f"got {word_count}")
-    check("contiene domanda (?)", has_question)
+    check("risposta non vuota", word_count >= 5, f"got {word_count}")
     check("contiene validazione emotiva", has_validation)
     check("NON termina con invito generico", not ends_generic)
 
@@ -132,8 +134,8 @@ async def test_ciao_input():
     word_count = len(words)
 
     print(f"  -> Risposta ({word_count} parole): {response[:200]}...")
-    check("saluto + espansione >=40 parole", word_count >= 40, f"got {word_count}")
-    check("non e' solo 'Ciao!'", word_count > 5)
+    check("saluto espanso (non solo Ciao)", word_count > 5, f"got {word_count}")
+    check("non e' solo 'Ciao!'", word_count > 3)
 
 
 async def test_anti_passive():
@@ -174,7 +176,7 @@ async def test_emotional_exploration():
     has_question = "?" in response
 
     print(f"  -> Risposta ({word_count} parole): {response[:200]}...")
-    check(">=80 parole (vulnerabilita')", word_count >= 80, f"got {word_count}")
+    check("risposta non vuota (vulnerabilita')", word_count >= 5, f"got {word_count}")
     check("contiene domanda esplorativa", has_question)
 
 
@@ -200,6 +202,101 @@ async def test_no_extra_llm():
     check("risultato espanso", len(result.split()) > 10)
 
 
+async def test_response_mode():
+    print("\n===== TEST 7: Response mode probabilistic =====")
+    await cleanup()
+
+    brain_state = {
+        "emotion": {"emotion": "neutral", "intensity": 0.3, "vulnerability": 0.0},
+        "latent": {"emotional_resonance": 0.5, "curiosity": 0.5,
+                   "attachment": 0.5, "stability": 0.5, "relational_energy": 0.5},
+        "profile": {"name": ""},
+        "relational": {"trust": 0.3, "stage": "initial"},
+        "episodes": [],
+    }
+
+    # Run 20 times and check we get variation in length
+    import random
+    random.seed(42)
+    lengths = []
+    for _ in range(20):
+        result = emotional_intensity_engine.enhance(
+            "Capisco quello che dici. E' una situazione complessa che richiede attenzione.",
+            "come stai?", brain_state
+        )
+        lengths.append(len(result.split()))
+
+    min_len = min(lengths)
+    max_len = max(lengths)
+    print(f"  -> Lengths: min={min_len} max={max_len} spread={max_len - min_len}")
+    check("variazione lunghezza (spread > 0)", max_len > min_len, f"min={min_len} max={max_len}")
+    check("almeno una risposta breve (<20 parole)", min_len < 20, f"min={min_len}")
+
+
+async def test_empathic_blocker():
+    print("\n===== TEST 8: Empathic phrase blocker =====")
+    await cleanup()
+
+    brain_state = {
+        "emotion": {"emotion": "sad", "intensity": 0.7, "vulnerability": 0.5},
+        "latent": {"emotional_resonance": 0.7, "curiosity": 0.5,
+                   "attachment": 0.5, "stability": 0.5, "relational_energy": 0.5},
+        "profile": {"name": ""},
+        "relational": {"trust": 0.4, "stage": "developing"},
+        "episodes": [],
+    }
+
+    # Reset engine state
+    emotional_intensity_engine._recent_responses.clear()
+    emotional_intensity_engine._recent_inputs.clear()
+
+    # First call: "sono qui con te" should pass
+    r1 = emotional_intensity_engine.enhance(
+        "Sono qui con te. Capisco il tuo dolore.", "mi sento triste", brain_state
+    )
+    # Second call: same phrase should be stripped
+    r2 = emotional_intensity_engine.enhance(
+        "Sono qui con te. Capisco il tuo dolore.", "sono molto triste", brain_state
+    )
+    print(f"  -> R1: {r1[:80]}...")
+    print(f"  -> R2: {r2[:80]}...")
+    check("seconda volta 'sono qui con te' rimossa", "sono qui con te" not in r2.lower())
+
+
+async def test_repeated_input():
+    print("\n===== TEST 9: Repeated input 3x =====")
+    await cleanup()
+
+    brain_state = {
+        "emotion": {"emotion": "sad", "intensity": 0.5, "vulnerability": 0.3},
+        "latent": {"emotional_resonance": 0.5, "curiosity": 0.5,
+                   "attachment": 0.5, "stability": 0.5, "relational_energy": 0.5},
+        "profile": {"name": ""},
+        "relational": {"trust": 0.3, "stage": "initial"},
+        "episodes": [],
+    }
+
+    # Reset engine state
+    emotional_intensity_engine._recent_responses.clear()
+    emotional_intensity_engine._recent_inputs.clear()
+
+    msg = "mi sento male"
+    r1 = emotional_intensity_engine.enhance("Capisco.", msg, brain_state)
+    r2 = emotional_intensity_engine.enhance("Capisco.", msg, brain_state)
+    r3 = emotional_intensity_engine.enhance("Capisco.", msg, brain_state)
+
+    print(f"  -> R1: {r1[:80]}")
+    print(f"  -> R2: {r2[:80]}")
+    print(f"  -> R3 (direct): {r3[:80]}")
+
+    # R3 should be direct style (from DIRECT_STYLE_RESPONSES)
+    direct_indicators = ["gia' detto", "cosa vuoi", "ripetendo", "cosa cambi",
+                         "cosa fai", "prossimo passo", "agire", "decidere"]
+    is_direct = any(d in r3.lower() for d in direct_indicators)
+    check("3a ripetizione = stile diretto", is_direct, f"got: {r3[:60]}")
+    check("R3 diversa da R1", r3 != r1)
+
+
 async def main():
     print("=" * 55)
     print("GENESI v3 - EMOTIONAL INTENSITY ENGINE TESTS")
@@ -215,6 +312,9 @@ async def main():
     await cleanup()
     await test_emotional_exploration()
     await test_no_extra_llm()
+    await test_response_mode()
+    await test_empathic_blocker()
+    await test_repeated_input()
     await cleanup()
 
     print("\n" + "=" * 55)
