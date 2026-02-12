@@ -27,6 +27,19 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         str: Risposta generata da Genesi (filtrata)
     """
     try:
+        # 0️⃣ RISPOSTA DETERMINISTICA SU DOMANDA NOME
+        full_profile = await semantic_memory.get_user_profile(user_id)
+        
+        # Check for name question patterns
+        name_patterns = ["come mi chiamo", "ti ricordi il mio nome", "qual è il mio nome", "come ti chiami"]
+        if any(pattern.lower() in message.lower() for pattern in name_patterns):
+            if full_profile.get("name"):
+                logger.info(f"NAME_DETERMINISTIC_RESPONSE user_id={user_id} name={full_profile['name']}")
+                return f"Ti chiami {full_profile['name']}."
+            else:
+                logger.info(f"NAME_QUESTION_NO_PROFILE user_id={user_id}")
+                return "Non ho ancora imparato come ti chiami. Come ti chiami?"
+        
         # 1️⃣ Analisi emotiva messaggio
         emotion = await analyze_emotion(message)
         
@@ -42,10 +55,7 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         # 5️⃣ Aggiornamento pattern emotivi nel profilo
         await semantic_memory.update_emotional_pattern(user_id, emotion.get("emotion", "neutral"), emotion.get("intensity", 0.3))
         
-        # 6️⃣ Caricamento profilo completo utente
-        full_profile = await semantic_memory.get_user_profile(user_id)
-        
-        # Log caricamento profilo
+        # 6️⃣ Log caricamento profilo (already loaded above)
         logger.info(f"PROFILE_LOADED user_id={user_id} has_name={bool(full_profile.get('name'))} name={full_profile.get('name')}")
         
         # 7️⃣ Costruzione prompt con memoria completa

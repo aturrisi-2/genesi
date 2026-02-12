@@ -58,6 +58,8 @@ Non sostituisci relazioni reali.
     user_context = ""
     if user_profile.get("name"):
         user_context = f"Nome utente: {user_profile['name']}\n"
+        # Iniezione esplicita memoria nome
+        user_context += f"L'utente si chiama {user_profile['name']}. Non dimenticare questa informazione.\n"
     
     if user_profile.get("profession"):
         user_context += f"Professione: {user_profile['profession']}\n"
