@@ -5,13 +5,16 @@ Architettura separata: Chat libera vs Tecnica
 """
 
 import re
+import logging
 from typing import Dict, Optional
 from core.log import log
+
+logger = logging.getLogger(__name__)
 
 class IntentClassifier:
     """
     Classificatore intent - rule-based deterministico
-    Separazione chiara: Qwen vs GPT
+    Engine: GPT-4o-mini per intent classification
     """
     
     def __init__(self):
@@ -23,8 +26,8 @@ class IntentClassifier:
             "cosa ti ricordi", "ti ricordi"
         ]
         
-        # Pattern per Qwen2.5-7B-Instruct (chat libera)
-        self.qwen_patterns = {
+        # Pattern per chat libera (GPT-4o)
+        self.chat_patterns = {
             "greeting": [
                 "ciao", "salve", "hey", "buongiorno", "buonasera", "buon pomeriggio"
             ],
@@ -58,7 +61,7 @@ class IntentClassifier:
             ]
         }
         
-        # Pattern per GPT (tecnica)
+        # Pattern per GPT-4o (tecnica)
         self.gpt_patterns = {
             "tecnica": [
                 "tecnica", "tecnico", "architettura", "sistema", "implementazione",
@@ -89,23 +92,26 @@ class IntentClassifier:
         
         # 0️⃣ PRIORITA' MASSIMA: pattern memoria/ricordo
         if any(pattern in message_lower for pattern in self.memory_patterns):
-            log("INTENT_CLASSIFIED", intent="chat_free", engine="QWEN", message=message[:50], override="memory_context")
+            log("INTENT_CLASSIFIED", intent="chat_free", engine="gpt-4o", message=message[:50], override="memory_context")
             return "chat_free"
         
-        # 1️⃣ Pattern tecnici (GPT)
+        # 1️⃣ Pattern tecnici (GPT-4o)
         for intent, keywords in self.gpt_patterns.items():
             if any(keyword in message_lower for keyword in keywords):
-                log("INTENT_CLASSIFIED", intent=intent, engine="GPT", message=message[:50])
+                log("INTENT_CLASSIFIED", intent=intent, engine="gpt-4o", message=message[:50])
+                logger.info("INTENT_ENGINE=gpt-4o-mini intent=%s", intent)
                 return intent
         
-        # 2️⃣ Pattern chat (Qwen) - match esatto su frasi complete
-        for intent, keywords in self.qwen_patterns.items():
+        # 2️⃣ Pattern chat (GPT-4o)
+        for intent, keywords in self.chat_patterns.items():
             if any(keyword in message_lower for keyword in keywords):
-                log("INTENT_CLASSIFIED", intent=intent, engine="QWEN", message=message[:50])
+                log("INTENT_CLASSIFIED", intent=intent, engine="gpt-4o", message=message[:50])
+                logger.info("INTENT_ENGINE=gpt-4o-mini intent=%s", intent)
                 return intent
         
-        # 3️⃣ Default: chat libera (Qwen)
-        log("INTENT_DEFAULT", intent="chat_free", engine="QWEN", message=message[:50])
+        # 3️⃣ Default: chat libera (GPT-4o)
+        log("INTENT_DEFAULT", intent="chat_free", engine="gpt-4o", message=message[:50])
+        logger.info("INTENT_ENGINE=gpt-4o-mini intent=chat_free")
         return "chat_free"
     
     def get_engine_for_intent(self, intent: str) -> str:
@@ -116,12 +122,12 @@ class IntentClassifier:
             intent: Intent classificato
             
         Returns:
-            Engine: "QWEN" o "GPT"
+            Engine: "gpt-4o" o "gpt-4o-mini"
         """
         if intent in self.gpt_patterns:
-            return "GPT"
+            return "gpt-4o"
         else:
-            return "QWEN"
+            return "gpt-4o"
 
 # Istanza globale
 intent_classifier = IntentClassifier()

@@ -5,6 +5,7 @@ LLM chiamato SOLO per complessità cognitiva elevata.
 Genera risposte coerenti, personalizzate, mai generiche.
 """
 
+import os
 import logging
 import random
 from typing import Dict, Any, Optional, List
@@ -14,7 +15,15 @@ from core.identity_filter import contains_forbidden_patterns
 
 logger = logging.getLogger(__name__)
 
+# GPT-4o per generazione risposta principale
+LLM_MODEL = "gpt-4o"
+
+_api_key = os.environ.get("OPENAI_API_KEY", "")
+if not _api_key or _api_key.startswith("sk-test"):
+    logger.warning("OPENAI_API_KEY missing or test-only — LLM calls will fail. No QWEN fallback.")
+
 client = AsyncOpenAI()
+logger.info("LLM_ENGINE=%s", LLM_MODEL)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -389,8 +398,9 @@ async def _try_llm_response(user_id: str, message: str,
     try:
         prompt = _build_llm_prompt(message, brain_state)
 
+        logger.info("LLM_REQUEST user=%s model=%s", user_id, LLM_MODEL)
         response = await client.chat.completions.create(
-            model="gpt-4",
+            model=LLM_MODEL,
             messages=[{"role": "system", "content": prompt}],
             temperature=0.7
         )
@@ -404,7 +414,7 @@ async def _try_llm_response(user_id: str, message: str,
         if not generated:
             return None
 
-        logger.info("LLM_RESPONSE user=%s len=%d", user_id, len(generated))
+        logger.info("LLM_RESPONSE user=%s len=%d engine=%s", user_id, len(generated), LLM_MODEL)
         return generated
 
     except (RateLimitError, APIError, APIConnectionError) as e:

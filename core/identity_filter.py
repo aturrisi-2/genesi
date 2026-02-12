@@ -123,7 +123,7 @@ Sii presente, non descrittivo.
 """
 
         response = await client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=[{"role": "system", "content": correction_prompt}],
             temperature=0.7
         )

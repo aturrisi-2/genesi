@@ -3,18 +3,30 @@ LLM SERVICE - Genesi Core v2
 Servizio LLM per risposte tecniche con contesto utente
 """
 
+import os
+import logging
 from openai import AsyncOpenAI
 from core.log import log
+
+logger = logging.getLogger(__name__)
+
+# GPT-4o per risposte tecniche
+LLM_SERVICE_MODEL = "gpt-4o"
 
 class LLMService:
     """
     LLM Service - Gestione risposte tecniche con contesto
-    Tecnica, debug, spiegazione, architettura
+    Engine: GPT-4o (no QWEN fallback)
     """
     
     def __init__(self):
         self.client = AsyncOpenAI()
+        self.model = LLM_SERVICE_MODEL
+        _api_key = os.environ.get("OPENAI_API_KEY", "")
+        if not _api_key or _api_key.startswith("sk-test"):
+            logger.warning("LLM_SERVICE: OPENAI_API_KEY missing or test-only — no QWEN fallback")
         log("LLM_SERVICE_ACTIVE")
+        logger.info("LLM_ENGINE=%s", self.model)
     
     async def generate_response(self, message: str) -> str:
         """
@@ -40,18 +52,19 @@ Domanda: {message}
 """
             
             response = await self.client.chat.completions.create(
-                model="gpt-4",
+                model=self.model,
                 messages=[{"role": "system", "content": technical_prompt}],
                 temperature=0.3
             )
             
             llm_response = response.choices[0].message.content.strip()
             
-            log("LLM_SERVICE_RESPONSE", length=len(llm_response))
+            log("LLM_SERVICE_RESPONSE", length=len(llm_response), engine=self.model)
             return llm_response
             
         except Exception as e:
-            log("LLM_SERVICE_ERROR", error=str(e))
+            log("LLM_SERVICE_ERROR", error=str(e), engine=self.model)
+            logger.error("LLM_SERVICE_ERROR engine=%s error=%s — no QWEN fallback", self.model, str(e))
             return "Mi dispiace, ho avuto un problema tecnico. Riprova più tardi."
     
     async def generate_response_with_context(self, message: str, user_profile: dict, user_id: str) -> str:
@@ -90,18 +103,19 @@ Domanda: {message}
 """
             
             response = await self.client.chat.completions.create(
-                model="gpt-4",
+                model=self.model,
                 messages=[{"role": "system", "content": technical_prompt}],
                 temperature=0.3
             )
             
             llm_response = response.choices[0].message.content.strip()
             
-            log("LLM_SERVICE_CONTEXT_RESPONSE", length=len(llm_response))
+            log("LLM_SERVICE_CONTEXT_RESPONSE", length=len(llm_response), engine=self.model)
             return llm_response
             
         except Exception as e:
-            log("LLM_SERVICE_CONTEXT_ERROR", error=str(e))
+            log("LLM_SERVICE_CONTEXT_ERROR", error=str(e), engine=self.model)
+            logger.error("LLM_SERVICE_CONTEXT_ERROR engine=%s error=%s — no QWEN fallback", self.model, str(e))
             return "Mi dispiace, ho avuto un problema tecnico. Riprova più tardi."
     
     def _build_user_context(self, user_profile: dict) -> str:
