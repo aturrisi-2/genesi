@@ -1,6 +1,6 @@
 """PROACTOR - Genesi Cognitive System v3
 Orchestratore centrale con memoria neurale multi-strato.
-Pipeline: brain.update → latent_state.update → evolution_engine → emotional_intensity → drift_modulator
+Pipeline: brain.update → latent_state.update → evolution_engine → curiosity_engine → emotional_intensity → drift_modulator
 LLM chiamato SOLO per complessità cognitiva elevata. Zero API extra.
 """
 
@@ -11,6 +11,7 @@ from core.memory_brain import memory_brain
 from core.evolution_engine import generate_response_from_brain
 from core.latent_state import latent_state_engine
 from core.drift_modulator import drift_modulator
+from core.curiosity_engine import curiosity_engine
 from core.emotional_intensity_engine import emotional_intensity_engine
 from core.tool_services import tool_service
 from core.storage import storage
@@ -20,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 class Proactor:
     """
-    Proactor v3 — Pipeline con vettore latente, intensita' emotiva e drift modulator.
-    brain.update → latent_state.update → evolution_engine → emotional_intensity → drift_modulator
+    Proactor v3 — Pipeline con vettore latente, curiosita', intensita' emotiva e drift modulator.
+    brain.update → latent_state.update → evolution_engine → curiosity_engine → emotional_intensity → drift_modulator
     Zero chiamate LLM ridondanti. Zero analisi emotiva via API.
     """
 
@@ -36,8 +37,9 @@ class Proactor:
         1. memory_brain.update_brain()
         2. latent_state_engine.update_latent_state()
         3. evolution_engine.generate_response_from_brain()
-        4. emotional_intensity_engine.enhance()
-        5. drift_modulator.modulate_response_style()
+        4. curiosity_engine.inject()
+        5. emotional_intensity_engine.enhance()
+        6. drift_modulator.modulate_response_style()
         """
         try:
             if not user_id:
@@ -68,10 +70,13 @@ class Proactor:
             logger.info("PROACTOR_ROUTE", extra={"route": "evolution", "intent": intent})
             base_response = await generate_response_from_brain(user_id, message, brain_state)
 
-            # ── 5. EMOTIONAL INTENSITY (expand, explore, anti-passive) ──
-            enhanced_response = emotional_intensity_engine.enhance(base_response, message, brain_state)
+            # ── 5. CURIOSITY ENGINE (selective exploration, targeted questions) ──
+            curious_response = curiosity_engine.inject(base_response, message, brain_state)
 
-            # ── 6. DRIFT MODULATOR (probabilistic tone modulation) ──
+            # ── 6. EMOTIONAL INTENSITY (expand, explore, anti-passive) ──
+            enhanced_response = emotional_intensity_engine.enhance(curious_response, message, brain_state)
+
+            # ── 7. DRIFT MODULATOR (probabilistic tone modulation) ──
             latent_vector = latent_state_engine.get_vector(latent)
             response = drift_modulator.modulate_response_style(
                 latent_state=latent_vector,
@@ -149,7 +154,7 @@ class Proactor:
         """Statistiche routing Proactor."""
         return {
             "tool_intents": self.tool_intents,
-            "engine": "evolution_engine + emotional_intensity + drift_modulator",
+            "engine": "evolution_engine + curiosity_engine + emotional_intensity + drift_modulator",
             "memory": "memory_brain (4-layer) + latent_state (5-dim)",
             "llm_gate": "complexity >= 0.6"
         }
