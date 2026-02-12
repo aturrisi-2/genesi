@@ -389,7 +389,7 @@ async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
   }
   
   if (!blob || blob.size === 0) {
-    console.log('[TTS_ABORT] reason=empty_prefetched_blob');
+    console.log('[TTS_EMPTY_BLOB] prefetched blob is empty or null');
     console.log('[TTS_FLOW] step=3 empty_prefetched_blob');
     return;
   }
@@ -511,7 +511,7 @@ async function _playTTSChunk(text) {
     console.log('[TTS] TTS blob ricevuto - size=' + blob.size + ' type=' + blob.type);
     
     if (!blob || blob.size === 0) {
-      console.log('[TTS_ABORT] reason=empty_blob');
+      console.log('[TTS_EMPTY_BLOB] fetched blob is empty, size=' + (blob ? blob.size : 'null'));
       console.log('[TTS_FLOW] step=7 empty_blob');
       return;
     }
@@ -733,24 +733,17 @@ async function sendMessage() {
     
     if (!botMessage || botMessage.trim().length === 0) return;
     
-    // PARTE 2: Log LLM response length
     console.log(`LLM_RESPONSE_LENGTH: ${botMessage.length} chars`);
     
-    // PARTE 1: Salva risposta in memoria, NON renderizzare
-    let pendingResponse = botMessage;
-    console.log('[FRONTEND] Response saved, waiting for TTS before rendering');
-    console.log("SYNC_STEP_3_RESPONSE_SAVED_NO_RENDER");
+    // RENDER IMMEDIATO — il testo appare SUBITO, senza attendere TTS
+    hideThinking();
+    addMessage(botMessage, 'genesi');
+    console.log('[TEXT_RENDERED] text_len=' + botMessage.length);
     
-    // PARTE 2: Chiama /api/tts PRIMA di mostrare testo
-    console.log('FRONTEND_TTS_REQUESTED');
-    console.log("SYNC_STEP_4_TTS_REQUESTED");
-    
-    // USA tts_text per il TTS, display_text per la UI
-    const ttsText = data.tts_text || data.response; // Fallback a response se tts_text non disponibile
-    console.log('[TTS_CALL] tts_text_len=' + ttsText.length + ' tts_text_preview=' + ttsText.substring(0, 100) + '...');
-    
-    // PARTE 2: Attendi TTS completamente
-    await playTTSWithSync(ttsText, data.tts_mode, pendingResponse);
+    // TTS ASINCRONO — completamente scollegato dal render
+    const ttsText = data.tts_text || data.response;
+    console.log('[TTS_ASYNC_START] tts_text_len=' + ttsText.length);
+    playTTSAsync(ttsText, data.tts_mode);
     
   } catch (e) {
     console.error('Chat error:', e);
@@ -764,57 +757,20 @@ async function sendMessage() {
 }
 
 // ===============================
-// TTS SYNC
+// TTS ASYNC — completamente scollegato dal render
 // ===============================
-async function playTTSWithSync(text, mode, displayText) {
-  const thinkingStartTime = Date.now();
-
-  
-  try {
-    console.log('[TTS_SYNC] Starting TTS with text sync');
-    console.log('FRONTEND_TTS_READY');
-    
-    // PARTE 2: Attendi TTS AVVIO (non completamento)
-    const ttsPromise = playTTS(text, mode);
-    
-    // NON attendere completamento, attendi solo avvio audio
-    await new Promise(resolve => {
-      // Monitora quando l'audio inizia a suonare
-      const checkAudioStart = () => {
-        if (_ttsSource && _isPlayingChunk) {
-          console.log('[TTS_SYNC] Audio started playing, showing text now');
-          resolve();
-        } else {
-          setTimeout(checkAudioStart, 50); // Controlla ogni 50ms
-        }
-      };
-      checkAudioStart();
-    });
-    
-    console.log('[TTS_SYNC] Audio started, now showing text');
-    
-    // Rimuovi thinking bubble e mostra messaggio assistente
-    hideThinking();
-    const messageElement = addMessage(displayText, 'genesi');
-    console.log('FRONTEND_RENDER_TEXT_AND_PLAY');
-    console.log("STEP_4_RENDER_TEXT");
-    
-    // Log thinking time (deve essere < 3 secondi)
-    const totalThinkingTime = (Date.now() - thinkingStartTime) / 1000;
-    console.log(`THINKING_TIME_VISIBLE: ${totalThinkingTime.toFixed(2)}s`);
-    
-    // L'audio continua in background senza bloccare UI
-    
-  } catch (e) {
-    console.error('[TTS_SYNC] Error:', e);
-    // In caso di errore, mostra comunque il testo
-    const messageElement = addMessage(displayText, 'genesi');
-    hideThinking();
-    
-    // Log anche in caso di errore
-    const totalThinkingTime = (Date.now() - thinkingStartTime) / 1000;
-    console.log(`THINKING_TIME_VISIBLE_ERROR: ${totalThinkingTime.toFixed(2)}s`);
-  }
+function playTTSAsync(text, mode) {
+  // Fire-and-forget: TTS non blocca MAI il render del testo
+  (async () => {
+    try {
+      console.log('[TTS_ASYNC] Starting TTS in background, len=' + text.length + ' mode=' + mode);
+      await playTTS(text, mode);
+      console.log('[TTS_ASYNC] TTS completed successfully');
+    } catch (e) {
+      console.warn('[TTS_ASYNC] TTS failed (non-blocking):', e.message);
+      console.log('[TTS_PLAY_FAILED] error=' + e.message);
+    }
+  })();
 }
 
 // ===============================
