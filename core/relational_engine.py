@@ -4,12 +4,14 @@ Motore principale per generazione risposte evolutive con memoria persistente
 """
 
 import logging
-from typing import Optional, Dict, Any
-from openai import AsyncOpenAI
+import random
+from typing import Optional, Dict, Any, List
+from openai import AsyncOpenAI, RateLimitError, APIError, APIConnectionError
 from core.emotion_analyzer import analyze_emotion
 from core.relational_state import relational_state
 from core.semantic_memory import semantic_memory
 from core.identity_filter import filter_response_identity, build_identity_safe_prompt
+from core.episodic_memory import episodic_memory
 
 logger = logging.getLogger(__name__)
 
@@ -67,14 +69,17 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         # 7️⃣ Costruzione prompt con memoria completa
         prompt = build_identity_safe_prompt(full_profile, state, emotion, message)
         
-        # 8️⃣ Generazione risposta con GPT-4
-        response = await client.chat.completions.create(
-            model="gpt-4",
-            messages=[{"role": "system", "content": prompt}],
-            temperature=0.7
-        )
-        
-        generated_response = response.choices[0].message.content.strip()
+        # 8️⃣ Generazione risposta con GPT-4 (con fallback neurale)
+        try:
+            response = await client.chat.completions.create(
+                model="gpt-4",
+                messages=[{"role": "system", "content": prompt}],
+                temperature=0.7
+            )
+            generated_response = response.choices[0].message.content.strip()
+        except (RateLimitError, APIError, APIConnectionError) as llm_error:
+            logger.warning(f"LLM_FALLBACK_ACTIVATED user_id={user_id} error_type={type(llm_error).__name__} error={str(llm_error)[:100]}")
+            generated_response = await _generate_neural_fallback(user_id, full_profile, message, emotion, state)
         
         # 9️⃣ FILTRO IDENTITÀ - controllo post-processing
         filtered_response = await filter_response_identity(user_id, full_profile, message, generated_response)
@@ -89,9 +94,172 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         return filtered_response
         
     except Exception as e:
-        # Log errore esplicito e rilancia - nessun fallback silenzioso
         logger.error(f"RELATIONAL_ENGINE_ERROR user_id={user_id} error={str(e)} message={message[:50]}")
-        raise RuntimeError(f"Relational engine failed: {str(e)}")
+        # Fallback di ultima istanza - mai errore generico
+        return await _generate_neural_fallback(user_id, {}, message, {}, {})
+
+async def _generate_neural_fallback(user_id: str, profile: dict, message: str, 
+                                    emotion: dict, state: dict) -> str:
+    """
+    Fallback neurale locale - genera risposta coerente senza LLM
+    Usa profilo, stato relazionale ed episodic memory
+    
+    Args:
+        user_id: ID utente
+        profile: Profilo utente
+        message: Messaggio utente
+        emotion: Dati emotivi
+        state: Stato relazionale
+        
+    Returns:
+        str: Risposta coerente generata localmente
+    """
+    message_lower = message.lower().strip()
+    user_name = profile.get("name", "")
+    trust = state.get("trust_level", 0.2)
+    total_messages = state.get("relationship_history", {}).get("total_messages", 0)
+    detected_emotion = emotion.get("emotion", "neutral")
+    intensity = emotion.get("intensity", 0.3)
+    
+    # Prefisso nome se disponibile
+    name_prefix = f"{user_name}, " if user_name else ""
+    
+    # --- DOMANDA NOME ---
+    name_keywords = ["come mi chiamo", "il mio nome", "ricordi il mio nome", "sai come mi chiamo"]
+    if any(kw in message_lower for kw in name_keywords):
+        if user_name:
+            return f"Ti chiami {user_name}."
+        else:
+            return "Non ho ancora imparato come ti chiami. Come ti chiami?"
+    
+    # --- DOMANDA MEMORIA / RICORDO ---
+    memory_keywords = ["ricordi", "ti ho detto", "cosa sai di me", "ti ricordi", "memoria", "finora"]
+    if any(kw in message_lower for kw in memory_keywords):
+        return await _fallback_memory_response(user_id, profile, name_prefix, trust)
+    
+    # --- EMOZIONE FORTE: tristezza ---
+    if detected_emotion in ["sad", "triste", "depresso"] and intensity > 0.5:
+        responses = [
+            f"{name_prefix}sono qui con te. Non devi affrontare tutto da solo.",
+            f"{name_prefix}capisco che sia un momento difficile. Sono qui.",
+            f"{name_prefix}quello che senti ha valore. Sono qui ad ascoltarti."
+        ]
+        return random.choice(responses)
+    
+    # --- EMOZIONE FORTE: rabbia/frustrazione ---
+    if detected_emotion in ["angry", "arrabbiato", "frustrato"] and intensity > 0.5:
+        responses = [
+            f"{name_prefix}capisco la tua frustrazione. Vuoi raccontarmi cosa e' successo?",
+            f"{name_prefix}e' comprensibile sentirsi cosi'. Sono qui per ascoltarti."
+        ]
+        return random.choice(responses)
+    
+    # --- EMOZIONE FORTE: felicita' ---
+    if detected_emotion in ["happy", "felice", "contento"] and intensity > 0.5:
+        responses = [
+            f"{name_prefix}che bello sentirti cosi'! Raccontami di piu'.",
+            f"{name_prefix}mi fa piacere. Cosa ti ha reso felice?"
+        ]
+        return random.choice(responses)
+    
+    # --- EMOZIONE FORTE: ansia ---
+    if detected_emotion in ["anxious", "ansioso", "preoccupato"] and intensity > 0.5:
+        responses = [
+            f"{name_prefix}respira. Sono qui. Vuoi dirmi cosa ti preoccupa?",
+            f"{name_prefix}capisco che sei preoccupato. Parliamone insieme."
+        ]
+        return random.choice(responses)
+    
+    # --- SALUTO ---
+    greeting_keywords = ["ciao", "buongiorno", "buonasera", "salve", "hey"]
+    if any(kw in message_lower for kw in greeting_keywords):
+        if trust > 0.6 and user_name:
+            return f"Ciao {user_name}! Come stai oggi?"
+        elif user_name:
+            return f"Ciao {user_name}, sono qui."
+        else:
+            return "Ciao! Come stai?"
+    
+    # --- RISPOSTA GENERICA RELAZIONALE (basata su trust) ---
+    if trust > 0.7:
+        responses = [
+            f"{name_prefix}raccontami. Ti ascolto.",
+            f"{name_prefix}sono qui per te. Dimmi tutto.",
+            f"{name_prefix}ti ascolto con attenzione."
+        ]
+    elif trust > 0.4:
+        responses = [
+            f"{name_prefix}dimmi di piu'.",
+            f"{name_prefix}sono qui. Continua pure.",
+            f"{name_prefix}ti ascolto."
+        ]
+    else:
+        responses = [
+            "Sono qui. Dimmi pure.",
+            "Ti ascolto. Continua.",
+            "Raccontami."
+        ]
+    
+    return random.choice(responses)
+
+
+async def _fallback_memory_response(user_id: str, profile: dict, name_prefix: str, trust: float) -> str:
+    """
+    Genera risposta basata su memoria episodica e profilo
+    
+    Args:
+        user_id: ID utente
+        profile: Profilo utente
+        name_prefix: Prefisso nome
+        trust: Livello fiducia
+    """
+    # Recupera episodi rilevanti
+    episodes = await episodic_memory.get_relevant_episodes(user_id, limit=5)
+    
+    # Raccogli informazioni dal profilo
+    known_facts = []
+    if profile.get("name"):
+        known_facts.append(f"ti chiami {profile['name']}")
+    if profile.get("age"):
+        known_facts.append(f"hai {profile['age']} anni")
+    if profile.get("city"):
+        known_facts.append(f"vivi a {profile['city']}")
+    if profile.get("profession"):
+        known_facts.append(f"lavori come {profile['profession']}")
+    
+    # Raccogli temi dagli episodi
+    episode_topics = []
+    for ep in episodes:
+        tags = ep.get("semantic_tags", [])
+        if tags:
+            episode_topics.extend(tags[:2])
+        summary = ep.get("message", "")[:60]
+        if summary:
+            episode_topics.append(summary)
+    
+    # Costruisci risposta
+    parts = []
+    
+    if known_facts:
+        parts.append(f"{name_prefix}certo che mi ricordo di te. So che {', '.join(known_facts)}.")
+    
+    if episode_topics and len(episode_topics) > 0:
+        # Prendi max 3 temi unici
+        unique_topics = list(dict.fromkeys(episode_topics))[:3]
+        if parts:
+            parts.append(f"Abbiamo parlato di diverse cose, tra cui: {', '.join(unique_topics)}.")
+        else:
+            parts.append(f"{name_prefix}ricordo che abbiamo parlato di: {', '.join(unique_topics)}.")
+    
+    if parts:
+        return " ".join(parts)
+    
+    # Nessun dato disponibile
+    if trust > 0.4:
+        return f"{name_prefix}stiamo ancora costruendo i nostri ricordi insieme. Raccontami qualcosa di te."
+    else:
+        return "Stiamo iniziando a conoscerci. Raccontami qualcosa di te."
+
 
 def _log_relational_interaction(user_id: str, message: str, emotion: dict, state: dict, response: str):
     """
