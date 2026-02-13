@@ -100,58 +100,37 @@ class Proactor:
     # HANDLE — Entry point, routing obbligatorio
     # ═══════════════════════════════════════════════════════════════
 
-    async def handle(self, message: str, intent: str, user_id: str) -> str:
+    async def handle(self, user_id: str, message: str) -> str:
         """
         Orchestrazione centrale v4.
         Ordine di routing:
             1. Identity Router  (deterministico)
-            2. Tool Router      (deterministico)
-            3. Strict Knowledge (skip relational)
-            4. Knowledge Router (GPT pulito)
-            5. Relational Router (GPT controllato)
-            6. Default Relational (chat libera)
+            2. Memory Update
+            3. Intent Classification
+            4. Tool Router      (deterministico)
+            5. Strict Knowledge (skip relational)
+            6. Relational Router (GPT controllato)
+            7. Default Relational (chat libera)
         """
         try:
+            # STEP 0: SANITY CHECK
             if not user_id:
                 raise ValueError("Proactor received empty user_id")
+            msg_lower = message.lower().strip()
 
-            logger.info("PROACTOR_START user=%s intent=%s msg_len=%d", user_id, intent, len(message))
+            logger.info("PROACTOR_START user=%s msg_len=%d", user_id, len(message))
 
-            # ── 1. BRAIN UPDATE (sempre, per tutte le route) ──
-            brain_state = await memory_brain.update_brain(user_id, message)
-            if brain_state is None:
-                brain_state = {"profile": {}, "latent": {}, "relational": {}}
-            logger.info("PROACTOR_MEMORY_UPDATED user=%s profile_name=%s trust=%.3f episodes=%d",
-                        user_id,
-                        brain_state.get('profile', {}).get('name', 'unknown'),
-                        brain_state.get('relational', {}).get('trust', 0),
-                        len(brain_state.get('episodes', [])))
-
-            # ── 2. LATENT STATE UPDATE (zero LLM) ──
-            latent = await latent_state_engine.update_latent_state(
-                user_id=user_id,
-                user_message=message,
-                emotional_analysis=brain_state.get("emotion", {}),
-                relational_state=brain_state.get("relational", {}),
-                episode_stored=brain_state.get("episode_id") is not None,
-                episode_tags=self._extract_episode_tags(brain_state)
-            )
-            brain_state["latent"] = latent
-
-            # ── ROUTING DETERMINISTICO ──
-
-            # ROUTE 1: IDENTITY (zero GPT)
-            if is_identity_question(message):
+            # STEP 1: HARD IDENTITY ROUTE
+            if is_identity_question(msg_lower):
                 logger.info("PROACTOR_ROUTE route=identity user=%s", user_id)
                 profile = await memory_brain.semantic.get_profile(user_id)
                 if not profile:
-                    logger.warning("PROFILE_NOT_FOUND user=%s", user_id)
-                    return "Non me lo hai ancora detto."
-                logger.info("MEMORY_DIRECT_PROFILE_LOAD user=%s name=%s city=%s",
+                    profile = {}
+                logger.info("MEMORY_DIRECT_PROFILE_LOAD user=%s name=%s city=%s profession=%s",
                             user_id,
                             profile.get("name", "unknown"),
-                            profile.get("city", "unknown"))
-                msg_lower = message.lower().strip()
+                            profile.get("city", "unknown"),
+                            profile.get("profession", "unknown"))
                 if "come mi chiamo" in msg_lower:
                     name = profile.get("name")
                     if name:
@@ -183,27 +162,35 @@ class Proactor:
                         return ", ".join(parts) + "."
                 return "Non me lo hai ancora detto."
 
-            # ROUTE 2: TOOL (zero GPT su errore)
+            # STEP 2: MEMORY UPDATE
+            brain_state = await memory_brain.update_brain(user_id, message)
+            if brain_state is None:
+                brain_state = {"profile": {}, "latent": {}, "relational": {}}
+            logger.info("PROACTOR_MEMORY_UPDATED user=%s profile_name=%s trust=%.3f episodes=%d",
+                        user_id,
+                        brain_state.get('profile', {}).get('name', 'unknown'),
+                        brain_state.get('relational', {}).get('trust', 0),
+                        len(brain_state.get('episodes', [])))
+
+            # STEP 3: INTENT CLASSIFICATION
+            intent = await intent_classifier.classify(message)
+
+            # STEP 4: TOOL ROUTES
             if intent in self.tool_intents:
                 logger.info("PROACTOR_ROUTE route=tool intent=%s user=%s", intent, user_id)
                 return await self._handle_tool(intent, message, user_id)
 
-            # ROUTE 3: STRICT ISOLATION — tecnica/knowledge intents skip relational completely
+            # STEP 5: KNOWLEDGE STRICT
             if intent in SKIP_RELATIONAL_INTENTS:
                 logger.info("PROACTOR_ROUTE route=knowledge_strict user=%s intent=%s", user_id, intent)
                 return await self._handle_knowledge(user_id, message)
 
-            # ROUTE 4: KNOWLEDGE (GPT pulito, senza contaminazione relazionale)
-            if is_knowledge_question(message):
-                logger.info("PROACTOR_ROUTE route=knowledge user=%s", user_id)
-                return await self._handle_knowledge(user_id, message)
-
-            # ROUTE 5: RELATIONAL (GPT controllato)
+            # STEP 6: RELATIONAL / GENERAL
             if is_relational_message(message):
                 logger.info("PROACTOR_ROUTE route=relational user=%s", user_id)
                 return await self._handle_relational(user_id, message, brain_state)
 
-            # ROUTE 6: DEFAULT — relational pipeline (chat libera)
+            # STEP 7: DEFAULT — relational pipeline (chat libera)
             logger.info("PROACTOR_ROUTE route=default_relational user=%s intent=%s", user_id, intent)
             return await self._handle_relational(user_id, message, brain_state)
 
