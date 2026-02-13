@@ -1,0 +1,31 @@
+OPENWEATHER_API_KEY non configurata — il servizio meteo non funzionerà
+GNEWS_API_KEY non configurata -- il servizio notizie non funzionera'
+LLM_SERVICE: OPENAI_API_KEY missing or test-only
+PROACTOR_TOOL_ERROR intent=weather user=test_user error=timeout
+Traceback (most recent call last):
+  File "C:\Users\turrisia\genesi\core\proactor.py", line 267, in _handle_tool
+    result = await tool_service.get_weather(message)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 2262, in _execute_mock_call
+    raise effect
+ConnectionError: timeout
+Traceback (most recent call last):
+  File "C:\Users\turrisia\genesi\test_architecture_v2.py", line 252, in <module>
+    asyncio.run(test_news_invalid_key())
+  File "C:\Program Files\Python312\Lib\asyncio\runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\turrisia\genesi\test_architecture_v2.py", line 246, in test_news_invalid_key
+    with patch("core.tool_services.NEWSAPI_KEY", "bad-key"):
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1458, in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\unittest\mock.py", line 1431, in get_original
+    raise AttributeError(
+AttributeError: <module 'core.tool_services' from 'C:\\Users\\turrisia\\genesi\\core\\tool_services.py'> does not have the attribute 'NEWSAPI_KEY'

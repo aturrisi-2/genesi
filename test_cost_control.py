@@ -16,7 +16,7 @@ os.environ.setdefault("OPENAI_API_KEY", "sk-test-dummy-key-for-local-testing")
 
 from core.llm_service import (
     LLMService, llm_service, model_selector,
-    LLM_DEFAULT_MODEL, LLM_UPGRADE_MODEL, LLM_DEEP_MODEL,
+    LLM_DEFAULT_MODEL, LLM_FALLBACK_MODEL, LLM_DEEP_MODEL,
     DEEP_ANALYSIS_TRIGGERS,
 )
 from core.fallback_knowledge import lookup_fallback, KNOWLEDGE_DB, FACTUAL_TRIGGERS
@@ -57,40 +57,34 @@ class FakeResponse:
 
 
 # =====================================================================
-# GROUP 1: MODEL SELECTOR -- gpt-4o-mini default
+# GROUP 1: MODEL SELECTOR — gpt-4o default
 # =====================================================================
 
 print("\n===== GROUP 1: Model Selector =====")
 
-check("default model is gpt-4o-mini", LLM_DEFAULT_MODEL == "gpt-4o-mini")
-check("upgrade model is gpt-4o", LLM_UPGRADE_MODEL == "gpt-4o")
+check("default model is gpt-4o", LLM_DEFAULT_MODEL == "gpt-4o")
+check("fallback model is gpt-4o-mini", LLM_FALLBACK_MODEL == "gpt-4o-mini")
 check("deep model is claude-opus", LLM_DEEP_MODEL == "claude-opus")
 
 # Default selection
 m1 = model_selector("ciao come stai", route="general")
-check("model_selector: general -> gpt-4o-mini", m1 == "gpt-4o-mini", f"got: {m1}")
+check("model_selector: general -> gpt-4o", m1 == "gpt-4o", f"got: {m1}")
 
 m2 = model_selector("cos'e' un algoritmo", route="knowledge")
-check("model_selector: knowledge -> gpt-4o-mini", m2 == "gpt-4o-mini", f"got: {m2}")
+check("model_selector: knowledge -> gpt-4o", m2 == "gpt-4o", f"got: {m2}")
 
 m3 = model_selector("spiega il codice", route="technical")
-check("model_selector: technical -> gpt-4o-mini", m3 == "gpt-4o-mini", f"got: {m3}")
+check("model_selector: technical -> gpt-4o", m3 == "gpt-4o", f"got: {m3}")
 
 m4 = model_selector("mi sento triste", route="relational")
-check("model_selector: short relational -> gpt-4o-mini", m4 == "gpt-4o-mini", f"got: {m4}")
+check("model_selector: short relational -> gpt-4o", m4 == "gpt-4o", f"got: {m4}")
 
-# Long relational -> gpt-4o
-long_msg = "mi sento molto triste oggi " * 20  # >200 chars
-m5 = model_selector(long_msg, route="relational")
-check("model_selector: long relational -> gpt-4o", m5 == "gpt-4o", f"got: {m5}")
+# Short message -> gpt-4o
+short_msg = "ciao"
+m5 = model_selector(short_msg, route="general")
+check("model_selector: short message -> gpt-4o", m5 == "gpt-4o", f"got: {m5}")
 
-
-# =====================================================================
-# GROUP 2: CLAUDE OPUS ONLY WHEN REQUESTED
-# =====================================================================
-
-print("\n===== GROUP 2: Claude Opus Only When Requested =====")
-
+# Deep analysis -> claude-opus
 for trigger in DEEP_ANALYSIS_TRIGGERS:
     m = model_selector(f"vorrei una {trigger} del mio stato", route="general")
     check(f"deep trigger '{trigger}' -> claude-opus", m == "claude-opus", f"got: {m}")
@@ -103,10 +97,10 @@ for msg in normal_msgs:
 
 
 # =====================================================================
-# GROUP 3: RATE LIMIT PROTECTION
+# GROUP 2: RATE LIMIT PROTECTION
 # =====================================================================
 
-print("\n===== GROUP 3: Rate Limit Protection =====")
+print("\n===== GROUP 2: Rate Limit Protection =====")
 
 
 async def test_rate_limit_protection():
@@ -124,13 +118,25 @@ async def test_rate_limit_protection():
     svc._call_model = always_fail
 
     # _call_with_protection should try: primary, retry, downgrade (if different model)
-    result = await svc._call_with_protection("gpt-4o", "prompt", "msg", user_id="test")
+    result = await svc._call_with_protection(
+        "gpt-4o",
+        "prompt",
+        "msg",
+        user_id="test",
+        route="general"
+    )
     check("rate limit: returns None when all fail", result is None)
     check("rate limit: tried 3 times (primary + retry + downgrade)", call_count == 3, f"got: {call_count}")
 
     # With default model, no downgrade needed (only 2 tries)
     call_count = 0
-    result2 = await svc._call_with_protection("gpt-4o-mini", "prompt", "msg", user_id="test")
+    result2 = await svc._call_with_protection(
+        "gpt-4o-mini",
+        "prompt",
+        "msg",
+        user_id="test",
+        route="general"
+    )
     check("rate limit: default model tries 2 times (no downgrade)", call_count == 2, f"got: {call_count}")
 
 
@@ -162,10 +168,10 @@ asyncio.run(test_deterministic_fallback())
 
 
 # =====================================================================
-# GROUP 4: FALLBACK KNOWLEDGE DICTIONARY
+# GROUP 3: FALLBACK KNOWLEDGE DICTIONARY
 # =====================================================================
 
-print("\n===== GROUP 4: Fallback Knowledge =====")
+print("\n===== GROUP 3: Fallback Knowledge =====")
 
 # All entries in KNOWLEDGE_DB should be retrievable
 check("knowledge DB: pressione arteriosa exists", "pressione arteriosa" in KNOWLEDGE_DB)
@@ -195,10 +201,10 @@ check("lookup: unknown topic -> empty", fb_miss2 == "")
 
 
 # =====================================================================
-# GROUP 5: GNEWS ENDPOINT
+# GROUP 4: GNEWS ENDPOINT
 # =====================================================================
 
-print("\n===== GROUP 5: GNews Endpoint =====")
+print("\n===== GROUP 4: GNews Endpoint =====")
 
 # Verify source code uses gnews.io
 ts_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "core/tool_services.py")
@@ -256,10 +262,10 @@ asyncio.run(test_gnews_invalid_key())
 
 
 # =====================================================================
-# GROUP 6: STRICT ROUTER ISOLATION
+# GROUP 5: STRICT ROUTER ISOLATION
 # =====================================================================
 
-print("\n===== GROUP 6: Strict Router Isolation =====")
+print("\n===== GROUP 5: Strict Router Isolation =====")
 
 # Verify SKIP_RELATIONAL_INTENTS
 check("skip_relational: tecnica in list", "tecnica" in SKIP_RELATIONAL_INTENTS)
@@ -273,17 +279,17 @@ with open(pa_path, "r", encoding="utf-8") as f:
 check("source: SKIP_RELATIONAL_INTENTS used in handle", "SKIP_RELATIONAL_INTENTS" in pa_src)
 check("source: knowledge_strict route", "route=knowledge_strict" in pa_src)
 check("source: MEMORY_DIRECT_RESPONSE log", "MEMORY_DIRECT_RESPONSE" in pa_src)
-check("source: ARCHITECTURE_MODE=cost_optimized_v1", "ARCHITECTURE_MODE=cost_optimized_v1" in pa_src)
+check("source: ARCHITECTURE_MODE=production_hardened_v2", "ARCHITECTURE_MODE=production_hardened_v2" in pa_src)
 check("source: model_selector imported", "from core.llm_service import" in pa_src and "model_selector" in pa_src)
 check("source: lookup_fallback imported", "from core.fallback_knowledge import lookup_fallback" in pa_src)
 check("source: KNOWLEDGE_FALLBACK_HIT log", "KNOWLEDGE_FALLBACK_HIT" in pa_src)
 
 
 # =====================================================================
-# GROUP 7: KNOWLEDGE FALLBACK IN PROACTOR
+# GROUP 6: KNOWLEDGE FALLBACK IN PROACTOR
 # =====================================================================
 
-print("\n===== GROUP 7: Knowledge Fallback in Proactor =====")
+print("\n===== GROUP 6: Knowledge Fallback in Proactor =====")
 
 
 async def test_knowledge_fallback_proactor():
@@ -307,10 +313,10 @@ asyncio.run(test_knowledge_fallback_proactor())
 
 
 # =====================================================================
-# GROUP 8: MEMORY DIRECT RESPONSE
+# GROUP 7: MEMORY DIRECT RESPONSE
 # =====================================================================
 
-print("\n===== GROUP 8: Memory Direct Response =====")
+print("\n===== GROUP 7: Memory Direct Response =====")
 
 
 async def test_memory_direct():
@@ -344,10 +350,10 @@ asyncio.run(test_memory_direct())
 
 
 # =====================================================================
-# GROUP 9: EVOLUTION ENGINE MODEL
+# GROUP 8: EVOLUTION ENGINE MODEL
 # =====================================================================
 
-print("\n===== GROUP 9: Evolution Engine Model =====")
+print("\n===== GROUP 8: Evolution Engine Model =====")
 
 from core.evolution_engine import LLM_MODEL as EVO_MODEL, LLM_FALLBACK_MODEL as EVO_FALLBACK
 check("evolution_engine: default model is gpt-4o-mini", EVO_MODEL == "gpt-4o-mini", f"got: {EVO_MODEL}")
@@ -355,10 +361,10 @@ check("evolution_engine: fallback model is gpt-4o-mini", EVO_FALLBACK == "gpt-4o
 
 
 # =====================================================================
-# GROUP 10: LLM SERVICE ARCHITECTURE
+# GROUP 9: LLM SERVICE ARCHITECTURE
 # =====================================================================
 
-print("\n===== GROUP 10: LLM Service Architecture =====")
+print("\n===== GROUP 9: LLM Service Architecture =====")
 
 ls_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "core/llm_service.py")
 with open(ls_path, "r", encoding="utf-8") as f:

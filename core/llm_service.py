@@ -2,7 +2,7 @@
 LLM SERVICE - Genesi Core v3 (cost_optimized_v1)
 Servizio LLM con model_selector(), rate limit protection, auto-downgrade.
 
-Default: gpt-4o-mini (cost-optimized)
+Default: gpt-4o (cost-optimized)
 Claude Opus: SOLO per deep analysis esplicito, narrativa lunga, analisi psicologica complessa.
 Rate limit: retry con backoff esponenziale, downgrade automatico, fallback deterministico.
 """
@@ -20,57 +20,44 @@ logger = logging.getLogger(__name__)
 # MODEL CONFIGURATION — cost-optimized defaults
 # ═══════════════════════════════════════════════════════════════
 
-LLM_DEFAULT_MODEL = "gpt-4o-mini"
-LLM_UPGRADE_MODEL = "gpt-4o"
+LLM_DEFAULT_MODEL = "gpt-4o"
+LLM_FALLBACK_MODEL = "gpt-4o-mini"
 LLM_DEEP_MODEL = "claude-opus"
 
 # Trigger per upgrade a Claude Opus (deep analysis)
 DEEP_ANALYSIS_TRIGGERS = [
-    "analisi profonda", "analisi approfondita", "deep analysis",
-    "analisi psicologica", "sintesi narrativa lunga",
-    "racconta in dettaglio", "analizza nel dettaglio",
+    "analisi profonda",
+    "deep psychological analysis"
 ]
 
 
 def model_selector(message: str, route: str = "general") -> str:
     """
-    Seleziona il modello LLM in base al messaggio e alla route.
-
-    Rules:
-    - Default: gpt-4o-mini (knowledge, technical, health, conversation)
-    - gpt-4o: relational con contesto complesso
-    - Claude Opus: SOLO se deep analysis esplicito, narrativa lunga, analisi psicologica
-
-    Returns:
-        Nome modello selezionato.
+    Selects the appropriate model based on message content and route.
     """
-    msg_lower = message.lower().strip()
+    # Default to primary model
+    selected_model = LLM_DEFAULT_MODEL
+    reason = "default"
 
-    # Claude Opus SOLO per richieste esplicite di analisi profonda
-    if any(trigger in msg_lower for trigger in DEEP_ANALYSIS_TRIGGERS):
-        logger.info("LLM_MODEL_SELECTED=%s reason=deep_analysis_trigger route=%s", LLM_DEEP_MODEL, route)
-        return LLM_DEEP_MODEL
+    # Use Claude Opus for deep analysis triggers
+    if any(trigger in message.lower() for trigger in DEEP_ANALYSIS_TRIGGERS):
+        selected_model = LLM_DEEP_MODEL
+        reason = "deep analysis trigger"
 
-    # gpt-4o per relational con contesto complesso (messaggi lunghi o alta profondita')
-    if route == "relational" and len(message) > 200:
-        logger.info("LLM_MODEL_SELECTED=%s reason=relational_complex route=%s", LLM_UPGRADE_MODEL, route)
-        return LLM_UPGRADE_MODEL
-
-    # Default: gpt-4o-mini per tutto il resto
-    logger.info("LLM_MODEL_SELECTED=%s reason=cost_optimized_default route=%s", LLM_DEFAULT_MODEL, route)
-    return LLM_DEFAULT_MODEL
+    logger.info("LLM_MODEL_SELECTED=%s reason=%s", selected_model, reason)
+    return selected_model
 
 
 class LLMService:
     """
     LLM Service v3 — Cost-optimized con rate limit protection.
-    Default: gpt-4o-mini. Auto-downgrade su rate limit. Fallback deterministico.
+    Default: gpt-4o. Auto-downgrade su rate limit. Fallback deterministico.
     """
 
     def __init__(self):
         self.client = AsyncOpenAI()
         self.default_model = LLM_DEFAULT_MODEL
-        self.fallback_model = LLM_DEFAULT_MODEL
+        self.fallback_model = LLM_FALLBACK_MODEL
         _api_key = os.environ.get("OPENAI_API_KEY", "")
         if not _api_key or _api_key.startswith("sk-test"):
             logger.warning("LLM_SERVICE: OPENAI_API_KEY missing or test-only")
@@ -187,41 +174,43 @@ DIVIETI ASSOLUTI:
     # RATE LIMIT PROTECTION — retry, downgrade, fallback
     # ═══════════════════════════════════════════════════════════
 
-    async def _call_with_protection(self, model: str, prompt: str, message: str,
-                                     user_id: str = "", route: str = "general") -> Optional[str]:
+    async def _call_with_protection(self, model: str, prompt: str, message: str, user_id: str, route: str) -> Optional[str]:
         """
-        Chiama LLM con protezione rate limit completa:
-        1. Primo tentativo con modello selezionato
-        2. Se RateLimitError: retry con backoff esponenziale (1s)
-        3. Se ancora fallisce: downgrade a gpt-4o-mini
-        4. Se tutto fallisce: ritorna None (caller usa fallback deterministico)
+        Call LLM with rate limit protection, retry, downgrade, and deterministic fallback.
         """
-        # Attempt 1: primary model
-        result = await self._call_model(model, prompt, message, is_primary=True, user_id=user_id)
-        if result is not None:
-            return result
-
-        # Attempt 2: retry with exponential backoff (1 second)
-        logger.warning("LLM_RATE_LIMIT_RETRY model=%s user=%s backoff=1s", model, user_id)
-        await asyncio.sleep(1.0)
-        result = await self._call_model(model, prompt, message, is_primary=True, user_id=user_id)
-        if result is not None:
-            return result
-
-        # Attempt 3: downgrade to cheapest model
-        if model != LLM_DEFAULT_MODEL:
-            logger.warning("LLM_AUTO_DOWNGRADE from=%s to=%s user=%s", model, LLM_DEFAULT_MODEL, user_id)
-            result = await self._call_model(LLM_DEFAULT_MODEL, prompt, message,
-                                             is_primary=False, user_id=user_id)
+        try:
+            # Primary attempt
+            logger.info("LLM_SERVICE_PRIMARY_REQUEST model=%s user=%s", model, user_id)
+            result = await self._call_model(model, prompt, message, user_id=user_id, route=route)
             if result is not None:
                 return result
 
-        return None
+            # Retry with exponential backoff
+            logger.warning("LLM_SERVICE_PRIMARY_API_ERROR model=%s user=%s", model, user_id)
+            logger.info("LLM_RATE_LIMIT_RETRY model=%s user=%s", model, user_id)
+            await asyncio.sleep(1.0)  # 1s backoff
+            result = await self._call_model(model, prompt, message, user_id=user_id, route=route)
+            if result is not None:
+                return result
 
-    async def _call_model(self, model: str, prompt: str, message: str,
-                          is_primary: bool, user_id: str = "") -> Optional[str]:
+            # Downgrade to gpt-4o-mini if not already using fallback model
+            if model != LLM_FALLBACK_MODEL:
+                logger.warning("LLM_AUTO_DOWNGRADE from=%s to=%s user=%s", model, LLM_FALLBACK_MODEL, user_id)
+                result = await self._call_model(LLM_FALLBACK_MODEL, prompt, message, user_id=user_id, route=route)
+                if result is not None:
+                    return result
+
+            # Return None if all attempts fail
+            logger.error("LLM_SERVICE_ALL_FAIL user=%s", user_id)
+            return None
+
+        except (RateLimitError, APIError, APIConnectionError) as e:
+            logger.error("LLM_SERVICE_EXCEPTION user=%s error=%s", user_id, str(e))
+            return None
+
+    async def _call_model(self, model: str, prompt: str, message: str, user_id: str, route: str) -> Optional[str]:
         """Chiama un singolo modello con logging completo e gestione RateLimitError."""
-        tag = "LLM_SERVICE_PRIMARY" if is_primary else "LLM_SERVICE_FALLBACK"
+        tag = "LLM_SERVICE_PRIMARY" if model == self.default_model else "LLM_SERVICE_FALLBACK"
         try:
             logger.info("%s_REQUEST model=%s msg=%s", tag, model, message[:50])
             response = await self.client.chat.completions.create(

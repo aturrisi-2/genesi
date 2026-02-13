@@ -451,6 +451,7 @@ class SemanticLayer:
 
     async def _save_profile(self, user_id: str, profile: Dict[str, Any]) -> bool:
         profile["updated_at"] = datetime.now().isoformat()
+        logger.info("PROFILE_BEFORE_SAVE user=%s profile=%s", user_id, profile)
         return await storage.save(f"long_term_profile:{user_id}", profile)
 
     async def update_emotional_pattern(self, user_id: str, emotion: str, intensity: float):
@@ -737,68 +738,27 @@ class MemoryBrain:
         self.emotion_analyzer = LocalEmotionAnalyzer()
         logger.info("MEMORY_BRAIN_INIT layers=4 status=ready")
 
-    async def update_brain(self, user_id: str, message: str,
-                           emotional_vector: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def update_brain(self, user_id: str, message: str) -> None:
         """
-        Aggiornamento completo del cervello per un messaggio.
-        Chiamato ad ogni interazione.
-
-        Returns:
-            brain_state: stato completo per generazione risposta
+        Aggiorna il profilo cerebrale dell'utente con le informazioni fornite.
         """
-        # 1. Emotion analysis (local, zero API)
-        if emotional_vector is None:
-            emotional_vector = self.emotion_analyzer.analyze(message)
-
-        # 2. Semantic extraction (entities, facts)
-        extracted = await self.semantic.extract_and_store(user_id, message)
-
-        # 3. Relational state update
-        rel_state = await self.relational.update(user_id, emotional_vector, message)
-
-        # 4. Episodic storage
-        context = {
-            "intent": None,  # will be set by caller
-            "is_personal_question": self._is_personal(message),
-            "references_past": self._references_past(message),
-            "message_length": len(message)
-        }
-        episode_id = await self.episodic.store_episode(user_id, message, emotional_vector, context)
-
-        # 5. Experience linking
-        if episode_id:
-            await self.linking.link_new_episode(user_id, episode_id)
-            await self.linking.update_entity_weight(user_id, message)
-
-        # 6. Consolidation check (fail-safe: never blocks chat)
-        consolidation_result = None
-        try:
-            if await self.consolidation.should_consolidate(user_id):
-                consolidation_result = await self.consolidation.consolidate(user_id)
-        except Exception as e:
-            logger.error("MEMORY_CONSOLIDATION_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            consolidation_result = {"error": str(e)}
-
-        # 7. Build brain state
         profile = await self.semantic.get_profile(user_id)
-        relevant_episodes = await self.episodic.recall(user_id, query=message, limit=5)
+        msg_lower = message.lower().strip()
 
-        brain_state = {
-            "user_id": user_id,
-            "profile": profile,
-            "relational": rel_state,
-            "emotion": emotional_vector,
-            "episodes": relevant_episodes,
-            "extracted": extracted,
-            "consolidation": consolidation_result,
-            "episode_id": episode_id
-        }
+        # Estrarre nome
+        parts = msg_lower.split("mi chiamo")
+        if len(parts) > 1:
+            after = parts[1].strip().split()
+            if after:
+                name = after[0]
+                old_name = profile.get("name", "")
+                if name != old_name:
+                    profile["name"] = name
+                    logger.info("MEMORY_PROFILE_UPDATED field=name old=%s new=%s", old_name, name)
 
-        logger.info("BRAIN_UPDATE user=%s emotion=%s trust=%.3f episodes=%d extracted=%s",
-                     user_id, emotional_vector.get("emotion"), rel_state["trust"],
-                     len(relevant_episodes), list(extracted.keys()) if extracted else "none")
-
-        return brain_state
+        # Aggiornare il profilo
+        logger.info("PROFILE_BEFORE_SAVE user=%s profile=%s", user_id, profile)
+        await self.semantic._save_profile(user_id, profile)
 
     async def recall_for_response(self, user_id: str, message: str) -> Dict[str, Any]:
         """Recall completo per generazione risposta (senza update)."""
