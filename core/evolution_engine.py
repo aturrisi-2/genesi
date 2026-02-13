@@ -15,8 +15,8 @@ from core.identity_filter import contains_forbidden_patterns
 
 logger = logging.getLogger(__name__)
 
-# GPT-4o per generazione risposta principale, gpt-4o-mini come fallback
-LLM_MODEL = "gpt-4o"
+# gpt-4o-mini come default (cost-optimized), gpt-4o come fallback upgrade
+LLM_MODEL = "gpt-4o-mini"
 LLM_FALLBACK_MODEL = "gpt-4o-mini"
 
 _api_key = os.environ.get("OPENAI_API_KEY", "")

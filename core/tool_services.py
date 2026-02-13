@@ -77,12 +77,12 @@ NEWS_CATEGORIES = {
 
 # API Keys
 OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY", "")
-NEWSAPI_KEY = os.environ.get("NEWSAPI_KEY", "")
+GNEWS_API_KEY = os.environ.get("GNEWS_API_KEY", os.environ.get("NEWSAPI_KEY", ""))
 
 if not OPENWEATHER_API_KEY:
     logger.warning("OPENWEATHER_API_KEY non configurata — il servizio meteo non funzionerà")
-if not NEWSAPI_KEY:
-    logger.warning("NEWSAPI_KEY non configurata — il servizio notizie non funzionerà")
+if not GNEWS_API_KEY:
+    logger.warning("GNEWS_API_KEY non configurata -- il servizio notizie non funzionera'")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -193,137 +193,73 @@ class ToolService:
 
     async def get_news(self, message: str) -> str:
         """
-        Notizie reali via NewsAPI.
-        Se API fallisce → messaggio di errore, zero dati inventati.
+        Notizie reali via GNews API (gnews.io).
+        Se API fallisce -> messaggio di errore, zero dati inventati.
         """
         try:
             log("TOOL_NEWS_REQUEST", message=message[:50])
 
-            if not NEWSAPI_KEY:
-                logger.error("TOOL_NEWS_MISSING_KEY error=NEWSAPI_KEY non configurata")
+            if not GNEWS_API_KEY:
+                logger.error("TOOL_NEWS_MISSING_KEY error=GNEWS_API_KEY non configurata")
                 return "Servizio notizie non configurato."
 
             topic = self._extract_topic(message)
             city = self._extract_city(message)
 
-            # Se c'è una città, cerca notizie specifiche per quella città
-            if city:
-                return await self._news_by_query(city, topic)
+            # Costruisci query
+            if city and topic:
+                query = f"{city} {topic}"
+            elif city:
+                query = city
             elif topic:
-                return await self._news_by_category(topic)
+                query = topic
             else:
-                return await self._news_top_headlines()
+                query = "Italia"
+
+            return await self._gnews_search(query)
 
         except httpx.TimeoutException:
-            logger.error("TOOL_NEWS_HTTP_ERROR error=timeout")
-            log("TOOL_NEWS_HTTP_ERROR", error="timeout")
+            logger.error("TOOL_GNEWS_HTTP_ERROR error=timeout")
+            log("TOOL_GNEWS_HTTP_ERROR", error="timeout")
             return "Servizio notizie temporaneamente non disponibile."
         except Exception as e:
-            logger.error("TOOL_NEWS_HTTP_ERROR error=%s", str(e))
-            log("TOOL_NEWS_HTTP_ERROR", error=str(e))
+            logger.error("TOOL_GNEWS_HTTP_ERROR error=%s", str(e))
+            log("TOOL_GNEWS_HTTP_ERROR", error=str(e))
             return "Servizio notizie temporaneamente non disponibile."
 
-    async def _news_by_query(self, city: str, topic: Optional[str] = None) -> str:
-        """Cerca notizie per città (e opzionalmente topic)."""
-        q = city
-        if topic:
-            q = f"{city} {topic}"
-
-        url = "https://newsapi.org/v2/everything"
+    async def _gnews_search(self, query: str) -> str:
+        """Cerca notizie via GNews API (gnews.io/api/v4/search)."""
+        url = "https://gnews.io/api/v4/search"
         params = {
-            "q": q,
-            "language": "it",
-            "sortBy": "publishedAt",
-            "pageSize": 5,
-            "apiKey": NEWSAPI_KEY,
+            "apikey": GNEWS_API_KEY,
+            "q": query,
+            "lang": "it",
+            "max": 5,
         }
 
-        logger.info("TOOL_NEWS_HTTP_CALL url=%s query=%s", url, q)
-        log("TOOL_NEWS_HTTP_CALL", url=url, query=q)
+        logger.info("TOOL_GNEWS_HTTP_CALL url=%s query=%s", url, query)
+        log("TOOL_GNEWS_HTTP_CALL", url=url, query=query)
 
         client = await self._get_client()
         resp = await client.get(url, params=params)
 
-        logger.info("TOOL_NEWS_HTTP_STATUS status=%d query=%s", resp.status_code, q)
-        log("TOOL_NEWS_HTTP_STATUS", status=resp.status_code, query=q)
+        logger.info("TOOL_GNEWS_HTTP_STATUS status=%d query=%s", resp.status_code, query)
+        log("TOOL_GNEWS_HTTP_STATUS", status=resp.status_code, query=query)
 
-        if resp.status_code == 401:
-            logger.error("TOOL_NEWS_API_KEY_INVALID status=401 body=%s", resp.text[:200])
-            log("TOOL_NEWS_API_KEY_INVALID", status=401, error=resp.text[:200])
+        if resp.status_code == 401 or resp.status_code == 403:
+            logger.error("TOOL_NEWS_API_KEY_INVALID status=%d body=%s", resp.status_code, resp.text[:200])
+            log("TOOL_NEWS_API_KEY_INVALID", status=resp.status_code, error=resp.text[:200])
             return "Chiave News API non valida."
         if resp.status_code != 200:
-            logger.error("TOOL_NEWS_HTTP_ERROR status=%d body=%s", resp.status_code, resp.text[:200])
-            log("TOOL_NEWS_HTTP_ERROR", status=resp.status_code, error=resp.text[:200])
+            logger.error("TOOL_GNEWS_HTTP_ERROR status=%d body=%s", resp.status_code, resp.text[:200])
+            log("TOOL_GNEWS_HTTP_ERROR", status=resp.status_code, error=resp.text[:200])
             return "Servizio notizie temporaneamente non disponibile."
 
         data = resp.json()
-        return self._format_news_it(data, q)
+        return self._format_gnews_it(data, query)
 
-    async def _news_by_category(self, topic: str) -> str:
-        """Cerca notizie per categoria."""
-        category = NEWS_CATEGORIES.get(topic, "general")
-
-        url = "https://newsapi.org/v2/top-headlines"
-        params = {
-            "country": "it",
-            "category": category,
-            "pageSize": 5,
-            "apiKey": NEWSAPI_KEY,
-        }
-
-        logger.info("TOOL_NEWS_HTTP_CALL url=%s category=%s topic=%s", url, category, topic)
-        log("TOOL_NEWS_HTTP_CALL", url=url, category=category, topic=topic)
-
-        client = await self._get_client()
-        resp = await client.get(url, params=params)
-
-        logger.info("TOOL_NEWS_HTTP_STATUS status=%d category=%s", resp.status_code, category)
-        log("TOOL_NEWS_HTTP_STATUS", status=resp.status_code, category=category)
-
-        if resp.status_code == 401:
-            logger.error("TOOL_NEWS_API_KEY_INVALID status=401 body=%s", resp.text[:200])
-            log("TOOL_NEWS_API_KEY_INVALID", status=401, error=resp.text[:200])
-            return "Chiave News API non valida."
-        if resp.status_code != 200:
-            logger.error("TOOL_NEWS_HTTP_ERROR status=%d body=%s", resp.status_code, resp.text[:200])
-            log("TOOL_NEWS_HTTP_ERROR", status=resp.status_code, error=resp.text[:200])
-            return "Servizio notizie temporaneamente non disponibile."
-
-        data = resp.json()
-        return self._format_news_it(data, topic)
-
-    async def _news_top_headlines(self) -> str:
-        """Top headlines Italia."""
-        url = "https://newsapi.org/v2/top-headlines"
-        params = {
-            "country": "it",
-            "pageSize": 5,
-            "apiKey": NEWSAPI_KEY,
-        }
-
-        logger.info("TOOL_NEWS_HTTP_CALL url=%s country=it", url)
-        log("TOOL_NEWS_HTTP_CALL", url=url, country="it")
-
-        client = await self._get_client()
-        resp = await client.get(url, params=params)
-
-        logger.info("TOOL_NEWS_HTTP_STATUS status=%d", resp.status_code)
-        log("TOOL_NEWS_HTTP_STATUS", status=resp.status_code)
-
-        if resp.status_code == 401:
-            logger.error("TOOL_NEWS_API_KEY_INVALID status=401 body=%s", resp.text[:200])
-            log("TOOL_NEWS_API_KEY_INVALID", status=401, error=resp.text[:200])
-            return "Chiave News API non valida."
-        if resp.status_code != 200:
-            logger.error("TOOL_NEWS_HTTP_ERROR status=%d body=%s", resp.status_code, resp.text[:200])
-            log("TOOL_NEWS_HTTP_ERROR", status=resp.status_code, error=resp.text[:200])
-            return "Servizio notizie temporaneamente non disponibile."
-
-        data = resp.json()
-        return self._format_news_it(data, "Italia")
-
-    def _format_news_it(self, data: dict, context: str) -> str:
-        """Formatta risposta NewsAPI in italiano naturale."""
+    def _format_gnews_it(self, data: dict, context: str) -> str:
+        """Formatta risposta GNews in italiano naturale."""
         try:
             articles = data.get("articles", [])
             if not articles:
@@ -332,9 +268,6 @@ class ToolService:
             lines = [f"Ecco le ultime notizie su {context}:"]
             for i, art in enumerate(articles[:5], 1):
                 title = art.get("title", "").strip()
-                # NewsAPI a volte mette " - Source" alla fine del titolo
-                if " - " in title:
-                    title = title.rsplit(" - ", 1)[0].strip()
                 if title:
                     lines.append(f"{i}. {title}")
 

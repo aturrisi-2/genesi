@@ -24,7 +24,7 @@ from core.evolution_engine import (
     score_message_complexity, LLM_MODEL, LLM_FALLBACK_MODEL,
     _build_llm_prompt, generate_response_from_brain
 )
-from core.llm_service import LLM_SERVICE_MODEL, LLM_SERVICE_FALLBACK, llm_service
+from core.llm_service import LLM_DEFAULT_MODEL, llm_service
 from core.context_assembler import ContextAssembler
 from core.latent_state import latent_state_engine
 
@@ -58,10 +58,9 @@ class FakeResponse:
 
 print("\n===== GROUP 1: LLM Architecture =====")
 
-check("primary model is gpt-4o", LLM_MODEL == "gpt-4o")
+check("primary model is gpt-4o-mini (cost-optimized)", LLM_MODEL == "gpt-4o-mini")
 check("fallback model is gpt-4o-mini", LLM_FALLBACK_MODEL == "gpt-4o-mini")
-check("llm_service primary is gpt-4o", LLM_SERVICE_MODEL == "gpt-4o")
-check("llm_service fallback is gpt-4o-mini", LLM_SERVICE_FALLBACK == "gpt-4o-mini")
+check("llm_service default is gpt-4o-mini", LLM_DEFAULT_MODEL == "gpt-4o-mini")
 
 # Verify fallback chain exists in evolution_engine source
 ee_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "core/evolution_engine.py")
@@ -281,7 +280,7 @@ async def test_news_all():
     mc.get = AsyncMock(return_value=fake_resp)
     mc.is_closed = False
     ts._http_client = mc
-    with patch("core.tool_services.NEWSAPI_KEY", "test-key"):
+    with patch("core.tool_services.GNEWS_API_KEY", "test-key"):
         result = await ts.get_news("notizie")
     check("news 200: contains title", "Roma vince" in result)
     check("news 200: numbered", "1." in result)
@@ -293,14 +292,14 @@ async def test_news_all():
     mc2.get = AsyncMock(return_value=fake_401)
     mc2.is_closed = False
     ts2._http_client = mc2
-    with patch("core.tool_services.NEWSAPI_KEY", "bad-key"):
+    with patch("core.tool_services.GNEWS_API_KEY", "bad-key"):
         r401 = await ts2.get_news("ultime notizie")
     check("news 401: 'Chiave News API non valida'", "Chiave News API non valida" in r401)
     check("news 401: NOT generic 'non disponibile'", "non disponibile" not in r401)
 
     # Missing key
     ts3 = ToolService()
-    with patch("core.tool_services.NEWSAPI_KEY", ""):
+    with patch("core.tool_services.GNEWS_API_KEY", ""):
         r_nokey = await ts3.get_news("notizie Roma")
     check("news missing key: 'non configurato'", "non configurato" in r_nokey)
 
@@ -311,7 +310,7 @@ async def test_news_all():
     mc5.get = AsyncMock(return_value=fake_500)
     mc5.is_closed = False
     ts5._http_client = mc5
-    with patch("core.tool_services.NEWSAPI_KEY", "key"):
+    with patch("core.tool_services.GNEWS_API_KEY", "key"):
         r500 = await ts5.get_news("notizie sport")
     check("news 500: 'non disponibile'", "non disponibile" in r500)
     check("news 500: NOT 'Chiave non valida'", "Chiave" not in r500)
@@ -478,7 +477,7 @@ required_tags = {
     "core/tool_services.py": [
         "TOOL_WEATHER_HTTP_CALL", "TOOL_WEATHER_HTTP_STATUS", "TOOL_WEATHER_HTTP_ERROR",
         "TOOL_WEATHER_MISSING_KEY",
-        "TOOL_NEWS_HTTP_CALL", "TOOL_NEWS_HTTP_STATUS", "TOOL_NEWS_HTTP_ERROR",
+        "TOOL_GNEWS_HTTP_CALL", "TOOL_GNEWS_HTTP_STATUS", "TOOL_GNEWS_HTTP_ERROR",
         "TOOL_NEWS_MISSING_KEY", "TOOL_NEWS_API_KEY_INVALID",
         "TOOL_TIME_RESPONSE", "TOOL_DATE_RESPONSE",
     ],
@@ -611,7 +610,7 @@ async def test_e2e_mandatory():
     mc2.get = AsyncMock(return_value=fake_news)
     mc2.is_closed = False
     ts2._http_client = mc2
-    with patch("core.tool_services.NEWSAPI_KEY", "test-key"):
+    with patch("core.tool_services.GNEWS_API_KEY", "test-key"):
         news_result = await ts2.get_news("dammi notizie su Roma")
     check("E2E-4: news contains article", "Roma inaugura" in news_result)
     check("E2E-4: news numbered", "1." in news_result)

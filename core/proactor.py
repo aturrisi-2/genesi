@@ -1,12 +1,13 @@
-"""PROACTOR v4 - Genesi Cognitive System
+"""PROACTOR v4.1 - Genesi Cognitive System (cost_optimized_v1)
 Orchestratore centrale deterministico. GPT e' uno strumento subordinato.
+Default model: gpt-4o-mini. Claude Opus solo per deep analysis.
 
 Routing obbligatorio:
-    INPUT → Intent Classifier → Proactor Decision Engine
-        ├── Identity Router   (deterministico, zero GPT)
-        ├── Tool Router       (deterministico, zero GPT su errore)
-        ├── Relational Router  (ContextAssembler + EmotionalIntensity + GPT controllato)
-        └── Knowledge Router   (GPT senza contaminazione relazionale)
+    INPUT -> Intent Classifier -> Proactor Decision Engine
+        |-- Identity Router   (deterministico, zero GPT)
+        |-- Tool Router       (deterministico, zero GPT su errore)
+        |-- Relational Router  (ContextAssembler + EmotionalIntensity + GPT controllato)
+        +-- Knowledge Router   (GPT senza contaminazione relazionale)
 
 GPT chiamato SOLO da Relational Router o Knowledge Router.
 """
@@ -22,9 +23,12 @@ from core.emotional_intensity_engine import emotional_intensity_engine
 from core.tool_services import tool_service
 from core.storage import storage
 from core.context_assembler import ContextAssembler
-from core.llm_service import llm_service
+from core.llm_service import llm_service, model_selector, LLM_DEFAULT_MODEL
+from core.fallback_knowledge import lookup_fallback
 
 logger = logging.getLogger(__name__)
+
+logger.info("ARCHITECTURE_MODE=cost_optimized_v1")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -51,7 +55,11 @@ RELATIONAL_TRIGGERS = [
 KNOWLEDGE_TRIGGERS = [
     "cos'è", "cos'e'", "cosa significa", "spiegami", "definisci",
     "come funziona", "che cos'è", "che cos'e'", "cosa vuol dire",
+    "che capitale", "quanto e'", "quanto è",
 ]
+
+# Intent che devono saltare completamente il relational router
+SKIP_RELATIONAL_INTENTS = ["tecnica", "debug", "spiegazione"]
 
 
 def is_identity_question(message: str) -> bool:
@@ -82,7 +90,7 @@ class Proactor:
     def __init__(self):
         self.tool_intents = ["weather", "news", "time", "date"]
         self.context_assembler = ContextAssembler(memory_brain, latent_state_engine)
-        logger.info("PROACTOR_V4_ACTIVE routers=identity,tool,relational,knowledge")
+        logger.info("PROACTOR_V4_ACTIVE routers=identity,tool,relational,knowledge default_model=%s", LLM_DEFAULT_MODEL)
 
     # ═══════════════════════════════════════════════════════════
     # HANDLE — Entry point, routing obbligatorio
@@ -134,17 +142,22 @@ class Proactor:
                 logger.info("PROACTOR_ROUTE route=tool intent=%s user=%s", intent, user_id)
                 return await self._handle_tool(intent, message, user_id)
 
-            # ROUTE 3: RELATIONAL (GPT controllato)
-            if is_relational_message(message):
-                logger.info("PROACTOR_ROUTE route=relational user=%s", user_id)
-                return await self._handle_relational(user_id, message, brain_state)
+            # ROUTE 3: STRICT ISOLATION — tecnica/knowledge intents skip relational completely
+            if intent in SKIP_RELATIONAL_INTENTS:
+                logger.info("PROACTOR_ROUTE route=knowledge_strict user=%s intent=%s", user_id, intent)
+                return await self._handle_knowledge(user_id, message)
 
             # ROUTE 4: KNOWLEDGE (GPT pulito, senza contaminazione relazionale)
             if is_knowledge_question(message):
                 logger.info("PROACTOR_ROUTE route=knowledge user=%s", user_id)
                 return await self._handle_knowledge(user_id, message)
 
-            # ROUTE 5: DEFAULT — relational pipeline (chat libera)
+            # ROUTE 5: RELATIONAL (GPT controllato)
+            if is_relational_message(message):
+                logger.info("PROACTOR_ROUTE route=relational user=%s", user_id)
+                return await self._handle_relational(user_id, message, brain_state)
+
+            # ROUTE 6: DEFAULT — relational pipeline (chat libera)
             logger.info("PROACTOR_ROUTE route=default_relational user=%s intent=%s", user_id, intent)
             return await self._handle_relational(user_id, message, brain_state)
 
@@ -172,6 +185,7 @@ class Proactor:
 
         logger.info("IDENTITY_ROUTER user=%s profile=%s", user_id,
                      {k: v for k, v in profile.items() if k != "entities" and v})
+        logger.info("MEMORY_DIRECT_RESPONSE user=%s route=identity", user_id)
 
         # Domanda specifica: nome
         name_kw = ["come mi chiamo", "il mio nome", "ricordi il mio nome",
@@ -297,17 +311,17 @@ class Proactor:
                            f"resonance={latent.get('emotional_resonance', 0):.2f} "
                            f"energy={latent.get('relational_energy', 0):.2f}")
 
-        # 3. GPT call with controlled prompt
+        # 3. GPT call with controlled prompt via llm_service (cost-optimized)
         logger.info("PROACTOR_LLM_CALL user=%s route=relational context_len=%d", user_id, len(short_summary))
         gpt_prompt = self._build_relational_gpt_prompt(short_summary, latent_synopsis, message)
 
-        from core.evolution_engine import _call_llm_model, LLM_MODEL, LLM_FALLBACK_MODEL
-        gpt_response = await _call_llm_model(user_id, gpt_prompt, LLM_MODEL, is_primary=True)
+        model = model_selector(message, route="relational")
+        gpt_response = await llm_service._call_with_protection(
+            model, gpt_prompt, message, user_id=user_id, route="relational"
+        )
         if gpt_response is None:
-            gpt_response = await _call_llm_model(user_id, gpt_prompt, LLM_FALLBACK_MODEL, is_primary=False)
-        if gpt_response is None:
-            # Deterministic fallback — no silent failure
-            logger.warning("RELATIONAL_ROUTER_LLM_FAIL user=%s — using autonomous response", user_id)
+            # Deterministic fallback -- no silent failure
+            logger.warning("RELATIONAL_ROUTER_LLM_FAIL user=%s -- using autonomous response", user_id)
             from core.evolution_engine import _generate_autonomous_response
             gpt_response = _generate_autonomous_response(
                 brain_state.get("profile", {}).get("name", ""),
@@ -390,6 +404,7 @@ Messaggio utente: {message}"""
         """
         GPT per domande di definizione/conoscenza.
         SENZA relational contamination. SENZA frasi empatiche. SENZA memoria.
+        Fallback deterministico da fallback_knowledge.py se LLM fallisce.
         """
         knowledge_prompt = f"""Sei Genesi, assistente informativo.
 Rispondi in italiano, in modo chiaro, preciso, conciso.
@@ -406,13 +421,17 @@ Domanda: {message}"""
 
         logger.info("PROACTOR_LLM_CALL user=%s route=knowledge msg_len=%d", user_id, len(message))
 
-        from core.evolution_engine import _call_llm_model, LLM_MODEL, LLM_FALLBACK_MODEL
-        result = await _call_llm_model(user_id, knowledge_prompt, LLM_MODEL, is_primary=True)
+        model = model_selector(message, route="knowledge")
+        result = await llm_service._call_with_protection(
+            model, knowledge_prompt, message, user_id=user_id, route="knowledge"
+        )
         if result is None:
-            result = await _call_llm_model(user_id, knowledge_prompt, LLM_FALLBACK_MODEL, is_primary=False)
-        if result is None:
-            logger.warning("KNOWLEDGE_ROUTER_LLM_FAIL user=%s", user_id)
-            return "Mi dispiace, non riesco a rispondere in questo momento. Riprova tra poco."
+            logger.warning("KNOWLEDGE_ROUTER_LLM_FAIL user=%s -- trying fallback_knowledge", user_id)
+            fb = lookup_fallback(message)
+            if fb:
+                logger.info("KNOWLEDGE_FALLBACK_HIT user=%s", user_id)
+                return fb
+            return "Al momento non ho accesso alle informazioni richieste. Riprova tra qualche minuto."
 
         logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d route=knowledge", user_id, len(result))
         return result

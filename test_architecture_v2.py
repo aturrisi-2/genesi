@@ -14,6 +14,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-dummy-key-for-local-testing")
 
+# Patch asyncio.sleep to be instant during tests (avoid 1s backoff delays)
+_original_sleep = asyncio.sleep
+async def _instant_sleep(seconds):
+    pass
+asyncio.sleep = _instant_sleep
+
 from core.proactor import (
     Proactor, proactor,
     is_identity_question, is_relational_message, is_knowledge_question,
@@ -243,7 +249,7 @@ async def test_news_invalid_key():
     mc.is_closed = False
     ts._http_client = mc
 
-    with patch("core.tool_services.NEWSAPI_KEY", "bad-key"):
+    with patch("core.tool_services.GNEWS_API_KEY", "bad-key"):
         result = await ts.get_news("notizie su Roma")
     check("news 401: contains 'non valida' or 'non configurato'",
           "non valida" in result or "non configurato" in result.lower(), f"got: {result[:80]}")
