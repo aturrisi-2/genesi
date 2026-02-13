@@ -144,6 +144,9 @@ class Proactor:
             if is_identity_question(message):
                 logger.info("PROACTOR_ROUTE route=identity user=%s", user_id)
                 profile = await memory_brain.semantic.get_profile(user_id)
+                if not profile:
+                    logger.warning("PROFILE_NOT_FOUND user=%s", user_id)
+                    return "Non me lo hai ancora detto."
                 logger.info("MEMORY_DIRECT_PROFILE_LOAD user=%s name=%s city=%s",
                             user_id,
                             profile.get("name", "unknown"),
@@ -158,12 +161,12 @@ class Proactor:
                     city = profile.get("city")
                     if city:
                         logger.info("MEMORY_DIRECT_RESPONSE user=%s", user_id)
-                        return f"Vivi a {city}."
+                        return f"Vivi a {city.strip().title()}."
                 elif "che lavoro faccio" in msg_lower:
                     profession = profile.get("profession")
                     if profession:
                         logger.info("MEMORY_DIRECT_RESPONSE user=%s", user_id)
-                        return f"Sei un {profession}."
+                        return f"Sei un {profession.strip().lower()}."
                 elif "chi sono" in msg_lower:
                     name = profile.get("name")
                     city = profile.get("city")
@@ -172,9 +175,9 @@ class Proactor:
                     if name:
                         parts.append(f"Ti chiami {name.strip().title()}")
                     if city:
-                        parts.append(f"vivi a {city}")
+                        parts.append(f"vivi a {city.strip().title()}")
                     if profession:
-                        parts.append(f"sei un {profession}")
+                        parts.append(f"sei un {profession.strip().lower()}")
                     if parts:
                         logger.info("MEMORY_DIRECT_RESPONSE user=%s", user_id)
                         return ", ".join(parts) + "."
@@ -214,9 +217,9 @@ class Proactor:
             prefix = f"{name}, " if name else ""
             return f"{prefix}Mi dispiace, ho avuto un problema. Riprova tra poco."
 
-    # ═══════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     # IDENTITY ROUTER — 100% deterministico, zero GPT
-    # ═══════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
 
     async def _handle_identity(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
         """
@@ -244,7 +247,7 @@ class Proactor:
         if any(kw in msg_lower for kw in city_kw):
             city = profile.get("city")
             if city:
-                return f"Vivi a {city}."
+                return f"Vivi a {city.strip().title()}."
             return "Non me lo hai ancora detto."
 
         # Domanda specifica: lavoro
@@ -252,7 +255,7 @@ class Proactor:
         if any(kw in msg_lower for kw in job_kw):
             profession = profile.get("profession")
             if profession:
-                return f"Lavori come {profession}."
+                return f"Lavori come {profession.strip().lower()}."
             return "Non me lo hai ancora detto."
 
         # Domanda specifica: eta'
@@ -278,9 +281,9 @@ class Proactor:
         if profile.get("age"):
             facts.append(f"hai {profile['age']} anni")
         if profile.get("city"):
-            facts.append(f"vivi a {profile['city']}")
+            facts.append(f"vivi a {profile['city'].strip().title()}")
         if profile.get("profession"):
-            facts.append(f"lavori come {profile['profession']}")
+            facts.append(f"lavori come {profile['profession'].strip().lower()}")
         entities = profile.get("entities", {})
         for role, data in entities.items():
             name = data.get("name")
