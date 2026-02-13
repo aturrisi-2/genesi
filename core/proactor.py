@@ -25,9 +25,13 @@ from core.storage import storage
 from core.context_assembler import ContextAssembler
 from core.llm_service import llm_service, model_selector, LLM_DEFAULT_MODEL
 from core.fallback_knowledge import lookup_fallback
+import unidecode
 
 logger = logging.getLogger(__name__)
 
+logger.info("ARCHITECTURE_MODE=production_hardened_v2")
+logger.info("PRIMARY_MODEL=gpt-4o")
+logger.info("FALLBACK_MODEL=gpt-4o-mini")
 logger.info("ARCHITECTURE_MODE=cost_optimized_v1")
 
 
@@ -92,9 +96,9 @@ class Proactor:
         self.context_assembler = ContextAssembler(memory_brain, latent_state_engine)
         logger.info("PROACTOR_V4_ACTIVE routers=identity,tool,relational,knowledge default_model=%s", LLM_DEFAULT_MODEL)
 
-    # ═══════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     # HANDLE — Entry point, routing obbligatorio
-    # ═══════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
 
     async def handle(self, message: str, intent: str, user_id: str) -> str:
         """
@@ -102,8 +106,10 @@ class Proactor:
         Ordine di routing:
             1. Identity Router  (deterministico)
             2. Tool Router      (deterministico)
-            3. Relational Router (GPT controllato)
-            4. Knowledge Router  (GPT pulito)
+            3. Strict Knowledge (skip relational)
+            4. Knowledge Router (GPT pulito)
+            5. Relational Router (GPT controllato)
+            6. Default Relational (chat libera)
         """
         try:
             if not user_id:
@@ -113,6 +119,8 @@ class Proactor:
 
             # ── 1. BRAIN UPDATE (sempre, per tutte le route) ──
             brain_state = await memory_brain.update_brain(user_id, message)
+            if brain_state is None:
+                brain_state = {"profile": {}, "latent": {}, "relational": {}}
             logger.info("PROACTOR_MEMORY_UPDATED user=%s profile_name=%s trust=%.3f episodes=%d",
                         user_id,
                         brain_state.get('profile', {}).get('name', 'unknown'),
@@ -135,7 +143,42 @@ class Proactor:
             # ROUTE 1: IDENTITY (zero GPT)
             if is_identity_question(message):
                 logger.info("PROACTOR_ROUTE route=identity user=%s", user_id)
-                return await self._handle_identity(user_id, message, brain_state)
+                profile = await memory_brain.semantic.get_profile(user_id)
+                logger.info("MEMORY_DIRECT_PROFILE_LOAD user=%s name=%s city=%s",
+                            user_id,
+                            profile.get("name", "unknown"),
+                            profile.get("city", "unknown"))
+                msg_lower = message.lower().strip()
+                if "come mi chiamo" in msg_lower:
+                    name = profile.get("name")
+                    if name:
+                        logger.info("MEMORY_DIRECT_RESPONSE user=%s", user_id)
+                        return f"Ti chiami {name.strip().title()}."
+                elif "dove vivo" in msg_lower:
+                    city = profile.get("city")
+                    if city:
+                        logger.info("MEMORY_DIRECT_RESPONSE user=%s", user_id)
+                        return f"Vivi a {city}."
+                elif "che lavoro faccio" in msg_lower:
+                    profession = profile.get("profession")
+                    if profession:
+                        logger.info("MEMORY_DIRECT_RESPONSE user=%s", user_id)
+                        return f"Sei un {profession}."
+                elif "chi sono" in msg_lower:
+                    name = profile.get("name")
+                    city = profile.get("city")
+                    profession = profile.get("profession")
+                    parts = []
+                    if name:
+                        parts.append(f"Ti chiami {name.strip().title()}")
+                    if city:
+                        parts.append(f"vivi a {city}")
+                    if profession:
+                        parts.append(f"sei un {profession}")
+                    if parts:
+                        logger.info("MEMORY_DIRECT_RESPONSE user=%s", user_id)
+                        return ", ".join(parts) + "."
+                return "Non me lo hai ancora detto."
 
             # ROUTE 2: TOOL (zero GPT su errore)
             if intent in self.tool_intents:
@@ -169,7 +212,7 @@ class Proactor:
             except Exception:
                 name = ""
             prefix = f"{name}, " if name else ""
-            return f"{prefix}mi dispiace, ho avuto un problema. Riprova tra poco."
+            return f"{prefix}Mi dispiace, ho avuto un problema. Riprova tra poco."
 
     # ═══════════════════════════════════════════════════════════
     # IDENTITY ROUTER — 100% deterministico, zero GPT
@@ -193,7 +236,7 @@ class Proactor:
         if any(kw in msg_lower for kw in name_kw):
             name = profile.get("name")
             if name:
-                return f"Ti chiami {name}."
+                return f"Ti chiami {name.strip().title()}."
             return "Non me lo hai ancora detto."
 
         # Domanda specifica: dove vivo
@@ -231,7 +274,7 @@ class Proactor:
         """Costruisce riepilogo identita' da profilo. Zero GPT."""
         facts = []
         if profile.get("name"):
-            facts.append(f"ti chiami {profile['name']}")
+            facts.append(f"ti chiami {profile['name'].strip().title()}")
         if profile.get("age"):
             facts.append(f"hai {profile['age']} anni")
         if profile.get("city"):
@@ -253,9 +296,9 @@ class Proactor:
             return f"Ecco cosa so di te: {', '.join(facts)}."
         return "Non so ancora molto di te. Raccontami qualcosa."
 
-    # ═══════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     # TOOL ROUTER — 100% deterministico, zero GPT su errore
-    # ═══════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
 
     async def _handle_tool(self, intent: str, message: str, user_id: str) -> str:
         """
@@ -427,11 +470,14 @@ Domanda: {message}"""
         )
         if result is None:
             logger.warning("KNOWLEDGE_ROUTER_LLM_FAIL user=%s -- trying fallback_knowledge", user_id)
-            fb = lookup_fallback(message)
+            # Normalize text
+            normalized_message = unidecode.unidecode(message.lower())
+            fb = lookup_fallback(normalized_message)
             if fb:
-                logger.info("KNOWLEDGE_FALLBACK_HIT user=%s", user_id)
+                logger.info("FALLBACK_KNOWLEDGE_USED keyword=%s", normalized_message)
+                logger.info("KNOWLEDGE_FALLBACK_HIT topic=%s", normalized_message)
                 return fb
-            return "Al momento non ho accesso alle informazioni richieste. Riprova tra qualche minuto."
+            return "Mi dispiace, non riesco a fornire una risposta precisa in questo momento."
 
         logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d route=knowledge", user_id, len(result))
         return result
