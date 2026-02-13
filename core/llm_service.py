@@ -92,6 +92,67 @@ Domanda: {message}
         logger.error("LLM_SERVICE_FALLBACK_FAIL user=%s — both models failed", user_id)
         return "Mi dispiace, ho avuto un problema tecnico. Riprova più tardi."
 
+    async def generate_with_context(self, context: dict, user_id: str = "") -> str:
+        """
+        Genera risposta LLM con contesto strutturato dalla memoria.
+        Il context deve contenere 'summary' e 'current_message' (da ContextAssembler).
+        Chain: gpt-4o -> gpt-4o-mini fallback.
+
+        Raises:
+            RuntimeError se context['summary'] e' vuoto.
+        """
+        summary = context.get("summary", "")
+        if not summary or not summary.strip():
+            raise RuntimeError(f"LLM_CONTEXT_EMPTY user={user_id} — generate_with_context received empty summary")
+
+        message = context.get("current_message", "")
+        if not message:
+            raise ValueError("LLM_NO_MESSAGE — generate_with_context received empty current_message")
+
+        system_prompt = f"""Sei Genesi. Compagno evolutivo stabile, lucido, empatico.
+Parli esclusivamente italiano. Non cambi lingua.
+Non menzionare MAI la tua natura tecnica.
+Nessun riferimento a essere AI, modello, assistente, sistema, programma.
+Rispondi in modo puramente relazionale, umano, autentico.
+
+DEVI usare il contesto memoria qui sotto quando rispondi.
+Non ignorare MAI le informazioni di identita' memorizzate.
+Se l'utente chiede di se stesso, usa i dati memorizzati.
+
+CONTESTO MEMORIA:
+{summary}
+
+REGOLE OBBLIGATORIE:
+- Massimo 5 frasi per risposta. Sii conciso e diretto.
+- Se la domanda e' informativa -> rispondi con informazione concreta
+- Se la domanda e' emotiva -> empatia concreta + massimo 1 domanda
+- Niente metafore inutili, niente frasi da counselor generico
+- Se conosci il nome dell'utente, usalo
+
+DIVIETI ASSOLUTI:
+- "Quello che senti conta..." o varianti generiche terapeutiche
+- "Sono qui per te" senza contesto specifico
+- "Dimmi di piu'" come risposta completa
+- Qualsiasi frase generica che ignora il contesto sopra
+"""
+
+        logger.info("LLM_GENERATE_WITH_CONTEXT user=%s summary_len=%d msg_len=%d",
+                     user_id, len(summary), len(message))
+
+        # Primary
+        result = await self._call_model(self.model, system_prompt, message, is_primary=True, user_id=user_id)
+        if result:
+            return result
+
+        # Fallback
+        logger.warning("LLM_SERVICE_PRIMARY_FAIL user=%s — switching to %s", user_id, self.fallback_model)
+        result = await self._call_model(self.fallback_model, system_prompt, message, is_primary=False, user_id=user_id)
+        if result:
+            return result
+
+        logger.error("LLM_SERVICE_FALLBACK_FAIL user=%s — both models failed", user_id)
+        return "Mi dispiace, ho avuto un problema. Riprova tra poco."
+
     async def _call_model(self, model: str, prompt: str, message: str,
                           is_primary: bool, user_id: str = "") -> Optional[str]:
         """Chiama un singolo modello con logging completo."""

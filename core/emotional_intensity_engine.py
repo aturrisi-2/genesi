@@ -925,8 +925,9 @@ class EmotionalIntensityEngine:
         """Riflette senza domanda finale. Chiude con osservazione."""
         # Strip trailing question if present
         sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', response) if s.strip()]
-        # Remove last sentence if it's a question
-        if sentences and sentences[-1].endswith("?"):
+        # Remove last sentence if it's a question — but NOT if response is very short (1-2 sentences)
+        # because in that case the question IS the core response
+        if sentences and sentences[-1].endswith("?") and len(sentences) > 2:
             sentences = sentences[:-1]
         # Add reflection if needed
         reflections = REFLECTIVE_EXPANSIONS.get(emotion, REFLECTIVE_EXPANSIONS["neutral"])
@@ -948,9 +949,9 @@ class EmotionalIntensityEngine:
         hypothesis = random.choice(hypotheses)
         if hypothesis.lower()[:30] in response.lower():
             return response
-        # Replace trailing question with hypothesis
+        # Replace trailing question with hypothesis — but preserve if response is short
         sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', response) if s.strip()]
-        if sentences and sentences[-1].endswith("?"):
+        if sentences and sentences[-1].endswith("?") and len(sentences) > 2:
             sentences[-1] = hypothesis
         else:
             sentences.append(hypothesis)
@@ -962,9 +963,9 @@ class EmotionalIntensityEngine:
         metaphor = random.choice(metaphors)
         if metaphor.lower()[:25] in response.lower():
             return response
-        # Insert metaphor, strip trailing question
+        # Insert metaphor, strip trailing question — but preserve if response is short
         sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', response) if s.strip()]
-        if sentences and sentences[-1].endswith("?"):
+        if sentences and sentences[-1].endswith("?") and len(sentences) > 2:
             sentences[-1] = metaphor
         else:
             sentences.append(metaphor)

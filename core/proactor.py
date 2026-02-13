@@ -15,6 +15,7 @@ from core.curiosity_engine import curiosity_engine
 from core.emotional_intensity_engine import emotional_intensity_engine
 from core.tool_services import tool_service
 from core.storage import storage
+from core.context_assembler import ContextAssembler
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class Proactor:
     def __init__(self):
         self.tool_intents = ["weather", "news", "time", "date"]
         self.all_intents = self.tool_intents
+        self.context_assembler = ContextAssembler(memory_brain, latent_state_engine)
         logger.info("PROACTOR_V3_ACTIVE", extra={"tool_intents": len(self.tool_intents), "emotional_intensity": True})
 
     async def handle(self, message: str, intent: str, user_id: str) -> str:
@@ -72,15 +74,17 @@ class Proactor:
                 logger.info("PROACTOR_ROUTE route=tool intent=%s user=%s", intent, user_id)
                 return await self._handle_tool(intent, message, user_id)
 
-            # ── 4. BUILD RELATIONAL CONTEXT — injected into brain_state for LLM ──
-            relational_context = self._build_relational_context(brain_state)
-            if not relational_context:
-                logger.error("PROACTOR_CONTEXT_EMPTY user=%s — context builder returned empty", user_id)
-            brain_state["relational_context"] = relational_context
-            logger.info("PROACTOR_CONTEXT_BUILT user=%s context_len=%d", user_id, len(relational_context))
+            # ── 4. CONTEXT ASSEMBLER — structured context from memory ──
+            context = await self.context_assembler.build(user_id, message)
+            logger.info("CONTEXT_ASSEMBLED user=%s summary_len=%d", user_id, len(context.get('summary', '')))
+
+            # Inject into brain_state for evolution_engine backward compatibility
+            brain_state["relational_context"] = context["summary"]
+            brain_state["assembled_context"] = context
+            logger.info("PROACTOR_CONTEXT_BUILT user=%s context_len=%d", user_id, len(context["summary"]))
 
             # ── 5. EVOLUTION ENGINE (relational + LLM gate) ──
-            logger.info("PROACTOR_LLM_CALL user=%s intent=%s context_len=%d", user_id, intent, len(relational_context))
+            logger.info("PROACTOR_LLM_CALL user=%s intent=%s context_len=%d", user_id, intent, len(context["summary"]))
             base_response = await generate_response_from_brain(user_id, message, brain_state)
             logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d", user_id, len(base_response))
 

@@ -1,8 +1,9 @@
 """
-GENESI - Orchestral Architecture Tests v2
-Tests: LLM fallback chain, Proactor context building, memory injection,
-       identity reflection, weather/news mock HTTP, intent routing,
-       anti-generic prompt, logging tags, silent fallback detection.
+GENESI - Orchestral Architecture Tests v3
+Tests: LLM fallback chain, Proactor context building, ContextAssembler,
+       memory injection, identity reflection, weather/news mock HTTP,
+       intent routing, anti-generic prompt, logging tags, silent fallback,
+       generate_with_context, mandatory Luca/Milano E2E.
 """
 
 import asyncio
@@ -23,7 +24,9 @@ from core.evolution_engine import (
     score_message_complexity, LLM_MODEL, LLM_FALLBACK_MODEL,
     _build_llm_prompt, generate_response_from_brain
 )
-from core.llm_service import LLM_SERVICE_MODEL, LLM_SERVICE_FALLBACK
+from core.llm_service import LLM_SERVICE_MODEL, LLM_SERVICE_FALLBACK, llm_service
+from core.context_assembler import ContextAssembler
+from core.latent_state import latent_state_engine
 
 passed = 0
 failed = 0
@@ -90,31 +93,38 @@ print("\n===== GROUP 2: Proactor Context Building =====")
 
 
 async def test_proactor_context():
-    """Proactor builds relational context and injects it into brain_state."""
+    """Proactor builds context via ContextAssembler and injects it into brain_state."""
     # First, seed memory
     await memory_brain.update_brain("test_ctx_001", "mi chiamo Alfio e vivo a Catania")
     await memory_brain.update_brain("test_ctx_001", "mia moglie si chiama Rita")
     await memory_brain.update_brain("test_ctx_001", "mi sento un po' triste oggi")
 
-    # Now build brain_state and context
-    brain = await memory_brain.update_brain("test_ctx_001", "come stai?")
-    ctx = Proactor._build_relational_context(brain)
+    # Now build context via ContextAssembler
+    assembler = ContextAssembler(memory_brain, latent_state_engine)
+    ctx = await assembler.build("test_ctx_001", "come stai?")
 
-    check("context is non-empty string", isinstance(ctx, str) and len(ctx) > 0)
-    check("context contains PROFILO UTENTE", "PROFILO UTENTE" in ctx)
-    check("context contains STATO RELAZIONALE", "STATO RELAZIONALE" in ctx)
-    check("context contains user name Alfio", "Alfio" in ctx)
-    check("context contains city Catania", "Catania" in ctx)
-    check("context contains moglie Rita", "Rita" in ctx)
-    check("context contains Trust:", "Trust:" in ctx)
-    check("context contains TONO RELAZIONALE", "TONO RELAZIONALE" in ctx)
+    check("context is dict", isinstance(ctx, dict))
+    check("context has summary", "summary" in ctx and len(ctx["summary"]) > 0)
+    check("context has long_term_profile", "long_term_profile" in ctx)
+    check("context has relational_state", "relational_state" in ctx)
+    check("context has recent_episodes", "recent_episodes" in ctx)
+    check("context has current_message", ctx.get("current_message") == "come stai?")
+
+    summary = ctx["summary"]
+    check("summary contains PROFILO UTENTE", "PROFILO UTENTE" in summary)
+    check("summary contains STATO RELAZIONALE", "STATO RELAZIONALE" in summary)
+    check("summary contains user name Alfio", "Alfio" in summary)
+    check("summary contains city Catania", "Catania" in summary)
+    check("summary contains moglie Rita", "Rita" in summary)
+    check("summary contains Trust:", "Trust:" in summary)
+    check("summary contains TONO RELAZIONALE", "TONO RELAZIONALE" in summary)
 
     # Verify proactor.py source has the log tags
     pa_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "core/proactor.py")
     with open(pa_path, "r", encoding="utf-8") as f:
         pa_src = f.read()
     check("PROACTOR_CONTEXT_BUILT in source", "PROACTOR_CONTEXT_BUILT" in pa_src)
-    check("PROACTOR_RELATIONAL_INJECTED in source", "PROACTOR_RELATIONAL_INJECTED" in pa_src)
+    check("CONTEXT_ASSEMBLED in source", "CONTEXT_ASSEMBLED" in pa_src)
 
 
 asyncio.run(test_proactor_context())
@@ -132,9 +142,10 @@ async def test_memory_injection():
     # Build brain_state with seeded memory
     brain = await memory_brain.update_brain("test_ctx_001", "raccontami qualcosa")
 
-    # Simulate Proactor injecting context
-    relational_ctx = Proactor._build_relational_context(brain)
-    brain["relational_context"] = relational_ctx
+    # Simulate ContextAssembler injecting context
+    assembler = ContextAssembler(memory_brain, latent_state_engine)
+    ctx = await assembler.build("test_ctx_001", "raccontami qualcosa")
+    brain["relational_context"] = ctx["summary"]
 
     # Build LLM prompt
     prompt = _build_llm_prompt("raccontami qualcosa", brain)
@@ -168,7 +179,9 @@ async def test_identity_reflection():
     """'chi sono io' with known profile returns memory-based response."""
     # Use seeded user from group 2
     brain = await memory_brain.update_brain("test_ctx_001", "chi sono io")
-    brain["relational_context"] = Proactor._build_relational_context(brain)
+    assembler = ContextAssembler(memory_brain, latent_state_engine)
+    ctx = await assembler.build("test_ctx_001", "chi sono io")
+    brain["relational_context"] = ctx["summary"]
 
     # generate_response_from_brain should handle this
     result = await generate_response_from_brain("test_ctx_001", "chi sono io", brain)
@@ -181,7 +194,8 @@ async def test_identity_reflection():
 
     # Without profile, should ask for info
     brain_empty = await memory_brain.update_brain("test_empty_999", "chi sono io")
-    brain_empty["relational_context"] = Proactor._build_relational_context(brain_empty)
+    ctx_empty = await assembler.build("test_empty_999", "chi sono io")
+    brain_empty["relational_context"] = ctx_empty["summary"]
     result_empty = await generate_response_from_brain("test_empty_999", "chi sono io", brain_empty)
     check("identity reflection (no profile): asks for info", "conoscerci" in result_empty or "Raccontami" in result_empty or "chiami" in result_empty)
 
@@ -427,6 +441,7 @@ active_files = [
     "core/memory_brain.py", "core/llm_service.py", "core/intent_classifier.py",
     "core/identity_filter.py", "core/emotional_intensity_engine.py",
     "core/curiosity_engine.py", "core/latent_state.py", "core/drift_modulator.py",
+    "core/context_assembler.py",
 ]
 
 bare_except_pass_found = []
@@ -469,10 +484,13 @@ required_tags = {
     ],
     "core/proactor.py": [
         "PROACTOR_START", "PROACTOR_MEMORY_UPDATED",
-        "PROACTOR_CONTEXT_BUILT", "PROACTOR_RELATIONAL_INJECTED",
+        "PROACTOR_CONTEXT_BUILT", "CONTEXT_ASSEMBLED",
         "PROACTOR_LLM_CALL", "PROACTOR_LLM_RESPONSE",
         "PROACTOR_ERROR_FULL", "PROACTOR_TOOL_ERROR", "PROACTOR_RESPONSE",
-        "PROACTOR_CONTEXT_EMPTY",
+    ],
+    "core/context_assembler.py": [
+        "CONTEXT_ASSEMBLER_LOADED", "CONTEXT_ASSEMBLED",
+        "CONTEXT_ASSEMBLER_EMPTY",
     ],
     "core/evolution_engine.py": [
         # Tags use %s format: tag_prefix = "LLM_PRIMARY" / "LLM_FALLBACK"
@@ -483,6 +501,7 @@ required_tags = {
     ],
     "core/llm_service.py": [
         "LLM_SERVICE_PRIMARY", "LLM_SERVICE_FALLBACK",
+        "LLM_GENERATE_WITH_CONTEXT", "LLM_CONTEXT_EMPTY",
     ],
     "core/memory_brain.py": [
         "MEMORY_CONSOLIDATION_ERROR", "MEMORY_EMOTION_NORMALIZED",
@@ -554,7 +573,9 @@ async def test_e2e_mandatory():
 
     # --- Test 2: "Chi sono?" -> must contain Marco ---
     brain_chi = await memory_brain.update_brain("test_e2e_marco", "chi sono io")
-    brain_chi["relational_context"] = Proactor._build_relational_context(brain_chi)
+    assembler = ContextAssembler(memory_brain, latent_state_engine)
+    ctx_chi = await assembler.build("test_e2e_marco", "chi sono io")
+    brain_chi["relational_context"] = ctx_chi["summary"]
     result_chi = await generate_response_from_brain("test_e2e_marco", "chi sono io", brain_chi)
     has_marco = "Marco" in result_chi or "chiami" in result_chi or "ricordo" in result_chi
     check("E2E-2: 'Chi sono?' -> contains Marco or memory ref", has_marco)
@@ -598,7 +619,8 @@ async def test_e2e_mandatory():
 
     # --- Test 5: "Cos'e' un bug?" -> informative, not therapeutic ---
     brain_info = await memory_brain.update_brain("test_e2e_info", "cos'e' un bug nel software")
-    brain_info["relational_context"] = Proactor._build_relational_context(brain_info)
+    ctx_info = await assembler.build("test_e2e_info", "cos'e' un bug nel software")
+    brain_info["relational_context"] = ctx_info["summary"]
     result_info = await generate_response_from_brain("test_e2e_info", "cos'e' un bug nel software", brain_info)
     check("E2E-5: informative response is string", isinstance(result_info, str))
     check("E2E-5: response not empty", len(result_info) > 0)
@@ -609,6 +631,100 @@ async def test_e2e_mandatory():
 
 
 asyncio.run(test_e2e_mandatory())
+
+
+# =====================================================================
+# GROUP 16: CONTEXT ASSEMBLER — Unit Tests
+# =====================================================================
+
+print("\n===== GROUP 16: ContextAssembler =====")
+
+
+async def test_context_assembler():
+    """ContextAssembler builds structured context from memory."""
+    assembler = ContextAssembler(memory_brain, latent_state_engine)
+
+    # Seed user
+    await memory_brain.update_brain("test_asm_001", "mi chiamo Giulia e vivo a Torino")
+    await memory_brain.update_brain("test_asm_001", "lavoro come ingegnere")
+
+    ctx = await assembler.build("test_asm_001", "come stai?")
+    check("assembler: returns dict", isinstance(ctx, dict))
+    check("assembler: has summary", isinstance(ctx.get("summary"), str) and len(ctx["summary"]) > 0)
+    check("assembler: has long_term_profile", isinstance(ctx.get("long_term_profile"), dict))
+    check("assembler: has relational_state", isinstance(ctx.get("relational_state"), dict))
+    check("assembler: has recent_episodes", isinstance(ctx.get("recent_episodes"), list))
+    check("assembler: has latent_state", "latent_state" in ctx)
+    check("assembler: has current_message", ctx.get("current_message") == "come stai?")
+    check("assembler: summary contains Giulia", "Giulia" in ctx["summary"])
+    check("assembler: summary contains Torino", "Torino" in ctx["summary"])
+    check("assembler: profile name is Giulia", ctx["long_term_profile"].get("name") == "Giulia")
+    check("assembler: profile city is Torino", ctx["long_term_profile"].get("city") == "Torino")
+
+    # generate_with_context on llm_service — verify it validates context
+    # (will fail LLM call due to test key, but should NOT raise on valid context)
+    ls_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "core/llm_service.py")
+    with open(ls_path, "r", encoding="utf-8") as f:
+        ls_src = f.read()
+    check("llm_service has generate_with_context", "async def generate_with_context" in ls_src)
+    check("llm_service validates empty summary", "LLM_CONTEXT_EMPTY" in ls_src)
+    check("llm_service logs LLM_GENERATE_WITH_CONTEXT", "LLM_GENERATE_WITH_CONTEXT" in ls_src)
+
+    # Safety: empty summary raises RuntimeError
+    try:
+        assembler_bad = ContextAssembler(memory_brain, latent_state_engine)
+        # Monkey-patch to force empty summary
+        original = assembler_bad._summarize
+        assembler_bad._summarize = lambda *a, **k: ""
+        await assembler_bad.build("test_asm_bad", "test")
+        check("assembler: empty summary raises RuntimeError", False)
+    except RuntimeError:
+        check("assembler: empty summary raises RuntimeError", True)
+    except Exception:
+        check("assembler: empty summary raises RuntimeError", False)
+
+
+asyncio.run(test_context_assembler())
+
+
+# =====================================================================
+# GROUP 17: MANDATORY LUCA/MILANO E2E TEST
+# =====================================================================
+
+print("\n===== GROUP 17: Luca/Milano Memory E2E =====")
+
+
+async def test_luca_milano():
+    """Mandatory test: 'Mi chiamo Luca e vivo a Milano' then 'Dove vivo?' must contain Milano."""
+    user_id = "test_luca_e2e"
+
+    # Step 1: Store identity
+    brain1 = await memory_brain.update_brain(user_id, "Mi chiamo Luca e vivo a Milano.")
+    profile = brain1.get("profile", {})
+    check("Luca E2E: name saved as Luca", profile.get("name") == "Luca")
+    check("Luca E2E: city saved as Milano", profile.get("city") == "Milano")
+
+    # Step 2: Build context via ContextAssembler
+    assembler = ContextAssembler(memory_brain, latent_state_engine)
+    ctx = await assembler.build(user_id, "Dove vivo?")
+    check("Luca E2E: context summary contains Luca", "Luca" in ctx["summary"])
+    check("Luca E2E: context summary contains Milano", "Milano" in ctx["summary"])
+
+    # Step 3: Ask "Dove vivo?" — response must contain Milano
+    brain2 = await memory_brain.update_brain(user_id, "Dove vivo?")
+    brain2["relational_context"] = ctx["summary"]
+    result = await generate_response_from_brain(user_id, "Dove vivo?", brain2)
+    check("Luca E2E: 'Dove vivo?' response is string", isinstance(result, str))
+    check("Luca E2E: response not empty", len(result) > 0)
+    has_milano = "Milano" in result or "milano" in result.lower()
+    check("Luca E2E: response contains Milano", has_milano)
+
+    # Step 4: Verify context was really passed (not hardcoded)
+    check("Luca E2E: context has long_term_profile with name", ctx["long_term_profile"].get("name") == "Luca")
+    check("Luca E2E: context has long_term_profile with city", ctx["long_term_profile"].get("city") == "Milano")
+
+
+asyncio.run(test_luca_milano())
 
 
 # =====================================================================

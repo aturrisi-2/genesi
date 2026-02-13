@@ -126,8 +126,10 @@ async def generate_response_from_brain(user_id: str, message: str,
     if any(kw in msg_lower for kw in identity_kw):
         return _identity_response(user_name, trust)
 
-    # Memoria / ricordi
-    memory_kw = ["ricordi", "ti ho detto", "cosa sai di me", "ti ricordi", "memoria", "finora"]
+    # Memoria / ricordi / fatti personali memorizzati
+    memory_kw = ["ricordi", "ti ho detto", "cosa sai di me", "ti ricordi", "memoria", "finora",
+                 "dove vivo", "dove abito", "quanti anni ho", "che lavoro faccio",
+                 "cosa faccio", "sai dove", "sai quanti"]
     if any(kw in msg_lower for kw in memory_kw):
         return await _memory_response(user_id, profile, episodes, user_name, trust)
 
