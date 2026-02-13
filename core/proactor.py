@@ -25,7 +25,9 @@ from core.storage import storage
 from core.context_assembler import ContextAssembler
 from core.llm_service import llm_service, model_selector, LLM_DEFAULT_MODEL
 from core.fallback_knowledge import lookup_fallback
+from core.identity_service import handle_identity_question
 import unidecode
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -100,17 +102,16 @@ class Proactor:
     # HANDLE — Entry point, routing obbligatorio
     # ═══════════════════════════════════════════════════════════════
 
-    async def handle(self, user_id: str, message: str) -> str:
+    async def handle(self, user_id: str, message: str, intent: str = None) -> str:
         """
         Orchestrazione centrale v4.
         Ordine di routing:
             1. Identity Router  (deterministico)
-            2. Memory Update
-            3. Intent Classification
-            4. Tool Router      (deterministico)
-            5. Strict Knowledge (skip relational)
-            6. Relational Router (GPT controllato)
-            7. Default Relational (chat libera)
+            2. Tool Router      (deterministico)
+            3. Strict Knowledge (skip relational)
+            4. Knowledge Router (GPT pulito)
+            5. Relational Router (GPT controllato)
+            6. Default Relational (chat libera)
         """
         try:
             # STEP 0: SANITY CHECK
@@ -118,49 +119,13 @@ class Proactor:
                 raise ValueError("Proactor received empty user_id")
             msg_lower = message.lower().strip()
 
-            logger.info("PROACTOR_START user=%s msg_len=%d", user_id, len(message))
+            logger.info("PROACTOR_HANDLE_ENTRY user=%s intent=%s", user_id, intent)
 
-            # STEP 1: HARD IDENTITY ROUTE
-            if is_identity_question(msg_lower):
-                logger.info("PROACTOR_ROUTE route=identity user=%s", user_id)
-                profile = await memory_brain.semantic.get_profile(user_id)
-                if not profile:
-                    profile = {}
-                logger.info("MEMORY_DIRECT_PROFILE_LOAD user=%s name=%s city=%s profession=%s",
-                            user_id,
-                            profile.get("name", "unknown"),
-                            profile.get("city", "unknown"),
-                            profile.get("profession", "unknown"))
-                if "come mi chiamo" in msg_lower:
-                    name = profile.get("name")
-                    if name:
-                        logger.info("MEMORY_DIRECT_RESPONSE user=%s", user_id)
-                        return f"Ti chiami {name.strip().title()}."
-                elif "dove vivo" in msg_lower:
-                    city = profile.get("city")
-                    if city:
-                        logger.info("MEMORY_DIRECT_RESPONSE user=%s", user_id)
-                        return f"Vivi a {city.strip().title()}."
-                elif "che lavoro faccio" in msg_lower:
-                    profession = profile.get("profession")
-                    if profession:
-                        logger.info("MEMORY_DIRECT_RESPONSE user=%s", user_id)
-                        return f"Sei un {profession.strip().lower()}."
-                elif "chi sono" in msg_lower:
-                    name = profile.get("name")
-                    city = profile.get("city")
-                    profession = profile.get("profession")
-                    parts = []
-                    if name:
-                        parts.append(f"Ti chiami {name.strip().title()}")
-                    if city:
-                        parts.append(f"vivi a {city.strip().title()}")
-                    if profession:
-                        parts.append(f"sei un {profession.strip().lower()}")
-                    if parts:
-                        logger.info("MEMORY_DIRECT_RESPONSE user=%s", user_id)
-                        return ", ".join(parts) + "."
-                return "Non me lo hai ancora detto."
+            # STEP 1: IDENTITY ROUTE PRIORITY
+            identity_response = await handle_identity_question(user_id, message)
+            if identity_response:
+                logger.info("IDENTITY_ROUTE_EXECUTION_ORDER_OK user=%s", user_id)
+                return identity_response
 
             # STEP 2: MEMORY UPDATE
             brain_state = await memory_brain.update_brain(user_id, message)
@@ -173,7 +138,8 @@ class Proactor:
                         len(brain_state.get('episodes', [])))
 
             # STEP 3: INTENT CLASSIFICATION
-            intent = await intent_classifier.classify(message)
+            if intent is None:
+                intent = await intent_classifier.classify(message)
 
             # STEP 4: TOOL ROUTES
             if intent in self.tool_intents:
@@ -195,7 +161,9 @@ class Proactor:
             return await self._handle_relational(user_id, message, brain_state)
 
         except Exception as e:
-            logger.error("PROACTOR_ERROR_FULL user=%s intent=%s error=%s", user_id, intent, str(e), exc_info=True)
+            logger.exception("PROACTOR_FATAL_ERROR user=%s intent=%s", user_id, intent, exc_info=True)
+            if os.getenv('TEST_MODE', '0') == '1':
+                raise
             try:
                 profile = await memory_brain.semantic.get_profile(user_id)
                 name = profile.get("name", "")

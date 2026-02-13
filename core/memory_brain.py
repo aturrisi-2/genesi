@@ -452,7 +452,9 @@ class SemanticLayer:
     async def _save_profile(self, user_id: str, profile: Dict[str, Any]) -> bool:
         profile["updated_at"] = datetime.now().isoformat()
         logger.info("PROFILE_BEFORE_SAVE user=%s profile=%s", user_id, profile)
-        return await storage.save(f"long_term_profile:{user_id}", profile)
+        result = await storage.save(f"long_term_profile:{user_id}", profile)
+        logger.info("PROFILE_AFTER_SAVE user=%s profile=%s", user_id, profile)
+        return result
 
     async def update_emotional_pattern(self, user_id: str, emotion: str, intensity: float):
         profile = await self.get_profile(user_id)
@@ -749,32 +751,25 @@ class MemoryBrain:
         name_match = re.search(r"mi chiamo ([\w']+)", msg_lower)
         if name_match:
             name = name_match.group(1)
-            old_name = profile.get("name", "")
-            if name != old_name:
-                profile["name"] = name
-                logger.info("PROFILE_FIELD_UPDATED user=%s field=name value=%s", user_id, name)
+            profile["name"] = name
 
         # Estrarre città
-        city_match = re.search(r"vivo a ([\w']+)", msg_lower)
+        city_match = re.search(r"(?:vivo a|abito a) ([\w']+)", msg_lower)
         if city_match:
             city = city_match.group(1)
-            old_city = profile.get("city", "")
-            if city != old_city:
-                profile["city"] = city
-                logger.info("PROFILE_FIELD_UPDATED user=%s field=city value=%s", user_id, city)
+            profile["city"] = city
 
         # Estrarre professione
-        profession_match = re.search(r"faccio (?:il|la) ([\w']+)|sono un(?:a)? ([\w']+)", msg_lower)
+        profession_match = re.search(r"(?:faccio (?:il|la|l')|sono un(?:a)?) ([\w']+)", msg_lower)
         if profession_match:
-            profession = profession_match.group(1) or profession_match.group(2)
-            old_profession = profile.get("profession", "")
-            if profession != old_profession:
-                profile["profession"] = profession
-                logger.info("PROFILE_FIELD_UPDATED user=%s field=profession value=%s", user_id, profession)
+            profession = profession_match.group(1)
+            profile["profession"] = profession
+
+        logger.info("PROFILE_BEFORE_SAVE user=%s name=%s city=%s profession=%s", user_id, profile.get("name"), profile.get("city"), profile.get("profession"))
 
         # Aggiornare il profilo
-        logger.info("PROFILE_BEFORE_SAVE user=%s profile=%s", user_id, profile)
         await self.semantic._save_profile(user_id, profile)
+        logger.info("PROFILE_AFTER_SAVE user=%s name=%s city=%s profession=%s", user_id, profile.get("name"), profile.get("city"), profile.get("profession"))
 
     async def recall_for_response(self, user_id: str, message: str) -> Dict[str, Any]:
         """Recall completo per generazione risposta (senza update)."""
