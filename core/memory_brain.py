@@ -746,15 +746,31 @@ class MemoryBrain:
         msg_lower = message.lower().strip()
 
         # Estrarre nome
-        parts = msg_lower.split("mi chiamo")
-        if len(parts) > 1:
-            after = parts[1].strip().split()
-            if after:
-                name = after[0]
-                old_name = profile.get("name", "")
-                if name != old_name:
-                    profile["name"] = name
-                    logger.info("MEMORY_PROFILE_UPDATED field=name old=%s new=%s", old_name, name)
+        name_match = re.search(r"mi chiamo ([\w']+)", msg_lower)
+        if name_match:
+            name = name_match.group(1)
+            old_name = profile.get("name", "")
+            if name != old_name:
+                profile["name"] = name
+                logger.info("PROFILE_FIELD_UPDATED user=%s field=name value=%s", user_id, name)
+
+        # Estrarre città
+        city_match = re.search(r"vivo a ([\w']+)", msg_lower)
+        if city_match:
+            city = city_match.group(1)
+            old_city = profile.get("city", "")
+            if city != old_city:
+                profile["city"] = city
+                logger.info("PROFILE_FIELD_UPDATED user=%s field=city value=%s", user_id, city)
+
+        # Estrarre professione
+        profession_match = re.search(r"faccio (?:il|la) ([\w']+)|sono un(?:a)? ([\w']+)", msg_lower)
+        if profession_match:
+            profession = profession_match.group(1) or profession_match.group(2)
+            old_profession = profile.get("profession", "")
+            if profession != old_profession:
+                profile["profession"] = profession
+                logger.info("PROFILE_FIELD_UPDATED user=%s field=profession value=%s", user_id, profession)
 
         # Aggiornare il profilo
         logger.info("PROFILE_BEFORE_SAVE user=%s profile=%s", user_id, profile)
