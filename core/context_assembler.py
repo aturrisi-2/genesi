@@ -8,6 +8,7 @@ Nessun fallback silenzioso — se il contesto non viene costruito, errore esplic
 import logging
 from typing import Dict, Any, List
 from core.memory_engine_v2 import MemoryEngineV2
+from core.cognitive_memory_engine import CognitiveMemoryEngine
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,8 @@ try:
     logger.info("MEMORY_V2_ACTIVE")
 except Exception as e:
     logger.error("MEMORY_V2_IMPORT_FAILED: %s", str(e))
+
+cognitive_engine = CognitiveMemoryEngine()
 
 class ContextAssembler:
     """
@@ -54,19 +57,24 @@ class ContextAssembler:
         brain_state = await self.memory_brain.update_brain(user_id, user_message)
         context['brain_state'] = brain_state
 
-        if memory_engine_v2:
-            try:
-                structured_memory = memory_engine_v2.load_user_memory(user_id)
-                if structured_memory:
-                    context['memory_v2'] = structured_memory
-                    logger.info("MEMORY_V2_RETRIEVED user_id=%s", user_id)
+        # Cognitive evaluation
+        extracted_profile_data = {}  # Placeholder for extracted data
+        decision = cognitive_engine.evaluate_event(user_id, user_message, extracted_profile_data)
 
-                    context['llm_prompt'] = self._build_llm_prompt(brain_state, structured_memory)
-                else:
-                    logger.info("MEMORY_V2_EMPTY user_id=%s", user_id)
-            except Exception as e:
-                logger.error("MEMORY_V2_ERROR user_id=%s error=%s", user_id, str(e))
-                logger.info("MEMORY_V2_FALLBACK user_id=%s", user_id)
+        if decision:
+            if memory_engine_v2:
+                try:
+                    structured_memory = memory_engine_v2.load_user_memory(user_id)
+                    if structured_memory:
+                        context['memory_v2'] = structured_memory
+                        logger.info("MEMORY_V2_RETRIEVED user_id=%s", user_id)
+
+                        context['llm_prompt'] = self._build_llm_prompt(brain_state, structured_memory)
+                    else:
+                        logger.info("MEMORY_V2_EMPTY user_id=%s", user_id)
+                except Exception as e:
+                    logger.error("MEMORY_V2_ERROR user_id=%s error=%s", user_id, str(e))
+                    logger.info("MEMORY_V2_FALLBACK user_id=%s", user_id)
 
         summary = self._summarize(long_term, relational, episodes, latent_state)
 
