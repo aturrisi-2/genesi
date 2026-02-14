@@ -40,7 +40,6 @@ async def chat_endpoint(request: ChatRequest):
 
         if decision['persist']:
             # Update memory via cognitive engine
-            # cognitive_engine.update_user_memory(...)  # Placeholder for actual update logic
             log("COGNITIVE_DECISION", user_id=request.user_id, persist=True, type=decision['memory_type'], confidence=decision['confidence'])
         else:
             log("COGNITIVE_DECISION", user_id=request.user_id, persist=False, reason="low_relevance")

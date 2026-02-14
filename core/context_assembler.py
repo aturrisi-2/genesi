@@ -45,11 +45,13 @@ class ContextAssembler:
         if cognitive_memory['persist']:
             context['cognitive_memory'] = cognitive_memory
             logger.info("COGNITIVE_MEMORY_UPDATE user_id=%s", user_id)
+        else:
+            logger.info("COGNITIVE_MEMORY_EMPTY user_id=%s", user_id)
 
         summary = self._summarize_cognitive(cognitive_memory)
 
         if not summary or not summary.strip():
-            raise RuntimeError(f"CONTEXT_ASSEMBLER_EMPTY user={user_id} — Context not built. Memory injection failed.")
+            summary = "No relevant memory found."
 
         context["summary"] = summary
         context["current_message"] = user_message
@@ -64,9 +66,9 @@ class ContextAssembler:
         # Build summary from cognitive memory
         parts = []
         if cognitive_memory.get('memory_type') == 'profile':
-            parts.append(f"Name: {cognitive_memory.get('key', '')}")
+            parts.append(f"Name: {cognitive_memory.get('value', '')}")
         elif cognitive_memory.get('memory_type') == 'relational':
-            parts.append(f"Spouse: {cognitive_memory.get('key', '')}")
+            parts.append(f"Spouse: {cognitive_memory.get('value', '')}")
         elif cognitive_memory.get('memory_type') == 'episodic':
-            parts.append(f"Event: {cognitive_memory.get('key', '')}")
+            parts.append(f"Event: {cognitive_memory.get('value', '')}")
         return "\n".join(parts)

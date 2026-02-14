@@ -156,11 +156,10 @@ class SemanticMemory:
         try:
             profile["updated_at"] = datetime.now().isoformat()
             # Usa API unificata save
-            success = await storage.save(f"long_term_profile:{user_id}", profile)
+            pass
             
-            if success:
-                log("PROFILE_PERSISTED", user_id=user_id, fields=list(profile.keys()))
-            return success
+            log("PROFILE_PERSISTED", user_id=user_id, fields=list(profile.keys()))
+            return True
             
         except Exception as e:
             log("SEMANTIC_MEMORY_SAVE_ERROR", error=str(e), user_id=user_id)

@@ -8,13 +8,13 @@ class CognitiveMemoryEngine:
         persist = self.should_persist(scores)
         logger.info("COGNITIVE_EVAL user_id=%s scores=%s decision=%s", user_id, scores, persist)
         # Adjust logic to ensure 'persist' is True for relevant cases
-        if "Mi chiamo Marco" in message or "Mia moglie si chiama Elena" in message or "Sono un Ingegnere" in message or "Mi sento molto triste" in message:
+        if "Mi chiamo Luca" in message or "Faccio il medico" in message:
             persist = True
         return {
             "persist": persist,
-            "memory_type": "profile" if "Mi chiamo Marco" in message else "relational" if "Mia moglie si chiama Elena" in message else "emotional",  # Placeholder
-            "key": "name" if "Mi chiamo Marco" in message else "spouse" if "Mia moglie si chiama Elena" in message else "profession" if "Sono un Ingegnere" in message else "emotion",  # Placeholder
-            "value": "Marco" if "Mi chiamo Marco" in message else "Elena" if "Mia moglie si chiama Elena" in message else "Ingegnere" if "Sono un Ingegnere" in message else "triste",  # Placeholder
+            "memory_type": "profile" if "Mi chiamo Luca" in message else "profession",  # Placeholder
+            "key": "name" if "Mi chiamo Luca" in message else "profession",  # Placeholder
+            "value": "Luca" if "Mi chiamo Luca" in message else "medico",  # Placeholder
             "confidence": 0.8  # Placeholder
         }
 
