@@ -10,6 +10,7 @@ from typing import Dict, Any, List
 from core.cognitive_memory_engine import CognitiveMemoryEngine
 from core.storage import storage
 from core.chat_memory import chat_memory
+from core.document_memory import load_document
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +184,11 @@ def build_conversation_context(user_id: str, current_message: str,
     if continuity:
         sections.append(continuity)
 
+    # --- E) Active document context ---
+    doc_section = _inject_document_context(user_id, current_message, profile)
+    if doc_section:
+        sections.append(doc_section)
+
     return "\n\n".join(sections)
 
 
@@ -247,3 +253,67 @@ def _detect_narrative_continuity(current_message: str, history: List[Dict]) -> s
                 f"NON trattarli come messaggi separati. NON usare fallback generico.")
 
     return ""
+
+
+# ═══════════════════════════════════════════════════════════════
+# DOCUMENT CONTEXT — inject active document into LLM context
+# ═══════════════════════════════════════════════════════════════
+
+_DOCUMENT_TRIGGERS = [
+    "file", "documento", "immagine", "foto", "caricato", "caricata",
+    "trascrivi", "riassumi", "riassunto", "cosa dice", "cosa c'è scritto",
+    "cosa c'era scritto", "cosa c'e' scritto", "cosa c'era",
+    "leggi", "analizza", "contenuto", "testo", "pdf",
+    "screenshot", "schermata", "allegato",
+    "cosa vedi", "cosa si vede", "descrivi", "estrai",
+]
+
+
+def is_document_reference(message: str) -> bool:
+    """Check if user message references an uploaded document."""
+    msg_lower = message.lower()
+    return any(trigger in msg_lower for trigger in _DOCUMENT_TRIGGERS)
+
+
+def _inject_document_context(user_id: str, message: str,
+                              profile: Dict[str, Any]) -> str:
+    """
+    If user has an active document and message references it,
+    inject document content into LLM context.
+    """
+    doc_id = profile.get("active_document_id")
+    if not doc_id:
+        return ""
+
+    if not is_document_reference(message):
+        return ""
+
+    doc = load_document(doc_id)
+    if not doc:
+        logger.warning("DOCUMENT_CONTEXT_MISSING doc_id=%s user_id=%s", doc_id, user_id)
+        return ""
+
+    # Build content section: summary + first 2000 chars for large docs
+    raw_content = doc.get("content", "")
+    summary = doc.get("summary", "")
+
+    if len(raw_content) > 4000 and summary:
+        content_section = (f"RIASSUNTO:\n{summary}\n\n"
+                           f"PRIMI 2000 CARATTERI:\n{raw_content[:2000]}")
+    elif len(raw_content) > 4000:
+        content_section = raw_content[:4000] + "\n[...contenuto troncato...]"
+    else:
+        content_section = raw_content
+
+    logger.info("DOCUMENT_CONTEXT_INJECTED doc_id=%s type=%s chars=%d",
+                doc_id, doc.get("type"), len(content_section))
+
+    return (f"[DOCUMENT_CONTEXT]\n"
+            f"filename: {doc.get('filename', '?')}\n"
+            f"type: {doc.get('type', '?')}\n"
+            f"content:\n<<<\n{content_section}\n>>>\n"
+            f"[/DOCUMENT_CONTEXT]\n"
+            f"ISTRUZIONE: L'utente si riferisce a questo documento. "
+            f"Rispondi usando il contenuto del documento sopra. "
+            f"NON dire che non hai accesso al file. HAI il contenuto. "
+            f"NON rispondere con frasi generiche. USA i dati del documento.")

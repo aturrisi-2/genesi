@@ -1566,7 +1566,7 @@ function handleFileUpload() {
     fd.append('user_id', getUserId());
 
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const res = await fetch('/api/upload/', { method: 'POST', body: fd });
       if (!res.ok) throw new Error(`Upload ${res.status}`);
       const result = await res.json();
       if (loadingMsg) loadingMsg.remove();

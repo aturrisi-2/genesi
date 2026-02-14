@@ -22,7 +22,7 @@ from core.curiosity_engine import curiosity_engine
 from core.emotional_intensity_engine import emotional_intensity_engine
 from core.tool_services import tool_service
 from core.storage import storage
-from core.context_assembler import ContextAssembler, build_conversation_context
+from core.context_assembler import ContextAssembler, build_conversation_context, is_document_reference
 from core.llm_service import llm_service, model_selector, LLM_DEFAULT_MODEL
 from core.fallback_knowledge import lookup_fallback
 from core.identity_service import handle_identity_question
@@ -171,6 +171,11 @@ class Proactor:
                     logger.info("ELLIPTICAL_NEWS_FOLLOWUP user=%s topic=%s", user_id, resolved_topic)
                     enriched_msg = f"notizie {resolved_topic}"
                     return await self._handle_tool("news", enriched_msg, user_id)
+
+            # STEP 2.7: DOCUMENT MODE — override to document_query if active doc + reference
+            if profile.get("active_document_id") and is_document_reference(message):
+                logger.info("DOCUMENT_MODE_TRIGGERED user=%s doc_id=%s", user_id, profile["active_document_id"])
+                return await self._handle_document_query(user_id, message, profile, brain_state)
 
             # STEP 3: INTENT CLASSIFICATION
             if intent is None:
@@ -586,6 +591,63 @@ Domanda: {message}"""
             result = "Non ho una risposta precisa."
 
         logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d route=knowledge", user_id, len(result))
+        return result
+
+    # ═══════════════════════════════════════════════════════════
+    # DOCUMENT QUERY ROUTER — document-aware GPT with no fallback
+    # ═══════════════════════════════════════════════════════════
+
+    async def _handle_document_query(self, user_id: str, message: str,
+                                      profile: Dict[str, Any], brain_state: Dict[str, Any]) -> str:
+        """
+        Handle document_query intent. Uses active document content in LLM context.
+        No generic fallback allowed — response MUST use document data.
+        """
+        # Build conversation context (includes document injection via step E)
+        conversation_ctx = build_conversation_context(user_id, message, profile)
+        logger.info("PROACTOR_LLM_CALL user=%s route=document_query ctx_len=%d", user_id, len(conversation_ctx))
+
+        doc_prompt = f"""Sei Genesi. L'utente ha caricato un documento e ti sta chiedendo qualcosa su di esso.
+
+{conversation_ctx}
+
+REGOLE DOCUMENTO:
+- Rispondi SOLO usando il contenuto del documento fornito sopra in [DOCUMENT_CONTEXT].
+- Se l'utente chiede di riassumere, riassumi il documento.
+- Se l'utente chiede di trascrivere, riporta il testo del documento.
+- Se l'utente chiede di estrarre dati, estrai i dati rilevanti.
+- Se l'utente chiede di analizzare, analizza il contenuto.
+- NON dire MAI "non ho accesso al file" o "non posso vedere il documento".
+- NON dare risposte generiche. HAI il contenuto del documento.
+- NON inventare dati che non sono nel documento.
+- Rispondi in italiano, in modo chiaro e preciso.
+- Se il documento contiene poco testo, riportalo integralmente.
+
+Messaggio utente: {message}"""
+
+        model = model_selector(message, route="document_query")
+        result = await llm_service._call_with_protection(
+            model, doc_prompt, message, user_id=user_id, route="document_query"
+        )
+
+        if not result:
+            logger.warning("DOCUMENT_QUERY_LLM_FAIL user=%s", user_id)
+            # Deterministic fallback using document content directly
+            from core.document_memory import load_document
+            doc_id = profile.get("active_document_id", "")
+            doc = load_document(doc_id) if doc_id else None
+            if doc and doc.get("content"):
+                content = doc["content"][:2000]
+                result = f"Ecco il contenuto del documento '{doc.get('filename', 'file')}':\n\n{content}"
+            else:
+                result = "Il documento è stato caricato ma non riesco a elaborarlo in questo momento."
+
+        # Post-generation filter
+        result = filter_response(result, user_id)
+        if not result:
+            result = "Documento ricevuto. Chiedimi cosa vuoi sapere."
+
+        logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d route=document_query", user_id, len(result))
         return result
 
     # ═══════════════════════════════════════════════════════════
