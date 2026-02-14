@@ -148,14 +148,14 @@ def build_conversation_context(user_id: str, current_message: str,
                                 profile: Dict[str, Any]) -> str:
     """
     Builds structured conversation context for LLM:
-    A) Last 6 messages (user/assistant alternating)
+    A) Last 15 messages (user/assistant alternating)
     B) Stable identity summary
     C) Current topic detection
     """
     sections = []
 
     # --- A) Chat history thread ---
-    history = chat_memory.get_messages(user_id, limit=6)
+    history = chat_memory.get_messages(user_id, limit=15)
     if history:
         thread_lines = []
         for entry in history:

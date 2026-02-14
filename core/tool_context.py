@@ -16,6 +16,18 @@ logger = logging.getLogger(__name__)
 _tool_contexts: Dict[str, Dict] = defaultdict(dict)
 
 # Elliptical follow-up patterns (Italian)
+ELLIPTICAL_NEWS = [
+    "e di politica", "e la politica", "e in politica",
+    "e di sport", "e lo sport", "e nello sport",
+    "e di cronaca", "e la cronaca", "e in cronaca",
+    "e di finanza", "e la finanza", "e in finanza",
+    "e di economia", "e l'economia", "e in economia",
+    "e le altre notizie", "e le altre",
+    "e di tecnologia", "e la tecnologia",
+    "e di salute", "e la salute",
+    "e di scienza", "e la scienza",
+]
+
 ELLIPTICAL_WEATHER = [
     "e domani", "e dopodomani", "e stasera", "e stanotte",
     "e lì", "e li", "e lì vicino", "e li vicino",
@@ -69,5 +81,34 @@ def resolve_elliptical_city(user_id: str, message: str) -> Optional[str]:
     if city:
         logger.info("TOOL_CONTEXT_REUSE user=%s city=%s for_message=%s", user_id, city, message[:30])
         return city
+
+    return None
+
+
+def is_elliptical_news_followup(message: str) -> bool:
+    """Check if message is an elliptical follow-up to a news query."""
+    msg_lower = message.lower().strip()
+    return any(msg_lower.startswith(p) or msg_lower == p for p in ELLIPTICAL_NEWS)
+
+
+def resolve_elliptical_news(user_id: str, message: str) -> Optional[str]:
+    """
+    If message is an elliptical news follow-up and we have a saved news context,
+    return the extracted topic. Otherwise None.
+    """
+    if not is_elliptical_news_followup(message):
+        return None
+
+    ctx = get_tool_context(user_id)
+    if not ctx or ctx.get("intent") != "news":
+        return None
+
+    # Extract the topic from the elliptical message
+    msg_lower = message.lower().strip()
+    import re
+    topic_match = re.sub(r"^e\s+(di|la|lo|le|l'|in|nello|nella)?\s*", "", msg_lower).strip().rstrip("?")
+    if topic_match:
+        logger.info("TOOL_CONTEXT_NEWS_REUSE user=%s topic=%s", user_id, topic_match)
+        return topic_match
 
     return None

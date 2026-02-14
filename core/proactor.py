@@ -27,7 +27,9 @@ from core.llm_service import llm_service, model_selector, LLM_DEFAULT_MODEL
 from core.fallback_knowledge import lookup_fallback
 from core.identity_service import handle_identity_question
 from core.response_filter import filter_response
-from core.tool_context import save_tool_context, resolve_elliptical_city, is_elliptical_weather_followup
+from core.tool_context import (save_tool_context, resolve_elliptical_city,
+                               is_elliptical_weather_followup,
+                               is_elliptical_news_followup, resolve_elliptical_news)
 import unidecode
 import os
 
@@ -161,6 +163,14 @@ class Proactor:
                     logger.info("ELLIPTICAL_WEATHER_FOLLOWUP user=%s city=%s", user_id, resolved_city)
                     enriched_msg = f"che tempo fa a {resolved_city} {message.strip('?').strip()}"
                     return await self._handle_tool("weather", enriched_msg, user_id)
+
+            # STEP 2.6: ELLIPTICAL NEWS FOLLOW-UP (e.g. "e di politica?" after news)
+            if is_elliptical_news_followup(msg_lower):
+                resolved_topic = resolve_elliptical_news(user_id, msg_lower)
+                if resolved_topic:
+                    logger.info("ELLIPTICAL_NEWS_FOLLOWUP user=%s topic=%s", user_id, resolved_topic)
+                    enriched_msg = f"notizie {resolved_topic}"
+                    return await self._handle_tool("news", enriched_msg, user_id)
 
             # STEP 3: INTENT CLASSIFICATION
             if intent is None:
@@ -303,6 +313,7 @@ class Proactor:
                 return result
             elif intent == "news":
                 result = await tool_service.get_news(message)
+                save_tool_context(user_id, "news")
                 logger.info("TOOL_ROUTER_OK intent=news user=%s", user_id)
                 return result
             elif intent == "time":
@@ -526,17 +537,24 @@ Messaggio utente: {message}"""
     async def _handle_knowledge(self, user_id: str, message: str) -> str:
         """
         GPT per domande di definizione/conoscenza.
-        SENZA relational contamination. SENZA frasi empatiche. SENZA memoria.
+        Include chat history per risolvere riferimenti contestuali.
         Fallback deterministico da fallback_knowledge.py se LLM fallisce.
         """
+        # Build conversation context — MUST include chat history
+        profile = await storage.load(f"profile:{user_id}", default={})
+        conversation_ctx = build_conversation_context(user_id, message, profile)
+
         knowledge_prompt = f"""Sei Genesi.
 Rispondi in italiano, in modo chiaro, preciso, conciso.
 Massimo 3 frasi.
 
+{conversation_ctx}
+
 REGOLE:
 - Rispondi SOLO con informazione concreta.
+- Usa la CONVERSAZIONE RECENTE sopra per risolvere riferimenti come "prima", "perche'", "continua".
+- Se l'utente chiede "perche'" o "secondo te", riferisciti al contesto della conversazione sopra.
 - NESSUNA frase empatica o relazionale.
-- NESSUN riferimento a memoria utente.
 - NESSUNA frase tipo "Sono qui per te" o "Dimmi di piu'".
 - NON dire MAI "assistente virtuale", "assistente informativo", "sono programmato".
 - NON dire MAI "non ho informazioni sufficienti" o "puoi fornire piu' contesto".
@@ -581,8 +599,8 @@ Domanda: {message}"""
         Prevents misrouting to knowledge/spiegazione.
         """
         msg_lower = message.lower().strip()
-        # Only override short messages (< 50 chars) that look like conversational follow-ups
-        if len(msg_lower) > 50:
+        # Only override messages < 60 chars that look like conversational follow-ups
+        if len(msg_lower) > 60:
             return False
         # Patterns that indicate a contextual follow-up, not a knowledge question
         contextual_patterns = [
@@ -591,11 +609,13 @@ Domanda: {message}"""
             "davvero?", "sul serio?", "in che senso", "cioè?", "cioe?",
             "tipo?", "ad esempio?", "e quindi?", "e allora?", "e poi?",
             "non capisco", "non ho capito", "cosa intendi", "cosa vuoi dire",
+            "prima", "lamentato", "detto prima", "parlato prima",
+            "continua", "continuare",
         ]
         if any(p in msg_lower for p in contextual_patterns):
             return True
-        # Very short messages with just "perché" + few words are likely follow-ups
-        if msg_lower.startswith("perch") and len(msg_lower) < 30:
+        # Short messages with just "perché" + few words are likely follow-ups
+        if msg_lower.startswith("perch") and len(msg_lower) < 50:
             return True
         return False
 

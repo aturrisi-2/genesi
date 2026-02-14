@@ -430,7 +430,7 @@ class TestNewsCategorization:
 def _should_override_to_relational(message: str, user_id: str) -> bool:
     """Standalone copy of Proactor._should_override_to_relational for testing."""
     msg_lower = message.lower().strip()
-    if len(msg_lower) > 50:
+    if len(msg_lower) > 60:
         return False
     contextual_patterns = [
         "perché?", "perche?", "secondo te", "e tu?", "e tu che ne pensi",
@@ -438,10 +438,12 @@ def _should_override_to_relational(message: str, user_id: str) -> bool:
         "davvero?", "sul serio?", "in che senso", "cioè?", "cioe?",
         "tipo?", "ad esempio?", "e quindi?", "e allora?", "e poi?",
         "non capisco", "non ho capito", "cosa intendi", "cosa vuoi dire",
+        "prima", "lamentato", "detto prima", "parlato prima",
+        "continua", "continuare",
     ]
     if any(p in msg_lower for p in contextual_patterns):
         return True
-    if msg_lower.startswith("perch") and len(msg_lower) < 30:
+    if msg_lower.startswith("perch") and len(msg_lower) < 50:
         return True
     return False
 
@@ -471,6 +473,15 @@ class TestIntentOverride:
 
     def test_ciao_no_override(self):
         assert _should_override_to_relational("Ciao come stai", "test") is False
+
+    def test_perche_lamentato_prima_overrides(self):
+        assert _should_override_to_relational("Perché mi sono lamentato prima?", "test") is True
+
+    def test_continua_overrides(self):
+        assert _should_override_to_relational("Continua", "test") is True
+
+    def test_di_cosa_parlato_prima_overrides(self):
+        assert _should_override_to_relational("Di cosa abbiamo parlato prima?", "test") is True
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -565,3 +576,128 @@ class TestNewFilterPatterns:
         _repeat_counts.pop(uid, None)
         result = filter_response("Non ho informazioni sufficienti per rispondere.", uid)
         assert "non ho informazioni sufficienti" not in result.lower()
+
+
+# ═══════════════════════════════════════════════════════════════
+# TEST 12: Chat history limit — must be 15, not 6 (new)
+# ═══════════════════════════════════════════════════════════════
+
+class TestChatHistoryLimit:
+    """Chat history must include at least 15 messages in the conversation context."""
+
+    def test_build_conversation_context_uses_15_messages(self):
+        from core.chat_memory import chat_memory
+        from core.context_assembler import build_conversation_context
+        uid = "test_history_15"
+        # Clear any existing messages
+        chat_memory.clear_messages(uid)
+        # Add 15 messages
+        for i in range(15):
+            chat_memory.add_message(uid, f"msg_{i}", f"resp_{i}", "chat_free")
+        ctx = build_conversation_context(uid, "nuovo messaggio", {})
+        # All 15 messages should be present
+        for i in range(15):
+            assert f"msg_{i}" in ctx, f"msg_{i} missing from context"
+        # Cleanup
+        chat_memory.clear_messages(uid)
+
+    def test_old_limit_6_is_gone(self):
+        from core.chat_memory import chat_memory
+        from core.context_assembler import build_conversation_context
+        uid = "test_history_not_6"
+        chat_memory.clear_messages(uid)
+        for i in range(10):
+            chat_memory.add_message(uid, f"turn_{i}", f"answer_{i}", "chat_free")
+        ctx = build_conversation_context(uid, "test", {})
+        # Message 0 through 9 should ALL be present (old limit=6 would drop 0-3)
+        for i in range(10):
+            assert f"turn_{i}" in ctx, f"turn_{i} missing — old limit=6 bug still present"
+        chat_memory.clear_messages(uid)
+
+    def test_weather_city_visible_in_history(self):
+        """After asking weather for Tokyo, the city must appear in conversation context."""
+        from core.chat_memory import chat_memory
+        from core.context_assembler import build_conversation_context
+        uid = "test_tokyo_visible"
+        chat_memory.clear_messages(uid)
+        chat_memory.add_message(uid, "Che tempo fa a Tokyo?",
+                                "A Tokyo: cielo sereno, 8°C, umidità 69%", "weather")
+        chat_memory.add_message(uid, "Bello!", "Sì, giornata limpida.", "chat_free")
+        ctx = build_conversation_context(uid, "Per quale città ti ho chiesto le previsioni?", {})
+        assert "Tokyo" in ctx, "Tokyo must be visible in conversation context"
+        chat_memory.clear_messages(uid)
+
+
+# ═══════════════════════════════════════════════════════════════
+# TEST 13: Elliptical news follow-up (new)
+# ═══════════════════════════════════════════════════════════════
+
+class TestEllipticalNewsFollowUp:
+    """'E di politica?' after news should resolve to news follow-up."""
+
+    def test_is_elliptical_news_detected(self):
+        from core.tool_context import is_elliptical_news_followup
+        assert is_elliptical_news_followup("e di politica?") is True
+
+    def test_is_elliptical_news_sport(self):
+        from core.tool_context import is_elliptical_news_followup
+        assert is_elliptical_news_followup("e di sport?") is True
+
+    def test_is_elliptical_news_cronaca(self):
+        from core.tool_context import is_elliptical_news_followup
+        assert is_elliptical_news_followup("e la cronaca?") is True
+
+    def test_not_elliptical_news(self):
+        from core.tool_context import is_elliptical_news_followup
+        assert is_elliptical_news_followup("che notizie ci sono?") is False
+
+    def test_resolve_news_after_context(self):
+        from core.tool_context import save_tool_context, resolve_elliptical_news
+        uid = "test_news_resolve"
+        save_tool_context(uid, "news")
+        topic = resolve_elliptical_news(uid, "e di politica?")
+        assert topic is not None
+        assert "politica" in topic
+
+    def test_resolve_news_no_context(self):
+        from core.tool_context import resolve_elliptical_news
+        topic = resolve_elliptical_news("no_ctx_user_xyz", "e di politica?")
+        assert topic is None
+
+    def test_resolve_news_wrong_intent(self):
+        from core.tool_context import save_tool_context, resolve_elliptical_news
+        uid = "test_news_wrong_intent"
+        save_tool_context(uid, "weather", city="Roma")
+        topic = resolve_elliptical_news(uid, "e di politica?")
+        assert topic is None
+
+
+# ═══════════════════════════════════════════════════════════════
+# TEST 14: Narrative continuity across intents (new)
+# ═══════════════════════════════════════════════════════════════
+
+class TestNarrativeContinuityAcrossIntents:
+    """Messages like 'Secondo te perché?' after 'Sono stanco' + 'Non ho dormito'
+    must have access to the full conversation thread."""
+
+    def test_stanco_dormito_perche_context_present(self):
+        """Simulate: 'Sono stanco' -> 'Non ho dormito' -> 'Secondo te perché?'
+        The context for the third message must contain both previous messages."""
+        from core.chat_memory import chat_memory
+        from core.context_assembler import build_conversation_context
+        uid = "test_continuity_perche"
+        chat_memory.clear_messages(uid)
+        chat_memory.add_message(uid, "Sono stanco", "Hai avuto una giornata pesante?", "chat_free")
+        chat_memory.add_message(uid, "Non ho dormito", "Se non hai dormito è normale sentirti così.", "chat_free")
+        ctx = build_conversation_context(uid, "Secondo te perché?", {})
+        assert "Sono stanco" in ctx
+        assert "Non ho dormito" in ctx
+        chat_memory.clear_messages(uid)
+
+    def test_perche_override_fires_for_lamentato(self):
+        """'Perché mi sono lamentato prima?' must trigger override."""
+        assert _should_override_to_relational("Perché mi sono lamentato prima?", "test") is True
+
+    def test_continua_override_fires(self):
+        """'Continua' must trigger override."""
+        assert _should_override_to_relational("Continua", "test") is True
