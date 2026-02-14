@@ -61,7 +61,8 @@ class TestDocumentReferenceDetection:
 from core.document_selector import resolve_documents
 
 
-def _make_doc(doc_id, filename, file_type, content="test content"):
+def _make_doc(doc_id, filename, file_type, content="test content",
+              status="active", importance_score=50):
     return {
         "doc_id": doc_id,
         "filename": filename,
@@ -71,6 +72,10 @@ def _make_doc(doc_id, filename, file_type, content="test content"):
         "meta": {},
         "created_at": "2026-01-01T00:00:00",
         "user_id": "test_user",
+        "last_accessed_at": "2026-01-01T00:00:00",
+        "access_count": 0,
+        "importance_score": importance_score,
+        "status": status,
     }
 
 
@@ -81,42 +86,48 @@ DOC_C = _make_doc("doc_c", "notes.txt", "text", "Text notes C")
 
 class TestDocumentSelector:
 
+    @patch("core.document_selector.reinforce_document")
     @patch("core.document_selector.load_document")
-    def test_filename_match(self, mock_load):
+    def test_filename_match(self, mock_load, mock_reinforce):
         mock_load.side_effect = lambda did: {"doc_a": DOC_A, "doc_b": DOC_B, "doc_c": DOC_C}.get(did)
         result = resolve_documents("cosa dice il report?", "user1", ["doc_a", "doc_b", "doc_c"])
         assert len(result) == 1
         assert result[0]["doc_id"] == "doc_a"
 
+    @patch("core.document_selector.reinforce_document")
     @patch("core.document_selector.load_document")
-    def test_type_match_image(self, mock_load):
+    def test_type_match_image(self, mock_load, mock_reinforce):
         mock_load.side_effect = lambda did: {"doc_a": DOC_A, "doc_b": DOC_B, "doc_c": DOC_C}.get(did)
         result = resolve_documents("descrivi l'immagine", "user1", ["doc_a", "doc_b", "doc_c"])
         assert len(result) == 1
         assert result[0]["type"] == "image"
 
+    @patch("core.document_selector.reinforce_document")
     @patch("core.document_selector.load_document")
-    def test_type_match_pdf(self, mock_load):
+    def test_type_match_pdf(self, mock_load, mock_reinforce):
         mock_load.side_effect = lambda did: {"doc_a": DOC_A, "doc_b": DOC_B, "doc_c": DOC_C}.get(did)
         result = resolve_documents("leggi il pdf", "user1", ["doc_a", "doc_b", "doc_c"])
         assert len(result) == 1
         assert result[0]["type"] == "pdf"
 
+    @patch("core.document_selector.reinforce_document")
     @patch("core.document_selector.load_document")
-    def test_recency_ultimo(self, mock_load):
+    def test_recency_ultimo(self, mock_load, mock_reinforce):
         mock_load.side_effect = lambda did: {"doc_a": DOC_A, "doc_b": DOC_B, "doc_c": DOC_C}.get(did)
         result = resolve_documents("riassumi l'ultimo file", "user1", ["doc_a", "doc_b", "doc_c"])
         assert len(result) == 1
         assert result[0]["doc_id"] == "doc_c"  # last in list = most recent
 
+    @patch("core.document_selector.reinforce_document")
     @patch("core.document_selector.load_document")
-    def test_comparison_selects_two(self, mock_load):
+    def test_comparison_selects_two(self, mock_load, mock_reinforce):
         mock_load.side_effect = lambda did: {"doc_a": DOC_A, "doc_b": DOC_B, "doc_c": DOC_C}.get(did)
         result = resolve_documents("confronta i documenti", "user1", ["doc_a", "doc_b", "doc_c"])
         assert len(result) == 2
 
+    @patch("core.document_selector.reinforce_document")
     @patch("core.document_selector.load_document")
-    def test_default_last_two(self, mock_load):
+    def test_default_last_two(self, mock_load, mock_reinforce):
         mock_load.side_effect = lambda did: {"doc_a": DOC_A, "doc_b": DOC_B, "doc_c": DOC_C}.get(did)
         result = resolve_documents("analizza il contenuto", "user1", ["doc_a", "doc_b", "doc_c"])
         assert len(result) == 2
@@ -128,8 +139,9 @@ class TestDocumentSelector:
         result = resolve_documents("riassumi", "user1", [])
         assert result == []
 
+    @patch("core.document_selector.reinforce_document")
     @patch("core.document_selector.load_document")
-    def test_single_doc(self, mock_load):
+    def test_single_doc(self, mock_load, mock_reinforce):
         mock_load.return_value = DOC_A
         result = resolve_documents("analizza", "user1", ["doc_a"])
         assert len(result) == 1
@@ -247,3 +259,191 @@ class TestMultiDocInjection:
         profile = {"active_document_id": "doc_a"}
         result = _inject_document_context("user1", "leggi il file", profile)
         assert "[DOCUMENT_CONTEXT]" in result
+
+
+# ═══════════════════════════════════════════════════════════════
+# Test: _compute_status
+# ═══════════════════════════════════════════════════════════════
+
+from core.document_memory import _compute_status
+
+
+class TestComputeStatus:
+    def test_high_score_active(self):
+        assert _compute_status(80) == "active"
+
+    def test_boundary_71_active(self):
+        assert _compute_status(71) == "active"
+
+    def test_boundary_70_passive(self):
+        assert _compute_status(70) == "passive"
+
+    def test_mid_score_passive(self):
+        assert _compute_status(50) == "passive"
+
+    def test_boundary_30_passive(self):
+        assert _compute_status(30) == "passive"
+
+    def test_boundary_29_archived(self):
+        assert _compute_status(29) == "archived"
+
+    def test_zero_archived(self):
+        assert _compute_status(0) == "archived"
+
+
+# ═══════════════════════════════════════════════════════════════
+# Test: Status filtering in document_selector
+# ═══════════════════════════════════════════════════════════════
+
+DOC_ARCHIVED = _make_doc("doc_arch", "old.pdf", "pdf", "Old content",
+                          status="archived", importance_score=10)
+DOC_PASSIVE = _make_doc("doc_pass", "medium.pdf", "pdf", "Medium content",
+                         status="passive", importance_score=40)
+
+
+class TestStatusFiltering:
+
+    @patch("core.document_selector.reinforce_document")
+    @patch("core.document_selector.load_document")
+    def test_archived_excluded(self, mock_load, mock_reinforce):
+        mock_load.side_effect = lambda did: {
+            "doc_a": DOC_A, "doc_arch": DOC_ARCHIVED
+        }.get(did)
+        result = resolve_documents("analizza", "user1", ["doc_arch", "doc_a"])
+        doc_ids = [d["doc_id"] for d in result]
+        assert "doc_arch" not in doc_ids
+        assert "doc_a" in doc_ids
+
+    @patch("core.document_selector.reinforce_document")
+    @patch("core.document_selector.load_document")
+    def test_passive_used_when_no_active(self, mock_load, mock_reinforce):
+        mock_load.side_effect = lambda did: {
+            "doc_pass": DOC_PASSIVE, "doc_arch": DOC_ARCHIVED
+        }.get(did)
+        result = resolve_documents("analizza", "user1", ["doc_arch", "doc_pass"])
+        assert len(result) == 1
+        assert result[0]["doc_id"] == "doc_pass"
+
+    @patch("core.document_selector.reinforce_document")
+    @patch("core.document_selector.load_document")
+    def test_all_archived_returns_empty(self, mock_load, mock_reinforce):
+        mock_load.side_effect = lambda did: {
+            "doc_arch": DOC_ARCHIVED
+        }.get(did)
+        result = resolve_documents("analizza", "user1", ["doc_arch"])
+        assert result == []
+
+
+# ═══════════════════════════════════════════════════════════════
+# Test: Forgetting engine decay
+# ═══════════════════════════════════════════════════════════════
+
+from core.document_forgetting import apply_decay, _DECAY_RATE
+from datetime import datetime, timedelta
+
+
+class TestForgettingEngine:
+
+    @patch("core.document_forgetting._save_doc")
+    @patch("core.document_forgetting.get_user_documents")
+    def test_decay_after_10_days(self, mock_get, mock_save):
+        ten_days_ago = (datetime.utcnow() - timedelta(days=10)).isoformat()
+        doc = _make_doc("d1", "test.pdf", "pdf")
+        doc["last_accessed_at"] = ten_days_ago
+        doc["importance_score"] = 50
+        mock_get.return_value = [doc]
+        updated = apply_decay("user1")
+        assert updated == 1
+        # 50 - 10*0.5 = 45
+        assert doc["importance_score"] == 45.0
+        assert doc["status"] == "passive"  # 30-70 range
+
+    @patch("core.document_forgetting._save_doc")
+    @patch("core.document_forgetting.get_user_documents")
+    def test_decay_clamps_to_zero(self, mock_get, mock_save):
+        old = (datetime.utcnow() - timedelta(days=200)).isoformat()
+        doc = _make_doc("d1", "test.pdf", "pdf")
+        doc["last_accessed_at"] = old
+        doc["importance_score"] = 50
+        mock_get.return_value = [doc]
+        apply_decay("user1")
+        assert doc["importance_score"] == 0
+        assert doc["status"] == "archived"
+
+    @patch("core.document_forgetting._save_doc")
+    @patch("core.document_forgetting.get_user_documents")
+    def test_no_decay_within_first_day(self, mock_get, mock_save):
+        recent = datetime.utcnow().isoformat()
+        doc = _make_doc("d1", "test.pdf", "pdf")
+        doc["last_accessed_at"] = recent
+        doc["importance_score"] = 50
+        mock_get.return_value = [doc]
+        updated = apply_decay("user1")
+        assert updated == 0
+        assert doc["importance_score"] == 50
+
+    @patch("core.document_forgetting._save_doc")
+    @patch("core.document_forgetting.get_user_documents")
+    def test_status_transition_active_to_passive(self, mock_get, mock_save):
+        days_ago = (datetime.utcnow() - timedelta(days=60)).isoformat()
+        doc = _make_doc("d1", "test.pdf", "pdf", importance_score=80)
+        doc["last_accessed_at"] = days_ago
+        doc["status"] = "active"
+        mock_get.return_value = [doc]
+        apply_decay("user1")
+        # 80 - 60*0.5 = 50 → passive
+        assert doc["importance_score"] == 50.0
+        assert doc["status"] == "passive"
+
+    @patch("core.document_forgetting._save_doc")
+    @patch("core.document_forgetting.get_user_documents")
+    def test_empty_docs_returns_zero(self, mock_get, mock_save):
+        mock_get.return_value = []
+        assert apply_decay("user1") == 0
+
+
+# ═══════════════════════════════════════════════════════════════
+# Test: Reinforcement
+# ═══════════════════════════════════════════════════════════════
+
+from core.document_memory import reinforce_document
+
+
+class TestReinforcement:
+
+    @patch("core.document_memory._save_doc")
+    @patch("core.document_memory.load_document")
+    def test_reinforce_bumps_score(self, mock_load, mock_save):
+        doc = _make_doc("d1", "test.pdf", "pdf")
+        doc["importance_score"] = 50
+        doc["access_count"] = 0
+        mock_load.return_value = doc
+        reinforce_document("d1")
+        assert doc["importance_score"] == 60
+        assert doc["access_count"] == 1
+
+    @patch("core.document_memory._save_doc")
+    @patch("core.document_memory.load_document")
+    def test_reinforce_caps_at_100(self, mock_load, mock_save):
+        doc = _make_doc("d1", "test.pdf", "pdf", importance_score=95)
+        doc["access_count"] = 5
+        mock_load.return_value = doc
+        reinforce_document("d1")
+        assert doc["importance_score"] == 100
+
+    @patch("core.document_memory._save_doc")
+    @patch("core.document_memory.load_document")
+    def test_reinforce_updates_status_to_active(self, mock_load, mock_save):
+        doc = _make_doc("d1", "test.pdf", "pdf", importance_score=65)
+        doc["status"] = "passive"
+        doc["access_count"] = 2
+        mock_load.return_value = doc
+        reinforce_document("d1")
+        # 65 + 10 = 75 → active
+        assert doc["importance_score"] == 75
+        assert doc["status"] == "active"
+
+    @patch("core.document_memory.load_document")
+    def test_reinforce_missing_doc_noop(self, mock_load):
+        mock_load.return_value = None
+        reinforce_document("nonexistent")  # Should not raise

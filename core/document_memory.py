@@ -64,6 +64,7 @@ async def save_document(doc_id: str, user_id: str, filename: str,
     if content and len(content) > _SUMMARY_THRESHOLD:
         summary = await _generate_summary(content, filename)
 
+    now = datetime.utcnow().isoformat()
     doc = {
         "doc_id": doc_id,
         "filename": filename,
@@ -71,8 +72,12 @@ async def save_document(doc_id: str, user_id: str, filename: str,
         "content": content,
         "summary": summary,
         "meta": meta,
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": now,
         "user_id": user_id,
+        "last_accessed_at": now,
+        "access_count": 0,
+        "importance_score": 50,
+        "status": "active",
     }
 
     path = _doc_path(doc_id)
@@ -98,6 +103,47 @@ def load_document(doc_id: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error("DOCUMENT_LOAD_ERROR doc_id=%s error=%s", doc_id, str(e))
         return None
+
+
+def _save_doc(doc: Dict[str, Any]) -> None:
+    """Write document dict back to disk."""
+    path = _doc_path(doc["doc_id"])
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(doc, f, ensure_ascii=False, indent=2)
+
+
+def _compute_status(score: float) -> str:
+    """Compute status from importance_score."""
+    if score > 70:
+        return "active"
+    elif score >= 30:
+        return "passive"
+    else:
+        return "archived"
+
+
+def reinforce_document(doc_id: str) -> None:
+    """
+    Reinforce a document when it is used in a query.
+    importance_score += 10, access_count += 1, last_accessed_at = now.
+    """
+    doc = load_document(doc_id)
+    if not doc:
+        return
+    doc["importance_score"] = min(100, doc.get("importance_score", 50) + 10)
+    doc["access_count"] = doc.get("access_count", 0) + 1
+    doc["last_accessed_at"] = datetime.utcnow().isoformat()
+    old_status = doc.get("status", "active")
+    doc["status"] = _compute_status(doc["importance_score"])
+    try:
+        _save_doc(doc)
+        log("DOCUMENT_REINFORCED", doc_id=doc_id, score=doc["importance_score"],
+            access_count=doc["access_count"])
+        if doc["status"] != old_status:
+            log("DOCUMENT_STATUS_CHANGED", doc_id=doc_id,
+                old_status=old_status, new_status=doc["status"])
+    except Exception as e:
+        logger.error("DOCUMENT_REINFORCE_ERROR doc_id=%s error=%s", doc_id, str(e))
 
 
 def get_user_documents(user_id: str) -> list:

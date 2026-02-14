@@ -7,7 +7,7 @@ Max 2 documenti iniettati per query.
 
 import logging
 from typing import List, Dict, Any
-from core.document_memory import load_document
+from core.document_memory import load_document, reinforce_document
 from core.log import log
 
 logger = logging.getLogger(__name__)
@@ -44,12 +44,20 @@ def resolve_documents(message: str, user_id: str,
     if not active_doc_ids:
         return []
 
-    # Load all active documents
-    docs = []
+    # Load all documents, filter by status
+    all_docs = []
     for doc_id in active_doc_ids:
         doc = load_document(doc_id)
         if doc:
-            docs.append(doc)
+            all_docs.append(doc)
+
+    if not all_docs:
+        return []
+
+    # Prefer active docs; if none, include passive; exclude archived
+    docs = [d for d in all_docs if d.get("status", "active") == "active"]
+    if not docs:
+        docs = [d for d in all_docs if d.get("status", "active") != "archived"]
 
     if not docs:
         return []
@@ -68,7 +76,7 @@ def resolve_documents(message: str, user_id: str,
     if selected:
         selected = selected[:_MAX_INJECTED]
         log("DOCUMENTS_SELECTED", ids=[d["doc_id"] for d in selected], reason="filename_match")
-        return selected
+        return _reinforce_selected(selected)
 
     # 2. Type match
     for type_key, keywords in _TYPE_KEYWORDS.items():
@@ -77,7 +85,7 @@ def resolve_documents(message: str, user_id: str,
             if type_matches:
                 selected = type_matches[:_MAX_INJECTED]
                 log("DOCUMENTS_SELECTED", ids=[d["doc_id"] for d in selected], reason="type_match")
-                return selected
+                return _reinforce_selected(selected)
 
     # 3. "ultimo" / "più recente" → most recent
     recency_keywords = ["ultimo", "ultima", "più recente", "piu recente", "appena caricato",
@@ -85,7 +93,7 @@ def resolve_documents(message: str, user_id: str,
     if any(kw in msg_lower for kw in recency_keywords):
         selected = [docs[-1]]  # docs are ordered oldest→newest (active_doc_ids order)
         log("DOCUMENTS_SELECTED", ids=[d["doc_id"] for d in selected], reason="recency")
-        return selected
+        return _reinforce_selected(selected)
 
     # 4. "confronta" / "compara" → last 2
     compare_keywords = ["confronta", "compara", "differenze", "confronto", "paragona",
@@ -93,9 +101,19 @@ def resolve_documents(message: str, user_id: str,
     if any(kw in msg_lower for kw in compare_keywords) and len(docs) >= 2:
         selected = docs[-2:]
         log("DOCUMENTS_SELECTED", ids=[d["doc_id"] for d in selected], reason="comparison")
-        return selected
+        return _reinforce_selected(selected)
 
     # 5. Default → last 2 documents
     selected = docs[-_MAX_INJECTED:]
     log("DOCUMENTS_SELECTED", ids=[d["doc_id"] for d in selected], reason="default")
-    return selected
+    return _reinforce_selected(selected)
+
+
+def _reinforce_selected(docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Reinforce all selected documents (bump importance + access count)."""
+    for doc in docs:
+        try:
+            reinforce_document(doc["doc_id"])
+        except Exception:
+            pass
+    return docs
