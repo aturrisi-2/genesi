@@ -944,3 +944,90 @@ body::after {
         max-width: 380px;
     }
 }
+
+/* ===============================
+   CAMERA OVERLAY
+   =============================== */
+#cameraOverlay {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.camera-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex: 1;
+    width: 100%;
+    overflow: hidden;
+}
+
+.camera-container video {
+    max-width: 100%;
+    max-height: 70vh;
+    object-fit: contain;
+}
+
+.camera-controls {
+    display: flex;
+    gap: 1.5rem;
+    padding: 1.2rem 0;
+    padding-bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
+    justify-content: center;
+}
+
+.camera-controls button {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 2rem;
+    padding: 0.8rem 2rem;
+    font-size: 1rem;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.2s;
+}
+
+.camera-controls button:active {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+#snapBtn {
+    background: rgba(0, 229, 255, 0.25);
+    border-color: rgba(0, 229, 255, 0.5);
+}
+
+#snapBtn:active {
+    background: rgba(0, 229, 255, 0.5);
+}
+
+/* Camera button in input bar */
+#camera-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+}
+
+#camera-button svg {
+    width: 1.3rem;
+    height: 1.3rem;
+    stroke: var(--text-secondary, #aaa);
+    stroke-width: 2;
+    fill: none;
+    transition: stroke 0.2s;
+}
+
+#camera-button:active svg {
+    stroke: var(--accent, #00e5ff);
+}

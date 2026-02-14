@@ -17,7 +17,12 @@ const textInput = document.getElementById('text-input');
 const sendButton = document.getElementById('send-button');
 const micButton = document.getElementById('mic-button');
 const plusButton = document.getElementById('plus-button');
+const cameraButton = document.getElementById('camera-button');
 const chatForm = document.getElementById('chat-form');
+
+// Camera state
+let cameraStream = null;
+let cameraVideo = null;
 
 // User bar DOM (auth disabilitato)
 const userBar = document.getElementById('user-bar');
@@ -1596,10 +1601,127 @@ function handleFileUpload() {
 }
 
 // ===============================
+// CAMERA — getUserMedia pipeline (iOS Safari + Android)
+// ===============================
+async function startCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" },
+      audio: false
+    });
+
+    cameraVideo = document.createElement("video");
+    cameraVideo.srcObject = cameraStream;
+    cameraVideo.setAttribute("playsinline", "");
+    cameraVideo.playsInline = true;
+    cameraVideo.muted = true;
+
+    await cameraVideo.play();
+
+    showCameraOverlay(cameraVideo);
+
+    console.log("[CAMERA] started");
+  } catch (err) {
+    console.error("[CAMERA] error:", err);
+    addMessage("Non riesco ad accedere alla fotocamera.", 'genesi');
+  }
+}
+
+function showCameraOverlay(video) {
+  const overlay = document.createElement("div");
+  overlay.id = "cameraOverlay";
+
+  overlay.innerHTML = `
+    <div class="camera-container"></div>
+    <div class="camera-controls">
+      <button id="snapBtn" type="button">Scatta</button>
+      <button id="closeCamera" type="button">Chiudi</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector(".camera-container").appendChild(video);
+
+  document.getElementById("snapBtn").onclick = captureFrame;
+  document.getElementById("closeCamera").onclick = stopCamera;
+}
+
+async function captureFrame() {
+  if (!cameraVideo) return;
+
+  const canvas = document.createElement("canvas");
+  const MAX_WIDTH = 1280;
+  const vw = cameraVideo.videoWidth || 640;
+  const vh = cameraVideo.videoHeight || 480;
+  const ratio = vw / vh;
+
+  canvas.width = Math.min(vw, MAX_WIDTH);
+  canvas.height = canvas.width / ratio;
+
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
+
+  const blob = await new Promise(resolve =>
+    canvas.toBlob(resolve, "image/jpeg", 0.8)
+  );
+
+  console.log("[CAMERA] photo captured size=", blob.size);
+
+  stopCamera();
+  await uploadCapturedImage(blob);
+}
+
+async function uploadCapturedImage(blob) {
+  const loadingMsg = addMessage("Sto analizzando la foto...", 'genesi');
+  setState(STATES.THINKING);
+
+  const formData = new FormData();
+  formData.append("file", blob, "camera_" + Date.now() + ".jpg");
+  formData.append("user_id", getUserId());
+
+  try {
+    const res = await fetch("/api/upload/", {
+      method: "POST",
+      body: formData
+    });
+
+    if (!res.ok) throw new Error("Upload " + res.status);
+
+    const data = await res.json();
+    if (loadingMsg) loadingMsg.remove();
+
+    addMessage(data.response || "Foto caricata.", 'genesi');
+
+    console.log("[CAMERA_UPLOAD] success doc_id=", data.doc_id);
+  } catch (err) {
+    console.error("[CAMERA_UPLOAD] error:", err);
+    if (loadingMsg) loadingMsg.remove();
+    addMessage("Errore nel caricamento della foto.", 'genesi');
+  } finally {
+    setState(STATES.IDLE);
+  }
+}
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(track => track.stop());
+    cameraStream = null;
+  }
+  cameraVideo = null;
+
+  const overlay = document.getElementById("cameraOverlay");
+  if (overlay) overlay.remove();
+
+  console.log("[CAMERA] stopped");
+}
+
+// ===============================
 // EVENT LISTENERS
 // ===============================
 sendButton.addEventListener('click', sendMessage);
 plusButton.addEventListener('click', handleFileUpload);
+cameraButton.addEventListener('click', startCamera);
 
 const handleMicToggle = (e) => {
   // Audio Priming: previeni NotAllowedError su Safari/iOS
