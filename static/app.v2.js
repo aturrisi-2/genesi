@@ -882,7 +882,9 @@ const _isSafari = (() => {
   return isSafariLike || hasSafariFeatures;
 })();
 
-const _useWebAudio = _isIOS || (_isSafari && !window.MediaRecorder);
+// Use WebAudio/ScriptProcessor ONLY if MediaRecorder is truly unavailable
+// iOS Safari 14.5+ supports MediaRecorder with audio/mp4
+let _useWebAudio = !window.MediaRecorder;
 
 // Detection dettagliata per logging
 function _getPlatformInfo() {
@@ -896,14 +898,19 @@ function _getPlatformInfo() {
   };
 }
 
-// --- MediaRecorder path (Chrome, Android, Firefox) ---
+// --- MediaRecorder path (all platforms including iOS Safari 14.5+) ---
 let mediaRecorder = null;
 let audioChunks = [];
+let _gainContext = null;
 
 function getSupportedMimeType() {
   if (typeof MediaRecorder === 'undefined') return '';
-  for (const t of ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']) {
-    if (MediaRecorder.isTypeSupported(t)) return t;
+  // audio/mp4 is the ONLY format iOS Safari MediaRecorder supports
+  const types = _isIOS
+    ? ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']
+    : ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+  for (const t of types) {
+    try { if (MediaRecorder.isTypeSupported(t)) return t; } catch(e) {}
   }
   return '';
 }
@@ -1034,10 +1041,9 @@ async function startRecording() {
       }
     };
     
-    // SAFARI DESKTOP: constraints specifiche
-    if (_isSafari && !_isIOS) {
-      console.log('[MIC][DESKTOP] using Safari-specific constraints');
-      // Safari desktop a volte richiede constraints più semplici
+    // SAFARI (desktop + iOS): use simple constraints — complex ones can fail
+    if (_isSafari || _isIOS) {
+      console.log('[MIC] Safari/iOS: using simple audio constraints');
       constraints.audio = true;
     }
     
@@ -1051,11 +1057,12 @@ async function startRecording() {
     currentStream = stream;
 
     if (_useWebAudio) {
-      // --- iOS Safari: AudioContext + ScriptProcessorNode → PCM WAV ---
-      console.log('[iOS STT] setting up AudioContext recording');
+      // --- FALLBACK: ScriptProcessor for ancient iOS without MediaRecorder ---
+      console.log('[iOS STT] setting up AudioContext recording (no MediaRecorder)');
       
       try {
-        _audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: _SAMPLE_RATE });
+        // Do NOT force sampleRate — let iOS choose its native rate
+        _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         
         // iOS requires resume after user gesture
         if (_audioCtx.state === 'suspended') {
@@ -1067,126 +1074,66 @@ async function startRecording() {
 
         const source = _audioCtx.createMediaStreamSource(stream);
         
-        // Aggiungi GainNode per ridurre volume a 0.3 (evita clipping)
-        const gainNode = _audioCtx.createGain();
-        gainNode.gain.value = 0.3;
-        console.log('[iOS STT] GainNode created with gain=0.3');
-        
         _scriptNode = _audioCtx.createScriptProcessor(4096, 1, 1);
         _pcmBuffers = [];
         _pcmLength = 0;
-        let frameCount = 0;
-        let audioDetected = false;
-        let clippingCount = 0;
 
         _scriptNode.onaudioprocess = (e) => {
           const data = e.inputBuffer.getChannelData(0);
-          
-          // DEBUG iOS: verifica dati audio e calcola RMS/clipping
-          let hasNonZero = false;
-          let maxValue = 0;
-          let sumSquares = 0;
-          
-          for (let i = 0; i < data.length; i++) {
-            const absValue = Math.abs(data[i]);
-            if (absValue > 0.00001) { // Soglia più bassa
-              hasNonZero = true;
-              maxValue = Math.max(maxValue, absValue);
-            }
-            
-            // Clipping detection
-            if (absValue > 0.95) {
-              clippingCount++;
-            }
-            
-            // RMS calculation
-            sumSquares += data[i] * data[i];
-          }
-          
-          const rms = Math.sqrt(sumSquares / data.length);
-          
-          // iOS: raccoglie TUTTI i dati audio senza soglia
           const copy = new Float32Array(data.length);
           copy.set(data);
           _pcmBuffers.push(copy);
           _pcmLength += copy.length;
-          frameCount++;
-          
-          // Primo rilevamento audio
-          if (hasNonZero && !audioDetected) {
-            audioDetected = true;
-            console.log('[iOS STT] AUDIO DETECTED! maxValue=' + maxValue.toFixed(6) + ' rms=' + rms.toFixed(6) + ' clipping=' + clippingCount);
-          }
-          
-          // Log dettagliato per debug iOS
-          if (frameCount === 1) {
-            console.log('[iOS STT] FIRST FRAME: length=' + data.length + ' hasNonZero=' + hasNonZero + ' maxValue=' + maxValue.toFixed(6) + ' rms=' + rms.toFixed(6));
-          }
-          
-          if (frameCount % 100 === 0) {
-            console.log('[iOS STT] frame ' + frameCount + ': samples=' + _pcmLength + ' hasNonZero=' + hasNonZero + ' maxValue=' + maxValue.toFixed(6) + ' rms=' + rms.toFixed(6) + ' clipping=' + clippingCount);
-          }
         };
 
-        source.connect(gainNode);
-        gainNode.connect(_scriptNode);
-        // CONNETTI a destination per iOS (importante!)
+        source.connect(_scriptNode);
         _scriptNode.connect(_audioCtx.destination);
         
-        console.log('[iOS STT] ScriptProcessor connected to destination');
+        console.log('[iOS STT] ScriptProcessor connected');
 
         isRecording = true;
         setState(STATES.RECORDING);
         micButton.classList.add('recording');
-        console.log('[iOS STT] recording started with audio output');
-        
-        // Log finale statisthe alla fine della registrazione
-        const originalStop = stopRecording;
-        stopRecording = function() {
-          console.log('[iOS STT] RECORDING STOPPED - FINAL STATS:');
-          console.log('[iOS STT] Total frames: ' + frameCount);
-          console.log('[iOS STT] Total samples: ' + _pcmLength);
-          console.log('[iOS STT] Clipping events: ' + clippingCount);
-          console.log('[iOS STT] Audio detected: ' + audioDetected);
-          console.log('[iOS STT] Estimated duration: ' + (_pcmLength / 16000).toFixed(2) + 's');
-          console.log('[iOS STT] Target amplitude: 8000-15000 (avoid >20000)');
-          return originalStop.call(this);
-        };
+        console.log('[iOS STT] recording started');
         
       } catch (error) {
         console.error('[iOS STT] AudioContext setup failed:', error);
-        // Fallback: prova MediaRecorder se AudioContext fallisce
-        console.log('[iOS STT] falling back to MediaRecorder');
         _useWebAudio = false;
-        // Continua con il percorso MediaRecorder sotto
       }
     }
     
     if (!_useWebAudio) {
-      // --- Standard: MediaRecorder con gain ---
+      // --- MAIN PATH: MediaRecorder (Chrome, Android, Firefox, iOS 14.5+, Safari) ---
       const mimeType = getSupportedMimeType();
-      console.log('[MIC] MediaRecorder mimeType=' + mimeType);
+      console.log('[MIC] MediaRecorder mimeType=' + mimeType + ' isIOS=' + _isIOS);
       
-      // Crea AudioContext per applicare gain anche a MediaRecorder
-      const gainCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const source = gainCtx.createMediaStreamSource(stream);
-      const gainNode = gainCtx.createGain();
-      gainNode.gain.value = 0.3;
+      // iOS Safari: use raw stream (GainNode + createMediaStreamDestination can fail)
+      // Other browsers: apply gain via AudioContext
+      let recordStream = stream;
       
-      // Crea destination per lo stream post-gain
-      const destination = gainCtx.createMediaStreamDestination();
-      source.connect(gainNode);
-      gainNode.connect(destination);
+      if (!_isIOS) {
+        try {
+          const gainCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const source = gainCtx.createMediaStreamSource(stream);
+          const gainNode = gainCtx.createGain();
+          gainNode.gain.value = 0.3;
+          const destination = gainCtx.createMediaStreamDestination();
+          source.connect(gainNode);
+          gainNode.connect(destination);
+          recordStream = destination.stream;
+          _gainContext = gainCtx;
+          console.log('[MIC] GainNode applied: gain=0.3');
+        } catch (gainErr) {
+          console.warn('[MIC] GainNode failed, using raw stream:', gainErr);
+          recordStream = stream;
+        }
+      } else {
+        console.log('[MIC][iOS] using raw stream (no GainNode)');
+      }
       
-      console.log('[MIC] GainNode created for MediaRecorder: gain=0.3');
-      
-      // MediaRecorder USA lo stream post-gain
-      console.log('[MIC] Recording from POST-GAIN stream');
-      mediaRecorder = new MediaRecorder(destination.stream, mimeType ? { mimeType } : {});
+      const recOptions = mimeType ? { mimeType } : {};
+      mediaRecorder = new MediaRecorder(recordStream, recOptions);
       audioChunks = [];
-      
-      // Salva contesto per cleanup
-      _gainContext = gainCtx;
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunks.push(e.data);
@@ -1195,19 +1142,15 @@ async function startRecording() {
       mediaRecorder.onstop = async () => {
         const blobType = mimeType || 'audio/webm';
         const blob = new Blob(audioChunks, { type: blobType });
-        console.log('[MIC] MediaRecorder blob size=' + blob.size);
-        const stream = currentStream;
+        console.log('[MIC] blob size=' + blob.size + ' type=' + blobType);
+        const savedStream = currentStream;
         resetMicrophoneState();
-        if (stream) stream.getTracks().forEach(t => t.stop());
+        if (savedStream) savedStream.getTracks().forEach(t => t.stop());
         await transcribeAudio(blob);
       };
 
       mediaRecorder.start(1000);
-      console.log('[MIC] MediaRecorder started');
-      
-      if (_isSafari && !_isIOS) {
-        console.log('[MIC][DESKTOP] Safari desktop recording started');
-      }
+      console.log('[MIC] MediaRecorder started' + (_isIOS ? ' (iOS)' : ''));
     }
 
     isRecording = true;
@@ -1278,7 +1221,7 @@ async function transcribeAudio(blob) {
   
   // FASE 4: FINALLY GLOBALE PER GARANTIRE STOP MICROFONO
   try {
-    const ext = blob.type.includes('wav') ? '.wav' : '.webm';
+    const ext = blob.type.includes('wav') ? '.wav' : blob.type.includes('mp4') ? '.mp4' : '.webm';
     const fd = new FormData();
     fd.append('audio', blob, 'rec' + ext);
     
