@@ -14,7 +14,9 @@ class CognitiveMemoryEngine:
         name_match = re.search(r"mi chiamo (\w+)", message, re.IGNORECASE)
         profession_match = re.search(r"faccio il (\w+)", message, re.IGNORECASE)
         spouse_match = re.search(r"(?:mia moglie|mio marito) si chiama (\w+)", message, re.IGNORECASE)
-        children_match = re.search(r"ho due figli (\w+) e (\w+)", message, re.IGNORECASE)
+        children_match = re.search(r"i miei figli si chiamano (\w+) e (\w+)", message, re.IGNORECASE)
+        dog_match = re.search(r"il mio cane si chiama (\w+)", message, re.IGNORECASE)
+        cat_match = re.search(r"la mia gatta si chiama (\w+)", message, re.IGNORECASE)
 
         if name_match:
             field = "name"
@@ -28,6 +30,12 @@ class CognitiveMemoryEngine:
         elif children_match:
             field = "children"
             value = [children_match.group(1), children_match.group(2)]
+        elif dog_match:
+            field = "pets"
+            value = {"type": "dog", "name": dog_match.group(1)}
+        elif cat_match:
+            field = "pets"
+            value = {"type": "cat", "name": cat_match.group(1)}
 
         # Ensure field and value are initialized
         if field and value:
@@ -38,7 +46,12 @@ class CognitiveMemoryEngine:
             logger.info("COGNITIVE_MEMORY_UPDATE field=%s value=%s", field, value)
             # Save to unified profile namespace
             profile = await storage.load(f"profile:{user_id}", default={})
-            profile[field] = value
+            if field == "pets":
+                if "pets" not in profile:
+                    profile["pets"] = []
+                profile["pets"].append(value)
+            else:
+                profile[field] = value
             await storage.save(f"profile:{user_id}", profile)
             logger.info("STORAGE_SAVE key=profile:%s field=%s", user_id, field)
         else:

@@ -13,6 +13,7 @@ from typing import Dict, Any, Optional, List, Tuple
 from collections import Counter, defaultdict
 from core.storage import storage
 from core.semantic_memory import SemanticMemory
+from core.relational_state import RelationalLayer
 
 logger = logging.getLogger(__name__)
 
