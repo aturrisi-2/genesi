@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional, List, Tuple
 from collections import Counter, defaultdict
 from core.storage import storage
 from core.semantic_memory import SemanticMemory
-from core.relational_state import RelationalLayer
+from core.relational_state import RelationalState
 
 logger = logging.getLogger(__name__)
 
@@ -724,7 +724,7 @@ class MemoryBrain:
 
     def __init__(self):
         self.episodic = EpisodicLayer()
-        self.relational = RelationalLayer()
+        self.relational = RelationalState()
         self.semantic = SemanticMemory()
         self.consolidation = ConsolidationEngine()
         self.linking = ExperienceLinking()
@@ -765,7 +765,7 @@ class MemoryBrain:
     async def recall_for_response(self, user_id: str, message: str) -> Dict[str, Any]:
         """Recall completo per generazione risposta (senza update)."""
         profile = await self.semantic.get_user_profile(user_id)
-        rel_state = await self.relational.load(user_id)
+        rel_state = await self.relational.load_state(user_id)
         episodes = await self.episodic.recall(user_id, query=message, limit=5)
 
         return {
