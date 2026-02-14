@@ -17,6 +17,7 @@ from api.memory import router as memory_router
 from api.proactor_api import router as proactor_router
 from tts.tts_api import router as tts_router
 from api.stt import router as stt_router
+from api.upload import router as upload_router
 from core.log import log
 
 # ===============================
@@ -40,6 +41,7 @@ app.include_router(memory_router, prefix="/api")
 app.include_router(proactor_router, prefix="/api")
 app.include_router(tts_router, prefix="/api")
 app.include_router(stt_router, prefix="/api")
+app.include_router(upload_router, prefix="/api")
 
 # ===============================
 # Health check
