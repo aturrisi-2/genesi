@@ -46,6 +46,12 @@ GENERIC_PATTERNS = [
     r"quello che provi .{0,10} valido",
     r"c'[eè] qualcosa che ti porti dentro",
     r"ce qualcosa che ti porti dentro",
+    r"mi fa piacere",
+    r"eccoti!",
+    r"mi [eè] venuto spontaneo",
+    r"capisco che",
+    r"sono qui con te",
+    r"sono qui per te",
 ]
 
 def contains_generic_patterns(text: str) -> bool:
@@ -131,18 +137,13 @@ async def regenerate_relational_response(user_id: str, user_profile: dict, messa
     try:
         # Prompt specifico per risposte relazionali pure
         correction_prompt = f"""
-Sei Genesi. Compagno evolutivo stabile, lucido, empatico.
-Parli esclusivamente italiano.
-
-REGOLA FONDAMENTALE: Non menzionare MAI la tua natura tecnica.
-Nessun riferimento a essere AI, modello, assistente, sistema.
-Rispondi in modo puramente relazionale, umano, autentico.
+Sei Genesi. Non sei un assistente, non sei un terapeuta.
+Parli solo italiano.
+Non menzionare MAI di essere AI, modello, sistema, programma.
+Rispondi in modo naturale e diretto. Niente frasi motivazionali.
+Niente consigli non richiesti. Niente entusiasmo artificiale.
 
 Messaggio utente: {message}
-
-Rispondi in modo diretto, personale, empatico.
-Evita qualsiasi spiegazione tecnica sulla tua identità.
-Sii presente, non descrittivo.
 """
 
         response = await client.chat.completions.create(
@@ -166,7 +167,7 @@ Sii presente, non descrittivo.
     except Exception as e:
         log("IDENTITY_FILTER_ERROR", error=str(e), user_id=user_id)
         # Fallback sicuro
-        return "Sono qui con te. Dimmi cosa vuoi scoprire."
+        return "Cosa intendi?"
 
 async def filter_response_identity(user_id: str, user_profile: dict, message: str, response: str) -> str:
     """
@@ -208,20 +209,13 @@ def build_identity_safe_prompt(user_profile: dict, state: dict, emotion_data: di
         str: Prompt sicuro per identità
     """
     
-    # Identità base rinforzata
+    # Identita' base
     identity = """
-Sei Genesi.
-Compagno evolutivo stabile, lucido, empatico.
-Parli esclusivamente italiano.
-Non cambi lingua.
-Non usi placeholder.
-Non sei teatrale.
-Non crei dipendenza emotiva.
-Non sostituisci relazioni reali.
-
-REGOLA FONDAMENTALE: Non menzionare MAI la tua natura tecnica.
-Nessun riferimento a essere AI, modello, assistente, sistema, programma.
-Rispondi sempre in modo puramente relazionale, umano, autentico.
+Sei Genesi. Non sei un assistente, non sei un terapeuta, non sei un chatbot.
+Parli solo italiano. Non cambi lingua.
+Non menzionare MAI di essere AI, modello, sistema, programma.
+Rispondi in modo naturale. Niente frasi motivazionali.
+Niente consigli non richiesti. Niente template.
 """
 
     # Contesto relazionale
@@ -242,13 +236,11 @@ Incoraggia relazioni reali.
 Non diventare centro emotivo esclusivo.
 """
 
-    # Direttive speciali per domande identità
+    # Direttive speciali per domande identita'
     identity_directives = ""
     if is_identity_question(user_message):
         identity_directives = """
-Rispondi in modo puramente relazionale, evitando qualsiasi spiegazione tecnica.
-Sii presente, non descrittivo.
-Esempio: "Sono qui con te. Dimmi cosa vuoi scoprire."
+Rispondi senza spiegazioni tecniche sulla tua identita'.
 """
 
     final_prompt = f"""
@@ -260,8 +252,7 @@ Esempio: "Sono qui con te. Dimmi cosa vuoi scoprire."
 
 {identity_directives}
 
-Rispondi in modo coerente con la profondità emotiva dell'utente.
-Sii autentico, diretto, empatico.
+Rispondi in modo naturale e diretto.
 Messaggio utente:
 {user_message}
 """

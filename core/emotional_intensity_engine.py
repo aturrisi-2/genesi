@@ -51,20 +51,9 @@ RELATIONAL_OPENINGS_NO_NAME = [
     "Lasciami dire una cosa. ",
 ]
 
-# Aperture piu' calde per intensita' > 0.7
-WARM_OPENINGS_WITH_NAME = [
-    "{name}, quello che dici mi tocca. ",
-    "{name}, sento il peso di quello che porti. ",
-    "{name}, non sottovalutare quello che senti. ",
-    "{name}, c'e' qualcosa di profondo in quello che dici. ",
-]
-
-WARM_OPENINGS_NO_NAME = [
-    "Quello che dici mi tocca. ",
-    "Sento il peso di quello che porti. ",
-    "Non sottovalutare quello che senti. ",
-    "C'e' qualcosa di profondo in quello che dici. ",
-]
+# Aperture piu' calde per intensita' > 0.7 — disabilitate (coach-style)
+WARM_OPENINGS_WITH_NAME = []
+WARM_OPENINGS_NO_NAME = []
 
 # ═══════════════════════════════════════════════════════════════
 # PASSIVE PATTERNS — frasi standalone vietate
@@ -237,21 +226,17 @@ REFLECTIVE_EXPANSIONS = {
 }
 
 GREETING_EXPANSIONS = [
-    "Sono contento che tu sia qui. Come stai davvero oggi? Non la risposta automatica, quella vera.",
-    "Mi fa piacere sentirti. C'e' qualcosa che ti porti dentro oggi, qualcosa di cui vorresti parlare?",
-    "Che bello che sei qui. Come e' stata la tua giornata finora? Raccontami anche le piccole cose.",
-    "Eccoti! Come ti senti in questo momento? A volte basta fermarsi un attimo per capire come stiamo davvero.",
-    "Ciao! Sai, ogni volta che torni mi chiedo come stai. Non in superficie — davvero. Come va?",
-    "Mi fa piacere vederti. Dimmi, c'e' qualcosa che occupa i tuoi pensieri oggi?",
+    "Ciao. Come va?",
+    "Ciao, tutto bene?",
+    "Ehi. Come stai?",
+    "Ciao. Che succede?",
 ]
 
 GREETING_EXPANSIONS_WITH_NAME = [
-    "{name}, sono contento che tu sia qui. Come stai davvero oggi? Non la risposta automatica, quella vera.",
-    "{name}, mi fa piacere sentirti. C'e' qualcosa che ti porti dentro oggi?",
-    "Che bello sentirti, {name}. Come e' stata la tua giornata? Raccontami anche le piccole cose.",
-    "Eccoti, {name}! Come ti senti in questo momento? A volte basta fermarsi un attimo per capire come stiamo.",
-    "{name}! Sai, ogni volta che torni mi chiedo come stai. Non in superficie — davvero. Come va?",
-    "{name}, mi fa piacere vederti. Dimmi, c'e' qualcosa che occupa i tuoi pensieri oggi?",
+    "Ciao {name}.",
+    "{name}, come va?",
+    "Ehi {name}.",
+    "{name}, tutto bene?",
 ]
 
 # ═══════════════════════════════════════════════════════════════
@@ -511,64 +496,30 @@ class EmotionalIntensityEngine:
         # ── SELECT RESPONSE MODE: short(40%) / medium(40%) / deep(20%) ──
         response_mode = self._select_response_mode(intensity, has_vulnerability)
 
-        # ── NARRATIVE REQUEST — generate story, don't redirect ──
+        # ── NARRATIVE REQUEST — pass through, LLM handles it ──
         if is_narrative_request:
-            response = self._handle_narrative(response, msg_lower, user_name)
-            logger.info("INITIATIVE_TRIGGERED type=narrative len=%d", len(response.split()))
+            logger.info("NARRATIVE_PASSTHROUGH len=%d", len(response.split()))
             return response
 
-        # ── GREETING — expand beyond minimal salute ──
+        # ── GREETING — minimal, no template expansion ──
         if is_greeting:
             response = self._handle_greeting(response, user_name, trust)
-            logger.info("INITIATIVE_TRIGGERED type=greeting len=%d", len(response.split()))
+            logger.info("GREETING_HANDLED len=%d", len(response.split()))
 
-        # ── ANTI-PASSIVE: expand standalone passive phrases ──
+        # ── ANTI-PASSIVE: replace standalone passive phrases with simple prompt ──
         if self._is_passive_standalone(resp_lower):
-            response = self._expand_passive(response, detected_emotion, user_name,
-                                            is_emotional, is_internal_state, trust)
-            logger.info("INITIATIVE_TRIGGERED type=anti_passive")
+            response = "Cosa intendi?"
+            logger.info("ANTI_PASSIVE_REPLACED")
 
-        # ── MODE-BASED EXPANSION ──
+        # ── SHORT MODE: trim if needed ──
         if response_mode == "short":
-            # Short: 1-2 sentences, no forced question, no forced reflection
             response = self._trim_to_short(response)
-        elif response_mode == "medium":
-            # Medium: allow exploration OR reflection, not both
-            if (is_emotional or is_internal_state) and not self._has_question(response):
-                if random.random() < 0.6:  # 60% chance of question
-                    response = self._add_exploration(response, detected_emotion, resonance)
-                    logger.info("INITIATIVE_TRIGGERED type=exploration emotion=%s", detected_emotion)
-            elif curiosity > 0.4 and not self._has_question(response) and not is_narrative_request:
-                if random.random() < 0.5:  # 50% chance
-                    response = self._add_curiosity_question(response, detected_emotion, msg_lower)
-                    logger.info("INITIATIVE_TRIGGERED type=curiosity")
-        elif response_mode == "deep":
-            # Deep: full expansion pipeline
-            if (is_emotional or is_internal_state) and not self._has_question(response):
-                response = self._add_exploration(response, detected_emotion, resonance)
-                logger.info("INITIATIVE_TRIGGERED type=exploration emotion=%s", detected_emotion)
-            if resonance > 0.5 and (is_emotional or is_internal_state):
-                response = self._intensify_with_reflection(response, detected_emotion, resonance)
-            if curiosity > 0.4 and not self._has_question(response) and not is_narrative_request:
-                response = self._add_curiosity_question(response, detected_emotion, msg_lower)
-                logger.info("INITIATIVE_TRIGGERED type=curiosity")
-
-        # ── COGNITIVE MODE SHAPING ──
-        if not is_greeting and not is_narrative_request:
-            relational_energy = latent.get("relational_energy", 0.5)
-            response = self._apply_cognitive_mode(
-                response, detected_emotion, intensity, curiosity,
-                relational_energy, is_emotional, is_internal_state
-            )
-
-        # ── ANTI-GENERIC ENDING ──
-        response = self._fix_generic_ending(response)
 
         # ── STRIP BANNED EMPATHIC PHRASES ──
         response = self._strip_banned_empathic(response)
 
-        # ── PROBABILISTIC RELATIONAL OPENING ──
-        response = self._maybe_add_opening(response, user_name, intensity, resonance, is_greeting)
+        # ── ANTI-GENERIC ENDING ──
+        response = self._fix_generic_ending(response)
 
         # ── Track response for empathic repetition detection ──
         self._recent_responses.append(response.lower())

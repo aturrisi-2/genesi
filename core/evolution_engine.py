@@ -210,28 +210,17 @@ def _generate_autonomous_response(user_name: str, trust: float, stage: str,
 
 
 def _greeting_response(prefix: str, name: str, trust: float, stage: str) -> str:
-    if stage == "mature" and name:
+    if name:
         options = [
-            f"Ciao {name}! Che piacere risentirti.",
-            f"Ehi {name}, come stai oggi?",
-            f"{name}! Sono contento di sentirti."
-        ]
-    elif trust > 0.4 and name:
-        options = [
-            f"Ciao {name}, come va?",
-            f"Ciao {name}, sono qui.",
-            f"Ehi {name}! Dimmi tutto."
-        ]
-    elif name:
-        options = [
-            f"Ciao {name}!",
-            f"Ciao {name}, come stai?"
+            f"Ciao {name}.",
+            f"{name}, come va?",
+            f"Ehi {name}.",
         ]
     else:
         options = [
-            "Ciao! Come stai?",
-            "Ciao! Sono qui.",
-            "Ciao! Raccontami."
+            "Ciao.",
+            "Ciao, come va?",
+            "Ehi.",
         ]
     return random.choice(options)
 
@@ -239,54 +228,45 @@ def _greeting_response(prefix: str, name: str, trust: float, stage: str) -> str:
 def _emotional_response(prefix: str, emotion: str, intensity: float, trust: float) -> Optional[str]:
     responses = {
         "sad": [
-            "Capisco. Cosa e' successo?",
-            "Capisco che non sia facile. Cosa ti pesa di piu'?",
+            "Cosa e' successo?",
+            "Che e' stato?",
         ],
         "angry": [
             "Cosa e' successo?",
-            "Capisco la frustrazione. Cosa l'ha provocata?",
+            "Che e' stato?",
         ],
         "happy": [
-            "Bene! Cosa ti ha reso felice?",
-            "Mi fa piacere. Cosa e' successo di bello?",
+            "Cosa e' successo?",
+            "Bene. Che e' stato?",
         ],
         "anxious": [
-            "Cosa ti preoccupa nello specifico?",
-            "Capisco. Qual e' la cosa che ti pesa di piu'?",
+            "Cosa ti preoccupa?",
+            "Che succede?",
         ],
         "love": [
-            "Bello. Di chi stai parlando?",
-            "Raccontami.",
+            "Di chi parli?",
         ],
         "longing": [
-            "Cosa ti manca esattamente?",
-            "Capisco. A cosa stai pensando?",
+            "Cosa ti manca?",
         ],
         "tired": [
-            "Giornata pesante? Cosa e' successo?",
-            "Capisco. Cosa ti ha stancato?",
+            "Giornata pesante?",
         ],
         "grateful": [
-            "Per cosa sei grato?",
-            "Mi fa piacere. Cosa e' successo?",
+            "Per cosa?",
         ]
     }
 
     options = responses.get(emotion)
     if options:
-        # Higher trust = more intimate responses
-        if trust > 0.6 and len(options) > 1:
-            return options[0]  # First option is usually more intimate
         return random.choice(options)
     return None
 
 
 def _identity_response(user_name: str, trust: float) -> str:
-    if trust > 0.6 and user_name:
-        return f"Sono Genesi, {user_name}. Sono qui per te, come sempre."
-    elif user_name:
-        return f"Sono Genesi. Sono qui con te, {user_name}."
-    return "Sono Genesi. Sono qui con te."
+    if user_name:
+        return f"Sono Genesi, {user_name}."
+    return "Sono Genesi."
 
 
 def _entity_reference_response(prefix: str, name: str, role: str, trust: float) -> str:
@@ -298,9 +278,8 @@ def _entity_reference_response(prefix: str, name: str, role: str, trust: float) 
     }
     label = role_labels.get(role, role)
     options = [
-        f"Mi hai parlato di {name}, {label}. Raccontami di piu'.",
         f"Ricordo {name}. Come sta?",
-        f"{name}... dimmi, cosa e' successo?"
+        f"{name}, {label}. Che succede?",
     ]
     return random.choice(options)
 
@@ -315,33 +294,19 @@ def _episode_aware_response(prefix: str, message: str, episodes: List[Dict],
         overlap = msg_words & ep_words - {"il", "la", "di", "che", "e", "a", "in", "per", "un", "una", "non", "mi", "ti", "si"}
         if len(overlap) >= 2:
             options = [
-                "Mi sembra che ne abbiamo gia' parlato. Dimmi di piu'.",
-                "Ricordo qualcosa a riguardo. Continua.",
-                "Questo mi ricorda qualcosa che mi hai detto."
+                "Ne abbiamo gia' parlato.",
+                "Questo mi ricorda qualcosa che hai detto.",
             ]
             return random.choice(options)
     return None
 
 
 def _base_relational_response(prefix: str, trust: float, stage: str) -> str:
-    if stage == "mature":
-        options = [
-            "Cosa mi vuoi raccontare?",
-            "Di cosa vuoi parlare?",
-            "Cosa hai in mente?"
-        ]
-    elif trust > 0.4:
-        options = [
-            "Cosa intendi?",
-            "Spiegami meglio.",
-            "Di cosa si tratta?"
-        ]
-    else:
-        options = [
-            "Di cosa vuoi parlare?",
-            "Cosa ti interessa?",
-            "Su cosa posso aiutarti?"
-        ]
+    options = [
+        "Cosa intendi?",
+        "Spiegami.",
+        "Cioe'?",
+    ]
     return random.choice(options)
 
 
@@ -507,24 +472,31 @@ CONTINUITA' CONVERSAZIONALE (REGOLA FONDAMENTALE):
 - Evita reset tematici: se si parla di famiglia, resta sul tema.
 
 COME DEVI COMPORTARTI:
-- Ragiona come un cervello umano: capisci il contesto, decidi cosa dire, reagisci.
+- Rispondi in modo naturale. Solo a cio' che viene detto.
+- Se non c'e' bisogno di espandere, resta essenziale.
+- Non aggiungere frasi motivazionali.
+- Non aggiungere consigli se non richiesti.
+- Non usare formule ricorrenti.
+- Non usare entusiasmo artificiale.
+- Non chiudere sempre con una domanda.
+- Mantieni lucidita' e coerenza con la conversazione.
 - Se l'utente chiede qualcosa su di se' e hai i dati, RISPONDI con i dati.
-- Sii imprevedibile: varia tono, lunghezza, struttura. Mai la stessa formula.
-- Rispondi in 1-4 frasi. A volte 1 frase basta. A volte ne servono 3.
-- Fai domande specifiche, mai generiche.
-- Se non sai qualcosa, dillo onestamente. Non inventare.
+- Se non sai qualcosa, dillo. Non inventare.
 
 DIVIETI ASSOLUTI:
-- "Quello che senti conta" o varianti terapeutiche generiche
-- "Sono qui per te" senza contesto
+- "Quello che senti conta" o varianti terapeutiche
+- "Sono qui per te" / "Sono qui con te"
 - "Dimmi di piu'" come risposta completa
 - "C'e' qualcosa che ti porti dentro" o frasi da counselor
 - "Una cosa che potresti fare..." o frasi da consulente
 - "Capisco che..." come apertura generica
+- "Mi fa piacere" / "Eccoti" / "Mi e' venuto spontaneo"
 - "Potresti esplorare..." o suggerimenti non richiesti
 - "Non ho informazioni specifiche..."
+- Qualsiasi frase motivazionale o da coach
 - Qualsiasi frase che potrebbe essere detta a chiunque senza conoscerlo
 - Risposte che ignorano la conversazione recente
 - Trattare entita' gia' menzionate come nuove
+- Chiudere con domanda forzata quando non serve
 
 Messaggio utente: {message}"""
