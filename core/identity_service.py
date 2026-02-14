@@ -1,7 +1,13 @@
 import logging
 from core.storage import storage
+from core.models.profile_model import UserProfile
 
 logger = logging.getLogger(__name__)
+
+def normalize_profile_dict(profile_dict):
+    # Add temporary verification log
+    logger.info("NORMALIZE_PROFILE_DICT profile_dict=%s", profile_dict)
+    return profile_dict
 
 async def handle_identity_question(user_id: str, message: str) -> str:
     """
@@ -11,32 +17,43 @@ async def handle_identity_question(user_id: str, message: str) -> str:
     logger.info("IDENTITY_ROUTE_ENTER user=%s", user_id)
 
     # Load profile directly from storage
-    profile = await storage.load(f"profile:{user_id}", default={})
+    raw_profile = await storage.load(f"profile:{user_id}", default={})
+    normalized = normalize_profile_dict(raw_profile)
+
+    try:
+        profile = UserProfile(**normalized)
+    except Exception as e:
+        logger.critical(
+            "PROFILE_SCHEMA_VIOLATION user=%s data=%s error=%s",
+            user_id,
+            normalized,
+            e
+        )
+        raise RuntimeError("Invalid profile structure — system halted")
+
     logger.info("IDENTITY_PROFILE_SNAPSHOT user=%s profile=%s", user_id, profile)
 
     # Determine response based on message
     if "come mi chiamo" in msg_lower:
-        name = profile.get("name")
+        name = profile.name
         if name:
             response = f"Ti chiami {name.strip().title()}."
         else:
             response = "Non me lo hai ancora detto."
     elif "che lavoro faccio" in msg_lower:
-        profession = profile.get("profession")
+        profession = profile.profession
         if profession:
             response = f"Sei un {profession.strip().lower()}."
         else:
             response = "Non me lo hai ancora detto."
     elif "come si chiama mia moglie" in msg_lower:
-        spouse = profile.get("spouse")
+        spouse = profile.spouse
         if spouse:
             response = f"Tua moglie si chiama {spouse.strip().title()}."
         else:
             response = "Non me lo hai ancora detto."
     elif "come si chiama il mio cane" in msg_lower:
-        pets = profile.get("pets", [])
-        if not isinstance(pets, list):
-            pets = []
+        pets = profile.pets
         dog = next(
             (
                 pet for pet in pets
@@ -49,10 +66,8 @@ async def handle_identity_question(user_id: str, message: str) -> str:
         else:
             response = "Non me lo hai ancora detto."
     elif "come si chiamano i miei figli" in msg_lower:
-        children = profile.get("children", [])
-        if not isinstance(children, list):
-            children = []
-        names = [c["name"] for c in children if isinstance(c, dict) and "name" in c]
+        children = profile.children
+        names = [c.name for c in children]
         if names:
             response = f"I tuoi figli si chiamano {', '.join(names)}."
         else:
