@@ -72,14 +72,11 @@ async def handle_identity_question(user_id: str, message: str) -> str:
     elif "come si chiama il mio cane" in msg_lower:
         pets = profile.pets
         dog = next(
-            (
-                pet for pet in pets
-                if isinstance(pet, dict) and pet.get("type") == "dog"
-            ),
+            (pet for pet in pets if pet.type == "dog"),
             None
         )
         if dog:
-            response = f"Il tuo cane si chiama {dog['name'].strip().title()}."
+            response = f"Il tuo cane si chiama {dog.name.strip().title()}."
         else:
             response = "Non me lo hai ancora detto."
     elif "come si chiamano i miei figli" in msg_lower:

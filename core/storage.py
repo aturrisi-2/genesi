@@ -41,6 +41,7 @@ class MemoryStorage:
     async def load(self, key: str, default: Any = None) -> Any:
         """
         Carica dati dallo storage - API unificata
+        Fail-fast per chiavi profile.
         
         Args:
             key: Chiave storage (formato: categoria:subchiave)
@@ -66,20 +67,30 @@ class MemoryStorage:
             if os.path.exists(file_path):
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                    if content.strip():  # Non vuoto
+                    if content.strip():
                         return json.loads(content)
                     else:
                         return default
             
             return default
             
+        except json.JSONDecodeError as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.critical(
+                "STORAGE_LOAD_FAILURE key=%s error=%s",
+                key,
+                e
+            )
+            raise RuntimeError(f"Corrupted JSON for key={key} — system halted")
         except Exception as e:
             log("MEMORY_LOAD_ERROR", error=str(e), key=key)
             return default
     
     async def save(self, key: str, value: Any) -> bool:
         """
-        Salva dati nello storage - API unificata
+        Strict JSON save.
+        Fail-fast if data is not fully serializable.
         
         Args:
             key: Chiave storage (formato: categoria:subchiave)
@@ -88,6 +99,21 @@ class MemoryStorage:
         Returns:
             Successo salvataggio
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # HARD VALIDATION: ensure JSON serializable BEFORE writing
+        try:
+            json_string = json.dumps(value, ensure_ascii=False, indent=2)
+        except TypeError as e:
+            logger.critical(
+                "STORAGE_SERIALIZATION_FAILURE key=%s data_type=%s error=%s",
+                key,
+                type(value),
+                e
+            )
+            raise RuntimeError("Non-serializable data attempted to persist")
+
         try:
             # Supporta sia formato "categoria:subchiave" sia path diretto
             if ":" in key:
@@ -105,13 +131,27 @@ class MemoryStorage:
             # Assicura che directory esista
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             
-            # Salva come JSON
+            # Scrivi stringa JSON pre-validata
             with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(value, f, ensure_ascii=False, indent=2)
+                f.write(json_string)
             
+            # Integrity check: re-read file immediately
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    json.load(f)
+            except Exception as e:
+                logger.critical(
+                    "STORAGE_CORRUPTION_DETECTED key=%s error=%s",
+                    key,
+                    e
+                )
+                raise RuntimeError("JSON integrity failure after write")
+
             log("STORAGE_SAVE", path=file_path, key=key)
             return True
             
+        except RuntimeError:
+            raise
         except Exception as e:
             log("MEMORY_SAVE_ERROR", error=str(e), key=key)
             return False

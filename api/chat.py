@@ -14,6 +14,8 @@ from core.chat_memory import chat_memory
 from core.log import log
 from core.cognitive_memory_engine import CognitiveMemoryEngine
 from core.storage import storage
+from core.models.profile_model import UserProfile, Pet, Child
+from core.identity_service import normalize_profile_dict
 
 router = APIRouter(prefix="/chat")
 
@@ -41,9 +43,29 @@ async def chat_endpoint(request: ChatRequest):
 
         if decision['persist']:
             if decision['memory_type'] == 'profile':
-                profile = await storage.load(f"profile:{request.user_id}", default={})
-                profile[decision['key']] = decision['value']
-                await storage.save(f"profile:{request.user_id}", profile)
+                raw_profile = await storage.load(f"profile:{request.user_id}", default={})
+                normalized = normalize_profile_dict(raw_profile)
+                profile = UserProfile(**normalized)
+
+                key = decision['key']
+                val = decision['value']
+
+                if key == "name":
+                    profile.name = val
+                elif key == "profession":
+                    profile.profession = val
+                elif key == "spouse":
+                    profile.spouse = val
+                elif key == "children":
+                    profile.children = [Child(**c) if isinstance(c, dict) else c for c in val]
+                elif key == "pets":
+                    if isinstance(val, list):
+                        profile.pets.extend([Pet(**p) if isinstance(p, dict) else p for p in val])
+                    else:
+                        pet = Pet(**val) if isinstance(val, dict) else val
+                        profile.pets.append(pet)
+
+                await storage.save(f"profile:{request.user_id}", profile.model_dump())
                 log("STORAGE_SAVE", key=f"profile:{request.user_id}")
 
         response = await simple_chat_handler(request.message, request.user_id)

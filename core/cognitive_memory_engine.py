@@ -1,7 +1,6 @@
 import logging
 import re
 from core.storage import storage
-from core.models.profile_model import UserProfile, Pet, Child
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +29,13 @@ class CognitiveMemoryEngine:
             value = spouse_match.group(1)
         elif children_match:
             field = "children"
-            value = [Child(name=children_match.group(1)), Child(name=children_match.group(2))]
+            value = [{"name": children_match.group(1)}, {"name": children_match.group(2)}]
         elif dog_match:
             field = "pets"
-            value = Pet(type="dog", name=dog_match.group(1))
+            value = {"type": "dog", "name": dog_match.group(1)}
         elif cat_match:
             field = "pets"
-            value = Pet(type="cat", name=cat_match.group(1))
+            value = {"type": "cat", "name": cat_match.group(1)}
 
         # Ensure field and value are initialized
         if field and value:
