@@ -134,7 +134,6 @@ class SemanticMemory:
                     "city": None,
                     "profession": None,
                     "traits": [],
-                    "emotional_patterns": [],
                     "created_at": datetime.now().isoformat(),
                     "updated_at": datetime.now().isoformat()
                 }
@@ -198,10 +197,10 @@ class SemanticMemory:
             intensity: Intensità emozione
         """
         try:
-            profile = await self._load_user_profile(user_id)
+            emotional_pattern = await self._load_emotional_pattern(user_id)
             
-            if "emotional_patterns" not in profile:
-                profile["emotional_patterns"] = []
+            if emotional_pattern is None:
+                emotional_pattern = []
             
             # Aggiungi pattern emotivo
             pattern_entry = {
@@ -210,16 +209,55 @@ class SemanticMemory:
                 "timestamp": datetime.now().isoformat()
             }
             
-            profile["emotional_patterns"].append(pattern_entry)
+            emotional_pattern.append(pattern_entry)
             
             # Mantieni solo ultimi 50 pattern
-            if len(profile["emotional_patterns"]) > 50:
-                profile["emotional_patterns"] = profile["emotional_patterns"][-50:]
+            if len(emotional_pattern) > 50:
+                emotional_pattern = emotional_pattern[-50:]
             
-            await self._save_user_profile(user_id, profile)
+            await self._save_emotional_pattern(user_id, emotional_pattern)
             
         except Exception as e:
             log("EMOTIONAL_PATTERN_ERROR", error=str(e), user_id=user_id)
+    
+    async def _load_emotional_pattern(self, user_id: str) -> List[Dict[str, Any]]:
+        """
+        Carica pattern emotivi utente dallo storage con API unificata
+        
+        Args:
+            user_id: ID utente
+            
+        Returns:
+            Pattern emotivi utente
+        """
+        try:
+            # Usa API unificata load
+            emotional_pattern_data = await storage.load(f"emotional_pattern:{user_id}", default=[])
+            log("EMOTIONAL_PATTERN_AFTER_LOAD", user_id=user_id, emotional_pattern=emotional_pattern_data)
+            return emotional_pattern_data
+        except Exception as e:
+            log("EMOTIONAL_PATTERN_LOAD_ERROR", error=str(e), user_id=user_id)
+            return []
+    
+    async def _save_emotional_pattern(self, user_id: str, emotional_pattern: List[Dict[str, Any]]) -> bool:
+        """
+        Salva pattern emotivi utente nello storage con API unificata
+        
+        Args:
+            user_id: ID utente
+            emotional_pattern: Pattern emotivi da salvare
+        
+        Returns:
+            Successo salvataggio
+        """
+        try:
+            # Usa API unificata save
+            await storage.save(f"emotional_pattern:{user_id}", emotional_pattern)
+            log("EMOTIONAL_PATTERN_PERSISTED", user_id=user_id, fields=len(emotional_pattern))
+            return True
+        except Exception as e:
+            log("EMOTIONAL_PATTERN_SAVE_ERROR", error=str(e), user_id=user_id)
+            return False
     
     async def get_memory_summary(self, user_id: str) -> Dict[str, Any]:
         """
@@ -233,6 +271,7 @@ class SemanticMemory:
         """
         try:
             profile = await self._load_user_profile(user_id)
+            emotional_pattern = await self._load_emotional_pattern(user_id)
             
             return {
                 "user_id": user_id,
@@ -241,7 +280,7 @@ class SemanticMemory:
                 "has_city": bool(profile.get("city")),
                 "has_profession": bool(profile.get("profession")),
                 "traits_count": len(profile.get("traits", [])),
-                "emotional_patterns_count": len(profile.get("emotional_patterns", [])),
+                "emotional_patterns_count": len(emotional_pattern),
                 "created_at": profile.get("created_at"),
                 "updated_at": profile.get("updated_at")
             }

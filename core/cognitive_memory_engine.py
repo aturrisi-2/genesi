@@ -13,6 +13,8 @@ class CognitiveMemoryEngine:
         # Semantic classification using regex
         name_match = re.search(r"mi chiamo (\w+)", message, re.IGNORECASE)
         profession_match = re.search(r"faccio il (\w+)", message, re.IGNORECASE)
+        spouse_match = re.search(r"(?:mia moglie|mio marito) si chiama (\w+)", message, re.IGNORECASE)
+        children_match = re.search(r"ho due figli (\w+) e (\w+)", message, re.IGNORECASE)
 
         if name_match:
             field = "name"
@@ -20,10 +22,17 @@ class CognitiveMemoryEngine:
         elif profession_match:
             field = "profession"
             value = profession_match.group(1)
+        elif spouse_match:
+            field = "spouse"
+            value = spouse_match.group(1)
+        elif children_match:
+            field = "children"
+            value = [children_match.group(1), children_match.group(2)]
 
         # Ensure field and value are initialized
         if field and value:
             persist = True
+            memory_type = "profile" if field in ["name", "profession"] else "relational"
             logger.info("COGNITIVE_EVAL type=identity field=%s confidence=0.9", field)
             logger.info("COGNITIVE_DECISION persist=true")
             logger.info("COGNITIVE_MEMORY_UPDATE field=%s value=%s", field, value)
@@ -34,11 +43,12 @@ class CognitiveMemoryEngine:
             logger.info("STORAGE_SAVE key=profile:%s field=%s", user_id, field)
         else:
             persist = False
+            memory_type = None
             logger.info("COGNITIVE_DECISION persist=false reason=low_relevance")
 
         return {
             "persist": persist,
-            "memory_type": "profile" if field == "name" else "profession",
+            "memory_type": memory_type,
             "key": field,
             "value": value,
             "confidence": 0.9  # High confidence for name and profession

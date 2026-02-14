@@ -13,6 +13,7 @@ from core.user_manager import user_manager
 from core.chat_memory import chat_memory
 from core.log import log
 from core.cognitive_memory_engine import CognitiveMemoryEngine
+from core.storage import storage
 
 router = APIRouter(prefix="/chat")
 
@@ -39,9 +40,16 @@ async def chat_endpoint(request: ChatRequest):
         decision = await cognitive_engine.evaluate_event(request.user_id, request.message, {})
 
         if decision['persist']:
-            log("COGNITIVE_DECISION", user_id=request.user_id, persist=True, type=decision['memory_type'], confidence=decision['confidence'])
-        else:
-            log("COGNITIVE_DECISION", user_id=request.user_id, persist=False, reason="low_relevance")
+            if decision['memory_type'] == 'profile':
+                profile = await storage.load(f"profile:{request.user_id}", default={})
+                profile[decision['key']] = decision['value']
+                await storage.save(f"profile:{request.user_id}", profile)
+                log("STORAGE_SAVE", key=f"profile:{request.user_id}")
+            elif decision['memory_type'] == 'relational':
+                relational = await storage.load(f"relational:{request.user_id}", default={})
+                relational[decision['key']] = decision['value']
+                await storage.save(f"relational:{request.user_id}", relational)
+                log("STORAGE_SAVE", key=f"relational:{request.user_id}")
 
         response = await simple_chat_handler(request.message, request.user_id)
 

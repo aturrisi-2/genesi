@@ -17,6 +17,10 @@ async def handle_identity_question(user_id: str, message: str) -> str:
     if not profile.get("profession"):
         logger.warning("IDENTITY_MISSING_FIELD profession")
 
+    # Load relational data directly from storage
+    relational = await storage.load(f"relational:{user_id}", default={})
+    logger.info("RELATIONAL_PROFILE_LOADED user=%s relational=%s", user_id, relational)
+
     # Determine response based on message
     if "come mi chiamo" in msg_lower:
         name = profile.get("name")
@@ -49,6 +53,12 @@ async def handle_identity_question(user_id: str, message: str) -> str:
             parts.append(f"sei un {profession.strip().lower()}")
         if parts:
             response = ", ".join(parts) + "."
+        else:
+            response = "Non me lo hai ancora detto."
+    elif "come si chiama mia moglie" in msg_lower:
+        spouse = relational.get("spouse")
+        if spouse:
+            response = f"Tua moglie si chiama {spouse.strip().title()}."
         else:
             response = "Non me lo hai ancora detto."
     else:
