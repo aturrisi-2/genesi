@@ -8,6 +8,7 @@ Nessun fallback silenzioso — se il contesto non viene costruito, errore esplic
 import logging
 from typing import Dict, Any
 from core.cognitive_memory_engine import CognitiveMemoryEngine
+from core.storage import storage
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +34,8 @@ class ContextAssembler:
         Raises:
             RuntimeError se il summary risulta vuoto dopo l'assemblaggio.
         """
-        # Use cognitive memory only
-        cognitive_memory = cognitive_engine.evaluate_event(user_id, user_message, {})
+        # Load from persistent storage
+        profile = await storage.load(f"long_term_profile:{user_id}", default={})
 
         logger.info("CONTEXT_ASSEMBLER_LOADED user=%s", user_id)
 
@@ -42,13 +43,11 @@ class ContextAssembler:
         brain_state = await self.memory_brain.update_brain(user_id, user_message)
         context['brain_state'] = brain_state
 
-        if cognitive_memory['persist']:
-            context['cognitive_memory'] = cognitive_memory
-            logger.info("COGNITIVE_MEMORY_UPDATE user_id=%s", user_id)
-        else:
-            logger.info("COGNITIVE_MEMORY_EMPTY user_id=%s", user_id)
+        if profile:
+            context['profile'] = profile
+            logger.info("PROFILE_LOADED user_id=%s", user_id)
 
-        summary = self._summarize_cognitive(cognitive_memory)
+        summary = self._summarize_profile(profile)
 
         if not summary or not summary.strip():
             summary = "No relevant memory found."
@@ -59,16 +58,14 @@ class ContextAssembler:
         logger.info("CONTEXT_ASSEMBLED user=%s summary_len=%d", user_id, len(summary))
         return context
 
-    def _summarize_cognitive(self, cognitive_memory):
+    def _summarize_profile(self, profile):
         """
         Costruisce riassunto compatto (max ~300 token) per il system prompt LLM.
         """
-        # Build summary from cognitive memory
+        # Build summary from profile
         parts = []
-        if cognitive_memory.get('memory_type') == 'profile':
-            parts.append(f"Name: {cognitive_memory.get('value', '')}")
-        elif cognitive_memory.get('memory_type') == 'relational':
-            parts.append(f"Spouse: {cognitive_memory.get('value', '')}")
-        elif cognitive_memory.get('memory_type') == 'episodic':
-            parts.append(f"Event: {cognitive_memory.get('value', '')}")
+        if 'name' in profile:
+            parts.append(f"Name: {profile['name']}")
+        if 'profession' in profile:
+            parts.append(f"Profession: {profile['profession']}")
         return "\n".join(parts)
