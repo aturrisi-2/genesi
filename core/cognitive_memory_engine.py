@@ -40,7 +40,7 @@ class CognitiveMemoryEngine:
         # Ensure field and value are initialized
         if field and value:
             persist = True
-            memory_type = "profile" if field in ["name", "profession"] else "relational"
+            memory_type = "profile"
             logger.info("COGNITIVE_EVAL type=identity field=%s confidence=0.9", field)
             logger.info("COGNITIVE_DECISION persist=true")
             logger.info("COGNITIVE_MEMORY_UPDATE field=%s value=%s", field, value)

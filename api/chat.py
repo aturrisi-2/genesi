@@ -45,11 +45,6 @@ async def chat_endpoint(request: ChatRequest):
                 profile[decision['key']] = decision['value']
                 await storage.save(f"profile:{request.user_id}", profile)
                 log("STORAGE_SAVE", key=f"profile:{request.user_id}")
-            elif decision['memory_type'] == 'relational':
-                relational = await storage.load(f"relational:{request.user_id}", default={})
-                relational[decision['key']] = decision['value']
-                await storage.save(f"relational:{request.user_id}", relational)
-                log("STORAGE_SAVE", key=f"relational:{request.user_id}")
 
         response = await simple_chat_handler(request.message, request.user_id)
 
