@@ -4,10 +4,27 @@ from core.models.profile_model import UserProfile
 
 logger = logging.getLogger(__name__)
 
-def normalize_profile_dict(profile_dict):
-    # Add temporary verification log
-    logger.info("NORMALIZE_PROFILE_DICT profile_dict=%s", profile_dict)
-    return profile_dict
+def normalize_profile_dict(data: dict) -> dict:
+    """
+    Normalize legacy profile data to match the Pydantic model schema.
+    """
+    # Normalize pets
+    pets = data.get("pets", [])
+    if isinstance(pets, dict):
+        pets = [pets]
+    elif not isinstance(pets, list):
+        pets = []
+    data["pets"] = pets
+
+    # Normalize children
+    children = data.get("children", [])
+    if isinstance(children, list) and all(isinstance(c, str) for c in children):
+        children = [{"name": c} for c in children]
+    elif not isinstance(children, list):
+        children = []
+    data["children"] = children
+
+    return data
 
 async def handle_identity_question(user_id: str, message: str) -> str:
     """
