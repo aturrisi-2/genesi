@@ -4,7 +4,7 @@ Architettura: Chat libera (Qwen) vs Tecnica (GPT) con Proactor
 1 intent → 1 funzione con orchestratore centrale
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
@@ -18,6 +18,9 @@ from api.proactor_api import router as proactor_router
 from tts.tts_api import router as tts_router
 from api.stt import router as stt_router
 from api.upload import router as upload_router
+from auth.router import router as auth_router
+from auth.database import init_db, async_session
+from auth.models import Visit
 from core.log import log
 
 # ===============================
@@ -30,11 +33,74 @@ app = FastAPI(title="Genesi Core v2 - Proactor Architecture")
 # Static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
+# ===============================
+# Startup: init auth DB
+# ===============================
+
+@app.on_event("startup")
+async def startup():
+    await init_db()
+    log("AUTH_DB_INIT", status="ok")
+
+
+# ===============================
+# Visit tracking middleware
+# ===============================
+
+@app.middleware("http")
+async def track_visits(request: Request, call_next):
+    response = await call_next(request)
+    # Track only page visits (GET on HTML pages), not API/static
+    if request.method == "GET" and request.url.path in (
+        "/", "/login", "/register", "/forgot-password", "/reset-password", "/admin"
+    ):
+        try:
+            ip = request.client.host if request.client else "unknown"
+            ua = request.headers.get("user-agent", "")[:200]
+            async with async_session() as session:
+                visit = Visit(ip=ip, user_agent=ua, path=request.url.path)
+                session.add(visit)
+                await session.commit()
+        except Exception:
+            pass  # Non-blocking: visit tracking must never break the app
+    return response
+
+
+# ===============================
+# Auth page routes (serve HTML)
+# ===============================
+
+@app.get("/login")
+async def serve_login():
+    return FileResponse(BASE_DIR / "static" / "login.html")
+
+@app.get("/register")
+async def serve_register():
+    return FileResponse(BASE_DIR / "static" / "register.html")
+
+@app.get("/forgot-password")
+async def serve_forgot_password():
+    return FileResponse(BASE_DIR / "static" / "forgot-password.html")
+
+@app.get("/reset-password")
+async def serve_reset_password():
+    return FileResponse(BASE_DIR / "static" / "reset-password.html")
+
+@app.get("/admin")
+async def serve_admin():
+    return FileResponse(BASE_DIR / "static" / "admin.html")
+
 @app.get("/")
 async def serve_index():
     return FileResponse(BASE_DIR / "static" / "index.html")
 
+
+# ===============================
 # API routes
+# ===============================
+
+app.include_router(auth_router)
 app.include_router(user_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
 app.include_router(memory_router, prefix="/api")
