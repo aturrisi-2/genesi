@@ -1,8 +1,9 @@
 """
-LOCATION RESOLVER - Genesi Core v2
+LOCATION RESOLVER - Genesi Core v3
 Risoluzione intelligente di località da messaggi utente.
 Supporto mondiale. Italia ultra-dettagliata.
 Nessuna città hardcoded. Zero fallback silenzioso.
+Fuzzy match per micro-località italiane.
 """
 
 import os
@@ -11,6 +12,7 @@ import logging
 from typing import Optional
 
 import httpx
+import unidecode
 
 from core.log import log
 
@@ -145,6 +147,103 @@ def extract_city_from_message(message: str) -> Optional[str]:
 
 
 # ═══════════════════════════════════════════════════════════════
+# FUZZY MATCHING — micro-località italiane
+# ═══════════════════════════════════════════════════════════════
+
+def _normalize(s: str) -> str:
+    """Normalize a string for fuzzy comparison: lowercase, strip accents, strip punctuation."""
+    return unidecode.unidecode(s).lower().strip()
+
+
+def _levenshtein(a: str, b: str) -> int:
+    """Simple Levenshtein distance."""
+    if len(a) < len(b):
+        return _levenshtein(b, a)
+    if len(b) == 0:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a):
+        curr = [i + 1]
+        for j, cb in enumerate(b):
+            cost = 0 if ca == cb else 1
+            curr.append(min(curr[j] + 1, prev[j + 1] + 1, prev[j] + cost))
+        prev = curr
+    return prev[-1]
+
+
+def fuzzy_match_city(query: str, candidates: list) -> Optional[dict]:
+    """
+    Fuzzy-match a city query against geocoding candidates.
+    Prioritizes Italian results. Returns best match or None.
+
+    Matching criteria:
+    - Normalized Levenshtein distance <= 2 (for names >= 4 chars)
+    - OR normalized name starts with normalized query
+    - IT results get priority bonus
+
+    Logs LOCATION_FUZZY_MATCH on successful match.
+    """
+    if not candidates or not query:
+        return None
+
+    q_norm = _normalize(query)
+    if len(q_norm) < 3:
+        return None
+
+    best = None
+    best_score = 999
+
+    for r in candidates:
+        name = r.get("name", "")
+        local_it = r.get("local_names", {}).get("it", "")
+        country = r.get("country", "")
+
+        for candidate_name in [name, local_it]:
+            if not candidate_name:
+                continue
+            c_norm = _normalize(candidate_name)
+
+            # Exact normalized match
+            if c_norm == q_norm:
+                score = 0
+            # Prefix match: query is a significant prefix of candidate (>= 60%)
+            elif c_norm.startswith(q_norm) and len(q_norm) >= len(c_norm) * 0.5:
+                score = 1
+            elif q_norm.startswith(c_norm) and len(c_norm) >= len(q_norm) * 0.5:
+                score = 1
+            # Levenshtein
+            else:
+                dist = _levenshtein(q_norm, c_norm)
+                max_len = max(len(q_norm), len(c_norm))
+                # Allow distance up to 2 for names >= 4 chars
+                if max_len >= 4 and dist <= 2:
+                    score = dist
+                else:
+                    continue
+
+            # IT priority: Italian results get a fractional bonus
+            if country == "IT":
+                score -= 0.5
+
+            if score < best_score:
+                best_score = score
+                best = r
+
+    if best is not None and best_score <= 2:
+        matched_name = best.get("local_names", {}).get("it", best.get("name", query))
+        log("LOCATION_FUZZY_MATCH",
+            query=query,
+            matched=matched_name,
+            country=best.get("country", ""),
+            distance=best_score)
+        logger.info("LOCATION_FUZZY_MATCH query=%s matched=%s country=%s dist=%d",
+                     query, matched_name, best.get("country", ""), best_score)
+        return best
+
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════
 # GEOCODING — OpenWeather Geocoding API
 # ═══════════════════════════════════════════════════════════════
 
@@ -193,6 +292,22 @@ async def resolve_location(message: str, http_client: Optional[httpx.AsyncClient
         if not results:
             log("LOCATION_NOT_FOUND", city=city, reason="no_geocoding_result")
             raise LocationNotFoundError(f"Non trovo la località '{city}'. Verifica il nome e riprova.")
+
+        # Try fuzzy match if no exact name match found
+        exact_names = [_normalize(r.get("name", "")) for r in results]
+        city_norm = _normalize(city)
+        if city_norm not in exact_names:
+            fuzzy_result = fuzzy_match_city(city, results)
+            if fuzzy_result:
+                location = _format_result(fuzzy_result)
+                log("LOCATION_RESOLVE_RESULT",
+                    city=city,
+                    resolved_name=location["name"],
+                    country=location["country"],
+                    lat=location["lat"],
+                    lon=location["lon"],
+                    method="fuzzy")
+                return location
 
         # Disambiguate
         location = _disambiguate(city, results, message)

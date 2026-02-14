@@ -108,6 +108,19 @@ _COUNTRY_NAMES = {
     "KR": "Corea del Sud", "EG": "Egitto", "ZA": "Sudafrica",
 }
 
+# Country code → continent (for news fallback hierarchy)
+_COUNTRY_TO_CONTINENT = {
+    "IT": "Europa", "FR": "Europa", "DE": "Europa", "ES": "Europa", "GB": "Europa",
+    "CH": "Europa", "AT": "Europa", "PT": "Europa", "NL": "Europa", "BE": "Europa",
+    "GR": "Europa", "PL": "Europa", "SE": "Europa", "NO": "Europa", "DK": "Europa",
+    "FI": "Europa", "TR": "Europa", "RU": "Europa",
+    "US": "Nord America", "CA": "Nord America", "MX": "Nord America",
+    "BR": "Sud America", "AR": "Sud America",
+    "JP": "Asia", "CN": "Asia", "TH": "Asia", "IN": "Asia", "KR": "Asia",
+    "AU": "Oceania",
+    "EG": "Africa", "ZA": "Africa",
+}
+
 
 # ═══════════════════════════════════════════════════════════════
 # TOOL SERVICE
@@ -379,51 +392,86 @@ class ToolService:
                                          city: str, state: str, country: str,
                                          section: Optional[str] = None) -> str:
         """
-        News fallback chain: city → state/region → country.
-        Logs every fallback step.
+        News fallback hierarchy: city → region → country → continent → global.
+        Logs NEWS_FALLBACK_LEVEL at every step.
         """
         query = f"{city} {section}" if section else city
         scope = city
 
-        # 1. Try city-level
+        # 1. City-level
+        log("NEWS_FALLBACK_LEVEL", level="city", scope=scope)
         result = await self._news_rss_search(client, query, country, scope)
-        count = result.count("\n") if result and "ultime notizie" in result.lower() else 0
+        count = self._count_news_results(result)
         log("NEWS_RESULTS_COUNT", scope=scope, count=count)
 
         if count > 0:
             log("NEWS_FINAL_SCOPE", scope=scope, level="city")
             return result
 
-        # 2. Fallback to state/region (if available)
+        # 2. Region-level
         if state:
-            log("NEWS_FALLBACK_TRIGGERED", from_scope=scope, to_scope=state, level="region")
+            log("NEWS_FALLBACK_LEVEL", level="region", scope=state)
             scope = state
             query = f"{state} {section}" if section else state
             result = await self._news_rss_search(client, query, country, scope)
-            count = result.count("\n") if result and "ultime notizie" in result.lower() else 0
+            count = self._count_news_results(result)
             log("NEWS_RESULTS_COUNT", scope=scope, count=count)
 
             if count > 0:
                 log("NEWS_FINAL_SCOPE", scope=scope, level="region")
                 return result
 
-        # 3. Fallback to country
+        # 3. Country-level
         country_name = _COUNTRY_NAMES.get(country, country)
         if country_name != city:
-            log("NEWS_FALLBACK_TRIGGERED", from_scope=scope, to_scope=country_name, level="country")
+            log("NEWS_FALLBACK_LEVEL", level="country", scope=country_name)
             scope = country_name
             query = f"{country_name} {section}" if section else country_name
             result = await self._news_rss_search(client, query, country, scope)
-            count = result.count("\n") if result and "ultime notizie" in result.lower() else 0
+            count = self._count_news_results(result)
             log("NEWS_RESULTS_COUNT", scope=scope, count=count)
 
             if count > 0:
                 log("NEWS_FINAL_SCOPE", scope=scope, level="country")
                 return result
 
-        # 4. Nothing found at any level
+        # 4. Continent-level
+        continent = _COUNTRY_TO_CONTINENT.get(country)
+        if continent:
+            log("NEWS_FALLBACK_LEVEL", level="continent", scope=continent)
+            scope = continent
+            query = f"{continent} {section}" if section else continent
+            result = await self._news_rss_search(client, query, "IT", scope)
+            count = self._count_news_results(result)
+            log("NEWS_RESULTS_COUNT", scope=scope, count=count)
+
+            if count > 0:
+                log("NEWS_FINAL_SCOPE", scope=scope, level="continent")
+                return result
+
+        # 5. Global-level
+        log("NEWS_FALLBACK_LEVEL", level="global", scope="mondo")
+        scope = "mondo"
+        query = section if section else "ultime notizie"
+        result = await self._news_rss_search(client, query, "IT", scope)
+        count = self._count_news_results(result)
+        log("NEWS_RESULTS_COUNT", scope=scope, count=count)
+
+        if count > 0:
+            log("NEWS_FINAL_SCOPE", scope=scope, level="global")
+            return result
+
+        # 6. Nothing found at any level
         log("NEWS_FINAL_SCOPE", scope=city, level="none")
         return f"Non trovo notizie locali recenti per {city}."
+
+    def _count_news_results(self, result: str) -> int:
+        """Count news results in a formatted response string."""
+        if not result:
+            return 0
+        if "ultime notizie" not in result.lower():
+            return 0
+        return result.count("\n")
 
     async def _news_rss_search(self, client: httpx.AsyncClient,
                                 query: str, country: str, display_scope: str) -> str:

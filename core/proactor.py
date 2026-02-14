@@ -29,7 +29,8 @@ from core.identity_service import handle_identity_question
 from core.response_filter import filter_response
 from core.tool_context import (save_tool_context, resolve_elliptical_city,
                                is_elliptical_weather_followup,
-                               is_elliptical_news_followup, resolve_elliptical_news)
+                               is_elliptical_news_followup, resolve_elliptical_news,
+                               resolve_inherited_intent)
 import unidecode
 import os
 
@@ -184,6 +185,13 @@ class Proactor:
             # STEP 3: INTENT CLASSIFICATION
             if intent is None:
                 intent = await intent_classifier.classify(message)
+
+            # STEP 3.5: INTENT INHERITANCE — geographic follow-up
+            inherited = resolve_inherited_intent(user_id, message, intent)
+            if inherited:
+                logger.info("PROACTOR_INTENT_INHERITED user=%s classified=%s inherited=%s msg=%s",
+                            user_id, intent, inherited, message[:40])
+                intent = inherited
 
             # STEP 4: TOOL ROUTES
             if intent in self.tool_intents:
