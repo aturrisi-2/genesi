@@ -1,17 +1,26 @@
-"""TOOL SERVICES - Genesi Core v2
+"""TOOL SERVICES - Genesi Core v3
 Servizi tool per weather, news, time, date.
 100% API-driven. Zero mock. Zero dati inventati.
+Supporto mondiale. Italia ultra-dettagliata.
 """
 
 import os
+import re
 import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Optional
+from xml.etree import ElementTree
 
 import httpx
 
 from core.log import log
+from core.location_resolver import (
+    resolve_location,
+    extract_city_from_message,
+    LocationNotFoundError,
+    AmbiguousLocationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,28 +56,6 @@ WEATHER_DESC_IT = {
     "drizzle": "pioggerella",
 }
 
-# Città note per estrazione rapida (fallback se geocoding non serve)
-CITIES_IT = [
-    "roma", "milano", "napoli", "torino", "firenze", "bologna",
-    "genova", "palermo", "catania", "bari", "venezia", "verona",
-    "messina", "padova", "trieste", "brescia", "parma", "modena",
-    "reggio calabria", "reggio emilia", "perugia", "cagliari",
-    "livorno", "ravenna", "ferrara", "rimini", "salerno",
-    "sassari", "latina", "bergamo", "siracusa", "monza",
-    "pescara", "trento", "bolzano", "ancona", "lecce", "udine",
-    "taranto", "pisa", "como", "arezzo", "prato", "la spezia",
-    "vicenza", "terni", "novara", "aosta", "potenza", "campobasso",
-    "l'aquila", "catanzaro", "crotone", "cosenza", "trapani",
-    "agrigento", "ragusa", "enna", "caltanissetta", "matera",
-    "avellino", "benevento", "caserta", "frosinone", "rieti",
-    "viterbo", "asti", "alessandria", "cuneo", "biella",
-]
-
-# Pattern per estrarre città dal messaggio (qualsiasi città del mondo)
-CITY_EXTRACT_PATTERNS = [
-    r"(?:a|di|da|in|su|per|ad)\s+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)*)",
-    r"(?:meteo|tempo|previsioni)\s+(?:a|di|per|in)?\s*([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)*)",
-]
 
 # Parole chiave che indicano previsione futura
 FORECAST_KEYWORDS = [
@@ -109,6 +96,18 @@ if not OPENWEATHER_API_KEY:
 if not GNEWS_API_KEY:
     logger.warning("GNEWS_API_KEY non configurata -- il servizio notizie non funzionera'")
 
+# Country code → display name (for news fallback chain)
+_COUNTRY_NAMES = {
+    "IT": "Italia", "US": "Stati Uniti", "GB": "Regno Unito", "FR": "Francia",
+    "DE": "Germania", "ES": "Spagna", "CH": "Svizzera", "AT": "Austria",
+    "JP": "Giappone", "CN": "Cina", "BR": "Brasile", "TH": "Thailandia",
+    "IN": "India", "AU": "Australia", "CA": "Canada", "MX": "Messico",
+    "AR": "Argentina", "PT": "Portogallo", "NL": "Paesi Bassi", "BE": "Belgio",
+    "GR": "Grecia", "TR": "Turchia", "RU": "Russia", "PL": "Polonia",
+    "SE": "Svezia", "NO": "Norvegia", "DK": "Danimarca", "FI": "Finlandia",
+    "KR": "Corea del Sud", "EG": "Egitto", "ZA": "Sudafrica",
+}
+
 
 # ═══════════════════════════════════════════════════════════════
 # TOOL SERVICE
@@ -139,52 +138,37 @@ class ToolService:
         msg_lower = message.lower()
         return any(kw in msg_lower for kw in FORECAST_KEYWORDS)
 
-    async def _geocode_city(self, city: str) -> Optional[dict]:
-        """Geocode any city worldwide via OpenWeather Geocoding API. Returns {lat, lon, name, country}."""
-        try:
-            client = await self._get_client()
-            url = "https://api.openweathermap.org/geo/1.0/direct"
-            params = {"q": city, "limit": 1, "appid": OPENWEATHER_API_KEY}
-            resp = await client.get(url, params=params)
-            if resp.status_code == 200:
-                results = resp.json()
-                if results:
-                    r = results[0]
-                    return {"lat": r["lat"], "lon": r["lon"],
-                            "name": r.get("local_names", {}).get("it", r.get("name", city)),
-                            "country": r.get("country", "")}
-            logger.warning("TOOL_GEOCODE_NO_RESULT city=%s status=%d", city, resp.status_code)
-        except Exception as e:
-            logger.error("TOOL_GEOCODE_ERROR city=%s error=%s", city, str(e))
-        return None
-
     async def get_weather(self, message: str) -> str:
         """
-        Meteo reale via OpenWeather API — supporta qualsiasi citta' del mondo.
-        Se l'utente chiede previsioni future, usa endpoint forecast.
+        Meteo reale via OpenWeather API — supporto mondiale.
+        Usa location_resolver per geocoding intelligente.
         Se API fallisce -> messaggio di errore, zero dati inventati.
         """
         try:
             log("TOOL_WEATHER_REQUEST", message=message[:50])
-            city = self._extract_city(message) or "Roma"
 
             if not OPENWEATHER_API_KEY:
                 logger.error("TOOL_WEATHER_MISSING_KEY error=OPENWEATHER_API_KEY non configurata")
                 return "Servizio meteo non configurato."
 
-            # Geocode city for worldwide support
-            geo = await self._geocode_city(city)
-            if not geo:
-                # Fallback: try direct query without country restriction
-                geo = {"lat": None, "lon": None, "name": city, "country": ""}
+            client = await self._get_client()
+
+            try:
+                geo = await resolve_location(message, http_client=client)
+            except AmbiguousLocationError as e:
+                return str(e)
+            except LocationNotFoundError as e:
+                return str(e)
 
             display_name = geo["name"]
+            log("WEATHER_COORD_CALL", city=display_name, lat=geo["lat"], lon=geo["lon"], country=geo["country"])
+
             is_forecast = self._is_forecast_request(message)
 
-            if is_forecast and geo["lat"] is not None:
+            if is_forecast:
                 return await self._get_forecast(geo, message, display_name)
             else:
-                return await self._get_current_weather(city, geo, display_name)
+                return await self._get_current_weather_coords(geo, display_name)
 
         except httpx.TimeoutException:
             logger.error("TOOL_WEATHER_HTTP_ERROR error=timeout")
@@ -195,20 +179,14 @@ class ToolService:
             log("TOOL_WEATHER_HTTP_ERROR", error=str(e))
             return "Servizio meteo temporaneamente non disponibile."
 
-    async def _get_current_weather(self, city: str, geo: dict, display_name: str) -> str:
-        """Current weather via /data/2.5/weather. Worldwide support."""
+    async def _get_current_weather_coords(self, geo: dict, display_name: str) -> str:
+        """Current weather via /data/2.5/weather using lat/lon coordinates."""
         client = await self._get_client()
+        url = "https://api.openweathermap.org/data/2.5/weather"
+        params = {"lat": geo["lat"], "lon": geo["lon"],
+                  "appid": OPENWEATHER_API_KEY, "units": "metric", "lang": "it"}
 
-        if geo.get("lat") is not None:
-            url = "https://api.openweathermap.org/data/2.5/weather"
-            params = {"lat": geo["lat"], "lon": geo["lon"],
-                      "appid": OPENWEATHER_API_KEY, "units": "metric", "lang": "it"}
-        else:
-            url = "https://api.openweathermap.org/data/2.5/weather"
-            params = {"q": city, "appid": OPENWEATHER_API_KEY,
-                      "units": "metric", "lang": "it"}
-
-        logger.info("TOOL_WEATHER_HTTP_CALL url=%s city=%s", url, display_name)
+        logger.info("TOOL_WEATHER_HTTP_CALL url=%s city=%s lat=%s lon=%s", url, display_name, geo["lat"], geo["lon"])
         log("TOOL_WEATHER_HTTP_CALL", url=url, city=display_name)
 
         resp = await client.get(url, params=params)
@@ -219,9 +197,11 @@ class ToolService:
         if resp.status_code != 200:
             logger.error("TOOL_WEATHER_HTTP_ERROR status=%d body=%s", resp.status_code, resp.text[:200])
             log("TOOL_WEATHER_HTTP_ERROR", status=resp.status_code, error=resp.text[:200])
-            return "Servizio meteo temporaneamente non disponibile."
+            return f"Non riesco a ottenere il meteo per {display_name}."
 
         data = resp.json()
+        city_used = data.get("name", display_name)
+        log("WEATHER_RESPONSE_CITY_USED", requested=display_name, api_city=city_used)
         return self._format_weather_it(data, display_name)
 
     async def _get_forecast(self, geo: dict, message: str, display_name: str) -> str:
@@ -337,109 +317,175 @@ class ToolService:
             return "Servizio previsioni temporaneamente non disponibile."
 
     # ───────────────────────────────────────────────────────────
-    # NEWS — NewsAPI reale
+    # NEWS — Google News RSS + GNews fallback
     # ───────────────────────────────────────────────────────────
 
     async def get_news(self, message: str) -> str:
         """
-        Notizie reali via GNews API (gnews.io).
-        Supporta notizie locali per qualsiasi citta'/paese.
-        Organizza per categoria: cronaca, politica, sport, finanza.
-        Se API fallisce -> messaggio di errore, zero dati inventati.
+        Notizie reali — supporto mondiale.
+        Pipeline: location_resolver → Google News RSS (city → region → country).
+        Fallback su GNews API se RSS vuoto.
+        Se nessun risultato → messaggio esplicito, zero dati inventati.
         """
         try:
             log("TOOL_NEWS_REQUEST", message=message[:50])
 
-            if not GNEWS_API_KEY:
-                logger.error("TOOL_NEWS_MISSING_KEY error=GNEWS_API_KEY non configurata")
-                return "Servizio notizie non configurato."
-
-            topic = self._extract_topic(message)
-            city = self._extract_city(message)
+            client = await self._get_client()
             msg_lower = message.lower()
 
-            # Check if user asks for a specific category
+            # Detect specific category
             requested_section = None
             for section, keywords in NEWS_SECTIONS.items():
                 if any(kw in msg_lower for kw in keywords):
                     requested_section = section
                     break
 
-            if requested_section:
-                # Single category search
-                query = f"{city} {requested_section}" if city else requested_section
-                result = await self._gnews_search(query)
-                return result
-            elif city:
-                # Local news for specific city/town — multi-category
-                return await self._get_categorized_news(city)
-            elif topic:
-                return await self._gnews_search(topic)
+            # Try to resolve location
+            city_name = None
+            country = "IT"
+            state = ""
+            try:
+                geo = await resolve_location(message, http_client=client)
+                city_name = geo["name"]
+                country = geo.get("country", "IT")
+                state = geo.get("state", "")
+            except (LocationNotFoundError, AmbiguousLocationError):
+                # No location in message — use general topic search
+                pass
+
+            # Determine search query
+            if city_name:
+                log("NEWS_QUERY_CITY", city=city_name, country=country, state=state)
+                return await self._news_with_fallback_chain(
+                    client, city_name, state, country, requested_section)
+            elif requested_section:
+                return await self._news_rss_search(client, requested_section, "IT", "Italia")
             else:
-                # General Italian news — multi-category
-                return await self._get_categorized_news("Italia")
+                # General news
+                topic = self._extract_topic(message)
+                query = topic if topic else "Italia"
+                return await self._news_rss_search(client, query, "IT", "Italia")
 
         except httpx.TimeoutException:
-            logger.error("TOOL_GNEWS_HTTP_ERROR error=timeout")
-            log("TOOL_GNEWS_HTTP_ERROR", error="timeout")
+            logger.error("TOOL_NEWS_HTTP_ERROR error=timeout")
+            log("TOOL_NEWS_HTTP_ERROR", error="timeout")
             return "Servizio notizie temporaneamente non disponibile."
         except Exception as e:
-            logger.error("TOOL_GNEWS_HTTP_ERROR error=%s", str(e))
-            log("TOOL_GNEWS_HTTP_ERROR", error=str(e))
+            logger.error("TOOL_NEWS_HTTP_ERROR error=%s", str(e))
+            log("TOOL_NEWS_HTTP_ERROR", error=str(e))
             return "Servizio notizie temporaneamente non disponibile."
 
-    async def _get_categorized_news(self, context: str) -> str:
-        """Fetch news organized by category (cronaca, politica, sport, finanza)."""
-        sections_output = []
-        categories_to_fetch = ["cronaca", "politica", "sport", "finanza"]
+    async def _news_with_fallback_chain(self, client: httpx.AsyncClient,
+                                         city: str, state: str, country: str,
+                                         section: Optional[str] = None) -> str:
+        """
+        News fallback chain: city → state/region → country.
+        Logs every fallback step.
+        """
+        query = f"{city} {section}" if section else city
+        scope = city
 
-        for category in categories_to_fetch:
-            query = f"{context} {category}"
-            try:
-                raw = await self._gnews_search_raw(query, max_results=3)
-                if raw:
-                    section_title = category.upper()
-                    lines = [f"\n{section_title}:"]
-                    for i, art in enumerate(raw[:3], 1):
-                        title = art.get("title", "").strip()
-                        if title:
-                            lines.append(f"  {i}. {title}")
-                    if len(lines) > 1:
-                        sections_output.append("\n".join(lines))
-            except Exception as e:
-                logger.warning("TOOL_NEWS_CATEGORY_ERROR category=%s error=%s", category, str(e))
-                continue
+        # 1. Try city-level
+        result = await self._news_rss_search(client, query, country, scope)
+        count = result.count("\n") if result and "ultime notizie" in result.lower() else 0
+        log("NEWS_RESULTS_COUNT", scope=scope, count=count)
 
-        if sections_output:
-            header = f"Notizie per {context}:"
-            return header + "\n".join(sections_output)
-        else:
-            # Fallback to simple search
-            return await self._gnews_search(context)
+        if count > 0:
+            log("NEWS_FINAL_SCOPE", scope=scope, level="city")
+            return result
 
-    async def _gnews_search_raw(self, query: str, max_results: int = 5) -> list:
-        """Raw GNews search — returns list of article dicts."""
-        url = "https://gnews.io/api/v4/search"
-        params = {
-            "apikey": GNEWS_API_KEY,
-            "q": query,
-            "lang": "it",
-            "max": max_results,
-        }
+        # 2. Fallback to state/region (if available)
+        if state:
+            log("NEWS_FALLBACK_TRIGGERED", from_scope=scope, to_scope=state, level="region")
+            scope = state
+            query = f"{state} {section}" if section else state
+            result = await self._news_rss_search(client, query, country, scope)
+            count = result.count("\n") if result and "ultime notizie" in result.lower() else 0
+            log("NEWS_RESULTS_COUNT", scope=scope, count=count)
 
-        client = await self._get_client()
-        resp = await client.get(url, params=params)
+            if count > 0:
+                log("NEWS_FINAL_SCOPE", scope=scope, level="region")
+                return result
 
-        logger.info("TOOL_GNEWS_HTTP_STATUS status=%d query=%s", resp.status_code, query)
+        # 3. Fallback to country
+        country_name = _COUNTRY_NAMES.get(country, country)
+        if country_name != city:
+            log("NEWS_FALLBACK_TRIGGERED", from_scope=scope, to_scope=country_name, level="country")
+            scope = country_name
+            query = f"{country_name} {section}" if section else country_name
+            result = await self._news_rss_search(client, query, country, scope)
+            count = result.count("\n") if result and "ultime notizie" in result.lower() else 0
+            log("NEWS_RESULTS_COUNT", scope=scope, count=count)
 
-        if resp.status_code != 200:
+            if count > 0:
+                log("NEWS_FINAL_SCOPE", scope=scope, level="country")
+                return result
+
+        # 4. Nothing found at any level
+        log("NEWS_FINAL_SCOPE", scope=city, level="none")
+        return f"Non trovo notizie locali recenti per {city}."
+
+    async def _news_rss_search(self, client: httpx.AsyncClient,
+                                query: str, country: str, display_scope: str) -> str:
+        """
+        Search Google News RSS for a query.
+        URL: https://news.google.com/rss/search?q={query}&hl=it&gl={country}&ceid={country}:it
+        Falls back to GNews API if RSS fails.
+        """
+        try:
+            gl = country if country else "IT"
+            rss_url = "https://news.google.com/rss/search"
+            params = {"q": query, "hl": "it", "gl": gl, "ceid": f"{gl}:it"}
+
+            logger.info("TOOL_NEWS_RSS_CALL query=%s gl=%s", query, gl)
+
+            resp = await client.get(rss_url, params=params, follow_redirects=True)
+
+            if resp.status_code == 200:
+                titles = self._parse_rss_titles(resp.text, max_items=5)
+                if titles:
+                    lines = [f"Ecco le ultime notizie su {display_scope}:"]
+                    for i, title in enumerate(titles, 1):
+                        lines.append(f"{i}. {title}")
+                    log("TOOL_NEWS_RESPONSE", context=display_scope, count=len(titles), source="google_rss")
+                    return "\n".join(lines)
+
+            # RSS empty or failed — try GNews as backup
+            logger.info("TOOL_NEWS_RSS_EMPTY query=%s, trying GNews", query)
+
+        except Exception as e:
+            logger.warning("TOOL_NEWS_RSS_ERROR query=%s error=%s", query, str(e))
+
+        # GNews fallback
+        if GNEWS_API_KEY:
+            return await self._gnews_search(client, query, display_scope)
+
+        return ""
+
+    def _parse_rss_titles(self, xml_text: str, max_items: int = 5) -> list:
+        """Parse Google News RSS XML and extract article titles."""
+        try:
+            root = ElementTree.fromstring(xml_text)
+            items = root.findall(".//item")
+            titles = []
+            for item in items[:max_items]:
+                title_el = item.find("title")
+                if title_el is not None and title_el.text:
+                    # Google News titles often end with " - Source Name"
+                    title = title_el.text.strip()
+                    # Remove source suffix for cleaner output
+                    if " - " in title:
+                        title = title.rsplit(" - ", 1)[0].strip()
+                    if title:
+                        titles.append(title)
+            return titles
+        except Exception as e:
+            logger.warning("TOOL_NEWS_RSS_PARSE_ERROR error=%s", str(e))
             return []
 
-        data = resp.json()
-        return data.get("articles", [])
-
-    async def _gnews_search(self, query: str) -> str:
-        """Cerca notizie via GNews API (gnews.io/api/v4/search)."""
+    async def _gnews_search(self, client: httpx.AsyncClient,
+                             query: str, display_scope: str) -> str:
+        """GNews API search as fallback for RSS."""
         url = "https://gnews.io/api/v4/search"
         params = {
             "apikey": GNEWS_API_KEY,
@@ -448,47 +494,29 @@ class ToolService:
             "max": 5,
         }
 
-        logger.info("TOOL_GNEWS_HTTP_CALL url=%s query=%s", url, query)
-        log("TOOL_GNEWS_HTTP_CALL", url=url, query=query)
+        logger.info("TOOL_GNEWS_HTTP_CALL query=%s", query)
+        log("TOOL_GNEWS_HTTP_CALL", query=query)
 
-        client = await self._get_client()
         resp = await client.get(url, params=params)
 
         logger.info("TOOL_GNEWS_HTTP_STATUS status=%d query=%s", resp.status_code, query)
-        log("TOOL_GNEWS_HTTP_STATUS", status=resp.status_code, query=query)
 
-        if resp.status_code == 401 or resp.status_code == 403:
-            logger.error("TOOL_NEWS_API_KEY_INVALID status=%d body=%s", resp.status_code, resp.text[:200])
-            log("TOOL_NEWS_API_KEY_INVALID", status=resp.status_code, error=resp.text[:200])
-            return "Chiave News API non valida."
         if resp.status_code != 200:
-            logger.error("TOOL_GNEWS_HTTP_ERROR status=%d body=%s", resp.status_code, resp.text[:200])
-            log("TOOL_GNEWS_HTTP_ERROR", status=resp.status_code, error=resp.text[:200])
-            return "Servizio notizie temporaneamente non disponibile."
+            return ""
 
         data = resp.json()
-        return self._format_gnews_it(data, query)
+        articles = data.get("articles", [])
+        if not articles:
+            return ""
 
-    def _format_gnews_it(self, data: dict, context: str) -> str:
-        """Formatta risposta GNews in italiano naturale."""
-        try:
-            articles = data.get("articles", [])
-            if not articles:
-                return f"Non ho trovato notizie recenti su {context}."
+        lines = [f"Ecco le ultime notizie su {display_scope}:"]
+        for i, art in enumerate(articles[:5], 1):
+            title = art.get("title", "").strip()
+            if title:
+                lines.append(f"{i}. {title}")
 
-            lines = [f"Ecco le ultime notizie su {context}:"]
-            for i, art in enumerate(articles[:5], 1):
-                title = art.get("title", "").strip()
-                if title:
-                    lines.append(f"{i}. {title}")
-
-            news_info = "\n".join(lines)
-            log("TOOL_NEWS_RESPONSE", context=context, count=len(articles))
-            return news_info
-
-        except Exception as e:
-            logger.error("TOOL_NEWS_FORMAT_ERROR error=%s", str(e))
-            return "Servizio notizie temporaneamente non disponibile."
+        log("TOOL_NEWS_RESPONSE", context=display_scope, count=len(articles), source="gnews")
+        return "\n".join(lines)
 
     # ───────────────────────────────────────────────────────────
     # TIME — Europe/Rome timezone
@@ -548,25 +576,8 @@ class ToolService:
     # ───────────────────────────────────────────────────────────
 
     def _extract_city(self, message: str) -> Optional[str]:
-        """Estrai nome citta' dal messaggio. Supporta qualsiasi citta' del mondo."""
-        message_lower = message.lower()
-        # 1. Check known Italian cities first (fast path)
-        for city in sorted(CITIES_IT, key=len, reverse=True):
-            if city in message_lower:
-                return city.title()
-        # 2. Regex extraction for any capitalized city name
-        import re as _re
-        for pattern in CITY_EXTRACT_PATTERNS:
-            m = _re.search(pattern, message)
-            if m:
-                candidate = m.group(1).strip()
-                # Filter out common Italian words that aren't cities
-                skip_words = {"Come", "Che", "Non", "Per", "Con", "Cosa", "Chi",
-                              "Dove", "Quando", "Quanto", "Quale", "Perch\u00e9",
-                              "Oggi", "Domani", "Ieri", "Italia", "Europa"}
-                if candidate not in skip_words and len(candidate) >= 2:
-                    return candidate
-        return None
+        """Estrai nome citta' dal messaggio. Delega a location_resolver."""
+        return extract_city_from_message(message)
 
     def _extract_topic(self, message: str) -> Optional[str]:
         """Estrai argomento dal messaggio."""

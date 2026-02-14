@@ -316,7 +316,8 @@ class Proactor:
             if intent == "weather":
                 result = await tool_service.get_weather(message)
                 # Save tool context for follow-up
-                city = tool_service._extract_city(message) or "Roma"
+                from core.location_resolver import extract_city_from_message
+                city = extract_city_from_message(message) or "Roma"
                 save_tool_context(user_id, "weather", city=city)
                 logger.info("TOOL_ROUTER_OK intent=weather user=%s city=%s", user_id, city)
                 return result
