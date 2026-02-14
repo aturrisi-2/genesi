@@ -7,12 +7,12 @@ Nessun fallback silenzioso — se il contesto non viene costruito, errore esplic
 
 import logging
 from typing import Dict, Any, List
+from core.memory_engine_v2 import MemoryEngineV2
 
 logger = logging.getLogger(__name__)
 
 memory_engine_v2 = None
 try:
-    from core.memory_engine_v2 import MemoryEngineV2
     memory_engine_v2 = MemoryEngineV2()
     logger.info("MEMORY_V2_ACTIVE")
 except Exception as e:
@@ -84,21 +84,20 @@ class ContextAssembler:
         return context
 
     def _build_llm_prompt(self, brain_state, structured_memory):
-        # Build LLM prompt with memory_v2 as a separate block
         prompt = ""
-        # Existing prompt construction logic
-        # ...
-        # Inject memory_v2
+
         if 'profile' in structured_memory:
-            prompt += f"\nMEMORY_V2_PROFILE: {structured_memory['profile']}"
+            prompt += f"\n### USER STRUCTURED MEMORY\nName: {structured_memory['profile'].get('name', '')}\nProfession: {structured_memory['profile'].get('profession', '')}"
+            logger.info("MEMORY_V2_PROFILE_USED user_id=%s", brain_state.get('user_id', 'unknown'))
         if 'relational' in structured_memory:
-            prompt += f"\nMEMORY_V2_RELATIONAL: {structured_memory['relational']}"
+            prompt += f"\nSpouse: {structured_memory['relational'].get('spouse', '')}"
+            logger.info("MEMORY_V2_RELATIONAL_USED user_id=%s", brain_state.get('user_id', 'unknown'))
         if 'episodic' in structured_memory:
             prompt += f"\nMEMORY_V2_EPISODIC: {structured_memory['episodic']}"
 
-        # Conflict resolution: prioritize memory_v2
         if structured_memory.get('profile', {}).get('name'):
             brain_state['profile']['name'] = structured_memory['profile']['name']
+            logger.info("MEMORY_V2_OVERRIDE_LONG_TERM user_id=%s", brain_state.get('user_id', 'unknown'))
 
         return prompt
 

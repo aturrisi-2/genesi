@@ -25,13 +25,15 @@ class MemoryEngineV2:
 
     def update_profile(self, user_id, key, value):
         memory = self.load_user_memory(user_id)
-        memory.setdefault("profile", {})[key] = value
+        memory["profile"] = memory.get("profile", {})
+        memory["profile"][key] = value
         self.save_user_memory(user_id, memory)
         logger.info("MEMORY_V2_UPDATE user_id=%s key=%s", user_id, key)
 
     def update_relational(self, user_id, key, value):
         memory = self.load_user_memory(user_id)
-        memory.setdefault("relational", {})[key] = value
+        memory["relational"] = memory.get("relational", {})
+        memory["relational"][key] = value
         self.save_user_memory(user_id, memory)
         logger.info("MEMORY_V2_UPDATE user_id=%s key=%s", user_id, key)
 
