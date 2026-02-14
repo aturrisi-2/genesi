@@ -81,13 +81,20 @@ class ContextAssembler:
                     pet_descs.append(f"{p.get('name', '?')} ({p.get('type', '?')})")
             if pet_descs:
                 parts.append(f"Animali: {', '.join(pet_descs)}")
-        # Interests
+        # Interests (legacy flat list)
         interests = profile.get('interests', [])
-        if interests:
+        if interests and isinstance(interests, list):
             parts.append(f"Interessi: {', '.join(interests)}")
-        # Preferences
-        preferences = profile.get('preferences', [])
-        if preferences:
+        # Preferences (categorized dict)
+        preferences = profile.get('preferences', {})
+        if isinstance(preferences, dict):
+            if preferences.get('music'):
+                parts.append(f"Musica preferita: {', '.join(preferences['music'])}")
+            if preferences.get('food'):
+                parts.append(f"Cibo preferito: {', '.join(preferences['food'])}")
+            if preferences.get('general'):
+                parts.append(f"Preferenze: {', '.join(preferences['general'])}")
+        elif isinstance(preferences, list) and preferences:
             parts.append(f"Preferenze: {', '.join(preferences)}")
         # Traits
         traits = profile.get('traits', [])
@@ -171,4 +178,72 @@ def build_conversation_context(user_id: str, current_message: str,
     topic = detect_topic(current_message, history)
     sections.append(f"TEMA CORRENTE DELLA CONVERSAZIONE: {topic}")
 
+    # --- D) Narrative continuity: link last 2 user messages if related ---
+    continuity = _detect_narrative_continuity(current_message, history)
+    if continuity:
+        sections.append(continuity)
+
     return "\n\n".join(sections)
+
+
+# ═══════════════════════════════════════════════════════════════
+# NARRATIVE CONTINUITY — semantic linking of last 2 user messages
+# ═══════════════════════════════════════════════════════════════
+
+# Semantic clusters: words that indicate related topics
+_SEMANTIC_CLUSTERS = {
+    "stanchezza": {"stanco", "stanca", "dormito", "dormire", "sonno", "insonne",
+                   "insonnia", "esausto", "esausta", "sveglio", "sveglia",
+                   "riposo", "riposare", "sfinito", "sfinita", "spossato"},
+    "tristezza": {"triste", "piango", "piangere", "lacrime", "depresso", "depressa",
+                  "giù", "giu", "abbattuto", "abbattuta", "sconsolato", "male",
+                  "infelice", "soffro", "soffrire", "dolore"},
+    "ansia": {"ansioso", "ansiosa", "ansia", "preoccupato", "preoccupata",
+              "paura", "panico", "agitato", "agitata", "nervoso", "nervosa",
+              "stress", "stressato", "stressata", "tensione"},
+    "lavoro": {"lavoro", "ufficio", "capo", "collega", "colleghi", "riunione",
+               "progetto", "scadenza", "licenziato", "licenziata", "stipendio",
+               "carriera", "promozione"},
+    "relazioni": {"moglie", "marito", "fidanzato", "fidanzata", "partner",
+                  "litigato", "litigio", "separazione", "divorzio", "amore",
+                  "relazione", "coppia"},
+    "salute": {"male", "dolore", "malato", "malata", "medico", "dottore",
+               "ospedale", "febbre", "testa", "stomaco", "schiena"},
+    "solitudine": {"solo", "sola", "solitudine", "isolato", "isolata",
+                   "nessuno", "abbandonato", "abbandonata"},
+}
+
+
+def _detect_narrative_continuity(current_message: str, history: List[Dict]) -> str:
+    """
+    If last 2 user messages share a semantic cluster, return a continuity directive
+    that forces the LLM to integrate them causally.
+    """
+    if not history:
+        return ""
+
+    # Get last user message from history
+    prev_user_msgs = [e.get("user_message", "") for e in history if e.get("user_message")]
+    if not prev_user_msgs:
+        return ""
+
+    last_user_msg = prev_user_msgs[-1].lower()
+    current_lower = current_message.lower()
+
+    # Find shared semantic clusters
+    shared_clusters = []
+    for cluster_name, keywords in _SEMANTIC_CLUSTERS.items():
+        last_has = any(kw in last_user_msg for kw in keywords)
+        current_has = any(kw in current_lower for kw in keywords)
+        if last_has and current_has:
+            shared_clusters.append(cluster_name)
+
+    if shared_clusters:
+        return (f"CONTINUITA' NARRATIVA OBBLIGATORIA:\n"
+                f"L'utente ha appena detto: \"{prev_user_msgs[-1]}\"\n"
+                f"Ora dice: \"{current_message}\"\n"
+                f"Questi messaggi sono collegati (tema: {', '.join(shared_clusters)}).\n"
+                f"DEVI collegare causalmente i due messaggi nella risposta.\n"
+                f"NON trattarli come messaggi separati. NON usare fallback generico.")
+
+    return ""

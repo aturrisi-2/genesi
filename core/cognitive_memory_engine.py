@@ -18,7 +18,23 @@ class CognitiveMemoryEngine:
         dog_match = re.search(r"il mio cane si chiama (\w+)", message, re.IGNORECASE)
         cat_match = re.search(r"la mia gatta si chiama (\w+)", message, re.IGNORECASE)
 
-        if name_match:
+        # Preference extraction — categorized
+        pref_result = self._extract_preference(message)
+        if pref_result:
+            pref_category, pref_value = pref_result
+            preferences = extracted_profile_data.get("preferences", {})
+            if not isinstance(preferences, dict):
+                preferences = {}
+            cat_list = preferences.get(pref_category, [])
+            if pref_value not in cat_list:
+                cat_list.append(pref_value)
+                preferences[pref_category] = cat_list
+                extracted_profile_data["preferences"] = preferences
+                field = "preferences"
+                value = preferences
+                logger.info("COGNITIVE_PREFERENCE_EXTRACT category=%s value=%s", pref_category, pref_value)
+
+        if not field and name_match:
             field = "name"
             value = name_match.group(1)
         elif profession_match:
@@ -38,7 +54,7 @@ class CognitiveMemoryEngine:
             value = {"type": "cat", "name": cat_match.group(1)}
 
         # Ensure field and value are initialized
-        if field and value:
+        if field is not None and value is not None:
             persist = True
             memory_type = "profile"
             logger.info("COGNITIVE_EVAL type=identity field=%s confidence=0.9", field)
@@ -66,6 +82,55 @@ class CognitiveMemoryEngine:
             "value": value,
             "confidence": 0.9  # High confidence for name and profession
         }
+
+    def _extract_preference(self, message: str):
+        """Extract categorized preference from message. Returns (category, value) or None."""
+        msg_lower = message.lower()
+
+        # Music preferences
+        music_patterns = [
+            r"mi piace (?:la |l')?musica (\w[\w\s]*)",
+            r"ascolto (?:la |l')?musica (\w[\w\s]*)",
+            r"ascolto (\w[\w\s]*?) (?:come|di) musica",
+            r"mi piace (?:il |l')?(rock|pop|jazz|blues|metal|rap|hip hop|classica|elettronica|reggae|funk|soul|r&b|techno|house|trap|indie)",
+            r"ascolto (?:il |l')?(rock|pop|jazz|blues|metal|rap|hip hop|classica|elettronica|reggae|funk|soul|r&b|techno|house|trap|indie)",
+            r"la mia musica preferita [eè] (?:la |il |l')?(\w[\w\s]*)",
+        ]
+        for pat in music_patterns:
+            m = re.search(pat, msg_lower)
+            if m:
+                return ("music", m.group(1).strip())
+
+        # Food preferences
+        food_patterns = [
+            r"mi piac(?:e|ciono) (?:le |i |l[ae] |gli )?(\w[\w\s]*?) (?:da mangiare|come (?:cibo|frutto|frutta|verdura|piatto))",
+            r"(?:il mio|la mia) (?:cibo|frutto|frutta|piatto|verdura) preferit[oa] [eè] (?:la |il |le |i |l')?(\w[\w\s]*)",
+            r"mi piace mangiare (?:la |il |le |i |l')?(\w[\w\s]*)",
+            r"adoro (?:la |il |le |i |l')?(\w[\w\s]*?) (?:da mangiare|come cibo)",
+            r"mi piac(?:e|ciono) (?:le |i |l[ae] |gli )?(banane|mele|arance|fragole|pizza|pasta|sushi|cioccolato|gelato|pane|riso|pesce|carne|verdure|insalata)",
+            r"(?:il mio|la mia) frutto preferito (?:sono|[eè]) (?:le |i |l[ae] |gli )?(\w[\w\s]*)",
+        ]
+        for pat in food_patterns:
+            m = re.search(pat, msg_lower)
+            if m:
+                return ("food", m.group(1).strip())
+
+        # General preferences (catch-all "mi piace X")
+        general_patterns = [
+            r"mi piace (?:molto |tanto )?(\w[\w\s]{2,30})",
+            r"adoro (\w[\w\s]{2,30})",
+            r"la mia passione [eè] (?:la |il |l')?(\w[\w\s]*)",
+        ]
+        for pat in general_patterns:
+            m = re.search(pat, msg_lower)
+            if m:
+                val = m.group(1).strip()
+                # Skip if it's a person reference or too short
+                if len(val) < 3 or val in ("il", "la", "le", "lo", "un", "una"):
+                    continue
+                return ("general", val)
+
+        return None
 
     def compute_scores(self, message):
         # Implement scoring logic

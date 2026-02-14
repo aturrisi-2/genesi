@@ -26,6 +26,8 @@ from core.context_assembler import ContextAssembler, build_conversation_context
 from core.llm_service import llm_service, model_selector, LLM_DEFAULT_MODEL
 from core.fallback_knowledge import lookup_fallback
 from core.identity_service import handle_identity_question
+from core.response_filter import filter_response
+from core.tool_context import save_tool_context, resolve_elliptical_city, is_elliptical_weather_followup
 import unidecode
 import os
 
@@ -151,6 +153,14 @@ class Proactor:
             # Use the profile in the context assembly
             context = await self.context_assembler.build(user_id, message)
             context['profile'] = profile
+
+            # STEP 2.5: ELLIPTICAL TOOL FOLLOW-UP (e.g. "e domani?" after weather)
+            if is_elliptical_weather_followup(msg_lower):
+                resolved_city = resolve_elliptical_city(user_id, msg_lower)
+                if resolved_city:
+                    logger.info("ELLIPTICAL_WEATHER_FOLLOWUP user=%s city=%s", user_id, resolved_city)
+                    enriched_msg = f"che tempo fa a {resolved_city} {message.strip('?').strip()}"
+                    return await self._handle_tool("weather", enriched_msg, user_id)
 
             # STEP 3: INTENT CLASSIFICATION
             if intent is None:
@@ -281,7 +291,10 @@ class Proactor:
         try:
             if intent == "weather":
                 result = await tool_service.get_weather(message)
-                logger.info("TOOL_ROUTER_OK intent=weather user=%s", user_id)
+                # Save tool context for follow-up
+                city = tool_service._extract_city(message) or "Roma"
+                save_tool_context(user_id, "weather", city=city)
+                logger.info("TOOL_ROUTER_OK intent=weather user=%s city=%s", user_id, city)
                 return result
             elif intent == "news":
                 result = await tool_service.get_news(message)
@@ -368,6 +381,19 @@ class Proactor:
             base_response=enhanced_response
         )
 
+        # 7. Post-generation filter (template strip + loop block)
+        response = filter_response(response, user_id)
+        if not response:
+            # Regeneration: one retry with higher temperature hint
+            logger.warning("RESPONSE_FILTER_REGEN user=%s route=relational", user_id)
+            gpt_response2 = await llm_service._call_with_protection(
+                model, gpt_prompt, message, user_id=user_id, route="relational"
+            )
+            if gpt_response2:
+                response = filter_response(gpt_response2, user_id)
+            if not response:
+                response = "Dimmi."
+
         logger.info("PROACTOR_RESPONSE user=%s len=%d route=relational emotion=%s",
                      user_id, len(response),
                      brain_state.get("emotion", {}).get("emotion", "?"))
@@ -394,10 +420,17 @@ class Proactor:
             if pet_descs:
                 parts.append(f"Animali: {', '.join(pet_descs)}")
         interests = profile.get("interests", [])
-        if interests:
+        if interests and isinstance(interests, list):
             parts.append(f"Interessi: {', '.join(interests)}")
-        preferences = profile.get("preferences", [])
-        if preferences:
+        preferences = profile.get("preferences", {})
+        if isinstance(preferences, dict):
+            if preferences.get('music'):
+                parts.append(f"Musica: {', '.join(preferences['music'])}")
+            if preferences.get('food'):
+                parts.append(f"Cibo: {', '.join(preferences['food'])}")
+            if preferences.get('general'):
+                parts.append(f"Pref: {', '.join(preferences['general'])}")
+        elif isinstance(preferences, list) and preferences:
             parts.append(f"Preferenze: {', '.join(preferences)}")
         traits = profile.get("traits", [])
         if traits:
@@ -433,15 +466,15 @@ CONTINUITA' CONVERSAZIONALE (REGOLA FONDAMENTALE):
 
 COME DEVI COMPORTARTI:
 - Rispondi in modo naturale. Solo a cio' che viene detto.
+- Max 2-3 frasi. Se basta 1 frase, usa 1 frase.
 - Se non c'e' bisogno di espandere, resta essenziale.
 - Non aggiungere frasi motivazionali.
 - Non aggiungere consigli se non richiesti.
 - Non usare formule ricorrenti.
 - Non usare entusiasmo artificiale.
-- Non chiudere sempre con una domanda.
+- Non chiudere con una domanda a meno che non sia necessaria.
 - Mantieni lucidita' e coerenza con la conversazione.
 - Se l'utente chiede qualcosa su di se' e hai i dati, RISPONDI con i dati.
-- Sii imprevedibile: varia tono, lunghezza, struttura.
 - Se non sai qualcosa, dillo. Non inventare.
 
 DIVIETI ASSOLUTI:
@@ -501,6 +534,11 @@ Domanda: {message}"""
                 logger.info("KNOWLEDGE_FALLBACK_HIT topic=%s", normalized_message)
                 return fb
             return "Mi dispiace, non riesco a fornire una risposta precisa in questo momento."
+
+        # Post-generation filter
+        result = filter_response(result, user_id)
+        if not result:
+            result = "Non ho una risposta precisa."
 
         logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d route=knowledge", user_id, len(result))
         return result
