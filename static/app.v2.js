@@ -1282,8 +1282,8 @@ async function transcribeAudio(blob) {
     const fd = new FormData();
     fd.append('audio', blob, 'rec' + ext);
     
-    console.log('[STT] sending POST /stt...');
-    const res = await fetch('/stt', { method: 'POST', body: fd });
+    console.log('[STT] sending POST /api/stt/ ...');
+    const res = await fetch('/api/stt/', { method: 'POST', body: fd });
     console.log('[STT] response status=' + res.status);
     
     if (!res.ok) {
