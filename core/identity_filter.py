@@ -34,6 +34,29 @@ FORBIDDEN_WORDS = [
     "algoritmo", "programma", "software", "addestrato"
 ]
 
+# Pattern generici da bloccare (counselor/consultant style)
+GENERIC_PATTERNS = [
+    r"una cosa che potresti fare",
+    r"potresti esplorare",
+    r"potresti provare a",
+    r"non ho informazioni specifiche",
+    r"non dispongo di informazioni",
+    r"a volte le conversazioni",
+    r"quello che senti conta",
+    r"quello che provi .{0,10} valido",
+    r"c'[eè] qualcosa che ti porti dentro",
+    r"ce qualcosa che ti porti dentro",
+]
+
+def contains_generic_patterns(text: str) -> bool:
+    """Controlla se il testo contiene frasi generiche da counselor/consultant."""
+    text_lower = text.lower()
+    for pattern in GENERIC_PATTERNS:
+        if re.search(pattern, text_lower):
+            return True
+    return False
+
+
 def contains_forbidden_patterns(text: str) -> bool:
     """
     Controlla se il testo contiene pattern vietati

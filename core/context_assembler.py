@@ -6,9 +6,10 @@ Nessun fallback silenzioso — se il contesto non viene costruito, errore esplic
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 from core.cognitive_memory_engine import CognitiveMemoryEngine
 from core.storage import storage
+from core.chat_memory import chat_memory
 
 logger = logging.getLogger(__name__)
 
@@ -93,3 +94,81 @@ class ContextAssembler:
         if traits:
             parts.append(f"Tratti: {', '.join(traits)}")
         return "\n".join(parts)
+
+
+# ═══════════════════════════════════════════════════════════════
+# CONVERSATION CONTEXT — thread continuity for LLM
+# ═══════════════════════════════════════════════════════════════
+
+# Topic detection keywords (Italian)
+_TOPIC_MAP = {
+    "famiglia": ["moglie", "marito", "figlio", "figlia", "figli", "madre", "padre",
+                 "fratello", "sorella", "famiglia", "rita", "genitori", "nonno", "nonna"],
+    "lavoro": ["lavoro", "ufficio", "collega", "capo", "professione", "progetto",
+               "cliente", "riunione", "stipendio"],
+    "salute": ["salute", "dottore", "ospedale", "dolore", "malattia", "medicina",
+               "terapia", "visita"],
+    "emozioni": ["triste", "felice", "arrabbiato", "ansioso", "paura", "solo",
+                 "stanco", "preoccupato", "contento", "nervoso"],
+    "animali": ["cane", "gatto", "gatta", "animale", "animali", "rio", "luna"],
+    "interessi": ["musica", "film", "libro", "sport", "cucina", "viaggio",
+                  "gioco", "hobby"],
+    "identita'": ["chiamo", "nome", "sono", "anni", "vivo", "abito"],
+}
+
+
+def detect_topic(message: str, history: List[Dict] = None) -> str:
+    """Detect current conversation topic from message + recent history."""
+    # Combine current message with last 2 user messages for topic continuity
+    texts = [message.lower()]
+    if history:
+        for entry in history[-2:]:
+            texts.append(entry.get("user_message", "").lower())
+    combined = " ".join(texts)
+
+    scores = {}
+    for topic, keywords in _TOPIC_MAP.items():
+        score = sum(1 for kw in keywords if kw in combined)
+        if score > 0:
+            scores[topic] = score
+
+    if scores:
+        return max(scores, key=scores.get)
+    return "conversazione libera"
+
+
+def build_conversation_context(user_id: str, current_message: str,
+                                profile: Dict[str, Any]) -> str:
+    """
+    Builds structured conversation context for LLM:
+    A) Last 6 messages (user/assistant alternating)
+    B) Stable identity summary
+    C) Current topic detection
+    """
+    sections = []
+
+    # --- A) Chat history thread ---
+    history = chat_memory.get_messages(user_id, limit=6)
+    if history:
+        thread_lines = []
+        for entry in history:
+            user_msg = entry.get("user_message", "")
+            sys_resp = entry.get("system_response", "")
+            if user_msg:
+                thread_lines.append(f"Utente: {user_msg}")
+            if sys_resp:
+                thread_lines.append(f"Genesi: {sys_resp}")
+        if thread_lines:
+            sections.append("CONVERSAZIONE RECENTE:\n" + "\n".join(thread_lines))
+
+    # --- B) Stable identity summary ---
+    assembler = ContextAssembler(None, None)
+    profile_summary = assembler._summarize_profile(profile)
+    if profile_summary:
+        sections.append("INFORMAZIONI STABILI SULL'UTENTE:\n" + profile_summary)
+
+    # --- C) Topic detection ---
+    topic = detect_topic(current_message, history)
+    sections.append(f"TEMA CORRENTE DELLA CONVERSAZIONE: {topic}")
+
+    return "\n\n".join(sections)

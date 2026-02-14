@@ -11,7 +11,8 @@ import random
 from typing import Dict, Any, Optional, List
 from openai import AsyncOpenAI, RateLimitError, APIError, APIConnectionError
 from core.memory_brain import memory_brain
-from core.identity_filter import contains_forbidden_patterns
+from core.identity_filter import contains_forbidden_patterns, contains_generic_patterns
+from core.context_assembler import build_conversation_context
 
 logger = logging.getLogger(__name__)
 
@@ -409,7 +410,7 @@ async def _memory_response(user_id: str, profile: Dict, episodes: List[Dict],
 async def _try_llm_response(user_id: str, message: str,
                              brain_state: Dict[str, Any]) -> Optional[str]:
     """Tenta risposta LLM con fallback chain: gpt-4o → gpt-4o-mini."""
-    prompt = _build_llm_prompt(message, brain_state)
+    prompt = _build_llm_prompt(message, brain_state, user_id=user_id)
 
     # ── PRIMARY: gpt-4o ──
     primary_result = await _call_llm_model(user_id, prompt, LLM_MODEL, is_primary=True)
@@ -443,6 +444,11 @@ async def _call_llm_model(user_id: str, prompt: str, model: str, is_primary: boo
             logger.warning("%s_IDENTITY_VIOLATION user=%s", tag_prefix, user_id)
             return None
 
+        # Generic phrase filter — block counselor/consultant style
+        if contains_generic_patterns(generated):
+            logger.warning("%s_GENERIC_PATTERN_BLOCKED user=%s", tag_prefix, user_id)
+            return None
+
         if not generated:
             logger.warning("%s_EMPTY user=%s", tag_prefix, user_id)
             return None
@@ -458,13 +464,14 @@ async def _call_llm_model(user_id: str, prompt: str, model: str, is_primary: boo
         return None
 
 
-def _build_llm_prompt(message: str, brain_state: Dict[str, Any]) -> str:
-    """Costruisce prompt LLM con contesto relazionale completo.
+def _build_llm_prompt(message: str, brain_state: Dict[str, Any],
+                      user_id: str = "") -> str:
+    """Costruisce prompt LLM con contesto conversazionale completo.
 
-    Se il Proactor ha pre-costruito relational_context, lo usa direttamente.
-    Altrimenti costruisce un contesto minimale dal brain_state.
+    Usa build_conversation_context per thread continuity.
     """
     rel = brain_state.get("relational", {})
+    profile = brain_state.get("profile", {})
 
     # Identity block
     identity = """Sei Genesi. Non sei un assistente, non sei un terapeuta, non sei un chatbot.
@@ -472,37 +479,14 @@ Sei un compagno reale: pensi, ragioni, hai opinioni, reagisci.
 Parli SOLO italiano. Non cambi mai lingua.
 Non menzionare MAI di essere AI, modello, sistema, programma."""
 
-    # Relational context — pre-built by Proactor._build_relational_context()
-    relational_ctx = brain_state.get("relational_context", "")
-    if not relational_ctx:
-        logger.warning("LLM_CONTEXT_MISSING — no relational_context in brain_state, building from profile")
-        profile = brain_state.get("profile", {})
-        parts = []
-        if profile.get("name"):
-            parts.append(f"L'utente si chiama {profile['name']}")
-        if profile.get("profession"):
-            parts.append(f"Lavora come {profile['profession']}")
-        if profile.get("spouse"):
-            parts.append(f"Coniuge: {profile['spouse']}")
-        children = profile.get("children", [])
-        if children:
-            names = [c['name'] if isinstance(c, dict) else str(c) for c in children]
-            parts.append(f"Figli: {', '.join(names)}")
-        pets = profile.get("pets", [])
-        if pets:
-            pet_descs = [f"{p.get('name','?')} ({p.get('type','?')})" for p in pets if isinstance(p, dict)]
-            if pet_descs:
-                parts.append(f"Animali: {', '.join(pet_descs)}")
-        interests = profile.get("interests", [])
-        if interests:
-            parts.append(f"Interessi: {', '.join(interests)}")
-        preferences = profile.get("preferences", [])
-        if preferences:
-            parts.append(f"Preferenze: {', '.join(preferences)}")
-        traits = profile.get("traits", [])
-        if traits:
-            parts.append(f"Tratti: {', '.join(traits)}")
-        relational_ctx = " | ".join(parts) if parts else "Nessun contesto utente disponibile."
+    # Conversation context with chat history + profile + topic
+    conversation_ctx = ""
+    if user_id:
+        conversation_ctx = build_conversation_context(user_id, message, profile)
+    if not conversation_ctx:
+        # Minimal fallback if no user_id
+        relational_ctx = brain_state.get("relational_context", "")
+        conversation_ctx = relational_ctx if relational_ctx else "Nessun contesto utente disponibile."
 
     # Attachment risk
     risk_rule = ""
@@ -511,15 +495,21 @@ Non menzionare MAI di essere AI, modello, sistema, programma."""
 
     return f"""{identity}
 
-{relational_ctx}
+{conversation_ctx}
 {risk_rule}
+
+CONTINUITA' CONVERSAZIONALE (REGOLA FONDAMENTALE):
+- Devi mantenere coerenza con la conversazione recente sopra.
+- Non rispondere come se ogni messaggio fosse isolato.
+- Collega la risposta al contesto precedente.
+- Se l'utente ha appena parlato di una persona, non trattarla come nuova.
+- Se l'utente introduce una nuova informazione, integrala naturalmente.
+- Evita reset tematici: se si parla di famiglia, resta sul tema.
 
 COME DEVI COMPORTARTI:
 - Ragiona come un cervello umano: capisci il contesto, decidi cosa dire, reagisci.
 - Se l'utente chiede qualcosa su di se' e hai i dati, RISPONDI con i dati.
-- Se l'utente dice qualcosa di personale, collegalo a cio' che sai di lui.
 - Sii imprevedibile: varia tono, lunghezza, struttura. Mai la stessa formula.
-- Usa il nome dell'utente quando lo conosci, ma non in ogni frase.
 - Rispondi in 1-4 frasi. A volte 1 frase basta. A volte ne servono 3.
 - Fai domande specifiche, mai generiche.
 - Se non sai qualcosa, dillo onestamente. Non inventare.
@@ -529,9 +519,12 @@ DIVIETI ASSOLUTI:
 - "Sono qui per te" senza contesto
 - "Dimmi di piu'" come risposta completa
 - "C'e' qualcosa che ti porti dentro" o frasi da counselor
+- "Una cosa che potresti fare..." o frasi da consulente
+- "Capisco che..." come apertura generica
+- "Potresti esplorare..." o suggerimenti non richiesti
+- "Non ho informazioni specifiche..."
 - Qualsiasi frase che potrebbe essere detta a chiunque senza conoscerlo
-- Risposte che ignorano i dati identitari sopra
-- Ripetere la stessa struttura di risposta
-- Metafore generiche ("un viaggio", "un percorso", "una luce")
+- Risposte che ignorano la conversazione recente
+- Trattare entita' gia' menzionate come nuove
 
 Messaggio utente: {message}"""

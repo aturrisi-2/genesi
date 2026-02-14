@@ -22,7 +22,7 @@ from core.curiosity_engine import curiosity_engine
 from core.emotional_intensity_engine import emotional_intensity_engine
 from core.tool_services import tool_service
 from core.storage import storage
-from core.context_assembler import ContextAssembler
+from core.context_assembler import ContextAssembler, build_conversation_context
 from core.llm_service import llm_service, model_selector, LLM_DEFAULT_MODEL
 from core.fallback_knowledge import lookup_fallback
 from core.identity_service import handle_identity_question
@@ -308,7 +308,7 @@ class Proactor:
     async def _handle_relational(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
         """
         Pipeline relazionale con GPT controllato.
-        GPT riceve SOLO: short relational summary, latent_state sintetico, ultimo messaggio.
+        GPT riceve: conversation thread, identity summary, topic, latent state.
         GPT NON inventa memoria.
         """
         # 1. Context Assembler — structured context from memory
@@ -318,18 +318,20 @@ class Proactor:
         # Inject into brain_state for backward compatibility
         brain_state["relational_context"] = context["summary"]
         brain_state["assembled_context"] = context
-        logger.info("PROACTOR_CONTEXT_BUILT user=%s context_len=%d", user_id, len(context["summary"]))
 
-        # 2. Build short relational summary for GPT (controlled input)
-        short_summary = self._build_short_relational_summary(context)
+        # 2. Build conversation context with chat history + profile + topic
+        profile = context.get("profile", {})
+        conversation_ctx = build_conversation_context(user_id, message, profile)
+        logger.info("CONVERSATION_CONTEXT_BUILT user=%s len=%d", user_id, len(conversation_ctx))
+
         latent = brain_state.get("latent", {})
         latent_synopsis = (f"attachment={latent.get('attachment', 0):.2f} "
                            f"resonance={latent.get('emotional_resonance', 0):.2f} "
                            f"energy={latent.get('relational_energy', 0):.2f}")
 
-        # 3. GPT call with controlled prompt via llm_service (cost-optimized)
-        logger.info("PROACTOR_LLM_CALL user=%s route=relational context_len=%d", user_id, len(short_summary))
-        gpt_prompt = self._build_relational_gpt_prompt(short_summary, latent_synopsis, message)
+        # 3. GPT call with conversation-aware prompt
+        logger.info("PROACTOR_LLM_CALL user=%s route=relational context_len=%d", user_id, len(conversation_ctx))
+        gpt_prompt = self._build_relational_gpt_prompt(conversation_ctx, latent_synopsis, message)
 
         model = model_selector(message, route="relational")
         gpt_response = await llm_service._call_with_protection(
@@ -409,26 +411,33 @@ class Proactor:
             parts.append(f"Ultimo episodio: \"{last_ep.get('msg', '')[:60]}\"")
         return " | ".join(parts)
 
-    def _build_relational_gpt_prompt(self, short_summary: str, latent_synopsis: str, message: str) -> str:
-        """Prompt GPT per relational router. Contesto completo, comportamento umano."""
+    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str) -> str:
+        """Prompt GPT per relational router. Conversazione continua, comportamento umano."""
         return f"""Sei Genesi. Non sei un assistente, non sei un terapeuta, non sei un chatbot.
 Sei un compagno reale: pensi, ragioni, hai opinioni, reagisci.
 Parli SOLO italiano. Non cambi mai lingua.
 Non menzionare MAI di essere AI, modello, sistema, programma.
 
-IDENTITA' UTENTE MEMORIZZATA (DEVI usare questi dati quando rispondi):
-{short_summary}
+{conversation_context}
 
 STATO LATENTE: {latent_synopsis}
+
+CONTINUITA' CONVERSAZIONALE (REGOLA FONDAMENTALE):
+- Devi mantenere coerenza con la conversazione recente sopra.
+- Non rispondere come se ogni messaggio fosse isolato.
+- Collega la risposta al contesto precedente.
+- Se l'utente ha appena parlato di una persona (es. Rita), non trattarla come nuova.
+- Se l'utente introduce una nuova informazione, integrala naturalmente.
+- Se fai riferimento alla memoria, fallo in modo umano e non meccanico.
+- Evita reset tematici: se si parla di famiglia, resta sul tema.
 
 COME DEVI COMPORTARTI:
 - Ragiona come un cervello umano: capisci il contesto, decidi cosa dire, reagisci.
 - Se l'utente chiede qualcosa su di se' e hai i dati, RISPONDI con i dati.
-- Se l'utente dice qualcosa di personale, collegalo a cio' che sai di lui.
 - Sii imprevedibile: varia tono, lunghezza, struttura. Mai la stessa formula.
 - Usa il nome dell'utente quando lo conosci, ma non in ogni frase.
 - Rispondi in 1-4 frasi. A volte 1 frase basta. A volte ne servono 3.
-- Fai domande specifiche, mai generiche. "Come sta Rio?" non "Dimmi di piu'".
+- Fai domande specifiche, mai generiche. "Come sta Rita?" non "Dimmi di piu'".
 - Se non sai qualcosa, dillo onestamente. Non inventare.
 
 DIVIETI ASSOLUTI:
@@ -436,9 +445,14 @@ DIVIETI ASSOLUTI:
 - "Sono qui per te" senza contesto
 - "Dimmi di piu'" come risposta completa
 - "C'e' qualcosa che ti porti dentro" o frasi da counselor
+- "Una cosa che potresti fare..." o frasi da consulente
+- "Capisco che..." come apertura generica
+- "Potresti esplorare..." o suggerimenti non richiesti
+- "Non ho informazioni specifiche..." 
 - Qualsiasi frase che potrebbe essere detta a chiunque senza conoscerlo
-- Risposte che ignorano i dati identitari sopra
+- Risposte che ignorano la conversazione recente
 - Ripetere la stessa struttura di risposta
+- Trattare entita' gia' menzionate come nuove ("Chi e' Rita?" se Rita e' gia' nota)
 
 Messaggio utente: {message}"""
 
