@@ -12,6 +12,7 @@ from core.simple_chat import simple_chat_handler
 from core.user_manager import user_manager
 from core.chat_memory import chat_memory
 from core.log import log
+from core.cognitive_memory_engine import CognitiveMemoryEngine
 
 router = APIRouter(prefix="/chat")
 
@@ -27,32 +28,31 @@ class ChatResponse(BaseModel):
 
 @router.post("/", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
-    """
-    Chat endpoint - 1 intent → 1 funzione con user_id reale obbligatorio
-    
-    Args:
-        request: Chat request con messaggio e user_id
-        
-    Returns:
-        Risposta diretta senza orchestrazione
-    """
     try:
-        # Enforce user_id reale - nessun fallback
         if not request.user_id:
             raise ValueError("Chat endpoint received empty user_id")
-        
-        # Log request con user_id reale
+
         log("API_CHAT", message=request.message[:100], user_id=request.user_id)
-        
-        # 1 intent → 1 funzione con memory
+
+        # Cognitive Memory Evaluation
+        cognitive_engine = CognitiveMemoryEngine()
+        decision = cognitive_engine.evaluate_event(request.user_id, request.message, {})
+
+        if decision['persist']:
+            # Update memory via cognitive engine
+            # cognitive_engine.update_user_memory(...)  # Placeholder for actual update logic
+            log("COGNITIVE_DECISION", user_id=request.user_id, persist=True, type=decision['memory_type'], confidence=decision['confidence'])
+        else:
+            log("COGNITIVE_DECISION", user_id=request.user_id, persist=False, reason="low_relevance")
+
         response = await simple_chat_handler(request.message, request.user_id)
-        
+
         return ChatResponse(
             response=response,
             status="ok",
             user_id=request.user_id
         )
-        
+
     except Exception as e:
         log("API_CHAT_ERROR", error=str(e), user_id=request.user_id or "unknown")
         raise HTTPException(status_code=500, detail="Chat error")

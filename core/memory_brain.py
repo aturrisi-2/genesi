@@ -438,16 +438,7 @@ class SemanticLayer:
         return extracted
 
     async def get_profile(self, user_id: str) -> Dict[str, Any]:
-        profile = await storage.load(f"long_term_profile:{user_id}", default=None)
-        if profile and isinstance(profile, dict):
-            return profile
-        return {
-            "name": None, "age": None, "city": None, "profession": None,
-            "traits": [], "entities": {}, "emotional_patterns": [],
-            "patterns": [],
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat()
-        }
+        return {}
 
     async def _save_profile(self, user_id: str, profile: Dict[str, Any]) -> bool:
         profile["updated_at"] = datetime.now().isoformat()

@@ -122,7 +122,7 @@ class SemanticMemory:
         """
         try:
             # Usa API unificata load
-            profile_data = await storage.load(f"long_term_profile:{user_id}", default=None)
+            profile_data = None
             log("PROFILE_AFTER_LOAD", user_id=user_id, profile=profile_data)
             if profile_data:
                 return profile_data

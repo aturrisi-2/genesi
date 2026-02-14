@@ -19,19 +19,19 @@ memory_engine_v2.update_relational(user_id, "spouse", "Elena")
 # Test cognitive evaluation
 def test_cognitive_memory():
     # Test name persistence
-    assert cognitive_engine.evaluate_event(user_id, "Mi chiamo Marco", {}) == True, "Name should persist"
+    assert cognitive_engine.evaluate_event(user_id, "Mi chiamo Marco", {})['persist'] == True, "Name should persist"
 
     # Test random comment non-persistence
-    assert cognitive_engine.evaluate_event(user_id, "Commento casuale", {}) == False, "Random comment should not persist"
+    assert cognitive_engine.evaluate_event(user_id, "Commento casuale", {})['persist'] == False, "Random comment should not persist"
 
     # Test relation persistence
-    assert cognitive_engine.evaluate_event(user_id, "Mia moglie si chiama Elena", {}) == True, "Relation should persist"
+    assert cognitive_engine.evaluate_event(user_id, "Mia moglie si chiama Elena", {})['persist'] == True, "Relation should persist"
 
     # Test profession contradiction
-    assert cognitive_engine.evaluate_event(user_id, "Sono un Ingegnere", {}) == True, "Profession contradiction should update"
+    assert cognitive_engine.evaluate_event(user_id, "Sono un Ingegnere", {})['persist'] == True, "Profession contradiction should update"
 
     # Test strong emotional event persistence
-    assert cognitive_engine.evaluate_event(user_id, "Mi sento molto triste", {}) == True, "Strong emotional event should persist"
+    assert cognitive_engine.evaluate_event(user_id, "Mi sento molto triste", {})['persist'] == True, "Strong emotional event should persist"
 
     print("\n✅ COGNITIVE MEMORY TEST PASSED")
 
