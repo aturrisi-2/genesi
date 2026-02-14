@@ -11,6 +11,7 @@ from core.cognitive_memory_engine import CognitiveMemoryEngine
 from core.storage import storage
 from core.chat_memory import chat_memory
 from core.document_memory import load_document
+from core.document_selector import resolve_documents
 
 logger = logging.getLogger(__name__)
 
@@ -266,6 +267,7 @@ _DOCUMENT_TRIGGERS = [
     "leggi", "analizza", "contenuto", "testo", "pdf",
     "screenshot", "schermata", "allegato",
     "cosa vedi", "cosa si vede", "descrivi", "estrai",
+    "confronta", "compara", "differenze", "confronto",
 ]
 
 
@@ -275,45 +277,68 @@ def is_document_reference(message: str) -> bool:
     return any(trigger in msg_lower for trigger in _DOCUMENT_TRIGGERS)
 
 
-def _inject_document_context(user_id: str, message: str,
-                              profile: Dict[str, Any]) -> str:
-    """
-    If user has an active document and message references it,
-    inject document content into LLM context.
-    """
-    doc_id = profile.get("active_document_id")
-    if not doc_id:
-        return ""
-
-    if not is_document_reference(message):
-        return ""
-
-    doc = load_document(doc_id)
-    if not doc:
-        logger.warning("DOCUMENT_CONTEXT_MISSING doc_id=%s user_id=%s", doc_id, user_id)
-        return ""
-
-    # Build content section: summary + first 2000 chars for large docs
+def _format_doc_block(doc: Dict[str, Any]) -> str:
+    """Format a single document as a [DOCUMENT_CONTEXT] block (max 2000 chars content)."""
     raw_content = doc.get("content", "")
     summary = doc.get("summary", "")
 
-    if len(raw_content) > 4000 and summary:
+    if len(raw_content) > 2000 and summary:
         content_section = (f"RIASSUNTO:\n{summary}\n\n"
                            f"PRIMI 2000 CARATTERI:\n{raw_content[:2000]}")
-    elif len(raw_content) > 4000:
-        content_section = raw_content[:4000] + "\n[...contenuto troncato...]"
+    elif len(raw_content) > 2000:
+        content_section = raw_content[:2000] + "\n[...contenuto troncato...]"
     else:
         content_section = raw_content
-
-    logger.info("DOCUMENT_CONTEXT_INJECTED doc_id=%s type=%s chars=%d",
-                doc_id, doc.get("type"), len(content_section))
 
     return (f"[DOCUMENT_CONTEXT]\n"
             f"filename: {doc.get('filename', '?')}\n"
             f"type: {doc.get('type', '?')}\n"
             f"content:\n<<<\n{content_section}\n>>>\n"
-            f"[/DOCUMENT_CONTEXT]\n"
-            f"ISTRUZIONE: L'utente si riferisce a questo documento. "
-            f"Rispondi usando il contenuto del documento sopra. "
-            f"NON dire che non hai accesso al file. HAI il contenuto. "
-            f"NON rispondere con frasi generiche. USA i dati del documento.")
+            f"[/DOCUMENT_CONTEXT]")
+
+
+def _inject_document_context(user_id: str, message: str,
+                              profile: Dict[str, Any]) -> str:
+    """
+    If user has active documents and message references them,
+    select relevant docs and inject their content into LLM context.
+    Supports multi-document (max 2 per query).
+    """
+    # Support both new active_documents list and legacy active_document_id
+    active_docs = profile.get("active_documents", [])
+    if not active_docs:
+        old_id = profile.get("active_document_id")
+        if old_id:
+            active_docs = [old_id]
+
+    if not active_docs:
+        return ""
+
+    if not is_document_reference(message):
+        return ""
+
+    # Use document selector to pick relevant docs
+    selected = resolve_documents(message, user_id, active_docs)
+    if not selected:
+        return ""
+
+    # Build context blocks
+    blocks = []
+    for doc in selected:
+        blocks.append(_format_doc_block(doc))
+        logger.info("DOCUMENT_CONTEXT_INJECTED doc_id=%s type=%s",
+                    doc.get("doc_id"), doc.get("type"))
+
+    doc_count = len(selected)
+    instruction = (
+        f"ISTRUZIONE: L'utente si riferisce a {'questi documenti' if doc_count > 1 else 'questo documento'}. "
+        f"Rispondi usando il contenuto {'dei documenti' if doc_count > 1 else 'del documento'} sopra. "
+        f"NON dire che non hai accesso al file. HAI il contenuto. "
+        f"NON rispondere con frasi generiche. USA i dati {'dei documenti' if doc_count > 1 else 'del documento'}."
+    )
+    if doc_count > 1:
+        instruction += (
+            " Se l'utente chiede un confronto, analizza le differenze e similitudini tra i documenti."
+        )
+
+    return "\n\n".join(blocks) + "\n\n" + instruction

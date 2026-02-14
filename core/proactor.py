@@ -172,9 +172,13 @@ class Proactor:
                     enriched_msg = f"notizie {resolved_topic}"
                     return await self._handle_tool("news", enriched_msg, user_id)
 
-            # STEP 2.7: DOCUMENT MODE — override to document_query if active doc + reference
-            if profile.get("active_document_id") and is_document_reference(message):
-                logger.info("DOCUMENT_MODE_TRIGGERED user=%s doc_id=%s", user_id, profile["active_document_id"])
+            # STEP 2.7: DOCUMENT MODE — override to document_query if active docs + reference
+            active_docs = profile.get("active_documents", [])
+            # Backward compat: migrate old active_document_id
+            if not active_docs and profile.get("active_document_id"):
+                active_docs = [profile["active_document_id"]]
+            if active_docs and is_document_reference(message):
+                logger.info("DOCUMENT_MODE_TRIGGERED user=%s doc_count=%d", user_id, len(active_docs))
                 return await self._handle_document_query(user_id, message, profile, brain_state)
 
             # STEP 3: INTENT CLASSIFICATION
@@ -607,19 +611,20 @@ Domanda: {message}"""
         conversation_ctx = build_conversation_context(user_id, message, profile)
         logger.info("PROACTOR_LLM_CALL user=%s route=document_query ctx_len=%d", user_id, len(conversation_ctx))
 
-        doc_prompt = f"""Sei Genesi. L'utente ha caricato un documento e ti sta chiedendo qualcosa su di esso.
+        doc_prompt = f"""Sei Genesi. L'utente ha caricato uno o più documenti e ti sta chiedendo qualcosa su di essi.
 
 {conversation_ctx}
 
 REGOLE DOCUMENTO:
-- Rispondi SOLO usando il contenuto del documento fornito sopra in [DOCUMENT_CONTEXT].
+- Rispondi SOLO usando il contenuto dei documenti forniti sopra in [DOCUMENT_CONTEXT].
 - Se l'utente chiede di riassumere, riassumi il documento.
 - Se l'utente chiede di trascrivere, riporta il testo del documento.
 - Se l'utente chiede di estrarre dati, estrai i dati rilevanti.
 - Se l'utente chiede di analizzare, analizza il contenuto.
+- Se l'utente chiede di confrontare, analizza differenze e similitudini tra i documenti.
 - NON dire MAI "non ho accesso al file" o "non posso vedere il documento".
-- NON dare risposte generiche. HAI il contenuto del documento.
-- NON inventare dati che non sono nel documento.
+- NON dare risposte generiche. HAI il contenuto dei documenti.
+- NON inventare dati che non sono nei documenti.
 - Rispondi in italiano, in modo chiaro e preciso.
 - Se il documento contiene poco testo, riportalo integralmente.
 
@@ -634,11 +639,14 @@ Messaggio utente: {message}"""
             logger.warning("DOCUMENT_QUERY_LLM_FAIL user=%s", user_id)
             # Deterministic fallback using document content directly
             from core.document_memory import load_document
-            doc_id = profile.get("active_document_id", "")
-            doc = load_document(doc_id) if doc_id else None
-            if doc and doc.get("content"):
-                content = doc["content"][:2000]
-                result = f"Ecco il contenuto del documento '{doc.get('filename', 'file')}':\n\n{content}"
+            from core.document_selector import resolve_documents
+            active_docs = profile.get("active_documents", [])
+            if not active_docs and profile.get("active_document_id"):
+                active_docs = [profile["active_document_id"]]
+            selected = resolve_documents(message, user_id, active_docs) if active_docs else []
+            if selected and selected[0].get("content"):
+                content = selected[0]["content"][:2000]
+                result = f"Ecco il contenuto del documento '{selected[0].get('filename', 'file')}':\n\n{content}"
             else:
                 result = "Il documento è stato caricato ma non riesco a elaborarlo in questo momento."
 
