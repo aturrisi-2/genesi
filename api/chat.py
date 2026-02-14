@@ -65,7 +65,7 @@ async def chat_endpoint(request: ChatRequest):
                         pet = Pet(**val) if isinstance(val, dict) else val
                         profile.pets.append(pet)
 
-                await storage.save(f"profile:{request.user_id}", profile.model_dump())
+                await storage.save(f"profile:{request.user_id}", profile.model_dump(mode="json"))
                 log("STORAGE_SAVE", key=f"profile:{request.user_id}")
 
         response = await simple_chat_handler(request.message, request.user_id)

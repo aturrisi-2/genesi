@@ -11,7 +11,7 @@ def test_profile_serialization_integrity(tmp_path):
         children=[Child(name="Ennio"), Child(name="Zoe")]
     )
 
-    data = profile.model_dump()
+    data = profile.model_dump(mode="json")
 
     # Must serialize
     json_string = json.dumps(data)
