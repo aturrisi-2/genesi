@@ -15,4 +15,7 @@ class UserProfile(BaseModel):
     spouse: Optional[str] = None
     pets: List[Pet] = Field(default_factory=list)
     children: List[Child] = Field(default_factory=list)
+    interests: List[str] = Field(default_factory=list)
+    preferences: List[str] = Field(default_factory=list)
+    traits: List[str] = Field(default_factory=list)
     updated_at: Optional[datetime] = None

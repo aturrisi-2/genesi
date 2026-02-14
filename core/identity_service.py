@@ -86,6 +86,24 @@ async def handle_identity_question(user_id: str, message: str) -> str:
             response = f"I tuoi figli si chiamano {', '.join(names)}."
         else:
             response = "Non me lo hai ancora detto."
+    elif "che musica mi piace" in msg_lower or "quali sono i miei interessi" in msg_lower:
+        interests = profile.interests
+        if interests:
+            response = f"Ti piace {', '.join(interests)}."
+        else:
+            response = "Non me lo hai ancora detto."
+    elif "quali sono le mie preferenze" in msg_lower:
+        preferences = profile.preferences
+        if preferences:
+            response = f"Le tue preferenze sono: {', '.join(preferences)}."
+        else:
+            response = "Non me lo hai ancora detto."
+    elif "come sono" in msg_lower or "che tipo di persona sono" in msg_lower:
+        traits = profile.traits
+        if traits:
+            response = f"Sei una persona {', '.join(traits)}."
+        else:
+            response = "Non me lo hai ancora detto."
     else:
         response = None
 

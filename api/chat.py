@@ -16,6 +16,8 @@ from core.cognitive_memory_engine import CognitiveMemoryEngine
 from core.storage import storage
 from core.models.profile_model import UserProfile, Pet, Child
 from core.identity_service import normalize_profile_dict
+from core.identity_extractor import extract_identity_updates, merge_identity_update
+from datetime import datetime
 
 router = APIRouter(prefix="/chat")
 
@@ -41,12 +43,15 @@ async def chat_endpoint(request: ChatRequest):
         cognitive_engine = CognitiveMemoryEngine()
         decision = await cognitive_engine.evaluate_event(request.user_id, request.message, {})
 
+        # Load profile once for all updates
+        raw_profile = await storage.load(f"profile:{request.user_id}", default={})
+        normalized = normalize_profile_dict(raw_profile)
+        profile = UserProfile(**normalized)
+        profile_changed = False
+
+        # Cognitive memory: explicit identity fields
         if decision['persist']:
             if decision['memory_type'] == 'profile':
-                raw_profile = await storage.load(f"profile:{request.user_id}", default={})
-                normalized = normalize_profile_dict(raw_profile)
-                profile = UserProfile(**normalized)
-
                 key = decision['key']
                 val = decision['value']
 
@@ -65,8 +70,19 @@ async def chat_endpoint(request: ChatRequest):
                         pet = Pet(**val) if isinstance(val, dict) else val
                         profile.pets.append(pet)
 
-                await storage.save(f"profile:{request.user_id}", profile.model_dump(mode="json"))
-                log("STORAGE_SAVE", key=f"profile:{request.user_id}")
+                profile_changed = True
+
+        # Identity extractor: stable interests, preferences, traits
+        identity_update = await extract_identity_updates(request.message)
+        if identity_update.interests or identity_update.preferences or identity_update.traits:
+            merge_identity_update(profile, identity_update)
+            profile_changed = True
+
+        # Save profile if any update occurred
+        if profile_changed:
+            profile.updated_at = datetime.utcnow()
+            await storage.save(f"profile:{request.user_id}", profile.model_dump(mode="json"))
+            log("STORAGE_SAVE", key=f"profile:{request.user_id}")
 
         response = await simple_chat_handler(request.message, request.user_id)
 
