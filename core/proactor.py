@@ -138,7 +138,7 @@ class Proactor:
                         len(brain_state.get('episodes', [])))
 
             # Load the profile from persistent storage
-            profile = await storage.load(f"long_term_profile:{user_id}", default={})
+            profile = await storage.load(f"profile:{user_id}", default={})
             logger.info("PROFILE_LOADED user_id=%s", user_id)
 
             # Use the profile in the context assembly

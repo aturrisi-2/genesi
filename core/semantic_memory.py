@@ -122,7 +122,7 @@ class SemanticMemory:
         """
         try:
             # Usa API unificata load
-            profile_data = None
+            profile_data = await storage.load(f"profile:{user_id}", default={})
             log("PROFILE_AFTER_LOAD", user_id=user_id, profile=profile_data)
             if profile_data:
                 return profile_data
@@ -149,18 +149,16 @@ class SemanticMemory:
         Args:
             user_id: ID utente
             profile: Profilo da salvare
-            
+        
         Returns:
             Successo salvataggio
         """
         try:
             profile["updated_at"] = datetime.now().isoformat()
             # Usa API unificata save
-            pass
-            
+            await storage.save(f"profile:{user_id}", profile)
             log("PROFILE_PERSISTED", user_id=user_id, fields=list(profile.keys()))
             return True
-            
         except Exception as e:
             log("SEMANTIC_MEMORY_SAVE_ERROR", error=str(e), user_id=user_id)
             return False
@@ -184,7 +182,7 @@ class SemanticMemory:
         Args:
             user_id: ID utente
             profile: Profilo da salvare
-            
+        
         Returns:
             Successo salvataggio
         """
@@ -229,7 +227,7 @@ class SemanticMemory:
         
         Args:
             user_id: ID utente
-            
+        
         Returns:
             Riepilogo memoria
         """
@@ -247,7 +245,6 @@ class SemanticMemory:
                 "created_at": profile.get("created_at"),
                 "updated_at": profile.get("updated_at")
             }
-            
         except Exception as e:
             log("MEMORY_SUMMARY_ERROR", error=str(e), user_id=user_id)
             return {}

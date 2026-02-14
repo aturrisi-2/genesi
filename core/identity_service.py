@@ -11,7 +11,7 @@ async def handle_identity_question(user_id: str, message: str) -> str:
     logger.info("IDENTITY_ROUTE_ENTER user=%s", user_id)
 
     # Load profile directly from storage
-    profile = {}
+    profile = await storage.load(f"profile:{user_id}", default={})
     logger.info("IDENTITY_PROFILE_LOADED user=%s profile=%s", user_id, profile)
 
     if not profile.get("profession"):

@@ -724,7 +724,7 @@ class MemoryBrain:
     def __init__(self):
         self.episodic = EpisodicLayer()
         self.relational = RelationalLayer()
-        self.semantic = SemanticLayer()
+        self.semantic = SemanticMemory()
         self.consolidation = ConsolidationEngine()
         self.linking = ExperienceLinking()
         self.emotion_analyzer = LocalEmotionAnalyzer()

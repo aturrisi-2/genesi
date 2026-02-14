@@ -35,7 +35,7 @@ class ContextAssembler:
             RuntimeError se il summary risulta vuoto dopo l'assemblaggio.
         """
         # Load from persistent storage
-        profile = await storage.load(f"long_term_profile:{user_id}", default={})
+        profile = await storage.load(f"profile:{user_id}", default={})
 
         logger.info("CONTEXT_ASSEMBLER_LOADED user=%s", user_id)
 

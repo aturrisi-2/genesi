@@ -27,11 +27,11 @@ class CognitiveMemoryEngine:
             logger.info("COGNITIVE_EVAL type=identity field=%s confidence=0.9", field)
             logger.info("COGNITIVE_DECISION persist=true")
             logger.info("COGNITIVE_MEMORY_UPDATE field=%s value=%s", field, value)
-            # Save to persistent storage
-            profile = await storage.load(f"long_term_profile:{user_id}", default={})
+            # Save to unified profile namespace
+            profile = await storage.load(f"profile:{user_id}", default={})
             profile[field] = value
-            await storage.save(f"long_term_profile:{user_id}", profile)
-            logger.info("STORAGE_SAVE key=long_term_profile:%s field=%s", user_id, field)
+            await storage.save(f"profile:{user_id}", profile)
+            logger.info("STORAGE_SAVE key=profile:%s field=%s", user_id, field)
         else:
             persist = False
             logger.info("COGNITIVE_DECISION persist=false reason=low_relevance")
