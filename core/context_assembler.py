@@ -10,14 +10,13 @@ from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
+memory_engine_v2 = None
 try:
     from core.memory_engine_v2 import MemoryEngineV2
-    memory_v2 = MemoryEngineV2()
+    memory_engine_v2 = MemoryEngineV2()
     logger.info("MEMORY_V2_ACTIVE")
-except ImportError:
-    memory_v2 = None
-    logger.error("MEMORY_V2_IMPORT_FAILED")
-
+except Exception as e:
+    logger.error("MEMORY_V2_IMPORT_FAILED: %s", str(e))
 
 class ContextAssembler:
     """
@@ -55,14 +54,13 @@ class ContextAssembler:
         brain_state = await self.memory_brain.update_brain(user_id, user_message)
         context['brain_state'] = brain_state
 
-        if memory_v2:
+        if memory_engine_v2:
             try:
-                structured_memory = memory_v2.load_user_memory(user_id)
+                structured_memory = memory_engine_v2.load_user_memory(user_id)
                 if structured_memory:
                     context['memory_v2'] = structured_memory
                     logger.info("MEMORY_V2_RETRIEVED user_id=%s", user_id)
 
-                    # Inject memory_v2 into LLM prompt
                     context['llm_prompt'] = self._build_llm_prompt(brain_state, structured_memory)
                 else:
                     logger.info("MEMORY_V2_EMPTY user_id=%s", user_id)
