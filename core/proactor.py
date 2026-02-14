@@ -137,6 +137,14 @@ class Proactor:
                         brain_state.get('relational', {}).get('trust', 0),
                         len(brain_state.get('episodes', [])))
 
+            # Load the profile from persistent storage
+            profile = await storage.load(f"long_term_profile:{user_id}", default={})
+            logger.info("PROFILE_LOADED user_id=%s", user_id)
+
+            # Use the profile in the context assembly
+            context = await self.context_assembler.build(user_id, message)
+            context['profile'] = profile
+
             # STEP 3: INTENT CLASSIFICATION
             if intent is None:
                 intent = await intent_classifier.classify(message)

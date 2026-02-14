@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List, Tuple
 from collections import Counter, defaultdict
 from core.storage import storage
+from core.semantic_memory import SemanticMemory
 
 logger = logging.getLogger(__name__)
 
@@ -385,7 +386,7 @@ class SemanticLayer:
 
     async def extract_and_store(self, user_id: str, message: str) -> Dict[str, Any]:
         """Estrae dati personali e entità dal messaggio, salva nel profilo."""
-        profile = await self.get_profile(user_id)
+        profile = await self.get_user_profile(user_id)
         extracted = {}
 
         # Standard fields
@@ -433,30 +434,30 @@ class SemanticLayer:
             profile["entities"] = entities
 
         if extracted:
-            await self._save_profile(user_id, profile)
+            await self.save_user_profile(user_id, profile)
 
         return extracted
 
-    async def get_profile(self, user_id: str) -> Dict[str, Any]:
-        return {}
+    async def get_user_profile(self, user_id: str) -> Dict[str, Any]:
+        return await storage.load(f"profile:{user_id}", default={})
 
-    async def _save_profile(self, user_id: str, profile: Dict[str, Any]) -> bool:
+    async def save_user_profile(self, user_id: str, profile: Dict[str, Any]) -> bool:
         profile["updated_at"] = datetime.now().isoformat()
         logger.info("PROFILE_BEFORE_SAVE user=%s profile=%s", user_id, profile)
-        return True
+        return await storage.save(f"profile:{user_id}", profile)
 
     async def update_emotional_pattern(self, user_id: str, emotion: str, intensity: float):
-        profile = await self.get_profile(user_id)
+        profile = await self.get_user_profile(user_id)
         patterns = profile.get("emotional_patterns", [])
         patterns.append({"emotion": emotion, "intensity": intensity, "ts": datetime.now().isoformat()})
         if len(patterns) > 50:
             patterns = patterns[-50:]
         profile["emotional_patterns"] = patterns
-        await self._save_profile(user_id, profile)
+        await self.save_user_profile(user_id, profile)
 
     async def get_entity_weight(self, user_id: str, entity_name: str) -> float:
         """Peso semantico di un'entità basato su menzioni."""
-        profile = await self.get_profile(user_id)
+        profile = await self.get_user_profile(user_id)
         entities = profile.get("entities", {})
         for role, data in entities.items():
             if data.get("name", "").lower() == entity_name.lower():
@@ -496,7 +497,7 @@ class ConsolidationEngine:
 
         # Update semantic profile
         semantic = SemanticLayer()
-        profile = await semantic.get_profile(user_id)
+        profile = await semantic.get_user_profile(user_id)
 
         existing_pattern_keys = {(p.get("type"), p.get("key", "")) for p in profile.get("patterns", [])}
         new_patterns = [p for p in patterns if (p["type"], p.get("key", "")) not in existing_pattern_keys]
@@ -514,7 +515,7 @@ class ConsolidationEngine:
         profile.setdefault("traits", []).extend(new_traits)
 
         profile["last_consolidation"] = datetime.now().isoformat()
-        await semantic._save_profile(user_id, profile)
+        await semantic.save_user_profile(user_id, profile)
 
         # Mark consolidated
         batch_ids = {e["id"] for e in batch}
@@ -619,7 +620,7 @@ class ExperienceLinking:
     async def update_entity_weight(self, user_id: str, message: str):
         """Incrementa peso entità menzionate nel messaggio."""
         semantic = SemanticLayer()
-        profile = await semantic.get_profile(user_id)
+        profile = await semantic.get_user_profile(user_id)
         entities = profile.get("entities", {})
         msg_lower = message.lower()
         updated = False
@@ -633,7 +634,7 @@ class ExperienceLinking:
 
         if updated:
             profile["entities"] = entities
-            await semantic._save_profile(user_id, profile)
+            await semantic.save_user_profile(user_id, profile)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -733,7 +734,7 @@ class MemoryBrain:
         """
         Aggiorna il profilo cerebrale dell'utente con le informazioni fornite.
         """
-        profile = await self.semantic.get_profile(user_id)
+        profile = await self.semantic.get_user_profile(user_id)
         msg_lower = message.lower().strip()
 
         # Estrarre nome
@@ -757,12 +758,12 @@ class MemoryBrain:
         logger.info("PROFILE_BEFORE_SAVE user=%s name=%s city=%s profession=%s", user_id, profile.get("name"), profile.get("city"), profile.get("profession"))
 
         # Aggiornare il profilo
-        await self.semantic._save_profile(user_id, profile)
+        await self.semantic.save_user_profile(user_id, profile)
         logger.info("PROFILE_AFTER_SAVE user=%s name=%s city=%s profession=%s", user_id, profile.get("name"), profile.get("city"), profile.get("profession"))
 
     async def recall_for_response(self, user_id: str, message: str) -> Dict[str, Any]:
         """Recall completo per generazione risposta (senza update)."""
-        profile = await self.semantic.get_profile(user_id)
+        profile = await self.semantic.get_user_profile(user_id)
         rel_state = await self.relational.load(user_id)
         episodes = await self.episodic.recall(user_id, query=message, limit=5)
 
