@@ -51,32 +51,37 @@ async def handle_identity_question(user_id: str, message: str) -> str:
     logger.info("IDENTITY_PROFILE_SNAPSHOT user=%s profile=%s", user_id, profile)
 
     # Determine response based on message
-    if "come mi chiamo" in msg_lower:
+    if any(kw in msg_lower for kw in ["come mi chiamo", "quale è il mio nome", "quale e' il mio nome",
+                                        "qual è il mio nome", "qual e' il mio nome"]):
         name = profile.name
         if name:
             response = f"Ti chiami {name.strip().title()}."
         else:
             response = "Non me lo hai ancora detto."
-    elif "che lavoro faccio" in msg_lower:
+    elif "che lavoro faccio" in msg_lower or "cosa faccio" in msg_lower:
         profession = profile.profession
         if profession:
             response = f"Sei un {profession.strip().lower()}."
         else:
             response = "Non me lo hai ancora detto."
-    elif "come si chiama mia moglie" in msg_lower:
+    elif "come si chiama mia moglie" in msg_lower or "come si chiama mio marito" in msg_lower:
         spouse = profile.spouse
         if spouse:
-            response = f"Tua moglie si chiama {spouse.strip().title()}."
+            response = f"Il tuo coniuge si chiama {spouse.strip().title()}."
         else:
             response = "Non me lo hai ancora detto."
     elif "come si chiama il mio cane" in msg_lower:
         pets = profile.pets
-        dog = next(
-            (pet for pet in pets if pet.type == "dog"),
-            None
-        )
+        dog = next((pet for pet in pets if pet.type == "dog"), None)
         if dog:
             response = f"Il tuo cane si chiama {dog.name.strip().title()}."
+        else:
+            response = "Non me lo hai ancora detto."
+    elif "come si chiama la mia gatta" in msg_lower:
+        pets = profile.pets
+        cat = next((pet for pet in pets if pet.type == "cat"), None)
+        if cat:
+            response = f"La tua gatta si chiama {cat.name.strip().title()}."
         else:
             response = "Non me lo hai ancora detto."
     elif "come si chiamano i miei figli" in msg_lower:
@@ -86,10 +91,11 @@ async def handle_identity_question(user_id: str, message: str) -> str:
             response = f"I tuoi figli si chiamano {', '.join(names)}."
         else:
             response = "Non me lo hai ancora detto."
-    elif "che musica mi piace" in msg_lower or "quali sono i miei interessi" in msg_lower:
+    elif any(kw in msg_lower for kw in ["cosa mi piace", "che musica mi piace",
+                                          "quali sono i miei interessi", "quale frutto mi piace"]):
         interests = profile.interests
         if interests:
-            response = f"Ti piace {', '.join(interests)}."
+            response = f"Ti piace: {', '.join(interests)}."
         else:
             response = "Non me lo hai ancora detto."
     elif "quali sono le mie preferenze" in msg_lower:
@@ -104,8 +110,37 @@ async def handle_identity_question(user_id: str, message: str) -> str:
             response = f"Sei una persona {', '.join(traits)}."
         else:
             response = "Non me lo hai ancora detto."
+    elif any(kw in msg_lower for kw in ["chi sono", "cosa sai di me"]):
+        response = _build_full_identity_summary(profile)
     else:
         response = None
 
     logger.info("IDENTITY_RESPONSE user=%s response=%s", user_id, response)
     return response
+
+
+def _build_full_identity_summary(profile) -> str:
+    """Build a complete identity summary from all known profile fields."""
+    facts = []
+    if profile.name:
+        facts.append(f"ti chiami {profile.name.strip().title()}")
+    if profile.profession:
+        facts.append(f"lavori come {profile.profession.strip().lower()}")
+    if profile.spouse:
+        facts.append(f"il tuo coniuge si chiama {profile.spouse.strip().title()}")
+    if profile.children:
+        names = [c.name for c in profile.children]
+        facts.append(f"i tuoi figli si chiamano {', '.join(names)}")
+    if profile.pets:
+        pet_descs = [f"{p.name} ({p.type})" for p in profile.pets]
+        facts.append(f"hai {', '.join(pet_descs)}")
+    if profile.interests:
+        facts.append(f"ti piace: {', '.join(profile.interests)}")
+    if profile.preferences:
+        facts.append(f"le tue preferenze sono: {', '.join(profile.preferences)}")
+    if profile.traits:
+        facts.append(f"sei una persona {', '.join(profile.traits)}")
+
+    if facts:
+        return f"Ecco cosa so di te: {', '.join(facts)}."
+    return "Non so ancora molto di te. Raccontami qualcosa."

@@ -733,34 +733,12 @@ class MemoryBrain:
 
     async def update_brain(self, user_id: str, message: str) -> None:
         """
-        Aggiorna il profilo cerebrale dell'utente con le informazioni fornite.
+        Aggiorna stato cerebrale (episodic, relational, emotion).
+        NON salva il profilo — la persistenza profilo e' gestita esclusivamente
+        da api/chat.py via UserProfile.model_dump(mode='json').
         """
         profile = await self.semantic.get_user_profile(user_id)
-        msg_lower = message.lower().strip()
-
-        # Estrarre nome
-        name_match = re.search(r"mi chiamo ([\w']+)", msg_lower)
-        if name_match:
-            name = name_match.group(1)
-            profile["name"] = name
-
-        # Estrarre città
-        city_match = re.search(r"(?:vivo a|abito a) ([\w']+)", msg_lower)
-        if city_match:
-            city = city_match.group(1)
-            profile["city"] = city
-
-        # Estrarre professione
-        profession_match = re.search(r"(?:faccio (?:il|la|l')|sono un(?:a)?) ([\w']+)", msg_lower)
-        if profession_match:
-            profession = profession_match.group(1)
-            profile["profession"] = profession
-
-        logger.info("PROFILE_BEFORE_SAVE user=%s name=%s city=%s profession=%s", user_id, profile.get("name"), profile.get("city"), profile.get("profession"))
-
-        # Aggiornare il profilo
-        await self.semantic.save_user_profile(user_id, profile)
-        logger.info("PROFILE_AFTER_SAVE user=%s name=%s city=%s profession=%s", user_id, profile.get("name"), profile.get("city"), profile.get("profession"))
+        logger.info("BRAIN_UPDATE user=%s profile_loaded=true", user_id)
 
     async def recall_for_response(self, user_id: str, message: str) -> Dict[str, Any]:
         """Recall completo per generazione risposta (senza update)."""

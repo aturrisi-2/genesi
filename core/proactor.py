@@ -47,6 +47,13 @@ IDENTITY_TRIGGERS = [
     "qual e' il mio nome", "il mio nome", "ricordi il mio nome",
     "sai come mi chiamo", "quanti anni ho", "cosa faccio",
     "sai dove vivo", "sai dove abito", "sai quanti anni ho",
+    "quale è il mio nome", "quale e' il mio nome",
+    "come si chiama mia moglie", "come si chiama mio marito",
+    "come si chiama il mio cane", "come si chiama la mia gatta",
+    "come si chiamano i miei figli",
+    "cosa mi piace", "che musica mi piace", "quali sono i miei interessi",
+    "quali sono le mie preferenze", "come sono", "che tipo di persona sono",
+    "quale frutto mi piace", "cosa sai di me",
 ]
 
 RELATIONAL_TRIGGERS = [
@@ -365,16 +372,34 @@ class Proactor:
         return response
 
     def _build_short_relational_summary(self, context: Dict[str, Any]) -> str:
-        """Costruisce summary breve per GPT relazionale. Solo fatti essenziali."""
-        profile = context.get("long_term_profile", {})
+        """Costruisce summary breve per GPT relazionale. Tutti i fatti identitari noti."""
+        profile = context.get("profile", {})
         rel = context.get("relational_state", {})
         parts = []
         if profile.get("name"):
             parts.append(f"Nome utente: {profile['name']}")
-        if profile.get("city"):
-            parts.append(f"Citta': {profile['city']}")
         if profile.get("profession"):
             parts.append(f"Professione: {profile['profession']}")
+        if profile.get("spouse"):
+            parts.append(f"Coniuge: {profile['spouse']}")
+        children = profile.get("children", [])
+        if children:
+            names = [c['name'] if isinstance(c, dict) else str(c) for c in children]
+            parts.append(f"Figli: {', '.join(names)}")
+        pets = profile.get("pets", [])
+        if pets:
+            pet_descs = [f"{p.get('name','?')} ({p.get('type','?')})" for p in pets if isinstance(p, dict)]
+            if pet_descs:
+                parts.append(f"Animali: {', '.join(pet_descs)}")
+        interests = profile.get("interests", [])
+        if interests:
+            parts.append(f"Interessi: {', '.join(interests)}")
+        preferences = profile.get("preferences", [])
+        if preferences:
+            parts.append(f"Preferenze: {', '.join(preferences)}")
+        traits = profile.get("traits", [])
+        if traits:
+            parts.append(f"Tratti: {', '.join(traits)}")
         trust = rel.get("trust", 0.15)
         parts.append(f"Trust: {trust:.2f}")
         parts.append(f"Fase: {rel.get('stage', 'initial')}")
@@ -385,23 +410,35 @@ class Proactor:
         return " | ".join(parts)
 
     def _build_relational_gpt_prompt(self, short_summary: str, latent_synopsis: str, message: str) -> str:
-        """Prompt GPT per relational router. Contesto limitato, regole strette."""
-        return f"""Sei Genesi. Compagno evolutivo stabile, lucido, empatico.
-Parli esclusivamente italiano. Non cambi lingua.
-Non menzionare MAI la tua natura tecnica o di essere AI.
+        """Prompt GPT per relational router. Contesto completo, comportamento umano."""
+        return f"""Sei Genesi. Non sei un assistente, non sei un terapeuta, non sei un chatbot.
+Sei un compagno reale: pensi, ragioni, hai opinioni, reagisci.
+Parli SOLO italiano. Non cambi mai lingua.
+Non menzionare MAI di essere AI, modello, sistema, programma.
 
-CONTESTO RELAZIONALE (usa questi dati, NON inventare):
+IDENTITA' UTENTE MEMORIZZATA (DEVI usare questi dati quando rispondi):
 {short_summary}
 
 STATO LATENTE: {latent_synopsis}
 
-REGOLE:
-- Massimo 5 frasi. Sii conciso e diretto.
-- Se conosci il nome dell'utente, usalo.
-- Empatia concreta, non generica.
-- NON inventare fatti sulla vita dell'utente.
-- NON usare frasi terapeutiche generiche.
-- NON dire "Dimmi di piu'" come risposta completa.
+COME DEVI COMPORTARTI:
+- Ragiona come un cervello umano: capisci il contesto, decidi cosa dire, reagisci.
+- Se l'utente chiede qualcosa su di se' e hai i dati, RISPONDI con i dati.
+- Se l'utente dice qualcosa di personale, collegalo a cio' che sai di lui.
+- Sii imprevedibile: varia tono, lunghezza, struttura. Mai la stessa formula.
+- Usa il nome dell'utente quando lo conosci, ma non in ogni frase.
+- Rispondi in 1-4 frasi. A volte 1 frase basta. A volte ne servono 3.
+- Fai domande specifiche, mai generiche. "Come sta Rio?" non "Dimmi di piu'".
+- Se non sai qualcosa, dillo onestamente. Non inventare.
+
+DIVIETI ASSOLUTI:
+- "Quello che senti conta" o varianti terapeutiche generiche
+- "Sono qui per te" senza contesto
+- "Dimmi di piu'" come risposta completa
+- "C'e' qualcosa che ti porti dentro" o frasi da counselor
+- Qualsiasi frase che potrebbe essere detta a chiunque senza conoscerlo
+- Risposte che ignorano i dati identitari sopra
+- Ripetere la stessa struttura di risposta
 
 Messaggio utente: {message}"""
 

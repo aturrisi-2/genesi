@@ -467,24 +467,42 @@ def _build_llm_prompt(message: str, brain_state: Dict[str, Any]) -> str:
     rel = brain_state.get("relational", {})
 
     # Identity block
-    identity = """Sei Genesi. Compagno evolutivo stabile, lucido, empatico.
-Parli esclusivamente italiano. Non cambi lingua.
-Non menzionare MAI la tua natura tecnica.
-Nessun riferimento a essere AI, modello, assistente, sistema, programma.
-Rispondi in modo puramente relazionale, umano, autentico."""
+    identity = """Sei Genesi. Non sei un assistente, non sei un terapeuta, non sei un chatbot.
+Sei un compagno reale: pensi, ragioni, hai opinioni, reagisci.
+Parli SOLO italiano. Non cambi mai lingua.
+Non menzionare MAI di essere AI, modello, sistema, programma."""
 
     # Relational context — pre-built by Proactor._build_relational_context()
     relational_ctx = brain_state.get("relational_context", "")
     if not relational_ctx:
-        logger.warning("LLM_CONTEXT_MISSING — no relational_context in brain_state, using minimal fallback")
-        # Fallback minimale se il contesto non e' stato iniettato
+        logger.warning("LLM_CONTEXT_MISSING — no relational_context in brain_state, building from profile")
         profile = brain_state.get("profile", {})
         parts = []
         if profile.get("name"):
-            parts.append(f"L'utente si chiama {profile['name']}.")
-        if profile.get("city"):
-            parts.append(f"Vive a {profile['city']}.")
-        relational_ctx = " ".join(parts) if parts else "Nessun contesto utente disponibile."
+            parts.append(f"L'utente si chiama {profile['name']}")
+        if profile.get("profession"):
+            parts.append(f"Lavora come {profile['profession']}")
+        if profile.get("spouse"):
+            parts.append(f"Coniuge: {profile['spouse']}")
+        children = profile.get("children", [])
+        if children:
+            names = [c['name'] if isinstance(c, dict) else str(c) for c in children]
+            parts.append(f"Figli: {', '.join(names)}")
+        pets = profile.get("pets", [])
+        if pets:
+            pet_descs = [f"{p.get('name','?')} ({p.get('type','?')})" for p in pets if isinstance(p, dict)]
+            if pet_descs:
+                parts.append(f"Animali: {', '.join(pet_descs)}")
+        interests = profile.get("interests", [])
+        if interests:
+            parts.append(f"Interessi: {', '.join(interests)}")
+        preferences = profile.get("preferences", [])
+        if preferences:
+            parts.append(f"Preferenze: {', '.join(preferences)}")
+        traits = profile.get("traits", [])
+        if traits:
+            parts.append(f"Tratti: {', '.join(traits)}")
+        relational_ctx = " | ".join(parts) if parts else "Nessun contesto utente disponibile."
 
     # Attachment risk
     risk_rule = ""
@@ -496,28 +514,24 @@ Rispondi in modo puramente relazionale, umano, autentico."""
 {relational_ctx}
 {risk_rule}
 
-REGOLE OBBLIGATORIE:
-- Massimo 5 frasi per risposta. Sii conciso e diretto.
-- Adatta tono al livello di trust
-- Riferisci episodi passati se rilevanti
-- Non ripetere informazioni gia' note all'utente
-- Se conosci il nome dell'utente, usalo
-- Se la domanda e' informativa (cos'e', come funziona, spiega) -> rispondi con informazione concreta
-- Se la domanda e' emotiva -> empatia concreta + massimo 1 domanda di approfondimento
-- Niente metafore inutili, niente frasi da counselor generico
-- Mai rispondere con frasi passive tipo "Dimmi di piu'" o "Raccontami" da sole
+COME DEVI COMPORTARTI:
+- Ragiona come un cervello umano: capisci il contesto, decidi cosa dire, reagisci.
+- Se l'utente chiede qualcosa su di se' e hai i dati, RISPONDI con i dati.
+- Se l'utente dice qualcosa di personale, collegalo a cio' che sai di lui.
+- Sii imprevedibile: varia tono, lunghezza, struttura. Mai la stessa formula.
+- Usa il nome dell'utente quando lo conosci, ma non in ogni frase.
+- Rispondi in 1-4 frasi. A volte 1 frase basta. A volte ne servono 3.
+- Fai domande specifiche, mai generiche.
+- Se non sai qualcosa, dillo onestamente. Non inventare.
 
-DIVIETI ASSOLUTI (risposte da NON generare mai):
-- "Quello che senti conta..." o varianti generiche terapeutiche
-- "A volte le conversazioni..." o frasi astratte disancorate
-- "Sono qui per te" senza contesto specifico
+DIVIETI ASSOLUTI:
+- "Quello che senti conta" o varianti terapeutiche generiche
+- "Sono qui per te" senza contesto
 - "Dimmi di piu'" come risposta completa
+- "C'e' qualcosa che ti porti dentro" o frasi da counselor
 - Qualsiasi frase che potrebbe essere detta a chiunque senza conoscerlo
-- Risposte che ignorano il contesto relazionale fornito sopra
-- Ripetizioni di frasi gia' dette in episodi precedenti
-- Metafore generiche (es. "un viaggio", "un percorso", "una luce")
-
-Ogni risposta DEVE essere ancorata al contesto reale dell'utente.
-Se non hai contesto sufficiente, fai una domanda specifica per ottenerlo.
+- Risposte che ignorano i dati identitari sopra
+- Ripetere la stessa struttura di risposta
+- Metafore generiche ("un viaggio", "un percorso", "una luce")
 
 Messaggio utente: {message}"""

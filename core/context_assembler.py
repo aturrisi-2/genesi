@@ -27,12 +27,10 @@ class ContextAssembler:
     async def build(self, user_id: str, user_message: str) -> Dict[str, Any]:
         """
         Costruisce contesto completo per LLM.
+        NON chiama update_brain — quello e' gia' fatto dal proactor.
 
         Returns:
-            dict con: summary, current_message
-
-        Raises:
-            RuntimeError se il summary risulta vuoto dopo l'assemblaggio.
+            dict con: summary, current_message, profile
         """
         # Load from persistent storage
         profile = await storage.load(f"profile:{user_id}", default={})
@@ -40,8 +38,6 @@ class ContextAssembler:
         logger.info("CONTEXT_ASSEMBLER_LOADED user=%s", user_id)
 
         context = {}
-        brain_state = await self.memory_brain.update_brain(user_id, user_message)
-        context['brain_state'] = brain_state
 
         if profile:
             context['profile'] = profile
@@ -61,11 +57,39 @@ class ContextAssembler:
     def _summarize_profile(self, profile):
         """
         Costruisce riassunto compatto (max ~300 token) per il system prompt LLM.
+        Include tutti i campi identitari noti.
         """
-        # Build summary from profile
         parts = []
-        if 'name' in profile:
-            parts.append(f"Name: {profile['name']}")
-        if 'profession' in profile:
-            parts.append(f"Profession: {profile['profession']}")
+        if profile.get('name'):
+            parts.append(f"L'utente si chiama {profile['name']}")
+        if profile.get('profession'):
+            parts.append(f"Lavora come {profile['profession']}")
+        if profile.get('spouse'):
+            parts.append(f"Il coniuge si chiama {profile['spouse']}")
+        # Children
+        children = profile.get('children', [])
+        if children:
+            names = [c['name'] if isinstance(c, dict) else str(c) for c in children]
+            parts.append(f"Figli: {', '.join(names)}")
+        # Pets
+        pets = profile.get('pets', [])
+        if pets:
+            pet_descs = []
+            for p in pets:
+                if isinstance(p, dict):
+                    pet_descs.append(f"{p.get('name', '?')} ({p.get('type', '?')})")
+            if pet_descs:
+                parts.append(f"Animali: {', '.join(pet_descs)}")
+        # Interests
+        interests = profile.get('interests', [])
+        if interests:
+            parts.append(f"Interessi: {', '.join(interests)}")
+        # Preferences
+        preferences = profile.get('preferences', [])
+        if preferences:
+            parts.append(f"Preferenze: {', '.join(preferences)}")
+        # Traits
+        traits = profile.get('traits', [])
+        if traits:
+            parts.append(f"Tratti: {', '.join(traits)}")
         return "\n".join(parts)
