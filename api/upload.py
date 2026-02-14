@@ -3,25 +3,30 @@ UPLOAD API v2 - Genesi Core v2
 Upload + analisi automatica file (PDF, immagini, testo).
 Smista a file_analyzer per elaborazione.
 Salva documento in memoria e aggiorna profilo utente.
+
+SICUREZZA: user_id estratto SOLO dal JWT. Mai dal client.
 """
 
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Depends
 from core.file_analyzer import analyze_file
 from core.document_memory import save_document
 from core.storage import storage
 from core.log import log
+from auth.router import require_auth
+from auth.models import AuthUser
 
 router = APIRouter(prefix="/upload")
 
 
 @router.post("/")
-async def upload_file(file: UploadFile = File(...), user_id: str = Form("")):
+async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(require_auth)):
     try:
+        user_id = user.id
         result = await analyze_file(file)
 
-        # If user_id provided, persist document and set as active
+        # Always persist document for authenticated user
         doc_id = None
         if user_id:
             doc_id = f"{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"

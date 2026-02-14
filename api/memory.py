@@ -2,18 +2,22 @@
 MEMORY API - Genesi Core v2
 API per gestione storage in-memory
 1 intent → 1 funzione
+
+SICUREZZA: require_admin su tutti gli endpoint (dati sensibili di sistema).
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from core.memory_storage import memory_storage
 from core.log import log
+from auth.router import require_admin
+from auth.models import AuthUser
 
 router = APIRouter(prefix="/memory")
 
 @router.get("/stats")
-async def get_memory_stats():
+async def get_memory_stats(user: AuthUser = Depends(require_admin)):
     """
-    Statistiche storage - 1 intent → 1 funzione
+    Statistiche storage - solo admin
     """
     try:
         stats = memory_storage.get_stats()
@@ -28,9 +32,9 @@ async def get_memory_stats():
         raise HTTPException(status_code=500, detail="Memory stats error")
 
 @router.get("/keys")
-async def get_memory_keys():
+async def get_memory_keys(user: AuthUser = Depends(require_admin)):
     """
-    Lista chiavi storage - 1 intent → 1 funzione
+    Lista chiavi storage - solo admin
     """
     try:
         keys = memory_storage.list_keys()
@@ -45,9 +49,9 @@ async def get_memory_keys():
         raise HTTPException(status_code=500, detail="Memory keys error")
 
 @router.delete("/clear")
-async def clear_memory():
+async def clear_memory(user: AuthUser = Depends(require_admin)):
     """
-    Pulisci storage - 1 intent → 1 funzione
+    Pulisci storage - solo admin
     """
     try:
         success = memory_storage.clear()
@@ -61,9 +65,9 @@ async def clear_memory():
         raise HTTPException(status_code=500, detail="Memory clear error")
 
 @router.get("/exists/{key}")
-async def key_exists(key: str):
+async def key_exists(key: str, user: AuthUser = Depends(require_admin)):
     """
-    Verifica esistenza chiave - 1 intent → 1 funzione
+    Verifica esistenza chiave - solo admin
     """
     try:
         exists = memory_storage.exists(key)

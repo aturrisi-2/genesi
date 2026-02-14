@@ -1,42 +1,36 @@
 # api/user.py
+"""
+USER API - Genesi Core v2
+Bootstrap utente autenticato. user_id estratto SOLO dal JWT.
+Nessun bootstrap anonimo. Nessun user_id dal client.
+"""
 
-from fastapi import APIRouter
-from pydantic import BaseModel
-from typing import Optional
-import uuid
+from fastapi import APIRouter, Depends
 
 from core.user_manager import user_manager
+from auth.router import require_auth
+from auth.models import AuthUser
 
 router = APIRouter(prefix="/user")
 
 
-class BootstrapRequest(BaseModel):
-    user_id: Optional[str] = None
-
-
 @router.post("/bootstrap")
-async def bootstrap_user(request: BootstrapRequest):
+async def bootstrap_user(user: AuthUser = Depends(require_auth)):
     """
-    Bootstrap = carica stato persistente.
-    NON interpreta.
-    NON normalizza.
-    NON scrive identità.
+    Bootstrap = carica stato persistente per utente autenticato.
+    user_id estratto dal JWT. Mai dal client.
     """
+    user_id = user.id
 
-    if request.user_id:
-        user_data = user_manager.get_user(request.user_id)
-        if not user_data:
-            user_data = user_manager.create_user(request.user_id)
-    else:
-        # Crea nuovo utente con ID univoco
-        new_user_id = str(uuid.uuid4())
-        user_data = user_manager.create_user(new_user_id)
+    user_data = user_manager.get_user(user_id)
+    if not user_data:
+        user_data = user_manager.create_user(user_id)
 
     # Aggiorna last_seen
-    user_manager.update_user(user_data["user_id"], {"last_seen": "now"})
+    user_manager.update_user(user_id, {"last_seen": "now"})
 
     return {
-        "user_id": user_data["user_id"],
+        "user_id": user_id,
         "profile": user_data.get("preferences", {}),
         "created_at": user_data["created_at"],
         "last_seen": user_data["last_seen"]

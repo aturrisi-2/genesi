@@ -5,10 +5,12 @@ Piper TTS locale. Zero cloud. Zero quota. Zero fallback.
 
 import io
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from tts.piper_tts import piper_tts_engine
+from auth.router import require_auth
+from auth.models import AuthUser
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +22,7 @@ class TTSRequest(BaseModel):
 
 
 @router.post("/")
-async def tts_endpoint(request: TTSRequest):
+async def tts_endpoint(request: TTSRequest, user: AuthUser = Depends(require_auth)):
     """
     Piper TTS locale — restituisce audio WAV.
     Nessun cloud. Nessuna quota. Nessun fallback.

@@ -24,61 +24,119 @@ const chatForm = document.getElementById('chat-form');
 let cameraStream = null;
 let cameraVideo = null;
 
-// User bar DOM (auth disabilitato)
+// User bar DOM (auth enabled)
 const userBar = document.getElementById('user-bar');
 const userGreeting = document.getElementById('user-greeting');
 const adminLink = document.getElementById('admin-link');
 const logoutBtn = document.getElementById('logout-btn');
 
 // ===============================
-// AUTH STATE - DISABILITATO
+// AUTH STATE — JWT-based
 // ===============================
-let _isLoggedIn = true; // SEMPRE loggato
-
 function getAuthToken() {
-  return null; // Nessun token
+  return localStorage.getItem('genesi_access_token');
 }
 
 function isLoggedIn() {
-  return true; // SEMPRE loggato
+  const token = getAuthToken();
+  if (!token) return false;
+  const payload = getTokenPayload();
+  if (!payload) return false;
+  // Check expiry
+  if (payload.exp && payload.exp * 1000 < Date.now()) return false;
+  return true;
 }
 
 function getTokenPayload() {
-  return null; // Nessun payload
+  const token = getAuthToken();
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    return JSON.parse(atob(parts[1]));
+  } catch (e) {
+    return null;
+  }
 }
 
 function isAdmin() {
-  return false; // Mai admin
+  return localStorage.getItem('genesi_is_admin') === 'true';
 }
 
 async function tryRefreshToken() {
-  return false; // Nessun refresh
+  const refresh = localStorage.getItem('genesi_refresh_token');
+  if (!refresh) return false;
+  try {
+    const res = await fetch('/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refresh }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    localStorage.setItem('genesi_access_token', data.access_token);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 function doLogout() {
-  // Nessun logout - disabilitato
+  const token = getAuthToken();
+  if (token) {
+    fetch('/auth/logout', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+    }).catch(() => {});
+  }
+  localStorage.removeItem('genesi_access_token');
+  localStorage.removeItem('genesi_refresh_token');
+  localStorage.removeItem('genesi_user_id');
+  localStorage.removeItem('genesi_is_admin');
+  window.location.href = '/login';
+}
+
+function authHeaders() {
+  const token = getAuthToken();
+  const h = { 'Content-Type': 'application/json' };
+  if (token) h['Authorization'] = 'Bearer ' + token;
+  return h;
+}
+
+function authHeadersRaw() {
+  const token = getAuthToken();
+  const h = {};
+  if (token) h['Authorization'] = 'Bearer ' + token;
+  return h;
 }
 
 function applyAuthState() {
-  // SEMPRE loggato - mostra chat, nascondi auth
+  if (!isLoggedIn()) {
+    // Not logged in — redirect to login
+    window.location.href = '/login';
+    return;
+  }
+
   userBar.style.display = 'flex';
   document.getElementById('presence').style.display = '';
   dialogue.style.display = '';
   document.getElementById('status').style.display = '';
   chatForm.style.display = '';
 
-  // Greeting fisso
+  // Greeting from token payload
+  const payload = getTokenPayload();
   userGreeting.textContent = 'Ciao';
 
-  // Admin link sempre nascosto
-  adminLink.style.display = 'none';
-  logoutBtn.style.display = 'none';
+  // Admin link
+  adminLink.style.display = isAdmin() ? '' : 'none';
+  logoutBtn.style.display = '';
 }
 
-// Logout handler (disabilitato)
+// Logout handler
 if (logoutBtn) {
-  logoutBtn.addEventListener('click', () => {
-    console.log('Logout disabilitato');
+  logoutBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    doLogout();
   });
 }
 
@@ -355,7 +413,7 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
     try {
       const response = await fetch('/api/tts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ text: normalizedChunk }),
         signal: currentTTSAbortController ? currentTTSAbortController.signal : undefined
       });
@@ -543,7 +601,7 @@ async function _playTTSChunk(text) {
     const normalizedText = normalizeTextForTTS(text);
     const response = await fetch('/api/tts', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ text: normalizedText }),
       signal: currentTTSAbortController ? currentTTSAbortController.signal : undefined
     });
@@ -646,30 +704,34 @@ async function playTTS(text, tts_mode = 'normal') {
 }
 
 // ===============================
-// USER IDENTITY - NO AUTH
+// USER IDENTITY — from JWT only
 // ===============================
 function getUserId() {
-  // Solo localStorage - nessun auth
-  let id = localStorage.getItem('genesi_user_id');
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem('genesi_user_id', id);
-  }
-  return id;
+  // user_id from JWT payload — NEVER generated client-side
+  const payload = getTokenPayload();
+  return payload ? payload.sub : null;
 }
 
 let userIdentity = {};
 
 async function bootstrapUser() {
+  if (!isLoggedIn()) return;
   try {
     const res = await fetch('/api/user/bootstrap', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: getUserId() })
+      headers: authHeaders(),
     });
     if (res.ok) {
       const data = await res.json();
       userIdentity = data.identity || {};
+    } else if (res.status === 401) {
+      // Token expired — try refresh
+      const refreshed = await tryRefreshToken();
+      if (refreshed) {
+        return bootstrapUser();
+      } else {
+        doLogout();
+      }
     }
   } catch (e) {
     console.error('Bootstrap error:', e);
@@ -732,12 +794,17 @@ function addUserMessage(text) { return addMessage(text, 'user'); }
 // ===============================
 async function sendChatMessage(message) {
   try {
-    // Nessun controllo auth - accesso diretto
     const res = await fetch('/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: getUserId(), message })
+      headers: authHeaders(),
+      body: JSON.stringify({ message })
     });
+    if (res.status === 401) {
+      const refreshed = await tryRefreshToken();
+      if (refreshed) return sendChatMessage(message);
+      doLogout();
+      throw new Error('Session expired');
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     return data;
@@ -993,7 +1060,7 @@ async function startRecording() {
   // Barge-in: interrompi TTS quando utente preme mic
   _interruptTTS('mic_press');
 
-  // Warm TTS AudioContext during mic tap gesture (iOS needs this for post-mic TTS)
+  // Warm AudioContext NOW (sync, during user gesture) — iOS requires this
   _warmTTSCtx();
 
   const platform = _getPlatformInfo();
@@ -1231,7 +1298,7 @@ async function transcribeAudio(blob) {
     fd.append('audio', blob, 'rec' + ext);
     
     console.log('[STT] sending POST /api/stt/ ...');
-    const res = await fetch('/api/stt/', { method: 'POST', body: fd });
+    const res = await fetch('/api/stt/', { method: 'POST', body: fd, headers: authHeadersRaw() });
     console.log('[STT] response status=' + res.status);
     
     if (!res.ok) {
@@ -1568,10 +1635,9 @@ function handleFileUpload() {
 
     const fd = new FormData();
     fd.append('file', file);
-    fd.append('user_id', getUserId());
 
     try {
-      const res = await fetch('/api/upload/', { method: 'POST', body: fd });
+      const res = await fetch('/api/upload/', { method: 'POST', body: fd, headers: authHeadersRaw() });
       if (!res.ok) throw new Error(`Upload ${res.status}`);
       const result = await res.json();
       if (loadingMsg) loadingMsg.remove();
@@ -1678,12 +1744,12 @@ async function uploadCapturedImage(blob) {
 
   const formData = new FormData();
   formData.append("file", blob, "camera_" + Date.now() + ".jpg");
-  formData.append("user_id", getUserId());
 
   try {
     const res = await fetch("/api/upload/", {
       method: "POST",
-      body: formData
+      body: formData,
+      headers: authHeadersRaw()
     });
 
     if (!res.ok) throw new Error("Upload " + res.status);

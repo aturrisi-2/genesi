@@ -5,12 +5,14 @@ Accetta audio multipart/form-data (webm, wav, mp4, ogg).
 Restituisce JSON: {"text": "trascrizione"}
 """
 
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Depends
 import logging
 import tempfile
 import os
 from openai import AsyncOpenAI
 from core.log import log
+from auth.router import require_auth
+from auth.models import AuthUser
 
 router = APIRouter(prefix="/stt")
 logger = logging.getLogger(__name__)
@@ -90,7 +92,7 @@ async def transcribe_audio(audio_data: bytes, content_type: str, filename: str =
 
 
 @router.post("/")
-async def speech_to_text(audio: UploadFile = File(...)):
+async def speech_to_text(audio: UploadFile = File(...), user: AuthUser = Depends(require_auth)):
     """
     POST /api/stt/
     Accepts multipart/form-data with field 'audio'.
