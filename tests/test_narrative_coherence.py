@@ -318,3 +318,250 @@ class TestContextAssemblerPreferences:
         assert "Anna" in summary
         assert "Preferenze" not in summary
         assert "Musica" not in summary
+
+
+# ═══════════════════════════════════════════════════════════════
+# TEST 7: Weather forecast detection (new)
+# ═══════════════════════════════════════════════════════════════
+
+class TestWeatherForecast:
+    """Weather: forecast keyword detection and worldwide city extraction."""
+
+    def setup_method(self):
+        from core.tool_services import ToolService
+        self.ts = ToolService()
+
+    def test_forecast_detected_domani(self):
+        assert self.ts._is_forecast_request("che tempo fa domani a Roma?") is True
+
+    def test_forecast_detected_previsioni(self):
+        assert self.ts._is_forecast_request("previsioni meteo Bologna") is True
+
+    def test_forecast_detected_weekend(self):
+        assert self.ts._is_forecast_request("meteo nel weekend") is True
+
+    def test_forecast_not_detected_current(self):
+        assert self.ts._is_forecast_request("che tempo fa a Roma?") is False
+
+    def test_extract_city_known_italian(self):
+        city = self.ts._extract_city("che tempo fa a Bologna?")
+        assert city == "Bologna"
+
+    def test_extract_city_known_compound(self):
+        city = self.ts._extract_city("meteo a reggio calabria")
+        assert city == "Reggio Calabria"
+
+    def test_extract_city_worldwide_capitalized(self):
+        city = self.ts._extract_city("che tempo fa a Londra?")
+        assert city is not None
+        assert "Londra" in city or "londra" in city.lower()
+
+    def test_extract_city_worldwide_paris(self):
+        city = self.ts._extract_city("meteo a Parigi")
+        assert city is not None
+
+    def test_extract_city_no_city(self):
+        city = self.ts._extract_city("che tempo fa?")
+        assert city is None
+
+
+# ═══════════════════════════════════════════════════════════════
+# TEST 8: News categorization (new)
+# ═══════════════════════════════════════════════════════════════
+
+class TestNewsCategorization:
+    """News: category detection from message."""
+
+    def test_sport_detected(self):
+        from core.tool_services import NEWS_SECTIONS
+        msg = "notizie sport"
+        found = None
+        for section, keywords in NEWS_SECTIONS.items():
+            if any(kw in msg for kw in keywords):
+                found = section
+                break
+        assert found == "sport"
+
+    def test_politica_detected(self):
+        from core.tool_services import NEWS_SECTIONS
+        msg = "notizie politica"
+        found = None
+        for section, keywords in NEWS_SECTIONS.items():
+            if any(kw in msg for kw in keywords):
+                found = section
+                break
+        assert found == "politica"
+
+    def test_cronaca_detected(self):
+        from core.tool_services import NEWS_SECTIONS
+        msg = "cronaca locale"
+        found = None
+        for section, keywords in NEWS_SECTIONS.items():
+            if any(kw in msg for kw in keywords):
+                found = section
+                break
+        assert found == "cronaca"
+
+    def test_finanza_detected(self):
+        from core.tool_services import NEWS_SECTIONS
+        msg = "notizie economia"
+        found = None
+        for section, keywords in NEWS_SECTIONS.items():
+            if any(kw in msg for kw in keywords):
+                found = section
+                break
+        assert found == "finanza"
+
+    def test_no_category_generic(self):
+        from core.tool_services import NEWS_SECTIONS
+        msg = "ultime notizie"
+        found = None
+        for section, keywords in NEWS_SECTIONS.items():
+            if any(kw in msg for kw in keywords):
+                found = section
+                break
+        assert found is None
+
+
+# ═══════════════════════════════════════════════════════════════
+# TEST 9: Intent override for short contextual follow-ups (new)
+# ═══════════════════════════════════════════════════════════════
+
+def _should_override_to_relational(message: str, user_id: str) -> bool:
+    """Standalone copy of Proactor._should_override_to_relational for testing."""
+    msg_lower = message.lower().strip()
+    if len(msg_lower) > 50:
+        return False
+    contextual_patterns = [
+        "perché?", "perche?", "secondo te", "e tu?", "e tu che ne pensi",
+        "perché continui", "perche continui", "come mai?",
+        "davvero?", "sul serio?", "in che senso", "cioè?", "cioe?",
+        "tipo?", "ad esempio?", "e quindi?", "e allora?", "e poi?",
+        "non capisco", "non ho capito", "cosa intendi", "cosa vuoi dire",
+    ]
+    if any(p in msg_lower for p in contextual_patterns):
+        return True
+    if msg_lower.startswith("perch") and len(msg_lower) < 30:
+        return True
+    return False
+
+
+class TestIntentOverride:
+    """Conversational fix: short 'perché?' should stay relational."""
+
+    def test_perche_short_overrides(self):
+        assert _should_override_to_relational("Perché?", "test") is True
+
+    def test_secondo_te_overrides(self):
+        assert _should_override_to_relational("Secondo te perché?", "test") is True
+
+    def test_perche_continui_overrides(self):
+        assert _should_override_to_relational("Perché continui?", "test") is True
+
+    def test_come_mai_overrides(self):
+        assert _should_override_to_relational("Come mai?", "test") is True
+
+    def test_e_quindi_overrides(self):
+        assert _should_override_to_relational("E quindi?", "test") is True
+
+    def test_long_technical_question_no_override(self):
+        assert _should_override_to_relational(
+            "Perché il protocollo TCP usa un handshake a tre vie per stabilire la connessione?", "test"
+        ) is False
+
+    def test_ciao_no_override(self):
+        assert _should_override_to_relational("Ciao come stai", "test") is False
+
+
+# ═══════════════════════════════════════════════════════════════
+# TEST 10: User boundary detection (new)
+# ═══════════════════════════════════════════════════════════════
+
+def _detect_user_boundaries(conversation_context: str, message: str) -> str:
+    """Standalone copy of Proactor._detect_user_boundaries for testing."""
+    boundaries = []
+    combined = (conversation_context + " " + message).lower()
+    if "non farmi domande" in combined or "non fare domande" in combined:
+        boundaries.append("L'utente ha chiesto di NON fare domande. NON chiudere con domande.")
+    if "non voglio consigli" in combined or "non darmi consigli" in combined:
+        boundaries.append("L'utente ha chiesto di NON ricevere consigli. NON dare suggerimenti.")
+    if "non voglio parlare" in combined or "non ne voglio parlare" in combined:
+        boundaries.append("L'utente non vuole parlare di questo. Rispetta il confine.")
+    if "basta" in message.lower() or "smettila" in message.lower():
+        boundaries.append("L'utente vuole che tu smetta. Rispondi brevemente e basta.")
+    if boundaries:
+        return "\nCONFINI ESPLICITI DELL'UTENTE (RISPETTA OBBLIGATORIAMENTE):\n" + "\n".join(f"- {b}" for b in boundaries)
+    return ""
+
+
+class TestUserBoundaries:
+    """Conversational fix: detect 'non farmi domande', 'non voglio consigli'."""
+
+    def test_non_farmi_domande_detected(self):
+        result = _detect_user_boundaries("", "Non farmi domande")
+        assert "NON fare domande" in result
+
+    def test_non_voglio_consigli_detected(self):
+        result = _detect_user_boundaries("", "Non voglio consigli")
+        assert "NON ricevere consigli" in result
+
+    def test_basta_detected(self):
+        result = _detect_user_boundaries("", "Basta")
+        assert "smetta" in result
+
+    def test_normal_message_no_boundary(self):
+        result = _detect_user_boundaries("", "Come stai?")
+        assert result == ""
+
+    def test_boundary_from_context(self):
+        ctx = "utente: non farmi domande\nassistente: ok"
+        result = _detect_user_boundaries(ctx, "Sono stanco")
+        assert "NON fare domande" in result
+
+
+# ═══════════════════════════════════════════════════════════════
+# TEST 11: New response filter patterns (new)
+# ═══════════════════════════════════════════════════════════════
+
+class TestNewFilterPatterns:
+    """Response filter: new leaked phrases are caught."""
+
+    def test_mi_fa_piacere_sapere_stripped(self):
+        from core.response_filter import filter_response, _last_responses, _repeat_counts
+        uid = "nfp_1"
+        _last_responses.pop(uid, None)
+        _repeat_counts.pop(uid, None)
+        result = filter_response("Mi fa piacere sapere che stai bene.", uid)
+        assert "mi fa piacere sapere" not in result.lower()
+
+    def test_assistente_virtuale_stripped(self):
+        from core.response_filter import filter_response, _last_responses, _repeat_counts
+        uid = "nfp_2"
+        _last_responses.pop(uid, None)
+        _repeat_counts.pop(uid, None)
+        result = filter_response("Sono un assistente virtuale progettato per aiutarti.", uid)
+        assert "assistente virtuale" not in result.lower()
+
+    def test_se_vuoi_parlare_stripped(self):
+        from core.response_filter import filter_response, _last_responses, _repeat_counts
+        uid = "nfp_3"
+        _last_responses.pop(uid, None)
+        _repeat_counts.pop(uid, None)
+        result = filter_response("Se vuoi parlare di qualcosa, sono qui.", uid)
+        assert "se vuoi parlare di qualcosa" not in result.lower()
+
+    def test_spero_che_possiate_stripped(self):
+        from core.response_filter import filter_response, _last_responses, _repeat_counts
+        uid = "nfp_4"
+        _last_responses.pop(uid, None)
+        _repeat_counts.pop(uid, None)
+        result = filter_response("Spero che possiate risolvere presto.", uid)
+        assert "spero che possiate" not in result.lower()
+
+    def test_non_ho_informazioni_sufficienti_stripped(self):
+        from core.response_filter import filter_response, _last_responses, _repeat_counts
+        uid = "nfp_5"
+        _last_responses.pop(uid, None)
+        _repeat_counts.pop(uid, None)
+        result = filter_response("Non ho informazioni sufficienti per rispondere.", uid)
+        assert "non ho informazioni sufficienti" not in result.lower()

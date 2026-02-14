@@ -171,8 +171,13 @@ class Proactor:
                 logger.info("PROACTOR_ROUTE route=tool intent=%s user=%s", intent, user_id)
                 return await self._handle_tool(intent, message, user_id)
 
-            # STEP 5: KNOWLEDGE STRICT
+            # STEP 5: KNOWLEDGE STRICT — but override short contextual follow-ups
             if intent in SKIP_RELATIONAL_INTENTS:
+                # Context-aware override: short messages with "perché"/"come mai"
+                # in a relational conversation should stay relational
+                if self._should_override_to_relational(message, user_id):
+                    logger.info("PROACTOR_INTENT_OVERRIDE user=%s intent=%s->relational reason=short_contextual", user_id, intent)
+                    return await self._handle_relational(user_id, message, brain_state)
                 logger.info("PROACTOR_ROUTE route=knowledge_strict user=%s intent=%s", user_id, intent)
                 return await self._handle_knowledge(user_id, message)
 
@@ -444,8 +449,25 @@ class Proactor:
             parts.append(f"Ultimo episodio: \"{last_ep.get('msg', '')[:60]}\"")
         return " | ".join(parts)
 
+    def _detect_user_boundaries(self, conversation_context: str, message: str) -> str:
+        """Detect explicit user boundaries from message and recent context."""
+        boundaries = []
+        combined = (conversation_context + " " + message).lower()
+        if "non farmi domande" in combined or "non fare domande" in combined:
+            boundaries.append("L'utente ha chiesto di NON fare domande. NON chiudere con domande.")
+        if "non voglio consigli" in combined or "non darmi consigli" in combined:
+            boundaries.append("L'utente ha chiesto di NON ricevere consigli. NON dare suggerimenti.")
+        if "non voglio parlare" in combined or "non ne voglio parlare" in combined:
+            boundaries.append("L'utente non vuole parlare di questo. Rispetta il confine.")
+        if "basta" in message.lower() or "smettila" in message.lower():
+            boundaries.append("L'utente vuole che tu smetta. Rispondi brevemente e basta.")
+        if boundaries:
+            return "\nCONFINI ESPLICITI DELL'UTENTE (RISPETTA OBBLIGATORIAMENTE):\n" + "\n".join(f"- {b}" for b in boundaries)
+        return ""
+
     def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str) -> str:
         """Prompt GPT per relational router. Conversazione continua, comportamento umano."""
+        user_boundaries = self._detect_user_boundaries(conversation_context, message)
         return f"""Sei Genesi. Non sei un assistente, non sei un terapeuta, non sei un chatbot.
 Sei un compagno reale: pensi, ragioni, hai opinioni, reagisci.
 Parli SOLO italiano. Non cambi mai lingua.
@@ -493,6 +515,8 @@ DIVIETI ASSOLUTI:
 - Trattare entita' gia' menzionate come nuove
 - Chiudere con domanda forzata quando non serve
 
+{user_boundaries}
+
 Messaggio utente: {message}"""
 
     # ═══════════════════════════════════════════════════════════
@@ -505,16 +529,19 @@ Messaggio utente: {message}"""
         SENZA relational contamination. SENZA frasi empatiche. SENZA memoria.
         Fallback deterministico da fallback_knowledge.py se LLM fallisce.
         """
-        knowledge_prompt = f"""Sei Genesi, assistente informativo.
+        knowledge_prompt = f"""Sei Genesi.
 Rispondi in italiano, in modo chiaro, preciso, conciso.
-Massimo 5 frasi.
+Massimo 3 frasi.
 
 REGOLE:
 - Rispondi SOLO con informazione concreta.
 - NESSUNA frase empatica o relazionale.
 - NESSUN riferimento a memoria utente.
 - NESSUNA frase tipo "Sono qui per te" o "Dimmi di piu'".
-- Se non sai la risposta, dillo chiaramente.
+- NON dire MAI "assistente virtuale", "assistente informativo", "sono programmato".
+- NON dire MAI "non ho informazioni sufficienti" o "puoi fornire piu' contesto".
+- NON menzionare MAI di essere AI, modello, sistema, programma.
+- Se non sai la risposta, dillo in modo naturale e breve.
 
 Domanda: {message}"""
 
@@ -546,6 +573,31 @@ Domanda: {message}"""
     # ═══════════════════════════════════════════════════════════
     # UTILITY
     # ═══════════════════════════════════════════════════════════
+
+    def _should_override_to_relational(self, message: str, user_id: str) -> bool:
+        """
+        Context-aware override: short follow-up messages like 'perché?', 'secondo te perché?',
+        'perché continui?' should stay relational if the conversation is already relational.
+        Prevents misrouting to knowledge/spiegazione.
+        """
+        msg_lower = message.lower().strip()
+        # Only override short messages (< 50 chars) that look like conversational follow-ups
+        if len(msg_lower) > 50:
+            return False
+        # Patterns that indicate a contextual follow-up, not a knowledge question
+        contextual_patterns = [
+            "perché?", "perche?", "secondo te", "e tu?", "e tu che ne pensi",
+            "perché continui", "perche continui", "come mai?",
+            "davvero?", "sul serio?", "in che senso", "cioè?", "cioe?",
+            "tipo?", "ad esempio?", "e quindi?", "e allora?", "e poi?",
+            "non capisco", "non ho capito", "cosa intendi", "cosa vuoi dire",
+        ]
+        if any(p in msg_lower for p in contextual_patterns):
+            return True
+        # Very short messages with just "perché" + few words are likely follow-ups
+        if msg_lower.startswith("perch") and len(msg_lower) < 30:
+            return True
+        return False
 
     def _extract_episode_tags(self, brain_state: Dict[str, Any]) -> list:
         """Estrae tags dall'episodio appena creato."""

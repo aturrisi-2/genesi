@@ -38,6 +38,17 @@ TEMPLATE_BLACKLIST = [
     r"non sono in grado di provare",
     r"non provo emozioni",
     r"non ho sentimenti",
+    # Leaked template phrases
+    r"mi fa piacere sapere",
+    r"assistente virtuale",
+    r"assistente informativo",
+    r"se vuoi parlare di qualcosa",
+    r"se vuoi semplicemente parlare",
+    r"puoi fornire pi[uù] contesto",
+    r"non ho la possibilit[aà] di",
+    r"spero che possiate",
+    r"se hai una domanda specifica",
+    r"non ho informazioni sufficienti",
     # Motivational / coaching
     r"ricorda che sei",
     r"non dimenticare che",
