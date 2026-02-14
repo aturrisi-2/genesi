@@ -34,17 +34,28 @@ async def handle_identity_question(user_id: str, message: str) -> str:
             response = "Non me lo hai ancora detto."
     elif "come si chiama il mio cane" in msg_lower:
         relational = await storage.load(f"relational:{user_id}", default={})
-        pets = relational.get("pets", [])
-        dog = next((pet for pet in pets if pet["type"] == "dog"), None)
+        pets = relational.get("pets")
+        if not isinstance(pets, list):
+            pets = []
+        dog = next(
+            (
+                pet for pet in pets
+                if isinstance(pet, dict) and pet.get("type") == "dog"
+            ),
+            None
+        )
         if dog:
             response = f"Il tuo cane si chiama {dog['name'].strip().title()}."
         else:
             response = "Non me lo hai ancora detto."
     elif "come si chiamano i miei figli" in msg_lower:
         relational = await storage.load(f"relational:{user_id}", default={})
-        children = relational.get("children", [])
-        if children:
-            response = f"I tuoi figli si chiamano {', '.join(children)}."
+        children = relational.get("children")
+        if not isinstance(children, list):
+            children = []
+        names = [c["name"] for c in children if isinstance(c, dict) and "name" in c]
+        if names:
+            response = f"I tuoi figli si chiamano {', '.join(names)}."
         else:
             response = "Non me lo hai ancora detto."
     else:

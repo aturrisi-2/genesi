@@ -29,7 +29,7 @@ class CognitiveMemoryEngine:
             value = spouse_match.group(1)
         elif children_match:
             field = "children"
-            value = [children_match.group(1), children_match.group(2)]
+            value = [{"name": children_match.group(1)}, {"name": children_match.group(2)}]
         elif dog_match:
             field = "pets"
             value = {"type": "dog", "name": dog_match.group(1)}
@@ -44,16 +44,16 @@ class CognitiveMemoryEngine:
             logger.info("COGNITIVE_EVAL type=identity field=%s confidence=0.9", field)
             logger.info("COGNITIVE_DECISION persist=true")
             logger.info("COGNITIVE_MEMORY_UPDATE field=%s value=%s", field, value)
-            # Save to unified profile namespace
-            profile = await storage.load(f"profile:{user_id}", default={})
-            if field == "pets":
-                if "pets" not in profile:
-                    profile["pets"] = []
-                profile["pets"].append(value)
+            
+            # Handle list types
+            if isinstance(value, list):
+                existing_value = extracted_profile_data.get(field)
+                if isinstance(existing_value, list):
+                    existing_value.extend(value)
+                else:
+                    extracted_profile_data[field] = value
             else:
-                profile[field] = value
-            await storage.save(f"profile:{user_id}", profile)
-            logger.info("STORAGE_SAVE key=profile:%s field=%s", user_id, field)
+                extracted_profile_data[field] = value
         else:
             persist = False
             memory_type = None
