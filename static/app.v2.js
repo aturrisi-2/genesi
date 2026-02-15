@@ -9,6 +9,13 @@ let _primedAudio = null;
 const STATES = { IDLE: 'idle', THINKING: 'thinking', RECORDING: 'recording' };
 
 // ===============================
+// DEV_MODE for local development
+// ===============================
+const DEV_MODE =
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1";
+
+// ===============================
 // DOM
 // ===============================
 const app = document.getElementById('genesi-app');
@@ -111,8 +118,8 @@ function authHeadersRaw() {
 }
 
 function applyAuthState() {
-  if (!isLoggedIn()) {
-    // Not logged in — redirect to login
+  if (!isLoggedIn() && !DEV_MODE) {
+    // Not logged in — redirect to login (unless in DEV_MODE)
     window.location.href = '/login';
     return;
   }
