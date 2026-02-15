@@ -58,6 +58,15 @@ async def handle_identity_question(user_id: str, message: str) -> str:
             response = f"Ti chiami {name.strip().title()}."
         else:
             response = "Non me lo hai ancora detto."
+    elif any(kw in msg_lower for kw in ["dove vivo", "dove abito", "sai dove vivo", "sai dove abito"]):
+        # Check raw profile first (city not in UserProfile model)
+        city = raw_profile.get("city")
+        if not city:
+            city = profile.city if hasattr(profile, 'city') else None
+        if city:
+            response = f"Vivi a {city.strip().title()}."
+        else:
+            response = "Non me lo hai ancora detto."
     elif "che lavoro faccio" in msg_lower or "cosa faccio" in msg_lower:
         profession = profile.profession
         if profession:
@@ -111,7 +120,7 @@ async def handle_identity_question(user_id: str, message: str) -> str:
         else:
             response = "Non me lo hai ancora detto."
     elif any(kw in msg_lower for kw in ["chi sono", "cosa sai di me"]):
-        response = _build_full_identity_summary(profile)
+        response = _build_full_identity_summary(profile, raw_profile)
     else:
         response = None
 
@@ -119,11 +128,13 @@ async def handle_identity_question(user_id: str, message: str) -> str:
     return response
 
 
-def _build_full_identity_summary(profile) -> str:
+def _build_full_identity_summary(profile, raw_profile=None) -> str:
     """Build a complete identity summary from all known profile fields."""
     facts = []
     if profile.name:
         facts.append(f"ti chiami {profile.name.strip().title()}")
+    if raw_profile and raw_profile.get("city"):
+        facts.append(f"vivi a {raw_profile['city'].strip().title()}")
     if profile.profession:
         facts.append(f"lavori come {profile.profession.strip().lower()}")
     if profile.spouse:
@@ -143,4 +154,4 @@ def _build_full_identity_summary(profile) -> str:
 
     if facts:
         return f"Ecco cosa so di te: {', '.join(facts)}."
-    return "Non so ancora molto di te. Raccontami qualcosa."
+    return "Non me lo hai ancora detto."

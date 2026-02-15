@@ -19,7 +19,7 @@ from core.storage import storage
 from core.models.profile_model import UserProfile, Pet, Child
 from core.identity_service import normalize_profile_dict
 from core.identity_extractor import extract_identity_updates, merge_identity_update
-from core.emoji_engine import enrich_with_emojis
+from core.emoji_engine import apply
 from core.intent_classifier import intent_classifier
 from auth.router import require_auth
 from auth.models import AuthUser
@@ -61,6 +61,10 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
 
                 if key == "name":
                     profile.name = val
+                elif key == "city":
+                    # City is not in UserProfile model, save in raw dict
+                    raw_profile["city"] = val
+                    profile_changed = True
                 elif key == "profession":
                     profile.profession = val
                 elif key == "spouse":
@@ -88,18 +92,34 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             await storage.save(f"profile:{user_id}", profile.model_dump(mode="json"))
             log("STORAGE_SAVE", key=f"profile:{user_id}")
 
-        response, response_source = await simple_chat_handler(request.message, user_id)
+        response = await simple_chat_handler(request.message, user_id)
         
-        # Enrich response with emojis ONLY for LLM-generated responses
-        if response_source == "llm":
-            # Get intent for emoji enrichment
-            intent = intent_classifier.classify(request.message)
-            response = enrich_with_emojis(response, intent)
+        # Defensive normalization: ensure response is always a string
+        if isinstance(response, tuple):
+            response = response[0]
+        if not isinstance(response, str):
+            response = str(response)
+        
+        # Get intent for emoji enrichment
+        intent = intent_classifier.classify(request.message)
+        
+        # Apply emoji enrichment to final response (after all routing and fallbacks)
+        if response and not response.startswith('{') and not response.startswith('['):
+            # Skip structured JSON and responses that already contain emojis
+            if not any(ord(c) > 127 and c in '👋😊📅⏰📋✨⚠️🤔✨💬🤝🛠️☀️🌤️🌞🌧️⛅' for c in response):
+                original_response = response
+                response = apply(response, intent)
+                
+                # Log emoji application if response was modified
+                if response != original_response:
+                    # Extract emojis from response for logging
+                    emojis = ''.join([c for c in response if ord(c) > 127 and c in '👋😊📅⏰📋✨⚠️🤔✨💬🤝🛠️☀️🌤️🌞🌧️⛅'])
+                    log("EMOJI_ENGINE_APPLIED", intent=intent, emoji=emojis, user_id=user_id)
 
         return ChatResponse(
             response=response,
             status="ok",
-            intent=intent if 'intent' in locals() else None,
+            intent=intent,
             user_id=user_id
         )
 

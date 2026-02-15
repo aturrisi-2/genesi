@@ -106,6 +106,13 @@ _SKIP_WORDS = {
     "questo", "quello", "qui", "qua", "là", "la", "li", "lo",
 }
 
+# STT-specific stop words to remove for robust parsing
+_STT_STOP_WORDS = {
+    "che", "tempo", "fa", "è", "e'", "oggi", "domani", "per", "favore",
+    "genesis", "genesi", "a", "di", "in", "su", "da", "con", "per",
+    "fa", "fanno", "sono", "e", "ed"
+}
+
 
 def _title_case_city(name: str) -> str:
     """Title-case a city name, preserving connectors lowercase."""
@@ -121,11 +128,57 @@ def _title_case_city(name: str) -> str:
     return " ".join(result)
 
 
+def _clean_stt_input(message: str) -> str:
+    """
+    Clean STT input for robust location parsing.
+    
+    Args:
+        message: Raw STT input (e.g., "Genesis che tempo fa è Imola")
+        
+    Returns:
+        Cleaned text ready for city extraction
+    """
+    original = message
+    
+    # Try to extract city directly from original message first
+    # Look for capitalized words at the end that could be city names
+    words = message.split()
+    for i in range(len(words) - 1, -1, -1):
+        word = words[i].strip('?!.,;:')
+        if (word and word[0].isupper() and 
+            len(word) >= 2 and 
+            word.lower() not in _STT_STOP_WORDS and 
+            word.lower() not in _SKIP_WORDS and
+            word.lower() not in ['fa', 'sono', 'fanno']):  # Additional common words
+            log("LOCATION_CLEANED_INPUT", original=original[:50], cleaned=word, city=word)
+            return word
+    
+    # Fallback: clean and process
+    cleaned = message.lower()
+    cleaned = re.sub(r'[^\w\s]', ' ', cleaned)
+    
+    # Remove STT stop words
+    words = cleaned.split()
+    filtered_words = [w for w in words if w not in _STT_STOP_WORDS and w not in _SKIP_WORDS]
+    cleaned = ' '.join(filtered_words)
+    
+    # Return last valid token
+    tokens = cleaned.split()
+    if tokens and len(tokens[-1]) >= 2:
+        city_candidate = tokens[-1]
+        log("LOCATION_CLEANED_INPUT", original=original[:50], cleaned=cleaned, city=city_candidate)
+        return city_candidate
+    
+    log("LOCATION_CLEANED_INPUT", original=original[:50], cleaned=cleaned, city=None)
+    return ""
+
+
 def extract_city_from_message(message: str) -> Optional[str]:
     """
     Extract a city/location name from a user message.
     Returns the extracted city name (title-cased) or None.
     Tries case-sensitive patterns first, then case-insensitive fallback.
+    Enhanced with STT robust parsing for noisy input.
     """
     # Pass 1: case-sensitive (proper nouns)
     for pattern in [_TRAILING_PATTERN, _DIRECT_PATTERN, _PREP_PATTERN]:
@@ -134,6 +187,13 @@ def extract_city_from_message(message: str) -> Optional[str]:
             candidate = m.group(1).strip().rstrip("?!.,;:")
             if candidate.lower() not in _SKIP_WORDS and len(candidate) >= 2:
                 return candidate
+
+    # Pass 1.5: STT robust parsing ONLY for noisy input (contains "genesis" or multiple capitalized words)
+    if 'genesis' in message.lower() or 'genesi' in message.lower() or sum(1 for w in message.split() if w and w[0].isupper()) > 2:
+        stt_cleaned = _clean_stt_input(message)
+        if stt_cleaned and len(stt_cleaned) >= 2:
+            # Title case the cleaned city name
+            return _title_case_city(stt_cleaned)
 
     # Pass 2: case-insensitive fallback (all-lowercase input)
     for pattern in [_TRAILING_PATTERN_CI, _DIRECT_PATTERN_CI, _PREP_PATTERN_CI]:

@@ -734,9 +734,24 @@ class MemoryBrain:
     async def update_brain(self, user_id: str, message: str) -> None:
         """
         Aggiorna stato cerebrale (episodic, relational, emotion).
-        NON salva il profilo — la persistenza profilo e' gestita esclusivamente
-        da api/chat.py via UserProfile.model_dump(mode='json').
+        Estrae e salva informazioni sul profilo se presenti.
         """
+        # Extract and save profile information using cognitive memory engine
+        from core.cognitive_memory_engine import CognitiveMemoryEngine
+        from core.storage import storage
+        cognitive_engine = CognitiveMemoryEngine()
+        
+        # Load current profile data
+        raw_profile = await storage.load(f"profile:{user_id}", default={})
+        
+        # Evaluate message for profile updates
+        decision = await cognitive_engine.evaluate_event(user_id, message, raw_profile)
+        
+        # Save profile if there are updates
+        if decision['persist'] and decision['memory_type'] == 'profile':
+            await storage.save(f"profile:{user_id}", raw_profile)
+            logger.info("BRAIN_PROFILE_UPDATED user=%s field=%s", user_id, decision['key'])
+        
         profile = await self.semantic.get_user_profile(user_id)
         logger.info("BRAIN_UPDATE user=%s profile_loaded=true", user_id)
 

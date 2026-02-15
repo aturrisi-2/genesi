@@ -9,10 +9,13 @@ class CognitiveMemoryEngine:
         # Initialize field and value
         field = None
         value = None
+        persist = False
+        memory_type = None
 
         # Semantic classification using regex
         name_match = re.search(r"mi chiamo (\w+)", message, re.IGNORECASE)
         profession_match = re.search(r"faccio il (\w+)", message, re.IGNORECASE)
+        city_match = re.search(r"vivo a (\w+)", message, re.IGNORECASE)
         spouse_match = re.search(r"(?:mia moglie|mio marito) si chiama (\w+)", message, re.IGNORECASE)
         children_match = re.search(r"i miei figli si chiamano (\w+) e (\w+)", message, re.IGNORECASE)
         dog_match = re.search(r"il mio cane si chiama (\w+)", message, re.IGNORECASE)
@@ -30,28 +33,66 @@ class CognitiveMemoryEngine:
                 cat_list.append(pref_value)
                 preferences[pref_category] = cat_list
                 extracted_profile_data["preferences"] = preferences
-                field = "preferences"
-                value = preferences
+                persist = True
+                memory_type = "profile"
                 logger.info("COGNITIVE_PREFERENCE_EXTRACT category=%s value=%s", pref_category, pref_value)
 
-        if not field and name_match:
+        # Extract all profile fields and update the extracted_profile_data
+        if name_match:
+            extracted_profile_data["name"] = name_match.group(1)
+            persist = True
+            memory_type = "profile"
             field = "name"
             value = name_match.group(1)
-        elif profession_match:
+            logger.info("COGNITIVE_NAME_EXTRACT value=%s", value)
+            
+        if city_match:
+            extracted_profile_data["city"] = city_match.group(1)
+            persist = True
+            memory_type = "profile"
+            field = "city"
+            value = city_match.group(1)
+            logger.info("COGNITIVE_CITY_EXTRACT value=%s", value)
+            
+        if profession_match:
+            extracted_profile_data["profession"] = profession_match.group(1)
+            persist = True
+            memory_type = "profile"
             field = "profession"
             value = profession_match.group(1)
-        elif spouse_match:
+            logger.info("COGNITIVE_PROFESSION_EXTRACT value=%s", value)
+
+        if spouse_match:
+            extracted_profile_data["spouse"] = spouse_match.group(1)
+            persist = True
+            memory_type = "profile"
             field = "spouse"
             value = spouse_match.group(1)
-        elif children_match:
+            logger.info("COGNITIVE_SPOUSE_EXTRACT value=%s", value)
+
+        if children_match:
+            extracted_profile_data["children"] = [{"name": children_match.group(1)}, {"name": children_match.group(2)}]
+            persist = True
+            memory_type = "profile"
             field = "children"
             value = [{"name": children_match.group(1)}, {"name": children_match.group(2)}]
-        elif dog_match:
+            logger.info("COGNITIVE_CHILDREN_EXTRACT value=%s", value)
+
+        if dog_match:
+            extracted_profile_data["pets"] = {"type": "dog", "name": dog_match.group(1)}
+            persist = True
+            memory_type = "profile"
             field = "pets"
             value = {"type": "dog", "name": dog_match.group(1)}
-        elif cat_match:
+            logger.info("COGNITIVE_PETS_EXTRACT value=%s", value)
+
+        if cat_match:
+            extracted_profile_data["pets"] = {"type": "cat", "name": cat_match.group(1)}
+            persist = True
+            memory_type = "profile"
             field = "pets"
             value = {"type": "cat", "name": cat_match.group(1)}
+            logger.info("COGNITIVE_PETS_EXTRACT value=%s", value)
 
         # Ensure field and value are initialized
         if field is not None and value is not None:

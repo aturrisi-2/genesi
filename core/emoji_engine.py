@@ -18,6 +18,7 @@ INTENT_EMOJI_MAP: Dict[str, str] = {
     "neutral": "💬",
     "relational": "🤝",
     "admin": "🛠️",
+    "weather": "☀️",
 }
 
 # Context-specific emoji mapping for certain patterns
@@ -31,6 +32,10 @@ CONTEXT_EMOJI_MAP: Dict[str, str] = {
     "task": "📋",
     "lavoro": "💼",
     "casa": "🏠",
+    "sole": "☀️",
+    "piove": "🌧️",
+    "nuvoloso": "☁️",
+    "tempo": "🌤️",
 }
 
 def enrich_with_emojis(text: str, intent: Optional[str] = None) -> str:
@@ -66,6 +71,19 @@ def enrich_with_emojis(text: str, intent: Optional[str] = None) -> str:
     enriched_text = _add_context_emojis(enriched_text)
     
     return enriched_text
+
+def apply(text: str, intent: Optional[str] = None) -> str:
+    """
+    Apply emoji enrichment to text - main entry point.
+    
+    Args:
+        text: Input text to enrich
+        intent: Optional intent classification for targeted emoji selection
+        
+    Returns:
+        Text enriched with appropriate emojis
+    """
+    return enrich_with_emojis(text, intent)
 
 def _has_emoji(text: str) -> bool:
     """Check if text already contains emoji characters."""
@@ -123,6 +141,9 @@ def _add_intent_emoji(text: str, intent: str, emoji: str) -> str:
         # Add list emoji to the header line
         if lines and "promemoria" in lines[0].lower():
             lines[0] = lines[0] + " " + emoji
+    elif intent == "weather":
+        # Add weather emoji at the end
+        lines[-1] = lines[-1] + " " + emoji
     elif intent in ["confirmation", "positive"]:
         # Add emoji at the beginning
         lines[0] = emoji + " " + lines[0]

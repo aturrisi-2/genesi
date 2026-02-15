@@ -85,7 +85,7 @@ class IntentClassifier:
     
     def classify(self, message: str) -> str:
         """
-        Classifica intent - logica MINIMA con priorità memoria
+        Classifica intent - logica MINIMA con priorità memoria e override per intent misti
         
         Args:
             message: Messaggio utente
@@ -99,6 +99,31 @@ class IntentClassifier:
         if any(pattern in message_lower for pattern in self.memory_patterns):
             log("INTENT_CLASSIFIED", intent="chat_free", engine="gpt-4o", message=message[:50], override="memory_context")
             return "chat_free"
+        
+        # 0.5️⃣ PRIORITY OVERRIDES for mixed intents
+        # Check for weather keywords (highest priority after memory)
+        weather_keywords = ["tempo", "meteo", "piove", "nevica", "caldo", "freddo", "sole", "nuvolo"]
+        if any(kw in message_lower for kw in weather_keywords):
+            log("INTENT_OVERRIDE_APPLIED", original="mixed", final="weather", message=message[:50])
+            return "weather"
+        
+        # Check for reminder keywords
+        reminder_keywords = ["ricorda", "ricordami", "promemoria", "appuntamento", "ricordare"]
+        if any(kw in message_lower for kw in reminder_keywords):
+            log("INTENT_OVERRIDE_APPLIED", original="mixed", final="reminder_create", message=message[:50])
+            return "reminder_create"
+        
+        # Check for technical keywords
+        technical_keywords = ["tecnica", "tecnico", "architettura", "sistema", "implementazione",
+                            "codice", "programmazione", "sviluppo", "software", "hardware",
+                            "algoritmo", "database", "api", "framework", "libreria",
+                            "debug", "errore", "bug", "problema", "non funziona", "crash",
+                            "eccezione", "exception", "fix", "risolvere", "correggere",
+                            "spiega", "spiegazione", "come funziona", "perché", "come mai",
+                            "dettagli", "approfondire", "chiarire", "illustrare"]
+        if any(kw in message_lower for kw in technical_keywords):
+            log("INTENT_OVERRIDE_APPLIED", original="mixed", final="tecnica", message=message[:50])
+            return "tecnica"
         
         # 1️⃣ Pattern tecnici (GPT-4o)
         for intent, keywords in self.gpt_patterns.items():
