@@ -121,7 +121,7 @@ class TestMemoryRoutingIntegration:
             mock_llm.return_value = "Ricordo che ti chiami Mario e vivi a Roma. Abbiamo parlato anche del tempo oggi."
             
             # Test memory reference triggers routing
-            response = await proactor.handle(user_id, "di cosa abbiamo parlato prima?")
+            response, source = await proactor.handle(user_id, "di cosa abbiamo parlato prima?")
             
             # Should have called LLM with memory context
             assert mock_llm.called
@@ -131,6 +131,7 @@ class TestMemoryRoutingIntegration:
             
             # Response should be memory-aware
             assert "Mario" in response or "Roma" in response or "tempo" in response
+            assert source == "knowledge"
 
     @pytest.mark.asyncio
     async def test_memory_routing_with_no_history(self, proactor):
@@ -142,7 +143,7 @@ class TestMemoryRoutingIntegration:
         
         # With no history, memory routing should NOT be triggered
         # It should go through normal routing (relational in this case)
-        response = await proactor.handle(user_id, "di cosa abbiamo parlato?")
+        response, source = await proactor.handle(user_id, "di cosa abbiamo parlato?")
         
         # Should get normal response (not memory-specific)
         assert response is not None and len(response) > 0
@@ -159,7 +160,7 @@ class TestMemoryRoutingIntegration:
                 mock_llm.return_value = "Ricordo la nostra conversazione..."
                 
                 # Memory reference should bypass classifier
-                response = await proactor.handle(user_id, "ricordi cosa ci siamo detti?")
+                response, source = await proactor.handle(user_id, "ricordi cosa ci siamo detti?")
                 
                 # Classifier should NOT be called
                 assert not mock_classify.called
@@ -177,7 +178,7 @@ class TestMemoryRoutingIntegration:
             mock_classify.return_value = "greeting"
             
             # Non-memory message should use normal routing
-            response = await proactor.handle(user_id, "come stai?")
+            response, source = await proactor.handle(user_id, "come stai?")
             
             # Classifier should be called
             assert mock_classify.called
@@ -190,7 +191,7 @@ class TestMemoryRoutingIntegration:
         with patch('core.llm_service.llm_service._call_with_protection') as mock_llm:
             mock_llm.return_value = None  # LLM failure
             
-            response = await proactor.handle(user_id, "ti ricordi di me?")
+            response, source = await proactor.handle(user_id, "ti ricordi di me?")
             
             # Should get fallback response
             assert "ricordo" in response.lower() or "scambi" in response.lower()
@@ -203,7 +204,7 @@ class TestMemoryRoutingIntegration:
         with patch('core.chat_memory.chat_memory.get_messages') as mock_get:
             mock_get.side_effect = Exception("Memory error")
             
-            response = await proactor.handle(user_id, "di cosa abbiamo detto?")
+            response, source = await proactor.handle(user_id, "di cosa abbiamo detto?")
             
             # Should get error fallback
             assert "dispiace" in response.lower() or "problema" in response.lower()
@@ -221,7 +222,7 @@ class TestMemoryRoutingIntegration:
             mock_llm.return_value = "Ciao! Piacere di conoscerti."
             
             # 1. First message - greeting
-            response1 = await proactor.handle(user_id, "ciao")
+            response1, source1 = await proactor.handle(user_id, "ciao")
             assert response1
             
             # Manually add to chat memory since proactor doesn't automatically save responses
@@ -229,19 +230,19 @@ class TestMemoryRoutingIntegration:
             
             # 2. Second message - identity
             mock_llm.return_value = "Ho capito, grazie per avermelo detto."
-            response2 = await proactor.handle(user_id, "mi chiamo Laura")
+            response2, source2 = await proactor.handle(user_id, "mi chiamo Laura")
             assert response2
             chat_memory.add_message(user_id, "mi chiamo Laura", response2, "identity")
             
             # 3. Third message - weather
             mock_llm.return_value = "Oggi c'è bel tempo."
-            response3 = await proactor.handle(user_id, "che tempo fa?")
+            response3, source3 = await proactor.handle(user_id, "che tempo fa?")
             assert response3
             chat_memory.add_message(user_id, "che tempo fa?", response3, "weather")
             
             # 4. Memory reference - should trigger memory routing
             mock_llm.return_value = "Ricordo che ti chiami Laura e abbiamo parlato del tempo."
-            response4 = await proactor.handle(user_id, "di cosa abbiamo parlato prima?")
+            response4, source4 = await proactor.handle(user_id, "di cosa abbiamo parlato prima?")
             
             # Should be memory-aware
             assert "Laura" in response4 or "tempo" in response4
@@ -266,7 +267,7 @@ class TestRegressionOtherRoutes:
         with patch('core.llm_service.llm_service._call_with_protection') as mock_llm:
             mock_llm.return_value = "Ciao! Come posso aiutarti?"
             
-            response = await proactor.handle(user_id, "ciao")
+            response, source = await proactor.handle(user_id, "ciao")
             
             # Should use normal routing (not memory)
             assert mock_llm.called
@@ -280,7 +281,7 @@ class TestRegressionOtherRoutes:
         with patch('core.tool_services.tool_service.get_weather') as mock_weather:
             mock_weather.return_value = "Oggi c'è sole."
             
-            response = await proactor.handle(user_id, "che tempo fa a Roma?")
+            response, source = await proactor.handle(user_id, "che tempo fa a Roma?")
             
             assert "sole" in response
             assert mock_weather.called
@@ -293,7 +294,7 @@ class TestRegressionOtherRoutes:
         with patch('core.tool_services.tool_service.get_news') as mock_news:
             mock_news.return_value = "Ultime notizie:..."
             
-            response = await proactor.handle(user_id, "notizie di oggi")
+            response, source = await proactor.handle(user_id, "notizie di oggi")
             
             assert "notizie" in response.lower()
             assert mock_news.called
@@ -312,7 +313,7 @@ class TestRegressionOtherRoutes:
         await storage.save(f"profile:{user_id}", profile_data)
         
         # Test actual identity question handling
-        response = await proactor.handle(user_id, "come mi chiamo?")
+        response, source = await proactor.handle(user_id, "come mi chiamo?")
         
         # Should get a response containing the name from the profile
         assert "Mario" in response

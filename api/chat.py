@@ -19,6 +19,8 @@ from core.storage import storage
 from core.models.profile_model import UserProfile, Pet, Child
 from core.identity_service import normalize_profile_dict
 from core.identity_extractor import extract_identity_updates, merge_identity_update
+from core.emoji_engine import enrich_with_emojis
+from core.intent_classifier import intent_classifier
 from auth.router import require_auth
 from auth.models import AuthUser
 from datetime import datetime
@@ -86,11 +88,18 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             await storage.save(f"profile:{user_id}", profile.model_dump(mode="json"))
             log("STORAGE_SAVE", key=f"profile:{user_id}")
 
-        response = await simple_chat_handler(request.message, user_id)
+        response, response_source = await simple_chat_handler(request.message, user_id)
+        
+        # Enrich response with emojis ONLY for LLM-generated responses
+        if response_source == "llm":
+            # Get intent for emoji enrichment
+            intent = intent_classifier.classify(request.message)
+            response = enrich_with_emojis(response, intent)
 
         return ChatResponse(
             response=response,
             status="ok",
+            intent=intent if 'intent' in locals() else None,
             user_id=user_id
         )
 

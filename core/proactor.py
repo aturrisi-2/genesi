@@ -152,9 +152,10 @@ class Proactor:
     # HANDLE — Entry point, routing obbligatorio
     # ═══════════════════════════════════════════════════════════════
 
-    async def handle(self, user_id: str, message: str, intent: str = None) -> str:
+    async def handle(self, user_id: str, message: str, intent: str = None) -> tuple[str, str]:
         """
         Orchestrazione centrale v4.
+        Returns: (response_text, response_source)
         Ordine di routing:
             1. Identity Router  (deterministico)
             2. Tool Router      (deterministico)
@@ -175,7 +176,7 @@ class Proactor:
             identity_response = await handle_identity_question(user_id, message)
             if identity_response:
                 logger.info("IDENTITY_ROUTE_EXECUTION_ORDER_OK user=%s", user_id)
-                return identity_response
+                return identity_response, "identity"
 
             # STEP 2: MEMORY UPDATE
             brain_state = await memory_brain.update_brain(user_id, message)
@@ -285,7 +286,7 @@ class Proactor:
             except Exception:
                 name = ""
             prefix = f"{name}, " if name else ""
-            return f"{prefix}Mi dispiace, ho avuto un problema. Riprova tra poco."
+            return f"{prefix}Mi dispiace, ho avuto un problema. Riprova tra poco.", "error"
 
     # ═══════════════════════════════════════════════════════════════
     # IDENTITY ROUTER — 100% deterministico, zero GPT
@@ -373,10 +374,11 @@ class Proactor:
     # TOOL ROUTER — 100% deterministico, zero GPT su errore
     # ═══════════════════════════════════════════════════════════════
 
-    async def _handle_tool(self, intent: str, message: str, user_id: str) -> str:
+    async def _handle_tool(self, intent: str, message: str, user_id: str) -> tuple[str, str]:
         """
         Tool routing deterministico.
         Errori gestiti con messaggi deterministici, MAI GPT.
+        Returns: (response_text, "tool")
         """
         try:
             if intent == "weather":
@@ -386,42 +388,45 @@ class Proactor:
                 city = extract_city_from_message(message) or "Roma"
                 save_tool_context(user_id, "weather", city=city)
                 logger.info("TOOL_ROUTER_OK intent=weather user=%s city=%s", user_id, city)
-                return result
+                return result, "tool"
             elif intent == "news":
                 result = await tool_service.get_news(message)
                 save_tool_context(user_id, "news")
                 logger.info("TOOL_ROUTER_OK intent=news user=%s", user_id)
-                return result
+                return result, "tool"
             elif intent == "time":
-                return await tool_service.get_time()
+                result = await tool_service.get_time()
+                return result, "tool"
             elif intent == "date":
-                return await tool_service.get_date()
+                result = await tool_service.get_date()
+                return result, "tool"
             else:
-                return "Tool non disponibile."
+                return "Tool non disponibile.", "tool"
         except Exception as e:
             logger.error("PROACTOR_TOOL_ERROR intent=%s user=%s error=%s", intent, user_id, str(e), exc_info=True)
             if intent == "weather":
-                return "Il servizio meteo non è disponibile al momento."
+                return "Il servizio meteo non è disponibile al momento.", "tool"
             elif intent == "news":
-                return "Il servizio notizie non è configurato correttamente."
-            return f"Errore nel servizio {intent}."
+                return "Il servizio notizie non è configurato correttamente.", "tool"
+            return f"Errore nel servizio {intent}.", "tool"
 
     # ═══════════════════════════════════════════════════════════
     # MEMORY CONTEXT ROUTER — conversational memory responses
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_memory_context(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
+    async def _handle_memory_context(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> tuple[str, str]:
         """
         Handle memory_context intent — responses based on conversation history.
         Loads last N=5 interactions, summarizes dynamically, responds naturally.
         Never responds with "non posso aiutarti".
+        Returns: (response_text, "knowledge")
         """
         try:
             # Load last 5 interactions
             messages = chat_memory.get_messages(user_id, limit=5)
             if not messages:
                 logger.warning("MEMORY_CONTEXT_NO_HISTORY user=%s", user_id)
-                return "Non abbiamo ancora parlato abbastanza. Di cosa vorresti conversare?"
+                return "Non abbiamo ancora parlato abbastanza. Di cosa vorresti conversare?", "knowledge"
             
             # Build conversation summary
             conversation_summary = []
@@ -451,30 +456,31 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             
             if response is None:
                 # Fallback: simple acknowledgment
-                return "Ricordo i nostri scambi. C'è qualcosa di specifico che vorresti approfondire?"
+                return "Ricordo i nostri scambi. C'è qualcosa di specifico che vorresti approfondire?", "knowledge"
             
             logger.info("MEMORY_CONTEXT_RESPONSE user=%s history_count=%d", user_id, len(messages))
-            return response
+            return response, "knowledge"
             
         except Exception as e:
             logger.error("MEMORY_CONTEXT_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            return "Mi dispiace, ho avuto un problema nel recuperare i nostri ricordi. Riprova."
+            return "Mi dispiace, ho avuto un problema nel recuperare i nostri ricordi. Riprova.", "knowledge"
 
     # ═══════════════════════════════════════════════════════════
     # REMINDER HANDLERS — deterministic reminder management
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_reminder_creation(self, user_id: str, message: str) -> str:
+    async def _handle_reminder_creation(self, user_id: str, message: str) -> tuple[str, str]:
         """
         Handle reminder creation requests.
         Parse time and date from message and create reminder.
+        Returns: (response_text, "reminder")
         """
         try:
             # Extract reminder text and datetime from message
             reminder_text, reminder_datetime = self._parse_reminder_request(message)
             
             if not reminder_text or not reminder_datetime:
-                return "Non ho capito quando vuoi che ti ricordi. Prova a dire 'ricordami di [azione] [giorno] alle [ora]'."
+                return "Non ho capito quando vuoi che ti ricordi. Prova a dire 'ricordami di [azione] [giorno] alle [ora]'.", "reminder"
             
             # Create the reminder
             reminder_id = reminder_engine.create_reminder(user_id, reminder_text, reminder_datetime)
@@ -482,33 +488,34 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             if reminder_id:
                 # Format confirmation message
                 date_str = reminder_datetime.strftime("%d %b %H:%M")
-                return f"Perfetto. Ti ricorderò di {reminder_text} il {date_str}."
+                return f"Perfetto. Ti ricorderò di {reminder_text} il {date_str}.", "reminder"
             else:
-                return "Mi dispiace, non sono riuscito a creare il promemoria. Riprova."
+                return "Mi dispiace, non sono riuscito a creare il promemoria. Riprova.", "reminder"
                 
         except Exception as e:
             logger.error("REMINDER_CREATION_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            return "Mi dispiace, ho avuto un problema con il promemoria. Riprova."
+            return "Mi dispiace, ho avuto un problema con il promemoria. Riprova.", "reminder"
 
-    async def _handle_reminder_list(self, user_id: str, message: str) -> str:
+    async def _handle_reminder_list(self, user_id: str, message: str) -> tuple[str, str]:
         """
         Handle reminder list requests.
         Return formatted list of user's reminders.
+        Returns: (response_text, "reminder")
         """
         try:
             # Get pending reminders
             reminders = reminder_engine.list_reminders(user_id, status_filter="pending")
             
             if not reminders:
-                return "Non hai promemoria impostati."
+                return "Non hai promemoria impostati.", "reminder"
             
             # Format and return the list
             formatted_list = reminder_engine.format_reminders_list(reminders)
-            return formatted_list
+            return formatted_list, "reminder"
             
         except Exception as e:
             logger.error("REMINDER_LIST_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            return "Mi dispiace, non riesco a vedere i tuoi promemoria. Riprova."
+            return "Mi dispiace, non riesco a vedere i tuoi promemoria. Riprova.", "reminder"
 
     def _parse_reminder_request(self, message: str) -> tuple[str, datetime]:
         """
@@ -601,11 +608,12 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
     # RELATIONAL ROUTER — GPT controllato con contesto limitato
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_relational(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
+    async def _handle_relational(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> tuple[str, str]:
         """
         Pipeline relazionale con GPT controllato.
         GPT riceve: conversation thread, identity summary, topic, latent state.
         GPT NON inventa memoria.
+        Returns: (response_text, "relational")
         """
         # 1. Context Assembler — structured context from memory
         context = await self.context_assembler.build(user_id, message)
@@ -680,7 +688,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         logger.info("PROACTOR_RESPONSE user=%s len=%d route=relational emotion=%s",
                      user_id, len(response),
                      brain_state.get("emotion", {}).get("emotion", "?"))
-        return response
+        return response, "relational"
 
     def _build_short_relational_summary(self, context: Dict[str, Any]) -> str:
         """Costruisce summary breve per GPT relazionale. Tutti i fatti identitari noti."""
@@ -796,16 +804,13 @@ DIVIETI ASSOLUTI:
 {user_boundaries}
 
 Messaggio utente: {message}"""
-
-    # ═══════════════════════════════════════════════════════════
-    # KNOWLEDGE ROUTER — GPT pulito, zero contaminazione relazionale
-    # ═══════════════════════════════════════════════════════════
-
-    async def _handle_knowledge(self, user_id: str, message: str) -> str:
+        
+    async def _handle_knowledge(self, user_id: str, message: str) -> tuple[str, str]:
         """
         GPT per domande di definizione/conoscenza.
         Include chat history per risolvere riferimenti contestuali.
         Fallback deterministico da fallback_knowledge.py se LLM fallisce.
+        Returns: (response_text, "llm")
         """
         # Build conversation context — MUST include chat history
         profile = await storage.load(f"profile:{user_id}", default={})
@@ -844,8 +849,8 @@ Domanda: {message}"""
             if fb:
                 logger.info("FALLBACK_KNOWLEDGE_USED keyword=%s", normalized_message)
                 logger.info("KNOWLEDGE_FALLBACK_HIT topic=%s", normalized_message)
-                return fb
-            return "Mi dispiace, non riesco a fornire una risposta precisa in questo momento."
+                return fb, "llm"
+            return "Mi dispiace, non riesco a fornire una risposta precisa in questo momento.", "llm"
 
         # Post-generation filter
         result = filter_response(result, user_id)
@@ -853,17 +858,18 @@ Domanda: {message}"""
             result = "Non ho una risposta precisa."
 
         logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d route=knowledge", user_id, len(result))
-        return result
+        return result, "llm"
 
     # ═══════════════════════════════════════════════════════════
     # DOCUMENT QUERY ROUTER — document-aware GPT with no fallback
     # ═══════════════════════════════════════════════════════════
 
     async def _handle_document_query(self, user_id: str, message: str,
-                                      profile: Dict[str, Any], brain_state: Dict[str, Any]) -> str:
+                                      profile: Dict[str, Any], brain_state: Dict[str, Any]) -> tuple[str, str]:
         """
         Handle document_query intent. Uses active document content in LLM context.
         No generic fallback allowed — response MUST use document data.
+        Returns: (response_text, "knowledge")
         """
         # Build conversation context (includes document injection via step E)
         conversation_ctx = build_conversation_context(user_id, message, profile)
@@ -914,7 +920,7 @@ Messaggio utente: {message}"""
             result = "Documento ricevuto. Chiedimi cosa vuoi sapere."
 
         logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d route=document_query", user_id, len(result))
-        return result
+        return result, "knowledge"
 
     # ═══════════════════════════════════════════════════════════
     # UTILITY

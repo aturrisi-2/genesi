@@ -359,12 +359,13 @@ class TestProactorIntegration:
         """Test complete reminder creation flow."""
         message = "ricordami di chiamare il medico domani alle 18"
         
-        response = await proactor._handle_reminder_creation(test_user, message)
+        response, source = await proactor._handle_reminder_creation(test_user, message)
         
         # Should get confirmation message
         assert "Perfetto" in response
         assert "chiamare il medico" in response
         assert response.count("domani") > 0 or response.count("18") > 0
+        assert source == "reminder"
         
         # Verify reminder was created
         reminders = reminder_engine.list_reminders(test_user)
@@ -380,30 +381,33 @@ class TestProactorIntegration:
         reminder_engine.create_reminder(test_user, "task 2", now + timedelta(hours=2))
         
         message = "quali appuntamenti ho?"
-        response = await proactor._handle_reminder_list(test_user, message)
+        response, source = await proactor._handle_reminder_list(test_user, message)
         
         # Should get formatted list
         assert "I tuoi promemoria:" in response
         assert "task 1" in response
         assert "task 2" in response
+        assert source == "reminder"
     
     @pytest.mark.asyncio
     async def test_empty_reminder_list(self, proactor, test_user):
         """Test listing when no reminders exist."""
         message = "cosa devo fare?"
-        response = await proactor._handle_reminder_list(test_user, message)
+        response, source = await proactor._handle_reminder_list(test_user, message)
         
         assert response == "Non hai promemoria impostati."
+        assert source == "reminder"
     
     @pytest.mark.asyncio
     async def test_invalid_reminder_request(self, proactor, test_user):
         """Test handling of invalid reminder requests."""
         message = "ricordami"  # No task specified
         
-        response = await proactor._handle_reminder_creation(test_user, message)
+        response, source = await proactor._handle_reminder_creation(test_user, message)
         
         # Should get helpful error message
         assert "Non ho capito" in response
+        assert source == "reminder"
         assert "prova a dire" in response.lower()
 
 
