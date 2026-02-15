@@ -74,9 +74,13 @@ class ReminderEngine:
             reminder_id = str(uuid.uuid4())
             now = datetime.now()
             
+            # Strip emojis from reminder text before saving
+            from core.tts_sanitizer import strip_emojis
+            clean_text = strip_emojis(text)
+            
             reminder = {
                 "id": reminder_id,
-                "text": text,
+                "text": clean_text,
                 "datetime": reminder_datetime.isoformat(),
                 "status": "pending",  # pending, done, cancelled
                 "created_at": now.isoformat()
@@ -90,7 +94,7 @@ class ReminderEngine:
             
             if self._save_reminders(user_id, reminders):
                 log("REMINDER_CREATE", user_id=user_id, reminder_id=reminder_id, 
-                    text=text[:50], datetime=reminder_datetime.isoformat())
+                    text=clean_text[:50], datetime=reminder_datetime.isoformat())
                 return reminder_id
             
             return None

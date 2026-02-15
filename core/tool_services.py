@@ -245,18 +245,12 @@ class ToolService:
                 desc_it = WEATHER_DESC_IT.get(desc_en, desc_en)
 
             temp = round(data.get("main", {}).get("temp", 0))
-            feels_like = round(data.get("main", {}).get("feels_like", 0))
             humidity = data.get("main", {}).get("humidity", 0)
             wind_ms = data.get("wind", {}).get("speed", 0)
             wind_kmh = round(wind_ms * 3.6)
 
-            parts = [f"A {city}: {desc_it}, {temp}°C"]
-            if abs(feels_like - temp) >= 2:
-                parts.append(f"percepiti {feels_like}°C")
-            parts.append(f"umidit\u00e0 {humidity}%")
-            parts.append(f"vento {wind_kmh} km/h")
-
-            weather_info = ", ".join(parts) + "."
+            # Strict format: "A {City}: {descrizione}, {temp}°C, umidità {hum}%, vento {wind} km/h."
+            weather_info = f"A {city}: {desc_it}, {temp}°C, umidità {humidity}%, vento {wind_kmh} km/h."
 
             log("TOOL_WEATHER_RESPONSE", city=city, temp=temp, desc=desc_it)
             return weather_info
@@ -342,6 +336,10 @@ class ToolService:
         """
         try:
             log("TOOL_NEWS_REQUEST", message=message[:50])
+
+            if not GNEWS_API_KEY:
+                logger.error("TOOL_NEWS_MISSING_KEY error=GNEWS_API_KEY non configurata")
+                return "Servizio notizie non configurato."
 
             client = await self._get_client()
             msg_lower = message.lower()

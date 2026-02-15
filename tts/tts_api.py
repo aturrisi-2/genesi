@@ -30,7 +30,11 @@ async def tts_endpoint(request: TTSRequest, user: AuthUser = Depends(require_aut
     try:
         logger.info("TTS_REQUEST text_len=%d", len(request.text))
 
-        wav_bytes = await piper_tts_engine.synthesize(request.text)
+        # Sanitize text for TTS before synthesis
+        from core.tts_sanitizer import sanitize_for_tts
+        clean_text = sanitize_for_tts(request.text)
+        
+        wav_bytes = await piper_tts_engine.synthesize(clean_text)
 
         return StreamingResponse(
             io.BytesIO(wav_bytes),
