@@ -31,6 +31,8 @@ from core.tool_context import (save_tool_context, resolve_elliptical_city,
                                is_elliptical_weather_followup,
                                is_elliptical_news_followup, resolve_elliptical_news,
                                resolve_inherited_intent)
+from core.chat_memory import chat_memory
+from core.intent_classifier import intent_classifier
 import unidecode
 import os
 
@@ -96,6 +98,19 @@ def is_knowledge_question(message: str) -> bool:
     """Rileva domande di definizione/conoscenza."""
     msg_lower = message.lower().strip()
     return any(trigger in msg_lower for trigger in KNOWLEDGE_TRIGGERS)
+
+
+def is_memory_reference(message: str) -> bool:
+    """Rileva riferimenti alla memoria conversazionale precedente."""
+    msg_lower = message.lower().strip()
+    memory_triggers = [
+        "prima", "abbiamo parlato", "ricordi", "ricordarmi", 
+        "l'altra volta", "ieri", "di cosa", "come mi chiamo", 
+        "ti ricordi", "cosa abbiamo detto", "cosa dicevamo", 
+        "sai cosa", "ricordi cosa", "mi ricordi", "ci siamo detti",
+        "avevamo parlato", "discusso", "avevamo detto"
+    ]
+    return any(trigger in msg_lower for trigger in memory_triggers)
 
 
 class Proactor:
@@ -182,9 +197,15 @@ class Proactor:
                 logger.info("DOCUMENT_MODE_TRIGGERED user=%s doc_count=%d", user_id, len(active_docs))
                 return await self._handle_document_query(user_id, message, profile, brain_state)
 
+            # STEP 2.8: MEMORY ROUTING OVERRIDE — bypass classifier for memory references
+            chat_count = chat_memory.get_message_count(user_id)
+            if chat_count > 0 and is_memory_reference(message):
+                logger.info("MEMORY_ROUTING_OVERRIDE user=%s chat_count=%d msg=%s", user_id, chat_count, message[:40])
+                intent = "memory_context"
+
             # STEP 3: INTENT CLASSIFICATION
             if intent is None:
-                intent = await intent_classifier.classify(message)
+                intent = intent_classifier.classify(message)
 
             # STEP 3.5: INTENT INHERITANCE — geographic follow-up
             inherited = resolve_inherited_intent(user_id, message, intent)
@@ -197,6 +218,11 @@ class Proactor:
             if intent in self.tool_intents:
                 logger.info("PROACTOR_ROUTE route=tool intent=%s user=%s", intent, user_id)
                 return await self._handle_tool(intent, message, user_id)
+
+            # STEP 4.5: MEMORY CONTEXT ROUTE
+            if intent == "memory_context":
+                logger.info("PROACTOR_ROUTE route=memory_context user=%s", user_id)
+                return await self._handle_memory_context(user_id, message, brain_state)
 
             # STEP 5: KNOWLEDGE STRICT — but override short contextual follow-ups
             if intent in SKIP_RELATIONAL_INTENTS:
@@ -347,6 +373,60 @@ class Proactor:
             elif intent == "news":
                 return "Il servizio notizie non è configurato correttamente."
             return f"Errore nel servizio {intent}."
+
+    # ═══════════════════════════════════════════════════════════
+    # MEMORY CONTEXT ROUTER — conversational memory responses
+    # ═══════════════════════════════════════════════════════════
+
+    async def _handle_memory_context(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
+        """
+        Handle memory_context intent — responses based on conversation history.
+        Loads last N=5 interactions, summarizes dynamically, responds naturally.
+        Never responds with "non posso aiutarti".
+        """
+        try:
+            # Load last 5 interactions
+            messages = chat_memory.get_messages(user_id, limit=5)
+            if not messages:
+                logger.warning("MEMORY_CONTEXT_NO_HISTORY user=%s", user_id)
+                return "Non abbiamo ancora parlato abbastanza. Di cosa vorresti conversare?"
+            
+            # Build conversation summary
+            conversation_summary = []
+            for msg in messages:
+                user_msg = msg.get("user_message", "")
+                sys_msg = msg.get("system_response", "")
+                if user_msg and sys_msg:
+                    conversation_summary.append(f"Tu: {user_msg}\nIo: {sys_msg}")
+            
+            summary_text = "\n\n".join(conversation_summary)
+            
+            # Build memory-aware prompt
+            memory_prompt = f"""Basandoti sulla nostra conversazione recente:
+
+{summary_text}
+
+L'utente ora chiede: "{message}"
+
+Rispondi in modo naturale facendo riferimento ai nostri scambi precedenti quando pertinente. 
+Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
+
+            # Use LLM for natural response
+            model = model_selector(message, route="memory")
+            response = await llm_service._call_with_protection(
+                model, memory_prompt, message, user_id=user_id, route="memory"
+            )
+            
+            if response is None:
+                # Fallback: simple acknowledgment
+                return "Ricordo i nostri scambi. C'è qualcosa di specifico che vorresti approfondire?"
+            
+            logger.info("MEMORY_CONTEXT_RESPONSE user=%s history_count=%d", user_id, len(messages))
+            return response
+            
+        except Exception as e:
+            logger.error("MEMORY_CONTEXT_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
+            return "Mi dispiace, ho avuto un problema nel recuperare i nostri ricordi. Riprova."
 
     # ═══════════════════════════════════════════════════════════
     # RELATIONAL ROUTER — GPT controllato con contesto limitato
