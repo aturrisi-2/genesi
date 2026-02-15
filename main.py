@@ -9,6 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
 import uvicorn
+import asyncio
+from datetime import datetime
 
 # Import base
 from api.user import router as user_router
@@ -22,6 +24,7 @@ from auth.router import router as auth_router
 from auth.database import init_db, async_session
 from auth.models import Visit
 from core.log import log
+from core.reminder_engine import reminder_engine
 
 # ===============================
 # Applicazione FastAPI
@@ -42,6 +45,42 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def startup():
     await init_db()
     log("AUTH_DB_INIT", status="ok")
+    
+    # Start reminder checker background task
+    asyncio.create_task(reminder_checker_background())
+    log("REMINDER_CHECKER_STARTED", status="ok")
+
+
+async def reminder_checker_background():
+    """
+    Background task that checks for due reminders every 30 seconds.
+    """
+    while True:
+        try:
+            # Get due reminders
+            due_reminders = reminder_engine.get_due_reminders()
+            
+            for reminder in due_reminders:
+                user_id = reminder["user_id"]
+                reminder_id = reminder["id"]
+                reminder_text = reminder["text"]
+                
+                # Log the reminder trigger
+                log("REMINDER_TRIGGERED", user_id=user_id, reminder_id=reminder_id, text=reminder_text[:50])
+                
+                # Mark as done
+                reminder_engine.mark_reminder_done(user_id, reminder_id)
+                
+                # TODO: Send notification to user (could be via WebSocket, email, etc.)
+                # For now, just log it
+            
+            # Wait 30 seconds before next check
+            await asyncio.sleep(30)
+            
+        except Exception as e:
+            log("REMINDER_CHECKER_ERROR", error=str(e))
+            # Wait 30 seconds even on error
+            await asyncio.sleep(30)
 
 
 # ===============================
