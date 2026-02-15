@@ -68,6 +68,27 @@ class IntentClassifier:
         
         # Pattern per GPT-4o (tecnica)
         self.gpt_patterns = {
+            "reminder_create": [
+                "ricordami", "ricorda", "promemoria", "appuntamento", "ricordare",
+                "imposta promemoria", "crea promemoria", "nuovo promemoria"
+            ],
+            "reminder_list": [
+                "quali promemoria ho", "che appuntamenti ho", "lista promemoria",
+                "i miei promemoria", "mostra promemoria", "elenco appuntamenti",
+                "promemoria attivi", "appuntamenti impostati", "ricordami i promemoria",
+                "appuntamenti ho", "quali appuntamenti"
+            ],
+            "reminder_delete": [
+                "cancella promemoria", "cancella tutti i promemoria", "elimina promemoria",
+                "annulla promemoria", "cancella appuntamenti", "elimina appuntamenti",
+                "rimuovi promemoria", "rimuovi tutti i promemoria"
+            ],
+            "reminder_update": [
+                "modifica promemoria", "sposta promemoria", "cambia orario",
+                "spostalo alle", "anticipa alle", "posticipa alle", "sposta a",
+                "cambia a", "modifica orario", "cambia data", "sposta domani",
+                "anticipa oggi", "posticipa domani", "sposta il promemoria"
+            ],
             "tecnica": [
                 "tecnica", "tecnico", "architettura", "sistema", "implementazione",
                 "codice", "programmazione", "sviluppo", "software", "hardware",
@@ -86,37 +107,77 @@ class IntentClassifier:
     def classify(self, message: str) -> str:
         """
         Classifica intent - logica MINIMA con priorità memoria e override per intent misti
+        APPLICA REMINDER GUARD LAYER post-processing
         
         Args:
             message: Messaggio utente
             
         Returns:
-            Intent classificato
+            Intent classificato e normalizzato
         """
         message_lower = message.lower().strip()
         
-        # 0️⃣ PRIORITA' MASSIMA: pattern memoria/ricordo
+        # 0️⃣ PRIORITA' MASSIMA: reminder patterns (tutti)
+        for intent, keywords in self.gpt_patterns.items():
+            if intent.startswith('reminder_'):
+                if any(keyword in message_lower for keyword in keywords):
+                    log("INTENT_CLASSIFIED", intent=intent, engine="gpt-4o", message=message[:50])
+                    logger.info("INTENT_ENGINE=gpt-4o-mini intent=%s", intent)
+                    # APPLICA REMINDER GUARD LAYER
+                    normalized_intent = self.normalize_reminder_intent(message, intent)
+                    return normalized_intent
+        
+        # 0.1️⃣ PRIORITA' ALTA: pattern memoria/ricordo
         if any(pattern in message_lower for pattern in self.memory_patterns):
             log("INTENT_CLASSIFIED", intent="chat_free", engine="gpt-4o", message=message[:50], override="memory_context")
             return "chat_free"
         
         # 0.5️⃣ PRIORITY OVERRIDES for mixed intents
-        # Check for weather keywords (highest priority after memory)
-        weather_keywords = ["tempo", "meteo", "piove", "nevica", "caldo", "freddo", "sole", "nuvolo"]
-        if any(kw in message_lower for kw in weather_keywords):
-            log("INTENT_OVERRIDE_APPLIED", original="mixed", final="weather", message=message[:50])
-            return "weather"
         
-        # Check for implicit weather patterns
-        if self._is_implicit_weather(message_lower):
-            log("INTENT_OVERRIDE_APPLIED", original="mixed", final="weather", message=message[:50])
-            return "weather"
+        # Blocca override weather per richieste tempo/data
+        time_keywords = [
+            "che ore",
+            "ora",
+            "orario",
+            "che giorno",
+            "data",
+            "oggi è",
+            "dimmi la data",
+        ]
+        
+        if any(k in message_lower for k in time_keywords):
+            # Continua con la classificazione normale, non applicare weather override
+            pass
+        else:
+            # Check for weather keywords (solo parole meteo reali)
+            weather_keywords = [
+                "meteo",
+                "tempo",
+                "pioggia",
+                "sole",
+                "nuvol",
+                "vento",
+                "temperatura",
+                "gradi",
+                "umidità",
+                "temporale",
+            ]
+            if any(kw in message_lower for kw in weather_keywords):
+                log("INTENT_OVERRIDE_APPLIED", original="mixed", final="weather", message=message[:50])
+                return "weather"
+            
+            # Check for follow-up weather patterns (solo città pura)
+            if self._is_followup_weather(message_lower):
+                log("INTENT_OVERRIDE_APPLIED", original="mixed", final="weather", message=message[:50])
+                return "weather"
         
         # Check for reminder keywords
         reminder_keywords = ["ricorda", "ricordami", "promemoria", "appuntamento", "ricordare"]
         if any(kw in message_lower for kw in reminder_keywords):
             log("INTENT_OVERRIDE_APPLIED", original="mixed", final="reminder_create", message=message[:50])
-            return "reminder_create"
+            # APPLICA REMINDER GUARD LAYER
+            normalized_intent = self.normalize_reminder_intent(message, "reminder_create")
+            return normalized_intent
         
         # Check for technical keywords
         technical_keywords = ["tecnica", "tecnico", "architettura", "sistema", "implementazione",
@@ -135,6 +196,10 @@ class IntentClassifier:
             if any(keyword in message_lower for keyword in keywords):
                 log("INTENT_CLASSIFIED", intent=intent, engine="gpt-4o", message=message[:50])
                 logger.info("INTENT_ENGINE=gpt-4o-mini intent=%s", intent)
+                # APPLICA REMINDER GUARD LAYER solo per reminder intents
+                if intent.startswith('reminder_'):
+                    normalized_intent = self.normalize_reminder_intent(message, intent)
+                    return normalized_intent
                 return intent
         
         # 2️⃣ Pattern chat (GPT-4o)
@@ -224,6 +289,124 @@ class IntentClassifier:
                             return True
         
         return False
+    
+    def _is_followup_weather(self, message_lower: str) -> bool:
+        """
+        Detect follow-up weather requests after previous weather intent.
+        Patterns: "A Firenze?", "Milano?", "E Bologna?"
+        """
+        import re
+        
+        # Pattern per follow-up weather
+        followup_patterns = [
+            r'^a\s+([a-zà-ú]{2,})\?$',  # "A Firenze?"
+            r'^([a-zà-ú]{2,})\?$',      # "Milano?"
+            r'^e\s+([a-zà-ú]{2,})\?$',  # "E Bologna?"
+        ]
+        
+        for pattern in followup_patterns:
+            if re.match(pattern, message_lower):
+                city = re.search(r'([a-zà-ú]{2,})', message_lower)
+                if city:
+                    city_name = city.group(1)
+                    # Skip common non-city words
+                    if city_name not in ["oggi", "domani", "ieri", "ora", "qui", "li", "la", "casa", "lavoro", "stato", "tempo", "meteo"]:
+                        return True
+        
+        return False
+
+    def normalize_reminder_intent(self, message: str, intent: str) -> str:
+        """
+        REMINDER GUARD LAYER - Post-processing deterministico per reminder intents.
+        Intercetta e corregge classificazioni errate basandosi su parole chiave specifiche.
+        
+        Args:
+            message: Messaggio utente originale
+            intent: Intent classificato dal sistema
+            
+        Returns:
+            Intent normalizzato (reminder_*, chat_free, o intent originale)
+        """
+        message_lower = message.lower().strip()
+        forced_intent = False
+        
+        # 1️⃣ Parole chiave CANCELLAZIONE → forza reminder_delete
+        delete_keywords = ["cancella", "elimina", "rimuovi", "annulla"]
+        if any(keyword in message_lower for keyword in delete_keywords):
+            if "promemoria" in message_lower or "appuntament" in message_lower:
+                log("REMINDER_GUARD_FORCED", original_intent=intent, forced_intent="reminder_delete", reason="delete_keyword", message=message[:50])
+                return "reminder_delete"
+        
+        # 2️⃣ Parole chiave LISTA → forza reminder_list  
+        list_keywords = ["quali", "mostra", "lista", "che appuntamenti", "che promemoria", "i miei", "elenco", "appuntamenti ho"]
+        if any(keyword in message_lower for keyword in list_keywords):
+            if "promemoria" in message_lower or "appuntament" in message_lower:
+                log("REMINDER_GUARD_FORCED", original_intent=intent, forced_intent="reminder_list", reason="list_keyword", message=message[:50])
+                return "reminder_list"
+        
+        # 3️⃣ Parole chiave MODIFICA → forza reminder_update
+        update_keywords = ["modifica", "sposta", "cambia", "posticipa", "anticipa"]
+        if any(keyword in message_lower for keyword in update_keywords):
+            if "promemoria" in message_lower or "appuntament" in message_lower:
+                log("REMINDER_GUARD_FORCED", original_intent=intent, forced_intent="reminder_update", reason="update_keyword", message=message[:50])
+                return "reminder_update"
+        
+        # 4️⃣ Se intent == reminder_create → verifica presenza data/orario
+        if intent == "reminder_create":
+            has_datetime = self._has_datetime_reference(message_lower)
+            
+            if not has_datetime:
+                # NON fare downgrade a chat_free, lasciare passare reminder_create
+                # Il proactor gestirà il caso chiedendo data/orario
+                log("REMINDER_GUARD_NO_DATETIME", intent=intent, has_datetime=False, message=message[:50])
+                return intent
+            else:
+                log("REMINDER_GUARD_VALIDATED", intent=intent, has_datetime=True, message=message[:50])
+        
+        # 5️⃣ Altri casi ambigui con parole reminder ma azione non chiara
+        reminder_keywords = ["ricordami", "ricorda", "promemoria", "appuntamento", "ricordare"]
+        if any(keyword in message_lower for keyword in reminder_keywords):
+            # Se contiene reminder keywords ma non è stato classificato come reminder_*
+            # e non ha data/orario chiara → downgrade a chat_free
+            if not intent.startswith('reminder_') and not self._has_datetime_reference(message_lower):
+                log("REMINDER_GUARD_AMBIGUOUS", original_intent=intent, final_intent="chat_free", reason="ambiguous_reminder", message=message[:50])
+                return "chat_free"
+        
+        return intent
+    
+    def _has_datetime_reference(self, message_lower: str) -> bool:
+        """
+        Verifica presenza di riferimenti a data/orario nel messaggio.
+        Pattern: HH:MM, domani, oggi, dopodomani, giorni settimana.
+        
+        Args:
+            message_lower: Messaggio in minuscolo
+            
+        Returns:
+            True se presente riferimento temporale
+        """
+        import re
+        
+        # Pattern orario HH:MM
+        if re.search(r'\d{1,2}:\d{2}', message_lower):
+            return True
+        
+        # Pattern "alle H" (senza minuti)
+        if re.search(r'alle\s+\d{1,2}(?::\d{2})?', message_lower):
+            return True
+        
+        # Parole chiave data
+        date_keywords = ["domani", "oggi", "dopodomani", "ieri"]
+        if any(keyword in message_lower for keyword in date_keywords):
+            return True
+        
+        # Giorni della settimana
+        weekdays = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]
+        if any(day in message_lower for day in weekdays):
+            return True
+        
+        return False
+
 
 # Istanza globale
 intent_classifier = IntentClassifier()

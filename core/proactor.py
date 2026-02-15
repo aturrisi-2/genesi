@@ -227,14 +227,8 @@ class Proactor:
                 logger.info("MEMORY_ROUTING_OVERRIDE user=%s chat_count=%d msg=%s", user_id, chat_count, message[:40])
                 intent = "memory_context"
 
-            # STEP 2.9: REMINDER ROUTING OVERRIDE — bypass classifier for reminder requests
-            if is_reminder_request(message):
-                logger.info("REMINDER_ROUTING_OVERRIDE user=%s msg=%s", user_id, message[:40])
-                return await self._handle_reminder_creation(user_id, message)
-            
-            if is_list_reminders_request(message):
-                logger.info("REMINDER_LIST_ROUTING user=%s msg=%s", user_id, message[:40])
-                return await self._handle_reminder_list(user_id, message)
+            # STEP 2.9: REMINDER ROUTING STRICT — SOLO per intent espliciti
+            # RIMOSSO: routing basato su testo, ora SOLO intent classificati
 
             # STEP 3: INTENT CLASSIFICATION
             if intent is None:
@@ -256,6 +250,23 @@ class Proactor:
             if intent == "memory_context":
                 logger.info("PROACTOR_ROUTE route=memory_context user=%s", user_id)
                 return await self._handle_memory_context(user_id, message, brain_state)
+            
+            # STEP 4.6: REMINDER ROUTING STRICT
+            if intent == "reminder_create":
+                logger.info("REMINDER_CREATE_ROUTING user=%s msg=%s", user_id, message[:40])
+                return await self._handle_reminder_creation(user_id, message)
+            
+            if intent == "reminder_list":
+                logger.info("REMINDER_LIST_ROUTING user=%s msg=%s", user_id, message[:40])
+                return await self._handle_reminder_list(user_id, message)
+            
+            if intent == "reminder_delete":
+                logger.info("REMINDER_DELETE_ROUTING user=%s msg=%s", user_id, message[:40])
+                return await self._handle_reminder_delete(user_id, message)
+            
+            if intent == "reminder_update":
+                logger.info("REMINDER_UPDATE_ROUTING user=%s msg=%s", user_id, message[:40])
+                return await self._handle_reminder_update(user_id, message)
 
             # STEP 5: KNOWLEDGE STRICT — but override short contextual follow-ups
             if intent in SKIP_RELATIONAL_INTENTS:
@@ -471,26 +482,34 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
     async def _handle_reminder_creation(self, user_id: str, message: str) -> tuple[str, str]:
         """
-        Handle reminder creation requests.
-        Parse time and date from message and create reminder.
+        Handle reminder creation requests with STRICT logic.
+        SOLO se presente orario esplicito (HH:MM) o data esplicita.
+        MAI fallback automatici.
         Returns: (response_text, "reminder")
         """
         try:
             # Extract reminder text and datetime from message
-            reminder_text, reminder_datetime = self._parse_reminder_request(message)
+            reminder_text, reminder_datetime = self._parse_reminder_request_strict(message)
             
-            if not reminder_text or not reminder_datetime:
+            # Se manca data o ora → chiedere chiarimento
+            if not reminder_datetime:
                 return "Non ho capito quando vuoi che ti ricordi. Prova a dire 'ricordami di [azione] [giorno] alle [ora]'.", "reminder"
             
-            # Create the reminder
-            reminder_id = reminder_engine.create_reminder(user_id, reminder_text, reminder_datetime)
+            # Se abbiamo datetime ma manca testo → chiedere cosa ricordare
+            if reminder_datetime and not reminder_text:
+                return "Cosa vuoi che ti ricordi?", "reminder"
             
-            if reminder_id:
-                # Format confirmation message
-                date_str = reminder_datetime.strftime("%d %b %H:%M")
-                return f"Perfetto. Ti ricorderò di {reminder_text} il {date_str}.", "reminder"
-            else:
-                return "Mi dispiace, non sono riuscito a creare il promemoria. Riprova.", "reminder"
+            # Caso completo: testo + datetime validi
+            if reminder_text and reminder_datetime:
+                # Create the reminder
+                reminder_id, response = reminder_engine.create_reminder_with_response(user_id, reminder_text, reminder_datetime)
+                
+                if reminder_id:
+                    return response, "reminder"
+                else:
+                    return response, "reminder"
+            
+            return "Quando vuoi che te lo ricordi?", "reminder"
                 
         except Exception as e:
             logger.error("REMINDER_CREATION_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
@@ -517,9 +536,343 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             logger.error("REMINDER_LIST_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
             return "Mi dispiace, non riesco a vedere i tuoi promemoria. Riprova.", "reminder"
 
+    async def _handle_reminder_delete(self, user_id: str, message: str) -> tuple[str, str]:
+        """
+        Handle reminder deletion requests with deterministic parsing.
+        Support: numero, "tutti", testo parziale (fuzzy)
+        Returns: (response_text, "reminder")
+        """
+        try:
+            msg_lower = message.lower()
+            
+            # 1️⃣ "tutti" → elimina tutti
+            if "tutti" in msg_lower:
+                deleted_count = reminder_engine.delete_all_pending(user_id)
+                
+                if deleted_count > 0:
+                    return f"Ho cancellato tutti i promemoria.", "reminder"
+                else:
+                    return "Non hai promemoria da cancellare.", "reminder"
+            
+            # 2️⃣ Numero → elimina per indice
+            import re
+            number_match = re.search(r'(\d+)', message)
+            if number_match:
+                index = int(number_match.group(1)) - 1  # Convert to 0-based
+                
+                reminders = reminder_engine.list_reminders(user_id, status_filter="pending")
+                
+                if 0 <= index < len(reminders):
+                    reminder_id = reminders[index]["id"]
+                    success = reminder_engine.delete_reminder(user_id, reminder_id)
+                    
+                    if success:
+                        return f"Ho cancellato il promemoria {index + 1}.", "reminder"
+                    else:
+                        return "Mi dispiace, non sono riuscito a cancellare il promemoria.", "reminder"
+                else:
+                    return f"Non hai un promemoria numero {index + 1}.", "reminder"
+            
+            # 3️⃣ Testo parziale → fuzzy match semplice
+            # Estrai testo dopo verbi di cancellazione
+            delete_patterns = ["cancella promemoria", "elimina promemoria", "annulla promemoria", 
+                              "cancella appuntamento", "elimina appuntamento", "rimuovi promemoria"]
+            
+            search_text = None
+            for pattern in delete_patterns:
+                if pattern in msg_lower:
+                    parts = msg_lower.split(pattern, 1)
+                    if len(parts) > 1:
+                        search_text = parts[1].strip()
+                        break
+            
+            if search_text:
+                reminders = reminder_engine.list_reminders(user_id, status_filter="pending")
+                
+                # Fuzzy match semplice: cerca testo parziale
+                for reminder in reminders:
+                    if search_text in reminder["text"].lower():
+                        success = reminder_engine.delete_reminder(user_id, reminder["id"])
+                        
+                        if success:
+                            return f"Ho cancellato il promemoria: {reminder['text']}", "reminder"
+                        else:
+                            return "Mi dispiace, non sono riuscito a cancellare il promemoria.", "reminder"
+                
+                return f"Non trovo promemoria con '{search_text}'.", "reminder"
+            
+            # 4️⃣ Default → elimina il più recente
+            latest_reminder = reminder_engine.get_latest_pending(user_id)
+            
+            if latest_reminder:
+                success = reminder_engine.delete_reminder(user_id, latest_reminder["id"])
+                
+                if success:
+                    return "Ho cancellato l'ultimo promemoria.", "reminder"
+                else:
+                    return "Mi dispiace, non sono riuscito a cancellare il promemoria.", "reminder"
+            else:
+                return "Non hai promemoria da cancellare.", "reminder"
+                
+        except Exception as e:
+            logger.error("REMINDER_DELETE_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
+            return "Mi dispiace, ho avuto un problema con la cancellazione. Riprova.", "reminder"
+
+    async def _handle_reminder_update(self, user_id: str, message: str) -> tuple[str, str]:
+        """
+        Handle reminder update requests with deterministic parsing.
+        Support: numero, testo parziale, nuova data/ora
+        Returns: (response_text, "reminder")
+        """
+        try:
+            msg_lower = message.lower()
+            
+            # 1️⃣ Numero → modifica per indice
+            import re
+            number_match = re.search(r'(\d+)', message)
+            target_reminder = None
+            
+            if number_match:
+                index = int(number_match.group(1)) - 1  # Convert to 0-based
+                
+                reminders = reminder_engine.list_reminders(user_id, status_filter="pending")
+                
+                if 0 <= index < len(reminders):
+                    target_reminder = reminders[index]
+                else:
+                    return f"Non hai un promemoria numero {index + 1}.", "reminder"
+            else:
+                # 2️⃣ Senza numero → usa il più recente
+                target_reminder = reminder_engine.get_latest_pending(user_id)
+            
+            if not target_reminder:
+                return "Non hai promemoria da modificare.", "reminder"
+            
+            # 3️⃣ Parsing nuova data/ora
+            new_datetime = self._parse_update_datetime_strict(message)
+            
+            if not new_datetime:
+                return "Non ho capito a quando vuoi spostare il promemoria. Prova con 'sposta alle 18' o 'a domani'.", "reminder"
+            
+            # 4️⃣ Aggiorna il reminder
+            success = reminder_engine.update_reminder_datetime(user_id, target_reminder["id"], new_datetime)
+            
+            if success:
+                # Format confirmation message
+                date_str = new_datetime.strftime("%d %b %H:%M")
+                return f"Ho aggiornato il promemoria al {date_str}.", "reminder"
+            else:
+                return "Mi dispiace, non sono riuscito ad aggiornare il promemoria.", "reminder"
+                
+        except Exception as e:
+            logger.error("REMINDER_UPDATE_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
+            return "Mi dispiace, ho avuto un problema con l'aggiornamento. Riprova.", "reminder"
+
+    def _parse_update_datetime_strict(self, message: str) -> Optional[datetime]:
+        """
+        Parse update datetime with STRICT logic.
+        SOLO orario esplicito (HH:MM) o data esplicita.
+        MAI fallback automatici.
+        
+        Args:
+            message: User message like "sposta alle 18" or "a domani"
+            
+        Returns:
+            New datetime or None if invalid
+        """
+        import re
+        from datetime import datetime, timedelta
+        
+        msg_lower = message.lower().strip()
+        now = datetime.now()
+        
+        # 1️⃣ Pattern orario esplicito HH:MM
+        time_match = re.search(r'(\d{1,2}):(\d{2})', message)
+        hour = None
+        minute = None
+        
+        if time_match:
+            hour = int(time_match.group(1))
+            minute = int(time_match.group(2))
+        
+        # 2️⃣ Pattern data esplicita
+        target_date = None
+        
+        # Oggi
+        if "oggi" in msg_lower:
+            target_date = now.date()
+        # Domani
+        elif "domani" in msg_lower:
+            target_date = (now + timedelta(days=1)).date()
+        # Ieri
+        elif "ieri" in msg_lower:
+            target_date = (now - timedelta(days=1)).date()
+        # Giorni della settimana
+        elif any(day in msg_lower for day in ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]):
+            day_map = {
+                "lunedì": 0, "martedì": 1, "mercoledì": 2, "giovedì": 3, 
+                "venerdì": 4, "sabato": 5, "domenica": 6
+            }
+            
+            for day_name, day_num in day_map.items():
+                if day_name in msg_lower:
+                    days_ahead = day_num - now.weekday()
+                    if days_ahead <= 0:
+                        days_ahead += 7
+                    target_date = (now + timedelta(days=days_ahead)).date()
+                    break
+        
+        # 3️⃣ Costruisci datetime SOLO se abbiamo almeno ora o data
+        new_datetime = None
+        
+        if hour is not None and minute is not None:
+            # Abbiamo orario esplicito
+            if target_date:
+                # Data + ora
+                new_datetime = datetime.combine(target_date, datetime.min.time().replace(hour=hour, minute=minute))
+            else:
+                # Solo ora → usa oggi
+                new_datetime = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                # Se ora è nel passato → sposta a domani
+                if new_datetime <= now:
+                    new_datetime += timedelta(days=1)
+        elif target_date:
+            # Solo data → usa ora corrente
+            new_datetime = datetime.combine(target_date, now.time())
+        
+        return new_datetime
+
+    def _parse_reminder_request_strict(self, message: str) -> tuple[str, Optional[datetime]]:
+        """
+        Parse reminder request with STRICT logic.
+        SOLO orario esplicito (HH:MM) o data esplicita.
+        MAI fallback automatici.
+        
+        Args:
+            message: User message like "ricordami di chiamare il medico domani alle 18"
+            
+        Returns:
+            Tuple of (reminder_text, reminder_datetime)
+        """
+        import re
+        from datetime import datetime, timedelta
+        from typing import Optional
+        
+        msg_lower = message.lower().strip()
+        now = datetime.now()
+        
+        # 1️⃣ Estrai testo dopo "ricordami di" / "ricordami che"
+        reminder_text = ""
+        if "ricordami di " in message:
+            # Estrai fino ai pattern temporali
+            parts = message.split("ricordami di ", 1)
+            if len(parts) > 1:
+                reminder_text = parts[1].strip()
+                # Rimuovi pattern temporali dalla fine
+                temp_patterns = [
+                    r'\s+domani(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
+                    r'\s+oggi(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
+                    r'\s+(?:lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica)(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
+                    r'\s+alle\s+\d{1,2}(?::\d{2})?'
+                ]
+                for pattern in temp_patterns:
+                    reminder_text = re.sub(pattern, '', reminder_text)
+                reminder_text = reminder_text.strip()
+        elif "ricordami che " in message:
+            parts = message.split("ricordami che ", 1)
+            if len(parts) > 1:
+                reminder_text = parts[1].strip()
+                # Rimuovi pattern temporali dalla fine
+                temp_patterns = [
+                    r'\s+domani(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
+                    r'\s+oggi(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
+                    r'\s+(?:lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica)(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
+                    r'\s+alle\s+\d{1,2}(?::\d{2})?'
+                ]
+                for pattern in temp_patterns:
+                    reminder_text = re.sub(pattern, '', reminder_text)
+                reminder_text = reminder_text.strip()
+        elif "ricordami " in message:
+            parts = message.split("ricordami ", 1)
+            if len(parts) > 1:
+                reminder_text = parts[1].strip()
+                # Rimuovi pattern temporali dalla fine
+                temp_patterns = [
+                    r'\s+domani(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
+                    r'\s+oggi(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
+                    r'\s+(?:lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica)(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
+                    r'\s+alle\s+\d{1,2}(?::\d{2})?'
+                ]
+                for pattern in temp_patterns:
+                    reminder_text = re.sub(pattern, '', reminder_text)
+                reminder_text = reminder_text.strip()
+        
+        # 2️⃣ Pattern orario esplicito HH:MM o H:MM
+        time_match = re.search(r'(\d{1,2}):(\d{2})', message)
+        hour = None
+        minute = None
+        
+        if time_match:
+            hour = int(time_match.group(1))
+            minute = int(time_match.group(2))
+        else:
+            # Pattern "alle H" senza minuti
+            time_match_simple = re.search(r'alle\s+(\d{1,2})(?::(\d{2}))?', msg_lower)
+            if time_match_simple:
+                hour = int(time_match_simple.group(1))
+                minute = int(time_match_simple.group(2)) if time_match_simple.group(2) else 0
+        
+        # 3️⃣ Pattern data esplicita
+        target_date = None
+        
+        # Oggi
+        if "oggi" in msg_lower:
+            target_date = now.date()
+        # Domani
+        elif "domani" in msg_lower:
+            target_date = (now + timedelta(days=1)).date()
+        # Ieri
+        elif "ieri" in msg_lower:
+            target_date = (now - timedelta(days=1)).date()
+        # Giorni della settimana
+        elif any(day in msg_lower for day in ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]):
+            day_map = {
+                "lunedì": 0, "martedì": 1, "mercoledì": 2, "giovedì": 3, 
+                "venerdì": 4, "sabato": 5, "domenica": 6
+            }
+            
+            for day_name, day_num in day_map.items():
+                if day_name in msg_lower:
+                    days_ahead = day_num - now.weekday()
+                    if days_ahead <= 0:
+                        days_ahead += 7
+                    target_date = (now + timedelta(days=days_ahead)).date()
+                    break
+        
+        # 4️⃣ Costruisci datetime SOLO se abbiamo almeno ora o data
+        reminder_datetime = None
+        
+        if hour is not None and minute is not None:
+            # Abbiamo orario esplicito
+            if target_date:
+                # Data + ora
+                reminder_datetime = datetime.combine(target_date, datetime.min.time().replace(hour=hour, minute=minute))
+            else:
+                # Solo ora → usa oggi
+                reminder_datetime = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                # Se ora è nel passato → non creare (chiedere)
+                if reminder_datetime <= now:
+                    reminder_datetime = None
+        elif target_date:
+            # Solo data → non creare (chiedere ora)
+            reminder_datetime = None
+        
+        return reminder_text, reminder_datetime
+
     def _parse_reminder_request(self, message: str) -> tuple[str, datetime]:
         """
         Parse reminder request to extract text and datetime.
+        LEGACY METHOD - mantenuto per compatibilità test.
         
         Args:
             message: User message like "ricordami di chiamare il medico domani alle 18"

@@ -65,15 +65,22 @@ async def reminder_checker_background():
                 reminder_id = reminder["id"]
                 reminder_text = reminder["text"]
                 
-                # Log the reminder trigger
-                log("REMINDER_TRIGGERED", user_id=user_id, reminder_id=reminder_id, text=reminder_text[:50])
+                # Mark as triggered (alarm activated)
+                reminder_engine.mark_reminder_triggered(user_id, reminder_id)
                 
-                # Mark as done
-                reminder_engine.mark_reminder_done(user_id, reminder_id)
+                # Log the reminder trigger
+                log("REMINDER_ALARM_TRIGGERED", user_id=user_id, reminder_id=reminder_id, text=reminder_text[:50])
+                
+                # Set global alarm flag for frontend
+                import os
+                os.environ["GENESI_ALARM_ACTIVE"] = "true"
+                os.environ["GENESI_ALARM_USER"] = user_id
+                os.environ["GENESI_ALARM_TEXT"] = reminder_text[:100]
                 
                 # TODO: Send notification to user (could be via WebSocket, email, etc.)
-                # For now, just log it
-            
+                # TODO: Force TTS response with priority
+                # TODO: Set alarm flag for frontend
+                
             # Wait 30 seconds before next check
             await asyncio.sleep(30)
             

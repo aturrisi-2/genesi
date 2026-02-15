@@ -24,7 +24,6 @@ const textInput = document.getElementById('text-input');
 const sendButton = document.getElementById('send-button');
 const micButton = document.getElementById('mic-button');
 const plusButton = document.getElementById('plus-button');
-const cameraButton = document.getElementById('camera-button');
 const chatForm = document.getElementById('chat-form');
 
 // Camera state
@@ -1794,7 +1793,6 @@ function stopCamera() {
 // ===============================
 sendButton.addEventListener('click', sendMessage);
 plusButton.addEventListener('click', handleFileUpload);
-cameraButton.addEventListener('click', startCamera);
 
 const handleMicToggle = (e) => {
   // Audio Priming: previeni NotAllowedError su Safari/iOS

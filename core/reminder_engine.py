@@ -82,7 +82,7 @@ class ReminderEngine:
                 "id": reminder_id,
                 "text": clean_text,
                 "datetime": reminder_datetime.isoformat(),
-                "status": "pending",  # pending, done, cancelled
+                "status": "pending",  # pending, done, cancelled, triggered
                 "created_at": now.isoformat()
             }
             
@@ -102,6 +102,62 @@ class ReminderEngine:
         except Exception as e:
             log("REMINDER_CREATE_ERROR", user_id=user_id, error=str(e))
             return None
+    
+    def create_reminder_with_response(self, user_id: str, text: str, reminder_datetime: datetime) -> tuple[Optional[str], Optional[str]]:
+        """
+        Create a new reminder for a user and return response message.
+        APPLICA VALIDAZIONE DATETIME PRESENCE.
+        
+        Args:
+            user_id: User identifier
+            text: Reminder text
+            reminder_datetime: When to remind
+            
+        Returns:
+            Tuple of (reminder_id, response_message) if successful, (None, error_message) otherwise
+        """
+        try:
+            # VALIDAZIONE DATETIME PRESENCE
+            if not self.validate_datetime_presence(text, reminder_datetime):
+                log("REMINDER_VALIDATION_FAILED", user_id=user_id, has_datetime=False, text=text[:50])
+                return None, "Non ho capito quando vuoi che ti ricordi."
+            
+            reminder_id = self.create_reminder(user_id, text, reminder_datetime)
+            
+            if reminder_id:
+                # Format confirmation message
+                date_str = reminder_datetime.strftime("%d %b %H:%M")
+                response = f"Perfetto. Ti ricorderò di {text} il {date_str}."
+                log("REMINDER_VALIDATION", user_id=user_id, has_datetime=True, reminder_id=reminder_id)
+                return reminder_id, response
+            
+            return None, "Mi dispiace, non sono riuscito a creare il promemoria. Riprova."
+            
+        except Exception as e:
+            log("REMINDER_CREATE_ERROR", user_id=user_id, error=str(e))
+            return None, "Mi dispiace, ho avuto un problema con il promemoria. Riprova."
+    
+    def validate_datetime_presence(self, text: str, parsed_datetime: Optional[datetime]) -> bool:
+        """
+        Valida presenza effettiva di data/orario nel reminder.
+        Blocca creazione se parsed_datetime è None.
+        
+        Args:
+            text: Testo del reminder
+            parsed_datetime: DateTime parsato dal sistema
+            
+        Returns:
+            True se datetime valido, False altrimenti
+        """
+        if parsed_datetime is None:
+            return False
+        
+        # Verifica che la datetime sia nel futuro (almeno 1 minuto)
+        now = datetime.now()
+        if parsed_datetime <= now + timedelta(minutes=1):
+            return False
+        
+        return True
     
     def list_reminders(self, user_id: str, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
         """
@@ -253,6 +309,124 @@ class ReminderEngine:
             log("REMINDER_DELETE_ERROR", user_id=user_id, reminder_id=reminder_id, error=str(e))
             return False
     
+    def delete_all_pending(self, user_id: str) -> int:
+        """
+        Delete all pending reminders for a user.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            Number of deleted reminders
+        """
+        try:
+            reminders = self._load_reminders(user_id)
+            
+            # Filter to keep only non-pending reminders
+            updated_reminders = [r for r in reminders if r.get("status") != "pending"]
+            deleted_count = len(reminders) - len(updated_reminders)
+            
+            if deleted_count > 0:
+                if self._save_reminders(user_id, updated_reminders):
+                    log("REMINDER_DELETE_ALL", user_id=user_id, count=deleted_count)
+                    return deleted_count
+            
+            return 0
+            
+        except Exception as e:
+            log("REMINDER_DELETE_ALL_ERROR", user_id=user_id, error=str(e))
+            return 0
+    
+    def get_latest_pending(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get the most recent pending reminder.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            Latest pending reminder or None
+        """
+        try:
+            reminders = self._load_reminders(user_id)
+            
+            # Filter pending reminders and sort by datetime (most recent first)
+            pending_reminders = [r for r in reminders if r.get("status") == "pending"]
+            pending_reminders.sort(key=lambda r: r["datetime"], reverse=True)
+            
+            return pending_reminders[0] if pending_reminders else None
+            
+        except Exception as e:
+            log("REMINDER_GET_LATEST_ERROR", user_id=user_id, error=str(e))
+            return None
+    
+    def update_reminder_datetime(self, user_id: str, reminder_id: str, new_datetime: datetime) -> bool:
+        """
+        Update the datetime of an existing reminder.
+        
+        Args:
+            user_id: User identifier
+            reminder_id: Reminder ID
+            new_datetime: New reminder datetime
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            reminders = self._load_reminders(user_id)
+            
+            for reminder in reminders:
+                if reminder.get("id") == reminder_id:
+                    reminder["datetime"] = new_datetime.isoformat()
+                    reminder["updated_at"] = datetime.now().isoformat()
+                    
+                    # Re-sort by datetime
+                    reminders.sort(key=lambda r: r["datetime"])
+                    
+                    if self._save_reminders(user_id, reminders):
+                        log("REMINDER_UPDATE", user_id=user_id, reminder_id=reminder_id, 
+                            datetime=new_datetime.isoformat())
+                        return True
+                    return False
+            
+            log("REMINDER_UPDATE_NOT_FOUND", user_id=user_id, reminder_id=reminder_id)
+            return False
+            
+        except Exception as e:
+            log("REMINDER_UPDATE_ERROR", user_id=user_id, reminder_id=reminder_id, error=str(e))
+            return False
+    
+    def mark_reminder_triggered(self, user_id: str, reminder_id: str) -> bool:
+        """
+        Mark a reminder as triggered (alarm activated).
+        
+        Args:
+            user_id: User identifier
+            reminder_id: Reminder ID
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            reminders = self._load_reminders(user_id)
+            
+            for reminder in reminders:
+                if reminder.get("id") == reminder_id:
+                    reminder["status"] = "triggered"
+                    reminder["triggered_at"] = datetime.now().isoformat()
+                    
+                    if self._save_reminders(user_id, reminders):
+                        log("REMINDER_TRIGGERED", user_id=user_id, reminder_id=reminder_id)
+                        return True
+                    return False
+            
+            log("REMINDER_TRIGGERED_NOT_FOUND", user_id=user_id, reminder_id=reminder_id)
+            return False
+            
+        except Exception as e:
+            log("REMINDER_TRIGGERED_ERROR", user_id=user_id, reminder_id=reminder_id, error=str(e))
+            return False
+    
     def format_reminders_list(self, reminders: List[Dict[str, Any]]) -> str:
         """
         Format reminders list for user display.
@@ -275,7 +449,7 @@ class ReminderEngine:
                 text = reminder["text"]
                 status = reminder.get("status", "pending")
                 
-                status_icon = "✅" if status == "done" else "⏰" if status == "pending" else "❌"
+                status_icon = "✅" if status == "done" else "⏰" if status == "pending" else "🔔" if status == "triggered" else "❌"
                 lines.append(f"{i}. {date_str} – {text} {status_icon}")
                 
             except Exception as e:
