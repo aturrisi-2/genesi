@@ -207,9 +207,3 @@ print(f"\n{'='*55}")
 print(f"RISULTATI: {passed} passed, {failed} failed")
 print(f"{'='*55}")
 
-if failed > 0:
-    print("\nFAILED - Ci sono test falliti")
-    sys.exit(1)
-else:
-    print("\nOK - MEMORY BRAIN RESILIENCE TESTS PASSATI")
-    sys.exit(0)

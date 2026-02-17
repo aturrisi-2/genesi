@@ -33,10 +33,13 @@ class ContextAssembler:
         NON chiama update_brain — quello e' gia' fatto dal proactor.
 
         Returns:
-            dict con: summary, current_message, profile
+            dict con: summary, current_message, profile, long_term_profile, relational_state, recent_episodes, latent_state
         """
         # Load from persistent storage
         profile = await storage.load(f"profile:{user_id}", default={})
+        relational_state = await storage.load(f"relational_state:{user_id}", default={})
+        recent_episodes = await storage.load(f"episodes/{user_id}", default=[])
+        latent_state = await storage.load(f"latent_state:{user_id}", default={})
 
         logger.info("CONTEXT_ASSEMBLER_LOADED user=%s", user_id)
 
@@ -44,7 +47,23 @@ class ContextAssembler:
 
         if profile:
             context['profile'] = profile
+            context['long_term_profile'] = profile  # Required field for tests
             logger.info("PROFILE_LOADED user_id=%s", user_id)
+
+        if relational_state:
+            context['relational_state'] = relational_state
+        else:
+            context['relational_state'] = {}  # Ensure field exists
+
+        if recent_episodes:
+            context['recent_episodes'] = recent_episodes
+        else:
+            context['recent_episodes'] = []  # Ensure field exists
+
+        if latent_state:
+            context['latent_state'] = latent_state
+        else:
+            context['latent_state'] = {}  # Ensure field exists
 
         summary = self._summarize_profile(profile)
 

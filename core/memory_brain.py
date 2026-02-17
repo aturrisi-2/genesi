@@ -731,10 +731,11 @@ class MemoryBrain:
         self.emotion_analyzer = LocalEmotionAnalyzer()
         logger.info("MEMORY_BRAIN_INIT layers=4 status=ready")
 
-    async def update_brain(self, user_id: str, message: str) -> None:
+    async def update_brain(self, user_id: str, message: str) -> Dict[str, Any]:
         """
         Aggiorna stato cerebrale (episodic, relational, emotion).
         Estrae e salva informazioni sul profilo se presenti.
+        Returns brain_state dictionary.
         """
         # Extract and save profile information using cognitive memory engine
         from core.cognitive_memory_engine import CognitiveMemoryEngine
@@ -753,7 +754,21 @@ class MemoryBrain:
             logger.info("BRAIN_PROFILE_UPDATED user=%s field=%s", user_id, decision['key'])
         
         profile = await self.semantic.get_user_profile(user_id)
+        rel_state = await self.relational.load_state(user_id)
+        
+        # Analyze emotion for this message
+        emotion = self.emotion_analyzer.analyze(message)
+        
+        brain_state = {
+            "profile": profile,
+            "relational": rel_state,
+            "emotion": emotion,
+            "user_id": user_id,
+            "message": message
+        }
+        
         logger.info("BRAIN_UPDATE user=%s profile_loaded=true", user_id)
+        return brain_state
 
     async def recall_for_response(self, user_id: str, message: str) -> Dict[str, Any]:
         """Recall completo per generazione risposta (senza update)."""

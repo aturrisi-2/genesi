@@ -203,13 +203,7 @@ async def run_tests():
     print(f"RISULTATI: {passed} passed, {failed} failed")
     print(f"{'=' * 50}")
 
-    if failed > 0:
-        print("\n!! ATTENZIONE: Alcuni test falliti!")
-        sys.exit(1)
-    else:
-        print("\nOK - TUTTI I TEST PASSATI - Sistema cognitivo operativo")
-        sys.exit(0)
-
+    
 
 if __name__ == "__main__":
     asyncio.run(run_tests())

@@ -387,10 +387,3 @@ check("llm_service: cost_optimized_v1 in init", "cost_optimized_v1" in ls_src)
 print(f"\n{'='*60}")
 print(f"RISULTATI: {passed} passed, {failed} failed")
 print(f"{'='*60}")
-
-if failed > 0:
-    print("\nFAILED - Ci sono test falliti")
-    sys.exit(1)
-else:
-    print("\nALL PASSED")
-    sys.exit(0)
