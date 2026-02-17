@@ -9,8 +9,6 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 
 # LAB ONLY: Import for snapshot management
 import sys
@@ -21,55 +19,6 @@ from core.evolution_state_manager import get_evolution_state_manager
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-
-class MassiveTrainingReportHandler(FileSystemEventHandler):
-    """
-    Event handler per monitorare massive training reports.
-    """
-    
-    def __init__(self, evolution_engine):
-        self.evolution_engine = evolution_engine
-        
-    def on_created(self, event):
-        """Quando un file viene creato."""
-        if not event.is_directory and event.src_path.endswith('.json'):
-            filename = Path(event.src_path).name
-            if filename.startswith('massive_training_auth_report_'):
-                self._process_report(event.src_path)
-    
-    def on_modified(self, event):
-        """Quando un file viene modificato."""
-        if not event.is_directory and event.src_path.endswith('.json'):
-            filename = Path(event.src_path).name
-            if filename.startswith('massive_training_auth_report_'):
-                self._process_report(event.src_path)
-    
-    def _process_report(self, report_path):
-        """Processa un massive training report."""
-        try:
-            # Carica report
-            with open(report_path, 'r', encoding='utf-8-sig') as f:
-                report = json.load(f)
-            
-            # Verifica sample size
-            total_messages = report.get("metrics", {}).get("total_messages", 0)
-            
-            if total_messages >= 100:
-                logger.info(f"MINIMAL_EVOLUTION_PROCESSING_REPORT - {report_path} ({total_messages} messages)")
-                # Esegui evoluzione
-                self._run_evolution()
-            else:
-                logger.info(f"MINIMAL_EVOLUTION_SKIPPED_LOW_SAMPLE - {report_path} ({total_messages} messages < 100)")
-                
-        except Exception as e:
-            logger.error(f"MINIMAL_EVOLUTION_REPORT_ERROR - {e}")
-    
-    def _run_evolution(self):
-        """Esegue l'evoluzione in modo asincrono."""
-        try:
-            self.evolution_engine.run_minimal_evolution()
-        except Exception as e:
-            logger.error(f"MINIMAL_EVOLUTION_ASYNC_ERROR - {e}")
 
 
 class MinimalEvolutionV1:
@@ -84,32 +33,6 @@ class MinimalEvolutionV1:
         """Inizializza il sistema di evoluzione minimale."""
         self.lab_dir = Path("lab")
         self.state_manager = get_evolution_state_manager()
-        self.observer = None
-        
-    def start_monitoring(self):
-        """Avvia il monitoraggio della cartella lab/ per massive training reports."""
-        try:
-            # Crea event handler
-            event_handler = MassiveTrainingReportHandler(self)
-            
-            # Configura observer
-            self.observer = Observer()
-            self.observer.schedule(event_handler, str(self.lab_dir), recursive=False)
-            
-            # Avvia monitoring
-            self.observer.start()
-            logger.info("MINIMAL_EVOLUTION_MONITORING_STARTED - Watching lab/ directory")
-            
-        except Exception as e:
-            logger.error(f"MINIMAL_EVOLUTION_MONITORING_ERROR - {e}")
-    
-    def stop_monitoring(self):
-        """Ferma il monitoraggio."""
-        if self.observer:
-            self.observer.stop()
-            self.observer.join()
-            logger.info("MINIMAL_EVOLUTION_MONITORING_STOPPED")
-        
     def run_minimal_evolution(self) -> bool:
         """
         Esegue la logica di auto-evoluzione minimale v1.
@@ -323,12 +246,5 @@ class SupervisorEngine:
         self.engine = MinimalEvolutionV1()
 
     def run(self):
+        """Run evolution (alias for run_minimal_evolution)."""
         return self.engine.run_minimal_evolution()
-    
-    def start_monitoring(self):
-        """Start monitoring for massive training reports."""
-        self.engine.start_monitoring()
-    
-    def stop_monitoring(self):
-        """Stop monitoring."""
-        self.engine.stop_monitoring()

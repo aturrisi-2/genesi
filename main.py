@@ -58,10 +58,8 @@ async def startup():
     # Start reminder checker background task
     asyncio.create_task(reminder_checker_background())
     
-    # 🚀 Start Minimal Auto Evolution Engine
-    supervisor = SupervisorEngine()
-    supervisor.start_monitoring()
-    print("MINIMAL_AUTO_EVOLUTION_STARTED path=lab")
+    # Start evolution scheduler (12 hours)
+    asyncio.create_task(evolution_scheduler())
     log("REMINDER_CHECKER_STARTED", status="ok")
 
 
@@ -73,6 +71,10 @@ async def reminder_checker_background():
         try:
             # Get due reminders
             due_reminders = reminder_engine.get_due_reminders()
+            
+            # Log solo se ci sono reminder dovuti
+            if due_reminders:
+                log("REMINDER_DUE", total_due=len(due_reminders))
             
             for reminder in due_reminders:
                 user_id = reminder["user_id"]
@@ -104,16 +106,15 @@ async def reminder_checker_background():
             await asyncio.sleep(30)
 
 
-# ===============================
-# Shutdown: Minimal Auto Evolution Engine
-# ===============================
-
-@app.on_event("shutdown")
-async def shutdown():
-    # 🛑 Stop Minimal Auto Evolution Engine
+async def evolution_scheduler():
+    """Evolution scheduler that runs every 12 hours."""
     supervisor = SupervisorEngine()
-    supervisor.stop_monitoring()
-    print("MINIMAL_AUTO_EVOLUTION_STOPPED")
+    while True:
+        await asyncio.sleep(43200)  # 12 ore
+        try:
+            supervisor.run()
+        except Exception as e:
+            print(f"EVOLUTION_SCHEDULER_ERROR {e}")
 
 
 # ===============================
