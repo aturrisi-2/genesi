@@ -14,7 +14,7 @@ class CognitiveMemoryEngine:
 
         # Semantic classification using regex
         name_match = re.search(r"mi chiamo (\w+)", message, re.IGNORECASE)
-        profession_match = re.search(r"(?:faccio|sono|lavoro come)\s+il?\s*(\w+(?:e|a)?)", message, re.IGNORECASE)
+        profession_match = re.search(r"(?:faccio|sono|lavoro come)\s+(?:il\s+)?(\w+)", message, re.IGNORECASE)
         city_match = re.search(r"vivo a (\w+)", message, re.IGNORECASE)
         spouse_match = re.search(r"(?:mia moglie|mio marito) si chiama (\w+)", message, re.IGNORECASE)
         children_match = re.search(r"i miei figli si chiamano (\w+) e (\w+)", message, re.IGNORECASE)
@@ -55,11 +55,26 @@ class CognitiveMemoryEngine:
             logger.info("COGNITIVE_CITY_EXTRACT value=%s", value)
             
         if profession_match:
-            extracted_profile_data["profession"] = profession_match.group(1)
-            persist = True
-            memory_type = "profile"
-            field = "profession"
-            value = profession_match.group(1)
+            new_profession = profession_match.group(1).strip()
+            old_profession = extracted_profile_data.get("profession")
+            
+            # Handle profession contradiction
+            if old_profession and old_profession != new_profession:
+                # Update to new profession
+                extracted_profile_data["profession"] = new_profession
+                field = "profession"
+                value = new_profession
+                persist = True
+                memory_type = "profile"
+                logger.info("COGNITIVE_PROFESSION_UPDATED old=%s new=%s", old_profession, new_profession)
+            else:
+                # First time setting profession
+                extracted_profile_data["profession"] = new_profession
+                field = "profession"
+                value = new_profession
+                persist = True
+                memory_type = "profile"
+            
             logger.info("COGNITIVE_PROFESSION_EXTRACT value=%s", value)
 
         if spouse_match:

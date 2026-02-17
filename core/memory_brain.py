@@ -743,18 +743,18 @@ class MemoryBrain:
         cognitive_engine = CognitiveMemoryEngine()
         
         # Load current profile data
-        raw_profile = storage.load_sync(f"profile:{user_id}", default={})
+        raw_profile = await storage.load(f"profile:{user_id}", default={})
         
         # Evaluate message for profile updates
         decision = cognitive_engine.evaluate_event(user_id, message, raw_profile)
         
         # Save profile if there are updates
         if decision['persist'] and decision['memory_type'] == 'profile':
-            storage.save_sync(f"profile:{user_id}", raw_profile)
+            await storage.save(f"profile:{user_id}", raw_profile)
             logger.info("BRAIN_PROFILE_UPDATED user=%s field=%s", user_id, decision['key'])
         
-        profile = self.semantic.get_user_profile(user_id)
-        rel_state = self.relational.load_state(user_id)
+        profile = await self.semantic.get_user_profile(user_id)
+        rel_state = await self.relational.load_state(user_id)
         
         # Analyze emotion for this message
         emotion = self.emotion_analyzer.analyze(message)

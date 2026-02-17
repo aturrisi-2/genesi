@@ -227,7 +227,7 @@ class Proactor:
             # (profile già caricato sopra per non-identity)
 
             # Use the profile in the context assembly
-            context = self.context_assembler.build(user_id, message)
+            context = await self.context_assembler.build(user_id, message)
             context['profile'] = profile
 
             # STEP 3.5: ELLIPTICAL TOOL FOLLOW-UP (e.g. "e domani?" after weather)
@@ -374,7 +374,7 @@ class Proactor:
         if any(kw in msg_lower for kw in job_kw):
             profession = profile.get("profession")
             if profession:
-                return f"Lavori come {profession.strip().lower()}."
+                return f"Fai l'{profession.strip().lower()}."
             return "Non me lo hai ancora detto."
 
         # Domanda specifica: eta'
@@ -402,7 +402,7 @@ class Proactor:
         if profile.get("city"):
             facts.append(f"vivi a {profile['city'].strip().title()}")
         if profile.get("profession"):
-            facts.append(f"lavori come {profile['profession'].strip().lower()}")
+            facts.append(f"fai l'{profile['profession'].strip().lower()}")
         entities = profile.get("entities", {})
         for role, data in entities.items():
             name = data.get("name")
