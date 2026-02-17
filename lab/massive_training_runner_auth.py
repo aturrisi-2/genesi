@@ -186,6 +186,7 @@ class MassiveTrainingRunnerAuth:
                 json=payload,
                 timeout=self.REQUEST_TIMEOUT
             )
+            time.sleep(0.4)  # Anti-rate-limit delay
             
             if response.status_code == 200:
                 data = response.json()
@@ -206,6 +207,7 @@ class MassiveTrainingRunnerAuth:
                         json=payload,
                         timeout=self.REQUEST_TIMEOUT
                     )
+                    time.sleep(0.4)  # Anti-rate-limit delay
 
                     if retry_login.status_code == 200:
                         data = retry_login.json()
@@ -217,6 +219,23 @@ class MassiveTrainingRunnerAuth:
 
                 logger.error(f"❌ Login failed even after LAB verify (direct 403) for {user_key}")
                 return False
+            elif response.status_code == 429:
+                logger.warning("RATE LIMIT HIT - waiting 1.5s")
+                time.sleep(1.5)
+                retry = self.session.post(
+                    self.login_endpoint,
+                    json=payload,
+                    timeout=self.REQUEST_TIMEOUT
+                )
+                if retry.status_code == 200:
+                    data = retry.json()
+                    token = data.get("access_token")
+                    if token:
+                        user_data["token"] = token
+                        logger.info(f"✅ Login ok after rate limit retry: {user_data['email']}")
+                        return True
+                logger.error(f"❌ Login failed even after rate limit retry for {user_key}")
+                return False
             elif response.status_code == 401:
                 # Utente non esiste -> prova a registrare
                 logger.info(f"🔄 Utente non trovato, tentativo registrazione: {user_data['email']}")
@@ -226,6 +245,7 @@ class MassiveTrainingRunnerAuth:
                     json=payload,
                     timeout=self.REQUEST_TIMEOUT
                 )
+                time.sleep(0.4)  # Anti-rate-limit delay
                 
                 if register_response.status_code in [200, 201]:
                     logger.info(f"🆕 Utente creato: {user_data['email']}")
@@ -236,6 +256,7 @@ class MassiveTrainingRunnerAuth:
                         json=payload,
                         timeout=self.REQUEST_TIMEOUT
                     )
+                    time.sleep(0.4)  # Anti-rate-limit delay
                     
                     if login_response.status_code == 200:
                         data = login_response.json()
@@ -255,6 +276,7 @@ class MassiveTrainingRunnerAuth:
                                 json=payload,
                                 timeout=self.REQUEST_TIMEOUT
                             )
+                            time.sleep(0.4)  # Anti-rate-limit delay
                             if retry_login.status_code == 200:
                                 data = retry_login.json()
                                 token = data.get("access_token")
