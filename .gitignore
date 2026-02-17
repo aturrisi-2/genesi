@@ -26,12 +26,16 @@ data/
 memory/
 memory_v2/
 # --- LAB RUNTIME (state, reports, evolution memory) ---
-lab/*.json
+# --- LAB RUNTIME ---
 lab/prompt_history/
 lab/__pycache__/
 lab/*report*
 lab/*history*
 lab/*metrics*
+
+# Allow stable global prompt
+!lab/global_prompt.json
+
 
 storage/
 # models/
