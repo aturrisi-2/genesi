@@ -27,7 +27,7 @@ class ContextAssembler:
         self.memory_brain = memory_brain
         self.latent_state_engine = latent_state_engine
 
-    async def build(self, user_id: str, user_message: str) -> Dict[str, Any]:
+    def build(self, user_id: str, user_message: str) -> Dict[str, Any]:
         """
         Costruisce contesto completo per LLM.
         NON chiama update_brain — quello e' gia' fatto dal proactor.
@@ -36,10 +36,10 @@ class ContextAssembler:
             dict con: summary, current_message, profile, long_term_profile, relational_state, recent_episodes, latent_state
         """
         # Load from persistent storage
-        profile = await storage.load(f"profile:{user_id}", default={})
-        relational_state = await storage.load(f"relational_state:{user_id}", default={})
-        recent_episodes = await storage.load(f"episodes/{user_id}", default=[])
-        latent_state = await storage.load(f"latent_state:{user_id}", default={})
+        profile = storage.load_sync(f"profile:{user_id}", default={})
+        relational_state = storage.load_sync(f"relational_state:{user_id}", default={})
+        recent_episodes = storage.load_sync(f"episodes/{user_id}", default=[])
+        latent_state = storage.load_sync(f"latent_state:{user_id}", default={})
 
         logger.info("CONTEXT_ASSEMBLER_LOADED user=%s", user_id)
 
@@ -75,11 +75,6 @@ class ContextAssembler:
 
         logger.info("CONTEXT_ASSEMBLED user=%s summary_len=%d", user_id, len(summary))
         return context
-
-    def build_sync(self, user_id: str, user_message: str) -> Dict[str, Any]:
-        """Sync wrapper for build method."""
-        import asyncio
-        return asyncio.run(self.build(user_id, user_message))
 
     def _summarize_profile(self, profile):
         """

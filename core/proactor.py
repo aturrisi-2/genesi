@@ -153,23 +153,15 @@ class Proactor:
     # HANDLE — Entry point, routing obbligatorio
     # ═══════════════════════════════════════════════════════════════
 
-    async def handle(self, user_id: str, message: str = None, intent: str = None) -> tuple[str, str]:
+    async def handle(self, user_id: str, message: str = None, intent: str = None) -> str:
         """
         Orchestrazione centrale v4.
-        Returns: (response_text, response_source) - internal contract
+        Returns: response_text (public contract)
         Ordine di routing:
             1. Identity Router  (deterministico)
             2. Tool Router      (deterministico)
             3. Knowledge Router (deterministico)
             4. Relational Router (deterministico)
-        """
-        response, source = await self._handle_internal(user_id, message, intent)
-        return response, source
-    
-    async def get_response(self, user_id: str, message: str = None, intent: str = None) -> str:
-        """
-        Public wrapper that returns only response text.
-        This maintains backward compatibility with tests expecting just the response.
         """
         response, _ = await self._handle_internal(user_id, message, intent)
         return response
@@ -235,7 +227,7 @@ class Proactor:
             # (profile già caricato sopra per non-identity)
 
             # Use the profile in the context assembly
-            context = await self.context_assembler.build(user_id, message)
+            context = self.context_assembler.build(user_id, message)
             context['profile'] = profile
 
             # STEP 3.5: ELLIPTICAL TOOL FOLLOW-UP (e.g. "e domani?" after weather)

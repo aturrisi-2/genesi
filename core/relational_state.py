@@ -36,7 +36,7 @@ class RelationalState:
             "trust_evolution": []
         }
     
-    async def load_state(self, user_id: str) -> Dict[str, Any]:
+    def load_state(self, user_id: str) -> Dict[str, Any]:
         """
         Carica stato relazionale persistente
         
@@ -47,7 +47,7 @@ class RelationalState:
             Stato relazionale completo (mai vuoto)
         """
         try:
-            state_data = await storage.load(f"relational_state:{user_id}", default=None)
+            state_data = storage.load_sync(f"relational_state:{user_id}", default=None)
             
             if state_data and isinstance(state_data, dict):
                 # Garantisci che tutte le chiavi obbligatorie esistano
@@ -59,7 +59,7 @@ class RelationalState:
             else:
                 # Stato iniziale per nuovo utente
                 state = self._default_state()
-                await self._save_state(user_id, state)
+                self._save_state(user_id, state)
                 return state
             
         except Exception as e:
@@ -145,7 +145,7 @@ class RelationalState:
             log("RELATIONAL_STATE_UPDATE_ERROR", error=str(e), user_id=user_id)
             return {}
     
-    async def _save_state(self, user_id: str, state: Dict[str, Any]) -> bool:
+    def _save_state(self, user_id: str, state: Dict[str, Any]) -> bool:
         """
         Salva stato relazionale persistente
         
@@ -157,7 +157,7 @@ class RelationalState:
             Successo salvataggio
         """
         try:
-            await storage.save(f"relational_state:{user_id}", state)
+            storage.save_sync(f"relational_state:{user_id}", state)
             return True
         except Exception as e:
             log("RELATIONAL_STATE_SAVE_ERROR", error=str(e), user_id=user_id)

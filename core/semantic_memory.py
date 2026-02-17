@@ -110,7 +110,7 @@ class SemanticMemory:
             log("SEMANTIC_MEMORY_ERROR", error=str(e), user_id=user_id)
             return {}
     
-    async def _load_user_profile(self, user_id: str) -> Dict[str, Any]:
+    def _load_user_profile(self, user_id: str) -> Dict[str, Any]:
         """
         Carica profilo utente dallo storage con API unificata
         
@@ -122,7 +122,7 @@ class SemanticMemory:
         """
         try:
             # Usa API unificata load
-            profile_data = await storage.load(f"profile:{user_id}", default={})
+            profile_data = storage.load_sync(f"profile:{user_id}", default={})
             log("PROFILE_AFTER_LOAD", user_id=user_id, profile=profile_data)
             if profile_data:
                 return profile_data
@@ -162,7 +162,7 @@ class SemanticMemory:
             log("SEMANTIC_MEMORY_SAVE_ERROR", error=str(e), user_id=user_id)
             return False
     
-    async def get_user_profile(self, user_id: str) -> Dict[str, Any]:
+    def get_user_profile(self, user_id: str) -> Dict[str, Any]:
         """
         Ottieni profilo utente completo
         
@@ -172,12 +172,11 @@ class SemanticMemory:
         Returns:
             Profilo utente
         """
-        return await self._load_user_profile(user_id)
+        return self._load_user_profile(user_id)
     
     def get_profile(self, user_id: str) -> Dict[str, Any]:
-        """Sync wrapper for get_user_profile."""
-        import asyncio
-        return asyncio.run(self.get_user_profile(user_id))
+        """Alias for get_user_profile for backward compatibility."""
+        return self.get_user_profile(user_id)
     
     async def save_user_profile(self, user_id: str, profile: Dict[str, Any]) -> bool:
         """

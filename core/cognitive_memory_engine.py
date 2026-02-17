@@ -5,7 +5,7 @@ from core.storage import storage
 logger = logging.getLogger(__name__)
 
 class CognitiveMemoryEngine:
-    async def evaluate_event(self, user_id, message, extracted_profile_data):
+    def evaluate_event(self, user_id, message, extracted_profile_data):
         # Initialize field and value
         field = None
         value = None
@@ -14,7 +14,7 @@ class CognitiveMemoryEngine:
 
         # Semantic classification using regex
         name_match = re.search(r"mi chiamo (\w+)", message, re.IGNORECASE)
-        profession_match = re.search(r"faccio il (\w+)", message, re.IGNORECASE)
+        profession_match = re.search(r"(?:faccio|sono|lavoro come)\s+il?\s*(\w+(?:e|a)?)", message, re.IGNORECASE)
         city_match = re.search(r"vivo a (\w+)", message, re.IGNORECASE)
         spouse_match = re.search(r"(?:mia moglie|mio marito) si chiama (\w+)", message, re.IGNORECASE)
         children_match = re.search(r"i miei figli si chiamano (\w+) e (\w+)", message, re.IGNORECASE)
@@ -123,11 +123,6 @@ class CognitiveMemoryEngine:
             "value": value,
             "confidence": 0.9  # High confidence for name and profession
         }
-
-    def evaluate_event_sync(self, user_id, message, extracted_profile_data):
-        """Sync wrapper for evaluate_event."""
-        import asyncio
-        return asyncio.run(self.evaluate_event(user_id, message, extracted_profile_data))
 
     def _extract_preference(self, message: str):
         """Extract categorized preference from message. Returns (category, value) or None."""

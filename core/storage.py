@@ -235,5 +235,63 @@ class MemoryStorage:
             log("MEMORY_STORAGE_STATS_ERROR", error=str(e))
             return {}
 
+    def load_sync(self, key: str, default: Any = None) -> Any:
+        """Sync wrapper for load method using direct file I/O."""
+        try:
+            # Supporta sia formato "categoria:subchiave" sia path diretto
+            if ":" in key:
+                category, subkey = key.split(":", 1)
+                file_path = self._get_file_path(category, subkey)
+            else:
+                file_path = key
+            
+            # Carica file JSON
+            if os.path.exists(file_path):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            else:
+                return default
+        except Exception as e:
+            log("MEMORY_LOAD_ERROR", error=str(e), key=key)
+            return default
+    
+    def save_sync(self, key: str, value: Any) -> bool:
+        """Sync wrapper for save method using direct file I/O."""
+        try:
+            # HARD VALIDATION: ensure JSON serializable BEFORE writing
+            try:
+                json_string = json.dumps(value, ensure_ascii=False, indent=2)
+            except TypeError as e:
+                logger.critical(
+                    "STORAGE_SERIALIZATION_FAILURE key=%s data_type=%s error=%s",
+                    key,
+                    type(value),
+                    e
+                )
+                raise RuntimeError("Non-serializable data attempted to persist")
+
+            # Supporta sia formato "categoria:subchiave" sia path diretto
+            if ":" in key:
+                category, subkey = key.split(":", 1)
+                file_path = self._get_file_path(category, subkey)
+            else:
+                file_path = key
+            
+            # Assicura che directory esista
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
+            # Scrivi stringa JSON pre-validata
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(json_string)
+            
+            log("STORAGE_SAVE", path=file_path, key=key)
+            return True
+            
+        except RuntimeError:
+            raise
+        except Exception as e:
+            log("MEMORY_SAVE_ERROR", error=str(e), key=key)
+            return False
+
 # Istanza globale
 storage = MemoryStorage()
