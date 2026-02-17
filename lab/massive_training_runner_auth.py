@@ -197,6 +197,26 @@ class MassiveTrainingRunnerAuth:
                 else:
                     logger.error(f"❌ No token in response for {user_key}")
                     return False
+            elif response.status_code == 403:
+                logger.warning(f"LAB VERIFY TRIGGER (direct 403) for {user_key}")
+
+                if self._force_verify_user_lab_only(user_data["email"]):
+                    retry_login = self.session.post(
+                        self.login_endpoint,
+                        json=payload,
+                        timeout=self.REQUEST_TIMEOUT
+                    )
+
+                    if retry_login.status_code == 200:
+                        data = retry_login.json()
+                        token = data.get("access_token")
+                        if token:
+                            user_data["token"] = token
+                            logger.info(f"✅ Login ok after LAB verify (direct 403): {user_data['email']}")
+                            return True
+
+                logger.error(f"❌ Login failed even after LAB verify (direct 403) for {user_key}")
+                return False
             elif response.status_code == 401:
                 # Utente non esiste -> prova a registrare
                 logger.info(f"🔄 Utente non trovato, tentativo registrazione: {user_data['email']}")
