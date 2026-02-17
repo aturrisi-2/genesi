@@ -25,6 +25,14 @@ venv/
 data/
 memory/
 memory_v2/
+# --- LAB RUNTIME (state, reports, evolution memory) ---
+lab/*.json
+lab/prompt_history/
+lab/__pycache__/
+lab/*report*
+lab/*history*
+lab/*metrics*
+
 storage/
 # models/
 voice_gold/
