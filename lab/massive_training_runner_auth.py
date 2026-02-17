@@ -14,6 +14,10 @@ from typing import Dict, List, Any
 from datetime import datetime
 from collections import defaultdict
 
+# LAB ONLY: Imports for automatic verification
+import sqlite3
+import os
+
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -138,6 +142,36 @@ class MassiveTrainingRunnerAuth:
         # Sessione requests
         self.session = requests.Session()
     
+    def _force_verify_user_lab_only(self, email: str):
+        """
+        LAB ONLY:
+        Forza is_verified=1 nel DB locale per permettere login durante training.
+        Non usare in produzione.
+        """
+        try:
+            db_path = os.path.join("data", "auth", "genesi_auth.db")
+
+            if not os.path.exists(db_path):
+                logger.error("LAB VERIFY FAILED: DB not found")
+                return False
+
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            cursor.execute(
+                "UPDATE auth_users SET is_verified=1 WHERE email=?",
+                (email,)
+            )
+            conn.commit()
+            conn.close()
+
+            logger.info(f"LAB VERIFY OK: {email}")
+            return True
+
+        except Exception as e:
+            logger.error(f"LAB VERIFY ERROR: {e}")
+            return False
+    
     def login_user(self, user_key: str, user_data: Dict) -> bool:
         """Esegue login per un utente con auto-registrazione se necessario."""
         try:
@@ -193,6 +227,24 @@ class MassiveTrainingRunnerAuth:
                         else:
                             logger.error(f"❌ No token in login response for {user_key}")
                             return False
+                    elif login_response.status_code == 403:
+                        logger.warning(f"LAB VERIFY TRIGGER for {user_key}")
+                        if self._force_verify_user_lab_only(user_data["email"]):
+                            retry_login = self.session.post(
+                                self.login_endpoint,
+                                json=payload,
+                                timeout=self.REQUEST_TIMEOUT
+                            )
+                            if retry_login.status_code == 200:
+                                data = retry_login.json()
+                                token = data.get("access_token")
+                                if token:
+                                    user_data["token"] = token
+                                    logger.info(f"✅ Login ok after LAB verify: {user_data['email']}")
+                                    return True
+
+                        logger.error(f"❌ Login failed even after LAB verify for {user_key}")
+                        return False
                     else:
                         logger.error(f"❌ Login fallito dopo registrazione per {user_key}: HTTP {login_response.status_code}")
                         return False
