@@ -27,6 +27,7 @@ from auth.database import init_db, async_session
 from auth.models import Visit
 from core.log import log
 from core.reminder_engine import reminder_engine
+from lab.supervisor import SupervisorEngine
 
 # ===============================
 # Applicazione FastAPI
@@ -56,6 +57,11 @@ async def startup():
     
     # Start reminder checker background task
     asyncio.create_task(reminder_checker_background())
+    
+    # 🚀 Start Minimal Auto Evolution Engine
+    supervisor = SupervisorEngine()
+    await supervisor.start_monitoring()
+    print("MINIMAL_AUTO_EVOLUTION_STARTED path=lab")
     log("REMINDER_CHECKER_STARTED", status="ok")
 
 
@@ -98,6 +104,16 @@ async def reminder_checker_background():
             await asyncio.sleep(30)
 
 
+# ===============================
+# Shutdown: Minimal Auto Evolution Engine
+# ===============================
+
+@app.on_event("shutdown")
+async def shutdown():
+    # 🛑 Stop Minimal Auto Evolution Engine
+    supervisor = SupervisorEngine()
+    supervisor.stop_monitoring()
+    print("MINIMAL_AUTO_EVOLUTION_STOPPED")
 
 
 # ===============================
