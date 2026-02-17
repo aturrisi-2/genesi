@@ -25,13 +25,14 @@ from auth.database import init_db, async_session
 from auth.models import Visit
 from core.log import log
 from core.reminder_engine import reminder_engine
+from core.auto_evolution_engine import get_evolution_engine
 
 # ===============================
 # Applicazione FastAPI
 # ===============================
 
 BASE_DIR = Path(__file__).resolve().parent
-app = FastAPI(title="Genesi Core v2 - Proactor Architecture")
+app = FastAPI(title="Genesi Core v2 - Proactor Architecture", redirect_slashes=False)
 
 # Static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -48,6 +49,11 @@ async def startup():
     
     # Start reminder checker background task
     asyncio.create_task(reminder_checker_background())
+    
+    # 🚀 Start Auto Evolution Engine
+    engine = get_evolution_engine()
+    await engine.start_monitoring()
+    print("AUTO_EVOLUTION_ENGINE_STARTED path=lab")
     log("REMINDER_CHECKER_STARTED", status="ok")
 
 
@@ -88,6 +94,19 @@ async def reminder_checker_background():
             log("REMINDER_CHECKER_ERROR", error=str(e))
             # Wait 30 seconds even on error
             await asyncio.sleep(30)
+
+
+# ===============================
+# Shutdown: Auto Evolution Engine
+# ===============================
+
+@app.on_event("shutdown")
+async def shutdown():
+    # 🛑 Stop Auto Evolution Engine
+    engine = get_evolution_engine()
+    engine.stop_monitoring()
+    print("AUTO_EVOLUTION_ENGINE_STOPPED")
+    log("AUTO_EVOLUTION_STOPPED", status="ok")
 
 
 # ===============================

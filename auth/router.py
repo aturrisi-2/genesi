@@ -1,4 +1,5 @@
 import re
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -21,6 +22,9 @@ from auth.security import (
 from auth.email import send_verification_email, send_reset_password_email
 from auth.init_environment import initialize_user_environment
 from core.log import log as _log
+
+# Development mode check
+DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -230,7 +234,7 @@ async def login(req: LoginRequest, http_request: Request, db: AsyncSession = Dep
         _log("AUTH_LOGIN_FAIL", email=email, ip=ip)
         raise HTTPException(status_code=401, detail="Credenziali non valide.")
 
-    if not user.is_verified:
+    if not user.is_verified and not DEV_MODE:
         _log("AUTH_LOGIN_UNVERIFIED", user_id=user.id, email=email)
         raise HTTPException(status_code=403, detail="Account non verificato. Controlla la tua email.")
 
@@ -242,6 +246,8 @@ async def login(req: LoginRequest, http_request: Request, db: AsyncSession = Dep
     refresh = create_refresh_token(user.id)
 
     _log("AUTH_LOGIN", user_id=user.id, email=email)
+    print(f"[DEBUG AUTH LOGIN] User ID created: {user.id}")  # DEBUG TEMPORANEO
+    print(f"[DEBUG AUTH LOGIN] DB URL: {db.bind.url}")  # DEBUG TEMPORANEO
 
     return {
         "access_token": access,
@@ -560,18 +566,31 @@ async def logout(http_request: Request):
 async def require_auth(request: Request, db: AsyncSession = Depends(get_db)) -> AuthUser:
     """FastAPI dependency: extracts and validates JWT, returns AuthUser."""
     auth_header = request.headers.get("Authorization", "")
+    print("AUTH HEADER:", auth_header)  # DEBUG TEMPORANEO
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Autenticazione richiesta.")
 
-    payload = decode_token(auth_header.split(" ")[1])
+    token = auth_header.split(" ")[1]
+    print(f"TOKEN RECEIVED: {token}")  # DEBUG TEMPORANEO
+    
+    try:
+        payload = decode_token(token)
+        print(f"DECODED PAYLOAD: {payload}")  # DEBUG TEMPORANEO
+    except Exception as e:
+        print(f"JWT ERROR: {type(e)} - {str(e)}")  # DEBUG TEMPORANEO
+        raise HTTPException(status_code=401, detail="Token non valido o scaduto.")
+    
     if not payload or payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="Token non valido o scaduto.")
 
     user_id = payload.get("sub")
+    print(f"[DEBUG GET_CURRENT_USER] Looking for user_id: {user_id}")  # DEBUG TEMPORANEO
     result = await db.execute(select(AuthUser).where(AuthUser.id == user_id))
     user = result.scalar_one_or_none()
+    print(f"[DEBUG GET_CURRENT_USER] User found: {user}")  # DEBUG TEMPORANEO
 
-    if not user or not user.is_verified:
+    if not user or (not user.is_verified and not DEV_MODE):
+        print(f"[DEBUG GET_CURRENT_USER] User verification failed - user: {user}, is_verified: {user.is_verified if user else 'None'}, DEV_MODE: {DEV_MODE}")  # DEBUG TEMPORANEO
         raise HTTPException(status_code=401, detail="Utente non valido.")
 
     return user

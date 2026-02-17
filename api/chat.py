@@ -92,7 +92,7 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             await storage.save(f"profile:{user_id}", profile.model_dump(mode="json"))
             log("STORAGE_SAVE", key=f"profile:{user_id}")
 
-        response = await simple_chat_handler(request.message, user_id)
+        response = await simple_chat_handler(user_id, request.message)
         
         # Defensive normalization: ensure response is always a string
         if isinstance(response, tuple):

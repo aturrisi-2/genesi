@@ -24,6 +24,7 @@ venv/
 # ===============================
 data/
 memory/
+memory_v2/
 storage/
 # models/
 voice_gold/

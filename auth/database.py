@@ -13,4 +13,5 @@ async def init_db():
 
 async def get_db() -> AsyncSession:
     async with async_session() as session:
+        print(f"[DEBUG AUTH] DB URL: {engine.url}")  # DEBUG TEMPORANEO
         yield session
