@@ -60,7 +60,7 @@ async def startup():
     
     # 🚀 Start Minimal Auto Evolution Engine
     supervisor = SupervisorEngine()
-    await supervisor.start_monitoring()
+    supervisor.start_monitoring()
     print("MINIMAL_AUTO_EVOLUTION_STARTED path=lab")
     log("REMINDER_CHECKER_STARTED", status="ok")
 

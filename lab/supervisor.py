@@ -6,7 +6,6 @@ Sistema minimale di auto-evoluzione deterministica basata su massive training re
 import json
 import glob
 import logging
-import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -57,15 +56,15 @@ class MassiveTrainingReportHandler(FileSystemEventHandler):
             
             if total_messages >= 100:
                 logger.info(f"MINIMAL_EVOLUTION_PROCESSING_REPORT - {report_path} ({total_messages} messages)")
-                # Esegui evoluzione in background
-                asyncio.create_task(self._run_evolution_async())
+                # Esegui evoluzione
+                self._run_evolution()
             else:
                 logger.info(f"MINIMAL_EVOLUTION_SKIPPED_LOW_SAMPLE - {report_path} ({total_messages} messages < 100)")
                 
         except Exception as e:
             logger.error(f"MINIMAL_EVOLUTION_REPORT_ERROR - {e}")
     
-    async def _run_evolution_async(self):
+    def _run_evolution(self):
         """Esegue l'evoluzione in modo asincrono."""
         try:
             self.evolution_engine.run_minimal_evolution()
@@ -87,7 +86,7 @@ class MinimalEvolutionV1:
         self.state_manager = get_evolution_state_manager()
         self.observer = None
         
-    async def start_monitoring(self):
+    def start_monitoring(self):
         """Avvia il monitoraggio della cartella lab/ per massive training reports."""
         try:
             # Crea event handler
@@ -326,9 +325,9 @@ class SupervisorEngine:
     def run(self):
         return self.engine.run_minimal_evolution()
     
-    async def start_monitoring(self):
+    def start_monitoring(self):
         """Start monitoring for massive training reports."""
-        await self.engine.start_monitoring()
+        self.engine.start_monitoring()
     
     def stop_monitoring(self):
         """Stop monitoring."""
