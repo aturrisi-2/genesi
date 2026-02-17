@@ -340,10 +340,11 @@ class Proactor:
     # IDENTITY ROUTER — 100% deterministico, zero GPT
     # ═══════════════════════════════════════════════════════════════
 
-    async def _handle_identity(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
+    async def _handle_identity(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> tuple[str, str]:
         """
         Risponde a domande sull'identita' dell'utente usando SOLO long_term_profile.
         Zero GPT. Zero emotional engine. Zero relational pipeline.
+        Returns: (response_text, "identity")
         """
         profile = brain_state.get("profile", {})
         msg_lower = message.lower().strip()
@@ -358,39 +359,39 @@ class Proactor:
         if any(kw in msg_lower for kw in name_kw):
             name = profile.get("name")
             if name:
-                return f"Ti chiami {name.strip().title()}."
-            return "Non me lo hai ancora detto."
+                return f"Ti chiami {name.strip().title()}.", "identity"
+            return "Non me lo hai ancora detto.", "identity"
 
         # Domanda specifica: dove vivo
         city_kw = ["dove vivo", "dove abito", "sai dove vivo", "sai dove abito"]
         if any(kw in msg_lower for kw in city_kw):
             city = profile.get("city")
             if city:
-                return f"Vivi a {city.strip().title()}."
-            return "Non me lo hai ancora detto."
+                return f"Vivi a {city.strip().title()}.", "identity"
+            return "Non me lo hai ancora detto.", "identity"
 
         # Domanda specifica: lavoro
         job_kw = ["che lavoro faccio", "che lavoro svolgo", "cosa faccio"]
         if any(kw in msg_lower for kw in job_kw):
             profession = profile.get("profession")
             if profession:
-                return f"Fai l'{profession.strip().lower()}."
-            return "Non me lo hai ancora detto."
+                return f"Fai l'{profession.strip().lower()}.", "identity"
+            return "Non me lo hai ancora detto.", "identity"
 
         # Domanda specifica: eta'
         age_kw = ["quanti anni ho", "sai quanti anni ho"]
         if any(kw in msg_lower for kw in age_kw):
             age = profile.get("age")
             if age:
-                return f"Hai {age} anni."
-            return "Non me lo hai ancora detto."
+                return f"Hai {age} anni.", "identity"
+            return "Non me lo hai ancora detto.", "identity"
 
         # Domanda generica: "chi sono"
         if "chi sono" in msg_lower:
-            return self._build_identity_summary(profile)
+            return self._build_identity_summary(profile), "identity"
 
         # Fallback identity
-        return self._build_identity_summary(profile)
+        return self._build_identity_summary(profile), "identity"
 
     def _build_identity_summary(self, profile: Dict[str, Any]) -> str:
         """Costruisce riepilogo identita' da profilo. Zero GPT."""
@@ -416,17 +417,17 @@ class Proactor:
 
         if facts:
             return f"Ecco cosa so di te: {', '.join(facts)}."
-        return "Non so ancora molto di te. Raccontami qualcosa."
+        return "Non so ancora molto di te. Raccontami qualcosa.", "identity"
 
     # ═══════════════════════════════════════════════════════════════
     # TOOL ROUTER — 100% deterministico, zero GPT su errore
     # ═══════════════════════════════════════════════════════════════
 
-    async def _handle_tool(self, intent: str, message: str, user_id: str) -> str:
+    async def _handle_tool(self, intent: str, message: str, user_id: str) -> tuple[str, str]:
         """
         Tool routing deterministico.
         Errori gestiti con messaggi deterministici, MAI GPT.
-        Returns: response_text
+        Returns: (response_text, "tool")
         """
         try:
             if intent == "weather":
@@ -436,27 +437,27 @@ class Proactor:
                 city = extract_city_from_message(message) or "Roma"
                 save_tool_context(user_id, "weather", city=city)
                 logger.info("TOOL_ROUTER_OK intent=weather user=%s city=%s", user_id, city)
-                return result
+                return result, "tool"
             elif intent == "news":
                 result = await tool_service.get_news(message)
                 save_tool_context(user_id, "news")
                 logger.info("TOOL_ROUTER_OK intent=news user=%s", user_id)
-                return result
+                return result, "tool"
             elif intent == "time":
                 result = await tool_service.get_time()
-                return result
+                return result, "tool"
             elif intent == "date":
                 result = await tool_service.get_date()
-                return result
+                return result, "tool"
             else:
-                return "Tool non disponibile."
+                return "Tool non disponibile.", "tool"
         except Exception as e:
             logger.error("PROACTOR_TOOL_ERROR intent=%s user=%s error=%s", intent, user_id, str(e), exc_info=True)
             if intent == "weather":
-                return "Il servizio meteo non è disponibile al momento."
+                return "Il servizio meteo non è disponibile al momento.", "tool"
             elif intent == "news":
-                return "Il servizio notizie non è configurato correttamente."
-            return f"Errore nel servizio {intent}."
+                return "Il servizio notizie non è configurato correttamente.", "tool"
+            return f"Errore nel servizio {intent}.", "tool"
 
     # ═══════════════════════════════════════════════════════════
     # MEMORY CONTEXT ROUTER — conversational memory responses

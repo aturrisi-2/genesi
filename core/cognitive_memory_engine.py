@@ -117,7 +117,8 @@ class CognitiveMemoryEngine:
             (r"sono\s+fuori\s+me", "emotional_state"),
             (r"voglio\s+morire", "emotional_state"),
             (r"tutto\s+sbagliato", "emotional_state"),
-            (r"non\s+so\s+cosa\s+fare", "emotional_state")
+            (r"non\s+so\s+cosa\s+fare", "emotional_state"),
+            (r"sto\s+malissimo", "emotional_state")
         ]
         
         for pattern, field_name in emotional_patterns:
