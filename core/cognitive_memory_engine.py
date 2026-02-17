@@ -109,13 +109,38 @@ class CognitiveMemoryEngine:
             value = {"type": "cat", "name": cat_match.group(1)}
             logger.info("COGNITIVE_PETS_EXTRACT value=%s", value)
 
+        # Emotional event detection
+        emotional_patterns = [
+            (r"sono\s+(disperato|distrutto|depresso|ansioso|preoccupato|spaventato|frustrato|deluso|triste|arrabbiato)", "emotional_state"),
+            (r"non\s+ce\s+la\s+faccio", "emotional_state"),
+            (r"non\s+ce\s+la\s+rendo", "emotional_state"),
+            (r"sono\s+fuori\s+me", "emotional_state"),
+            (r"voglio\s+morire", "emotional_state"),
+            (r"tutto\s+sbagliato", "emotional_state"),
+            (r"non\s+so\s+cosa\s+fare", "emotional_state")
+        ]
+        
+        for pattern, field_name in emotional_patterns:
+            match = re.search(pattern, message, re.IGNORECASE)
+            if match:
+                persist = True
+                memory_type = "emotional"
+                field = field_name
+                value = match.group(1) if match.groups() else message.strip()
+                logger.info("COGNITIVE_EMOTIONAL_EVENT detected pattern=%s", pattern)
+                break
+
         # Ensure field and value are initialized
         if field is not None and value is not None:
             persist = True
-            memory_type = "profile"
-            logger.info("COGNITIVE_EVAL type=identity field=%s confidence=0.9", field)
-            logger.info("COGNITIVE_DECISION persist=true")
-            logger.info("COGNITIVE_MEMORY_UPDATE field=%s value=%s", field, value)
+            if memory_type == "emotional":
+                logger.info("COGNITIVE_EVAL type=emotional field=%s confidence=0.9", field)
+                logger.info("COGNITIVE_DECISION persist=true")
+                logger.info("COGNITIVE_EMOTIONAL_UPDATE field=%s value=%s", field, value)
+            else:
+                logger.info("COGNITIVE_EVAL type=identity field=%s confidence=0.9", field)
+                logger.info("COGNITIVE_DECISION persist=true")
+                logger.info("COGNITIVE_MEMORY_UPDATE field=%s value=%s", field, value)
             
             # Handle list types
             if field == "children" or field == "pets":
