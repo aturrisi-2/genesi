@@ -31,7 +31,7 @@ lab/prompt_history/
 lab/__pycache__/
 lab/*report*
 lab/*history*
-lab/*metrics*
+lab/*metrics*.json
 
 # Allow stable global prompt
 !lab/global_prompt.json
