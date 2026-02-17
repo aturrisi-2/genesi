@@ -111,14 +111,15 @@ class CognitiveMemoryEngine:
 
         # Emotional event detection
         emotional_patterns = [
-            (r"sono\s+(disperato|distrutto|depresso|ansioso|preoccupato|spaventato|frustrato|deluso|triste|arrabbiato)", "emotional_state"),
+            (r"sono\s+(disperato|distrutto|depresso|ansioso|preoccupato|spaventato|frustrato|deluso|triste|arrabbiato|a pezzi)", "emotional_state"),
             (r"non\s+ce\s+la\s+faccio", "emotional_state"),
             (r"non\s+ce\s+la\s+rendo", "emotional_state"),
             (r"sono\s+fuori\s+me", "emotional_state"),
             (r"voglio\s+morire", "emotional_state"),
             (r"tutto\s+sbagliato", "emotional_state"),
             (r"non\s+so\s+cosa\s+fare", "emotional_state"),
-            (r"sto\s+malissimo", "emotional_state")
+            (r"sto\s+malissimo", "emotional_state"),
+            (r"mi\s+sento\s+perso", "emotional_state")
         ]
         
         for pattern, field_name in emotional_patterns:

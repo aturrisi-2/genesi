@@ -207,8 +207,12 @@ class Proactor:
                 logger.info("IDENTITY_ROUTE_EXECUTION_ORDER_OK user=%s", user_id)
                 profile = await storage.load(f"profile:{user_id}", default={})
                 brain_state_identity = {"profile": profile}
-                identity_text = await self._handle_identity(user_id, message, brain_state_identity)
-                return identity_text, "identity"
+                identity_result = await self._handle_identity(user_id, message, brain_state_identity)
+                if isinstance(identity_result, tuple):
+                    response, _ = identity_result
+                else:
+                    response = identity_result
+                return response
 
             # Load profile for other routing (non-identity)
             profile = await storage.load(f"profile:{user_id}", default={})
@@ -236,8 +240,12 @@ class Proactor:
                 if resolved_city:
                     logger.info("ELLIPTICAL_WEATHER_FOLLOWUP user=%s city=%s", user_id, resolved_city)
                     enriched_msg = f"che tempo fa a {resolved_city} {message.strip('?').strip()}"
-                    tool_response = await self._handle_tool("weather", enriched_msg, user_id)
-                    return tool_response, "tool"
+                    tool_result = await self._handle_tool("weather", enriched_msg, user_id)
+                    if isinstance(tool_result, tuple):
+                        response, _ = tool_result
+                    else:
+                        response = tool_result
+                    return response
 
             # STEP 3.6: ELLIPTICAL NEWS FOLLOW-UP (e.g. "e di politica?" after news)
             if is_elliptical_news_followup(msg_lower):
@@ -245,8 +253,12 @@ class Proactor:
                 if resolved_topic:
                     logger.info("ELLIPTICAL_NEWS_FOLLOWUP user=%s topic=%s", user_id, resolved_topic)
                     enriched_msg = f"notizie {resolved_topic}"
-                    tool_response = await self._handle_tool("news", enriched_msg, user_id)
-                    return tool_response, "tool"
+                    tool_result = await self._handle_tool("news", enriched_msg, user_id)
+                    if isinstance(tool_result, tuple):
+                        response, _ = tool_result
+                    else:
+                        response = tool_result
+                    return response
 
             # STEP 3.7: DOCUMENT MODE — override to document_query if active docs + reference
             active_docs = profile.get("active_documents", [])
@@ -255,7 +267,12 @@ class Proactor:
                 active_docs = [profile["active_document_id"]]
             if active_docs and is_document_reference(message):
                 logger.info("DOCUMENT_MODE_TRIGGERED user=%s doc_count=%d", user_id, len(active_docs))
-                return await self._handle_document_query(user_id, message, profile, brain_state), "document"
+                doc_result = await self._handle_document_query(user_id, message, profile, brain_state)
+                if isinstance(doc_result, tuple):
+                    response, _ = doc_result
+                else:
+                    response = doc_result
+                return response
 
             # STEP 3.8: MEMORY ROUTING OVERRIDE — bypass classifier for memory references
             chat_count = chat_memory.get_message_count(user_id)
@@ -280,30 +297,59 @@ class Proactor:
             # STEP 5: TOOL ROUTES
             if intent in self.tool_intents:
                 logger.info("PROACTOR_ROUTE route=tool intent=%s user=%s", intent, user_id)
-                tool_response = await self._handle_tool(intent, message, user_id)
-                return tool_response, "tool"
+                tool_result = await self._handle_tool(intent, message, user_id)
+                if isinstance(tool_result, tuple):
+                    response, _ = tool_result
+                else:
+                    response = tool_result
+                return response
 
             # STEP 5.5: MEMORY CONTEXT ROUTE
             if intent == "memory_context":
                 logger.info("PROACTOR_ROUTE route=memory_context user=%s", user_id)
-                return await self._handle_memory_context(user_id, message, brain_state), "memory"
+                memory_result = await self._handle_memory_context(user_id, message, brain_state)
+                if isinstance(memory_result, tuple):
+                    response, _ = memory_result
+                else:
+                    response = memory_result
+                return response
             
             # STEP 5.6: REMINDER ROUTING STRICT
             if intent == "reminder_create":
                 logger.info("REMINDER_CREATE_ROUTING user=%s msg=%s", user_id, message[:40])
-                return await self._handle_reminder_creation(user_id, message), "reminder"
+                reminder_result = await self._handle_reminder_creation(user_id, message)
+                if isinstance(reminder_result, tuple):
+                    response, _ = reminder_result
+                else:
+                    response = reminder_result
+                return response
             
             if intent == "reminder_list":
                 logger.info("REMINDER_LIST_ROUTING user=%s msg=%s", user_id, message[:40])
-                return await self._handle_reminder_list(user_id, message), "reminder"
+                reminder_result = await self._handle_reminder_list(user_id, message)
+                if isinstance(reminder_result, tuple):
+                    response, _ = reminder_result
+                else:
+                    response = reminder_result
+                return response
             
             if intent == "reminder_delete":
                 logger.info("REMINDER_DELETE_ROUTING user=%s msg=%s", user_id, message[:40])
-                return await self._handle_reminder_delete(user_id, message), "reminder"
+                reminder_result = await self._handle_reminder_delete(user_id, message)
+                if isinstance(reminder_result, tuple):
+                    response, _ = reminder_result
+                else:
+                    response = reminder_result
+                return response
             
             if intent == "reminder_update":
                 logger.info("REMINDER_UPDATE_ROUTING user=%s msg=%s", user_id, message[:40])
-                return await self._handle_reminder_update(user_id, message), "reminder"
+                reminder_result = await self._handle_reminder_update(user_id, message)
+                if isinstance(reminder_result, tuple):
+                    response, _ = reminder_result
+                else:
+                    response = reminder_result
+                return response
 
             # STEP 6: KNOWLEDGE STRICT — but override short contextual follow-ups
             if intent in SKIP_RELATIONAL_INTENTS:
@@ -311,18 +357,38 @@ class Proactor:
                 # in a relational conversation should stay relational
                 if self._should_override_to_relational(message, user_id):
                     logger.info("PROACTOR_INTENT_OVERRIDE user=%s intent=%s->relational reason=short_contextual", user_id, intent)
-                    return await self._handle_relational(user_id, message, brain_state), "relational"
+                    relational_result = await self._handle_relational(user_id, message, brain_state)
+                    if isinstance(relational_result, tuple):
+                        response, _ = relational_result
+                    else:
+                        response = relational_result
+                    return response
                 logger.info("PROACTOR_ROUTE route=knowledge_strict user=%s intent=%s", user_id, intent)
-                return await self._handle_knowledge(user_id, message), "knowledge"
+                knowledge_result = await self._handle_knowledge(user_id, message)
+                if isinstance(knowledge_result, tuple):
+                    response, _ = knowledge_result
+                else:
+                    response = knowledge_result
+                return response
 
             # STEP 7: RELATIONAL / GENERAL
             if is_relational_message(message):
                 logger.info("PROACTOR_ROUTE route=relational user=%s", user_id)
-                return await self._handle_relational(user_id, message, brain_state), "relational"
+                relational_result = await self._handle_relational(user_id, message, brain_state)
+                if isinstance(relational_result, tuple):
+                    response, _ = relational_result
+                else:
+                    response = relational_result
+                return response
 
             # STEP 8: DEFAULT — relational pipeline (chat libera)
             logger.info("PROACTOR_ROUTE route=default_relational user=%s intent=%s", user_id, intent)
-            return await self._handle_relational(user_id, message, brain_state), "relational"
+            relational_result = await self._handle_relational(user_id, message, brain_state)
+            if isinstance(relational_result, tuple):
+                response, _ = relational_result
+            else:
+                response = relational_result
+            return response
 
         except Exception as e:
             logger.exception("PROACTOR_FATAL_ERROR user=%s intent=%s", user_id, intent, exc_info=True)
