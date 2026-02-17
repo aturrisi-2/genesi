@@ -124,6 +124,11 @@ class CognitiveMemoryEngine:
             "confidence": 0.9  # High confidence for name and profession
         }
 
+    def evaluate_event_sync(self, user_id, message, extracted_profile_data):
+        """Sync wrapper for evaluate_event."""
+        import asyncio
+        return asyncio.run(self.evaluate_event(user_id, message, extracted_profile_data))
+
     def _extract_preference(self, message: str):
         """Extract categorized preference from message. Returns (category, value) or None."""
         msg_lower = message.lower()

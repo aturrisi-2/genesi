@@ -174,6 +174,11 @@ class SemanticMemory:
         """
         return await self._load_user_profile(user_id)
     
+    def get_profile(self, user_id: str) -> Dict[str, Any]:
+        """Sync wrapper for get_user_profile."""
+        import asyncio
+        return asyncio.run(self.get_user_profile(user_id))
+    
     async def save_user_profile(self, user_id: str, profile: Dict[str, Any]) -> bool:
         """
         Salva profilo utente completo con API unificata

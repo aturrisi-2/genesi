@@ -76,6 +76,11 @@ class ContextAssembler:
         logger.info("CONTEXT_ASSEMBLED user=%s summary_len=%d", user_id, len(summary))
         return context
 
+    def build_sync(self, user_id: str, user_message: str) -> Dict[str, Any]:
+        """Sync wrapper for build method."""
+        import asyncio
+        return asyncio.run(self.build(user_id, user_message))
+
     def _summarize_profile(self, profile):
         """
         Costruisce riassunto compatto (max ~300 token) per il system prompt LLM.

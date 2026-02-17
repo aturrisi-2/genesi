@@ -156,15 +156,25 @@ class Proactor:
     async def handle(self, user_id: str, message: str = None, intent: str = None) -> tuple[str, str]:
         """
         Orchestrazione centrale v4.
-        Returns: (response_text, response_source)
+        Returns: (response_text, response_source) - internal contract
         Ordine di routing:
             1. Identity Router  (deterministico)
             2. Tool Router      (deterministico)
-            3. Strict Knowledge (skip relational)
-            4. Knowledge Router (GPT pulito)
-            5. Relational Router (GPT controllato)
-            6. Default Relational (chat libera)
+            3. Knowledge Router (deterministico)
+            4. Relational Router (deterministico)
         """
+        response, source = await self._handle_internal(user_id, message, intent)
+        return response, source
+    
+    async def get_response(self, user_id: str, message: str = None, intent: str = None) -> str:
+        """
+        Public wrapper that returns only response text.
+        This maintains backward compatibility with tests expecting just the response.
+        """
+        response, _ = await self._handle_internal(user_id, message, intent)
+        return response
+    
+    async def _handle_internal(self, user_id: str, message: str = None, intent: str = None) -> tuple[str, str]:
         try:
             # STEP 0: SANITY CHECK
             if not user_id:
@@ -253,7 +263,7 @@ class Proactor:
                 active_docs = [profile["active_document_id"]]
             if active_docs and is_document_reference(message):
                 logger.info("DOCUMENT_MODE_TRIGGERED user=%s doc_count=%d", user_id, len(active_docs))
-                return await self._handle_document_query(user_id, message, profile, brain_state)
+                return await self._handle_document_query(user_id, message, profile, brain_state), "document"
 
             # STEP 3.8: MEMORY ROUTING OVERRIDE — bypass classifier for memory references
             chat_count = chat_memory.get_message_count(user_id)
@@ -284,24 +294,24 @@ class Proactor:
             # STEP 5.5: MEMORY CONTEXT ROUTE
             if intent == "memory_context":
                 logger.info("PROACTOR_ROUTE route=memory_context user=%s", user_id)
-                return await self._handle_memory_context(user_id, message, brain_state)
+                return await self._handle_memory_context(user_id, message, brain_state), "memory"
             
             # STEP 5.6: REMINDER ROUTING STRICT
             if intent == "reminder_create":
                 logger.info("REMINDER_CREATE_ROUTING user=%s msg=%s", user_id, message[:40])
-                return await self._handle_reminder_creation(user_id, message)
+                return await self._handle_reminder_creation(user_id, message), "reminder"
             
             if intent == "reminder_list":
                 logger.info("REMINDER_LIST_ROUTING user=%s msg=%s", user_id, message[:40])
-                return await self._handle_reminder_list(user_id, message)
+                return await self._handle_reminder_list(user_id, message), "reminder"
             
             if intent == "reminder_delete":
                 logger.info("REMINDER_DELETE_ROUTING user=%s msg=%s", user_id, message[:40])
-                return await self._handle_reminder_delete(user_id, message)
+                return await self._handle_reminder_delete(user_id, message), "reminder"
             
             if intent == "reminder_update":
                 logger.info("REMINDER_UPDATE_ROUTING user=%s msg=%s", user_id, message[:40])
-                return await self._handle_reminder_update(user_id, message)
+                return await self._handle_reminder_update(user_id, message), "reminder"
 
             # STEP 6: KNOWLEDGE STRICT — but override short contextual follow-ups
             if intent in SKIP_RELATIONAL_INTENTS:
@@ -309,18 +319,18 @@ class Proactor:
                 # in a relational conversation should stay relational
                 if self._should_override_to_relational(message, user_id):
                     logger.info("PROACTOR_INTENT_OVERRIDE user=%s intent=%s->relational reason=short_contextual", user_id, intent)
-                    return await self._handle_relational(user_id, message, brain_state)
+                    return await self._handle_relational(user_id, message, brain_state), "relational"
                 logger.info("PROACTOR_ROUTE route=knowledge_strict user=%s intent=%s", user_id, intent)
-                return await self._handle_knowledge(user_id, message)
+                return await self._handle_knowledge(user_id, message), "knowledge"
 
             # STEP 7: RELATIONAL / GENERAL
             if is_relational_message(message):
                 logger.info("PROACTOR_ROUTE route=relational user=%s", user_id)
-                return await self._handle_relational(user_id, message, brain_state)
+                return await self._handle_relational(user_id, message, brain_state), "relational"
 
             # STEP 8: DEFAULT — relational pipeline (chat libera)
             logger.info("PROACTOR_ROUTE route=default_relational user=%s intent=%s", user_id, intent)
-            return await self._handle_relational(user_id, message, brain_state)
+            return await self._handle_relational(user_id, message, brain_state), "relational"
 
         except Exception as e:
             logger.exception("PROACTOR_FATAL_ERROR user=%s intent=%s", user_id, intent, exc_info=True)
@@ -460,19 +470,19 @@ class Proactor:
     # MEMORY CONTEXT ROUTER — conversational memory responses
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_memory_context(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> tuple[str, str]:
+    async def _handle_memory_context(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
         """
         Handle memory_context intent — responses based on conversation history.
         Loads last N=5 interactions, summarizes dynamically, responds naturally.
         Never responds with "non posso aiutarti".
-        Returns: (response_text, "knowledge")
+        Returns: response_text
         """
         try:
             # Load last 5 interactions
             messages = chat_memory.get_messages(user_id, limit=5)
             if not messages:
                 logger.warning("MEMORY_CONTEXT_NO_HISTORY user=%s", user_id)
-                return "Non abbiamo ancora parlato abbastanza. Di cosa vorresti conversare?", "knowledge"
+                return "Non abbiamo ancora parlato abbastanza. Di cosa vorresti conversare?"
             
             # Build conversation summary
             conversation_summary = []
@@ -502,25 +512,25 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             
             if response is None:
                 # Fallback: simple acknowledgment
-                return "Ricordo i nostri scambi. C'è qualcosa di specifico che vorresti approfondire?", "knowledge"
+                return "Ricordo i nostri scambi. C'è qualcosa di specifico che vorresti approfondire?"
             
             logger.info("MEMORY_CONTEXT_RESPONSE user=%s history_count=%d", user_id, len(messages))
-            return response, "knowledge"
+            return response
             
         except Exception as e:
             logger.error("MEMORY_CONTEXT_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            return "Mi dispiace, ho avuto un problema nel recuperare i nostri ricordi. Riprova.", "knowledge"
+            return "Mi dispiace, ho avuto un problema nel recuperare i nostri ricordi. Riprova."
 
     # ═══════════════════════════════════════════════════════════
     # REMINDER HANDLERS — deterministic reminder management
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_reminder_creation(self, user_id: str, message: str) -> tuple[str, str]:
+    async def _handle_reminder_creation(self, user_id: str, message: str) -> str:
         """
         Handle reminder creation requests with STRICT logic.
         SOLO se presente orario esplicito (HH:MM) o data esplicita.
         MAI fallback automatici.
-        Returns: (response_text, "reminder")
+        Returns: response_text
         """
         try:
             # Extract reminder text and datetime from message
@@ -528,11 +538,11 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             
             # Se manca data o ora → chiedere chiarimento
             if not reminder_datetime:
-                return "Non ho capito quando vuoi che ti ricordi. Prova a dire 'ricordami di [azione] [giorno] alle [ora]'.", "reminder"
+                return "Non ho capito quando vuoi che ti ricordi. Prova a dire 'ricordami di [azione] [giorno] alle [ora]'."
             
             # Se abbiamo datetime ma manca testo → chiedere cosa ricordare
             if reminder_datetime and not reminder_text:
-                return "Cosa vuoi che ti ricordi?", "reminder"
+                return "Cosa vuoi che ti ricordi?"
             
             # Caso completo: testo + datetime validi
             if reminder_text and reminder_datetime:
@@ -540,42 +550,42 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 reminder_id, response = reminder_engine.create_reminder_with_response(user_id, reminder_text, reminder_datetime)
                 
                 if reminder_id:
-                    return response, "reminder"
+                    return response
                 else:
-                    return response, "reminder"
+                    return response
             
-            return "Quando vuoi che te lo ricordi?", "reminder"
+            return "Quando vuoi che te lo ricordi?"
                 
         except Exception as e:
             logger.error("REMINDER_CREATION_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            return "Mi dispiace, ho avuto un problema con il promemoria. Riprova.", "reminder"
+            return "Mi dispiace, ho avuto un problema con il promemoria. Riprova."
 
-    async def _handle_reminder_list(self, user_id: str, message: str) -> tuple[str, str]:
+    async def _handle_reminder_list(self, user_id: str, message: str) -> str:
         """
         Handle reminder list requests.
         Return formatted list of user's reminders.
-        Returns: (response_text, "reminder")
+        Returns: response_text
         """
         try:
             # Get pending reminders
             reminders = reminder_engine.list_reminders(user_id, status_filter="pending")
             
             if not reminders:
-                return "Non hai promemoria impostati.", "reminder"
+                return "Non hai promemoria impostati."
             
             # Format and return the list
             formatted_list = reminder_engine.format_reminders_list(reminders)
-            return formatted_list, "reminder"
+            return formatted_list
             
         except Exception as e:
             logger.error("REMINDER_LIST_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            return "Mi dispiace, non riesco a vedere i tuoi promemoria. Riprova.", "reminder"
+            return "Mi dispiace, non riesco a vedere i tuoi promemoria. Riprova."
 
-    async def _handle_reminder_delete(self, user_id: str, message: str) -> tuple[str, str]:
+    async def _handle_reminder_delete(self, user_id: str, message: str) -> str:
         """
         Handle reminder deletion requests with deterministic parsing.
         Support: numero, "tutti", testo parziale (fuzzy)
-        Returns: (response_text, "reminder")
+        Returns: response_text
         """
         try:
             msg_lower = message.lower()
@@ -585,9 +595,9 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 deleted_count = reminder_engine.delete_all_pending(user_id)
                 
                 if deleted_count > 0:
-                    return f"Ho cancellato tutti i promemoria.", "reminder"
+                    return f"Ho cancellato tutti i promemoria."
                 else:
-                    return "Non hai promemoria da cancellare.", "reminder"
+                    return "Non hai promemoria da cancellare."
             
             # 2️⃣ Numero → elimina per indice
             import re
@@ -602,11 +612,11 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                     success = reminder_engine.delete_reminder(user_id, reminder_id)
                     
                     if success:
-                        return f"Ho cancellato il promemoria {index + 1}.", "reminder"
+                        return f"Ho cancellato il promemoria {index + 1}."
                     else:
-                        return "Mi dispiace, non sono riuscito a cancellare il promemoria.", "reminder"
+                        return "Mi dispiace, non sono riuscito a cancellare il promemoria."
                 else:
-                    return f"Non hai un promemoria numero {index + 1}.", "reminder"
+                    return f"Non hai un promemoria numero {index + 1}."
             
             # 3️⃣ Testo parziale → fuzzy match semplice
             # Estrai testo dopo verbi di cancellazione
@@ -630,11 +640,11 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                         success = reminder_engine.delete_reminder(user_id, reminder["id"])
                         
                         if success:
-                            return f"Ho cancellato il promemoria: {reminder['text']}", "reminder"
+                            return f"Ho cancellato il promemoria: {reminder['text']}"
                         else:
-                            return "Mi dispiace, non sono riuscito a cancellare il promemoria.", "reminder"
+                            return "Mi dispiace, non sono riuscito a cancellare il promemoria."
                 
-                return f"Non trovo promemoria con '{search_text}'.", "reminder"
+                return f"Non trovo promemoria con '{search_text}'."
             
             # 4️⃣ Default → elimina il più recente
             latest_reminder = reminder_engine.get_latest_pending(user_id)
@@ -643,21 +653,21 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 success = reminder_engine.delete_reminder(user_id, latest_reminder["id"])
                 
                 if success:
-                    return "Ho cancellato l'ultimo promemoria.", "reminder"
+                    return "Ho cancellato l'ultimo promemoria."
                 else:
-                    return "Mi dispiace, non sono riuscito a cancellare il promemoria.", "reminder"
+                    return "Mi dispiace, non sono riuscito a cancellare il promemoria."
             else:
-                return "Non hai promemoria da cancellare.", "reminder"
+                return "Non hai promemoria da cancellare."
                 
         except Exception as e:
             logger.error("REMINDER_DELETE_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            return "Mi dispiace, ho avuto un problema con la cancellazione. Riprova.", "reminder"
+            return "Mi dispiace, ho avuto un problema con la cancellazione. Riprova."
 
-    async def _handle_reminder_update(self, user_id: str, message: str) -> tuple[str, str]:
+    async def _handle_reminder_update(self, user_id: str, message: str) -> str:
         """
         Handle reminder update requests with deterministic parsing.
         Support: numero, testo parziale, nuova data/ora
-        Returns: (response_text, "reminder")
+        Returns: response_text
         """
         try:
             msg_lower = message.lower()
@@ -675,19 +685,19 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 if 0 <= index < len(reminders):
                     target_reminder = reminders[index]
                 else:
-                    return f"Non hai un promemoria numero {index + 1}.", "reminder"
+                    return f"Non hai un promemoria numero {index + 1}."
             else:
                 # 2️⃣ Senza numero → usa il più recente
                 target_reminder = reminder_engine.get_latest_pending(user_id)
             
             if not target_reminder:
-                return "Non hai promemoria da modificare.", "reminder"
+                return "Non hai promemoria da modificare."
             
             # 3️⃣ Parsing nuova data/ora
             new_datetime = self._parse_update_datetime_strict(message)
             
             if not new_datetime:
-                return "Non ho capito a quando vuoi spostare il promemoria. Prova con 'sposta alle 18' o 'a domani'.", "reminder"
+                return "Non ho capito a quando vuoi spostare il promemoria. Prova con 'sposta alle 18' o 'a domani'."
             
             # 4️⃣ Aggiorna il reminder
             success = reminder_engine.update_reminder_datetime(user_id, target_reminder["id"], new_datetime)
@@ -695,13 +705,13 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             if success:
                 # Format confirmation message
                 date_str = new_datetime.strftime("%d %b %H:%M")
-                return f"Ho aggiornato il promemoria al {date_str}.", "reminder"
+                return f"Ho aggiornato il promemoria al {date_str}."
             else:
-                return "Mi dispiace, non sono riuscito ad aggiornare il promemoria.", "reminder"
+                return "Mi dispiace, non sono riuscito ad aggiornare il promemoria."
                 
         except Exception as e:
             logger.error("REMINDER_UPDATE_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            return "Mi dispiace, ho avuto un problema con l'aggiornamento. Riprova.", "reminder"
+            return "Mi dispiace, ho avuto un problema con l'aggiornamento. Riprova."
 
     def _parse_update_datetime_strict(self, message: str) -> Optional[datetime]:
         """
