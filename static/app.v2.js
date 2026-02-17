@@ -417,9 +417,11 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
     console.log('[TTS_PREFETCH] index=' + (index + 1) + '/total=' + chunks.length + ' len=' + chunk.length + ' genId=' + myGenId);
     
     try {
-      const response = await fetch('/api/tts', {
+      const headers = authHeaders();
+      console.log('[TTS_PREFETCH] AUTH HEADERS: ' + JSON.stringify(headers));
+      const response = await fetch('/api/tts/', {
         method: 'POST',
-        headers: authHeaders(),
+        headers: headers,
         body: JSON.stringify({ text: normalizedChunk }),
         signal: currentTTSAbortController ? currentTTSAbortController.signal : undefined
       });
@@ -605,9 +607,11 @@ async function _playTTSChunk(text) {
     console.log('[TTS] richiesta inviata - text_len=' + text.length);
     
     const normalizedText = normalizeTextForTTS(text);
-    const response = await fetch('/api/tts', {
+    const headers = authHeaders();
+    console.log('[TTS] AUTH HEADERS: ' + JSON.stringify(headers));
+    const response = await fetch('/api/tts/', {
       method: 'POST',
-      headers: authHeaders(),
+      headers: headers,
       body: JSON.stringify({ text: normalizedText }),
       signal: currentTTSAbortController ? currentTTSAbortController.signal : undefined
     });

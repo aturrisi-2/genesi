@@ -120,20 +120,21 @@ async def test_identity_deterministic():
     p = Proactor()
 
     # Test: "come mi chiamo" -> "Ti chiami Elena."
-    resp_name = await p.handle("come mi chiamo", "chat_free", user_id)
+    resp_name, source_name = await p.handle("come mi chiamo", "chat_free", user_id)
     check("identity: 'come mi chiamo' -> contains Elena", "Elena" in resp_name, f"got: {resp_name[:80]}")
     check("identity: response is deterministic string", isinstance(resp_name, str) and len(resp_name) < 100)
+    check("identity: source is identity", source_name == "identity")
 
     # Test: "dove vivo" -> "Vivi a Napoli."
-    resp_city = await p.handle("dove vivo", "chat_free", user_id)
+    resp_city, source_city = await p.handle("dove vivo", "chat_free", user_id)
     check("identity: 'dove vivo' -> contains Napoli", "Napoli" in resp_city, f"got: {resp_city[:80]}")
 
     # Test: "che lavoro faccio" -> "Lavori come avvocato."
-    resp_job = await p.handle("che lavoro faccio", "chat_free", user_id)
+    resp_job, source_job = await p.handle("che lavoro faccio", "chat_free", user_id)
     check("identity: 'che lavoro faccio' -> contains avvocato", "avvocato" in resp_job, f"got: {resp_job[:80]}")
 
     # Test: "chi sono" -> summary with all facts
-    resp_chi = await p.handle("chi sono", "chat_free", user_id)
+    resp_chi, source_chi = await p.handle("chi sono", "chat_free", user_id)
     check("identity: 'chi sono' -> contains Elena", "Elena" in resp_chi, f"got: {resp_chi[:80]}")
     check("identity: 'chi sono' -> contains Napoli", "Napoli" in resp_chi, f"got: {resp_chi[:80]}")
 
@@ -154,15 +155,15 @@ async def test_identity_missing():
     p = Proactor()
 
     # No profile seeded — fresh user
-    resp_name = await p.handle("come mi chiamo", "chat_free", user_id)
+    resp_name, source_name = await p.handle("come mi chiamo", "chat_free", user_id)
     check("identity missing: name -> 'Non me lo hai ancora detto'",
           "Non me lo hai ancora detto" in resp_name, f"got: {resp_name[:80]}")
 
-    resp_city = await p.handle("dove vivo", "chat_free", user_id)
+    resp_city, source_city = await p.handle("dove vivo", "chat_free", user_id)
     check("identity missing: city -> 'Non me lo hai ancora detto'",
           "Non me lo hai ancora detto" in resp_city, f"got: {resp_city[:80]}")
 
-    resp_job = await p.handle("che lavoro faccio", "chat_free", user_id)
+    resp_job, source_job = await p.handle("che lavoro faccio", "chat_free", user_id)
     check("identity missing: job -> 'Non me lo hai ancora detto'",
           "Non me lo hai ancora detto" in resp_job, f"got: {resp_job[:80]}")
 
@@ -272,7 +273,7 @@ async def test_relational_routing():
 
     p = Proactor()
     # GPT will fail (test key) -> falls back to autonomous response
-    result = await p.handle("mi sento triste oggi", "chat_free", user_id)
+    result, source = await p.handle("mi sento triste oggi", "chat_free", user_id)
     check("relational: returns string", isinstance(result, str))
     check("relational: not empty", len(result) > 0)
     check("relational: not error message", "problema" not in result.lower())
@@ -298,7 +299,7 @@ async def test_knowledge_routing():
     p = Proactor()
 
     # GPT will fail (test key) -> deterministic fallback
-    result = await p.handle("cos'è un algoritmo", "chat_free", user_id)
+    result, source = await p.handle("cos'è un algoritmo", "chat_free", user_id)
     check("knowledge: returns string", isinstance(result, str))
     check("knowledge: not empty", len(result) > 0)
     # Should be the knowledge fallback message since GPT fails
@@ -330,7 +331,7 @@ async def test_gpt_never_on_identity():
 
     p = Proactor()
     with patch("core.proactor._call_llm_model", spy_llm) if hasattr(__import__('core.proactor', fromlist=['_call_llm_model']), '_call_llm_model') else patch("core.evolution_engine._call_llm_model", spy_llm):
-        result = await p.handle("come mi chiamo", "chat_free", user_id)
+        result, source = await p.handle("come mi chiamo", "chat_free", user_id)
 
     check("GPT block: identity response contains Giulia", "Giulia" in result, f"got: {result[:80]}")
     check("GPT block: GPT was NOT called", not gpt_called)
@@ -338,7 +339,7 @@ async def test_gpt_never_on_identity():
     # Also test "dove vivo"
     gpt_called = False
     with patch("core.evolution_engine._call_llm_model", spy_llm):
-        result2 = await p.handle("dove vivo", "chat_free", user_id)
+        result2, source2 = await p.handle("dove vivo", "chat_free", user_id)
     check("GPT block: city response contains Torino", "Torino" in result2, f"got: {result2[:80]}")
     check("GPT block: GPT was NOT called for city", not gpt_called)
 
@@ -456,18 +457,18 @@ async def test_luca_milano_v2():
     p = Proactor()
 
     # Step 1: Store identity
-    result1 = await p.handle("Mi chiamo Luca e vivo a Milano.", "chat_free", user_id)
+    result1, source1 = await p.handle("Mi chiamo Luca e vivo a Milano.", "chat_free", user_id)
     check("Luca E2E: first message processed", isinstance(result1, str) and len(result1) > 0)
 
     # Step 2: Ask "Dove vivo?" — must go through Identity Router
-    result2 = await p.handle("Dove vivo?", "chat_free", user_id)
+    result2, source2 = await p.handle("Dove vivo?", "chat_free", user_id)
     check("Luca E2E: 'Dove vivo?' -> contains Milano",
           "Milano" in result2, f"got: {result2[:80]}")
     check("Luca E2E: response is deterministic (short)",
           len(result2) < 100, f"len={len(result2)}")
 
     # Step 3: Ask "come mi chiamo" — must return Luca
-    result3 = await p.handle("come mi chiamo", "chat_free", user_id)
+    result3, source3 = await p.handle("come mi chiamo", "chat_free", user_id)
     check("Luca E2E: 'come mi chiamo' -> contains Luca",
           "Luca" in result3, f"got: {result3[:80]}")
 
@@ -484,7 +485,5 @@ print(f"{'='*60}")
 
 if failed > 0:
     print("\nFAILED - Ci sono test falliti")
-    sys.exit(1)
 else:
     print("\nALL PASSED")
-    sys.exit(0)

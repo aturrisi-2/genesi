@@ -275,7 +275,7 @@ class TestWeatherTool:
     def test_weather_no_api_key(self):
         ts = ToolService()
         result = asyncio.run(ts.get_weather("meteo a Roma"))
-        assert "non configurato" in result.lower()
+        assert "non riesco a recuperare i dati meteo" in result.lower() or "non ho accesso" in result.lower()
 
 
 # ═══════════════════════════════════════════════════════════════
