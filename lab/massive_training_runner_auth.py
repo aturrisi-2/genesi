@@ -32,7 +32,7 @@ class MassiveTrainingRunnerAuth:
         self.chat_endpoint = f"{base_url}/api/chat/"
         
         # Configurazione
-        self.TOTAL_MESSAGES = 50  # Test limitato a 20 messaggi
+        self.TOTAL_MESSAGES = 120  # Test limitato a 20 messaggi
         self.REQUEST_TIMEOUT = 10.0
         
         # Utenti predefiniti
