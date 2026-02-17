@@ -109,27 +109,25 @@ class CognitiveMemoryEngine:
             value = {"type": "cat", "name": cat_match.group(1)}
             logger.info("COGNITIVE_PETS_EXTRACT value=%s", value)
 
-        # Emotional event detection
-        emotional_patterns = [
-            (r"sono\s+(disperato|distrutto|depresso|ansioso|preoccupato|spaventato|frustrato|deluso|triste|arrabbiato|a pezzi)", "emotional_state"),
-            (r"non\s+ce\s+la\s+faccio", "emotional_state"),
-            (r"non\s+ce\s+la\s+rendo", "emotional_state"),
-            (r"sono\s+fuori\s+me", "emotional_state"),
-            (r"voglio\s+morire", "emotional_state"),
-            (r"tutto\s+sbagliato", "emotional_state"),
-            (r"non\s+so\s+cosa\s+fare", "emotional_state"),
-            (r"sto\s+malissimo", "emotional_state"),
-            (r"mi\s+sento\s+perso", "emotional_state")
+        # Emotional event detection - use substring matching
+        strong_keywords = [
+            "disperato",
+            "distrutto",
+            "depresso",
+            "non ce la faccio",
+            "sto malissimo",
+            "a pezzi",
+            "mi sento perso"
         ]
         
-        for pattern, field_name in emotional_patterns:
-            match = re.search(pattern, message, re.IGNORECASE)
-            if match:
+        msg_lower = message.lower()
+        for k in strong_keywords:
+            if k in msg_lower:
                 persist = True
                 memory_type = "emotional"
-                field = field_name
-                value = match.group(1) if match.groups() else message.strip()
-                logger.info("COGNITIVE_EMOTIONAL_EVENT detected pattern=%s", pattern)
+                field = "emotional_state"
+                value = message.strip()
+                logger.info("COGNITIVE_EMOTIONAL_EVENT detected keyword=%s", k)
                 break
 
         # Ensure field and value are initialized
