@@ -7,9 +7,11 @@ Architettura: Chat libera (Qwen) vs Tecnica (GPT) con Proactor
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.templating import Jinja2Templates
 from pathlib import Path
 import uvicorn
 import asyncio
+import time
 from datetime import datetime
 
 # Import base
@@ -36,6 +38,12 @@ app = FastAPI(title="Genesi Core v2 - Proactor Architecture", redirect_slashes=F
 
 # Static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Template configuration
+templates = Jinja2Templates(directory="static")
+
+# Build version for cache busting (timestamp di avvio server)
+BUILD_VERSION = str(int(time.time()))
 
 
 # ===============================
@@ -157,8 +165,11 @@ async def serve_admin():
     return FileResponse(BASE_DIR / "static" / "admin.html")
 
 @app.get("/")
-async def serve_index():
-    return FileResponse(BASE_DIR / "static" / "index.html")
+async def serve_index(request: Request):
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "build_version": BUILD_VERSION
+    })
 
 
 # ===============================
