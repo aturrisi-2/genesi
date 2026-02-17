@@ -189,11 +189,11 @@ Domanda: {message}
                                      route: str = "relational") -> str:
         """
         Genera risposta LLM con contesto strutturato dalla memoria.
-        Il context deve contenere 'summary' e 'current_message' (da ContextAssembler).
+        Il context deve contenere \'summary\' e \'current_message\' (da ContextAssembler).
         Rate limit protection con auto-downgrade.
 
         Raises:
-            RuntimeError se context['summary'] e' vuoto.
+            RuntimeError se context[\'summary\'] e\' vuoto.
         """
         summary = context.get("summary", "")
         if not summary or not summary.strip():
@@ -278,7 +278,7 @@ BEHAVIORAL_MODULATION:
         if user_id:
             conversation_ctx = build_conversation_context(user_id, message, profile)
         else:
-            conversation_ctx = f"INFORMAZIONI STABILI SULL'UTENTE:\n{summary}"
+            conversation_ctx = f"INFORMAZIONI STABILI SULL\'UTENTE:\n{summary}"
 
         model = model_selector(message, route=route)
         
@@ -648,7 +648,7 @@ CARATTERE:
     def _deterministic_fallback(message: str, route: str) -> str:
         """
         Fallback deterministico quando tutti i modelli LLM falliscono.
-        Mai restituire 'Non riesco a rispondere'. Sempre una risposta utile.
+        Mai restituire \'Non riesco a rispondere\'. Sempre una risposta utile.
         """
         msg_lower = message.lower().strip()
 
@@ -661,13 +661,13 @@ CARATTERE:
             return "Al momento non ho accesso alle informazioni richieste. Riprova tra qualche minuto."
 
         if route == "relational":
-            return "Capisco. Dimmi qualcosa in piu' su quello che stai vivendo."
+            return "Capisco. Dimmi qualcosa in piu\' su quello che stai vivendo."
 
         if route == "technical":
-            return "Il servizio tecnico e' temporaneamente sovraccarico. Riprova tra qualche minuto."
+            return "Il servizio tecnico e\' temporaneamente sovraccarico. Riprova tra qualche minuto."
 
         # General fallback
-        return "Scusa, sto avendo qualche difficolta'. Riproviamo tra un momento."
+        return "Scusa, sto avendo qualche difficolta\'. Riproviamo tra un momento."
 
     @staticmethod
     def _build_user_context(user_profile: dict) -> str:
@@ -689,10 +689,10 @@ CARATTERE:
             context_parts.append(f"Professione: {user_profile['profession']}")
         
         if user_profile.get("city"):
-            context_parts.append(f"Citta': {user_profile['city']}")
+            context_parts.append(f"Citt\': {user_profile['city']}")
         
         if user_profile.get("age"):
-            context_parts.append(f"Eta': {user_profile['age']}")
+            context_parts.append(f"Eta\': {user_profile['age']}")
         
         if user_profile.get("traits"):
             context_parts.append(f"Caratteristiche: {', '.join(user_profile['traits'])}")
