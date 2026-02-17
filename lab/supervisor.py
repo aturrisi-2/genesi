@@ -230,3 +230,20 @@ if __name__ == "__main__":
         print("✅ Minimal Evolution V1 applied successfully")
     else:
         print("ℹ️ Minimal Evolution V1 - No changes applied")
+
+
+# ============================================================
+# BACKWARD COMPATIBILITY WRAPPER
+# ============================================================
+
+class SupervisorEngine:
+    """
+    Compatibility wrapper for legacy architecture.
+    Maintains previous import contract.
+    """
+
+    def __init__(self):
+        self.engine = MinimalEvolutionV1()
+
+    def run(self):
+        return self.engine.run_minimal_evolution()
