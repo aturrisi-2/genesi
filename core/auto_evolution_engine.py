@@ -110,7 +110,8 @@ class AutoEvolutionEngine:
         self.observer = Observer()
         
         # 🔵 VERIFICA MONITOR PATH ESATTO
-        lab_path = Path("lab").resolve()
+        BASE_DIR = Path(__file__).resolve().parent.parent
+        lab_path = (BASE_DIR / "lab").resolve()
         self.observer.schedule(event_handler, str(lab_path), recursive=False)
         self.observer.start()
         
