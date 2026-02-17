@@ -36,6 +36,7 @@ class ChatResponse(BaseModel):
     intent: Optional[str] = None
     user_id: Optional[str] = None
 
+@router.post("", response_model=ChatResponse)
 @router.post("/", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_auth)):
     try:
