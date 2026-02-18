@@ -746,7 +746,7 @@ class MemoryBrain:
         raw_profile = await storage.load(f"profile:{user_id}", default={})
         
         # Evaluate message for profile updates
-        decision = cognitive_engine.evaluate_event(user_id, message, raw_profile)
+        decision = await cognitive_engine.evaluate_event(user_id, message, raw_profile)
         
         # Save profile if there are updates
         if decision['persist'] and decision['memory_type'] == 'profile':

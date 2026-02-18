@@ -35,7 +35,7 @@ def _is_strong_emotional(message: str) -> bool:
     return has_strong or (has_always and has_strong) or has_repetition
 
 class CognitiveMemoryEngine:
-    def evaluate_event(self, user_id, message, extracted_profile_data):
+    async def evaluate_event(self, user_id, message, extracted_profile_data):
         # Initialize field and value
         field = None
         value = None
@@ -94,30 +94,11 @@ class CognitiveMemoryEngine:
             value = extracted_name
             logger.info("COGNITIVE_NAME_EXTRACT value=%s", value)
             
-            # FIX IDENTITÀ DECLARATIVA IMMEDIATA
-            # 1. Aggiornare immediatamente brain.profile
-            brain_state._state["profile"]["name"] = extracted_name
-            logger.info("BRAIN_PROFILE_IMMEDIATE_UPDATE user=%s name=%s", user_id, extracted_name)
-            
-            # 2. Chiamare semantic_memory.update_profile SINCRONAMENTE
-            try:
-                from core.semantic_memory import semantic_memory
-                current_profile = storage._storage.get(f"long_term_profile:{user_id}", {})
-                current_profile["name"] = extracted_name
-                storage._storage[f"long_term_profile:{user_id}"] = current_profile
-                logger.info("SEMANTIC_PROFILE_IMMEDIATE_UPDATE user=%s name=%s", user_id, extracted_name)
-            except Exception as e:
-                logger.error("SEMANTIC_UPDATE_ERROR user=%s error=%s", user_id, str(e))
-            
-            # 3. Se esiste memory_v2: sync profile
-            try:
-                from core.memory_brain import memory_brain
-                # memory_brain sync è già gestito da brain_state
-                logger.info("MEMORY_V2_SYNC_IMMEDIATE user=%s name=%s", user_id, extracted_name)
-            except Exception as e:
-                logger.error("MEMORY_V2_SYNC_ERROR user=%s error=%s", user_id, str(e))
-            
-            logger.info("IDENTITY_DECLARATIVE_IMMEDIATE_COMPLETE user=%s name=%s", user_id, extracted_name)
+            # FIX DEFINITIVO: Scrittura diretta su storage
+            profile = await storage.load(f"long_term_profile:{user_id}", default={})
+            profile["name"] = extracted_name
+            await storage.save(f"long_term_profile:{user_id}", profile)
+            logger.info("STORAGE_DIRECT_WRITE user=%s name=%s", user_id, extracted_name)
             
         if city_match:
             extracted_profile_data["city"] = city_match.group(1)
@@ -128,7 +109,7 @@ class CognitiveMemoryEngine:
             logger.info("COGNITIVE_CITY_EXTRACT value=%s", value)
             
         if profession_match:
-            new_profession = profession_match.group(1).strip()
+            new_profession = profession_match.group(1).strip().lower()  # lowercase come richiesto
             old_profession = extracted_profile_data.get("profession")
             
             # Handle profession contradiction
@@ -149,6 +130,12 @@ class CognitiveMemoryEngine:
                 memory_type = "profile"
             
             logger.info("COGNITIVE_PROFESSION_EXTRACT value=%s", value)
+            
+            # FIX DEFINITIVO: Scrittura diretta su storage
+            profile = await storage.load(f"long_term_profile:{user_id}", default={})
+            profile["profession"] = new_profession
+            await storage.save(f"long_term_profile:{user_id}", profile)
+            logger.info("STORAGE_DIRECT_WRITE user=%s profession=%s", user_id, new_profession)
 
         if spouse_match:
             extracted_profile_data["spouse"] = spouse_match.group(1)
