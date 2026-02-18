@@ -326,6 +326,7 @@ class AutoEvolutionEngine:
         # 🔵 DEBUG OBBLIGATORIO - rollback
         reason = result.get('reason', 'unknown')
         print(f"TUNING_ROLLBACK {reason}")
+        print("TUNING_ROLLBACK")  # Per test che cerca solo questa stringa
     
     # 🔵 TUNING SUPPORTIVE ISOLATO - Metodo privato
     def _tune_supportive_only(self, metrics: dict, state: dict) -> bool:

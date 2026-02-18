@@ -46,7 +46,7 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
 
         # Cognitive Memory Evaluation
         cognitive_engine = CognitiveMemoryEngine()
-        decision = cognitive_engine.evaluate_event(user_id, request.message, {})
+        decision = await cognitive_engine.evaluate_event(user_id, request.message, {})
 
         # Load profile once for all updates
         raw_profile = await storage.load(f"profile:{user_id}", default={})
