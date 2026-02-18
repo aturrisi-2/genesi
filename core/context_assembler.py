@@ -35,11 +35,23 @@ class ContextAssembler:
         Returns:
             dict con: summary, long_term_profile, relational_state, recent_episodes, memory_v2, current_message
         """
-        # Load from persistent storage
-        profile = storage.load(f"profile:{user_id}", default={})
-        relational_state = storage.load(f"relational_state:{user_id}", default={})
-        recent_episodes = storage.load(f"episodes/{user_id}", default=[])
-        latent_state = self.latent_state_engine.load(user_id)
+        import asyncio
+        
+        # Load from persistent storage - use asyncio.run for sync wrapper
+        try:
+            loop = asyncio.get_running_loop()
+            # If we're in an async context, we need to handle this differently
+            # For now, create sync versions
+            profile = storage._storage.get(f"profile:{user_id}", {})
+            relational_state = storage._storage.get(f"relational_state:{user_id}", {})
+            recent_episodes = storage._storage.get(f"episodes/{user_id}", [])
+            latent_state = self.latent_state_engine._storage.get(f"latent_state:{user_id}", {})
+        except RuntimeError:
+            # No event loop, safe to use asyncio.run
+            profile = asyncio.run(storage.load(f"profile:{user_id}", default={}))
+            relational_state = asyncio.run(storage.load(f"relational_state:{user_id}", default={}))
+            recent_episodes = asyncio.run(storage.load(f"episodes/{user_id}", default=[]))
+            latent_state = asyncio.run(self.latent_state_engine.load(user_id))
 
         logger.info("CONTEXT_ASSEMBLER_LOADED user=%s", user_id)
 
