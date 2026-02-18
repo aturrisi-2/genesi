@@ -14,7 +14,7 @@ GPT chiamato SOLO da Relational Router o Knowledge Router.
 
 import logging
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple, Union
 from datetime import datetime
 from core.log import log
 from core.memory_brain import memory_brain
