@@ -47,7 +47,7 @@ async def tts_endpoint(request: TTSRequest, user: AuthUser = Depends(require_aut
         
         # Usa routing basato su intent
         from core.tts_provider import get_tts_provider_for_intent
-        provider = get_tts_provider_for_intent(intent=intent, route=route)
+        provider = get_tts_provider_for_intent(intent=intent, route=route, user_id=uid)
         audio = await provider.synthesize(clean_text)
         
         # Gestione fallback a cascata se audio è None

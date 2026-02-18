@@ -233,6 +233,7 @@ class Proactor:
 
             # STEP 1: IDENTITY ROUTE (PRIMA DI TUTTO - MASSIMA PRIORITÀ)
             if is_identity_question(message):
+                log("ROUTING_DECISION", route="identity", user_id=user_id)
                 logger.info("IDENTITY_ROUTE_EXECUTION_ORDER_OK user=%s", user_id)
                 profile = await storage.load(f"profile:{user_id}", default={})
                 brain_state_identity = {"profile": profile}
@@ -298,7 +299,7 @@ class Proactor:
 
             # STEP 4: INTENT CLASSIFICATION
             if intent is None:
-                intent = intent_classifier.classify(message)
+                intent = intent_classifier.classify(message, user_id)
 
             # STEP 4.5: INTENT INHERITANCE — geographic follow-up
             inherited = resolve_inherited_intent(user_id, message, intent)
@@ -309,34 +310,34 @@ class Proactor:
 
             # STEP 5: TOOL ROUTES
             if intent in self.tool_intents:
-                logger.info("PROACTOR_ROUTE route=tool intent=%s user=%s", intent, user_id)
+                log("ROUTING_DECISION", route="tool", user_id=user_id)
                 response = await self._handle_tool(intent, message, user_id)
                 return response, "tool"
 
             # STEP 5.5: MEMORY CONTEXT ROUTE
             if intent == "memory_context":
-                logger.info("PROACTOR_ROUTE route=memory_context user=%s", user_id)
+                log("ROUTING_DECISION", route="memory_context", user_id=user_id)
                 response = await self._handle_memory_context(user_id, message, brain_state)
                 return response, "tool"
             
             # STEP 5.6: REMINDER ROUTING STRICT
             if intent == "reminder_create":
-                logger.info("REMINDER_CREATE_ROUTING user=%s msg=%s", user_id, message[:40])
+                log("ROUTING_DECISION", route="reminder_create", user_id=user_id)
                 response = await self._handle_reminder_creation(user_id, message)
                 return response, "tool"
             
             if intent == "reminder_list":
-                logger.info("REMINDER_LIST_ROUTING user=%s msg=%s", user_id, message[:40])
+                log("ROUTING_DECISION", route="reminder_list", user_id=user_id)
                 response = await self._handle_reminder_list(user_id, message)
                 return response, "tool"
             
             if intent == "reminder_delete":
-                logger.info("REMINDER_DELETE_ROUTING user=%s msg=%s", user_id, message[:40])
+                log("ROUTING_DECISION", route="reminder_delete", user_id=user_id)
                 response = await self._handle_reminder_delete(user_id, message)
                 return response, "tool"
             
             if intent == "reminder_update":
-                logger.info("REMINDER_UPDATE_ROUTING user=%s msg=%s", user_id, message[:40])
+                log("ROUTING_DECISION", route="reminder_update", user_id=user_id)
                 response = await self._handle_reminder_update(user_id, message)
                 return response, "tool"
 
@@ -348,18 +349,18 @@ class Proactor:
                     logger.info("PROACTOR_INTENT_OVERRIDE user=%s intent=%s->relational reason=short_contextual", user_id, intent)
                     response = await self._handle_relational(user_id, message, brain_state)
                     return response, "tool"
-                logger.info("PROACTOR_ROUTE route=knowledge_strict user=%s intent=%s", user_id, intent)
+                log("ROUTING_DECISION", route="knowledge_strict", user_id=user_id)
                 response = await self._handle_knowledge(user_id, message)
                 return response, "tool"
 
             # STEP 7: RELATIONAL / GENERAL
             if is_relational_message(message):
-                logger.info("PROACTOR_ROUTE route=relational user=%s", user_id)
+                log("ROUTING_DECISION", route="relational", user_id=user_id)
                 response = await self._handle_relational(user_id, message, brain_state)
                 return response, "tool"
 
             # STEP 8: DEFAULT — relational pipeline (chat libera)
-            logger.info("PROACTOR_ROUTE route=default_relational user=%s intent=%s", user_id, intent)
+            log("ROUTING_DECISION", route="default_relational", user_id=user_id)
             response = await self._handle_relational(user_id, message, brain_state)
             return response, "relational"
 

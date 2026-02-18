@@ -221,7 +221,7 @@ INFORMATIONAL_INTENTS = {
     "tool", "reminder", "document"
 }
 
-def get_tts_provider_for_intent(intent: str = None, route: str = None) -> TTSProvider:
+def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: str = None) -> TTSProvider:
     """
     Ritorna il provider TTS appropriato in base all'intent o route.
     
@@ -260,7 +260,7 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None) -> TTSPro
         primary = "openai"
         secondary = "edge_tts"
 
-    print(f"TTS_ROUTING intent={intent} route={route} category={category} provider={primary}")
+    log("TTS_ROUTING", provider=primary, user_id=user_id)
 
     # Prova primary
     try:

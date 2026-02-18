@@ -22,6 +22,8 @@ from core.meta_governance_engine import MetaGovernanceEngine
 from core.constitution import GenesisConstitution
 # META-GOVERNANCE EXTENSION END
 
+from core.log import log
+
 logger = logging.getLogger(__name__)
 
 # Limiti massimi di variazione per singolo step evolutivo
@@ -211,7 +213,7 @@ class AutoEvolutionEngine:
             # 🚨 PROTEZIONE ANTI-DEGENERAZIONE API
             if not await self._validate_report_safety(report_path):
                 logger.error(f"🚨 Report INVALIDO - degenerazione rilevata: {report_path}")
-                print(f"EVOLUTION_DECISION ignore")
+                log("EVOLUTION_DECISION", status="ignore")
                 return
             
             # 🔵 DEBUG OBBLIGATORIO - inizio processing
@@ -220,7 +222,7 @@ class AutoEvolutionEngine:
             # Analizza report
             analysis = self.auto_tuner.analyze_report(report_path)
             if not analysis:
-                print(f"EVOLUTION_DECISION ignore")
+                log("EVOLUTION_DECISION", status="ignore")
                 return
             
             # 🔵 DEBUG OBBLIGATORIO - metrics parsed
@@ -262,12 +264,12 @@ class AutoEvolutionEngine:
             # 🔵 CONTINUA solo se NON locked
             if has_hard_violation:
                 logger.error("🚨 HARD CONSTRAINTS VIOLATION - initiating rollback")
-                print(f"EVOLUTION_DECISION rollback")
+                log("EVOLUTION_DECISION", status="rollback")
                 await self._emergency_rollback()
                 return
             
             if is_locked:
-                print("EVOLUTION_DECISION locked")
+                log("EVOLUTION_DECISION", status="locked")
                 logger.warning("🔒 Evolution locked - skipping tuning")
                 return
             
@@ -287,7 +289,7 @@ class AutoEvolutionEngine:
             result = self.auto_tuner.run_auto_tuning_cycle(report_path)
             
             # 🔵 DEBUG OBBLIGATORIO - decision
-            print(f"EVOLUTION_DECISION {result['status']}")
+            log("EVOLUTION_DECISION", status=result['status'])
             
             # 🔵 TUNING SUPPORTIVE ISOLATO - Solo se optimal e unlocked
             if result['status'] == 'optimal' and not is_locked:
@@ -423,7 +425,7 @@ class AutoEvolutionEngine:
         logger.info(f"DELTA: {adjustments}")
         
         # 🔵 DEBUG OBBLIGATORIO - tuning applicato
-        print(f"TUNING_APPLIED {new_state}")
+        log("TUNING_APPLIED", new_state=new_state)
         
         # Dettaglio per ogni parametro
         for param, delta in adjustments.items():
@@ -436,7 +438,7 @@ class AutoEvolutionEngine:
         
         # 🔵 DEBUG OBBLIGATORIO - rollback
         reason = result.get('reason', 'unknown')
-        print(f"TUNING_ROLLBACK {reason}")
+        log("TUNING_ROLLBACK", reason=reason)
         print("TUNING_ROLLBACK")  # Per test che cerca solo questa stringa
     
     # 🔵 TUNING SUPPORTIVE ISOLATO - Metodo privato

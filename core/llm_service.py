@@ -183,7 +183,7 @@ Domanda: {message}
             return result
 
         logger.error("LLM_SERVICE_ALL_FAIL user=%s — activating deterministic fallback", user_id)
-        return self._deterministic_fallback(message, "technical")
+        return self._deterministic_fallback(message, "technical", user_id)
 
     async def generate_with_context(self, context: dict, user_id: str = "",
                                      route: str = "relational") -> str:
@@ -446,7 +446,7 @@ CARATTERE:
             return result
 
         logger.error("LLM_SERVICE_ALL_FAIL user=%s — activating deterministic fallback", user_id)
-        return self._deterministic_fallback(message, route)
+        return self._deterministic_fallback(message, route, user_id)
 
     # ═══════════════════════════════════════════════════════════
     # RATE LIMIT PROTECTION — retry, downgrade, fallback
@@ -659,11 +659,16 @@ CARATTERE:
     # ═══════════════════════════════════════════════════════════
 
     @staticmethod
-    def _deterministic_fallback(message: str, route: str) -> str:
+    def _deterministic_fallback(message: str, route: str, user_id: str = None) -> str:
         """
         Fallback deterministico quando tutti i modelli LLM falliscono.
-        Mai restituire \'Non riesco a rispondere\'. Sempre una risposta utile.
+        Mai restituire 'Non riesco a rispondere'. Sempre una risposta utile.
         """
+        from core.log import log
+        
+        # Log del fallback GPT
+        log("GPT_FALLBACK", reason="all_models_failed", user_id=user_id)
+        
         msg_lower = message.lower().strip()
 
         if route == "knowledge":

@@ -104,7 +104,7 @@ class IntentClassifier:
             ]
         }
     
-    def classify(self, message: str) -> str:
+    def classify(self, message: str, user_id: str = None) -> str:
         """
         Classifica intent - logica MINIMA con priorità memoria e override per intent misti
         APPLICA REMINDER GUARD LAYER post-processing
@@ -121,7 +121,7 @@ class IntentClassifier:
         for intent, keywords in self.gpt_patterns.items():
             if intent.startswith('reminder_'):
                 if any(keyword in message_lower for keyword in keywords):
-                    log("INTENT_CLASSIFIED", intent=intent, engine="gpt-4o", message=message[:50])
+                    log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="gpt-4o", message=message[:50])
                     logger.info("INTENT_ENGINE=gpt-4o-mini intent=%s", intent)
                     # APPLICA REMINDER GUARD LAYER
                     normalized_intent = self.normalize_reminder_intent(message, intent)
@@ -129,7 +129,7 @@ class IntentClassifier:
         
         # 0.1️⃣ PRIORITA' ALTA: pattern memoria/ricordo
         if any(pattern in message_lower for pattern in self.memory_patterns):
-            log("INTENT_CLASSIFIED", intent="chat_free", engine="gpt-4o", message=message[:50], override="memory_context")
+            log("INTENT_CLASSIFIED", intent="chat_free", user_id=user_id, engine="gpt-4o", message=message[:50], override="memory_context")
             return "chat_free"
         
         # 0.5️⃣ PRIORITY OVERRIDES for mixed intents
@@ -199,7 +199,7 @@ class IntentClassifier:
         # 1️⃣ Pattern tecnici (GPT-4o)
         for intent, keywords in self.gpt_patterns.items():
             if any(keyword in message_lower for keyword in keywords):
-                log("INTENT_CLASSIFIED", intent=intent, engine="gpt-4o", message=message[:50])
+                log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="gpt-4o", message=message[:50])
                 logger.info("INTENT_ENGINE=gpt-4o-mini intent=%s", intent)
                 # APPLICA REMINDER GUARD LAYER solo per reminder intents
                 if intent.startswith('reminder_'):
@@ -210,12 +210,12 @@ class IntentClassifier:
         # 2️⃣ Pattern chat (GPT-4o)
         for intent, keywords in self.chat_patterns.items():
             if any(keyword in message_lower for keyword in keywords):
-                log("INTENT_CLASSIFIED", intent=intent, engine="gpt-4o", message=message[:50])
+                log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="gpt-4o", message=message[:50])
                 logger.info("INTENT_ENGINE=gpt-4o-mini intent=%s", intent)
                 return intent
         
         # 3️⃣ Default: chat libera (GPT-4o)
-        log("INTENT_DEFAULT", intent="chat_free", engine="gpt-4o", message=message[:50])
+        log("INTENT_DEFAULT", intent="chat_free", user_id=user_id, engine="gpt-4o", message=message[:50])
         logger.info("INTENT_ENGINE=gpt-4o-mini intent=chat_free")
         return "chat_free"
     
