@@ -38,7 +38,8 @@ async def tts_endpoint(request: TTSRequest, user: AuthUser = Depends(require_aut
         # Recupera ultimo intent dalla chat memory per routing
         from core.chat_memory import ChatMemory
         chat_memory = ChatMemory()
-        last_message = chat_memory.get_last_message(user.user_id)
+        uid = getattr(user, 'user_id', None) or getattr(user, 'id', None) or getattr(user, 'sub', None)
+        last_message = chat_memory.get_last_message(uid)
         
         # Estrai intent e route dall'ultimo messaggio
         intent = last_message.get("intent") if last_message else None
