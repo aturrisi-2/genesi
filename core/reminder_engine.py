@@ -129,13 +129,13 @@ class ReminderEngine:
                 date_str = reminder_datetime.strftime("%d %b %H:%M")
                 response = f"Perfetto. Ti ricorderò di {text} il {date_str}."
                 log("REMINDER_VALIDATION", user_id=user_id, has_datetime=True, reminder_id=reminder_id)
-                return reminder_id, response
+                return reminder_id
             
-            return None, "Mi dispiace, non sono riuscito a creare il promemoria. Riprova."
+            return None
             
         except Exception as e:
             log("REMINDER_CREATE_ERROR", user_id=user_id, error=str(e))
-            return None, "Mi dispiace, ho avuto un problema con il promemoria. Riprova."
+            return None
     
     def validate_datetime_presence(self, text: str, parsed_datetime: Optional[datetime]) -> bool:
         """

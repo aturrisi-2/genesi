@@ -163,10 +163,9 @@ class Proactor:
             3. Knowledge Router (deterministico)
             4. Relational Router (deterministico)
         """
-        response, _ = await self._handle_internal(user_id, message, intent)
-        return response
+        return await self._handle_internal(user_id, message, intent)
     
-    async def _handle_internal(self, user_id: str, message: str = None, intent: str = None) -> tuple[str, str]:
+    async def _handle_internal(self, user_id: str, message: str = None, intent: str = None) -> str:
         try:
             # STEP 0: SANITY CHECK
             if not user_id:
@@ -207,8 +206,7 @@ class Proactor:
                 logger.info("IDENTITY_ROUTE_EXECUTION_ORDER_OK user=%s", user_id)
                 profile = await storage.load(f"profile:{user_id}", default={})
                 brain_state_identity = {"profile": profile}
-                identity_result = await self._handle_identity(user_id, message, brain_state_identity)
-                return identity_result
+                return await self._handle_identity(user_id, message, brain_state_identity)
 
             # Load profile for other routing (non-identity)
             profile = await storage.load(f"profile:{user_id}", default={})
@@ -331,17 +329,17 @@ class Proactor:
             except Exception:
                 name = ""
             prefix = f"{name}, " if name else ""
-            return f"{prefix}Mi dispiace, ho avuto un problema. Riprova tra poco.", "error"
+            return f"{prefix}Mi dispiace, ho avuto un problema. Riprova tra poco."
 
     # ═══════════════════════════════════════════════════════════════
     # IDENTITY ROUTER — 100% deterministico, zero GPT
     # ═══════════════════════════════════════════════════════════════
 
-    async def _handle_identity(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> tuple[str, str]:
+    async def _handle_identity(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
         """
         Risponde a domande sull'identita' dell'utente usando SOLO long_term_profile.
         Zero GPT. Zero emotional engine. Zero relational pipeline.
-        Returns: (response_text, "identity")
+        Returns: response_text
         """
         profile = brain_state.get("profile", {})
         msg_lower = message.lower().strip()
@@ -356,75 +354,67 @@ class Proactor:
         if any(kw in msg_lower for kw in name_kw):
             name = profile.get("name")
             if name:
-                return f"Ti chiami {name.strip().title()}.", "identity"
-            return "Non me lo hai ancora detto.", "identity"
+                return f"Ti chiami {name.strip().title()}."
+            return "Non me lo hai ancora detto."
 
         # Domanda specifica: dove vivo
         city_kw = ["dove vivo", "dove abito", "sai dove vivo", "sai dove abito"]
         if any(kw in msg_lower for kw in city_kw):
             city = profile.get("city")
             if city:
-                return f"Vivi a {city.strip().title()}.", "identity"
-            return "Non me lo hai ancora detto.", "identity"
+                return f"Vivi a {city.strip().title()}."
+            return "Non me lo hai ancora detto."
 
         # Domanda specifica: lavoro
         job_kw = ["che lavoro faccio", "che lavoro svolgo", "cosa faccio"]
         if any(kw in msg_lower for kw in job_kw):
             profession = profile.get("profession")
             if profession:
-                return f"Fai l'{profession.strip().lower()}.", "identity"
-            return "Non me lo hai ancora detto.", "identity"
+                return f"Fai l'{profession.strip().lower()}."
+            return "Non me lo hai ancora detto."
 
         # Domanda specifica: eta'
         age_kw = ["quanti anni ho", "sai quanti anni ho"]
         if any(kw in msg_lower for kw in age_kw):
             age = profile.get("age")
             if age:
-                return f"Hai {age} anni.", "identity"
-            return "Non me lo hai ancora detto.", "identity"
+                return f"Hai {age} anni."
+            return "Non me lo hai ancora detto."
 
         # Domanda generica: "chi sono"
         if "chi sono" in msg_lower:
-            return self._build_identity_summary(profile), "identity"
+            return self._build_identity_summary(profile)
 
         # Fallback identity
-        return self._build_identity_summary(profile), "identity"
+        return self._build_identity_summary(profile)
 
     def _build_identity_summary(self, profile: Dict[str, Any]) -> str:
         """Costruisce riepilogo identita' da profilo. Zero GPT."""
-        facts = []
+        parts = []
+        
         if profile.get("name"):
-            facts.append(f"ti chiami {profile['name'].strip().title()}")
-        if profile.get("age"):
-            facts.append(f"hai {profile['age']} anni")
+            parts.append(f"ti chiami {profile['name']}")
+        
         if profile.get("city"):
-            facts.append(f"vivi a {profile['city'].strip().title()}")
+            parts.append(f"vivi a {profile['city']}")
+        
         if profile.get("profession"):
-            facts.append(f"fai l'{profile['profession'].strip().lower()}")
-        entities = profile.get("entities", {})
-        for role, data in entities.items():
-            name = data.get("name")
-            if name:
-                role_labels = {"moglie": "tua moglie", "marito": "tuo marito",
-                               "figlio": "tuo figlio", "figlia": "tua figlia",
-                               "amico": "il tuo amico", "amica": "la tua amica",
-                               "madre": "tua madre", "padre": "tuo padre"}
-                label = role_labels.get(role, role)
-                facts.append(f"{label} si chiama {name}")
-
-        if facts:
-            return f"Ecco cosa so di te: {', '.join(facts)}."
-        return "Non so ancora molto di te. Raccontami qualcosa.", "identity"
+            parts.append(f"lavori come {profile['profession']}")
+        
+        if not parts:
+            return "Non me lo hai ancora detto."
+        
+        return "Ecco cosa so di te: " + ", ".join(parts) + "."
 
     # ═══════════════════════════════════════════════════════════════
     # TOOL ROUTER — 100% deterministico, zero GPT su errore
     # ═══════════════════════════════════════════════════════════════
 
-    async def _handle_tool(self, intent: str, message: str, user_id: str) -> tuple[str, str]:
+    async def _handle_tool(self, intent: str, message: str, user_id: str) -> str:
         """
         Tool routing deterministico.
         Errori gestiti con messaggi deterministici, MAI GPT.
-        Returns: (response_text, "tool")
+        Returns: response_text
         """
         try:
             if intent == "weather":
@@ -434,27 +424,27 @@ class Proactor:
                 city = extract_city_from_message(message) or "Roma"
                 save_tool_context(user_id, "weather", city=city)
                 logger.info("TOOL_ROUTER_OK intent=weather user=%s city=%s", user_id, city)
-                return result, "tool"
+                return result
             elif intent == "news":
                 result = await tool_service.get_news(message)
                 save_tool_context(user_id, "news")
                 logger.info("TOOL_ROUTER_OK intent=news user=%s", user_id)
-                return result, "tool"
+                return result
             elif intent == "time":
                 result = await tool_service.get_time()
-                return result, "tool"
+                return result
             elif intent == "date":
                 result = await tool_service.get_date()
-                return result, "tool"
+                return result
             else:
-                return "Tool non disponibile.", "tool"
+                return "Tool non disponibile."
         except Exception as e:
             logger.error("PROACTOR_TOOL_ERROR intent=%s user=%s error=%s", intent, user_id, str(e), exc_info=True)
             if intent == "weather":
-                return "Il servizio meteo non è disponibile al momento.", "tool"
+                return "Il servizio meteo non è disponibile al momento."
             elif intent == "news":
-                return "Il servizio notizie non è configurato correttamente.", "tool"
-            return f"Errore nel servizio {intent}.", "tool"
+                return "Il servizio notizie non è configurato correttamente."
+            return f"Errore nel servizio {intent}."
 
     # ═══════════════════════════════════════════════════════════
     # MEMORY CONTEXT ROUTER — conversational memory responses

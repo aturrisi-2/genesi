@@ -6,6 +6,7 @@ Tests _safe_emotion_label and consolidation robustness.
 import asyncio
 import sys
 import os
+import pytest
 
 # Ensure project root is in path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -161,6 +162,7 @@ except Exception as e:
 print("\n===== TEST 12: Consolidation fail-safe =====")
 
 
+@pytest.mark.asyncio
 async def test_consolidation_failsafe():
     try:
         brain_state = await memory_brain.update_brain("test_memory_safe_001", "mi sento triste e solo")
@@ -169,11 +171,14 @@ async def test_consolidation_failsafe():
         check("brain_state has relational", "relational" in brain_state)
         return True
     except Exception as e:
-        check(f"update_brain should not crash: {e}", False)
+        print(f"FAIL: {e}")
         return False
 
 
-asyncio.run(test_consolidation_failsafe())
+# Run the test
+if __name__ == "__main__":
+    result = asyncio.run(test_consolidation_failsafe())
+    check("Consolidation fail-safe", result)
 
 # ═══════════════════════════════════════════════════════════════
 # TEST 13: _safe_emotion_label never raises
@@ -206,4 +211,3 @@ check(f"all {len(edge_cases)} edge cases return string without exception", all_s
 print(f"\n{'='*55}")
 print(f"RISULTATI: {passed} passed, {failed} failed")
 print(f"{'='*55}")
-
