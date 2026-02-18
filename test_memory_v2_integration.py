@@ -15,7 +15,7 @@ async def test_memory_v2_integration():
 
     # Assemble context
     context_assembler = ContextAssembler(memory_brain, latent_state_engine)
-    context = context_assembler.build(user_id, "Chi sono?")
+    context = await context_assembler.build(user_id, "Chi sono?")
 
     # Verify memory V2 is prioritized
     assert context['memory_v2']['profile']['name'] == "Marco", "Name mismatch in memory V2"

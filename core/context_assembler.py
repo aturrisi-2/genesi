@@ -27,7 +27,7 @@ class ContextAssembler:
         self.memory_brain = memory_brain
         self.latent_state_engine = latent_state_engine
 
-    def build(self, user_id: str, user_message: str) -> Dict[str, Any]:
+    async def build(self, user_id: str, user_message: str) -> Dict[str, Any]:
         """
         Costruisce contesto completo per LLM.
         NON chiama update_brain — quello e' gia' fatto dal proactor.
@@ -86,11 +86,13 @@ class ContextAssembler:
             context['latent_state'] = {}  # Ensure field exists
 
         # Add memory_v2 structure - FASE 6: memory_v2 Stabilizzazione
+        # memory_v2.profile è una vista derivata da long_term_profile:{user_id}
         from core.brain_state import brain_state
         brain_state.load_from_storage(user_id)
+        profile = await storage.load(f"long_term_profile:{user_id}", default={})
         
         context['memory_v2'] = {
-            'profile': brain_state.profile,
+            'profile': profile,  # Vista derivata da long_term_profile
             'relational_state': brain_state.relational_state,
             'traits': brain_state.traits
         }

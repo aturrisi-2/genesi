@@ -100,7 +100,7 @@ async def test_proactor_context():
 
     # Now build context via ContextAssembler
     assembler = ContextAssembler(memory_brain, latent_state_engine)
-    ctx = assembler.build("test_ctx_001", "come stai?")
+    ctx = await assembler.build("test_ctx_001", "come stai?")
 
     check("context is dict", isinstance(ctx, dict))
     check("context has summary", "summary" in ctx and len(ctx["summary"]) > 0)
@@ -143,7 +143,7 @@ async def test_memory_injection():
 
     # Simulate ContextAssembler injecting context
     assembler = ContextAssembler(memory_brain, latent_state_engine)
-    ctx = assembler.build("test_ctx_001", "raccontami qualcosa")
+    ctx = await assembler.build("test_ctx_001", "raccontami qualcosa")
     brain["relational_context"] = ctx["summary"]
 
     # Build LLM prompt
@@ -179,7 +179,7 @@ async def test_identity_reflection():
     # Use seeded user from group 2
     brain = await memory_brain.update_brain("test_ctx_001", "chi sono io")
     assembler = ContextAssembler(memory_brain, latent_state_engine)
-    ctx = assembler.build("test_ctx_001", "chi sono io")
+    ctx = await assembler.build("test_ctx_001", "chi sono io")
     brain["relational_context"] = ctx["summary"]
 
     # generate_response_from_brain should handle this
@@ -193,7 +193,7 @@ async def test_identity_reflection():
 
     # Without profile, should ask for info
     brain_empty = await memory_brain.update_brain("test_empty_999", "chi sono io")
-    ctx_empty = assembler.build("test_empty_999", "chi sono io")
+    ctx_empty = await assembler.build("test_empty_999", "chi sono io")
     brain_empty["relational_context"] = ctx_empty["summary"]
     result_empty = await generate_response_from_brain("test_empty_999", "chi sono io", brain_empty)
     check("identity reflection (no profile): asks for info", "conoscerci" in result_empty or "Raccontami" in result_empty or "chiami" in result_empty)
@@ -573,7 +573,7 @@ async def test_e2e_mandatory():
     # --- Test 2: "Chi sono?" -> must contain Marco ---
     brain_chi = await memory_brain.update_brain("test_e2e_marco", "chi sono io")
     assembler = ContextAssembler(memory_brain, latent_state_engine)
-    ctx_chi = assembler.build("test_e2e_marco", "chi sono io")
+    ctx_chi = await assembler.build("test_e2e_marco", "chi sono io")
     brain_chi["relational_context"] = ctx_chi["summary"]
     result_chi = await generate_response_from_brain("test_e2e_marco", "chi sono io", brain_chi)
     has_marco = "Marco" in result_chi or "chiami" in result_chi or "ricordo" in result_chi
@@ -618,7 +618,7 @@ async def test_e2e_mandatory():
 
     # --- Test 5: "Cos'e' un bug?" -> informative, not therapeutic ---
     brain_info = await memory_brain.update_brain("test_e2e_info", "cos'e' un bug nel software")
-    ctx_info = assembler.build("test_e2e_info", "cos'e' un bug nel software")
+    ctx_info = await assembler.build("test_e2e_info", "cos'e' un bug nel software")
     brain_info["relational_context"] = ctx_info["summary"]
     result_info = await generate_response_from_brain("test_e2e_info", "cos'e' un bug nel software", brain_info)
     check("E2E-5: informative response is string", isinstance(result_info, str))
@@ -647,7 +647,7 @@ async def test_context_assembler():
     await memory_brain.update_brain("test_asm_001", "mi chiamo Giulia e vivo a Torino")
     await memory_brain.update_brain("test_asm_001", "lavoro come ingegnere")
 
-    ctx = assembler.build("test_asm_001", "come stai?")
+    ctx = await assembler.build("test_asm_001", "come stai?")
     check("assembler: returns dict", isinstance(ctx, dict))
     check("assembler: has summary", isinstance(ctx.get("summary"), str) and len(ctx["summary"]) > 0)
     check("assembler: has long_term_profile", isinstance(ctx.get("long_term_profile"), dict))
@@ -705,7 +705,7 @@ async def test_luca_milano():
 
     # Step 2: Build context via ContextAssembler
     assembler = ContextAssembler(memory_brain, latent_state_engine)
-    ctx = assembler.build(user_id, "Dove vivo?")
+    ctx = await assembler.build(user_id, "Dove vivo?")
     check("Luca E2E: context summary contains Luca", "Luca" in ctx["summary"])
     check("Luca E2E: context summary contains Milano", "Milano" in ctx["summary"])
 

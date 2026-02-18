@@ -16,10 +16,10 @@ async def test_memory_v2_authority():
 
     # Assemble context
     context_assembler = ContextAssembler(memory_brain, latent_state_engine)
-    context = context_assembler.build(user_id, "Chi sono?")
+    context = await context_assembler.build(user_id, "Chi sono?")
 
     # Verify memory V2 authority
-    assert context['memory_v2']['profile']['profession'] == "Ingegnere", "Profession mismatch in memory V2"
+    assert context['memory_v2']['profile']['profession'] == "ingegnere", "Profession mismatch in memory V2"
     assert context['memory_v2']['profile']['spouse'] == "Elena", "Spouse mismatch in memory V2"
 
     print("\n✅ MEMORY V2 AUTHORITY TEST PASSED")
