@@ -188,16 +188,16 @@ class CognitiveMemoryEngine:
             
             # Save to storage if persist=True
             if persist and memory_type == "profile":
+                # Save to sync storage for immediate persistence
+                storage._storage[f"long_term_profile:{user_id}"] = extracted_profile_data
+                # Also trigger async save in background (fire and forget)
                 import asyncio
                 try:
                     loop = asyncio.get_running_loop()
-                    # If in async context, create task
                     asyncio.create_task(storage.save(f"long_term_profile:{user_id}", extracted_profile_data))
                 except RuntimeError:
-                    # No event loop, safe to use asyncio.run
-                    asyncio.run(storage.save(f"long_term_profile:{user_id}", extracted_profile_data))
-                # Also sync to _storage for immediate access
-                storage._storage[f"long_term_profile:{user_id}"] = extracted_profile_data
+                    # No event loop, skip async save - sync storage is enough
+                    pass
                 logger.info("COGNITIVE_PROFILE_SAVED user=%s field=%s", user_id, field)
         else:
             persist = False
