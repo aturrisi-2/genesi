@@ -91,8 +91,26 @@ class ContextAssembler:
         brain_state.load_from_storage(user_id)
         profile = await storage.load(f"long_term_profile:{user_id}", default={})
         
+        # NORMALIZZAZIONE STRUTTURA PIATTA per memory_v2
+        def _normalize_profile(profile: dict) -> dict:
+            normalized = dict(profile)
+            
+            # Spouse: se dict → estrarre name
+            spouse = normalized.get("spouse")
+            if isinstance(spouse, dict):
+                normalized["spouse"] = spouse.get("name")
+            
+            # Pets: se dict complesso → mantenere solo nome
+            pets = normalized.get("pets")
+            if isinstance(pets, dict):
+                normalized["pets"] = pets.get("name")
+            
+            return normalized
+        
+        profile = _normalize_profile(profile)
+        
         context['memory_v2'] = {
-            'profile': profile,  # Vista derivata da long_term_profile
+            'profile': profile,  # Vista derivata da long_term_profile (normalizzata)
             'relational_state': brain_state.relational_state,
             'traits': brain_state.traits
         }
