@@ -487,19 +487,19 @@ class Proactor:
     # MEMORY CONTEXT ROUTER — conversational memory responses
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_memory_context(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
+    async def _handle_memory_context(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> tuple[str, str]:
         """
         Handle memory_context intent — responses based on conversation history.
         Loads last N=5 interactions, summarizes dynamically, responds naturally.
         Never responds with "non posso aiutarti".
-        Returns: response_text
+        Returns: (response_text: str, source: str)
         """
         try:
             # Load last 5 interactions
             messages = chat_memory.get_messages(user_id, limit=5)
             if not messages:
                 logger.warning("MEMORY_CONTEXT_NO_HISTORY user=%s", user_id)
-                return "Non abbiamo ancora parlato abbastanza. Di cosa vorresti conversare?"
+                return "Non abbiamo ancora parlato abbastanza. Di cosa vorresti conversare?", "memory_context"
             
             # Build conversation summary
             conversation_summary = []
@@ -529,14 +529,14 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             
             if response is None:
                 # Fallback: simple acknowledgment
-                return "Ricordo i nostri scambi. C'è qualcosa di specifico che vorresti approfondire?"
+                return "Ricordo i nostri scambi. C'è qualcosa di specifico che vorresti approfondire?", "memory_context"
             
             logger.info("MEMORY_CONTEXT_RESPONSE user=%s history_count=%d", user_id, len(messages))
-            return response
+            return response, "memory_context"
             
         except Exception as e:
             logger.error("MEMORY_CONTEXT_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            return "Mi dispiace, ho avuto un problema nel recuperare i nostri ricordi. Riprova."
+            return "Mi dispiace, ho avuto un problema nel recuperare i nostri ricordi. Riprova.", "memory_context"
 
     # ═══════════════════════════════════════════════════════════
     # REMINDER HANDLERS — deterministic reminder management
@@ -598,11 +598,11 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             logger.error("REMINDER_LIST_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
             return "Mi dispiace, non riesco a vedere i tuoi promemoria. Riprova.", "reminder"
 
-    async def _handle_reminder_delete(self, user_id: str, message: str) -> str:
+    async def _handle_reminder_delete(self, user_id: str, message: str) -> tuple[str, str]:
         """
         Handle reminder deletion requests with deterministic parsing.
         Support: numero, "tutti", testo parziale (fuzzy)
-        Returns: response_text
+        Returns: (response_text: str, source: str)
         """
         try:
             msg_lower = message.lower()
@@ -612,9 +612,9 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 deleted_count = reminder_engine.delete_all_pending(user_id)
                 
                 if deleted_count > 0:
-                    return f"Ho cancellato tutti i promemoria."
+                    return f"Ho cancellato tutti i promemoria.", "reminder"
                 else:
-                    return "Non hai promemoria da cancellare."
+                    return "Non hai promemoria da cancellare.", "reminder"
             
             # 2️⃣ Numero → elimina per indice
             import re
@@ -629,11 +629,11 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                     success = reminder_engine.delete_reminder(user_id, reminder_id)
                     
                     if success:
-                        return f"Ho cancellato il promemoria {index + 1}."
+                        return f"Ho cancellato il promemoria {index + 1}.", "reminder"
                     else:
-                        return "Mi dispiace, non sono riuscito a cancellare il promemoria."
+                        return "Mi dispiace, non sono riuscito a cancellare il promemoria.", "reminder"
                 else:
-                    return f"Non hai un promemoria numero {index + 1}."
+                    return f"Non hai un promemoria numero {index + 1}.", "reminder"
             
             # 3️⃣ Testo parziale → fuzzy match semplice
             # Estrai testo dopo verbi di cancellazione
@@ -657,11 +657,11 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                         success = reminder_engine.delete_reminder(user_id, reminder["id"])
                         
                         if success:
-                            return f"Ho cancellato il promemoria: {reminder['text']}"
+                            return f"Ho cancellato il promemoria: {reminder['text']}", "reminder"
                         else:
-                            return "Mi dispiace, non sono riuscito a cancellare il promemoria."
+                            return "Mi dispiace, non sono riuscito a cancellare il promemoria.", "reminder"
                 
-                return f"Non trovo promemoria con '{search_text}'."
+                return f"Non trovo promemoria con '{search_text}'.", "reminder"
             
             # 4️⃣ Default → elimina il più recente
             latest_reminder = reminder_engine.get_latest_pending(user_id)
@@ -670,21 +670,21 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 success = reminder_engine.delete_reminder(user_id, latest_reminder["id"])
                 
                 if success:
-                    return "Ho cancellato l'ultimo promemoria."
+                    return "Ho cancellato l'ultimo promemoria.", "reminder"
                 else:
-                    return "Mi dispiace, non sono riuscito a cancellare il promemoria."
+                    return "Mi dispiace, non sono riuscito a cancellare il promemoria.", "reminder"
             else:
-                return "Non hai promemoria da cancellare."
+                return "Non hai promemoria da cancellare.", "reminder"
                 
         except Exception as e:
             logger.error("REMINDER_DELETE_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            return "Mi dispiace, ho avuto un problema con la cancellazione. Riprova."
+            return "Mi dispiace, ho avuto un problema con la cancellazione. Riprova.", "reminder"
 
-    async def _handle_reminder_update(self, user_id: str, message: str) -> str:
+    async def _handle_reminder_update(self, user_id: str, message: str) -> tuple[str, str]:
         """
         Handle reminder update requests with deterministic parsing.
         Support: numero, testo parziale, nuova data/ora
-        Returns: response_text
+        Returns: (response_text: str, source: str)
         """
         try:
             msg_lower = message.lower()
@@ -702,19 +702,19 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 if 0 <= index < len(reminders):
                     target_reminder = reminders[index]
                 else:
-                    return f"Non hai un promemoria numero {index + 1}."
+                    return f"Non hai un promemoria numero {index + 1}.", "reminder"
             else:
                 # 2️⃣ Senza numero → usa il più recente
                 target_reminder = reminder_engine.get_latest_pending(user_id)
             
             if not target_reminder:
-                return "Non hai promemoria da modificare."
+                return "Non hai promemoria da modificare.", "reminder"
             
             # 3️⃣ Parsing nuova data/ora
             new_datetime = self._parse_update_datetime_strict(message)
             
             if not new_datetime:
-                return "Non ho capito a quando vuoi spostare il promemoria. Prova con 'sposta alle 18' o 'a domani'."
+                return "Non ho capito a quando vuoi spostare il promemoria. Prova con 'sposta alle 18' o 'a domani'.", "reminder"
             
             # 4️⃣ Aggiorna il reminder
             success = reminder_engine.update_reminder_datetime(user_id, target_reminder["id"], new_datetime)
@@ -722,13 +722,13 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             if success:
                 # Format confirmation message
                 date_str = new_datetime.strftime("%d %b %H:%M")
-                return f"Ho aggiornato il promemoria al {date_str}."
+                return f"Ho aggiornato il promemoria al {date_str}.", "reminder"
             else:
-                return "Mi dispiace, non sono riuscito ad aggiornare il promemoria."
+                return "Mi dispiace, non sono riuscito ad aggiornare il promemoria.", "reminder"
                 
         except Exception as e:
             logger.error("REMINDER_UPDATE_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            return "Mi dispiace, ho avuto un problema con l'aggiornamento. Riprova."
+            return "Mi dispiace, ho avuto un problema con l'aggiornamento. Riprova.", "reminder"
 
     def _parse_update_datetime_strict(self, message: str) -> Optional[datetime]:
         """
@@ -1023,12 +1023,12 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
     # RELATIONAL ROUTER — GPT controllato con contesto limitato
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_relational(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
+    async def _handle_relational(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> tuple[str, str]:
         """
         Pipeline relazionale con GPT controllato.
         GPT riceve: conversation thread, identity summary, topic, latent state.
         GPT NON inventa memoria.
-        Returns: response_text
+        Returns: (response_text: str, source: str)
         """
         # 1. Context Assembler — structured context from memory
         context = await self.context_assembler.build(user_id, message)
@@ -1103,7 +1103,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         logger.info("PROACTOR_RESPONSE user=%s len=%d route=relational emotion=%s",
                      user_id, len(response),
                      brain_state.get("emotion", {}).get("emotion", "?"))
-        return response
+        return response, "relational"
 
     def _build_short_relational_summary(self, context: Dict[str, Any]) -> str:
         """Costruisce summary breve per GPT relazionale. Tutti i fatti identitari noti."""
@@ -1220,12 +1220,12 @@ DIVIETI ASSOLUTI:
 
 Messaggio utente: {message}"""
         
-    async def _handle_knowledge(self, user_id: str, message: str) -> str:
+    async def _handle_knowledge(self, user_id: str, message: str) -> tuple[str, str]:
         """
         GPT per domande di definizione/conoscenza.
         Include chat history per risolvere riferimenti contestuali.
         Fallback deterministico da fallback_knowledge.py se LLM fallisce.
-        Returns: response_text
+        Returns: (response_text: str, source: str)
         """
         # Build conversation context — MUST include chat history
         profile = await storage.load(f"profile:{user_id}", default={})
@@ -1264,8 +1264,8 @@ Domanda: {message}"""
             if fb:
                 logger.info("FALLBACK_KNOWLEDGE_USED keyword=%s", normalized_message)
                 logger.info("KNOWLEDGE_FALLBACK_HIT topic=%s", normalized_message)
-                return fb
-            return "Mi dispiace, non riesco a fornire una risposta precisa in questo momento."
+                return fb, "knowledge"
+            return "Mi dispiace, non riesco a fornire una risposta precisa in questo momento.", "knowledge"
 
         # Post-generation filter
         result = filter_response(result, user_id)
@@ -1273,18 +1273,18 @@ Domanda: {message}"""
             result = "Non ho una risposta precisa."
 
         logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d route=knowledge", user_id, len(result))
-        return result
+        return result, "knowledge"
 
     # ═══════════════════════════════════════════════════════════
     # DOCUMENT QUERY ROUTER — document-aware GPT with no fallback
     # ═══════════════════════════════════════════════════════════
 
     async def _handle_document_query(self, user_id: str, message: str,
-                                      profile: Dict[str, Any], brain_state: Dict[str, Any]) -> str:
+                                      profile: Dict[str, Any], brain_state: Dict[str, Any]) -> tuple[str, str]:
         """
         Handle document_query intent. Uses active document content in LLM context.
         No generic fallback allowed — response MUST use document data.
-        Returns: response_text
+        Returns: (response_text: str, source: str)
         """
         # Build conversation context (includes document injection via step E)
         conversation_ctx = build_conversation_context(user_id, message, profile)
@@ -1335,7 +1335,7 @@ Messaggio utente: {message}"""
             result = "Documento ricevuto. Chiedimi cosa vuoi sapere."
 
         logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d route=document_query", user_id, len(result))
-        return result
+        return result, "document_query"
 
     # ═══════════════════════════════════════════════════════════
     # UTILITY

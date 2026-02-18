@@ -12,6 +12,8 @@ def _is_strong_emotional(message: str) -> bool:
         "distrutt",
         "non ce la faccio",
         "sto mal",
+        "malissimo",
+        "piango",
         "a pezzi",
         "non so più cosa fare",
         "sono a terra",
