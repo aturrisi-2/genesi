@@ -17,7 +17,8 @@ def _is_strong_emotional(message: str) -> bool:
         "a pezzi",
         "non so più cosa fare",
         "sono a terra",
-        "mi sento perso"
+        "mi sento perso",
+        "molto triste"
     ]
     
     m = message.lower()

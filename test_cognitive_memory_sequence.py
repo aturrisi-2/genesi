@@ -13,11 +13,11 @@ cognitive_engine = CognitiveMemoryEngine()
 # Test cognitive evaluation sequence
 async def test_cognitive_memory_sequence():
     # Test name persistence
-    decision = await cognitive_engine.evaluate_event(user_id, "Mi chiamo Luca", {})
+    decision = cognitive_engine.evaluate_event(user_id, "Mi chiamo Luca", {})
     assert decision['persist'] == True, "Name should persist"
 
     # Test profession persistence
-    decision = await cognitive_engine.evaluate_event(user_id, "Faccio il medico", {})
+    decision = cognitive_engine.evaluate_event(user_id, "Faccio il medico", {})
     assert decision['persist'] == True, "Profession should persist"
 
     # Load and verify persistent storage

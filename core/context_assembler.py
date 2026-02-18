@@ -27,7 +27,7 @@ class ContextAssembler:
         self.memory_brain = memory_brain
         self.latent_state_engine = latent_state_engine
 
-    async def build(self, user_id: str, user_message: str) -> Dict[str, Any]:
+    def build(self, user_id: str, user_message: str) -> Dict[str, Any]:
         """
         Costruisce contesto completo per LLM.
         NON chiama update_brain — quello e' gia' fatto dal proactor.
@@ -45,8 +45,15 @@ class ContextAssembler:
             profile = storage._storage.get(f"profile:{user_id}", {})
             relational_state = storage._storage.get(f"relational_state:{user_id}", {})
             recent_episodes = storage._storage.get(f"episodes/{user_id}", [])
-            # Use proper async call for latent_state_engine
-            latent_state = await self.latent_state_engine.load(user_id)
+            # For latent_state, create a new event loop
+            try:
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self.latent_state_engine.load(user_id))
+                    latent_state = future.result()
+            except RuntimeError:
+                # Fallback if threading fails
+                latent_state = {}
         except RuntimeError:
             # No event loop, safe to use asyncio.run
             profile = asyncio.run(storage.load(f"profile:{user_id}", default={}))

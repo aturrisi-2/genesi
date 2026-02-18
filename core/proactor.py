@@ -256,7 +256,7 @@ class Proactor:
             # (profile già caricato sopra per non-identity)
 
             # Use the profile in the context assembly
-            context = await self.context_assembler.build(user_id, message)
+            context = self.context_assembler.build(user_id, message)
             context['profile'] = profile
 
             # STEP 3.5: ELLIPTICAL TOOL FOLLOW-UP (e.g. "e domani?" after weather)
@@ -1059,7 +1059,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         Returns: (response_text: str, source: str)
         """
         # 1. Context Assembler — structured context from memory
-        context = await self.context_assembler.build(user_id, message)
+        context = self.context_assembler.build(user_id, message)
         logger.info("CONTEXT_ASSEMBLED user=%s summary_len=%d", user_id, len(context.get('summary', '')))
 
         # Inject into brain_state for backward compatibility
