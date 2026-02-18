@@ -3,6 +3,10 @@ TTS Provider Tests - Genesi Cognitive System
 Test pytest per il layer di astrazione TTS multi-provider
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 import pytest
 import json
 import tempfile
