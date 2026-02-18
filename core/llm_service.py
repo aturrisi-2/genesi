@@ -568,14 +568,14 @@ CARATTERE:
         
         return modulation
     
-    async def _call_with_protection(self, model: str, prompt: str, message: str, user_id: str, route: str) -> Optional[str]:
+    async def _call_with_protection(self, model: str, prompt: str, message: str, user_id: str, route: str, messages: Optional[List[Dict[str, str]]] = None) -> Optional[str]:
         """
         Call LLM with rate limit protection, retry, downgrade, and deterministic fallback.
         """
         try:
             # Primary attempt
             logger.info("LLM_SERVICE_PRIMARY_REQUEST model=%s user=%s", model, user_id)
-            result = await self._call_model(model, prompt, message, user_id=user_id, route=route)
+            result = await self._call_model(model, prompt, message, user_id=user_id, route=route, messages=messages)
             if result is not None:
                 return result
 
@@ -583,14 +583,14 @@ CARATTERE:
             logger.warning("LLM_SERVICE_PRIMARY_API_ERROR model=%s user=%s", model, user_id)
             logger.info("LLM_RATE_LIMIT_RETRY model=%s user=%s", model, user_id)
             await asyncio.sleep(1.0)  # 1s backoff
-            result = await self._call_model(model, prompt, message, user_id=user_id, route=route)
+            result = await self._call_model(model, prompt, message, user_id=user_id, route=route, messages=messages)
             if result is not None:
                 return result
 
             # Downgrade to gpt-4o-mini if not already using fallback model
             if model != LLM_FALLBACK_MODEL:
                 logger.warning("LLM_AUTO_DOWNGRADE from=%s to=%s user=%s", model, LLM_FALLBACK_MODEL, user_id)
-                result = await self._call_model(LLM_FALLBACK_MODEL, prompt, message, user_id=user_id, route=route)
+                result = await self._call_model(LLM_FALLBACK_MODEL, prompt, message, user_id=user_id, route=route, messages=messages)
                 if result is not None:
                     return result
 
@@ -602,14 +602,21 @@ CARATTERE:
             logger.error("LLM_SERVICE_EXCEPTION user=%s error=%s", user_id, str(e))
             return None
 
-    async def _call_model(self, model: str, prompt: str, message: str, user_id: str, route: str) -> Optional[str]:
+    async def _call_model(self, model: str, prompt: str, message: str, user_id: str, route: str, messages: Optional[List[Dict[str, str]]] = None) -> Optional[str]:
         """Chiama un singolo modello con logging completo e gestione RateLimitError."""
         tag = "LLM_SERVICE_PRIMARY" if model == self.default_model else "LLM_SERVICE_FALLBACK"
         try:
             logger.info("%s_REQUEST model=%s msg=%s", tag, model, message[:50])
+            
+            # Use provided messages or fallback to system-only format
+            if messages:
+                chat_messages = messages
+            else:
+                chat_messages = [{"role": "system", "content": prompt}]
+                
             response = await self.client.chat.completions.create(
                 model=model,
-                messages=[{"role": "system", "content": prompt}],
+                messages=chat_messages,
                 temperature=0.3
             )
             llm_response = response.choices[0].message.content.strip()

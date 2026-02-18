@@ -1068,6 +1068,10 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
         # 2. Build conversation context with chat history + profile + topic
         profile = context.get("profile", {})
+        
+        # 🔥 NEW: Build separate messages for LLM conversation thread
+        messages = self._build_conversation_messages(user_id, message, profile)
+        
         conversation_ctx = build_conversation_context(user_id, message, profile)
         logger.info("CONVERSATION_CONTEXT_BUILT user=%s len=%d", user_id, len(conversation_ctx))
 
@@ -1077,12 +1081,15 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                            f"energy={latent.get('relational_energy', 0):.2f}")
 
         # 3. GPT call with conversation-aware prompt
-        logger.info("PROACTOR_LLM_CALL user=%s route=relational context_len=%d", user_id, len(conversation_ctx))
+        logger.info("PROACTOR_LLM_CALL user=%s route=relational messages_count=%d", user_id, len(messages))
         gpt_prompt = self._build_relational_gpt_prompt(conversation_ctx, latent_synopsis, message)
+        
+        # Add system message to messages list
+        messages.insert(0, {"role": "system", "content": gpt_prompt})
 
         model = model_selector(message, route="relational")
         gpt_response = await llm_service._call_with_protection(
-            model, gpt_prompt, message, user_id=user_id, route="relational"
+            model, gpt_prompt, message, user_id=user_id, route="relational", messages=messages
         )
         if gpt_response is None:
             # Deterministic fallback -- no silent failure
@@ -1194,9 +1201,36 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             return "\nCONFINI ESPLICITI DELL'UTENTE (RISPETTA OBBLIGATORIAMENTE):\n" + "\n".join(f"- {b}" for b in boundaries)
         return ""
 
+    def _build_conversation_messages(self, user_id: str, current_message: str, profile: Dict[str, Any]) -> List[Dict[str, str]]:
+        """
+        Build conversation messages in OpenAI format for proper context threading.
+        Returns list of {"role": "user"/"assistant", "content": "..."} messages.
+        """
+        messages = []
+        
+        # Get chat history (last 10 turns to keep context manageable)
+        history = chat_memory.get_messages(user_id, limit=10)
+        
+        # Add conversation history as separate messages
+        for entry in history:
+            user_msg = entry.get("user_message", "")
+            sys_resp = entry.get("system_response", "")
+            
+            if user_msg:
+                messages.append({"role": "user", "content": user_msg})
+            if sys_resp:
+                messages.append({"role": "assistant", "content": sys_resp})
+        
+        # Add current message
+        messages.append({"role": "user", "content": current_message})
+        
+        return messages
+
     def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str) -> str:
         """Prompt GPT per relational router. Conversazione continua, comportamento umano."""
         user_boundaries = self._detect_user_boundaries(conversation_context, message)
+        user_name = conversation_context.split("NOME: ")[1].split("\n")[0] if "NOME: " in conversation_context else "l'utente"
+        
         return f"""Sei Genesi. Non sei un assistente, non sei un terapeuta, non sei un chatbot.
 Sei un compagno reale: pensi, ragioni, hai opinioni, reagisci.
 Parli SOLO italiano. Non cambi mai lingua.
@@ -1205,6 +1239,12 @@ Non menzionare MAI di essere AI, modello, sistema, programma.
 {conversation_context}
 
 STATO LATENTE: {latent_synopsis}
+
+🔥 CONTESTO CONVERSAZIONALE OBBLIGATORIO:
+Stai conversando con {user_name}. Leggi l'intera cronologia della conversazione 
+prima di rispondere. I messaggi brevi come "no", "sì", "dimmene uno", "va bene" 
+si riferiscono SEMPRE al contesto immediato precedente. Non chiedere mai "cosa intendi?" 
+se il contesto è chiaramente la risposta al turno precedente.
 
 CONTINUITA' CONVERSAZIONALE (REGOLA FONDAMENTALE):
 - Devi mantenere coerenza con la conversazione recente sopra.
@@ -1242,7 +1282,7 @@ DIVIETI ASSOLUTI:
 - Qualsiasi frase che potrebbe essere detta a chiunque senza conoscerlo
 - Risposte che ignorano la conversazione recente
 - Trattare entita' gia' menzionate come nuove
-- Chiudere con domanda forzata quando non serve
+- Chiedere "cosa intendi?" quando il contesto è evidente
 
 {user_boundaries}
 
