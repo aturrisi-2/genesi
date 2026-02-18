@@ -24,8 +24,8 @@ class TTSRequest(BaseModel):
 @router.post("/")
 async def tts_endpoint(request: TTSRequest, user: AuthUser = Depends(require_auth)):
     """
-    Piper TTS locale — restituisce audio WAV.
-    Nessun cloud. Nessuna quota. Nessun fallback.
+    TTS multi-provider — restituisce audio WAV.
+    Supporta Piper e Edge TTS con fallback automatico.
     """
     try:
         logger.info("TTS_REQUEST text_len=%d", len(request.text))
@@ -34,13 +34,20 @@ async def tts_endpoint(request: TTSRequest, user: AuthUser = Depends(require_aut
         from core.tts_sanitizer import sanitize_for_tts
         clean_text = sanitize_for_tts(request.text)
         
-        wav_bytes = await piper_tts_engine.synthesize(clean_text)
+        # TTS-PROVIDER-LAYER START
+        from core.tts_provider import synthesize_with_fallback, get_tts_provider
+        provider = get_tts_provider()
+        wav_bytes = await synthesize_with_fallback(clean_text)
+        
+        # Aggiorna filename basato sul provider
+        filename = f"{provider.name()}_tts.wav"
+        # TTS-PROVIDER-LAYER END
 
         return StreamingResponse(
             io.BytesIO(wav_bytes),
             media_type="audio/wav",
             headers={
-                "Content-Disposition": "inline; filename=piper_tts.wav",
+                "Content-Disposition": f"inline; filename={filename}",
                 "Content-Length": str(len(wav_bytes)),
                 "Cache-Control": "no-cache"
             }
@@ -53,5 +60,20 @@ async def tts_endpoint(request: TTSRequest, user: AuthUser = Depends(require_aut
 
 @router.get("/info")
 async def tts_info():
-    """Informazioni configurazione Piper TTS locale."""
-    return piper_tts_engine.info()
+    """Informazioni configurazione TTS multi-provider."""
+    # TTS-PROVIDER-LAYER START
+    from core.tts_provider import get_tts_provider
+    provider = get_tts_provider()
+    
+    info = {
+        "active_provider": provider.name(),
+        "engine": provider.name(),
+        "format": "wav",
+        "sample_rate": 22050,
+        "sample_width": 2,
+        "channels": 1,
+        "fallback_enabled": True
+    }
+    # TTS-PROVIDER-LAYER END
+    
+    return info

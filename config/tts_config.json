@@ -1,0 +1,16 @@
+{
+  "active_provider": "edge_tts",
+  "providers": {
+    "piper": {
+      "enabled": true,
+      "model": "it_IT-paola-medium",
+      "speed": 1.0
+    },
+    "edge_tts": {
+      "enabled": true,
+      "voice": "it-IT-DiegoNeural",
+      "rate": "+0%",
+      "volume": "+0%"
+    }
+  }
+}
