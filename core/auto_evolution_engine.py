@@ -17,6 +17,11 @@ from core.auto_tuner import AutoTuner
 from core.llm_service import reload_tuning_state
 from core.evolution_state_manager import get_evolution_state_manager
 
+# META-GOVERNANCE EXTENSION START
+from core.meta_governance_engine import MetaGovernanceEngine
+from core.constitution import GenesisConstitution
+# META-GOVERNANCE EXTENSION END
+
 logger = logging.getLogger(__name__)
 
 class ReportHandler(FileSystemEventHandler):
@@ -97,6 +102,11 @@ class AutoEvolutionEngine:
             'avg_response_time_max': 3.5  # 3.5s
         }
         
+        # META-GOVERNANCE EXTENSION START
+        self._meta_governance = MetaGovernanceEngine()
+        print("AUTO_EVOLUTION_META_GOVERNANCE_ATTACHED")
+        # META-GOVERNANCE EXTENSION END
+        
     async def start_monitoring(self):
         """Avvia monitoraggio cartella lab per nuovi report."""
         if self.is_running:
@@ -153,6 +163,19 @@ class AutoEvolutionEngine:
             
             # 🔵 DEBUG OBBLIGATORIO - metrics parsed
             print(f"EVOLUTION_METRICS {analysis}")
+            
+            # META-GOVERNANCE EXTENSION START
+            # Detect drift nei parametri correnti
+            current_params = self._get_current_tuning_params()
+            drift_info = await self._meta_governance.detect_drift(current_params)
+            
+            # Alert se drift significativo
+            if drift_info["drift_detected"] and drift_info["drift_magnitude"] > 0.3:
+                print(f"META_GOVERNANCE_DRIFT_ALERT magnitude={drift_info['drift_magnitude']}")
+                # Aggiungi flag decisione senza sovrascrivere logica esistente
+                analysis["meta_drift_detected"] = True
+                analysis["meta_drift_magnitude"] = drift_info["drift_magnitude"]
+            # META-GOVERNANCE EXTENSION END
             
             # 🔵 META-GOVERNANCE - Calcola decision flags
             has_hard_violation = await self._check_hard_constraints_violation(analysis)
@@ -300,6 +323,13 @@ class AutoEvolutionEngine:
         except Exception as e:
             logger.error(f"❌ Emergency rollback failed: {e}")
             print(f"EVOLUTION_EXCEPTION {e}")
+        
+        # META-GOVERNANCE EXTENSION START
+        # Invalida shift proposti con stato corrente dopo rollback
+        current_params = self._get_current_tuning_params()
+        await self._meta_governance.evaluate_pending_shifts(current_params)
+        print("META_GOVERNANCE_SHIFTS_CLEARED_ON_ROLLBACK")
+        # META-GOVERNANCE EXTENSION END
     
     async def _log_tuning_applied(self, result: Dict[str, Any]):
         """Log obbligatorio per tuning applicato."""
@@ -411,6 +441,28 @@ class AutoEvolutionEngine:
     async def manual_tuning_cycle(self, report_path: str) -> Dict[str, Any]:
         """Esegui ciclo di tuning manuale su report specifico."""
         return await self.process_report(report_path)
+
+# META-GOVERNANCE EXTENSION START
+    async def get_meta_governance_summary(self) -> Dict[str, Any]:
+        """Ritorna sommario stato meta-governance."""
+        return self._meta_governance.get_governance_summary()
+    
+    def _get_current_tuning_params(self) -> Dict[str, Any]:
+        """Estrae parametri tuning correnti dal sistema."""
+        try:
+            # Prova a caricare stato corrente
+            current_state = self.state_manager.load_current_state()
+            return current_state.get("parameters", {})
+        except Exception:
+            # Fallback a valori default
+            return {
+                "supportive_intensity": 0.5,
+                "attuned_intensity": 0.5,
+                "confrontational_intensity": 0.5,
+                "max_questions_per_response": 1,
+                "repetition_penalty_weight": 1.0
+            }
+    # META-GOVERNANCE EXTENSION END
 
 # Singleton globale per l'evolution engine
 _evolution_engine = None
