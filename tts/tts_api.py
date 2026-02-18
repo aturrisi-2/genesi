@@ -24,8 +24,8 @@ class TTSRequest(BaseModel):
 @router.post("/")
 async def tts_endpoint(request: TTSRequest, user: AuthUser = Depends(require_auth)):
     """
-    TTS multi-provider — restituisce audio WAV.
-    Supporta Piper e Edge TTS con fallback automatico.
+    TTS multi-provider con routing automatico basato su intent.
+    Onyx per conversazione, Edge per contenuto, Piper fallback.
     """
     try:
         logger.info("TTS_REQUEST text_len=%d", len(request.text))
@@ -34,10 +34,32 @@ async def tts_endpoint(request: TTSRequest, user: AuthUser = Depends(require_aut
         from core.tts_sanitizer import sanitize_for_tts
         clean_text = sanitize_for_tts(request.text)
         
-        # TTS-PROVIDER-LAYER START
-        from core.tts_provider import synthesize_with_fallback, get_tts_provider
-        provider = get_tts_provider()
-        wav_bytes = await synthesize_with_fallback(clean_text)
+        # TTS-ROUTING-CALL START
+        # Recupera ultimo intent dalla chat memory per routing
+        from core.chat_memory import ChatMemory
+        chat_memory = ChatMemory()
+        last_message = chat_memory.get_last_message(user.user_id)
+        
+        # Estrai intent e route dall'ultimo messaggio
+        intent = last_message.get("intent") if last_message else None
+        route = None  # Route non salvata in memory, ma possiamo dedurla dall'intent
+        
+        # Usa routing basato su intent
+        from core.tts_provider import get_tts_provider_for_intent
+        provider = get_tts_provider_for_intent(intent=intent, route=route)
+        audio = await provider.synthesize(clean_text)
+        
+        # Gestione fallback a cascata se audio è None
+        if audio is None:
+            print("TTS_AUDIO_NONE primary — trying edge fallback")
+            from core.tts_provider import EdgeTTSProvider
+            audio = await EdgeTTSProvider().synthesize(clean_text)
+
+        if audio is None:
+            print("TTS_AUDIO_NONE edge — trying piper fallback")
+            from core.tts_provider import PiperTTSProvider
+            audio = await PiperTTSProvider().synthesize(clean_text)
+        # TTS-ROUTING-CALL END
         
         # Aggiorna filename e media type basato sul provider
         filename = f"{provider.name()}_tts.wav"
@@ -47,14 +69,13 @@ async def tts_endpoint(request: TTSRequest, user: AuthUser = Depends(require_aut
         if provider.name() == "openai":
             filename = f"{provider.name()}_tts.mp3"
             media_type = "audio/mpeg"
-        # TTS-PROVIDER-LAYER END
 
         return StreamingResponse(
-            io.BytesIO(wav_bytes),
+            io.BytesIO(audio),
             media_type=media_type,
             headers={
                 "Content-Disposition": f"inline; filename={filename}",
-                "Content-Length": str(len(wav_bytes)),
+                "Content-Length": str(len(audio)),
                 "Cache-Control": "no-cache"
             }
         )

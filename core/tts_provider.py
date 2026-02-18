@@ -210,6 +210,115 @@ class OpenAITTSProvider(TTSProvider):
             return None
 
 
+# TTS-ROUTING START
+CONVERSATIONAL_INTENTS = {
+    "greeting", "chat_free", "how_are_you", "identity", 
+    "emotional", "default_relational", "memory_context"
+}
+
+INFORMATIONAL_INTENTS = {
+    "weather", "tecnica", "news", "date", "knowledge_strict",
+    "tool", "reminder", "document"
+}
+
+def get_tts_provider_for_intent(intent: str = None, route: str = None) -> TTSProvider:
+    """
+    Ritorna il provider TTS appropriato in base all'intent o route.
+    
+    Logica:
+    - Conversazionale → OpenAI onyx (qualità premium)
+    - Informativo/tool → edge_tts (gratuito)
+    - Fallback → Piper (offline, sempre disponibile)
+    """
+    import json
+    import os
+
+    config_path = os.path.join(os.path.dirname(__file__), "..", "config", "tts_config.json")
+    
+    try:
+        with open(config_path) as f:
+            config = json.load(f)
+        providers_cfg = config.get("providers", {})
+    except Exception as e:
+        print(f"TTS_ROUTING_CONFIG_ERROR reason={e} fallback=piper")
+        return _build_piper(providers_cfg={})
+
+    # Determina categoria
+    target = intent or route or ""
+    
+    if target in CONVERSATIONAL_INTENTS or route == "default_relational":
+        category = "conversational"
+        primary = "openai"
+        secondary = "edge_tts"
+    elif target in INFORMATIONAL_INTENTS or route in ("tool", "knowledge_strict"):
+        category = "informational"
+        primary = "edge_tts"
+        secondary = "openai"
+    else:
+        # Intent sconosciuto → conversazionale per sicurezza
+        category = "conversational"
+        primary = "openai"
+        secondary = "edge_tts"
+
+    print(f"TTS_ROUTING intent={intent} route={route} category={category} provider={primary}")
+
+    # Prova primary
+    try:
+        if primary == "openai":
+            cfg = providers_cfg.get("openai", {})
+            return OpenAITTSProvider(
+                voice=cfg.get("voice", "onyx"),
+                model=cfg.get("model", "tts-1"),
+                speed=cfg.get("speed", 1.0)
+            )
+        elif primary == "edge_tts":
+            cfg = providers_cfg.get("edge_tts", {})
+            return EdgeTTSProvider(
+                voice=cfg.get("voice", "it-IT-DiegoNeural"),
+                rate=cfg.get("rate", "+0%"),
+                volume=cfg.get("volume", "+0%")
+            )
+    except Exception as e:
+        print(f"TTS_ROUTING_PRIMARY_FAIL provider={primary} reason={e}")
+
+    # Prova secondary
+    try:
+        if secondary == "edge_tts":
+            cfg = providers_cfg.get("edge_tts", {})
+            return EdgeTTSProvider(
+                voice=cfg.get("voice", "it-IT-DiegoNeural"),
+                rate=cfg.get("rate", "+0%"),
+                volume=cfg.get("volume", "+0%")
+            )
+        elif secondary == "openai":
+            cfg = providers_cfg.get("openai", {})
+            return OpenAITTSProvider(
+                voice=cfg.get("voice", "onyx"),
+                model=cfg.get("model", "tts-1"),
+                speed=cfg.get("speed", 1.0)
+            )
+    except Exception as e:
+        print(f"TTS_ROUTING_SECONDARY_FAIL provider={secondary} reason={e}")
+
+    # Fallback finale: Piper (sempre offline)
+    print("TTS_ROUTING_FALLBACK_PIPER")
+    return _build_piper(providers_cfg)
+
+
+def _build_piper(providers_cfg: dict) -> TTSProvider:
+    """Costruisce PiperTTSProvider con config o default sicuri."""
+    try:
+        cfg = providers_cfg.get("piper", {})
+        return PiperTTSProvider(
+            model=cfg.get("model", "it_IT-paola-medium"),
+            speed=cfg.get("speed", 1.0)
+        )
+    except Exception as e:
+        print(f"TTS_PIPER_FALLBACK_ERROR reason={e}")
+        return PiperTTSProvider()
+# TTS-ROUTING END
+
+
 # Singleton con cache e invalidazione per modifiche config
 _tts_provider_instance: Optional[TTSProvider] = None
 _config_mtime: Optional[float] = None

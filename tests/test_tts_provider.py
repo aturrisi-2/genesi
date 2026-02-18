@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, patch, MagicMock
 
 # Import dei moduli da testare
 from core.tts_provider import (
-    TTSProvider, PiperTTSProvider, EdgeTTSProvider, 
-    get_tts_provider, synthesize_with_fallback
+    TTSProvider, PiperTTSProvider, EdgeTTSProvider, OpenAITTSProvider,
+    get_tts_provider, synthesize_with_fallback, get_tts_provider_for_intent
 )
 
 
@@ -282,3 +282,22 @@ class TestSynthesizeWithFallback:
             with patch('core.tts_provider.PiperTTSProvider', return_value=mock_fallback):
                 with pytest.raises(RuntimeError, match="Both primary and fallback TTS providers failed"):
                     await synthesize_with_fallback("test text")
+
+
+class TestTTSRouting:
+    """Test per il routing automatico TTS basato su intent."""
+    
+    def test_routing_conversational_returns_openai(self):
+        """Test che intent conversazionale ritorni OpenAI provider."""
+        provider = get_tts_provider_for_intent(intent="greeting")
+        assert provider.name() == "openai"
+    
+    def test_routing_informational_returns_edge(self):
+        """Test che intent informativo ritorni Edge provider."""
+        provider = get_tts_provider_for_intent(intent="weather")
+        assert provider.name() == "edge_tts"
+    
+    def test_routing_unknown_intent_defaults_conversational(self):
+        """Test che intent sconosciuto default a conversazionale (OpenAI)."""
+        provider = get_tts_provider_for_intent(intent="sconosciuto_xyz")
+        assert provider.name() == "openai"

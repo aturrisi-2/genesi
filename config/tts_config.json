@@ -1,5 +1,5 @@
 {
-  "active_provider": "openai",
+  "active_provider": "edge_tts",
   "providers": {
     "piper": {
       "enabled": true,

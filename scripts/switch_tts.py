@@ -70,7 +70,7 @@ def switch_provider(provider_name):
     config["active_provider"] = provider_name
     
     if save_config(config):
-        print(f"Switch TTS: {old_provider} → {provider_name}")
+        print(f"Switch TTS: {old_provider} -> {provider_name}")
         print("Provider cambiato con successo!")
     else:
         print("ERRORE: Impossibile salvare la configurazione")
