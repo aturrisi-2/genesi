@@ -11,6 +11,11 @@ import re
 from core.constitution import GenesisConstitution
 
 
+# Soglie di blocco — oltre queste l'evolution viene bloccata
+DRIFT_BLOCK_THRESHOLD = 0.15      # deriva su singolo parametro
+DRIFT_CUMULATIVE_THRESHOLD = 0.10  # magnitudine media su tutti i parametri
+
+
 class MetaGovernanceEngine:
     """
     Motore di meta-governanza per validare e guidare l'evoluzione del sistema.
@@ -273,3 +278,35 @@ class MetaGovernanceEngine:
             "approved_shifts": approved_count,
             "rejected_shifts": rejected_count
         }
+
+    def should_block_evolution(self, current_params: dict, previous_params: dict) -> tuple[bool, str]:
+        """
+        Ritorna (True, motivo) se l'evolution deve essere bloccata.
+        Ritorna (False, "") se l'evolution può procedere.
+        """
+        if not previous_params:
+            return False, ""
+        
+        violations = []
+        deltas = []
+        
+        for param, current_val in current_params.items():
+            if param in previous_params:
+                delta = abs(current_val - previous_params[param])
+                deltas.append(delta)
+                if delta > DRIFT_BLOCK_THRESHOLD:
+                    violations.append(f"{param}={delta:.4f}")
+        
+        if violations:
+            reason = f"single_param_drift: {', '.join(violations)}"
+            print(f"META_GOVERNANCE_BLOCK reason={reason}")
+            return True, reason
+        
+        if deltas:
+            avg_delta = sum(deltas) / len(deltas)
+            if avg_delta > DRIFT_CUMULATIVE_THRESHOLD:
+                reason = f"cumulative_drift={avg_delta:.4f}"
+                print(f"META_GOVERNANCE_BLOCK reason={reason}")
+                return True, reason
+        
+        return False, ""

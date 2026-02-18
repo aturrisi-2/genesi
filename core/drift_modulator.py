@@ -13,6 +13,9 @@ from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
+DRIFT_CENTER = 0.5          # valore centrale neutro
+DRIFT_RECENTERING_RATE = 0.01  # quanto si avvicina al centro ad ogni messaggio
+
 
 def _sigmoid(x: float, center: float = 0.5, steepness: float = 6.0) -> float:
     return 1.0 / (1.0 + math.exp(-steepness * (x - center)))
@@ -124,6 +127,9 @@ class DriftModulator:
 
         # 4. Linguistic temperature — word-level variation
         result = self._apply_linguistic_temperature(result, warmth, evocativeness)
+        
+        # 5. Apply recentering towards center
+        result = self._apply_recentering_to_result(result, warmth, expansiveness, evocativeness, groundedness)
 
         logger.info(
             "DRIFT_APPLIED warmth=%.3f expand=%.3f evoc=%.3f ground=%.3f len_delta=%+d",
@@ -132,6 +138,32 @@ class DriftModulator:
         )
 
         return result
+    
+    def _apply_recentering_to_result(self, text: str, warmth: float, expansiveness: float, evocativeness: float, groundedness: float) -> str:
+        """Applica recentering ai valori di drift dopo l'applicazione."""
+        # Non modifichiamo il testo, ma registriamo il recentering per debug
+        recentered_warmth = self._apply_recentering(warmth)
+        recentered_expansiveness = self._apply_recentering(expansiveness)
+        recentered_evocativeness = self._apply_recentering(evocativeness)
+        recentered_groundedness = self._apply_recentering(groundedness)
+        
+        if any(abs(val - DRIFT_CENTER) > 0.01 for val in [warmth, expansiveness, evocativeness, groundedness]):
+            logger.info(
+                "DRIFT_RECENTERING warmth=%.3f->%.3f expand=%.3f->%.3f evoc=%.3f->%.3f ground=%.3f->%.3f",
+                warmth, recentered_warmth, expansiveness, recentered_expansiveness,
+                evocativeness, recentered_evocativeness, groundedness, recentered_groundedness
+            )
+        
+        return text
+    
+    def _apply_recentering(self, current_value: float) -> float:
+        """Spinge lentamente il valore verso il centro (0.5)."""
+        if abs(current_value - DRIFT_CENTER) < 0.01:
+            return current_value  # già abbastanza centrato
+        
+        direction = 1 if current_value < DRIFT_CENTER else -1
+        new_value = current_value + (direction * DRIFT_RECENTERING_RATE)
+        return max(0.0, min(1.0, new_value))
 
     # ── Modulation implementations ─────────────────────────────
 

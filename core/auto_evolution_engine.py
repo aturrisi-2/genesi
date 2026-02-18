@@ -24,6 +24,19 @@ from core.constitution import GenesisConstitution
 
 logger = logging.getLogger(__name__)
 
+# Limiti massimi di variazione per singolo step evolutivo
+EVOLUTION_MAX_DELTA = {
+    "supportive_intensity": 0.05,
+    "attuned_intensity": 0.05,
+    "confrontational_intensity": 0.03,  # più conservativo
+    "max_questions_per_response": 0.5,
+    "repetition_penalty_weight": 0.05,
+}
+
+EVOLUTION_DEFAULT_MAX_DELTA = 0.05  # fallback per parametri non listati
+
+EVOLUTION_MIN_MESSAGES_BETWEEN_SHIFTS = 10  # minimo messaggi tra uno shift e il successivo
+
 class ReportHandler(FileSystemEventHandler):
     """Handler per nuovi report JSON del Massive Training."""
     
@@ -106,6 +119,55 @@ class AutoEvolutionEngine:
         self._meta_governance = MetaGovernanceEngine()
         print("AUTO_EVOLUTION_META_GOVERNANCE_ATTACHED")
         # META-GOVERNANCE EXTENSION END
+    
+    def _apply_clamped_delta(self, param_name: str, current_value: float, proposed_value: float) -> float:
+        """Applica max_delta e ritorna il valore finale clampato."""
+        max_delta = EVOLUTION_MAX_DELTA.get(param_name, EVOLUTION_DEFAULT_MAX_DELTA)
+        delta = proposed_value - current_value
+        
+        if abs(delta) > max_delta:
+            clamped_delta = max_delta if delta > 0 else -max_delta
+            print(f"EVOLUTION_DELTA_CLAMPED param={param_name} requested={delta:.4f} applied={clamped_delta:.4f}")
+            return current_value + clamped_delta
+        
+        return proposed_value
+    
+    def _get_messages_since_last_shift(self, user_id: str) -> int:
+        """Ottiene il numero di messaggi dall'ultimo shift applicato."""
+        try:
+            # Recupera il contatore messaggi dalla chat memory
+            from core.chat_memory import ChatMemory
+            chat_memory = ChatMemory()
+            messages = chat_memory.get_messages(user_id, limit=1000)
+            
+            # Controlla se abbiamo salvato il message_count dell'ultimo shift
+            last_shift_count = self.state_manager.load_current_state().get("last_shift_message_count", 0)
+            current_count = len(messages)
+            
+            return current_count - last_shift_count
+        except Exception as e:
+            logger.error(f"Error getting messages since last shift: {e}")
+            return 999  # fallback alto per non bloccare
+    
+    def _get_previous_tuning_params(self) -> Dict[str, Any]:
+        """Ottiene i parametri di tuning dal precedente snapshot."""
+        try:
+            # Prova a ottenere dall'ultimo snapshot del meta-governance
+            if hasattr(self._meta_governance, '_drift_snapshots') and len(self._meta_governance._drift_snapshots) > 1:
+                # Prendi il penultimo snapshot come "previous"
+                return self._meta_governance._drift_snapshots[-2]["params"]
+            else:
+                # Fallback: usa valori default
+                return {
+                    "supportive_intensity": 0.5,
+                    "attuned_intensity": 0.5,
+                    "confrontational_intensity": 0.5,
+                    "max_questions_per_response": 1,
+                    "repetition_penalty_weight": 1.0
+                }
+        except Exception as e:
+            logger.error(f"Error getting previous tuning params: {e}")
+            return {}
         
     async def start_monitoring(self):
         """Avvia monitoraggio cartella lab per nuovi report."""
@@ -177,6 +239,13 @@ class AutoEvolutionEngine:
                 analysis["meta_drift_magnitude"] = drift_info["drift_magnitude"]
             # META-GOVERNANCE EXTENSION END
             
+            # 🔵 META-GOVERNANCE - Verifica blocco evoluzione
+            previous_params = self._get_previous_tuning_params()
+            block, reason = self._meta_governance.should_block_evolution(current_params, previous_params)
+            if block:
+                print(f"EVOLUTION_BLOCKED reason={reason}")
+                return  # ritorna parametri invariati
+            
             # 🔵 META-GOVERNANCE - Calcola decision flags
             has_hard_violation = await self._check_hard_constraints_violation(analysis)
             is_rollback_decision = has_hard_violation  # Sempre rollback su hard violation
@@ -200,6 +269,17 @@ class AutoEvolutionEngine:
             if is_locked:
                 print("EVOLUTION_DECISION locked")
                 logger.warning("🔒 Evolution locked - skipping tuning")
+                return
+            
+            # 🔵 THROTTLING - Verifica frequenza evoluzione
+            # Nota: user_id non disponibile qui, usiamo un approccio basato su tempo
+            import time
+            current_time = time.time()
+            last_shift_time = self.state_manager.load_current_state().get("last_shift_timestamp", 0)
+            min_interval = 300  # 5 minuti minimo tra shift (fallback quando user_id non disponibile)
+            
+            if current_time - last_shift_time < min_interval:
+                print(f"EVOLUTION_THROTTLED time_since_last={current_time - last_shift_time:.0f}s min={min_interval}s")
                 return
                 return
             
@@ -379,10 +459,10 @@ class AutoEvolutionEngine:
 
             if observed < target_min or observed > target_max:
                 delta = (midpoint - observed) * 0.5
-                new_value = current + delta
-
-                # Clamp sicurezza
-                new_value = max(0.2, min(0.8, new_value))
+                proposed_value = current + delta
+                
+                # Applica max_delta clamp
+                new_value = self._apply_clamped_delta("supportive_intensity", current, proposed_value)
 
                 print(f"TUNING_SUPPORTIVE delta={delta:.6f} old={current:.6f} new={new_value:.6f}")
 
