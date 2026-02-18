@@ -39,13 +39,19 @@ async def tts_endpoint(request: TTSRequest, user: AuthUser = Depends(require_aut
         provider = get_tts_provider()
         wav_bytes = await synthesize_with_fallback(clean_text)
         
-        # Aggiorna filename basato sul provider
+        # Aggiorna filename e media type basato sul provider
         filename = f"{provider.name()}_tts.wav"
+        media_type = "audio/wav"
+        
+        # OpenAI restituisce MP3, non WAV
+        if provider.name() == "openai":
+            filename = f"{provider.name()}_tts.mp3"
+            media_type = "audio/mpeg"
         # TTS-PROVIDER-LAYER END
 
         return StreamingResponse(
             io.BytesIO(wav_bytes),
-            media_type="audio/wav",
+            media_type=media_type,
             headers={
                 "Content-Disposition": f"inline; filename={filename}",
                 "Content-Length": str(len(wav_bytes)),

@@ -164,6 +164,52 @@ class EdgeTTSProvider(TTSProvider):
         return "edge_tts"
 
 
+class OpenAITTSProvider(TTSProvider):
+    """Provider TTS usando OpenAI API — voce onyx profonda e naturale."""
+
+    def __init__(self, voice: str = "onyx", model: str = "tts-1", speed: float = 1.0):
+        import os
+        self.voice = voice
+        self.model = model
+        self.speed = speed
+        self.api_key = os.environ.get("OPENAI_API_KEY")
+        if not self.api_key:
+            raise RuntimeError("OPENAI_API_KEY non trovata nelle variabili d'ambiente")
+        print(f"TTS_PROVIDER=openai voice={self.voice} model={self.model}")
+
+    def name(self) -> str:
+        return "openai"
+
+    async def synthesize(self, text: str) -> bytes:
+        """Sintetizza con OpenAI TTS e ritorna MP3 bytes."""
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    "https://api.openai.com/v1/audio/speech",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": self.model,
+                        "input": text,
+                        "voice": self.voice,
+                        "speed": self.speed,
+                        "response_format": "mp3"
+                    }
+                )
+                response.raise_for_status()
+                result = response.content
+                print(f"TTS_OPENAI_OK voice={self.voice} bytes={len(result)}")
+                return result
+
+        except Exception as e:
+            print(f"TTS_OPENAI_FALLBACK reason={e}")
+            return None
+
+
 # Singleton con cache e invalidazione per modifiche config
 _tts_provider_instance: Optional[TTSProvider] = None
 _config_mtime: Optional[float] = None
@@ -203,6 +249,13 @@ def get_tts_provider() -> TTSProvider:
                     voice=edge_config.get("voice", "it-IT-DiegoNeural"),
                     rate=edge_config.get("rate", "+0%"),
                     volume=edge_config.get("volume", "+0%")
+                )
+            elif active_provider == "openai":
+                cfg = providers.get("openai", {})
+                _tts_provider_instance = OpenAITTSProvider(
+                    voice=cfg.get("voice", "onyx"),
+                    model=cfg.get("model", "tts-1"),
+                    speed=cfg.get("speed", 1.0)
                 )
             else:
                 logger.error("Unknown TTS provider: %s, falling back to Piper", active_provider)

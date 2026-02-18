@@ -80,10 +80,11 @@ def switch_provider(provider_name):
 def main():
     """Main entry point."""
     if len(sys.argv) < 2:
-        print("Uso: python switch_tts.py <piper|edge_tts|status>")
+        print("Uso: python switch_tts.py <piper|edge_tts|openai|status>")
         print("Comandi:")
         print("  piper    - Switcha a Piper TTS")
         print("  edge_tts - Switcha a Edge TTS")
+        print("  openai   - Switcha a OpenAI TTS")
         print("  status   - Mostra provider attivo")
         sys.exit(1)
     
@@ -91,11 +92,11 @@ def main():
     
     if command == "status":
         show_status()
-    elif command in ["piper", "edge_tts"]:
+    elif command in ["piper", "edge_tts", "openai"]:
         switch_provider(command)
     else:
         print(f"ERRORE: Comando non riconosciuto: {command}")
-        print("Comandi validi: piper, edge_tts, status")
+        print("Comandi validi: piper, edge_tts, openai, status")
         sys.exit(1)
 
 

@@ -31,7 +31,7 @@ class TestTTSConfig:
         
         assert "active_provider" in config, "config deve avere active_provider"
         assert "providers" in config, "config deve avere providers"
-        assert config["active_provider"] in ["piper", "edge_tts"], "active_provider deve essere valido"
+        assert config["active_provider"] in ["piper", "edge_tts", "openai"], "active_provider deve essere valido"
 
 
 class TestPiperTTSProvider:
