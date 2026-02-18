@@ -132,38 +132,32 @@ class EdgeTTSProvider(TTSProvider):
         self.timeout = 5.0
         logger.info("EDGE_TTS_PROVIDER: Ready (voice=%s rate=%s volume=%s)", voice, rate, volume)
     
-    async def synthesize(self, text: str) -> Optional[bytes]:
-        """Sintetizza testo via Edge TTS."""
-        if not text or not text.strip():
-            return None
-        
-        cleaned = text.strip()[:2000]
-        print(f"TTS_PROVIDER=edge_tts voice={self.voice} text_len={len(cleaned)}")
-        
+    async def synthesize(self, text: str) -> bytes:
+        """Sintetizza testo con edge-tts e ritorna bytes audio."""
+        import io
+        import edge_tts
+
         try:
-            import edge_tts
+            communicate = edge_tts.Communicate(
+                text,
+                voice=self.voice,
+                rate=self.rate,
+                volume=self.volume
+            )
+            audio_buffer = io.BytesIO()
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_buffer.write(chunk["data"])
             
-            # Timeout per l'intero processo
-            communicate = edge_tts.Communicate(text=cleaned, voice=self.voice, rate=self.rate, volume=self.volume)
-            
-            # Usa asyncio.wait_for per timeout
-            audio_data = await asyncio.wait_for(communicate.stream(), timeout=self.timeout)
-            
-            # Edge TTS ritorna MP3, dobbiamo convertire in PCM WAV
-            # Per ora, ritorna None e il fallback gestirà il caso
-            # TODO: implementare conversione MP3->PCM
-            
-            print("TTS_EDGE_FALLBACK reason=mp3_conversion_not_implemented")
-            return None
-            
-        except ImportError:
-            print("TTS_EDGE_FALLBACK reason=edge_tts_not_installed")
-            return None
-        except asyncio.TimeoutError:
-            print(f"TTS_EDGE_FALLBACK reason=timeout_after_{self.timeout}s")
-            return None
+            result = audio_buffer.getvalue()
+            if not result:
+                raise ValueError("Audio buffer vuoto")
+                
+            print(f"TTS_EDGE_OK voice={self.voice} bytes={len(result)}")
+            return result
+
         except Exception as e:
-            print(f"TTS_EDGE_FALLBACK reason={str(e)}")
+            print(f"TTS_EDGE_FALLBACK reason={e}")
             return None
     
     def name(self) -> str:
