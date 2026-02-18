@@ -1,6 +1,7 @@
 import logging
 import re
 from core.storage import storage
+from core.brain_state import brain_state
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,16 @@ def _is_strong_emotional(message: str) -> bool:
     ]
     
     m = message.lower()
-    return any(p in m for p in strong_patterns)
+    has_strong = any(p in m for p in strong_patterns)
+    
+    # FASE 5: Strong Emotional Persistence
+    # Controlla "sempre" + emozione forte
+    has_always = "sempre" in m
+    
+    # Controlla ripetizione (semplificato - in realtà richiederebbe storico)
+    has_repetition = any(m.count(word) >= 2 for word in ["triste", "felice", "arrabbiato", "preoccupato"])
+    
+    return has_strong or (has_always and has_strong) or has_repetition
 
 class CognitiveMemoryEngine:
     def evaluate_event(self, user_id, message, extracted_profile_data):
@@ -31,6 +41,9 @@ class CognitiveMemoryEngine:
         value = None
         persist = False
         memory_type = None
+        
+        # FASE 3: Carica stato brain completo
+        brain_state.load_from_storage(user_id)
         
         # Load existing profile data (sync)
         try:
@@ -73,12 +86,17 @@ class CognitiveMemoryEngine:
 
         # Extract all profile fields and update the extracted_profile_data
         if name_match:
-            extracted_profile_data["name"] = name_match.group(1)
+            extracted_name = name_match.group(1)
+            extracted_profile_data["name"] = extracted_name
             persist = True
             memory_type = "profile"
             field = "name"
-            value = name_match.group(1)
+            value = extracted_name
             logger.info("COGNITIVE_NAME_EXTRACT value=%s", value)
+            
+            # FASE 4: Identity Persist Immediato
+            brain_state.update_profile(user_id, "name", extracted_name)
+            logger.info("BRAIN_IDENTITY_PERSIST_IMMEDIATE user=%s name=%s", user_id, extracted_name)
             
         if city_match:
             extracted_profile_data["city"] = city_match.group(1)

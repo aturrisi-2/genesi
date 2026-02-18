@@ -85,12 +85,23 @@ class ContextAssembler:
         else:
             context['latent_state'] = {}  # Ensure field exists
 
-        # Add memory_v2 structure
+        # Add memory_v2 structure - FASE 6: memory_v2 Stabilizzazione
+        from core.brain_state import brain_state
+        brain_state.load_from_storage(user_id)
+        
         context['memory_v2'] = {
-            'profile': profile if profile else {},
-            'relational_state': relational_state if relational_state else {},
-            'recent_episodes': recent_episodes if recent_episodes else []
+            'profile': brain_state.profile,
+            'relational_state': brain_state.relational_state,
+            'traits': brain_state.traits
         }
+        
+        # Mai None, mai coroutine
+        if not context['memory_v2']['profile']:
+            context['memory_v2']['profile'] = {}
+        if not context['memory_v2']['relational_state']:
+            context['memory_v2']['relational_state'] = {}
+        if not context['memory_v2']['traits']:
+            context['memory_v2']['traits'] = {}
 
         summary = self._summarize_profile(profile)
 
