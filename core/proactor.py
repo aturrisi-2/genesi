@@ -153,10 +153,10 @@ class Proactor:
     # HANDLE — Entry point, routing obbligatorio
     # ═══════════════════════════════════════════════════════════════
 
-    async def handle(self, user_id: str, message: str = None, intent: str = None) -> tuple[str, str]:
+    async def handle(self, user_id: str, message: str = None, intent: str = None) -> str:
         """
         Orchestrazione centrale v4.
-        Returns: (response_text: str, source: str) - for test compatibility
+        Returns: response_text (SOLO stringa - nessuna tupla, nessun dict)
         Ordine di routing:
             1. Identity Router  (deterministico)
             2. Tool Router      (deterministico)
@@ -165,7 +165,18 @@ class Proactor:
         
         NOTE: user_id validation for empty values is handled in _handle_internal
         """
-        return await self._handle_internal(user_id, message, intent)
+        result = await self._handle_internal(user_id, message, intent)
+        # Handle nested tuples: ((response, source), source) -> response
+        if isinstance(result, tuple):
+            if len(result) == 2 and isinstance(result[0], tuple):
+                # Nested tuple case
+                response = result[0][0] if isinstance(result[0], tuple) else result[0]
+            else:
+                # Normal tuple case
+                response = result[0]
+        else:
+            response = result
+        return response
 
     def handle_response_only(self, user_id: str, message: str = None, intent: str = None) -> str:
         """
@@ -245,7 +256,7 @@ class Proactor:
             # (profile già caricato sopra per non-identity)
 
             # Use the profile in the context assembly
-            context = self.context_assembler.build(user_id, message)
+            context = await self.context_assembler.build(user_id, message)
             context['profile'] = profile
 
             # STEP 3.5: ELLIPTICAL TOOL FOLLOW-UP (e.g. "e domani?" after weather)
@@ -350,7 +361,7 @@ class Proactor:
             # STEP 8: DEFAULT — relational pipeline (chat libera)
             logger.info("PROACTOR_ROUTE route=default_relational user=%s intent=%s", user_id, intent)
             response = await self._handle_relational(user_id, message, brain_state)
-            return response, "relational"
+            return response
 
         except Exception as e:
             logger.exception("PROACTOR_FATAL_ERROR user=%s intent=%s", user_id, intent, exc_info=True)
@@ -396,7 +407,7 @@ class Proactor:
             city = profile.get("city")
             if city:
                 return f"Vivi a {city.strip().title()}."
-            return "Non me lo hai ancora detto.", "identity"
+            return "Non me lo hai ancora detto."
 
         # Domanda specifica: lavoro
         job_kw = ["che lavoro faccio", "che lavoro svolgo", "cosa faccio"]
@@ -404,7 +415,7 @@ class Proactor:
             profession = profile.get("profession")
             if profession:
                 return f"Fai l'{profession.strip().lower()}."
-            return "Non me lo hai ancora detto.", "identity"
+            return "Non me lo hai ancora detto."
 
         # Domanda specifica: eta'
         age_kw = ["quanti anni ho", "sai quanti anni ho"]
@@ -412,14 +423,14 @@ class Proactor:
             age = profile.get("age")
             if age:
                 return f"Hai {age} anni."
-            return "Non me lo hai ancora detto.", "identity"
+            return "Non me lo hai ancora detto."
 
         # Domanda generica: "chi sono"
         if "chi sono" in msg_lower:
             return self._build_identity_response(profile)
 
         # Fallback identity
-        return self._build_identity_response(profile), "identity"
+        return self._build_identity_response(profile)
 
     @staticmethod
     def _build_identity_response(profile: dict) -> str:
@@ -464,7 +475,7 @@ class Proactor:
     # TOOL ROUTER — 100% deterministico, zero GPT su errore
     # ═══════════════════════════════════════════════════════════════
 
-    async def _handle_tool(self, intent: str, message: str, user_id: str) -> tuple[str, str]:
+    async def _handle_tool(self, intent: str, message: str, user_id: str) -> str:
         """
         Tool routing deterministico.
         Errori gestiti con messaggi deterministici, MAI GPT.
@@ -504,7 +515,7 @@ class Proactor:
     # MEMORY CONTEXT ROUTER — conversational memory responses
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_memory_context(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> tuple[str, str]:
+    async def _handle_memory_context(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
         """
         Handle memory_context intent — responses based on conversation history.
         Loads last N=5 interactions, summarizes dynamically, responds naturally.
@@ -559,7 +570,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
     # REMINDER HANDLERS — deterministic reminder management
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_reminder_creation(self, user_id: str, message: str) -> tuple[str, str]:
+    async def _handle_reminder_creation(self, user_id: str, message: str) -> str:
         """
         Handle reminder creation requests with STRICT logic.
         SOLO se presente orario esplicito (HH:MM) o data esplicita.
@@ -594,7 +605,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             logger.error("REMINDER_CREATION_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
             return "Mi dispiace, ho avuto un problema con il promemoria. Riprova.", "reminder"
 
-    async def _handle_reminder_list(self, user_id: str, message: str) -> tuple[str, str]:
+    async def _handle_reminder_list(self, user_id: str, message: str) -> str:
         """
         Handle reminder list requests.
         Return formatted list of user's reminders.
@@ -615,7 +626,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             logger.error("REMINDER_LIST_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
             return "Mi dispiace, non riesco a vedere i tuoi promemoria. Riprova.", "reminder"
 
-    async def _handle_reminder_delete(self, user_id: str, message: str) -> tuple[str, str]:
+    async def _handle_reminder_delete(self, user_id: str, message: str) -> str:
         """
         Handle reminder deletion requests with deterministic parsing.
         Support: numero, "tutti", testo parziale (fuzzy)
@@ -697,7 +708,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             logger.error("REMINDER_DELETE_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
             return "Mi dispiace, ho avuto un problema con la cancellazione. Riprova.", "reminder"
 
-    async def _handle_reminder_update(self, user_id: str, message: str) -> tuple[str, str]:
+    async def _handle_reminder_update(self, user_id: str, message: str) -> str:
         """
         Handle reminder update requests with deterministic parsing.
         Support: numero, testo parziale, nuova data/ora
@@ -1040,7 +1051,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
     # RELATIONAL ROUTER — GPT controllato con contesto limitato
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_relational(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> tuple[str, str]:
+    async def _handle_relational(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
         """
         Pipeline relazionale con GPT controllato.
         GPT riceve: conversation thread, identity summary, topic, latent state.
@@ -1120,7 +1131,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         logger.info("PROACTOR_RESPONSE user=%s len=%d route=relational emotion=%s",
                      user_id, len(response),
                      brain_state.get("emotion", {}).get("emotion", "?"))
-        return response, "relational"
+        return response
 
     def _build_short_relational_summary(self, context: Dict[str, Any]) -> str:
         """Costruisce summary breve per GPT relazionale. Tutti i fatti identitari noti."""
@@ -1237,7 +1248,7 @@ DIVIETI ASSOLUTI:
 
 Messaggio utente: {message}"""
         
-    async def _handle_knowledge(self, user_id: str, message: str) -> tuple[str, str]:
+    async def _handle_knowledge(self, user_id: str, message: str) -> str:
         """
         GPT per domande di definizione/conoscenza.
         Include chat history per risolvere riferimenti contestuali.

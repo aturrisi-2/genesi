@@ -50,7 +50,7 @@ class TestRouterUserIdIntegrity:
                 mock_identity.return_value = None  # Non identity question per continuare
                 
                 # Chiama handle con user_id e message diversi
-                response, source = await proactor.handle(real_user_id, message_content)
+                response = await proactor.handle(real_user_id, message_content)
                 
                 # Verifica che storage.load sia stato chiamato con il vero user_id
                 expected_profile_key = f"profile:{real_user_id}"
@@ -168,7 +168,7 @@ class TestRouterUserIdIntegrity:
             mock_context.return_value = {}
             
             # Esegui handle completo
-            response, source = await proactor.handle(real_user_id, message_content)
+            response = await proactor.handle(real_user_id, message_content)
             
             # Verifica tutte le chiamate storage
             for call in mock_load.call_args_list:
@@ -213,7 +213,7 @@ class TestRouterUserIdIntegrity:
                 mock_update_brain.return_value = {"profile": {}, "latent": {}, "relational": {}}
                 
                 # Esegui handle
-                response, source = await proactor.handle(real_user_id, message_content)
+                response = await proactor.handle(real_user_id, message_content)
                 
                 # Verifica che load_profile sia stato chiamato con il vero user_id
                 mock_load_profile.assert_called_once_with(real_user_id)
@@ -231,7 +231,7 @@ class TestRouterUserIdIntegrity:
                 mock_update_brain.return_value = {"profile": {}, "latent": {}, "relational": {}}
                 
                 # Esegui handle
-                response, source = await proactor.handle(real_user_id, message_content)
+                response = await proactor.handle(real_user_id, message_content)
                 
                 # Verifica che nessuna chiamata storage usi message come chiave
                 for call in mock_load.call_args_list:

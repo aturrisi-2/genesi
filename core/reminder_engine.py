@@ -37,7 +37,8 @@ class ReminderEngine:
             with open(file_path, 'r', encoding='utf-8') as f:
                 reminders = json.load(f)
             
-            log("REMINDER_LOAD", user_id=user_id, count=len(reminders))
+            if reminders:
+                log("REMINDER_LOAD", user_id=user_id, count=len(reminders))
             return reminders
             
         except Exception as e:
@@ -211,7 +212,8 @@ class ReminderEngine:
                         reminder_copy["user_id"] = user_id
                         due_reminders.append(reminder_copy)
             
-            log("REMINDER_DUE_CHECK", total_due=len(due_reminders))
+            if due_reminders:
+                log("REMINDER_DUE_CHECK", total_due=len(due_reminders))
             return due_reminders
             
         except Exception as e:

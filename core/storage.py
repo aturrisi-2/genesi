@@ -18,6 +18,7 @@ class MemoryStorage:
     
     def __init__(self):
         self.base_path = "memory"
+        self._storage = {}  # Alias compatibile per test
         self._ensure_directories()
         log("MEMORY_STORAGE_ACTIVE", base_path=self.base_path)
     
@@ -68,10 +69,15 @@ class MemoryStorage:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
                     if content.strip():
-                        return json.loads(content)
+                        data = json.loads(content)
+                        # Sincronizza con _storage per compatibilità
+                        self._storage[key] = data
+                        return data
                     else:
+                        self._storage[key] = default
                         return default
             
+            self._storage[key] = default
             return default
             
         except json.JSONDecodeError as e:
@@ -85,6 +91,7 @@ class MemoryStorage:
             raise RuntimeError(f"Corrupted JSON for key={key} — system halted")
         except Exception as e:
             log("MEMORY_LOAD_ERROR", error=str(e), key=key)
+            self._storage[key] = default
             return default
     
     async def save(self, key: str, value: Any) -> bool:
@@ -134,6 +141,9 @@ class MemoryStorage:
             # Scrivi stringa JSON pre-validata
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(json_string)
+            
+            # Sincronizza con _storage per compatibilità
+            self._storage[key] = value
             
             # Integrity check: re-read file immediately
             try:
