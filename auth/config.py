@@ -7,7 +7,7 @@ load_dotenv()
 # ===============================
 # JWT
 # ===============================
-JWT_SECRET = os.getenv("JWT_SECRET", "dev_secret_key_for_testing_only")
+JWT_SECRET = os.getenv("JWT_SECRET", "dev_secret_key_for_testing_only_32b")
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
