@@ -383,27 +383,32 @@ class Proactor:
 
         # Domanda generica: "chi sono"
         if "chi sono" in msg_lower:
-            return self._build_identity_summary(profile)
+            return self._build_identity_response(profile)
 
         # Fallback identity
-        return self._build_identity_summary(profile)
+        return self._build_identity_response(profile)
 
-    def _build_identity_summary(self, profile: Dict[str, Any]) -> str:
-        """Costruisce riepilogo identita' da profilo. Zero GPT."""
+    @staticmethod
+    def _build_identity_response(profile: dict) -> str:
+        """Build complete identity response including all available fields."""
         parts = []
-        
-        if profile.get("name"):
-            parts.append(f"ti chiami {profile['name']}")
-        
-        if profile.get("city"):
-            parts.append(f"vivi a {profile['city']}")
-        
-        if profile.get("profession"):
-            parts.append(f"lavori come {profile['profession']}")
-        
+
+        name = profile.get("name")
+        city = profile.get("city")
+        profession = profile.get("profession")
+
+        if name:
+            parts.append(f"ti chiami {name}")
+
+        if city:
+            parts.append(f"vivi a {city}")
+
+        if profession:
+            parts.append(f"lavori come {profession}")
+
         if not parts:
             return "Non me lo hai ancora detto."
-        
+
         return "Ecco cosa so di te: " + ", ".join(parts) + "."
 
     # ═══════════════════════════════════════════════════════════════

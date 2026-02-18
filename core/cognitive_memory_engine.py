@@ -4,6 +4,23 @@ from core.storage import storage
 
 logger = logging.getLogger(__name__)
 
+def _is_strong_emotional(message: str) -> bool:
+    """Detect strong emotional patterns using substring matching."""
+    strong_patterns = [
+        "disperat",
+        "devastat",
+        "distrutt",
+        "non ce la faccio",
+        "sto mal",
+        "a pezzi",
+        "non so più cosa fare",
+        "sono a terra",
+        "mi sento perso"
+    ]
+    
+    m = message.lower()
+    return any(p in m for p in strong_patterns)
+
 class CognitiveMemoryEngine:
     def evaluate_event(self, user_id, message, extracted_profile_data):
         # Initialize field and value
@@ -11,6 +28,10 @@ class CognitiveMemoryEngine:
         value = None
         persist = False
         memory_type = None
+        
+        # Check for strong emotional patterns first
+        if _is_strong_emotional(message):
+            return {"persist": True}
 
         # Semantic classification using regex
         name_match = re.search(r"mi chiamo (\w+)", message, re.IGNORECASE)

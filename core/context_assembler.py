@@ -67,7 +67,9 @@ class ContextAssembler:
 
         # Add memory_v2 structure
         context['memory_v2'] = {
-            'profile': profile if profile else {}
+            'profile': profile if profile else {},
+            'relational_state': relational_state if relational_state else {},
+            'recent_episodes': recent_episodes if recent_episodes else []
         }
 
         summary = self._summarize_profile(profile)
