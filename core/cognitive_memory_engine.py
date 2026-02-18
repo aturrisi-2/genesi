@@ -32,6 +32,16 @@ class CognitiveMemoryEngine:
         persist = False
         memory_type = None
         
+        # Load existing profile data (sync)
+        try:
+            existing_profile_data = storage._storage.get(f"long_term_profile:{user_id}", {})
+        except:
+            existing_profile_data = {}
+        
+        # Initialize extracted_profile_data with existing data
+        if existing_profile_data:
+            extracted_profile_data.update(existing_profile_data)
+        
         # Check for strong emotional patterns first
         if _is_strong_emotional(message):
             return {"persist": True}
@@ -175,6 +185,20 @@ class CognitiveMemoryEngine:
                     extracted_profile_data[field] = value
             else:
                 extracted_profile_data[field] = value
+            
+            # Save to storage if persist=True
+            if persist and memory_type == "profile":
+                import asyncio
+                try:
+                    loop = asyncio.get_running_loop()
+                    # If in async context, create task
+                    asyncio.create_task(storage.save(f"long_term_profile:{user_id}", extracted_profile_data))
+                except RuntimeError:
+                    # No event loop, safe to use asyncio.run
+                    asyncio.run(storage.save(f"long_term_profile:{user_id}", extracted_profile_data))
+                # Also sync to _storage for immediate access
+                storage._storage[f"long_term_profile:{user_id}"] = extracted_profile_data
+                logger.info("COGNITIVE_PROFILE_SAVED user=%s field=%s", user_id, field)
         else:
             persist = False
             memory_type = None
