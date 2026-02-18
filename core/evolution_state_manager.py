@@ -4,6 +4,7 @@ Gestisce snapshot versionati, apply atomico e rollback reale per auto-evoluzione
 """
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -66,6 +67,9 @@ class EvolutionStateManager:
     def load_current_state(self) -> Dict[str, Any]:
         """Carica stato corrente da file."""
         try:
+            # Assicura che la directory esista
+            os.makedirs(self.current_state_file.parent, exist_ok=True)
+            
             with open(self.current_state_file, 'r', encoding='utf-8') as f:
                 state = json.load(f)
             return state
@@ -141,6 +145,9 @@ class EvolutionStateManager:
         try:
             # Aggiorna timestamp
             state["timestamp"] = datetime.now().isoformat()
+            
+            # Assicura che la directory esista
+            os.makedirs(self.current_state_file.parent, exist_ok=True)
             
             with open(self.current_state_file, 'w', encoding='utf-8') as f:
                 json.dump(state, f, indent=2)

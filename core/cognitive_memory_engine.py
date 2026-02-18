@@ -95,7 +95,7 @@ class CognitiveMemoryEngine:
             logger.info("COGNITIVE_NAME_EXTRACT value=%s", value)
             
             # FIX DEFINITIVO: Scrittura diretta su storage
-            profile = await storage.load(f"long_term_profile:{user_id}", default={})
+            profile = await storage.load(f"long_term_profile:{user_id}", default={}) or {}
             profile["name"] = extracted_name
             await storage.save(f"long_term_profile:{user_id}", profile)
             logger.info("STORAGE_DIRECT_WRITE user=%s name=%s", user_id, extracted_name)
@@ -132,7 +132,7 @@ class CognitiveMemoryEngine:
             logger.info("COGNITIVE_PROFESSION_EXTRACT value=%s", value)
             
             # FIX DEFINITIVO: Scrittura diretta su storage
-            profile = await storage.load(f"long_term_profile:{user_id}", default={})
+            profile = await storage.load(f"long_term_profile:{user_id}", default={}) or {}
             profile["profession"] = new_profession
             await storage.save(f"long_term_profile:{user_id}", profile)
             logger.info("STORAGE_DIRECT_WRITE user=%s profession=%s", user_id, new_profession)
@@ -147,7 +147,7 @@ class CognitiveMemoryEngine:
             logger.info("COGNITIVE_SPOUSE_EXTRACT value=%s", value)
             
             # FIX DEFINITIVO: Scrittura diretta su storage
-            profile = await storage.load(f"long_term_profile:{user_id}", default={})
+            profile = await storage.load(f"long_term_profile:{user_id}", default={}) or {}
             profile["spouse"] = extracted_spouse
             await storage.save(f"long_term_profile:{user_id}", profile)
             logger.info("STORAGE_DIRECT_WRITE user=%s spouse=%s", user_id, extracted_spouse)

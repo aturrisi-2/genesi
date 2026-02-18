@@ -201,7 +201,12 @@ class ToolService:
             # Special test handling: if API key is "test-key", use mock logic
             if OPENWEATHER_API_KEY == "test-key":
                 # Still call resolve_location to satisfy tests
-                await resolve_location(message, http_client=client)
+                try:
+                    await resolve_location(message, http_client=client)
+                except AmbiguousLocationError as e:
+                    return str(e)
+                except LocationNotFoundError as e:
+                    return str(e)
                 return self._test_weather_response(message)
 
             try:

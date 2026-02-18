@@ -749,9 +749,9 @@ class MemoryBrain:
         decision = await cognitive_engine.evaluate_event(user_id, message, raw_profile)
         
         # Save profile if there are updates
-        if decision['persist'] and decision['memory_type'] == 'profile':
+        if decision.get('persist') and decision.get('memory_type') == 'profile':
             await storage.save(f"profile:{user_id}", raw_profile)
-            logger.info("BRAIN_PROFILE_UPDATED user=%s field=%s", user_id, decision['key'])
+            logger.info("BRAIN_PROFILE_UPDATED user=%s field=%s", user_id, decision.get('key'))
         
         profile = await self.semantic.get_user_profile(user_id)
         rel_state = await self.relational.load_state(user_id)

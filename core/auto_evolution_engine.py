@@ -167,16 +167,17 @@ class AutoEvolutionEngine:
             # 🔵 GOVERNANCE - Verifica lock status
             is_locked = updated_state.get("auto_evolution_locked", False)
             
-            if is_locked:
-                print("EVOLUTION_DECISION locked")
-                logger.warning("🔒 Evolution locked - skipping tuning")
-                return
-            
             # 🔵 CONTINUA solo se NON locked
             if has_hard_violation:
                 logger.error("🚨 HARD CONSTRAINTS VIOLATION - initiating rollback")
                 print(f"EVOLUTION_DECISION rollback")
                 await self._emergency_rollback()
+                return
+            
+            if is_locked:
+                print("EVOLUTION_DECISION locked")
+                logger.warning("🔒 Evolution locked - skipping tuning")
+                return
                 return
             
             # Esegui ciclo di auto-tuning
@@ -281,7 +282,7 @@ class AutoEvolutionEngine:
             # Trova ultimo snapshot e rollback
             latest_snapshot = self.auto_tuner._get_latest_snapshot()
             if latest_snapshot:
-                snapshot_id = self.auto_tuner.rollback_to_snapshot(latest_snapshot['id'])
+                snapshot_id = self.auto_tuner.rollback_to_snapshot(latest_snapshot.get('id', 'unknown'))
                 logger.critical(f"🚨 EMERGENCY ROLLBACK to snapshot: {snapshot_id}")
                 
                 # 🔵 DEBUG OBBLIGATORIO - rollback log
