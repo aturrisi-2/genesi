@@ -129,7 +129,7 @@ class ReminderEngine:
                 date_str = reminder_datetime.strftime("%d %b %H:%M")
                 response = f"Perfetto. Ti ricorderò di {text} il {date_str}."
                 log("REMINDER_VALIDATION", user_id=user_id, has_datetime=True, reminder_id=reminder_id)
-                return reminder_id
+                return reminder_id, response
             
             return None
             

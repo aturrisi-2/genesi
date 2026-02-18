@@ -35,7 +35,7 @@ class CognitiveMemoryEngine:
 
         # Semantic classification using regex
         name_match = re.search(r"mi chiamo (\w+)", message, re.IGNORECASE)
-        profession_match = re.search(r"(?:faccio|sono|lavoro come)\s+(?:il\s+)?(\w+)", message, re.IGNORECASE)
+        profession_match = re.search(r"(?:faccio|sono|lavoro come)\s+(?:il\s+|la\s+|l\s+)?([^.\s]+(?:\s+[^.\s]+)*)", message, re.IGNORECASE)
         city_match = re.search(r"vivo a (\w+)", message, re.IGNORECASE)
         spouse_match = re.search(r"(?:mia moglie|mio marito) si chiama (\w+)", message, re.IGNORECASE)
         children_match = re.search(r"i miei figli si chiamano (\w+) e (\w+)", message, re.IGNORECASE)

@@ -153,19 +153,21 @@ class Proactor:
     # HANDLE — Entry point, routing obbligatorio
     # ═══════════════════════════════════════════════════════════════
 
-    async def handle(self, user_id: str, message: str = None, intent: str = None) -> str:
+    async def handle(self, user_id: str, message: str = None, intent: str = None) -> tuple[str, str]:
         """
         Orchestrazione centrale v4.
-        Returns: response_text (public contract)
+        Returns: (response_text: str, source: str)
         Ordine di routing:
             1. Identity Router  (deterministico)
             2. Tool Router      (deterministico)
             3. Knowledge Router (deterministico)
             4. Relational Router (deterministico)
+        
+        NOTE: user_id validation for empty values is handled in _handle_internal
         """
         return await self._handle_internal(user_id, message, intent)
     
-    async def _handle_internal(self, user_id: str, message: str = None, intent: str = None) -> str:
+    async def _handle_internal(self, user_id: str, message: str = None, intent: str = None) -> tuple[str, str]:
         try:
             # STEP 0: SANITY CHECK
             if not user_id:
@@ -206,7 +208,8 @@ class Proactor:
                 logger.info("IDENTITY_ROUTE_EXECUTION_ORDER_OK user=%s", user_id)
                 profile = await storage.load(f"profile:{user_id}", default={})
                 brain_state_identity = {"profile": profile}
-                return await self._handle_identity(user_id, message, brain_state_identity)
+                response = await self._handle_identity(user_id, message, brain_state_identity)
+                return response, "identity"
 
             # Load profile for other routing (non-identity)
             profile = await storage.load(f"profile:{user_id}", default={})
@@ -225,7 +228,7 @@ class Proactor:
             # (profile già caricato sopra per non-identity)
 
             # Use the profile in the context assembly
-            context = await self.context_assembler.build(user_id, message)
+            context = self.context_assembler.build(user_id, message)
             context['profile'] = profile
 
             # STEP 3.5: ELLIPTICAL TOOL FOLLOW-UP (e.g. "e domani?" after weather)
@@ -234,7 +237,8 @@ class Proactor:
                 if resolved_city:
                     logger.info("ELLIPTICAL_WEATHER_FOLLOWUP user=%s city=%s", user_id, resolved_city)
                     enriched_msg = f"che tempo fa a {resolved_city} {message.strip('?').strip()}"
-                    return await self._handle_tool("weather", enriched_msg, user_id)
+                    response = await self._handle_tool("weather", enriched_msg, user_id)
+                    return response, "tool"
 
             # STEP 3.6: ELLIPTICAL NEWS FOLLOW-UP (e.g. "e di politica?" after news)
             if is_elliptical_news_followup(msg_lower):
@@ -242,7 +246,8 @@ class Proactor:
                 if resolved_topic:
                     logger.info("ELLIPTICAL_NEWS_FOLLOWUP user=%s topic=%s", user_id, resolved_topic)
                     enriched_msg = f"notizie {resolved_topic}"
-                    return await self._handle_tool("news", enriched_msg, user_id)
+                    response = await self._handle_tool("news", enriched_msg, user_id)
+                    return response, "tool"
 
             # STEP 3.7: DOCUMENT MODE — override to document_query if active docs + reference
             active_docs = profile.get("active_documents", [])
@@ -251,7 +256,8 @@ class Proactor:
                 active_docs = [profile["active_document_id"]]
             if active_docs and is_document_reference(message):
                 logger.info("DOCUMENT_MODE_TRIGGERED user=%s doc_count=%d", user_id, len(active_docs))
-                return await self._handle_document_query(user_id, message, profile, brain_state)
+                response = await self._handle_document_query(user_id, message, profile, brain_state)
+                return response, "document_query"
 
             # STEP 3.8: MEMORY ROUTING OVERRIDE — bypass classifier for memory references
             chat_count = chat_memory.get_message_count(user_id)
@@ -276,29 +282,35 @@ class Proactor:
             # STEP 5: TOOL ROUTES
             if intent in self.tool_intents:
                 logger.info("PROACTOR_ROUTE route=tool intent=%s user=%s", intent, user_id)
-                return await self._handle_tool(intent, message, user_id)
+                response = await self._handle_tool(intent, message, user_id)
+                return response, "tool"
 
             # STEP 5.5: MEMORY CONTEXT ROUTE
             if intent == "memory_context":
                 logger.info("PROACTOR_ROUTE route=memory_context user=%s", user_id)
-                return await self._handle_memory_context(user_id, message, brain_state)
+                response = await self._handle_memory_context(user_id, message, brain_state)
+                return response, "memory_context"
             
             # STEP 5.6: REMINDER ROUTING STRICT
             if intent == "reminder_create":
                 logger.info("REMINDER_CREATE_ROUTING user=%s msg=%s", user_id, message[:40])
-                return await self._handle_reminder_creation(user_id, message)
+                response = await self._handle_reminder_creation(user_id, message)
+                return response, "reminder"
             
             if intent == "reminder_list":
                 logger.info("REMINDER_LIST_ROUTING user=%s msg=%s", user_id, message[:40])
-                return await self._handle_reminder_list(user_id, message)
+                response = await self._handle_reminder_list(user_id, message)
+                return response, "reminder"
             
             if intent == "reminder_delete":
                 logger.info("REMINDER_DELETE_ROUTING user=%s msg=%s", user_id, message[:40])
-                return await self._handle_reminder_delete(user_id, message)
+                response = await self._handle_reminder_delete(user_id, message)
+                return response, "reminder"
             
             if intent == "reminder_update":
                 logger.info("REMINDER_UPDATE_ROUTING user=%s msg=%s", user_id, message[:40])
-                return await self._handle_reminder_update(user_id, message)
+                response = await self._handle_reminder_update(user_id, message)
+                return response, "reminder"
 
             # STEP 6: KNOWLEDGE STRICT — but override short contextual follow-ups
             if intent in SKIP_RELATIONAL_INTENTS:
@@ -306,18 +318,22 @@ class Proactor:
                 # in a relational conversation should stay relational
                 if self._should_override_to_relational(message, user_id):
                     logger.info("PROACTOR_INTENT_OVERRIDE user=%s intent=%s->relational reason=short_contextual", user_id, intent)
-                    return await self._handle_relational(user_id, message, brain_state)
+                    response = await self._handle_relational(user_id, message, brain_state)
+                    return response, "relational"
                 logger.info("PROACTOR_ROUTE route=knowledge_strict user=%s intent=%s", user_id, intent)
-                return await self._handle_knowledge(user_id, message)
+                response = await self._handle_knowledge(user_id, message)
+                return response, "knowledge"
 
             # STEP 7: RELATIONAL / GENERAL
             if is_relational_message(message):
                 logger.info("PROACTOR_ROUTE route=relational user=%s", user_id)
-                return await self._handle_relational(user_id, message, brain_state)
+                response = await self._handle_relational(user_id, message, brain_state)
+                return response, "relational"
 
             # STEP 8: DEFAULT — relational pipeline (chat libera)
             logger.info("PROACTOR_ROUTE route=default_relational user=%s intent=%s", user_id, intent)
-            return await self._handle_relational(user_id, message, brain_state)
+            response = await self._handle_relational(user_id, message, brain_state)
+            return response, "relational"
 
         except Exception as e:
             logger.exception("PROACTOR_FATAL_ERROR user=%s intent=%s", user_id, intent, exc_info=True)
@@ -329,17 +345,17 @@ class Proactor:
             except Exception:
                 name = ""
             prefix = f"{name}, " if name else ""
-            return f"{prefix}Mi dispiace, ho avuto un problema. Riprova tra poco."
+            return f"{prefix}Mi dispiace, ho avuto un problema. Riprova tra poco.", "error"
 
     # ═══════════════════════════════════════════════════════════════
     # IDENTITY ROUTER — 100% deterministico, zero GPT
     # ═══════════════════════════════════════════════════════════════
 
-    async def _handle_identity(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
+    async def _handle_identity(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> tuple[str, str]:
         """
         Risponde a domande sull'identita' dell'utente usando SOLO long_term_profile.
         Zero GPT. Zero emotional engine. Zero relational pipeline.
-        Returns: response_text
+        Returns: (response_text: str, source: str)
         """
         profile = brain_state.get("profile", {})
         msg_lower = message.lower().strip()
@@ -354,39 +370,39 @@ class Proactor:
         if any(kw in msg_lower for kw in name_kw):
             name = profile.get("name")
             if name:
-                return f"Ti chiami {name.strip().title()}."
-            return "Non me lo hai ancora detto."
+                return f"Ti chiami {name.strip().title()}.", "identity"
+            return "Non me lo hai ancora detto.", "identity"
 
         # Domanda specifica: dove vivo
         city_kw = ["dove vivo", "dove abito", "sai dove vivo", "sai dove abito"]
         if any(kw in msg_lower for kw in city_kw):
             city = profile.get("city")
             if city:
-                return f"Vivi a {city.strip().title()}."
-            return "Non me lo hai ancora detto."
+                return f"Vivi a {city.strip().title()}.", "identity"
+            return "Non me lo hai ancora detto.", "identity"
 
         # Domanda specifica: lavoro
         job_kw = ["che lavoro faccio", "che lavoro svolgo", "cosa faccio"]
         if any(kw in msg_lower for kw in job_kw):
             profession = profile.get("profession")
             if profession:
-                return f"Fai l'{profession.strip().lower()}."
-            return "Non me lo hai ancora detto."
+                return f"Fai l'{profession.strip().lower()}.", "identity"
+            return "Non me lo hai ancora detto.", "identity"
 
         # Domanda specifica: eta'
         age_kw = ["quanti anni ho", "sai quanti anni ho"]
         if any(kw in msg_lower for kw in age_kw):
             age = profile.get("age")
             if age:
-                return f"Hai {age} anni."
-            return "Non me lo hai ancora detto."
+                return f"Hai {age} anni.", "identity"
+            return "Non me lo hai ancora detto.", "identity"
 
         # Domanda generica: "chi sono"
         if "chi sono" in msg_lower:
-            return self._build_identity_response(profile)
+            return self._build_identity_response(profile), "identity"
 
         # Fallback identity
-        return self._build_identity_response(profile)
+        return self._build_identity_response(profile), "identity"
 
     @staticmethod
     def _build_identity_response(profile: dict) -> str:
@@ -396,6 +412,19 @@ class Proactor:
         name = profile.get("name")
         city = profile.get("city")
         profession = profile.get("profession")
+        spouse = profile.get("spouse")
+        pets = profile.get("pets", [])
+        
+        # Convert pets to string if needed
+        if pets and isinstance(pets, list):
+            pet_descs = []
+            for pet in pets:
+                if isinstance(pet, dict):
+                    pet_descs.append(f"{pet.get('name', '?')} ({pet.get('type', '?')})")
+                else:
+                    pet_descs.append(str(pet))
+            if pet_descs:
+                parts.append(f"hai {', '.join(pet_descs)}")
 
         if name:
             parts.append(f"ti chiami {name}")
@@ -405,6 +434,9 @@ class Proactor:
 
         if profession:
             parts.append(f"lavori come {profession}")
+            
+        if spouse:
+            parts.append(f"il tuo coniuge si chiama {spouse}")
 
         if not parts:
             return "Non me lo hai ancora detto."
@@ -415,11 +447,11 @@ class Proactor:
     # TOOL ROUTER — 100% deterministico, zero GPT su errore
     # ═══════════════════════════════════════════════════════════════
 
-    async def _handle_tool(self, intent: str, message: str, user_id: str) -> str:
+    async def _handle_tool(self, intent: str, message: str, user_id: str) -> tuple[str, str]:
         """
         Tool routing deterministico.
         Errori gestiti con messaggi deterministici, MAI GPT.
-        Returns: response_text
+        Returns: (response_text: str, source: str)
         """
         try:
             if intent == "weather":
@@ -429,27 +461,27 @@ class Proactor:
                 city = extract_city_from_message(message) or "Roma"
                 save_tool_context(user_id, "weather", city=city)
                 logger.info("TOOL_ROUTER_OK intent=weather user=%s city=%s", user_id, city)
-                return result
+                return result, "tool"
             elif intent == "news":
                 result = await tool_service.get_news(message)
                 save_tool_context(user_id, "news")
                 logger.info("TOOL_ROUTER_OK intent=news user=%s", user_id)
-                return result
+                return result, "tool"
             elif intent == "time":
                 result = await tool_service.get_time()
-                return result
+                return result, "tool"
             elif intent == "date":
                 result = await tool_service.get_date()
-                return result
+                return result, "tool"
             else:
-                return "Tool non disponibile."
+                return "Tool non disponibile.", "tool"
         except Exception as e:
             logger.error("PROACTOR_TOOL_ERROR intent=%s user=%s error=%s", intent, user_id, str(e), exc_info=True)
             if intent == "weather":
-                return "Il servizio meteo non è disponibile al momento."
+                return "Il servizio meteo non è disponibile al momento.", "tool"
             elif intent == "news":
-                return "Il servizio notizie non è configurato correttamente."
-            return f"Errore nel servizio {intent}."
+                return "Il servizio notizie non è configurato correttamente.", "tool"
+            return f"Errore nel servizio {intent}.", "tool"
 
     # ═══════════════════════════════════════════════════════════
     # MEMORY CONTEXT ROUTER — conversational memory responses
@@ -510,12 +542,12 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
     # REMINDER HANDLERS — deterministic reminder management
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_reminder_creation(self, user_id: str, message: str) -> str:
+    async def _handle_reminder_creation(self, user_id: str, message: str) -> tuple[str, str]:
         """
         Handle reminder creation requests with STRICT logic.
         SOLO se presente orario esplicito (HH:MM) o data esplicita.
         MAI fallback automatici.
-        Returns: response_text
+        Returns: (response_text: str, source: str)
         """
         try:
             # Extract reminder text and datetime from message
@@ -523,11 +555,11 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             
             # Se manca data o ora → chiedere chiarimento
             if not reminder_datetime:
-                return "Non ho capito quando vuoi che ti ricordi. Prova a dire 'ricordami di [azione] [giorno] alle [ora]'."
+                return "Non ho capito quando vuoi che ti ricordi. Prova a dire 'ricordami di [azione] [giorno] alle [ora]'.", "reminder"
             
             # Se abbiamo datetime ma manca testo → chiedere cosa ricordare
             if reminder_datetime and not reminder_text:
-                return "Cosa vuoi che ti ricordi?"
+                return "Cosa vuoi che ti ricordi?", "reminder"
             
             # Caso completo: testo + datetime validi
             if reminder_text and reminder_datetime:
@@ -535,36 +567,36 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 reminder_id, response = reminder_engine.create_reminder_with_response(user_id, reminder_text, reminder_datetime)
                 
                 if reminder_id:
-                    return response
+                    return response, "reminder"
                 else:
-                    return response
+                    return response, "reminder"
             
-            return "Quando vuoi che te lo ricordi?"
+            return "Quando vuoi che te lo ricordi?", "reminder"
                 
         except Exception as e:
             logger.error("REMINDER_CREATION_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            return "Mi dispiace, ho avuto un problema con il promemoria. Riprova."
+            return "Mi dispiace, ho avuto un problema con il promemoria. Riprova.", "reminder"
 
-    async def _handle_reminder_list(self, user_id: str, message: str) -> str:
+    async def _handle_reminder_list(self, user_id: str, message: str) -> tuple[str, str]:
         """
         Handle reminder list requests.
         Return formatted list of user's reminders.
-        Returns: response_text
+        Returns: (response_text: str, source: str)
         """
         try:
             # Get pending reminders
             reminders = reminder_engine.list_reminders(user_id, status_filter="pending")
             
             if not reminders:
-                return "Non hai promemoria impostati."
+                return "Non hai promemoria impostati.", "reminder"
             
             # Format and return the list
             formatted_list = reminder_engine.format_reminders_list(reminders)
-            return formatted_list
+            return formatted_list, "reminder"
             
         except Exception as e:
             logger.error("REMINDER_LIST_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            return "Mi dispiace, non riesco a vedere i tuoi promemoria. Riprova."
+            return "Mi dispiace, non riesco a vedere i tuoi promemoria. Riprova.", "reminder"
 
     async def _handle_reminder_delete(self, user_id: str, message: str) -> str:
         """
