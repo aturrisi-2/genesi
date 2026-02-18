@@ -138,12 +138,19 @@ class CognitiveMemoryEngine:
             logger.info("STORAGE_DIRECT_WRITE user=%s profession=%s", user_id, new_profession)
 
         if spouse_match:
-            extracted_profile_data["spouse"] = spouse_match.group(1)
+            extracted_spouse = spouse_match.group(1)
+            extracted_profile_data["spouse"] = extracted_spouse
             persist = True
             memory_type = "profile"
             field = "spouse"
-            value = spouse_match.group(1)
+            value = extracted_spouse
             logger.info("COGNITIVE_SPOUSE_EXTRACT value=%s", value)
+            
+            # FIX DEFINITIVO: Scrittura diretta su storage
+            profile = await storage.load(f"long_term_profile:{user_id}", default={})
+            profile["spouse"] = extracted_spouse
+            await storage.save(f"long_term_profile:{user_id}", profile)
+            logger.info("STORAGE_DIRECT_WRITE user=%s spouse=%s", user_id, extracted_spouse)
 
         if children_match:
             extracted_profile_data["children"] = [{"name": children_match.group(1)}, {"name": children_match.group(2)}]
