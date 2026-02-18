@@ -134,42 +134,47 @@ class IntentClassifier:
         
         # 0.5️⃣ PRIORITY OVERRIDES for mixed intents
         
-        # Blocca override weather per richieste tempo/data
-        time_keywords = [
-            "che ore",
-            "ora",
-            "orario",
-            "che giorno",
-            "data",
-            "oggi è",
-            "dimmi la data",
-        ]
-        
-        if any(k in message_lower for k in time_keywords):
-            # Continua con la classificazione normale, non applicare weather override
+        # 🔥 NEW: Guardia per messaggi brevi contestuali
+        if self._should_block_weather_override(message_lower):
+            # Continua con la classificazione normale - non applicare weather override
             pass
         else:
-            # Check for weather keywords (solo parole meteo reali)
-            weather_keywords = [
-                "meteo",
-                "tempo",
-                "pioggia",
-                "sole",
-                "nuvol",
-                "vento",
-                "temperatura",
-                "gradi",
-                "umidità",
-                "temporale",
+            # Blocca override weather per richieste tempo/data
+            time_keywords = [
+                "che ore",
+                "ora",
+                "orario",
+                "che giorno",
+                "data",
+                "oggi è",
+                "dimmi la data",
             ]
-            if any(kw in message_lower for kw in weather_keywords):
-                log("INTENT_OVERRIDE_APPLIED", original="mixed", final="weather", message=message[:50])
-                return "weather"
             
-            # Check for follow-up weather patterns (solo città pura)
-            if self._is_followup_weather(message_lower):
-                log("INTENT_OVERRIDE_APPLIED", original="mixed", final="weather", message=message[:50])
-                return "weather"
+            if any(k in message_lower for k in time_keywords):
+                # Continua con la classificazione normale, non applicare weather override
+                pass
+            else:
+                # Check for weather keywords (solo parole meteo reali)
+                weather_keywords = [
+                    "meteo",
+                    "tempo",
+                    "pioggia",
+                    "sole",
+                    "nuvol",
+                    "vento",
+                    "temperatura",
+                    "gradi",
+                    "umidità",
+                    "temporale",
+                ]
+                if any(kw in message_lower for kw in weather_keywords):
+                    log("INTENT_OVERRIDE_APPLIED", original="mixed", final="weather", message=message[:50])
+                    return "weather"
+                
+                # Check for follow-up weather patterns (solo città pura)
+                if self._is_followup_weather(message_lower):
+                    log("INTENT_OVERRIDE_APPLIED", original="mixed", final="weather", message=message[:50])
+                    return "weather"
         
         # Check for reminder keywords
         reminder_keywords = ["ricorda", "ricordami", "promemoria", "appuntamento", "ricordare"]
@@ -290,6 +295,29 @@ class IntentClassifier:
         
         return False
     
+    def _should_block_weather_override(self, message_lower: str) -> bool:
+        """
+        Blocca override weather per messaggi brevi contestuali.
+        Returns True se l'override deve essere bloccato.
+        """
+        words = message_lower.strip().split()
+        
+        # Messaggi molto corti (1-3 parole) senza keyword esplicite → NON overridare
+        if len(words) <= 3:
+            WEATHER_KEYWORDS = ["meteo", "tempo", "pioggia", "sole", "temperatura", 
+                               "gradi", "clima", "previsioni", "nuvoloso", "vento", "umidità", "temporale"]
+            has_weather_keyword = any(kw in message_lower for kw in WEATHER_KEYWORDS)
+            if not has_weather_keyword:
+                return True  # Blocca override
+        
+        # Pronomi interrogativi isolati → mai weather
+        bare_pronouns = {"dove", "dove?", "quale", "quale?", "quando", "quando?", 
+                        "come", "come?", "cosa", "cosa?", "chi", "chi?"}
+        if message_lower.strip() in bare_pronouns:
+            return True  # Blocca override
+        
+        return False  # Non bloccare - comportamento originale
+
     def _is_followup_weather(self, message_lower: str) -> bool:
         """
         Detect follow-up weather requests after previous weather intent.

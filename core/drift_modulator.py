@@ -167,7 +167,12 @@ class DriftModulator:
         if text.rstrip(".").split()[-1:] == suffix.strip().split()[:1]:
             return text
 
-        return text.rstrip(".") + "." + suffix
+        # Fix: avoid double punctuation by ensuring proper spacing
+        text_clean = text.rstrip(".")
+        if suffix.startswith(" "):
+            return text_clean + "." + suffix
+        else:
+            return text_clean + ". " + suffix
 
     def _apply_expansiveness(self, text: str, expansiveness: float) -> str:
         """Modula lunghezza: espande o contrae."""
