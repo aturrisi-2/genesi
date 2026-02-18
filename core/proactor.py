@@ -361,7 +361,7 @@ class Proactor:
             # STEP 8: DEFAULT — relational pipeline (chat libera)
             logger.info("PROACTOR_ROUTE route=default_relational user=%s intent=%s", user_id, intent)
             response = await self._handle_relational(user_id, message, brain_state)
-            return response
+            return response, "relational"
 
         except Exception as e:
             logger.exception("PROACTOR_FATAL_ERROR user=%s intent=%s", user_id, intent, exc_info=True)

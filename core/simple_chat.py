@@ -34,7 +34,7 @@ async def simple_chat_handler(user_id: str, message: str) -> str:
         intent = intent_classifier.classify(message)
 
         # 2. Proactor orchestration (brain update + evolution engine)
-        response, source = await proactor.handle(
+        response = await proactor.handle(
             user_id=user_id,
             message=message,
             intent=intent
