@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
+from contextlib import asynccontextmanager
 from pathlib import Path
 import uvicorn
 import asyncio
@@ -23,6 +24,7 @@ from tts.tts_api import router as tts_router
 from api.stt import router as stt_router
 from api.upload import router as upload_router
 from auth.router import router as auth_router
+from api.notifications import router as notifications_router
 from auth.database import init_db, async_session
 from auth.models import Visit
 from core.log import log
@@ -34,7 +36,33 @@ from lab.supervisor import SupervisorEngine
 # ===============================
 
 BASE_DIR = Path(__file__).resolve().parent
-app = FastAPI(title="Genesi Core v2 - Proactor Architecture", redirect_slashes=False)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # STARTUP
+    await init_db()
+    log("AUTH_DB_INIT", status="ok")
+    
+    # Start reminder checker background task
+    reminder_task = asyncio.create_task(reminder_checker_background())
+    
+    # Start evolution scheduler (12 hours)
+    evolution_task = asyncio.create_task(evolution_scheduler())
+    log("REMINDER_CHECKER_STARTED", status="ok")
+    
+    yield  # ← app in esecuzione
+    
+    # SHUTDOWN
+    reminder_task.cancel()
+    evolution_task.cancel()
+    try:
+        await reminder_task
+        await evolution_task
+    except asyncio.CancelledError:
+        pass
+    log("REMINDER_CHECKER_STOPPED", status="ok")
+
+app = FastAPI(title="Genesi Core v2 - Proactor Architecture", redirect_slashes=False, lifespan=lifespan)
 
 # Static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -47,20 +75,6 @@ BUILD_VERSION = str(int(time.time()))
 
 
 # ===============================
-# Startup: init auth DB
-# ===============================
-
-@app.on_event("startup")
-async def startup():
-    await init_db()
-    log("AUTH_DB_INIT", status="ok")
-    
-    # Start reminder checker background task
-    asyncio.create_task(reminder_checker_background())
-    
-    # Start evolution scheduler (12 hours)
-    asyncio.create_task(evolution_scheduler())
-    log("REMINDER_CHECKER_STARTED", status="ok")
 
 
 async def reminder_checker_background():
@@ -77,25 +91,50 @@ async def reminder_checker_background():
                 log("REMINDER_DUE", total_due=len(due_reminders))
             
             for reminder in due_reminders:
-                user_id = reminder["user_id"]
-                reminder_id = reminder["id"]
-                reminder_text = reminder["text"]
-                
-                # Mark as triggered (alarm activated)
-                reminder_engine.mark_reminder_triggered(user_id, reminder_id)
-                
-                # Log the reminder trigger
-                log("REMINDER_ALARM_TRIGGERED", user_id=user_id, reminder_id=reminder_id, text=reminder_text[:50])
-                
-                # Set global alarm flag for frontend
-                import os
-                os.environ["GENESI_ALARM_ACTIVE"] = "true"
-                os.environ["GENESI_ALARM_USER"] = user_id
-                os.environ["GENESI_ALARM_TEXT"] = reminder_text[:100]
-                
-                # TODO: Send notification to user (could be via WebSocket, email, etc.)
-                # TODO: Force TTS response with priority
-                # TODO: Set alarm flag for frontend
+                try:
+                    user_id = reminder["user_id"]
+                    reminder_id = reminder["id"]
+                    reminder_text = reminder["text"]
+                    
+                    # Mark as triggered (alarm activated)
+                    reminder_engine.mark_reminder_triggered(user_id, reminder_id)
+                    
+                    # Log the reminder trigger
+                    log("REMINDER_ALARM_TRIGGERED", user_id=user_id, reminder_id=reminder_id, text=reminder_text[:50])
+                    
+                    # Aggiungi notifica in-chat all'utente
+                    try:
+                        from core.chat_memory import chat_memory
+                        
+                        # Costruisci messaggio di notifica
+                        notification_text = f"🔔 Promemoria: {reminder_text}"
+                        
+                        # Aggiungi ai messaggi in chat dell'utente
+                        chat_memory.add_message(
+                            user_id=user_id,
+                            message="",  # nessun messaggio utente
+                            response=notification_text,
+                            intent="reminder_alarm"
+                        )
+                        log("REMINDER_NOTIFICATION_QUEUED", user_id=user_id, reminder_id=reminder_id)
+                        
+                    except Exception as e:
+                        log("REMINDER_NOTIFICATION_ERROR", user_id=user_id, error=str(e))
+                        # Non bloccare: reminder è già triggered anche se notifica fallisce
+                    
+                    # Set global alarm flag for frontend
+                    import os
+                    os.environ["GENESI_ALARM_ACTIVE"] = "true"
+                    os.environ["GENESI_ALARM_USER"] = user_id
+                    os.environ["GENESI_ALARM_TEXT"] = reminder_text[:100]
+                    
+                    # TODO: Send notification to user (could be via WebSocket, email, etc.)
+                    # TODO: Force TTS response with priority
+                    # TODO: Set alarm flag for frontend
+                    
+                except Exception as e:
+                    log("REMINDER_PROCESS_ERROR", reminder_id=reminder.get("id"), error=str(e))
+                    # Continua con il prossimo reminder anche se questo fallisce
                 
             # Wait 30 seconds before next check
             await asyncio.sleep(30)
@@ -184,6 +223,7 @@ app.include_router(proactor_router, prefix="/api")
 app.include_router(tts_router, prefix="/api")
 app.include_router(stt_router, prefix="/api")
 app.include_router(upload_router, prefix="/api")
+app.include_router(notifications_router, prefix="/api")
 
 # ===============================
 # Health check
