@@ -881,7 +881,8 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                     r'\s+domani(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
                     r'\s+oggi(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
                     r'\s+(?:lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica)(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
-                    r'\s+alle\s+\d{1,2}(?::\d{2})?'
+                    r'\s+alle\s+\d{1,2}(?::\d{2})?',
+                    r'\s+tra\s+\d+\s+(?:minut[oi]|or[ae]|second[oi]|giorn[oi])'
                 ]
                 for pattern in temp_patterns:
                     reminder_text = re.sub(pattern, '', reminder_text)
@@ -895,7 +896,8 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                     r'\s+domani(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
                     r'\s+oggi(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
                     r'\s+(?:lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica)(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
-                    r'\s+alle\s+\d{1,2}(?::\d{2})?'
+                    r'\s+alle\s+\d{1,2}(?::\d{2})?',
+                    r'\s+tra\s+\d+\s+(?:minut[oi]|or[ae]|second[oi]|giorn[oi])'
                 ]
                 for pattern in temp_patterns:
                     reminder_text = re.sub(pattern, '', reminder_text)
@@ -909,12 +911,44 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                     r'\s+domani(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
                     r'\s+oggi(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
                     r'\s+(?:lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica)(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
-                    r'\s+alle\s+\d{1,2}(?::\d{2})?'
+                    r'\s+alle\s+\d{1,2}(?::\d{2})?',
+                    r'\s+tra\s+\d+\s+(?:minut[oi]|or[ae]|second[oi]|giorn[oi])'
                 ]
                 for pattern in temp_patterns:
                     reminder_text = re.sub(pattern, '', reminder_text)
                 reminder_text = reminder_text.strip()
         
+        # 1b️⃣ Pattern durata relativa: "tra X minuti", "tra X ore", "tra X secondi"
+        relative_match = re.search(
+            r'tra\s+(\d+)\s+(minut[oi]|or[ae]|second[oi]|giorn[oi])',
+            msg_lower
+        )
+        if relative_match:
+            quantity = int(relative_match.group(1))
+            unit = relative_match.group(2)
+
+            if unit.startswith("minut"):
+                delta = timedelta(minutes=quantity)
+            elif unit.startswith("or") or unit.startswith("or"):
+                delta = timedelta(hours=quantity)
+            elif unit.startswith("second"):
+                delta = timedelta(seconds=quantity)
+            elif unit.startswith("giorn"):
+                delta = timedelta(days=quantity)
+            else:
+                delta = None
+
+            if delta:
+                reminder_datetime = now + delta
+                # Rimuovi pattern relativo dal reminder_text
+                reminder_text = re.sub(
+                    r'\s*tra\s+\d+\s+(?:minut[oi]|or[ae]|second[oi]|giorn[oi])',
+                    '',
+                    reminder_text,
+                    flags=re.IGNORECASE
+                ).strip()
+                return reminder_text, reminder_datetime
+
         # 2️⃣ Pattern orario esplicito HH:MM o H:MM
         time_match = re.search(r'(\d{1,2}):(\d{2})', message)
         hour = None
