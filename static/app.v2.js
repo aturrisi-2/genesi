@@ -2295,21 +2295,3 @@ document.addEventListener('click', function _firstClick(e) {
     }).join(' ');
   }
 })();
-
-// ===============================
-// DOM READY SIDEBAR INITIALIZATION
-// ===============================
-document.addEventListener("DOMContentLoaded", () => {
-    console.log("DOM_READY");
-
-    const sidebar = document.querySelector(".sidebar");
-
-    if (!sidebar) {
-        console.error("SIDEBAR_STILL_MISSING_AFTER_DOM_READY");
-        return;
-    }
-
-    console.log("SIDEBAR_FOUND_AFTER_DOM_READY");
-
-    initSidebar();
-});
