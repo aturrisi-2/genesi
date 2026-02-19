@@ -766,20 +766,58 @@ function setState(newState) {
 const _neonHues = [180, 300, 90, 210, 330, 45, 270, 150, 0, 60];
 let _neonIdx = 0;
 
+function parseResponse(rawResponse) {
+    // Prova a parsare come JSON con immagini
+    if (typeof rawResponse === 'string' && rawResponse.trim().startsWith('{')) {
+        try {
+            const parsed = JSON.parse(rawResponse);
+            if (parsed.text && parsed.images) {
+                return parsed;
+            }
+        } catch(e) {}
+    }
+    // Risposta normale come stringa
+    return { text: rawResponse, images: [] };
+}
+
+function renderImages(images) {
+    if (!images || images.length === 0) return '';
+    
+    let html = '<div class="image-grid" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
+    images.forEach(img => {
+        const thumb = img.thumbnail || img.url;
+        html += `
+            <div style="width:160px;text-align:center;">
+                <img src="${thumb}" 
+                     alt="${img.title}"
+                     loading="lazy"
+                     onerror="this.parentElement.style.display='none'"
+                     onclick="window.open('${img.url}', '_blank')"
+                     style="width:100%;height:110px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,0.15);">
+                <div style="font-size:10px;color:#888;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${img.source}</div>
+            </div>`;
+    });
+    html += '</div>';
+    return html;
+}
+
 function addMessage(text, sender) {
   const el = document.createElement('div');
   el.className = `message ${sender}`;
   
+  // Parse response per gestire immagini
+  const parsed = parseResponse(text);
+  
   // Usa innerHTML con escape per proteggere da XSS ma permettere formattazione
   // Previene sovrascritture future garantendo che il contenuto sia locked
-  const escapedText = text
+  const escapedText = parsed.text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
   
-  el.innerHTML = escapedText;
+  el.innerHTML = escapedText + renderImages(parsed.images);
   
   // Assign rotating neon hue
   const hue = _neonHues[_neonIdx % _neonHues.length];
