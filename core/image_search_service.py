@@ -71,6 +71,8 @@ def extract_image_query(message: str) -> Optional[str]:
         if trigger in msg_lower:
             idx = msg_lower.index(trigger) + len(trigger)
             query = message[idx:].strip().strip('?!.,')
+            import re as _re
+            query = _re.sub(r"^(di|del|della|degli|delle|dello|d') ", '', query, flags=_re.IGNORECASE).strip()
             if query:
                 return query
     return None
