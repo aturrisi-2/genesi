@@ -1,0 +1,23 @@
+{
+  "version": "1.0.0",
+  "timestamp": "2026-02-19T15:04:29.733643",
+  "parameters": {
+    "supportive_intensity": 0.5,
+    "attuned_intensity": 0.5,
+    "confrontational_intensity": 0.5,
+    "max_questions_per_response": 1,
+    "repetition_penalty_weight": 1.0
+  },
+  "last_snapshot": null,
+  "evolution_count": 0,
+  "stability_score": 0.0,
+  "ema_stability": 0.1296,
+  "rollback_streak": 4,
+  "apply_streak": 0,
+  "hard_violation_streak": 4,
+  "consecutive_valid_reports": 0,
+  "evolution_health": "critical",
+  "auto_evolution_locked": true,
+  "post_unlock_observation": false,
+  "post_unlock_remaining_reports": 0
+}

@@ -260,7 +260,7 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
         primary = "openai"
         secondary = "edge_tts"
 
-    log("TTS_ROUTING", provider=primary, user_id=user_id)
+    print(f"TTS_ROUTING intent={intent} route={route} category={category} provider={primary}")
 
     # Prova primary
     try:

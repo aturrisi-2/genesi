@@ -1,3 +1,8 @@
+import sys
+import unittest.mock as _mock
+_mock.patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}).start()
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 """
 Test Supportive Tuning Isolated
 Verifica tuning isolato del parametro supportive_intensity

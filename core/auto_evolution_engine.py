@@ -123,16 +123,20 @@ class AutoEvolutionEngine:
         # META-GOVERNANCE EXTENSION END
     
     def _apply_clamped_delta(self, param_name: str, current_value: float, proposed_value: float) -> float:
-        """Applica max_delta e ritorna il valore finale clampato."""
+        """Applica max_delta e range assoluto, ritorna il valore finale clampato."""
         max_delta = EVOLUTION_MAX_DELTA.get(param_name, EVOLUTION_DEFAULT_MAX_DELTA)
         delta = proposed_value - current_value
-        
+
         if abs(delta) > max_delta:
             clamped_delta = max_delta if delta > 0 else -max_delta
             print(f"EVOLUTION_DELTA_CLAMPED param={param_name} requested={delta:.4f} applied={clamped_delta:.4f}")
-            return current_value + clamped_delta
-        
-        return proposed_value
+            result = current_value + clamped_delta
+        else:
+            result = proposed_value
+
+        # Clamp assoluto 0.2-0.8 per parametri comportamentali
+        result = max(0.2, min(0.8, result))
+        return result
     
     def _get_messages_since_last_shift(self, user_id: str) -> int:
         """Ottiene il numero di messaggi dall'ultimo shift applicato."""
