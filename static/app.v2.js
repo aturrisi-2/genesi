@@ -2166,6 +2166,8 @@ document.addEventListener('click', function _firstClick(e) {
   
   scrollToBottom();
 
+  console.log("SIDEBAR_INIT_START");
+
   // ─── CONVERSATION SIDEBAR ───────────────────────────────────────────────────
 
   function clearChat() {
@@ -2265,8 +2267,23 @@ document.addEventListener('click', function _firstClick(e) {
   document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
   document.getElementById('sidebar-open-btn')?.addEventListener('click', toggleSidebar);
 
-  // Avvia con sidebar aperta e lista caricata
-  loadConversations();
+  // FORZA RE-INIZIALIZZAZIONE DOPO LOGIN
+  if (isLoggedIn()) {
+      console.log("SIDEBAR_LOADING_CONVERSATIONS");
+      await loadConversations();
+      
+      // Validazione DOM
+      const sidebarEl = document.querySelector(".sidebar");
+      if (!sidebarEl) {
+          console.error("SIDEBAR_DOM_ERROR: .sidebar element not found");
+      } else if (!sidebarEl.children.length) {
+          console.warn("SIDEBAR_DOM_WARNING: .sidebar exists but is empty");
+      } else {
+          console.log("SIDEBAR_DOM_OK: sidebar rendered with", sidebarEl.children.length, "children");
+      }
+  }
+
+  console.log("SIDEBAR_INIT_DONE");
 
   // Neon flicker — wrap each word of the presence text in a span
   const presenceP = document.querySelector('#presence p');
