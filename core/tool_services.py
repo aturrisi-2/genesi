@@ -121,6 +121,23 @@ _COUNTRY_TO_CONTINENT = {
     "EG": "Africa", "ZA": "Africa",
 }
 
+ITALIAN_CITIES = [
+    "roma", "milano", "napoli", "torino", "palermo", "genova", "bologna",
+    "firenze", "bari", "catania", "venezia", "verona", "messina", "padova",
+    "trieste", "brescia", "taranto", "prato", "reggio calabria", "modena",
+    "parma", "reggio emilia", "perugia", "livorno", "ravenna", "cagliari",
+    "foggia", "rimini", "salerno", "ferrara", "latina", "giugliano",
+    "monza", "siracusa", "bergamo", "trento", "novara"
+]
+
+def _extract_city_from_message(message: str) -> str:
+    """Estrae nome città dal messaggio. Ritorna stringa vuota se non trovata."""
+    msg_lower = message.lower()
+    for city in ITALIAN_CITIES:
+        if city in msg_lower:
+            return city.capitalize()
+    return ""
+
 
 # ═══════════════════════════════════════════════════════════════
 # TOOL SERVICE
@@ -401,6 +418,14 @@ class ToolService:
 
             client = await self._get_client()
             msg_lower = message.lower()
+
+            # Estrai città italiana dal messaggio
+            italian_city = _extract_city_from_message(message)
+            if italian_city:
+                log("TOOL_NEWS_CITY_EXTRACTED", city=italian_city)
+                # Usa la città italiana come query diretta
+                query = f"{italian_city} {requested_section}" if requested_section else italian_city
+                return await self._news_rss_search(client, query, "IT", italian_city)
 
             # Detect specific category
             requested_section = None

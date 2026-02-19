@@ -9,7 +9,26 @@ import logging
 import math
 import random
 import re
-from typing import Dict, Any
+from typing import Dict, List, Tuple
+
+def _clean_join(parts: list) -> str:
+    """Unisce parti di testo evitando doppie punteggiature e mancanza di spazi."""
+    result = ""
+    for part in parts:
+        if not part:
+            continue
+        part = part.strip()
+        if not result:
+            result = part
+            continue
+        # Assicura spazio tra le parti
+        if result and not result[-1] in ' \n':
+            if part and part[0].isalpha():
+                result += ' '
+            elif part and not part[0] in ' \n.,!?':
+                result += ' '
+        result += part
+    return result
 
 logger = logging.getLogger(__name__)
 
@@ -201,10 +220,7 @@ class DriftModulator:
 
         # Fix: avoid double punctuation by ensuring proper spacing
         text_clean = text.rstrip(".")
-        if suffix.startswith(" "):
-            return text_clean + "." + suffix
-        else:
-            return text_clean + ". " + suffix
+        return _clean_join([text_clean + ".", suffix])
 
     def _apply_expansiveness(self, text: str, expansiveness: float) -> str:
         """Modula lunghezza: espande o contrae."""

@@ -880,6 +880,22 @@ function autoResizeInput(el) {
 }
 
 // ===============================
+// CHAT RESPONSE HANDLER
+// ===============================
+function handleChatResponse(rawResponse) {
+    // Controlla se è una risposta con immagini
+    if (typeof rawResponse === 'string' && rawResponse.trim().startsWith('{"text"')) {
+        try {
+            const parsed = JSON.parse(rawResponse);
+            if (parsed.text && parsed.images) {
+                return { text: parsed.text, images: parsed.images };
+            }
+        } catch(e) {}
+    }
+    return { text: rawResponse, images: [] };
+}
+
+// ===============================
 // SEND MESSAGE
 // ===============================
 async function sendMessage() {
@@ -927,8 +943,32 @@ async function sendMessage() {
     
     // RENDER IMMEDIATO — il testo appare SUBITO, senza attendere TTS
     hideThinking();
-    addMessage(botMessage, 'genesi');
-    console.log('[TEXT_RENDERED] text_len=' + botMessage.length);
+    const parsed = handleChatResponse(botMessage);
+    if (parsed.images && parsed.images.length > 0) {
+        // Aggiungi messaggio testo
+        addMessage(parsed.text, 'genesi');
+        // Aggiungi griglia immagini
+        const lastMsg = document.querySelector('.message.genesi:last-child');
+        if (lastMsg) {
+            let grid = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
+            parsed.images.forEach(img => {
+                grid += `<div style="width:150px;text-align:center;">
+                    <img src="${img.thumbnail || img.url}" 
+                         alt="${img.title}"
+                         loading="lazy"
+                         onerror="this.parentElement.style.display='none'"
+                         onclick="window.open('${img.url}','_blank')"
+                         style="width:100%;height:100px;object-fit:cover;border-radius:8px;cursor:pointer;">
+                    <div style="font-size:10px;color:#888;margin-top:2px;">${img.source}</div>
+                </div>`;
+            });
+            grid += '</div>';
+            lastMsg.insertAdjacentHTML('beforeend', grid);
+        }
+    } else {
+        addMessage(parsed.text, 'genesi');
+    }
+    console.log('[TEXT_RENDERED] text_len=' + parsed.text.length);
     
     // TTS ASINCRONO — completamente scollegato dal render
     const ttsText = data.tts_text || data.response;

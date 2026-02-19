@@ -12,11 +12,18 @@ from core.log import log
 logger = logging.getLogger(__name__)
 
 EMOTIONAL_KEYWORDS = [
-    "sono triste", "mi sento solo", "sono arrabbiato", "sono stressato",
-    "mi sento male", "sono depresso", "piango", "ho paura", "sono ansioso",
-    "mi sento sopraffatto", "non ce la faccio", "sono esausto", "ho il cuore pesante",
-    "mi manca", "soffro", "sono deluso", "mi sento inutile", "non so come andare avanti"
+    "mi sento", "sono triste", "sono solo", "mi sento solo",
+    "sono arrabbiato", "sono stressato", "mi sento male",
+    "sono depresso", "ho paura", "sono ansioso", "piango",
+    "mi manca", "soffro", "sono deluso", "mi sento inutile",
+    "non ce la faccio", "sono esausto", "tutto mi pesa",
+    "mi sento sopraffatto", "sono giù", "non sto bene",
+    "ho il cuore pesante", "non so come andare avanti"
 ]
+
+def _is_emotional(message: str) -> bool:
+    msg_lower = message.lower()
+    return any(kw in msg_lower for kw in EMOTIONAL_KEYWORDS)
 
 WEATHER_EXPLICIT_KEYWORDS = [
     "meteo", "tempo", "pioggia", "sole", "temperatura", "gradi",
