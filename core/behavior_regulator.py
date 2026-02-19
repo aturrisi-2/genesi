@@ -108,7 +108,8 @@ class BehaviorRegulator:
                     hash_val = int(hashlib.md5((response + recent).encode()).hexdigest()[:8], 16)
                     variant_idx = hash_val % len(self.opening_variants)
                     new_opening = self.opening_variants[variant_idx]
-                    sentences[0] = new_opening + sentences[0][len(sentences[0].split()[0]):]
+                    rest = sentences[0][len(sentences[0].split()[0]):].lstrip()
+                    sentences[0] = new_opening + " " + rest
                     return '. '.join(sentences)
                 elif sentences:
                     # Se c'è solo una frase, aggiungi prefisso
@@ -120,7 +121,7 @@ class BehaviorRegulator:
     
     def _apply_opening_variance(self, response: str) -> str:
         """Applica varianza alle aperture problematiche."""
-        problematic_openings = ["Forse", "Un ", "Non posso"]
+        problematic_openings = ["Forse", "Non posso"]
         
         for opening in problematic_openings:
             if response.startswith(opening):
@@ -128,7 +129,7 @@ class BehaviorRegulator:
                 hash_val = int(hashlib.md5(response.encode()).hexdigest()[:8], 16)
                 variant_idx = hash_val % len(self.opening_variants)
                 replacement = self.opening_variants[variant_idx]
-                return replacement + response[len(opening):]
+                return replacement + " " + response[len(opening):].lstrip()
         
         return response
     
