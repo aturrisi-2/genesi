@@ -731,14 +731,27 @@ let userIdentity = {};
 
 // Polling notifiche reminder — avvia dopo login
 function startNotificationPolling() {
-    setInterval(async () => {
-        try {
-            const res = await fetch('/api/notifications/pending', {
-                headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-            });
-            if (!res.ok) return;
+    const authToken = getAuthToken();
+    if (!authToken) {
+        console.log("NOTIFICATION_POLLING_SKIPPED_NO_TOKEN");
+        return;
+    }
 
-            const data = await res.json();
+    const notificationInterval = setInterval(async () => {
+        try {
+            const response = await fetch('/api/notifications/pending', {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            
+            if (response.status === 401) {
+                console.warn("NOTIFICATION_POLLING_STOPPED_401");
+                clearInterval(notificationInterval);
+                return;
+            }
+            
+            if (!response.ok) return;
+
+            const data = await response.json();
             if (data.count > 0) {
                 for (const notif of data.notifications) {
                     // Mostra solo se non già mostrata
@@ -752,12 +765,12 @@ function startNotificationPolling() {
                     // Marca come letta chiamando endpoint ack
                     await fetch(`/api/notifications/ack/${notif.id}`, {
                         method: 'POST',
-                        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+                        headers: { 'Authorization': `Bearer ${authToken}` }
                     });
                 }
             }
-        } catch (e) {
-            console.warn('Notification polling error:', e);
+        } catch (err) {
+            console.error("NOTIFICATION_POLLING_ERROR", err);
         }
     }, 30000);
 }
