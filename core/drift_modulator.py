@@ -9,7 +9,7 @@ import logging
 import math
 import random
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 
 def _clean_join(parts: list) -> str:
     """Unisce parti di testo evitando doppie punteggiature e mancanza di spazi."""
