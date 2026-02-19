@@ -423,9 +423,7 @@ class ToolService:
             italian_city = _extract_city_from_message(message)
             if italian_city:
                 log("TOOL_NEWS_CITY_EXTRACTED", city=italian_city)
-                # Usa la città italiana come query diretta
-                query = f"{italian_city} {requested_section}" if requested_section else italian_city
-                return await self._news_rss_search(client, query, "IT", italian_city)
+                return await self._news_rss_search(client, italian_city, "IT", italian_city)
 
             # Detect specific category
             requested_section = None
