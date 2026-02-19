@@ -96,64 +96,81 @@
     </style>
 </head>
 <body>
-    <div id="genesi-app">
+    <!-- Hamburger per aprire sidebar -->
+    <button id="sidebar-open-btn" style="display: none;">☰</button>
 
-        <!-- User bar: sempre visibile -->
-        <div id="user-bar">
-            <span id="user-greeting">Ciao</span>
-            <div id="user-bar-actions">
-                <a href="/admin" id="admin-link" style="display:none;">Admin</a>
-                <button id="logout-btn" type="button" style="display:none;">Esci</button>
+    <div id="app-layout">
+        <!-- SIDEBAR SINISTRA -->
+        <aside id="sidebar" class="sidebar-collapsed">
+            <div class="sidebar-header">
+                <button id="new-chat-btn" title="Nuova chat">＋</button>
+                <button id="sidebar-toggle" title="Chiudi">‹</button>
+            </div>
+            <div id="conv-list"></div>
+        </aside>
+
+        <!-- CHAT PRINCIPALE (invariata) -->
+        <div id="main-chat">
+            <div id="genesi-app">
+
+                <!-- User bar: sempre visibile -->
+                <div id="user-bar">
+                    <span id="user-greeting">Ciao</span>
+                    <div id="user-bar-actions">
+                        <a href="/admin" id="admin-link" style="display:none;">Admin</a>
+                        <button id="logout-btn" type="button" style="display:none;">Esci</button>
+                    </div>
+                </div>
+
+                <header id="presence">
+                    <p>Ciò che conta davvero è come attraversi il fuoco.</p>
+                </header>
+
+                <main id="dialogue">
+                    <!-- messaggi -->
+                </main>
+
+                <div id="status" aria-live="polite"></div>
+
+                <form id="chat-form" autocomplete="off">
+                    <div id="input-container">
+
+                        <button id="plus-button" type="button" aria-label="Aggiungi">
+                            <svg viewBox="0 0 24 24">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+
+                        <textarea 
+                            id="text-input"
+                            placeholder="Scrivi un messaggio..."
+                            aria-label="Scrivi un messaggio"
+                            autocomplete="off"
+                            enterkeyhint="send"
+                            rows="1"
+                        ></textarea>
+
+                        <button id="mic-button" type="button" aria-label="Usa microfono">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="23"></line>
+                                <line x1="8" y1="23" x2="16" y2="23"></line>
+                            </svg>
+                        </button>
+
+                        <button id="send-button" type="submit" aria-label="Invia messaggio">
+                            <svg viewBox="0 0 24 24">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </button>
+
+                    </div>
+                </form>
             </div>
         </div>
-
-        <header id="presence">
-            <p>Ciò che conta davvero è come attraversi il fuoco.</p>
-        </header>
-
-        <main id="dialogue">
-            <!-- messaggi -->
-        </main>
-
-        <div id="status" aria-live="polite"></div>
-
-        <form id="chat-form" autocomplete="off">
-            <div id="input-container">
-
-                <button id="plus-button" type="button" aria-label="Aggiungi">
-                    <svg viewBox="0 0 24 24">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                </button>
-
-                <textarea 
-                    id="text-input"
-                    placeholder="Scrivi un messaggio..."
-                    aria-label="Scrivi un messaggio"
-                    autocomplete="off"
-                    enterkeyhint="send"
-                    rows="1"
-                ></textarea>
-
-                <button id="mic-button" type="button" aria-label="Usa microfono">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                        <line x1="12" y1="19" x2="12" y2="23"></line>
-                        <line x1="8" y1="23" x2="16" y2="23"></line>
-                    </svg>
-                </button>
-
-                <button id="send-button" type="submit" aria-label="Invia messaggio">
-                    <svg viewBox="0 0 24 24">
-                        <line x1="22" y1="2" x2="11" y2="13"></line>
-                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                    </svg>
-                </button>
-
-            </div>
-        </form>
     </div>
 
     <script src="/static/app.v2.js?v={{ build_version }}"></script>
