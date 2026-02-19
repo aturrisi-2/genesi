@@ -1986,6 +1986,21 @@ textInput.addEventListener('input', () => {
 // INIT
 // ===============================
 // ===============================
+// CONVERSATION PERSISTENCE
+// ===============================
+async function saveMessageToConversation(role, content) {
+    if (!currentConvId) return;
+    try {
+        await fetch(`/api/conversations/${currentConvId}/messages`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role, content })
+        });
+        await loadConversations(); // aggiorna titolo nella lista
+    } catch (e) { console.warn('saveMessage error', e); }
+}
+
+// ===============================
 // GLOBAL AUDIO UNLOCK - Prima gesture utente
 // ===============================
 function unlockAudio() {
@@ -2227,19 +2242,6 @@ document.addEventListener('click', function _firstClick(e) {
       const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
       sidebar.classList.toggle('sidebar-collapsed', !isCollapsed);
       document.getElementById('sidebar-open-btn').style.display = isCollapsed ? 'none' : 'block';
-  }
-
-  // Salva ogni messaggio nella conversazione corrente
-  async function saveMessageToConversation(role, content) {
-      if (!currentConvId) return;
-      try {
-          await fetch(`/api/conversations/${currentConvId}/messages`, {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ role, content })
-          });
-          await loadConversations(); // aggiorna titolo nella lista
-      } catch (e) { console.warn('saveMessage error', e); }
   }
 
   // Init sidebar dopo login/bootstrap
