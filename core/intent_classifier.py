@@ -11,6 +11,23 @@ from core.log import log
 
 logger = logging.getLogger(__name__)
 
+EMOTIONAL_KEYWORDS = [
+    "sono triste", "mi sento solo", "sono arrabbiato", "sono stressato",
+    "mi sento male", "sono depresso", "piango", "ho paura", "sono ansioso",
+    "mi sento sopraffatto", "non ce la faccio", "sono esausto", "ho il cuore pesante",
+    "mi manca", "soffro", "sono deluso", "mi sento inutile", "non so come andare avanti"
+]
+
+WEATHER_EXPLICIT_KEYWORDS = [
+    "meteo", "tempo", "pioggia", "sole", "temperatura", "gradi",
+    "clima", "previsioni", "nuvoloso", "vento", "neve", "grandine"
+]
+
+BARE_PRONOUNS = {
+    "dove", "dove?", "quale", "quale?", "quando", "quando?",
+    "come", "come?", "cosa", "cosa?", "chi", "chi?", "quanto", "quanto?"
+}
+
 class IntentClassifier:
     """
     Classificatore intent - rule-based deterministico
@@ -167,7 +184,7 @@ class IntentClassifier:
                     "umidità",
                     "temporale",
                 ]
-                if any(kw in message_lower for kw in weather_keywords):
+                if any(kw in message_lower for kw in weather_keywords) and self._should_override_to_weather(message):
                     log("INTENT_OVERRIDE_APPLIED", original="mixed", final="weather", message=message[:50])
                     return "weather"
                 
@@ -213,6 +230,11 @@ class IntentClassifier:
                 log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="gpt-4o", message=message[:50])
                 logger.info("INTENT_ENGINE=gpt-4o-mini intent=%s", intent)
                 return intent
+        
+        # 2.5️⃣ Emotional check - prima di default chat_free
+        if any(keyword in message_lower for keyword in EMOTIONAL_KEYWORDS):
+            log("INTENT_OVERRIDE_APPLIED", original="chat_free", final="emotional", message=message[:50])
+            return "emotional"
         
         # 3️⃣ Default: chat libera (GPT-4o)
         log("INTENT_DEFAULT", intent="chat_free", user_id=user_id, engine="gpt-4o", message=message[:50])
@@ -434,6 +456,21 @@ class IntentClassifier:
             return True
         
         return False
+    
+    def _should_override_to_weather(self, message: str) -> bool:
+        msg_lower = message.lower().strip()
+        words = msg_lower.split()
+        
+        # Pronomi isolati → mai weather
+        if msg_lower in BARE_PRONOUNS:
+            return False
+        
+        # Messaggi corti senza keyword esplicite → non overridare
+        if len(words) <= 3:
+            if not any(kw in msg_lower for kw in WEATHER_EXPLICIT_KEYWORDS):
+                return False
+        
+        return True
 
 
 # Istanza globale

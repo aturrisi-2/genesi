@@ -221,13 +221,15 @@ INFORMATIONAL_INTENTS = {
     "tool", "reminder", "document"
 }
 
-def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: str = None) -> TTSProvider:
+def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: str = None, text_len: int = 0) -> TTSProvider:
     """
     Ritorna il provider TTS appropriato in base all'intent o route.
     
     Logica:
     - Conversazionale → OpenAI onyx (qualità premium)
     - Informativo/tool → edge_tts (gratuito)
+    - chat_free lungo (>150 chars) → edge_tts (probabile tecnico)
+    - chat_free corto (≤150 chars) → openai (conversazionale)
     - Fallback → Piper (offline, sempre disponibile)
     """
     import json
@@ -246,7 +248,17 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
     # Determina categoria
     target = intent or route or ""
     
-    if target in CONVERSATIONAL_INTENTS or route == "default_relational":
+    # chat_free con risposta lunga (>150 chars) → probabile risposta tecnica → edge
+    if intent == "chat_free" and text_len > 150:
+        category = "informational"
+        primary = "edge_tts"
+        secondary = "openai"
+    # chat_free con risposta corta → conversazionale → onyx
+    elif intent == "chat_free" and text_len <= 150:
+        category = "conversational"
+        primary = "openai"
+        secondary = "edge_tts"
+    elif target in CONVERSATIONAL_INTENTS or route == "default_relational":
         category = "conversational"
         primary = "openai"
         secondary = "edge_tts"

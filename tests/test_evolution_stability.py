@@ -32,6 +32,13 @@ def test_evolution_delta_clamp_method():
     result = engine._apply_clamped_delta("supportive_intensity", 0.5, 0.3)
     assert result == 0.45, "Delta negativo non clampato correttamente"
 
+def test_clamped_delta_actually_clamps():
+    from core.auto_evolution_engine import AutoEvolutionEngine, EVOLUTION_MAX_DELTA
+    engine = AutoEvolutionEngine()
+    max_d = EVOLUTION_MAX_DELTA["supportive_intensity"]
+    result = engine._apply_clamped_delta("supportive_intensity", 0.1, 0.9)
+    assert abs(result - 0.1) <= max_d + 0.001, f"Clamping non funziona: {result}"
+
 def test_meta_governance_block_method():
     from core.meta_governance_engine import MetaGovernanceEngine
     engine = MetaGovernanceEngine()

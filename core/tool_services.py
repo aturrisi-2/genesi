@@ -519,6 +519,14 @@ class ToolService:
 
         # 6. Nothing found at any level
         log("NEWS_FINAL_SCOPE", scope=city, level="none")
+        
+        # Se nessuna città estratta, usa Italia come default
+        if not city:
+            city = "Italia"
+            print(f"NEWS_DEFAULT_LOCATION city=Italia")
+            # Riprova con Italia
+            return await self._news_with_fallback_chain(client, None, None, "IT", requested_section)
+        
         return f"Non trovo notizie locali recenti per {city}."
 
     def _count_news_results(self, result: str) -> int:

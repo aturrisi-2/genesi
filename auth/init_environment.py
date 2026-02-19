@@ -10,6 +10,7 @@ def initialize_user_environment(user_id: str, preferences: dict = None):
     Inizializza l'ambiente Genesi per un utente appena verificato.
     - Crea directory utente
     - Crea profilo iniziale vuoto
+    - Sincronizza user_manager per evitare USER_NOT_FOUND ciclici
     """
     _log("ENV_INIT", user_id=user_id, status="starting")
 
@@ -37,5 +38,16 @@ def initialize_user_environment(user_id: str, preferences: dict = None):
         _log("ENV_INIT", user_id=user_id, step="profile", status="ok")
     except Exception as e:
         _log("ENV_INIT", user_id=user_id, step="profile", error=str(e))
+
+    # 3. Sincronizza user_manager per evitare USER_NOT_FOUND ciclici
+    try:
+        from core.user_manager import user_manager
+        if not user_manager.get_user(user_id):
+            user_manager.create_user(user_id)
+            _log("ENV_INIT", user_id=user_id, step="user_manager_sync", status="created")
+        else:
+            _log("ENV_INIT", user_id=user_id, step="user_manager_sync", status="exists")
+    except Exception as e:
+        _log("ENV_INIT", user_id=user_id, step="user_manager_sync", error=str(e))
 
     _log("ENV_INIT", user_id=user_id, status="completed")

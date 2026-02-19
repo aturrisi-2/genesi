@@ -289,6 +289,19 @@ class AutoEvolutionEngine:
                 return
                 return
             
+            # 🔵 MESSAGING THROTTLING - Verifica numero messaggi per utente system
+            try:
+                from core.chat_memory import ChatMemory
+                chat_memory = ChatMemory()
+                system_message_count = chat_memory.get_message_count("system")
+                
+                if system_message_count < EVOLUTION_MIN_MESSAGES_BETWEEN_SHIFTS:
+                    print(f"EVOLUTION_THROTTLED_MESSAGES current={system_message_count} min={EVOLUTION_MIN_MESSAGES_BETWEEN_SHIFTS}")
+                    return
+            except Exception as e:
+                # Se fallisce il conteggio, continua con logica tempo
+                print(f"EVOLUTION_MESSAGE_COUNT_ERROR error={e}")
+            
             # Esegui ciclo di auto-tuning
             result = self.auto_tuner.run_auto_tuning_cycle(report_path)
             

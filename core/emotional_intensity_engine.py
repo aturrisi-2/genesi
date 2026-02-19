@@ -670,7 +670,10 @@ class EmotionalIntensityEngine:
         # Don't duplicate if response already ends with question
         if response.rstrip().endswith("?"):
             return response
-        return f"{response} {question}"
+        
+        # Rimuovi punteggiatura finale dalla risposta prima di aggiungere domanda
+        response_clean = response.rstrip('.!?')
+        return f"{response_clean} {question}"
 
     def _intensify_with_reflection(self, response: str, emotion: str, resonance: float) -> str:
         """Add reflective depth when resonance is high."""
@@ -685,13 +688,19 @@ class EmotionalIntensityEngine:
             # Insert before last sentence
             sentences.insert(-1, reflection)
             return " ".join(sentences)
-        return f"{response} {reflection}"
+        
+        # Rimuovi punteggiatura finale dalla risposta prima di aggiungere reflection
+        response_clean = response.rstrip('.!?')
+        return f"{response_clean}. {reflection}"
 
     def _add_curiosity_question(self, response: str, emotion: str, msg: str) -> str:
         """Add a curiosity-driven question."""
         questions = EXPLORATIVE_QUESTIONS.get(emotion, EXPLORATIVE_QUESTIONS["neutral"])
         question = random.choice(questions)
-        return f"{response} {question}"
+        
+        # Rimuovi punteggiatura finale dalla risposta prima di aggiungere domanda
+        response_clean = response.rstrip('.!?')
+        return f"{response_clean} {question}"
 
     def _enforce_min_length(self, response: str, emotion: str, name: str,
                             min_words: int, is_emotional: bool, is_internal: bool,
@@ -892,7 +901,10 @@ class EmotionalIntensityEngine:
         if response.rstrip().endswith("?"):
             return response  # Already has question
         questions = EXPLORATIVE_QUESTIONS.get(emotion, EXPLORATIVE_QUESTIONS["neutral"])
-        return f"{response} {random.choice(questions)}"
+        
+        # Rimuovi punteggiatura finale dalla risposta prima di aggiungere domanda
+        response_clean = response.rstrip('.!?')
+        return f"{response_clean} {random.choice(questions)}"
 
     def _mode_interpretative(self, response: str, emotion: str) -> str:
         """Propone ipotesi interpretativa."""
