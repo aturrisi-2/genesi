@@ -10,6 +10,20 @@ from typing import Dict, Any, Optional, List
 from core.log import log
 from core.storage import storage
 
+def _validate_profession(value: str) -> str:
+    """Valida che profession sia una professione breve, non testo libero."""
+    if not value:
+        return value
+    # Se è più lungo di 50 caratteri, probabilmente è testo sbagliato
+    if len(value) > 50:
+        print(f"IDENTITY_EXTRACTOR_PROFESSION_REJECTED value_too_long={len(value)}")
+        return ""
+    # Se contiene virgole multiple o frasi (anni, erasmus, ecc), rifiuta
+    if re.search(r'\d+ anni|erasmus|adolescen|scuola|play', value, re.IGNORECASE):
+        print(f"IDENTITY_EXTRACTOR_PROFESSION_REJECTED looks_like_narrative")
+        return ""
+    return value
+
 class SemanticMemory:
     """
     Semantic Memory - Estrazione e persistenza dati personali utente
@@ -91,7 +105,10 @@ class SemanticMemory:
                             except:
                                 continue
                         elif field == "profession":
-                            value = value.lower()
+                            value = _validate_profession(value.lower())
+                            # Se la validazione ha rifiutato il valore, salta
+                            if not value:
+                                continue
                         
                         # Salva solo se nuovo o diverso
                         if field not in profile or profile[field] != value:
