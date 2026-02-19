@@ -409,11 +409,18 @@ body::after {
     border: none;
     color: #fff;
     font-size: 1rem;
-    padding: 0.6rem 0;
+    padding: 10px 14px;
     outline: none;
     caret-color: #00e5ff;
     -webkit-appearance: none;
     appearance: none;
+    resize: none;
+    overflow-y: hidden;
+    min-height: 44px;
+    max-height: 150px;
+    line-height: 1.4;
+    box-sizing: border-box;
+    transition: height 0.1s ease;
 }
 
 #text-input::placeholder {

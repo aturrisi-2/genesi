@@ -863,6 +863,23 @@ async function sendChatMessage(message) {
 }
 
 // ===============================
+// AUTO-RESIZE INPUT
+// ===============================
+function autoResizeInput(el) {
+    el.style.height = 'auto';
+    const newHeight = Math.min(el.scrollHeight, 150);
+    el.style.height = newHeight + 'px';
+    
+    // Aggiusta l'altezza del container chat per compensare
+    const chatBox = document.querySelector('#dialogue');
+    if (chatBox) {
+        const inputArea = el.closest('#input-container') || el.parentElement;
+        const inputHeight = inputArea ? inputArea.offsetHeight : newHeight;
+        chatBox.style.paddingBottom = inputHeight + 'px';
+    }
+}
+
+// ===============================
 // SEND MESSAGE
 // ===============================
 async function sendMessage() {
@@ -880,6 +897,8 @@ async function sendMessage() {
   if (!text || currentState !== STATES.IDLE) return;
 
   textInput.value = '';
+  textInput.style.height = '44px';
+  autoResizeInput(textInput);
 
   // Pulse shockwave on send
   const ic = document.getElementById('input-container');
@@ -1871,6 +1890,7 @@ textInput.addEventListener('focus', () => {
 
 // Barge-in su ogni digitazione (solo se TTS sta suonando)
 textInput.addEventListener('input', () => {
+  autoResizeInput(textInput);
   if (_ttsSource || activeTTSSources.length > 0) {
     _interruptTTS('text_typing');
   }
