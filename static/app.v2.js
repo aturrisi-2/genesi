@@ -1935,6 +1935,12 @@ function stopCamera() {
 sendButton.addEventListener('click', sendMessage);
 plusButton.addEventListener('click', handleFileUpload);
 
+// Intercept form submit to prevent page reload
+chatForm.addEventListener('submit', async (e) => {
+  e.preventDefault(); // BLOCCA reload pagina
+  await sendMessage();
+});
+
 const handleMicToggle = (e) => {
   // Audio Priming: previeni NotAllowedError su Safari/iOS
   primeAudio();
