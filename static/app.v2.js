@@ -1,4 +1,9 @@
 // ===============================
+// CONVERSATION STATE
+// ===============================
+let currentConvId = null;
+
+// ===============================
 // AUDIO PRIMING
 // ===============================
 let _primedAudio = null;
@@ -2149,8 +2154,6 @@ document.addEventListener('click', function _firstClick(e) {
   scrollToBottom();
 
   // ─── CONVERSATION SIDEBAR ───────────────────────────────────────────────────
-
-  let currentConvId = null;
 
   function clearChat() {
       const dialogue = document.getElementById('dialogue');
