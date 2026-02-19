@@ -17,7 +17,14 @@ import unidecode
 from core.log import log
 
 # Importa città italiane per priorità IT
-from core.tool_services import ITALIAN_CITIES
+ITALIAN_CITIES = [
+    "roma", "milano", "napoli", "torino", "palermo", "genova", "bologna",
+    "firenze", "bari", "catania", "venezia", "verona", "messina", "padova",
+    "trieste", "brescia", "taranto", "prato", "reggio calabria", "modena",
+    "parma", "reggio emilia", "perugia", "livorno", "ravenna", "cagliari",
+    "foggia", "rimini", "salerno", "ferrara", "latina", "giugliano",
+    "monza", "siracusa", "bergamo", "trento", "novara", "imola"
+]
 
 logger = logging.getLogger(__name__)
 
