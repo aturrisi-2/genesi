@@ -16,6 +16,9 @@ import unidecode
 
 from core.log import log
 
+# Importa città italiane per priorità IT
+from core.tool_services import ITALIAN_CITIES
+
 logger = logging.getLogger(__name__)
 
 OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY", "")
@@ -409,6 +412,14 @@ def _disambiguate(city: str, results: list, message: str) -> dict:
             country="IT",
             reason="italian_priority")
         return _format_result(it_results[0])
+
+    # Se ambiguous, cerca se uno dei candidati è IT e la città è italiana nota
+    if len(it_results) > 0 and len(countries) > 1:
+        city_lower = city.lower()
+        # Controlla se è una città italiana conosciuta
+        if city_lower in [c.lower() for c in ITALIAN_CITIES]:
+            log("LOCATION_IT_PRIORITY", city=city, reason="known_italian_city")
+            return _format_result(it_results[0])
 
     # Check if all results are in the same country → just pick first
     countries = set(r.get("country", "") for r in results)

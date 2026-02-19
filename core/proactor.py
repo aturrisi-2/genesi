@@ -501,7 +501,7 @@ class Proactor:
         """
         try:
             if intent == "weather":
-                result = await tool_service.get_weather(message)
+                result = await tool_service.get_weather(message, user_id)
                 # Save tool context for follow-up
                 from core.location_resolver import extract_city_from_message
                 city = extract_city_from_message(message) or "Roma"

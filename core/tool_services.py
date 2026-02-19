@@ -200,7 +200,18 @@ class ToolService:
         msg_lower = message.lower()
         return any(kw in msg_lower for kw in FORECAST_KEYWORDS)
 
-    async def get_weather(self, message: str) -> str:
+    def _clean_weather_message(self, message: str) -> str:
+        """Rimuove parti del verbo 'fare' che precedono il nome della città."""
+        import re
+        # Rimuovi "fa " e "farà " all'inizio o dopo "tempo"
+        cleaned = re.sub(r'\bfa\s+(?=[A-Z])', '', message)
+        cleaned = re.sub(r'\bfarà\s+(?=(?:nel\s+)?(?:a\s+)?[A-Z])', '', cleaned)
+        # Rimuovi "nel weekend", "domani", "dopodomani" che non sono città
+        cleaned = re.sub(r'\bnel\s+week-?end\b', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'\bdomani\b|\bdopodomani\b', '', cleaned, flags=re.IGNORECASE)
+        return cleaned.strip()
+
+    async def get_weather(self, message: str, user_id: str = None) -> str:
         """
         Meteo reale via OpenWeather API — supporto mondiale.
         Usa location_resolver per geocoding intelligente.
@@ -213,25 +224,43 @@ class ToolService:
                 logger.error("TOOL_WEATHER_MISSING_KEY error=OPENWEATHER_API_KEY non configurata")
                 return self._human_weather_fallback(message)
 
+            # Pulisci il messaggio dal verbo "fare" prima di estrarre la città
+            cleaned_message = self._clean_weather_message(message)
+
             client = await self._get_client()
 
             # Special test handling: if API key is "test-key", use mock logic
             if OPENWEATHER_API_KEY == "test-key":
                 # Still call resolve_location to satisfy tests
                 try:
-                    await resolve_location(message, http_client=client)
+                    await resolve_location(cleaned_message, http_client=client)
                 except AmbiguousLocationError as e:
                     return str(e)
                 except LocationNotFoundError as e:
                     return str(e)
-                return self._test_weather_response(message)
+                return self._test_weather_response(cleaned_message)
 
             try:
-                geo = await resolve_location(message, http_client=client)
+                geo = await resolve_location(cleaned_message, http_client=client)
             except AmbiguousLocationError as e:
                 return str(e)
             except LocationNotFoundError as e:
-                return str(e)
+                # Se la città estratta non è valida, prova dal tool context
+                if user_id:
+                    try:
+                        from core.tool_context import get_tool_context
+                        ctx = get_tool_context(user_id)
+                        if ctx and ctx.get('intent') == 'weather' and ctx.get('city'):
+                            # Riprova con la città dal context
+                            city_from_ctx = ctx['city']
+                            geo = await resolve_location(city_from_ctx, http_client=client)
+                            log("WEATHER_CITY_FROM_CONTEXT", city=city_from_ctx)
+                        else:
+                            return str(e)
+                    except Exception:
+                        return str(e)
+                else:
+                    return str(e)
 
             display_name = geo["name"]
             log("WEATHER_COORD_CALL", city=display_name, lat=geo["lat"], lon=geo["lon"], country=geo["country"])
