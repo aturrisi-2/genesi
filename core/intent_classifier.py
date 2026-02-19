@@ -395,7 +395,11 @@ class IntentClassifier:
                 return "reminder_delete"
         
         # 2️⃣ Parole chiave LISTA → forza reminder_list  
-        list_keywords = ["quali", "mostra", "lista", "che appuntamenti", "che promemoria", "i miei", "elenco", "appuntamenti ho"]
+        list_keywords = [
+            "quali", "mostra", "lista", "che appuntamenti", "che promemoria", "i miei", 
+            "elenco", "appuntamenti ho", "cosa mi devi ricordare", "cosa devi ricordarmi", 
+            "cosa devo fare", "dimmi i promemoria", "elenca i promemoria", "che promemoria ho"
+        ]
         if any(keyword in message_lower for keyword in list_keywords):
             if "promemoria" in message_lower or "appuntament" in message_lower:
                 log("REMINDER_GUARD_FORCED", original_intent=intent, forced_intent="reminder_list", reason="list_keyword", message=message[:50])

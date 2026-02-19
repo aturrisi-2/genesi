@@ -724,6 +724,39 @@ function getUserId() {
 
 let userIdentity = {};
 
+// Polling notifiche reminder — avvia dopo login
+function startNotificationPolling() {
+    setInterval(async () => {
+        try {
+            const res = await fetch('/api/notifications/pending', {
+                headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+            });
+            if (!res.ok) return;
+
+            const data = await res.json();
+            if (data.count > 0) {
+                for (const notif of data.notifications) {
+                    // Mostra solo se non già mostrata
+                    const key = `notif_shown_${notif.id}`;
+                    if (sessionStorage.getItem(key)) continue;
+                    sessionStorage.setItem(key, '1');
+
+                    // Inserisci in chat come messaggio assistente
+                    addMessage(`🔔 Promemoria: ${notif.text}`, 'genesi');
+
+                    // Marca come letta chiamando endpoint ack
+                    await fetch(`/api/notifications/ack/${notif.id}`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn('Notification polling error:', e);
+        }
+    }, 30000);
+}
+
 async function bootstrapUser() {
   if (!isLoggedIn()) return;
   try {
@@ -2079,6 +2112,12 @@ document.addEventListener('click', function _firstClick(e) {
 
   // Bootstrap utente SEMPRE
   await bootstrapUser();
+  
+  // Avvia polling notifiche se loggato
+  if (isLoggedIn()) {
+    startNotificationPolling();
+  }
+  
   scrollToBottom();
 
   // Neon flicker — wrap each word of the presence text in a span

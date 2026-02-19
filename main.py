@@ -122,6 +122,24 @@ async def reminder_checker_background():
                         log("REMINDER_NOTIFICATION_ERROR", user_id=user_id, error=str(e))
                         # Non bloccare: reminder è già triggered anche se notifica fallisce
                     
+                    # Email notification
+                    try:
+                        from core.notification_email import send_reminder_email
+                        from auth.database import get_user_by_id
+
+                        user = await get_user_by_id(user_id)
+                        if user and user.email:
+                            asyncio.create_task(
+                                send_reminder_email(
+                                    user_email=user.email,
+                                    reminder_text=reminder_text,
+                                    user_name=user.username or ""
+                                )
+                            )
+                    except Exception as e:
+                        log("REMINDER_EMAIL_ERROR", user_id=user_id, error=str(e))
+                        # Fail-safe: continua anche se email fallisce
+                    
                     # Set global alarm flag for frontend
                     import os
                     os.environ["GENESI_ALARM_ACTIVE"] = "true"

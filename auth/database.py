@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy import select
 from auth.config import DATABASE_URL
-from auth.models import Base
+from auth.models import Base, AuthUser
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -15,3 +16,10 @@ async def get_db() -> AsyncSession:
     async with async_session() as session:
         print(f"[DEBUG AUTH] DB URL: {engine.url}")  # DEBUG TEMPORANEO
         yield session
+
+
+async def get_user_by_id(user_id: str) -> AuthUser:
+    """Ottiene utente per ID dal database."""
+    async with async_session() as session:
+        result = await session.execute(select(AuthUser).where(AuthUser.id == user_id))
+        return result.scalar_one_or_none()

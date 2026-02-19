@@ -35,3 +35,20 @@ async def get_pending_notifications(current_user: AuthUser = Depends(require_aut
     except Exception as e:
         log("NOTIFICATIONS_ERROR", user_id=user_id, error=str(e))
         return {"notifications": [], "count": 0}
+
+@router.post("/api/notifications/ack/{reminder_id}")
+async def ack_notification(
+    reminder_id: str,
+    current_user: AuthUser = Depends(require_auth)
+):
+    """Marca una notifica reminder come letta (status done)."""
+    user_id = str(current_user.id)
+    
+    try:
+        reminder_engine.mark_reminder_done(user_id, reminder_id)
+        log("REMINDER_ACK", user_id=user_id, reminder_id=reminder_id)
+        return {"status": "ok"}
+        
+    except Exception as e:
+        log("REMINDER_ACK_ERROR", user_id=user_id, reminder_id=reminder_id, error=str(e))
+        return {"status": "error", "error": str(e)}
