@@ -36,6 +36,8 @@ from core.tool_context import (save_tool_context, resolve_elliptical_city,
 from core.chat_memory import chat_memory
 from core.intent_classifier import intent_classifier
 from core.reminder_engine import reminder_engine
+from core.document_context_manager import get_document_context_manager
+from core.image_search_service import get_image_search_service, extract_image_query
 import unidecode
 import os
 
@@ -197,7 +199,22 @@ class Proactor:
     
     async def _handle_internal(self, user_id: str, message: str = None, intent: str = None) -> tuple[str, str]:
         try:
-            # STEP 0: SANITY CHECK
+            # STEP 0.5: Image Search detection (prima del routing normale)
+            image_query = extract_image_query(message)
+            if image_query:
+                svc = get_image_search_service()
+                images = await svc.search(image_query)
+                if images:
+                    image_response = {
+                        "text": f"Ho trovato alcune immagini per '{image_query}':",
+                        "images": [{"url": r.url, "title": r.title, "source": r.source, "thumbnail": r.thumbnail}
+                                   for r in images]
+                    }
+                    # Convert to JSON string for compatibility with existing tuple return
+                    import json
+                    return json.dumps(image_response), "image_search"
+            
+            # STEP 1: SANITY CHECK
             if not user_id:
                 raise ValueError("Proactor received empty user_id")
             
@@ -1083,7 +1100,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
         # 3. GPT call with conversation-aware prompt
         logger.info("PROACTOR_LLM_CALL user=%s route=relational messages_count=%d", user_id, len(messages))
-        gpt_prompt = self._build_relational_gpt_prompt(conversation_ctx, latent_synopsis, message)
+        gpt_prompt = self._build_relational_gpt_prompt(conversation_ctx, latent_synopsis, message, user_id)
         
         # Add system message to messages list
         messages.insert(0, {"role": "system", "content": gpt_prompt})
@@ -1227,12 +1244,22 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         
         return messages
 
-    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str) -> str:
+    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str, user_id: str = None) -> str:
         """Prompt GPT per relational router. Conversazione continua, comportamento umano."""
         user_boundaries = self._detect_user_boundaries(conversation_context, message)
         user_name = conversation_context.split("NOME: ")[1].split("\n")[0] if "NOME: " in conversation_context else "l'utente"
         
-        return f"""Sei Genesi. Non sei un assistente, non sei un terapeuta, non sei un chatbot.
+        # STEP 1: Document Context injection (NotebookLM behavior)
+        system_prompt = ""
+        if user_id:
+            doc_manager = get_document_context_manager()
+            if doc_manager.has_documents(user_id):
+                doc_context = doc_manager.get_relevant_context(user_id, message)
+                if doc_context:
+                    system_prompt = doc_context + "\n\n"
+                    print(f"DOCUMENT_CONTEXT_INJECTED user={user_id} chars={len(doc_context)}")
+        
+        system_prompt += f"""Sei Genesi. Non sei un assistente, non sei un terapeuta, non sei un chatbot.
 Sei un compagno reale: pensi, ragioni, hai opinioni, reagisci.
 Parli SOLO italiano. Non cambi mai lingua.
 Non menzionare MAI di essere AI, modello, sistema, programma.
@@ -1288,6 +1315,8 @@ DIVIETI ASSOLUTI:
 {user_boundaries}
 
 Messaggio utente: {message}"""
+        
+        return system_prompt
         
     async def _handle_knowledge(self, user_id: str, message: str) -> str:
         """

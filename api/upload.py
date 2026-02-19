@@ -8,6 +8,8 @@ SICUREZZA: user_id estratto SOLO dal JWT. Mai dal client.
 """
 
 import uuid
+import os
+import asyncio
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Depends
 from core.file_analyzer import analyze_file
@@ -19,10 +21,53 @@ from auth.models import AuthUser
 
 router = APIRouter(prefix="/upload")
 
+# Upload validation constants
+UPLOAD_MAX_SIZE_MB = 20
+UPLOAD_ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.webp', '.txt', '.md'}
+
+def _validate_upload(filename: str, file_size_bytes: int) -> tuple[bool, str]:
+    """Valida dimensione e estensione file."""
+    size_mb = file_size_bytes / (1024 * 1024)
+    if size_mb > UPLOAD_MAX_SIZE_MB:
+        return False, f"File troppo grande: {size_mb:.1f}MB (max {UPLOAD_MAX_SIZE_MB}MB)"
+    ext = os.path.splitext(filename.lower())[1]
+    if ext not in UPLOAD_ALLOWED_EXTENSIONS:
+        return False, f"Formato non supportato: {ext}"
+    return True, ""
+
+async def _ocr_with_retry(file_path: str, max_retries: int = 3) -> str:
+    """OCR con retry automatico per migliorare affidabilità."""
+    from core.ocr_service import extract_text_from_image
+    
+    for attempt in range(max_retries):
+        try:
+            result = await extract_text_from_image(file_path)
+            if result and len(result.strip()) > 0:
+                print(f"OCR_SUCCESS attempt={attempt+1} chars={len(result)}")
+                return result
+            print(f"OCR_EMPTY attempt={attempt+1}")
+        except Exception as e:
+            print(f"OCR_ERROR attempt={attempt+1} error={e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(1)
+    print(f"OCR_FAILED all_attempts_exhausted")
+    return ""
+
 
 @router.post("/")
 async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(require_auth)):
     try:
+        # STEP 1: Validazione upload prima di qualsiasi elaborazione
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="Nessun file selezionato")
+        
+        # Validazione dimensione e estensione
+        is_valid, error_msg = _validate_upload(file.filename, file.size or 0)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        print(f"UPLOAD_VALIDATED filename={file.filename} size_mb={file.size/(1024*1024):.1f}")
+        
         user_id = user.id
         result = await analyze_file(file)
 
@@ -38,6 +83,21 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
                 content=result.get("content", ""),
                 meta=result.get("meta", {}),
             )
+            
+            # STEP 2: Register in Document Context Manager (NotebookLM behavior)
+            try:
+                from core.document_context_manager import get_document_context_manager
+                doc_manager = get_document_context_manager()
+                file_ext = os.path.splitext(file.filename.lower())[1] if file.filename else "unknown"
+                doc_manager.add_document(
+                    user_id=user_id, 
+                    filename=result.get("meta", {}).get("filename", file.filename or "unknown"), 
+                    content=result.get("content", ""), 
+                    file_type=result.get("type", "unknown")
+                )
+                print(f"DOCUMENT_CONTEXT_REGISTERED user={user_id} filename={file.filename}")
+            except Exception as doc_err:
+                print(f"DOCUMENT_CONTEXT_REGISTER_ERROR user={user_id} error={doc_err}")
 
             # Add to active_documents list on user profile (max 5)
             try:
