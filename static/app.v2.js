@@ -2299,7 +2299,7 @@ document.addEventListener('click', function _firstClick(e) {
 // ===============================
 // DOM READY SIDEBAR INITIALIZATION
 // ===============================
-document.addEventListener("DOMContentLoaded", async () => {
+document.addEventListener("DOMContentLoaded", () => {
     console.log("DOM_READY");
 
     const sidebar = document.querySelector(".sidebar");
@@ -2311,8 +2311,5 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     console.log("SIDEBAR_FOUND_AFTER_DOM_READY");
 
-    // Solo se autenticato, carica conversazioni
-    if (isLoggedIn()) {
-        await loadConversations();
-    }
+    initSidebar();
 });
