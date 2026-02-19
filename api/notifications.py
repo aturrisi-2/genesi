@@ -11,7 +11,7 @@ from core.log import log
 
 router = APIRouter()
 
-@router.get("/api/notifications/pending")
+@router.get("/notifications/pending")
 async def get_pending_notifications(current_user: AuthUser = Depends(require_auth)):
     """Ritorna notifiche reminder triggered non ancora lette dall'utente."""
     user_id = str(current_user.id)
@@ -36,7 +36,7 @@ async def get_pending_notifications(current_user: AuthUser = Depends(require_aut
         log("NOTIFICATIONS_ERROR", user_id=user_id, error=str(e))
         return {"notifications": [], "count": 0}
 
-@router.post("/api/notifications/ack/{reminder_id}")
+@router.post("/notifications/ack/{reminder_id}")
 async def ack_notification(
     reminder_id: str,
     current_user: AuthUser = Depends(require_auth)
