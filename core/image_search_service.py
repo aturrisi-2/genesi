@@ -22,44 +22,47 @@ class ImageResult:
     height: int = 0
 
 class ImageSearchService:
-    DDG_URL = "https://duckduckgo.com/"
-    DDG_IMAGES_URL = "https://duckduckgo.com/i.js"
+    PIXABAY_API_URL = "https://pixabay.com/api/"
     TIMEOUT = 10
     MAX_RESULTS = 4
 
     async def search(self, query: str, max_results: int = 4) -> List[ImageResult]:
         try:
-            results = await self._ddg_search(query, max_results)
+            results = await self._pixabay_search(query, max_results)
             print(f"IMAGE_SEARCH_OK query={query!r} results={len(results)}")
             return results
         except Exception as e:
             print(f"IMAGE_SEARCH_ERROR query={query!r} error={e}")
             return []
 
-    async def _ddg_search(self, query: str, max_results: int) -> List[ImageResult]:
-        async with httpx.AsyncClient(timeout=self.TIMEOUT, follow_redirects=True) as client:
-            resp = await client.get(self.DDG_URL, params={"q": query})
-            vqd_match = re.search(r'vqd=([\d-]+)', resp.text)
-            if not vqd_match:
-                raise ValueError("vqd token non trovato")
-            vqd = vqd_match.group(1)
-
-            headers = {"Referer": "https://duckduckgo.com/", "Accept": "application/json"}
-            params = {"l": "it-it", "o": "json", "q": query, "vqd": vqd, "f": ",,,", "p": "1"}
-            resp = await client.get(self.DDG_IMAGES_URL, params=params, headers=headers)
+    async def _pixabay_search(self, query: str, max_results: int) -> List[ImageResult]:
+        import os
+        api_key = os.environ.get("PIXABAY_API_KEY", "")
+        if not api_key:
+            raise ValueError("PIXABAY_API_KEY non configurata")
+        
+        async with httpx.AsyncClient(timeout=self.TIMEOUT) as client:
+            params = {
+                "key": api_key,
+                "q": query,
+                "lang": "it",
+                "image_type": "photo",
+                "per_page": max_results,
+                "safesearch": "true"
+            }
+            resp = await client.get(self.PIXABAY_API_URL, params=params)
             data = resp.json()
-
+            
             results = []
-            for item in data.get("results", [])[:max_results]:
-                if item.get("image"):
-                    results.append(ImageResult(
-                        url=item["image"],
-                        title=item.get("title", ""),
-                        source=item.get("source", ""),
-                        thumbnail=item.get("thumbnail", ""),
-                        width=item.get("width", 0),
-                        height=item.get("height", 0)
-                    ))
+            for item in data.get("hits", [])[:max_results]:
+                results.append(ImageResult(
+                    url=item["largeImageURL"],
+                    title=item.get("tags", ""),
+                    source="pixabay.com",
+                    thumbnail=item["previewURL"],
+                    width=item.get("imageWidth", 0),
+                    height=item.get("imageHeight", 0)
+                ))
             return results
 
 def extract_image_query(message: str) -> Optional[str]:
