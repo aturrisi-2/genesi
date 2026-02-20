@@ -37,7 +37,10 @@ class AIEngineerOSFlags:
     
     def _load_default_flags(self) -> Dict[str, bool]:
         """Load default flags (all disabled)."""
-        return {flag.value: False for flag in FeatureFlag}
+        flags = {flag.value: False for flag in FeatureFlag}
+        # Master switch abilitato per coding endpoint
+        flags[FeatureFlag.AI_ENGINEER_OS_ENABLED.value] = True
+        return flags
     
     def _load_environment_flags(self) -> None:
         """Load flags from environment variables."""

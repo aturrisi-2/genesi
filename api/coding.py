@@ -133,7 +133,7 @@ async def _call_proactor_with_shadow(
         
         if web_context:
             # Inietta contesto nel messaggio — invisibile all'utente
-            enriched_message = f"{web_context}\n\nDomanda utente: {message}"
+            enriched_message = f"Rispondi a questa domanda usando il contesto web qui sotto.\n\nDomanda: {message}\n\n{web_context}"
             
             # Logga che la ricerca è avvenuta
             await _log_web_search(observation_id, query, bool(web_context))
