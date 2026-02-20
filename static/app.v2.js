@@ -2152,6 +2152,101 @@ document.addEventListener('click', function _firstClick(e) {
   document.removeEventListener('click', _firstClick);
 }, { once: true });
 
+// ===============================
+// GLOBAL SIDEBAR FUNCTIONS
+// ===============================
+function clearChat() {
+    const dialogue = document.getElementById('dialogue');
+    if (dialogue) {
+        dialogue.innerHTML = '';
+    }
+}
+
+async function loadConversations() {
+    try {
+        const res = await fetch('/api/conversations', {
+            headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+        });
+        const data = await res.json();
+        renderConvList(data.conversations || []);
+    } catch (e) { console.warn('loadConversations error', e); }
+}
+
+function renderConvList(convs) {
+    const list = document.getElementById('conv-list');
+    if (!list) return;
+    list.innerHTML = '';
+    convs.forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'conv-item' + (c.id === currentConvId ? ' active' : '');
+        item.dataset.id = c.id;
+        item.innerHTML = `
+            <span class="conv-title" title="${c.title}">${c.title}</span>
+            <div class="conv-actions">
+                <button class="conv-btn" onclick="renameConv('${c.id}')" title="Rinomina">✎</button>
+                <button class="conv-btn" onclick="deleteConv('${c.id}')" title="Elimina">✕</button>
+            </div>`;
+        item.addEventListener('click', (e) => {
+            if (e.target.classList.contains('conv-btn')) return;
+            openConversation(c.id);
+        });
+        list.appendChild(item);
+    });
+}
+
+async function createNewConversation() {
+    const res = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+    });
+    const conv = await res.json();
+    currentConvId = conv.id;
+    clearChat(); // funzione esistente o equivalente per pulire la UI
+    await loadConversations();
+}
+
+async function openConversation(convId) {
+    currentConvId = convId;
+    const res = await fetch(`/api/conversations/${convId}`, {
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+    });
+    const conv = await res.json();
+    clearChat();
+    (conv.messages || []).forEach(m => addMessage(m.content, m.role));
+    await loadConversations(); // aggiorna active state
+}
+
+async function renameConv(convId) {
+    const newTitle = prompt('Nuovo nome:');
+    if (!newTitle) return;
+    await fetch(`/api/conversations/${convId}`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle })
+    });
+    await loadConversations();
+}
+
+async function deleteConv(convId) {
+    if (!confirm('Eliminare questa conversazione?')) return;
+    await fetch(`/api/conversations/${convId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+    });
+    if (currentConvId === convId) {
+        currentConvId = null;
+        clearChat();
+    }
+    await loadConversations();
+}
+
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
+    sidebar.classList.toggle('sidebar-collapsed', !isCollapsed);
+    document.getElementById('sidebar-open-btn').style.display = isCollapsed ? 'none' : 'block';
+}
+
 (async () => {
   // Apply auth state FIRST - sempre loggato
   applyAuthState();
@@ -2167,100 +2262,6 @@ document.addEventListener('click', function _firstClick(e) {
   scrollToBottom();
 
   console.log("SIDEBAR_INIT_START");
-
-  // ─── CONVERSATION SIDEBAR ───────────────────────────────────────────────────
-
-  function clearChat() {
-      const dialogue = document.getElementById('dialogue');
-      if (dialogue) {
-          dialogue.innerHTML = '';
-      }
-  }
-
-  async function loadConversations() {
-      try {
-          const res = await fetch('/api/conversations', {
-              headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-          });
-          const data = await res.json();
-          renderConvList(data.conversations || []);
-      } catch (e) { console.warn('loadConversations error', e); }
-  }
-
-  function renderConvList(convs) {
-      const list = document.getElementById('conv-list');
-      if (!list) return;
-      list.innerHTML = '';
-      convs.forEach(c => {
-          const item = document.createElement('div');
-          item.className = 'conv-item' + (c.id === currentConvId ? ' active' : '');
-          item.dataset.id = c.id;
-          item.innerHTML = `
-              <span class="conv-title" title="${c.title}">${c.title}</span>
-              <div class="conv-actions">
-                  <button class="conv-btn" onclick="renameConv('${c.id}')" title="Rinomina">✎</button>
-                  <button class="conv-btn" onclick="deleteConv('${c.id}')" title="Elimina">✕</button>
-              </div>`;
-          item.addEventListener('click', (e) => {
-              if (e.target.classList.contains('conv-btn')) return;
-              openConversation(c.id);
-          });
-          list.appendChild(item);
-      });
-  }
-
-  async function createNewConversation() {
-      const res = await fetch('/api/conversations', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-      });
-      const conv = await res.json();
-      currentConvId = conv.id;
-      clearChat(); // funzione esistente o equivalente per pulire la UI
-      await loadConversations();
-  }
-
-  async function openConversation(convId) {
-      currentConvId = convId;
-      const res = await fetch(`/api/conversations/${convId}`, {
-          headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-      });
-      const conv = await res.json();
-      clearChat();
-      (conv.messages || []).forEach(m => addMessage(m.content, m.role));
-      await loadConversations(); // aggiorna active state
-  }
-
-  async function renameConv(convId) {
-      const newTitle = prompt('Nuovo nome:');
-      if (!newTitle) return;
-      await fetch(`/api/conversations/${convId}`, {
-          method: 'PATCH',
-          headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: newTitle })
-      });
-      await loadConversations();
-  }
-
-  async function deleteConv(convId) {
-      if (!confirm('Eliminare questa conversazione?')) return;
-      await fetch(`/api/conversations/${convId}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-      });
-      if (currentConvId === convId) {
-          currentConvId = null;
-          clearChat();
-      }
-      await loadConversations();
-  }
-
-  function toggleSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
-      sidebar.classList.toggle('sidebar-collapsed', !isCollapsed);
-      document.getElementById('sidebar-open-btn').style.display = isCollapsed ? 'none' : 'block';
-  }
 
   // Init sidebar dopo login/bootstrap
   document.getElementById('new-chat-btn')?.addEventListener('click', createNewConversation);
