@@ -40,7 +40,8 @@ async def list_conversations(current_user: AuthUser = Depends(require_auth)):
                 "id": c["id"], 
                 "title": c.get("title", "Nuova chat"), 
                 "updated_at": c.get("updated_at"),
-                "message_count": len(messages)
+                "message_count": len(messages),
+                "messages": messages  # <-- aggiunto per frontend
             })
         except: pass
     return {"conversations": convs}

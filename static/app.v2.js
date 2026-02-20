@@ -2293,15 +2293,21 @@ async function startNewSession() {
             headers: { 'Authorization': `Bearer ${getAuthToken()}` }
         });
         const convs = await listRes.json();
+
+        // DEBUG — stampa la struttura raw delle conv
+        console.log('CONVS_RAW:', JSON.stringify(convs.slice(0,3)));
+
         const existingEmpty = convs.find(c =>
             (!c.messages || c.messages.length === 0) &&
             (c.title === 'Nuova chat' || !c.title)
         );
 
+        console.log('EXISTING_EMPTY:', existingEmpty ? existingEmpty.id : 'none');
+
         if (existingEmpty) {
             // Riusa quella vuota invece di crearne una nuova
             currentConvId = existingEmpty.id;
-            console.log('SESSION_REUSE_EMPTY conv_id=' + currentConvId);
+            console.log('SESSION_REUSE conv_id=' + currentConvId);
         } else {
             // Crea nuova solo se non esiste una vuota
             const res = await fetch('/api/conversations', {
@@ -2309,13 +2315,15 @@ async function startNewSession() {
                 headers: { 'Authorization': `Bearer ${getAuthToken()}` }
             });
             const conv = await res.json();
+            console.log('CONV_CREATED_RAW:', JSON.stringify(conv));  
             currentConvId = conv.id;
             console.log('SESSION_STARTED conv_id=' + currentConvId);
         }
 
+        console.log('CURRENT_CONV_ID_AFTER_START:', currentConvId);  
         await loadConversations();
     } catch(e) {
-        console.warn('startNewSession error', e);
+        console.error('startNewSession FATAL:', e);
     }
 }
 
