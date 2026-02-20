@@ -4,6 +4,11 @@
 let currentConvId = null;
 
 // ===============================
+// APPLICATION MODE STATE
+// ===============================
+let currentMode = "chat"; // "chat" | "coding"
+
+// ===============================
 // AUDIO PRIMING
 // ===============================
 let _primedAudio = null;
@@ -852,6 +857,24 @@ function renderImages(images) {
     return html;
 }
 
+function renderMessageContent(text) {
+    // Escape HTML base
+    const escape = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    
+    // Sostituisci ```lang\n...\n``` con <pre><code>
+    let html = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+        return `<pre class="code-block"><code class="${lang ? 'lang-'+lang : ''}">${escape(code.trim())}</code></pre>`;
+    });
+    
+    // Sostituisci `inline code` con <code>
+    html = html.replace(/`([^`]+)`/g, (_, code) => `<code class="inline-code">${escape(code)}</code>`);
+    
+    // Newline → <br> per testo normale (solo fuori dai pre)
+    html = html.replace(/(?<!<\/pre>)\n(?!<pre)/g, '<br>');
+    
+    return html;
+}
+
 function addMessage(text, sender) {
   const el = document.createElement('div');
   el.className = `message ${sender}`;
@@ -859,16 +882,10 @@ function addMessage(text, sender) {
   // Parse response per gestire immagini
   const parsed = parseResponse(text);
   
-  // Usa innerHTML con escape per proteggere da XSS ma permettere formattazione
-  // Previene sovrascritture future garantendo che il contenuto sia locked
-  const escapedText = parsed.text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  // Usa renderMessageContent per formattazione code blocks + escape HTML
+  const renderedContent = renderMessageContent(parsed.text);
   
-  el.innerHTML = escapedText + renderImages(parsed.images);
+  el.innerHTML = renderedContent + renderImages(parsed.images);
   
   // Assign rotating neon hue
   const hue = _neonHues[_neonIdx % _neonHues.length];
@@ -893,7 +910,10 @@ function addUserMessage(text) { return addMessage(text, 'user'); }
 // ===============================
 async function sendChatMessage(message) {
   try {
-    const res = await fetch('/api/chat', {
+    // Route to different endpoint based on current mode
+    const endpoint = currentMode === "coding" ? "/coding/" : "/api/chat";
+    
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ message })
@@ -1033,7 +1053,21 @@ async function sendMessage() {
     console.log('[TEXT_RENDERED] text_len=' + parsed.text.length);
     
     // TTS ASINCRONO — completamente scollegato dal render
-    const ttsText = data.tts_text || data.response;
+    const rawTtsText = data.tts_text || data.response;
+    function stripCodeForTTS(text) {
+        return text
+            .replace(/```[\s\S]*?```/g, '. ')
+            .replace(/`[^`]+`/g, '')
+            .trim();
+    }
+    const ttsText = (currentMode === 'coding') ? stripCodeForTTS(rawTtsText) : rawTtsText;
+    
+    // Se ttsText è vuoto o solo spazi dopo il filtro, non chiamare TTS affatto
+    if (!ttsText || ttsText.trim().length === 0) {
+      console.log('[TTS_ASYNC] Skipped: empty after code filtering in coding mode');
+      return;
+    }
+    
     console.log('[TTS_ASYNC_START] tts_text_len=' + ttsText.length);
     playTTSAsync(ttsText, data.tts_mode);
     
@@ -2259,6 +2293,29 @@ function toggleSidebar() {
     document.getElementById('sidebar-open-btn').style.display = isCollapsed ? 'none' : 'block';
 }
 
+function toggleCodingMode() {
+    const codingBtn = document.getElementById('coding-mode-btn');
+    
+    // Toggle mode
+    if (currentMode === "chat") {
+        currentMode = "coding";
+        codingBtn.classList.add('active');
+        codingBtn.style.backgroundColor = '#00ff88';
+        codingBtn.style.color = '#000';
+        console.log('CODING_MODE_ACTIVATED');
+    } else {
+        currentMode = "chat";
+        codingBtn.classList.remove('active');
+        codingBtn.style.backgroundColor = '';
+        codingBtn.style.color = '';
+        console.log('CODING_MODE_DEACTIVATED');
+    }
+    
+    // Clear chat when switching modes
+    clearChat();
+    startNewSession();
+}
+
 // Pulizia conversazioni vuote all'avvio
 async function cleanEmptyConversations() {
     try {
@@ -2348,8 +2405,12 @@ async function startNewSession() {
 
   // Init sidebar dopo login/bootstrap
   document.getElementById('new-chat-btn')?.addEventListener('click', startNewSession);
+  document.getElementById('coding-mode-btn')?.addEventListener('click', toggleCodingMode);
   document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
   document.getElementById('sidebar-open-btn')?.addEventListener('click', toggleSidebar);
+
+  // Init Voice Mode
+  initVoiceMode();
 
   // FORZA RE-INIZIALIZZAZIONE DOPO LOGIN
   if (isLoggedIn()) {
@@ -2383,78 +2444,74 @@ async function startNewSession() {
 // Esponi activeTTSSources globalmente per Voice Mode
 window.activeTTSSources = activeTTSSources;
 
-// ════════════════════════════════════════════════════
-// VOICE MODE — stato globale
-// ════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// VOICE MODE — Conversazione continua
+// ════════════════════════════════════════════════════════════
 let voiceModeActive = false;
 let voiceRecognition = null;
 let voiceSilenceTimer = null;
-let ttsSpeaking = false;
+let voiceBlockedUntil = 0;
 const VOICE_SILENCE_MS = 1500;
 
 function initVoiceMode() {
     const btn = document.getElementById('voice-mode-btn');
     const stopBtn = document.getElementById('voice-mode-stop-btn');
     if (!btn) return;
-    let lastVoiceToggle = 0;
-
-    btn.addEventListener('click', () => {
-        const now = Date.now();
-
-        // Protezione anti doppio click (1.5 secondi)
-        if (now - lastVoiceToggle < 1500) {
-            console.log('VOICE_TOGGLE_BLOCKED double click prevented');
-            return;
-        }
-
-        lastVoiceToggle = now;
-
-        if (voiceModeActive) {
-            stopVoiceMode();
-        } else {
-            startVoiceMode();
-        }
-    });
+    btn.addEventListener('click', () => voiceModeActive ? stopVoiceMode() : startVoiceMode());
     stopBtn?.addEventListener('click', stopVoiceMode);
 }
 
 function buildVoiceRecognition() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return null;
-
     const rec = new SpeechRecognition();
     rec.lang = 'it-IT';
-    rec.continuous = true;
+    rec.continuous = false;
     rec.interimResults = true;
-
     let finalTranscript = '';
 
     rec.onresult = (event) => {
-        // Ignora mentre TTS parla
-        if (ttsSpeaking) {
-            console.log('STT_IGNORED_DURING_TTS');
+        if (Date.now() < voiceBlockedUntil) {
+            console.log('VOICE_BLOCKED transcript ignored remaining=' + (voiceBlockedUntil - Date.now()) + 'ms');
             return;
         }
         if (!voiceModeActive) return;
-
         finalTranscript = '';
         let interim = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
             if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
             else interim += event.results[i][0].transcript;
         }
-
         const inp = document.getElementById('message-input');
         if (inp) inp.value = finalTranscript || interim;
-
         clearTimeout(voiceSilenceTimer);
         if (finalTranscript) {
             voiceSilenceTimer = setTimeout(() => {
-                if (!ttsSpeaking) {
-                    sendVoiceMessage(finalTranscript);
-                }
+                if (Date.now() >= voiceBlockedUntil) sendVoiceMessage(finalTranscript);
             }, VOICE_SILENCE_MS);
         }
+    };
+
+    rec.onend = () => {
+        if (!voiceModeActive) return;
+        const waitMs = Math.max(0, voiceBlockedUntil - Date.now());
+        setTimeout(() => {
+            if (voiceModeActive && Date.now() >= voiceBlockedUntil) {
+                try { voiceRecognition = buildVoiceRecognition(); voiceRecognition?.start(); }
+                catch(e) { console.warn('VOICE_RESTART_ERROR', e); }
+            }
+        }, waitMs + 100);
+    };
+
+    rec.onerror = (e) => {
+        console.warn('VOICE_REC_ERROR', e.error);
+        if (!voiceModeActive || e.error === 'aborted') return;
+        setTimeout(() => {
+            if (voiceModeActive && Date.now() >= voiceBlockedUntil) {
+                try { voiceRecognition = buildVoiceRecognition(); voiceRecognition?.start(); }
+                catch(e2) {}
+            }
+        }, 600);
     };
 
     return rec;
@@ -2462,14 +2519,13 @@ function buildVoiceRecognition() {
 
 function startVoiceMode() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { alert('Browser non supporta riconoscimento vocale.'); return; }
-
+    if (!SpeechRecognition) { alert('Browser non supporta il riconoscimento vocale.'); return; }
     voiceModeActive = true;
+    voiceBlockedUntil = 0;
     document.getElementById('voice-mode-btn')?.classList.add('active');
     document.getElementById('voice-mode-overlay')?.classList.replace('hidden', 'visible');
     setVoiceOrbState('listening');
     setVoiceStatusText('In ascolto...');
-
     voiceRecognition = buildVoiceRecognition();
     voiceRecognition?.start();
     console.log('VOICE_MODE_STARTED');
@@ -2477,21 +2533,51 @@ function startVoiceMode() {
 
 async function sendVoiceMessage(text) {
     if (!text?.trim() || !voiceModeActive) return;
-
     clearTimeout(voiceSilenceTimer);
     voiceSilenceTimer = null;
 
-    // Pulisci input e invia
+    voiceBlockedUntil = Date.now() + 60000;
+    console.log('VOICE_BLOCKED_START will unblock after TTS');
+
+    try { voiceRecognition?.stop(); } catch(e) {}
+    voiceRecognition = null;
+
     const input = document.getElementById('message-input');
     if (input) { input.value = text; input.style.height = 'auto'; }
     if (typeof sendMessage === 'function') await sendMessage(text);
 
     setVoiceOrbState('speaking');
     setVoiceStatusText('Genesi risponde...');
+
+    waitForTTSEnd(() => {
+        if (!voiceModeActive) return;
+        voiceBlockedUntil = Date.now() + 1000;
+        console.log('VOICE_UNBLOCKED riavvio ascolto fra 1s');
+        setVoiceOrbState('listening');
+        setVoiceStatusText('In ascolto...');
+        setTimeout(() => {
+            if (!voiceModeActive) return;
+            voiceRecognition = buildVoiceRecognition();
+            try { voiceRecognition?.start(); } catch(e) {}
+        }, 1000);
+    });
+}
+
+function waitForTTSEnd(callback) {
+    let ttsStarted = false;
+    const poll = setInterval(() => {
+        if (window.ttsPlaying === true) ttsStarted = true;
+        if (ttsStarted && window.ttsPlaying !== true) {
+            clearInterval(poll);
+            setTimeout(callback, 400);
+        }
+    }, 150);
+    setTimeout(() => { clearInterval(poll); if (voiceModeActive) callback(); }, 30000);
 }
 
 function stopVoiceMode() {
     voiceModeActive = false;
+    voiceBlockedUntil = 0;
     clearTimeout(voiceSilenceTimer);
     voiceSilenceTimer = null;
     try { voiceRecognition?.stop(); } catch(e) {}
@@ -2512,8 +2598,3 @@ function setVoiceStatusText(text) {
     const el = document.querySelector('.voice-status-text');
     if (el) el.textContent = text;
 }
-
-// Init Voice Mode
-document.addEventListener('DOMContentLoaded', () => {
-    initVoiceMode();
-});

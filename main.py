@@ -26,6 +26,7 @@ from api.upload import router as upload_router
 from auth.router import router as auth_router
 from api.notifications import router as notifications_router
 from api.conversations import router as conversations_router
+from api.coding import coding_router
 from auth.database import init_db, async_session
 from auth.models import Visit
 from core.log import log
@@ -244,6 +245,7 @@ app.include_router(stt_router, prefix="/api")
 app.include_router(upload_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")
+app.include_router(coding_router)
 
 # ===============================
 # Health check

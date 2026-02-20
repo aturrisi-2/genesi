@@ -1,0 +1,1 @@
+{"timestamp": 1771621906.1351373, "test_type": "deterministic_wrapper", "message": "Test message for deterministic verification", "intent": "chat_free", "user_id": "test_deterministic_user", "result_id": 1565195856304, "result_length": 21, "call_count": 1, "wrapper_overhead_ms": 0.000300002284348011, "llm_time_ms": 749.2030999983399}

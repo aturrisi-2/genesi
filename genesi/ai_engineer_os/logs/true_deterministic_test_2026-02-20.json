@@ -1,0 +1,1 @@
+{"timestamp": 1771621946.2306874, "test_type": "true_deterministic", "message": "Test message", "intent": "chat_free", "user_id": "test_user", "result_id": 1659724869200, "result": "DETERMINISTIC_RESPONSE_Test message_chat_free_test_user", "call_count": 1, "wrapper_overhead_ms": 0.0006999980541877449, "processing_time_ms": 14.523800000461051}
