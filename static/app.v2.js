@@ -2474,34 +2474,81 @@ async function sendVoiceMessage(text) {
     clearTimeout(voiceSilenceTimer);
     voiceSilenceTimer = null;
 
-    // Pulisci input
+    // STOP IMMEDIATO del microfono — impedisce di trascrivere la risposta TTS
+    voiceRecognition?.stop();
+    voiceRecognition = null;
+
     const input = document.getElementById('text-input');
     if (input) { input.value = ''; input.style.height = 'auto'; }
 
-    // Invia messaggio tramite sendMessage esistente
-    // Inietta il testo e triggera invio
     if (input) {
         input.value = text;
-        // Chiama sendMessage() direttamente se disponibile
         if (typeof sendMessage === 'function') {
             await sendMessage(text);
         } else {
-            // Fallback: trigger click sul pulsante invio
             document.getElementById('send-button')?.click();
         }
     }
 
-    // Aspetta che il TTS finisca prima di riascoltare
     setVoiceOrbState('speaking');
     setVoiceStatusText('Genesi risponde...');
+
     waitForTTSEnd(() => {
-        if (voiceModeActive) {
-            setVoiceOrbState('listening');
-            setVoiceStatusText('In ascolto...');
-            setTimeout(() => {
-                if (voiceModeActive) voiceRecognition.start();
-            }, 400);
-        }
+        if (!voiceModeActive) return;
+
+        // Ricrea recognition da zero — quella vecchia è stata fermata
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) return;
+
+        voiceRecognition = new SpeechRecognition();
+        voiceRecognition.lang = 'it-IT';
+        voiceRecognition.continuous = false;
+        voiceRecognition.interimResults = true;
+
+        let finalTranscript = '';
+
+        voiceRecognition.onresult = (event) => {
+            let interim = '';
+            finalTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                } else {
+                    interim += event.results[i][0].transcript;
+                }
+            }
+            const inp = document.getElementById('text-input');
+            if (inp) inp.value = finalTranscript || interim;
+            clearTimeout(voiceSilenceTimer);
+            if (finalTranscript) {
+                voiceSilenceTimer = setTimeout(() => {
+                    sendVoiceMessage(finalTranscript);
+                }, 1500);
+            }
+        };
+
+        voiceRecognition.onend = () => {
+            if (voiceModeActive && !voiceSilenceTimer) {
+                setTimeout(() => {
+                    if (voiceModeActive) voiceRecognition?.start();
+                }, 300);
+            }
+        };
+
+        voiceRecognition.onerror = (e) => {
+            console.warn('VOICE_MODE_ERROR', e.error);
+            if (voiceModeActive && e.error !== 'aborted') {
+                setTimeout(() => {
+                    if (voiceModeActive) voiceRecognition?.start();
+                }, 500);
+            }
+        };
+
+        setVoiceOrbState('listening');
+        setVoiceStatusText('In ascolto...');
+        setTimeout(() => {
+            if (voiceModeActive) voiceRecognition.start();
+        }, 600); // buffer 600ms dopo fine TTS
     });
 }
 
