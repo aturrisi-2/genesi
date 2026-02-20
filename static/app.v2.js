@@ -2110,7 +2110,7 @@ async function playSimpleAudio(blob) {
   
   // Configura eventi
   audio.onended = () => {
-    window.ttsPlaying = false; console.log("[TTS] Playback completato genId=' + myGenId);
+    window.ttsPlaying = false; console.log('[TTS] Playback completato genId=' + myGenId);
     cleanup();
   };
   
@@ -2135,7 +2135,7 @@ async function playSimpleAudio(blob) {
   _isPlayingChunk = true;
   _wasPlayingChunk = true;
   
-  window.ttsPlaying = true; console.log("[TTS] Audio avviato genId=' + myGenId + ' activeSources=' + activeTTSSources.length);
+  window.ttsPlaying = true; console.log('[TTS] Audio avviato genId=' + myGenId + ' activeSources=' + activeTTSSources.length);
 }
 
 // iOS: pre-unlock AudioContext on very first user interaction
