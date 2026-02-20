@@ -1054,6 +1054,12 @@ async function sendMessage() {
     
     // TTS ASINCRONO — completamente scollegato dal render
     const rawTtsText = data.tts_text || data.response;
+    function stripCodeForTTS(text) {
+        return text
+            .replace(/```[\s\S]*?```/g, '. ')
+            .replace(/`[^`]+`/g, '')
+            .trim();
+    }
     const ttsText = (currentMode === 'coding') ? stripCodeForTTS(rawTtsText) : rawTtsText;
     
     // Se ttsText è vuoto o solo spazi dopo il filtro, non chiamare TTS affatto
