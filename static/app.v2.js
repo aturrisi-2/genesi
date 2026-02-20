@@ -966,6 +966,7 @@ async function sendMessage() {
   textInput.value = '';
   textInput.style.height = '44px';
   autoResizeInput(textInput);
+  textInput.focus();
 
   // Pulse shockwave on send
   const ic = document.getElementById('input-container');
