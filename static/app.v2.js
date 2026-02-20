@@ -2001,21 +2001,31 @@ textInput.addEventListener('input', () => {
 });
 
 // ===============================
-// INIT
-// ===============================
 // ===============================
 // CONVERSATION PERSISTENCE
 // ===============================
 async function saveMessageToConversation(role, content) {
-    if (!currentConvId) return;
+    console.log('SAVE_MESSAGE_ATTEMPT', { role, contentLength: content?.length, currentConvId });
+    if (!currentConvId) {
+        console.warn('SAVE_MESSAGE_SKIPPED: no currentConvId');
+        return;
+    }
     try {
-        await fetch(`/api/conversations/${currentConvId}/messages`, {
+        const response = await fetch(`/api/conversations/${currentConvId}/messages`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ role, content })
         });
+        console.log('SAVE_MESSAGE_RESPONSE', { status: response.status, ok: response.ok });
+        if (!response.ok) {
+            console.error('SAVE_MESSAGE_FAILED', response.status, response.statusText);
+            return;
+        }
         await loadConversations(); // aggiorna titolo nella lista
-    } catch (e) { console.warn('saveMessage error', e); }
+        console.log('SAVE_MESSAGE_SUCCESS');
+    } catch (e) { 
+        console.error('SAVE_MESSAGE_ERROR', e); 
+    }
 }
 
 // ===============================
