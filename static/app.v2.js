@@ -2267,8 +2267,32 @@ function toggleSidebar() {
     document.getElementById('sidebar-open-btn').style.display = isCollapsed ? 'none' : 'block';
 }
 
+// Pulizia conversazioni vuote all'avvio
+async function cleanEmptyConversations() {
+    try {
+        const res = await fetch('/api/conversations', {
+            headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+        });
+        const convs = await res.json();
+        for (const c of convs) {
+            // Se il titolo è "Nuova chat" e non ha messaggi
+            const hasMessages = c.message_count > 0 || 
+                               (c.messages && c.messages.length > 0) ||
+                               (c.title && c.title !== 'Nuova chat');
+            if (!hasMessages) {
+                await fetch(`/api/conversations/${c.id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+                });
+            }
+        }
+        console.log('CLEANED_EMPTY_CONVS completed');
+    } catch(e) { console.warn('cleanEmptyConversations error', e); }
+}
+
 // Crea nuova conversazione all'avvio
 async function startNewSession() {
+    await cleanEmptyConversations();   
     try {
         const res = await fetch('/api/conversations', {
             method: 'POST',
