@@ -2247,6 +2247,20 @@ function toggleSidebar() {
     document.getElementById('sidebar-open-btn').style.display = isCollapsed ? 'none' : 'block';
 }
 
+// Crea nuova conversazione all'avvio
+async function startNewSession() {
+    try {
+        const res = await fetch('/api/conversations', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+        });
+        const conv = await res.json();
+        currentConvId = conv.id;
+        console.log('SESSION_STARTED conv_id=' + currentConvId);
+        await loadConversations();
+    } catch(e) { console.warn('startNewSession error', e); }
+}
+
 (async () => {
   // Apply auth state FIRST - sempre loggato
   applyAuthState();
@@ -2264,14 +2278,14 @@ function toggleSidebar() {
   console.log("SIDEBAR_INIT_START");
 
   // Init sidebar dopo login/bootstrap
-  document.getElementById('new-chat-btn')?.addEventListener('click', createNewConversation);
+  document.getElementById('new-chat-btn')?.addEventListener('click', startNewSession);
   document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
   document.getElementById('sidebar-open-btn')?.addEventListener('click', toggleSidebar);
 
   // FORZA RE-INIZIALIZZAZIONE DOPO LOGIN
   if (isLoggedIn()) {
       console.log("SIDEBAR_LOADING_CONVERSATIONS");
-      await loadConversations();
+      await startNewSession();
       
       // Validazione DOM
       const sidebarEl = document.querySelector(".sidebar");
