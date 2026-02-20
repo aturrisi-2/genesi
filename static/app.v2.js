@@ -2001,6 +2001,15 @@ textInput.addEventListener('input', () => {
   }
 });
 
+// Enter invia, Shift+Enter va a capo
+textInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+  // Shift+Enter: comportamento default (va a capo)
+});
+
 // ===============================
 // ===============================
 // CONVERSATION PERSISTENCE

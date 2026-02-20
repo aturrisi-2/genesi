@@ -309,6 +309,13 @@ body::after {
   box-sizing: border-box;
   transition: border-color 0.2s, box-shadow 0.2s;
   outline: none;
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* IE/Edge */
+}
+
+#text-input::-webkit-scrollbar,
+textarea#text-input::-webkit-scrollbar {
+  display: none;                /* Chrome/Safari */
 }
 
 #text-input:focus, textarea#text-input:focus {
