@@ -2505,12 +2505,35 @@ async function sendVoiceMessage(text) {
         console.log('VOICE_UNBLOCKED riavvio ascolto');
         setVoiceOrbState('listening');
         setVoiceStatusText('In ascolto...');
+        
+        // Rimuovi eventuale recognition vecchia
+        try { voiceRecognition?.stop(); } catch(e) {}
+        voiceRecognition = null;
+        
+        // Delay più lungo per evitare conflitti con eventi UI
         setTimeout(() => {
-            if (voiceModeActive) {
-                voiceRecognition = buildVoiceRecognition();
-                try { voiceRecognition?.start(); } catch(e) {}
+            if (!voiceModeActive) {
+                console.log('VOICE_MODE_INACTIVE - skip restart');
+                return;
             }
-        }, 800);
+            
+            // Verifica che il pulsante sia ancora in stato active
+            const btn = document.getElementById('voice-mode-btn');
+            if (!btn?.classList.contains('active')) {
+                console.log('VOICE_BUTTON_NOT_ACTIVE - skip restart');
+                return;
+            }
+            
+            try {
+                voiceRecognition = buildVoiceRecognition();
+                if (voiceRecognition) {
+                    voiceRecognition.start();
+                    console.log('VOICE_RESTARTED successfully');
+                }
+            } catch(e) {
+                console.warn('VOICE_RESTART_ERROR', e);
+            }
+        }, 1200); // aumentato da 800ms a 1200ms
     });
 }
 
