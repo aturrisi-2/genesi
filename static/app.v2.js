@@ -2389,7 +2389,7 @@ window.activeTTSSources = activeTTSSources;
 let voiceModeActive = false;
 let voiceRecognition = null;
 let voiceSilenceTimer = null;
-let voiceBlocked = false;
+let ttsSpeaking = false;
 const VOICE_SILENCE_MS = 1500;
 
 function initVoiceMode() {
@@ -2424,16 +2424,15 @@ function buildVoiceRecognition() {
 
     const rec = new SpeechRecognition();
     rec.lang = 'it-IT';
-    rec.continuous = false;
+    rec.continuous = true;
     rec.interimResults = true;
 
     let finalTranscript = '';
 
-
     rec.onresult = (event) => {
-        // Ignora se siamo nel periodo di blocco
-        if (voiceBlocked) {
-            console.log('VOICE_BLOCKED transcript ignored');
+        // Ignora mentre TTS parla
+        if (ttsSpeaking) {
+            console.log('STT_IGNORED_DURING_TTS');
             return;
         }
         if (!voiceModeActive) return;
@@ -2451,29 +2450,10 @@ function buildVoiceRecognition() {
         clearTimeout(voiceSilenceTimer);
         if (finalTranscript) {
             voiceSilenceTimer = setTimeout(() => {
-                if (!voiceBlocked) {
+                if (!ttsSpeaking) {
                     sendVoiceMessage(finalTranscript);
                 }
             }, VOICE_SILENCE_MS);
-        }
-    };
-
-    rec.onend = () => {
-        if (voiceModeActive && !voiceBlocked) {
-            setTimeout(() => {
-                if (voiceModeActive && !voiceBlocked) {
-                    try { voiceRecognition = buildVoiceRecognition(); voiceRecognition?.start(); } catch(e) {}
-                }
-            }, 300);
-        }
-    };
-
-    rec.onerror = (e) => {
-        console.warn('VOICE_REC_ERROR', e.error);
-        if (voiceModeActive && e.error !== 'aborted' && !voiceBlocked) {
-            setTimeout(() => {
-                try { voiceRecognition = buildVoiceRecognition(); voiceRecognition?.start(); } catch(e2) {}
-            }, 500);
         }
     };
 
@@ -2485,7 +2465,6 @@ function startVoiceMode() {
     if (!SpeechRecognition) { alert('Browser non supporta riconoscimento vocale.'); return; }
 
     voiceModeActive = true;
-    voiceBlocked = false;
     document.getElementById('voice-mode-btn')?.classList.add('active');
     document.getElementById('voice-mode-overlay')?.classList.replace('hidden', 'visible');
     setVoiceOrbState('listening');
@@ -2502,91 +2481,17 @@ async function sendVoiceMessage(text) {
     clearTimeout(voiceSilenceTimer);
     voiceSilenceTimer = null;
 
-    // BLOCCA trascrizioni mentre TTS parla
-    voiceBlocked = true;
-    console.log('VOICE_BLOCKED until TTS ends');
-
-    // Ferma recognition
-    try { voiceRecognition?.stop(); } catch(e) {}
-    voiceRecognition = null;
-
     // Pulisci input e invia
     const input = document.getElementById('message-input');
     if (input) { input.value = text; input.style.height = 'auto'; }
     if (typeof sendMessage === 'function') await sendMessage(text);
 
     setVoiceOrbState('speaking');
-
-// Aspetta che TTS inizi poi finisca
-waitForTTSEnd(() => {
-if (!voiceModeActive) return;
-// Sblocca subito dopo TTS
-voiceBlocked = false;
-console.log('VOICE_UNBLOCKED riavvio ascolto');
-setVoiceOrbState('listening');
-setVoiceStatusText('In ascolto...');
-        
-// Rimuovi eventuale recognition vecchia
-try { voiceRecognition?.stop(); } catch(e) {}
-voiceRecognition = null;
-        voiceRecognition = null;
-        
-        // Delay più lungo per evitare conflitti con eventi UI
-        setTimeout(() => {
-            if (!voiceModeActive) {
-                console.log('VOICE_MODE_INACTIVE - skip restart');
-                return;
-            }
-            
-            // Verifica che il pulsante sia ancora in stato active
-            const btn = document.getElementById('voice-mode-btn');
-            if (!btn?.classList.contains('active')) {
-                console.log('VOICE_BUTTON_NOT_ACTIVE - skip restart');
-                return;
-            }
-            
-            try {
-                voiceRecognition = buildVoiceRecognition();
-                if (voiceRecognition) {
-                    voiceRecognition.start();
-                    console.log('VOICE_RESTARTED successfully');
-                }
-            } catch(e) {
-                console.warn('VOICE_RESTART_ERROR', e);
-            }
-        }, 1200); // aumentato da 800ms a 1200ms
-    });
-}
-
-function waitForTTSEnd(callback) {
-    let ttsStarted = false;
-    let called = false;
-
-    const safeCall = () => {
-        if (called) return;
-        called = true;
-        try { callback(); } catch(e) {}
-    };
-
-    const poll = setInterval(() => {
-        if (window.ttsPlaying === true) ttsStarted = true;
-
-        if (ttsStarted && !window.ttsPlaying) {
-            clearInterval(poll);
-            setTimeout(safeCall, 500);
-        }
-    }, 150);
-
-    // Fallback — MA senza doppia chiamata
-    setTimeout(() => {
-        clearInterval(poll);
-        if (voiceModeActive) safeCall();
-    }, 30000);
+    setVoiceStatusText('Genesi risponde...');
 }
 
 function stopVoiceMode() {
     voiceModeActive = false;
-    voiceBlocked = false;
     clearTimeout(voiceSilenceTimer);
     voiceSilenceTimer = null;
     try { voiceRecognition?.stop(); } catch(e) {}
