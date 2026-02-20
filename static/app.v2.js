@@ -2389,7 +2389,7 @@ window.activeTTSSources = activeTTSSources;
 let voiceModeActive = false;
 let voiceRecognition = null;
 let voiceSilenceTimer = null;
-let voiceBlockedUntil = 0; // timestamp ms — ignora trascrizioni prima di questo
+let voiceBlocked = false;
 const VOICE_SILENCE_MS = 1500;
 
 function initVoiceMode() {
@@ -2432,7 +2432,7 @@ function buildVoiceRecognition() {
 
     rec.onresult = (event) => {
         // Ignora se siamo nel periodo di blocco
-        if (Date.now() < voiceBlockedUntil) {
+        if (voiceBlocked) {
             console.log('VOICE_BLOCKED transcript ignored');
             return;
         }
@@ -2451,7 +2451,7 @@ function buildVoiceRecognition() {
         clearTimeout(voiceSilenceTimer);
         if (finalTranscript) {
             voiceSilenceTimer = setTimeout(() => {
-                if (Date.now() >= voiceBlockedUntil) {
+                if (!voiceBlocked) {
                     sendVoiceMessage(finalTranscript);
                 }
             }, VOICE_SILENCE_MS);
@@ -2459,9 +2459,9 @@ function buildVoiceRecognition() {
     };
 
     rec.onend = () => {
-        if (voiceModeActive && Date.now() >= voiceBlockedUntil) {
+        if (voiceModeActive && !voiceBlocked) {
             setTimeout(() => {
-                if (voiceModeActive && Date.now() >= voiceBlockedUntil) {
+                if (voiceModeActive && !voiceBlocked) {
                     try { voiceRecognition = buildVoiceRecognition(); voiceRecognition?.start(); } catch(e) {}
                 }
             }, 300);
@@ -2470,7 +2470,7 @@ function buildVoiceRecognition() {
 
     rec.onerror = (e) => {
         console.warn('VOICE_REC_ERROR', e.error);
-        if (voiceModeActive && e.error !== 'aborted' && Date.now() >= voiceBlockedUntil) {
+        if (voiceModeActive && e.error !== 'aborted' && !voiceBlocked) {
             setTimeout(() => {
                 try { voiceRecognition = buildVoiceRecognition(); voiceRecognition?.start(); } catch(e2) {}
             }, 500);
@@ -2485,7 +2485,7 @@ function startVoiceMode() {
     if (!SpeechRecognition) { alert('Browser non supporta riconoscimento vocale.'); return; }
 
     voiceModeActive = true;
-    voiceBlockedUntil = 0;
+    voiceBlocked = false;
     document.getElementById('voice-mode-btn')?.classList.add('active');
     document.getElementById('voice-mode-overlay')?.classList.replace('hidden', 'visible');
     setVoiceOrbState('listening');
@@ -2502,8 +2502,8 @@ async function sendVoiceMessage(text) {
     clearTimeout(voiceSilenceTimer);
     voiceSilenceTimer = null;
 
-    // BLOCCA trascrizioni per i prossimi 60 secondi (verrà rimosso dopo TTS)
-    voiceBlockedUntil = Date.now() + 60000;
+    // BLOCCA trascrizioni mentre TTS parla
+    voiceBlocked = true;
     console.log('VOICE_BLOCKED until TTS ends');
 
     // Ferma recognition
@@ -2516,19 +2516,19 @@ async function sendVoiceMessage(text) {
     if (typeof sendMessage === 'function') await sendMessage(text);
 
     setVoiceOrbState('speaking');
-    setVoiceStatusText('Genesi risponde...');
 
-    // Aspetta che TTS inizi poi finisca
-    waitForTTSEnd(() => {
-        if (!voiceModeActive) return;
-        // Sblocca con buffer aggiuntivo
-        voiceBlockedUntil = Date.now() + 800;
-        console.log('VOICE_UNBLOCKED riavvio ascolto');
-        setVoiceOrbState('listening');
-        setVoiceStatusText('In ascolto...');
+// Aspetta che TTS inizi poi finisca
+waitForTTSEnd(() => {
+if (!voiceModeActive) return;
+// Sblocca subito dopo TTS
+voiceBlocked = false;
+console.log('VOICE_UNBLOCKED riavvio ascolto');
+setVoiceOrbState('listening');
+setVoiceStatusText('In ascolto...');
         
-        // Rimuovi eventuale recognition vecchia
-        try { voiceRecognition?.stop(); } catch(e) {}
+// Rimuovi eventuale recognition vecchia
+try { voiceRecognition?.stop(); } catch(e) {}
+voiceRecognition = null;
         voiceRecognition = null;
         
         // Delay più lungo per evitare conflitti con eventi UI
@@ -2586,7 +2586,7 @@ function waitForTTSEnd(callback) {
 
 function stopVoiceMode() {
     voiceModeActive = false;
-    voiceBlockedUntil = 0;
+    voiceBlocked = false;
     clearTimeout(voiceSilenceTimer);
     voiceSilenceTimer = null;
     try { voiceRecognition?.stop(); } catch(e) {}
