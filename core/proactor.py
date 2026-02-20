@@ -866,8 +866,24 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         from datetime import datetime, timedelta
         from typing import Optional
         
+        # Dizionario conversione numeri italiani
+        NUMERI_ITALIANI = {
+            'uno': 1, 'due': 2, 'tre': 3, 'quattro': 4, 'cinque': 5,
+            'sei': 6, 'sette': 7, 'otto': 8, 'nove': 9, 'dieci': 10,
+            'quindici': 15, 'venti': 20, 'trenta': 30, 'quaranta': 40,
+            'cinquanta': 50, 'sessanta': 60
+        }
+        
         msg_lower = message.lower().strip()
-        now = datetime.now()
+        
+        # Normalizza numeri in lettere prima del parsing
+        msg_normalized = msg_lower
+        for parola, cifra in NUMERI_ITALIANI.items():
+            msg_normalized = re.sub(rf'\b{parola}\b', str(cifra), msg_normalized)
+        
+        from datetime import timezone, timedelta
+        CET = timezone(timedelta(hours=1))
+        now = datetime.now(CET).replace(tzinfo=None)
         
         # 1️⃣ Estrai testo dopo "ricordami di" / "ricordami che"
         reminder_text = ""
@@ -921,7 +937,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         # 1b️⃣ Pattern durata relativa: "tra X minuti", "tra X ore", "tra X secondi"
         relative_match = re.search(
             r'tra\s+(\d+)\s+(minut[oi]|or[ae]|second[oi]|giorn[oi])',
-            msg_lower
+            msg_normalized
         )
         if relative_match:
             quantity = int(relative_match.group(1))
