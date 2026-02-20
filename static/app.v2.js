@@ -857,6 +857,24 @@ function renderImages(images) {
     return html;
 }
 
+function renderMessageContent(text) {
+    // Escape HTML base
+    const escape = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    
+    // Sostituisci ```lang\n...\n``` con <pre><code>
+    let html = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+        return `<pre class="code-block"><code class="${lang ? 'lang-'+lang : ''}">${escape(code.trim())}</code></pre>`;
+    });
+    
+    // Sostituisci `inline code` con <code>
+    html = html.replace(/`([^`]+)`/g, (_, code) => `<code class="inline-code">${escape(code)}</code>`);
+    
+    // Newline → <br> per testo normale (solo fuori dai pre)
+    html = html.replace(/(?<!<\/pre>)\n(?!<pre)/g, '<br>');
+    
+    return html;
+}
+
 function addMessage(text, sender) {
   const el = document.createElement('div');
   el.className = `message ${sender}`;
@@ -864,16 +882,10 @@ function addMessage(text, sender) {
   // Parse response per gestire immagini
   const parsed = parseResponse(text);
   
-  // Usa innerHTML con escape per proteggere da XSS ma permettere formattazione
-  // Previene sovrascritture future garantendo che il contenuto sia locked
-  const escapedText = parsed.text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  // Usa renderMessageContent per formattazione code blocks + escape HTML
+  const renderedContent = renderMessageContent(parsed.text);
   
-  el.innerHTML = escapedText + renderImages(parsed.images);
+  el.innerHTML = renderedContent + renderImages(parsed.images);
   
   // Assign rotating neon hue
   const hue = _neonHues[_neonIdx % _neonHues.length];
@@ -1041,7 +1053,15 @@ async function sendMessage() {
     console.log('[TEXT_RENDERED] text_len=' + parsed.text.length);
     
     // TTS ASINCRONO — completamente scollegato dal render
-    const ttsText = data.tts_text || data.response;
+    const rawTtsText = data.tts_text || data.response;
+    const ttsText = (currentMode === 'coding') ? stripCodeForTTS(rawTtsText) : rawTtsText;
+    
+    // Se ttsText è vuoto o solo spazi dopo il filtro, non chiamare TTS affatto
+    if (!ttsText || ttsText.trim().length === 0) {
+      console.log('[TTS_ASYNC] Skipped: empty after code filtering in coding mode');
+      return;
+    }
+    
     console.log('[TTS_ASYNC_START] tts_text_len=' + ttsText.length);
     playTTSAsync(ttsText, data.tts_mode);
     

@@ -188,18 +188,43 @@ body::after {
    =============================== */
 /* ─── BUBBLE MESSAGES ──────────────────────────────────── */
 .message {
-  border-radius: 999px;
-  padding: 12px 22px;
-  max-width: 65%;
+  border-radius: 18px;          /* meno pill, più adattivo al contenuto */
+  padding: 12px 18px;
+  max-width: 72%;
+  width: fit-content;
   font-size: 14px;
   line-height: 1.5;
   border: none;
   display: inline-block;
   animation: msgAppear 0.3s ease-out forwards;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  white-space: pre-wrap;
+  word-break: break-word;
+  white-space: normal;
   will-change: transform, opacity;
+}
+
+/* ── CODE BLOCK dentro le bubble ── */
+.message pre.code-block {
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(100, 180, 255, 0.2);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 8px 0;
+  overflow-x: auto;
+  font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.message code.inline-code {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 0.85em;
+  color: #7dd3fc;
 }
 
 .message.user {
@@ -1012,6 +1037,35 @@ textarea#text-input::-webkit-scrollbar {
   transition: background 0.15s;
 }
 #new-chat-btn:hover { background: #242424; }
+
+/* ── CODING MODE BUTTON ── */
+#coding-mode-btn {
+    background: transparent;
+    border: 1px solid rgba(100, 180, 100, 0.4);
+    border-radius: 8px;
+    color: rgba(150, 220, 150, 0.8);
+    padding: 6px 14px;
+    font-size: 0.75rem;
+    font-family: 'Fira Code', 'Consolas', monospace;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+}
+
+#coding-mode-btn:hover {
+    border-color: rgba(100, 220, 100, 0.7);
+    color: rgba(180, 255, 180, 1);
+    background: rgba(0, 80, 0, 0.25);
+    box-shadow: 0 0 10px rgba(0, 200, 0, 0.2);
+}
+
+#coding-mode-btn.active {
+    background: rgba(0, 60, 0, 0.5);
+    border-color: rgba(0, 255, 80, 0.8);
+    color: #00ff80;
+    box-shadow: 0 0 14px rgba(0, 255, 80, 0.35);
+}
 
 #sidebar-toggle {
   background: none;
