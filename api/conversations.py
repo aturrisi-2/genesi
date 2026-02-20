@@ -35,7 +35,13 @@ async def list_conversations(current_user: AuthUser = Depends(require_auth)):
     for f in sorted((_user_dir(user_id)).glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
         try:
             c = json.loads(f.read_text())
-            convs.append({"id": c["id"], "title": c.get("title", "Nuova chat"), "updated_at": c.get("updated_at")})
+            messages = c.get("messages", [])
+            convs.append({
+                "id": c["id"], 
+                "title": c.get("title", "Nuova chat"), 
+                "updated_at": c.get("updated_at"),
+                "message_count": len(messages)
+            })
         except: pass
     return {"conversations": convs}
 
@@ -46,6 +52,23 @@ async def create_conversation(current_user: AuthUser = Depends(require_auth)):
     _save_conv(user_id, conv)
     log("CONVERSATION_CREATE", user_id=user_id, conv_id=conv["id"])
     return conv
+
+@router.delete("/conversations/empty")
+async def delete_empty_conversations(current_user = Depends(require_auth)):
+    user_dir = Path(CONV_DIR) / current_user.id
+    if not user_dir.exists():
+        return {"deleted": 0}
+    deleted = 0
+    for f in user_dir.glob("*.json"):
+        try:
+            data = json.loads(f.read_text())
+            if not data.get("messages") or len(data["messages"]) == 0:
+                f.unlink()
+                deleted += 1
+        except:
+            pass
+    log("CONVERSATIONS_CLEAN_EMPTY", user_id=current_user.id, deleted=deleted)
+    return {"deleted": deleted}
 
 @router.get("/conversations/{conv_id}")
 async def get_conversation(conv_id: str, current_user: AuthUser = Depends(require_auth)):

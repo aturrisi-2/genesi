@@ -2009,38 +2009,27 @@ textInput.addEventListener('keydown', function(e) {
   }
   // Shift+Enter: comportamento default (va a capo)
 });
-
-// ===============================
 // ===============================
 // CONVERSATION PERSISTENCE
 // ===============================
 async function saveMessageToConversation(role, content) {
-    console.log('SAVE_MESSAGE_ATTEMPT', { role, contentLength: content?.length, currentConvId });
     if (!currentConvId) {
-        console.warn('SAVE_MESSAGE_SKIPPED: no currentConvId');
+        console.warn('SAVE_SKIPPED no currentConvId');
         return;
     }
+    const convId = currentConvId; // snapshot locale per evitare race condition
     try {
-        const response = await fetch(`/api/conversations/${currentConvId}/messages`, {
+        await fetch(`/api/conversations/${convId}/messages`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`,
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify({ role, content })
         });
-        console.log('SAVE_MESSAGE_RESPONSE', { status: response.status, ok: response.ok });
-        if (!response.ok) {
-            console.error('SAVE_MESSAGE_FAILED', response.status, response.statusText);
-            return;
-        }
-        await loadConversations(); // aggiorna titolo nella lista
-        console.log('SAVE_MESSAGE_SUCCESS');
-    } catch (e) { 
-        console.error('SAVE_MESSAGE_ERROR', e); 
-    }
+    } catch(e) { console.warn('saveMessage error', e); }
 }
 
-// ===============================
-// GLOBAL AUDIO UNLOCK - Prima gesture utente
-// ===============================
 function unlockAudio() {
   if (window.audioUnlocked) {
     console.log('[AUDIO] Already unlocked');
@@ -2292,17 +2281,42 @@ async function cleanEmptyConversations() {
 
 // Crea nuova conversazione all'avvio
 async function startNewSession() {
-    await cleanEmptyConversations();   
     try {
-        const res = await fetch('/api/conversations', {
-            method: 'POST',
+        // 1. Cancella tutte le conv vuote sul backend
+        await fetch('/api/conversations/empty', {
+            method: 'DELETE',
             headers: { 'Authorization': `Bearer ${getAuthToken()}` }
         });
-        const conv = await res.json();
-        currentConvId = conv.id;
-        console.log('SESSION_STARTED conv_id=' + currentConvId);
+
+        // 2. Controlla se esiste già UNA conv vuota (appena creata)
+        const listRes = await fetch('/api/conversations', {
+            headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+        });
+        const convs = await listRes.json();
+        const existingEmpty = convs.find(c =>
+            (!c.messages || c.messages.length === 0) &&
+            (c.title === 'Nuova chat' || !c.title)
+        );
+
+        if (existingEmpty) {
+            // Riusa quella vuota invece di crearne una nuova
+            currentConvId = existingEmpty.id;
+            console.log('SESSION_REUSE_EMPTY conv_id=' + currentConvId);
+        } else {
+            // Crea nuova solo se non esiste una vuota
+            const res = await fetch('/api/conversations', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+            });
+            const conv = await res.json();
+            currentConvId = conv.id;
+            console.log('SESSION_STARTED conv_id=' + currentConvId);
+        }
+
         await loadConversations();
-    } catch(e) { console.warn('startNewSession error', e); }
+    } catch(e) {
+        console.warn('startNewSession error', e);
+    }
 }
 
 (async () => {
