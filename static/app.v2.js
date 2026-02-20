@@ -954,9 +954,12 @@ async function sendMessage() {
   primeAudio();
   
   // Barge-in: increment generation + force-stop ALL TTS
+  // MA NON durante voice mode conversazionale!
   ttsGenerationId++;
-  stopAllTTS();
-
+  if (!voiceModeActive) {
+    stopAllTTS();
+  }
+  
   // Warm AudioContext NOW (sync, during user gesture) — iOS requires this
   _warmTTSCtx();
 
