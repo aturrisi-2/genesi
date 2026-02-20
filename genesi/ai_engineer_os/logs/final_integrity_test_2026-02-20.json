@@ -1,0 +1,1 @@
+{"timestamp": 1771621964.9688714, "test_type": "final_integrity", "message": "Final test message", "intent": "chat_free", "user_id": "final_test_user", "result": "FINAL_TEST_RESPONSE_Final test message_chat_free_final_test_user", "call_count": 1, "wrapper_overhead_ms": 14.940900000510737}

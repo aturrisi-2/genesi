@@ -1,0 +1,2 @@
+{"timestamp": 1771621780.7571855, "observation_id": "0d5ffe27-473a-409a-b8bf-85f15c32f2c7", "event": "observation_start", "message": "Come ti chiami?", "intent": "identity", "user_id": "test_shadow_user", "kwargs_keys": []}
+{"timestamp": 1771621783.2099993, "observation_id": "0d5ffe27-473a-409a-b8bf-85f15c32f2c7", "event": "observation_complete", "result_length": 128, "observation_time": 2.4528112411499023, "success": true}

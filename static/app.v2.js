@@ -4,6 +4,11 @@
 let currentConvId = null;
 
 // ===============================
+// APPLICATION MODE STATE
+// ===============================
+let currentMode = "chat"; // "chat" | "coding"
+
+// ===============================
 // AUDIO PRIMING
 // ===============================
 let _primedAudio = null;
@@ -893,7 +898,10 @@ function addUserMessage(text) { return addMessage(text, 'user'); }
 // ===============================
 async function sendChatMessage(message) {
   try {
-    const res = await fetch('/api/chat', {
+    // Route to different endpoint based on current mode
+    const endpoint = currentMode === "coding" ? "/coding" : "/api/chat";
+    
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ message })
@@ -2259,6 +2267,29 @@ function toggleSidebar() {
     document.getElementById('sidebar-open-btn').style.display = isCollapsed ? 'none' : 'block';
 }
 
+function toggleCodingMode() {
+    const codingBtn = document.getElementById('coding-mode-btn');
+    
+    // Toggle mode
+    if (currentMode === "chat") {
+        currentMode = "coding";
+        codingBtn.classList.add('active');
+        codingBtn.style.backgroundColor = '#00ff88';
+        codingBtn.style.color = '#000';
+        console.log('CODING_MODE_ACTIVATED');
+    } else {
+        currentMode = "chat";
+        codingBtn.classList.remove('active');
+        codingBtn.style.backgroundColor = '';
+        codingBtn.style.color = '';
+        console.log('CODING_MODE_DEACTIVATED');
+    }
+    
+    // Clear chat when switching modes
+    clearChat();
+    startNewSession();
+}
+
 // Pulizia conversazioni vuote all'avvio
 async function cleanEmptyConversations() {
     try {
@@ -2348,6 +2379,7 @@ async function startNewSession() {
 
   // Init sidebar dopo login/bootstrap
   document.getElementById('new-chat-btn')?.addEventListener('click', startNewSession);
+  document.getElementById('coding-mode-btn')?.addEventListener('click', toggleCodingMode);
   document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
   document.getElementById('sidebar-open-btn')?.addEventListener('click', toggleSidebar);
 
