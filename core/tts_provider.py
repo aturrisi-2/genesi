@@ -177,6 +177,23 @@ class OpenAITTSProvider(TTSProvider):
             raise RuntimeError("OPENAI_API_KEY non trovata nelle variabili d'ambiente")
         print(f"TTS_PROVIDER=openai voice={self.voice} model={self.model}")
 
+    def _pad_tts_text(self, text: str) -> str:
+        """
+        Aggiunge padding implicito per evitare che Onyx tagli l'audio
+        all'inizio e alla fine.
+        """
+        text = text.strip()
+        
+        # Aggiungi pausa iniziale con virgola se il testo inizia con parola diretta
+        if text and text[0].isalpha():
+            text = "… " + text  # ellissi forza una micro-pausa iniziale
+        
+        # Assicura che il testo finisca con punteggiatura forte
+        if text and text[-1] not in '.!?…':
+            text = text + "."
+        
+        return text
+
     def name(self) -> str:
         return "openai"
 
@@ -185,6 +202,10 @@ class OpenAITTSProvider(TTSProvider):
         import httpx
 
         try:
+            # Applica padding solo per Onyx
+            if self.voice == "onyx":
+                text = self._pad_tts_text(text)
+            
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(
                     "https://api.openai.com/v1/audio/speech",
@@ -277,11 +298,12 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
     # Prova primary
     try:
         if primary == "openai":
+            import os
             cfg = providers_cfg.get("openai", {})
             return OpenAITTSProvider(
                 voice=cfg.get("voice", "onyx"),
-                model=cfg.get("model", "tts-1"),
-                speed=cfg.get("speed", 1.0)
+                model=os.getenv("OPENAI_TTS_MODEL", cfg.get("model", "tts-1")),
+                speed=float(os.getenv("ONYX_SPEED", str(cfg.get("speed", 1.0))))
             )
         elif primary == "edge_tts":
             cfg = providers_cfg.get("edge_tts", {})
@@ -303,11 +325,12 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
                 volume=cfg.get("volume", "+0%")
             )
         elif secondary == "openai":
+            import os
             cfg = providers_cfg.get("openai", {})
             return OpenAITTSProvider(
                 voice=cfg.get("voice", "onyx"),
-                model=cfg.get("model", "tts-1"),
-                speed=cfg.get("speed", 1.0)
+                model=os.getenv("OPENAI_TTS_MODEL", cfg.get("model", "tts-1")),
+                speed=float(os.getenv("ONYX_SPEED", str(cfg.get("speed", 1.0))))
             )
     except Exception as e:
         print(f"TTS_ROUTING_SECONDARY_FAIL provider={secondary} reason={e}")
