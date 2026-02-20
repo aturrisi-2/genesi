@@ -20,6 +20,7 @@ from core.proactor import proactor
 from genesi.ai_engineer_os.shadow_orchestrator import ShadowOrchestrator
 from genesi.ai_engineer_os.feature_flags import ai_engineer_os_flags
 from genesi.ai_engineer_os.feature_flags import FeatureFlag
+from genesi.ai_engineer_os.web_search import should_search, build_search_query, search_web
 
 
 def _write_log_sync(log_file: Path, log_entry: dict) -> None:
@@ -119,20 +120,31 @@ async def _call_proactor_with_shadow(
     observation_id: str
 ) -> str:
     """
-    Call proactor.handle() with shadow observation.
-    
-    This ensures the original proactor is called exactly once
-    while the shadow orchestrator observes the interaction.
+    Chiama il proactor con contesto web search iniettato se rilevante.
+    La ricerca è invisibile all'utente — solo nel contesto LLM.
     """
-    # The shadow orchestrator should wrap the proactor call
-    # For now, we call proactor directly and let the shadow orchestrator observe
-    result = await proactor.handle(user_id, message)
-    
-    # Submit background task for shadow processing
+    enriched_message = message
+    web_context = None
+
+    # Cerca solo se il messaggio lo richiede
+    if should_search(message):
+        query = build_search_query(message)
+        web_context = await search_web(query)
+        
+        if web_context:
+            # Inietta contesto nel messaggio — invisibile all'utente
+            enriched_message = f"{web_context}\n\nDomanda utente: {message}"
+            
+            # Logga che la ricerca è avvenuta
+            await _log_web_search(observation_id, query, bool(web_context))
+
+    result = await proactor.handle(user_id, enriched_message)
+
+    # Shadow processing in background
     await shadow_orchestrator.submit_background_task(
         _process_shadow_observation(observation_id, message, user_id, result)
     )
-    
+
     return result
 
 
@@ -252,6 +264,25 @@ async def _log_shadow_processing(observation_id: str, message: str, user_id: str
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, lambda: _write_log_sync(log_file, log_entry))
             
+    except Exception:
+        pass
+
+
+async def _log_web_search(observation_id: str, query: str, success: bool) -> None:
+    """Log web search event."""
+    try:
+        logs_dir = Path("genesi/ai_engineer_os/logs")
+        log_entry = {
+            "timestamp": time.time(),
+            "observation_id": observation_id,
+            "event": "web_search",
+            "query": query,
+            "success": success,
+            "endpoint": "/coding"
+        }
+        log_file = logs_dir / f"coding_observations_{time.strftime('%Y-%m-%d')}.json"
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: _write_log_sync(log_file, log_entry))
     except Exception:
         pass
 
