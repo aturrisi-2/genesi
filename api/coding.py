@@ -4,6 +4,7 @@ Isolated endpoint for AI Engineer OS shadow integration.
 No auth dependency injection - uses direct request processing.
 """
 
+import asyncio
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Request
@@ -19,6 +20,13 @@ from core.proactor import proactor
 from genesi.ai_engineer_os.shadow_orchestrator import ShadowOrchestrator
 from genesi.ai_engineer_os.feature_flags import ai_engineer_os_flags
 from genesi.ai_engineer_os.feature_flags import FeatureFlag
+
+
+def _write_log_sync(log_file: Path, log_entry: dict) -> None:
+    """Sync log write — chiamata via executor per non bloccare event loop."""
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_file, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(log_entry) + '\n')
 
 
 # Pydantic models
@@ -81,7 +89,7 @@ async def coding_endpoint(request: Request, body: CodingRequest):
                 await shadow_orchestrator.stop()
         else:
             # Direct call if AI Engineer OS is disabled
-            result = await proactor.handle(message, "chat_free", user_id)
+            result = await proactor.handle(user_id, message)
         
         processing_time = time.time() - start_time
         
@@ -118,7 +126,7 @@ async def _call_proactor_with_shadow(
     """
     # The shadow orchestrator should wrap the proactor call
     # For now, we call proactor directly and let the shadow orchestrator observe
-    result = await proactor.handle(message, "chat_free", user_id)
+    result = await proactor.handle(user_id, message)
     
     # Submit background task for shadow processing
     await shadow_orchestrator.submit_background_task(
@@ -168,8 +176,8 @@ async def _log_observation_start(observation_id: str, message: str, user_id: str
         
         log_file = logs_dir / f"coding_observations_{time.strftime('%Y-%m-%d')}.json"
         
-        with open(log_file, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(log_entry) + '\n')
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: _write_log_sync(log_file, log_entry))
             
     except Exception:
         pass  # Silently fail to avoid affecting main flow
@@ -192,8 +200,8 @@ async def _log_observation_complete(observation_id: str, result: str, processing
         
         log_file = logs_dir / f"coding_observations_{time.strftime('%Y-%m-%d')}.json"
         
-        with open(log_file, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(log_entry) + '\n')
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: _write_log_sync(log_file, log_entry))
             
     except Exception:
         pass
@@ -216,8 +224,8 @@ async def _log_observation_error(observation_id: str, error: str, processing_tim
         
         log_file = logs_dir / f"coding_observations_{time.strftime('%Y-%m-%d')}.json"
         
-        with open(log_file, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(log_entry) + '\n')
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: _write_log_sync(log_file, log_entry))
             
     except Exception:
         pass
@@ -241,8 +249,8 @@ async def _log_shadow_processing(observation_id: str, message: str, user_id: str
         
         log_file = logs_dir / f"shadow_processing_{time.strftime('%Y-%m-%d')}.json"
         
-        with open(log_file, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(log_entry) + '\n')
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: _write_log_sync(log_file, log_entry))
             
     except Exception:
         pass
@@ -264,8 +272,8 @@ async def _log_shadow_error(observation_id: str, error: str) -> None:
         
         log_file = logs_dir / f"shadow_errors_{time.strftime('%Y-%m-%d')}.json"
         
-        with open(log_file, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(log_entry) + '\n')
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: _write_log_sync(log_file, log_entry))
             
     except Exception:
         pass
