@@ -16,6 +16,14 @@ def should_search(message: str) -> bool:
     Decide se il messaggio richiede una ricerca web.
     Trigger su: versioni, librerie, changelog, esempi reali, "latest", "ultimo".
     """
+    # Filtra messaggi bash/terminale copiati per errore
+    if message.startswith("(venv)"):
+        return False
+    if "$/opt/" in message:
+        return False
+    if len(message) > 300:
+        return False
+    
     keywords = [
         # Italiano
         'ultima versione', 'versione stabile', 'changelog', 'novità',

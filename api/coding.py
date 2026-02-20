@@ -5,6 +5,7 @@ No auth dependency injection - uses direct request processing.
 """
 
 import asyncio
+import logging
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Request
@@ -21,6 +22,8 @@ from genesi.ai_engineer_os.shadow_orchestrator import ShadowOrchestrator
 from genesi.ai_engineer_os.feature_flags import ai_engineer_os_flags
 from genesi.ai_engineer_os.feature_flags import FeatureFlag
 from genesi.ai_engineer_os.web_search import should_search, build_search_query, search_web
+
+logger = logging.getLogger(__name__)
 
 
 def _write_log_sync(log_file: Path, log_entry: dict) -> None:
