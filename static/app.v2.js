@@ -2475,6 +2475,7 @@ async function sendVoiceMessage(text) {
     voiceSilenceTimer = null;
 
     // STOP IMMEDIATO del microfono — impedisce di trascrivere la risposta TTS
+    window.voiceBlocked = true;
     voiceRecognition?.stop();
     voiceRecognition = null;
 
@@ -2544,6 +2545,7 @@ async function sendVoiceMessage(text) {
             }
         };
 
+        window.voiceBlocked = false;
         setVoiceOrbState('listening');
         setVoiceStatusText('In ascolto...');
         setTimeout(() => {
