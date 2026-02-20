@@ -2539,14 +2539,28 @@ async function sendVoiceMessage(text) {
 
 function waitForTTSEnd(callback) {
     let ttsStarted = false;
+    let called = false;
+
+    const safeCall = () => {
+        if (called) return;
+        called = true;
+        try { callback(); } catch(e) {}
+    };
+
     const poll = setInterval(() => {
         if (window.ttsPlaying === true) ttsStarted = true;
+
         if (ttsStarted && !window.ttsPlaying) {
             clearInterval(poll);
-            setTimeout(callback, 500);
+            setTimeout(safeCall, 500);
         }
     }, 150);
-    setTimeout(() => { clearInterval(poll); if (voiceModeActive) callback(); }, 30000);
+
+    // Fallback — MA senza doppia chiamata
+    setTimeout(() => {
+        clearInterval(poll);
+        if (voiceModeActive) safeCall();
+    }, 30000);
 }
 
 function stopVoiceMode() {
