@@ -1,9 +1,12 @@
 """
 Coding Mode API Endpoint
 Isolated endpoint for AI Engineer OS shadow integration.
+No auth dependency injection - uses direct request processing.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter
+from fastapi import HTTPException
+from fastapi import Request
 from pydantic import BaseModel
 from typing import Optional
 import time
@@ -12,10 +15,10 @@ import os
 import json
 from pathlib import Path
 
-from auth.auth import get_current_user
 from core.proactor import proactor
 from genesi.ai_engineer_os.shadow_orchestrator import ShadowOrchestrator
-from genesi.ai_engineer_os.feature_flags import ai_engineer_os_flags, FeatureFlag
+from genesi.ai_engineer_os.feature_flags import ai_engineer_os_flags
+from genesi.ai_engineer_os.feature_flags import FeatureFlag
 
 
 # Pydantic models
@@ -35,25 +38,29 @@ coding_router = APIRouter(prefix="/coding", tags=["coding"])
 
 
 @coding_router.post("/", response_model=CodingResponse)
-async def coding_endpoint(
-    request: CodingRequest,
-    current_user: dict = Depends(get_current_user)
-):
+async def coding_endpoint(request: Request, body: CodingRequest):
     """
     Coding Mode endpoint with AI Engineer OS shadow integration.
     
     This endpoint activates the AI Engineer OS shadow orchestrator
     only for coding mode requests, leaving normal chat unaffected.
+    
+    No auth dependency injection - processes request directly.
     """
     start_time = time.time()
     observation_id = str(uuid.uuid4())
     
     try:
-        # Get user ID from authenticated user
-        user_id = current_user.get("sub") or request.user_id or "unknown"
+        # Extract user_id from request body or default
+        user_id = body.user_id or "coding_user"
+        
+        # Extract message from request body
+        message = body.message
+        if not message:
+            raise HTTPException(status_code=400, detail="Message is required")
         
         # Log observation start
-        await _log_observation_start(observation_id, request.message, user_id)
+        await _log_observation_start(observation_id, message, user_id)
         
         # Activate AI Engineer OS shadow orchestrator for this request
         if ai_engineer_os_flags.is_enabled(FeatureFlag.AI_ENGINEER_OS_ENABLED):
@@ -65,7 +72,7 @@ async def coding_endpoint(
                 # Call proactor.handle() through shadow orchestrator
                 result = await _call_proactor_with_shadow(
                     shadow_orchestrator, 
-                    request.message, 
+                    message, 
                     user_id,
                     observation_id
                 )
@@ -74,7 +81,7 @@ async def coding_endpoint(
                 await shadow_orchestrator.stop()
         else:
             # Direct call if AI Engineer OS is disabled
-            result = await proactor.handle(request.message, "chat_free", user_id)
+            result = await proactor.handle(message, "chat_free", user_id)
         
         processing_time = time.time() - start_time
         
