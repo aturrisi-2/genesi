@@ -1084,6 +1084,122 @@ textarea#text-input::-webkit-scrollbar {
 }
 #sidebar-open-btn:hover { color: #ccc; }
 
+/* ─── VOICE MODE BUTTON ─────────────────────────────────── */
+#voice-mode-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #111;
+  border: 1px solid #2a2a2a;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+#voice-mode-btn:hover { color: #aaa; border-color: #444; }
+#voice-mode-btn.active {
+  background: #0e3a5c;
+  border-color: #1e6494;
+  color: #4ab4f0;
+  box-shadow: 0 0 12px rgba(30,100,180,0.4);
+}
+
+/* ─── VOICE OVERLAY ─────────────────────────────────────── */
+.voice-overlay {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  z-index: 200;
+  pointer-events: none;
+}
+.voice-overlay.hidden { display: none; }
+.voice-overlay.visible { display: flex; pointer-events: all; }
+
+.voice-orb {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid rgba(74, 180, 240, 0.3);
+  animation: voicePulse 2s ease-out infinite;
+}
+.ring-1 { width: 70px; height: 70px; animation-delay: 0s; }
+.ring-2 { width: 95px; height: 95px; animation-delay: 0.4s; }
+.ring-3 { width: 120px; height: 120px; animation-delay: 0.8s; }
+
+@keyframes voicePulse {
+  0%   { transform: scale(0.95); opacity: 0.6; }
+  50%  { transform: scale(1.05); opacity: 0.3; }
+  100% { transform: scale(0.95); opacity: 0.6; }
+}
+
+.voice-orb-core {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #1e6494, #0a2a40);
+  border: 1px solid #1e6494;
+  box-shadow: 0 0 20px rgba(30,100,180,0.5);
+  z-index: 1;
+  transition: transform 0.1s;
+}
+
+/* Quando parla l'utente */
+.voice-orb.listening .voice-ring {
+  border-color: rgba(74, 180, 240, 0.6);
+  animation-duration: 0.8s;
+}
+.voice-orb.listening .voice-orb-core {
+  box-shadow: 0 0 30px rgba(30,100,180,0.8);
+}
+
+/* Quando risponde Genesi */
+.voice-orb.speaking .voice-ring {
+  border-color: rgba(240, 160, 50, 0.5);
+  animation-duration: 0.6s;
+}
+.voice-orb.speaking .voice-orb-core {
+  background: radial-gradient(circle, #5a3a00, #2a1800);
+  border-color: #c88020;
+  box-shadow: 0 0 30px rgba(200,130,20,0.6);
+}
+
+.voice-status-text {
+  position: absolute;
+  bottom: -28px;
+  font-size: 12px;
+  color: #888;
+  white-space: nowrap;
+  letter-spacing: 0.05em;
+}
+
+#voice-mode-stop-btn {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  color: #888;
+  padding: 6px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-top: 8px;
+}
+#voice-mode-stop-btn:hover { color: #ccc; }
+
 #main-chat {
   flex: 1;
   overflow: hidden;
@@ -1181,3 +1297,119 @@ textarea#text-input::-webkit-scrollbar {
   font-size: 16px;
 }
 #sidebar-open-btn:hover { color: #ccc; }
+
+/* ─── VOICE MODE BUTTON ─────────────────────────────────── */
+#voice-mode-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #111;
+  border: 1px solid #2a2a2a;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+#voice-mode-btn:hover { color: #aaa; border-color: #444; }
+#voice-mode-btn.active {
+  background: #0e3a5c;
+  border-color: #1e6494;
+  color: #4ab4f0;
+  box-shadow: 0 0 12px rgba(30,100,180,0.4);
+}
+
+/* ─── VOICE OVERLAY ─────────────────────────────────────── */
+.voice-overlay {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  z-index: 200;
+  pointer-events: none;
+}
+.voice-overlay.hidden { display: none; }
+.voice-overlay.visible { display: flex; pointer-events: all; }
+
+.voice-orb {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid rgba(74, 180, 240, 0.3);
+  animation: voicePulse 2s ease-out infinite;
+}
+.ring-1 { width: 70px; height: 70px; animation-delay: 0s; }
+.ring-2 { width: 95px; height: 95px; animation-delay: 0.4s; }
+.ring-3 { width: 120px; height: 120px; animation-delay: 0.8s; }
+
+@keyframes voicePulse {
+  0%   { transform: scale(0.95); opacity: 0.6; }
+  50%  { transform: scale(1.05); opacity: 0.3; }
+  100% { transform: scale(0.95); opacity: 0.6; }
+}
+
+.voice-orb-core {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #1e6494, #0a2a40);
+  border: 1px solid #1e6494;
+  box-shadow: 0 0 20px rgba(30,100,180,0.5);
+  z-index: 1;
+  transition: transform 0.1s;
+}
+
+/* Quando parla l'utente */
+.voice-orb.listening .voice-ring {
+  border-color: rgba(74, 180, 240, 0.6);
+  animation-duration: 0.8s;
+}
+.voice-orb.listening .voice-orb-core {
+  box-shadow: 0 0 30px rgba(30,100,180,0.8);
+}
+
+/* Quando risponde Genesi */
+.voice-orb.speaking .voice-ring {
+  border-color: rgba(240, 160, 50, 0.5);
+  animation-duration: 0.6s;
+}
+.voice-orb.speaking .voice-orb-core {
+  background: radial-gradient(circle, #5a3a00, #2a1800);
+  border-color: #c88020;
+  box-shadow: 0 0 30px rgba(200,130,20,0.6);
+}
+
+.voice-status-text {
+  position: absolute;
+  bottom: -28px;
+  font-size: 12px;
+  color: #888;
+  white-space: nowrap;
+  letter-spacing: 0.05em;
+}
+
+#voice-mode-stop-btn {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  color: #888;
+  padding: 6px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-top: 8px;
+}
+#voice-mode-stop-btn:hover { color: #ccc; }
