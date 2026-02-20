@@ -2292,7 +2292,7 @@ async function startNewSession() {
         const listRes = await fetch('/api/conversations', {
             headers: { 'Authorization': `Bearer ${getAuthToken()}` }
         });
-        const convs = await listRes.json();
+        const convData = await listRes.json(); const convs = Array.isArray(convData) ? convData : (convData.conversations || convData.items || Object.values(convData) || []);
 
         // DEBUG — stampa la struttura raw delle conv
         console.log('CONVS_RAW:', JSON.stringify(convs.slice(0,3)));
