@@ -2536,8 +2536,8 @@ async function sendVoiceMessage(text) {
     clearTimeout(voiceSilenceTimer);
     voiceSilenceTimer = null;
 
-    voiceBlockedUntil = Date.now() + 60000;
-    console.log('VOICE_BLOCKED_START will unblock after TTS');
+    voiceBlockedUntil = Date.now() + 8000;  
+    console.log('VOICE_BLOCKED_START timestamp=' + Date.now() + ' will unblock after 8s');
 
     try { voiceRecognition?.stop(); } catch(e) {}
     voiceRecognition = null;
@@ -2552,7 +2552,7 @@ async function sendVoiceMessage(text) {
     waitForTTSEnd(() => {
         if (!voiceModeActive) return;
         voiceBlockedUntil = Date.now() + 1000;
-        console.log('VOICE_UNBLOCKED riavvio ascolto fra 1s');
+        console.log('VOICE_UNBLOCKED timestamp=' + Date.now() + ' riavvio ascolto fra 1s');
         setVoiceOrbState('listening');
         setVoiceStatusText('In ascolto...');
         setTimeout(() => {
@@ -2565,14 +2565,40 @@ async function sendVoiceMessage(text) {
 
 function waitForTTSEnd(callback) {
     let ttsStarted = false;
+    let ttsDetected = false;
+    const startTime = Date.now();
+    
+    // Check rapido per TTS assente
+    const ttsCheckTimer = setTimeout(() => {
+        if (!ttsStarted && !ttsDetected) {
+            console.log('TTS_NOT_DETECTED timestamp=' + Date.now() + ' dopo 2s senza TTS');
+            callback();
+        }
+    }, 2000);
+    
     const poll = setInterval(() => {
-        if (window.ttsPlaying === true) ttsStarted = true;
+        if (window.ttsPlaying === true) {
+            ttsStarted = true;
+            ttsDetected = true;
+            console.log('TTS_DETECTED timestamp=' + Date.now());
+            clearTimeout(ttsCheckTimer);
+        }
         if (ttsStarted && window.ttsPlaying !== true) {
             clearInterval(poll);
+            clearTimeout(ttsCheckTimer);
             setTimeout(callback, 400);
         }
     }, 150);
-    setTimeout(() => { clearInterval(poll); if (voiceModeActive) callback(); }, 30000);
+    
+    // Timeout di sicurezza aumentato a 30 secondi
+    setTimeout(() => { 
+        clearInterval(poll); 
+        clearTimeout(ttsCheckTimer);
+        if (voiceModeActive) {
+            console.log('TTS_TIMEOUT timestamp=' + Date.now() + ' dopo 30s');
+            callback(); 
+        }
+    }, 30000);
 }
 
 function stopVoiceMode() {
