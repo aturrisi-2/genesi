@@ -2396,7 +2396,25 @@ function initVoiceMode() {
     const btn = document.getElementById('voice-mode-btn');
     const stopBtn = document.getElementById('voice-mode-stop-btn');
     if (!btn) return;
-    btn.addEventListener('click', () => voiceModeActive ? stopVoiceMode() : startVoiceMode());
+    let lastVoiceToggle = 0;
+
+    btn.addEventListener('click', () => {
+        const now = Date.now();
+
+        // Protezione anti doppio click (1.5 secondi)
+        if (now - lastVoiceToggle < 1500) {
+            console.log('VOICE_TOGGLE_BLOCKED double click prevented');
+            return;
+        }
+
+        lastVoiceToggle = now;
+
+        if (voiceModeActive) {
+            stopVoiceMode();
+        } else {
+            startVoiceMode();
+        }
+    });
     stopBtn?.addEventListener('click', stopVoiceMode);
 }
 
