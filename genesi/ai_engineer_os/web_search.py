@@ -4,7 +4,7 @@ Usa DuckDuckGo — nessuna API key richiesta.
 I risultati vengono iniettati nel contesto LLM, invisibili all'utente.
 """
 
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 from typing import Optional
 import logging
 
