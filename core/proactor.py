@@ -302,7 +302,7 @@ class Proactor:
                 active_docs = [profile["active_document_id"]]
             if active_docs and is_document_reference(message):
                 logger.info("DOCUMENT_MODE_TRIGGERED user=%s doc_count=%d", user_id, len(active_docs))
-                response = await self._handle_document_query(user_id, message, profile, brain_state)
+                response = await self._handle_document_query(user_id, message, profile, brain_state, conversation_id)
                 return response, "tool"
 
             # STEP 3.8: MEMORY ROUTING OVERRIDE — bypass classifier for memory references
@@ -370,21 +370,21 @@ class Proactor:
                 # in a relational conversation should stay relational
                 if self._should_override_to_relational(message, user_id):
                     logger.info("PROACTOR_INTENT_OVERRIDE user=%s intent=%s->relational reason=short_contextual", user_id, intent)
-                    response = await self._handle_relational(user_id, message, brain_state)
+                    response = await self._handle_relational(user_id, message, brain_state, conversation_id)
                     return response, "tool"
                 log("ROUTING_DECISION", route="knowledge_strict", user_id=user_id)
-                response = await self._handle_knowledge(user_id, message)
+                response = await self._handle_knowledge(user_id, message, conversation_id)
                 return response, "tool"
 
             # STEP 7: RELATIONAL / GENERAL
             if is_relational_message(message):
                 log("ROUTING_DECISION", route="relational", user_id=user_id)
-                response = await self._handle_relational(user_id, message, brain_state)
+                response = await self._handle_relational(user_id, message, brain_state, conversation_id)
                 return response, "tool"
 
             # STEP 8: DEFAULT — relational pipeline (chat libera)
             log("ROUTING_DECISION", route="default_relational", user_id=user_id)
-            response = await self._handle_relational(user_id, message, brain_state)
+            response = await self._handle_relational(user_id, message, brain_state, conversation_id)
             return response, "relational"
 
         except Exception as e:
@@ -1125,7 +1125,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
     # RELATIONAL ROUTER — GPT controllato con contesto limitato
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_relational(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
+    async def _handle_relational(self, user_id: str, message: str, brain_state: Dict[str, Any], conversation_id: str = None) -> str:
         """
         Pipeline relazionale con GPT controllato.
         GPT riceve: conversation thread, identity summary, topic, latent state.
@@ -1374,7 +1374,7 @@ Messaggio utente: {message}"""
         
         return system_prompt
         
-    async def _handle_knowledge(self, user_id: str, message: str) -> str:
+    async def _handle_knowledge(self, user_id: str, message: str, conversation_id: str = None) -> str:
         """
         GPT per domande di definizione/conoscenza.
         Include chat history per risolvere riferimenti contestuali.
@@ -1434,7 +1434,7 @@ Domanda: {message}"""
     # ═══════════════════════════════════════════════════════════
 
     async def _handle_document_query(self, user_id: str, message: str,
-                                      profile: Dict[str, Any], brain_state: Dict[str, Any]) -> tuple[str, str]:
+                                      profile: Dict[str, Any], brain_state: Dict[str, Any], conversation_id: str = None) -> tuple[str, str]:
         """
         Handle document_query intent. Uses active document content in LLM context.
         No generic fallback allowed — response MUST use document data.
