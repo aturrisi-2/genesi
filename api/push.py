@@ -16,7 +16,7 @@ from auth.models import AuthUser
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/push", tags=["push"])
+router = APIRouter(prefix="/api/push", tags=["push"])
 
 # ── Config VAPID ──────────────────────────────────────────────
 VAPID_PRIVATE_KEY   = os.getenv("VAPID_PRIVATE_KEY", "")
