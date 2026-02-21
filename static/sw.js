@@ -84,3 +84,53 @@ self.addEventListener('fetch', (event) => {
         })
     );
 });
+
+// ── Push notifications ───────────────────────────────────────
+self.addEventListener('push', (event) => {
+    if (!event.data) return;
+
+    let payload;
+    try {
+        payload = event.data.json();
+    } catch {
+        payload = { title: 'Genesi', body: event.data.text() };
+    }
+
+    const options = {
+        body: payload.body || '',
+        icon: payload.icon || '/static/icon.png',
+        badge: payload.badge || '/static/icon.png',
+        tag: payload.tag || 'genesi-notification',
+        renotify: payload.renotify || false,
+        data: payload.data || {},
+        actions: [
+            { action: 'open', title: 'Apri Genesi' },
+            { action: 'dismiss', title: 'Chiudi' },
+        ],
+    };
+
+    event.waitUntil(
+        self.registration.showNotification(payload.title || 'Genesi', options)
+    );
+});
+
+// Click sulla notifica: apre l'app
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+
+    if (event.action === 'dismiss') return;
+
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true })
+            .then((clientList) => {
+                // Se l'app è già aperta, porta in primo piano
+                for (const client of clientList) {
+                    if (client.url.includes(self.location.origin) && 'focus' in client) {
+                        return client.focus();
+                    }
+                }
+                // Altrimenti apri una nuova finestra
+                return clients.openWindow('/');
+            })
+    );
+});

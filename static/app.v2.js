@@ -2875,3 +2875,80 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
+
+// ── Push Notifications — richiesta permesso e subscription ──
+(function initPushNotifications() {
+  'use strict';
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    console.info('[PUSH] Non supportato su questo browser.');
+    return;
+  }
+
+  async function getVapidKey() {
+    const resp = await fetch('/api/push/vapid-public-key');
+    if (!resp.ok) throw new Error('VAPID key non disponibile');
+    const data = await resp.json();
+    return data.public_key;
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+  }
+
+  async function subscribeToPush() {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const vapidKey = await getVapidKey();
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      });
+
+      // Invia subscription al backend
+      const resp = await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+
+      if (resp.ok) {
+        console.log('[PUSH] Subscription salvata sul server.');
+      } else {
+        console.warn('[PUSH] Errore salvataggio subscription:', resp.status);
+      }
+    } catch (err) {
+      console.warn('[PUSH] Errore subscription:', err);
+    }
+  }
+
+  async function initPush() {
+    // Aspetta che l'utente sia loggato (presenza del token)
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.info('[PUSH] Utente non loggato — skip push init.');
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    console.log('[PUSH] Permesso notifiche:', permission);
+
+    if (permission === 'granted') {
+      await subscribeToPush();
+    }
+  }
+
+  // Avvia dopo che il SW è pronto
+  navigator.serviceWorker.ready.then(() => {
+    // Piccolo delay per non sovraccaricare il primo caricamento
+    setTimeout(initPush, 2000);
+  });
+
+})();

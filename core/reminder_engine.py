@@ -419,6 +419,18 @@ class ReminderEngine:
                     
                     if self._save_reminders(user_id, reminders):
                         log("REMINDER_TRIGGERED", user_id=user_id, reminder_id=reminder_id)
+                        
+                        # Notifica push quando reminder scatta
+                        try:
+                            from api.push import send_push_notification
+                            send_push_notification(
+                                user_id=user_id,
+                                title="⏰ Promemoria Genesi",
+                                body=reminder["text"],
+                                data={"reminder_id": str(reminder_id)}
+                            )
+                        except Exception as push_err:
+                            log("PUSH_REMINDER_ERROR", error=str(push_err))
                         return True
                     return False
             
