@@ -1952,11 +1952,14 @@ body {
 /* 2. Fix 100vh bug su Mobile Chrome/Safari che taglia l'input box */
 
 #app-layout {
-  height: 100dvh !important;
+  height: var(--app-height) !important;
+  max-height: 100% !important;
 }
 
 body {
-  min-height: 100dvh !important;
+  height: var(--app-height) !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
 }
 
 /* 3. Aggiungo Safe padding per la Dynamic Island e Bottom Bar di Apple iOS */
