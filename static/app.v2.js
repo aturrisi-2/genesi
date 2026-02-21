@@ -2914,7 +2914,7 @@ if ('serviceWorker' in navigator) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+          'Authorization': `Bearer ${localStorage.getItem('genesi_access_token') || ''}`,
         },
         body: JSON.stringify(subscription.toJSON()),
       });
@@ -2931,7 +2931,7 @@ if ('serviceWorker' in navigator) {
 
   async function initPush() {
     // Aspetta che l'utente sia loggato (presenza del token)
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('genesi_access_token');
     if (!token) {
       console.info('[PUSH] Utente non loggato — skip push init.');
       return;
