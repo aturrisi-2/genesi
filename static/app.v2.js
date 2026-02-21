@@ -2166,7 +2166,8 @@ async function playSimpleAudio(blob) {
 
     // Cleanup helper
     const cleanup = () => {
-      activeTTSSources = activeTTSSources.filter(s => s !== source);
+      const idx = activeTTSSources.indexOf(source);
+      if (idx > -1) activeTTSSources.splice(idx, 1);
       if (_ttsSource === source) _ttsSource = null;
       _isPlayingChunk = false;
     };
