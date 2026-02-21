@@ -307,7 +307,7 @@ class Proactor:
 
             # STEP 3.8: MEMORY ROUTING OVERRIDE — bypass classifier for memory references
             chat_count = chat_memory.get_message_count(user_id)
-            if chat_count > 0 and is_memory_reference(message):
+            if (chat_count > 0 or conversation_id) and is_memory_reference(message):
                 logger.info("MEMORY_ROUTING_OVERRIDE user=%s chat_count=%d msg=%s", user_id, chat_count, message[:40])
                 intent = "memory_context"
 
@@ -340,7 +340,7 @@ class Proactor:
             # STEP 5.5: MEMORY CONTEXT ROUTE
             if intent == "memory_context":
                 log("ROUTING_DECISION", route="memory_context", user_id=user_id)
-                response = await self._handle_memory_context(user_id, message, brain_state)
+                response = await self._handle_memory_context(user_id, message, brain_state, conversation_id)
                 return response, "tool"
             
             # STEP 5.6: REMINDER ROUTING STRICT
@@ -539,16 +539,44 @@ class Proactor:
     # MEMORY CONTEXT ROUTER — conversational memory responses
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_memory_context(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
+    async def _handle_memory_context(self, user_id: str, message: str, brain_state: Dict[str, Any], conversation_id: str = None) -> tuple[str, str]:
         """
         Handle memory_context intent — responses based on conversation history.
-        Loads last N=5 interactions, summarizes dynamically, responds naturally.
+        Loads last N interactions, summarizes dynamically, responds naturally.
         Never responds with "non posso aiutarti".
         Returns: (response_text: str, source: str)
         """
         try:
-            # Load last 5 interactions
-            messages = chat_memory.get_messages(user_id, limit=5)
+            # Load last interactions from specific conversation if provided
+            messages = []
+            if conversation_id:
+                try:
+                    from api.conversations import _load_conv
+                    conv = _load_conv(user_id, conversation_id)
+                    if conv and "messages" in conv:
+                        raw_msgs = conv["messages"]
+                        current_pair = {}
+                        for m in raw_msgs:
+                            role = m.get("role")
+                            content = m.get("content", "")
+                            if role == "user":
+                                if current_pair.get("user_message"):
+                                    messages.append(current_pair)
+                                    current_pair = {}
+                                current_pair["user_message"] = content
+                            elif role in ("assistant", "genesi", "system", "model") and current_pair.get("user_message"):
+                                current_pair["system_response"] = content
+                                messages.append(current_pair)
+                                current_pair = {}
+                        # Keep last 10 for better context
+                        messages = messages[-10:]
+                except Exception as e:
+                    logger.error("Failed to load conversation history for memory_context: %s", str(e))
+                
+            if not messages:
+                # Fallback to volatile memory
+                messages = chat_memory.get_messages(user_id, limit=5)
+                
             if not messages:
                 logger.warning("MEMORY_CONTEXT_NO_HISTORY user=%s", user_id)
                 return "Non abbiamo ancora parlato abbastanza. Di cosa vorresti conversare?", "memory_context"
@@ -570,7 +598,8 @@ class Proactor:
 
 L'utente ora chiede: "{message}"
 
-Rispondi in modo naturale facendo riferimento ai nostri scambi precedenti quando pertinente. 
+Rispondi in modo naturale facendo riferimento ai nostri scambi precedenti quando pertinente.
+ISTRUZIONE OBBLIGATORIA: Inizia la tua risposta confermando esplicitamente all'utente che hai appena riletto la storia della chat (es. "Ho riletto i nostri vecchi scambi e...", "Ho controllato la nostra conversazione...").
 Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
             # Use LLM for natural response
