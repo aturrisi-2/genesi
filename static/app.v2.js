@@ -146,7 +146,7 @@ function applyAuthState() {
 
   // Greeting from token payload
   const payload = getTokenPayload();
-  userGreeting.textContent = 'Ciao';
+
 
   // Admin link
   adminLink.style.display = isAdmin() ? '' : 'none';
@@ -2681,23 +2681,17 @@ function setVoiceStatusText(text) {
 (function initWeatherWidget() {
   'use strict';
 
-  // Mappa condition OpenWeather → emoji
-  const WEATHER_ICONS = {
-    clear: '☀️',
-    clouds: '☁️',
-    rain: '🌧️',
-    drizzle: '🌦️',
-    thunderstorm: '⛈️',
-    snow: '❄️',
-    mist: '🌫️',
-    fog: '🌫️',
-    haze: '🌫️',
-    smoke: '🌫️',
-    dust: '🌪️',
-    sand: '🌪️',
-    ash: '🌋',
-    squall: '💨',
-    tornado: '🌪️',
+  // Mappa icon_code OpenWeather → emoji
+  const WEATHER_ICONS_MAP = {
+    '01d': '☀️', '01n': '🌙',
+    '02d': '⛅', '02n': '🌤️',
+    '03d': '☁️', '03n': '☁️',
+    '04d': '☁️', '04n': '☁️',
+    '09d': '🌧️', '09n': '🌧️',
+    '10d': '🌦️', '10n': '🌧️',
+    '11d': '⛈️', '11n': '⛈️',
+    '13d': '❄️', '13n': '❄️',
+    '50d': '🌫️', '50n': '🌫️'
   };
 
   const els = {
@@ -2731,7 +2725,8 @@ function setVoiceStatusText(text) {
   }
 
   function renderWeather(payload) {
-    const icon = WEATHER_ICONS[payload.condition] || '🌡️';
+    // Usa l'icon_code di OpenWeatherMap per discriminare giorno/notte
+    const icon = WEATHER_ICONS_MAP[payload.icon_code] || '🌡️';
     els.icon.textContent = icon;
     els.city.textContent = payload.city;
     els.temp.textContent = `${payload.temp}°`;

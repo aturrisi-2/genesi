@@ -1965,3 +1965,33 @@ body {
     padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important;
   }
 }
+
+/* 4. Aumento dimensioni colpo d'occhio Widget Meteo */
+.weather-widget {
+  margin-top: 25px !important;
+  margin-bottom: 25px !important;
+}
+
+.weather-widget__inner {
+  font-size: 1.15rem !important;
+  gap: 0.8rem !important;
+}
+
+.weather-widget__icon-wrap {
+  font-size: 2.3rem !important;
+}
+
+.weather-widget__temp {
+  font-size: 1.5rem !important;
+}
+
+.weather-widget__city {
+  font-size: 0.95rem !important;
+}
+
+.weather-widget__desc,
+.weather-widget__meta,
+.weather-widget__time {
+  font-size: 1rem !important;
+  opacity: 0.65 !important;
+}

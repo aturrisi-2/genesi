@@ -1,239 +1,250 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
-    <title>Genesi</title>
-    <link rel="stylesheet" href="/static/style.css?v=9">
-    <style>
-        /* Cinematic Thinking Bubble Animations */
-        
-        @keyframes dotPulse {
-            0%, 100% {
-                opacity: 0.4;
-                transform: scale(1);
-                filter: brightness(0.8);
-            }
-            50% {
-                opacity: 1;
-                transform: scale(1.1);
-                filter: brightness(1.2);
-            }
-        }
-        
-        @keyframes bubbleBreath {
-            0%, 100% {
-                transform: scale(1);
-            }
-            50% {
-                transform: scale(1.02);
-            }
-        }
-        
-        @keyframes bubbleExplode {
-            0% {
-                transform: scale(1);
-            }
-            50% {
-                transform: scale(1.05);
-                box-shadow: 
-                    0 0 20px rgba(0, 255, 255, 0.8),
-                    0 0 40px rgba(0, 255, 255, 0.4),
-                    0 0 60px rgba(0, 255, 255, 0.2);
-            }
-            100% {
-                transform: scale(1);
-            }
-        }
-        
-        /* Thinking dots - independent row, no wrapper */
-        .thinking-row {
-          display: flex;
-          justify-content: flex-start;
-          margin: 10px 0 6px 0;
-          padding-left: 18px; /* leggermente rientrato rispetto al bubble */
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&display=swap"
+    rel="stylesheet">
+  <title>Genesi</title>
+  <link rel="stylesheet" href="/static/style.css?v=9">
+  <style>
+    /* Cinematic Thinking Bubble Animations */
 
-        .thinking-dots {
-          display: flex;
-          gap: 5px;
-          align-items: center;
-        }
+    @keyframes dotPulse {
 
-        .thinking-dots span {
-          width: 5px;
-          height: 5px;
-          background: rgba(0, 240, 255, 0.6);
-          border-radius: 50%;
-          animation: noirPulse 1.6s infinite ease-in-out;
-        }
+      0%,
+      100% {
+        opacity: 0.4;
+        transform: scale(1);
+        filter: brightness(0.8);
+      }
 
-        .thinking-dots span:nth-child(2) {
-          animation-delay: 0.2s;
-        }
+      50% {
+        opacity: 1;
+        transform: scale(1.1);
+        filter: brightness(1.2);
+      }
+    }
 
-        .thinking-dots span:nth-child(3) {
-          animation-delay: 0.4s;
-        }
+    @keyframes bubbleBreath {
 
-        @keyframes noirPulse {
-          0% {
-            transform: scale(0.7);
-            opacity: 0.3;
-          }
-          50% {
-            transform: scale(1.15);
-            opacity: 0.9;
-          }
-          100% {
-            transform: scale(0.7);
-            opacity: 0.3;
-          }
-        }
-    </style>
+      0%,
+      100% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(1.02);
+      }
+    }
+
+    @keyframes bubbleExplode {
+      0% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(1.05);
+        box-shadow:
+          0 0 20px rgba(0, 255, 255, 0.8),
+          0 0 40px rgba(0, 255, 255, 0.4),
+          0 0 60px rgba(0, 255, 255, 0.2);
+      }
+
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    /* Thinking dots - independent row, no wrapper */
+    .thinking-row {
+      display: flex;
+      justify-content: flex-start;
+      margin: 10px 0 6px 0;
+      padding-left: 18px;
+      /* leggermente rientrato rispetto al bubble */
+    }
+
+    .thinking-dots {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .thinking-dots span {
+      width: 5px;
+      height: 5px;
+      background: rgba(0, 240, 255, 0.6);
+      border-radius: 50%;
+      animation: noirPulse 1.6s infinite ease-in-out;
+    }
+
+    .thinking-dots span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .thinking-dots span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes noirPulse {
+      0% {
+        transform: scale(0.7);
+        opacity: 0.3;
+      }
+
+      50% {
+        transform: scale(1.15);
+        opacity: 0.9;
+      }
+
+      100% {
+        transform: scale(0.7);
+        opacity: 0.3;
+      }
+    }
+  </style>
 </head>
+
 <body>
-    <!-- Hamburger per aprire sidebar -->
-    <button id="sidebar-open-btn">☰</button>
+  <!-- Hamburger per aprire sidebar -->
+  <button id="sidebar-open-btn">☰</button>
 
-    <div id="app-layout">
-        <!-- SIDEBAR SINISTRA -->
-        <aside id="sidebar" class="sidebar sidebar-collapsed">
-            <div class="sidebar-header">
-                <button id="new-chat-btn" title="Nuova chat">＋</button>
-                <button id="coding-mode-btn" title="Coding Mode">💻</button>
-                <button id="sidebar-toggle" title="Chiudi">‹</button>
-            </div>
-            <div id="conv-list"></div>
-        </aside>
+  <div id="app-layout">
+    <!-- SIDEBAR SINISTRA -->
+    <aside id="sidebar" class="sidebar sidebar-collapsed">
+      <div class="sidebar-header">
+        <button id="new-chat-btn" title="Nuova chat">＋</button>
+        <button id="coding-mode-btn" title="Coding Mode">💻</button>
+        <button id="sidebar-toggle" title="Chiudi">‹</button>
+      </div>
+      <div id="conv-list"></div>
+    </aside>
 
-        <!-- CHAT PRINCIPALE (invariata) -->
-        <div id="main-chat">
-            <div id="genesi-app">
+    <!-- CHAT PRINCIPALE (invariata) -->
+    <div id="main-chat">
+      <div id="genesi-app">
 
-                <!-- User bar: sempre visibile -->
-                <div id="user-bar">
-                    <span id="user-greeting">Ciao</span>
-                    <div id="user-bar-actions">
-                        <a href="/admin" id="admin-link" style="display:none;">Admin</a>
-                        <button id="logout-btn" type="button" style="display:none;">Esci</button>
-                    </div>
-                </div>
+        <!-- User bar: sempre visibile -->
+        <div id="user-bar">
 
-                <!-- ═══════════════════════════════════════════════
+          <div id="user-bar-actions">
+            <a href="/admin" id="admin-link" style="display:none;">Admin</a>
+            <button id="logout-btn" type="button" style="display:none;">Esci</button>
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════
      WEATHER WIDGET — Inserito sopra #presence
      Non spostare. Non annidare dentro altri elementi.
      ═══════════════════════════════════════════════ -->
-<div id="weather-widget" class="weather-widget" aria-live="polite" aria-atomic="true">
-  <div class="weather-widget__inner">
+        <div id="weather-widget" class="weather-widget" aria-live="polite" aria-atomic="true">
+          <div class="weather-widget__inner">
 
-    <!-- Stato: loading -->
-    <div class="weather-widget__loading" id="ww-loading">
-      <span class="weather-widget__dot"></span>
-      <span class="weather-widget__dot"></span>
-      <span class="weather-widget__dot"></span>
-    </div>
-
-    <!-- Stato: dati -->
-    <div class="weather-widget__data" id="ww-data" hidden>
-      <div class="weather-widget__icon-wrap">
-        <span class="weather-widget__icon" id="ww-icon">☁️</span>
-      </div>
-      <div class="weather-widget__details">
-        <span class="weather-widget__city"    id="ww-city">—</span>
-        <span class="weather-widget__temp"    id="ww-temp">—°</span>
-        <span class="weather-widget__desc"    id="ww-desc">—</span>
-        <span class="weather-widget__meta"    id="ww-meta">—</span>
-        <span class="weather-widget__time"    id="ww-time">—</span>
-      </div>
-    </div>
-
-    <!-- Stato: errore -->
-    <div class="weather-widget__error" id="ww-error" hidden>
-      <span class="weather-widget__error-text">
-        Meteo non disponibile
-      </span>
-    </div>
-
-  </div>
-</div>
-<!-- /WEATHER WIDGET -->
-                <header id="presence">
-                    <p>Ciò che conta davvero è come attraversi il fuoco.</p>
-                </header>
-
-                <main id="dialogue">
-                    <!-- messaggi -->
-                </main>
-
-                <div id="status" aria-live="polite"></div>
-
-                <div id="voice-mode-overlay" class="voice-overlay hidden">
-                    <div class="voice-orb">
-                        <div class="voice-ring ring-1"></div>
-                        <div class="voice-ring ring-2"></div>
-                        <div class="voice-ring ring-3"></div>
-                        <div class="voice-orb-core"></div>
-                        <div class="voice-status-text">In ascolto...</div>
-                    </div>
-                    <button id="voice-mode-stop-btn">✕ Esci</button>
-                </div>
-
-                <form id="chat-form" autocomplete="off">
-                    <div id="input-container">
-
-                        <button id="plus-button" type="button" aria-label="Aggiungi">
-                            <svg viewBox="0 0 24 24">
-                                <line x1="12" y1="5" x2="12" y2="19"></line>
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                            </svg>
-                        </button>
-
-                        <textarea 
-                            id="text-input"
-                            placeholder="Scrivi un messaggio..."
-                            aria-label="Scrivi un messaggio"
-                            autocomplete="off"
-                            enterkeyhint="send"
-                            rows="1"
-                        ></textarea>
-
-                        <button id="mic-button" type="button" aria-label="Usa microfono">
-                            <svg viewBox="0 0 24 24">
-                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                                <line x1="12" y1="19" x2="12" y2="23"></line>
-                                <line x1="8" y1="23" x2="16" y2="23"></line>
-                            </svg>
-                        </button>
-
-                        <button id="voice-mode-btn" title="Conversazione vocale">
-                            <svg width="22" height="18" viewBox="0 0 22 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                              <line x1="1"  y1="9"  x2="1"  y2="9"/>
-                              <line x1="5"  y1="5"  x2="5"  y2="13"/>
-                              <line x1="9"  y1="1"  x2="9"  y2="17"/>
-                              <line x1="13" y1="5"  x2="13" y2="13"/>
-                              <line x1="17" y1="7"  x2="17" y2="11"/>
-                              <line x1="21" y1="9"  x2="21" y2="9"/>
-                            </svg>
-                        </button>
-
-                        <button id="send-button" type="submit" aria-label="Invia messaggio">
-                            <svg viewBox="0 0 24 24">
-                                <line x1="22" y1="2" x2="11" y2="13"></line>
-                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                            </svg>
-                        </button>
-
-                    </div>
-                </form>
+            <!-- Stato: loading -->
+            <div class="weather-widget__loading" id="ww-loading">
+              <span class="weather-widget__dot"></span>
+              <span class="weather-widget__dot"></span>
+              <span class="weather-widget__dot"></span>
             </div>
-        </div>
-    </div>
 
-    <script src="/static/app.v2.js?v={{ build_version }}"></script>
+            <!-- Stato: dati -->
+            <div class="weather-widget__data" id="ww-data" hidden>
+              <div class="weather-widget__icon-wrap">
+                <span class="weather-widget__icon" id="ww-icon">☁️</span>
+              </div>
+              <div class="weather-widget__details">
+                <span class="weather-widget__city" id="ww-city">—</span>
+                <span class="weather-widget__temp" id="ww-temp">—°</span>
+                <span class="weather-widget__desc" id="ww-desc">—</span>
+                <span class="weather-widget__meta" id="ww-meta">—</span>
+                <span class="weather-widget__time" id="ww-time">—</span>
+              </div>
+            </div>
+
+            <!-- Stato: errore -->
+            <div class="weather-widget__error" id="ww-error" hidden>
+              <span class="weather-widget__error-text">
+                Meteo non disponibile
+              </span>
+            </div>
+
+          </div>
+        </div>
+        <!-- /WEATHER WIDGET -->
+        <header id="presence">
+          <p>Ciò che conta davvero è come attraversi il fuoco.</p>
+        </header>
+
+        <main id="dialogue">
+          <!-- messaggi -->
+        </main>
+
+        <div id="status" aria-live="polite"></div>
+
+        <div id="voice-mode-overlay" class="voice-overlay hidden">
+          <div class="voice-orb">
+            <div class="voice-ring ring-1"></div>
+            <div class="voice-ring ring-2"></div>
+            <div class="voice-ring ring-3"></div>
+            <div class="voice-orb-core"></div>
+            <div class="voice-status-text">In ascolto...</div>
+          </div>
+          <button id="voice-mode-stop-btn">✕ Esci</button>
+        </div>
+
+        <form id="chat-form" autocomplete="off">
+          <div id="input-container">
+
+            <button id="plus-button" type="button" aria-label="Aggiungi">
+              <svg viewBox="0 0 24 24">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </button>
+
+            <textarea id="text-input" placeholder="Scrivi un messaggio..." aria-label="Scrivi un messaggio"
+              autocomplete="off" enterkeyhint="send" rows="1"></textarea>
+
+            <button id="mic-button" type="button" aria-label="Usa microfono">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+                <line x1="8" y1="23" x2="16" y2="23"></line>
+              </svg>
+            </button>
+
+            <button id="voice-mode-btn" title="Conversazione vocale">
+              <svg width="22" height="18" viewBox="0 0 22 18" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round">
+                <line x1="1" y1="9" x2="1" y2="9" />
+                <line x1="5" y1="5" x2="5" y2="13" />
+                <line x1="9" y1="1" x2="9" y2="17" />
+                <line x1="13" y1="5" x2="13" y2="13" />
+                <line x1="17" y1="7" x2="17" y2="11" />
+                <line x1="21" y1="9" x2="21" y2="9" />
+              </svg>
+            </button>
+
+            <button id="send-button" type="submit" aria-label="Invia messaggio">
+              <svg viewBox="0 0 24 24">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.v2.js?v={{ build_version }}"></script>
 </body>
+
 </html>
