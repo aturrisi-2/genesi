@@ -1018,7 +1018,24 @@ async function sendMessage(voiceText = null) {
 
   // PARTE 1: Mostra animazione thinking come messaggio reale
   setState(STATES.THINKING);
-  showThinking();
+
+  // Determina se è una query per l'archivio della memoria
+  const memoryTriggers = [
+    "prima", "abbiamo parlato", "ricordi", "ricordarmi",
+    "l'altra volta", "ieri", "di cosa", "come mi chiamo",
+    "ti ricordi", "cosa abbiamo detto", "cosa dicevamo",
+    "sai cosa", "ricordi cosa", "mi ricordi", "ci siamo detti",
+    "avevamo parlato", "discusso", "avevamo detto",
+    "questa chat", "vecchia chat", "archivio"
+  ];
+  const isMemoryQuery = memoryTriggers.some(t => text.toLowerCase().includes(t));
+
+  if (isMemoryQuery && window.currentConvId) {
+    showThinking("Sto rileggendo l'archivio di questa chat...");
+  } else {
+    showThinking();
+  }
+
   console.log('FRONTEND_THINKING_START');
 
   try {
@@ -1125,12 +1142,15 @@ function playTTSAsync(text, mode) {
 // ===============================
 // THINKING DOTS - INDEPENDENT ROW
 // ===============================
-function showThinking() {
+function showThinking(labelText = null) {
   const thinking = document.createElement("div");
   thinking.className = "thinking-row";
   thinking.id = "genesi-thinking";
 
+  let labelHtml = labelText ? `<div class="thinking-label" style="color:#aaa; font-style:italic; font-size:0.9rem; margin-bottom:4px;">${labelText}</div>` : '';
+
   thinking.innerHTML = `
+    ${labelHtml}
     <div class="thinking-dots">
       <span></span>
       <span></span>
