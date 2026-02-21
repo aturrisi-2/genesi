@@ -171,11 +171,8 @@ if (logoutBtn) {
 function updateAppHeight() {
   if (window.visualViewport) {
     const h = window.visualViewport.height;
-    const top = window.visualViewport.offsetTop;
     document.documentElement.style.setProperty('--app-height', h + 'px');
-    // iOS Safari: when keyboard opens, viewport scrolls up — compensate
-    document.getElementById('genesi-app').style.transform =
-      top > 0 ? 'translateY(' + top + 'px)' : '';
+    document.getElementById('genesi-app').style.transform = '';
   } else {
     document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
   }

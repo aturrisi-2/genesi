@@ -215,7 +215,7 @@ body::after {
   flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0.6rem 0;
+  padding: 0.6rem 20px;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }
