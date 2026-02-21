@@ -111,7 +111,7 @@ def search_github(query: str) -> Optional[str]:
     import requests
     try:
         q = urllib.parse.quote(query)
-        url = f"https://api.github.com/search/code?q={q}&per_page=3"
+        url = f"https://api.github.com/search/repositories?q={q}&sort=stars&per_page=3"
         headers = {
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "Genesi-AI-Engineer-OS"
@@ -124,23 +124,16 @@ def search_github(query: str) -> Optional[str]:
         if not items:
             return None
             
-        lines = [
-            "=== RICERCA GITHUB (risultati di codice reale) ===",
-            f"Query: {query}",
-            ""
-        ]
-        
-        for i, item in enumerate(items, 1):
-            repo = item.get("repository", {}).get("full_name", "")
-            path = item.get("path", "")
-            lines.append(f"[{i}] {repo}")
-            lines.append(f"    Path: {path}")
-            lines.append(f"    URL: {item.get('html_url')}")
-            lines.append("")
+        risultati = []
+        for item in items:
+            name = item.get("full_name", "")
+            description = item.get("description", "")
+            repo_url = item.get("html_url", "")
+            stars = item.get("stargazers_count", 0)
+            risultati.append(f"- [{name}]({repo_url}) ⭐{stars}: {description}")
             
-        lines.append("=== FINE RICERCA GITHUB ===")
-        logger.info(f"GITHUB_SEARCH_OK query='{query}' results={len(items)}")
-        return '\n'.join(lines)
+        logger.info(f"GITHUB_SEARCH_OK results={len(items)}")
+        return "GitHub repos trovati:\n" + "\n".join(risultati)
     except Exception as e:
         logger.warning(f"GITHUB_SEARCH_ERROR query='{query}' error={e}")
         return None
