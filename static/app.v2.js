@@ -1000,7 +1000,7 @@ async function sendMessage(voiceText = null) {
   textInput.value = '';
   textInput.style.height = '44px';
   autoResizeInput(textInput);
-  textInput.focus();
+  textInput.blur(); // Chiude la tastiera su mobile per mostrare la risposta
 
   // Pulse shockwave on send
   const ic = document.getElementById('input-container');
