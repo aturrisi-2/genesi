@@ -1,12 +1,28 @@
-script: |
-            # Crea la cartella se non esiste
+name: Deploy Genesi
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: luca
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
             mkdir -p /home/luca/genesi
             cd /home/luca/genesi
-            
-            # Se la cartella è vuota (non c'è .git), clona il repo
             if [ ! -d ".git" ]; then
               git clone https://github.com/aturrisi-2/genesi.git .
             else
-              # Se esiste già, aggiorna semplicemente
               git pull origin main
             fi
