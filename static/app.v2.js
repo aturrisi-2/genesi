@@ -974,7 +974,7 @@ function handleChatResponse(rawResponse) {
 // ===============================
 // SEND MESSAGE
 // ===============================
-async function sendMessage() {
+async function sendMessage(voiceText = null) {
   // Audio Priming: previeni NotAllowedError su Safari/iOS
   primeAudio();
   
@@ -988,7 +988,7 @@ async function sendMessage() {
   // Warm AudioContext NOW (sync, during user gesture) — iOS requires this
   _warmTTSCtx();
 
-  const text = textInput.value.trim();
+  const text = voiceText !== null ? voiceText : textInput.value.trim();
   console.log('SEND_MSG_STATE state=' + currentState + ' text_len=' + text.length);
   if (!text || currentState !== STATES.IDLE) return;
 
@@ -2548,13 +2548,14 @@ async function sendVoiceMessage(text) {
     try { voiceRecognition?.stop(); } catch(e) {}
     voiceRecognition = null;
 
-    const input = document.getElementById('message-input');
-    if (input) { input.value = text; input.style.height = 'auto'; }
+    // Imposta il testo nel campo input corretto
+    textInput.value = text;
+    textInput.style.height = 'auto';
     
     // Forza stato IDLE prima di chiamare sendMessage() per evitare il blocco
     setState(STATES.IDLE);
     
-    if (typeof sendMessage === 'function') await sendMessage(text);
+    await sendMessage(text);
 
     setVoiceOrbState('speaking');
     setVoiceStatusText('Genesi risponde...');
