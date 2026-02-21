@@ -2,7 +2,7 @@
 // Strategia: Network First con fallback cache
 // Non cacha le API calls — solo asset statici
 
-const CACHE_NAME = 'genesi-v1';
+const CACHE_NAME = 'genesi-v2';
 const CACHE_TIMEOUT = 4000; // ms prima di usare cache
 
 // Asset da precachare al primo install
