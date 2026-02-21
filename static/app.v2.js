@@ -2503,13 +2503,19 @@ function buildVoiceRecognition() {
 
     rec.onend = () => {
         if (!voiceModeActive) return;
-        const waitMs = Math.max(0, voiceBlockedUntil - Date.now());
+        const waitMs = Math.max(1500, voiceBlockedUntil - Date.now());
         setTimeout(() => {
-            if (voiceModeActive && Date.now() >= voiceBlockedUntil) {
-                try { voiceRecognition = buildVoiceRecognition(); voiceRecognition?.start(); }
+            if (!voiceModeActive) return;
+            if (Date.now() < voiceBlockedUntil) return;
+            try { 
+                voiceRecognition.stop();
+            } catch(e) {}
+            setTimeout(() => {
+                if (!voiceModeActive) return;
+                try { voiceRecognition.start(); }
                 catch(e) { console.warn('VOICE_RESTART_ERROR', e); }
-            }
-        }, waitMs + 100);
+            }, 300);
+        }, waitMs);
     };
 
     rec.onerror = (e) => {
@@ -2535,7 +2541,11 @@ function startVoiceMode() {
     document.getElementById('voice-mode-overlay')?.classList.replace('hidden', 'visible');
     setVoiceOrbState('listening');
     setVoiceStatusText('In ascolto...');
-    voiceRecognition = buildVoiceRecognition();
+    
+    // Crea la recognition UNA SOLA VOLTA
+    if (!voiceRecognition) {
+        voiceRecognition = buildVoiceRecognition();
+    }
     voiceRecognition?.start();
     console.log('VOICE_MODE_STARTED');
 }
@@ -2549,8 +2559,8 @@ async function sendVoiceMessage(text) {
     voiceBlockedUntil = Date.now() + 12000;  
     console.log('VOICE_BLOCKED_START timestamp=' + Date.now() + ' will unblock after 12s');
 
-    try { voiceRecognition?.stop(); } catch(e) {}
-    voiceRecognition = null;
+    // NON fare voiceRecognition?.stop() e NON fare voiceRecognition = null
+    // Lascia che sia onend a gestire il ciclo
 
     // Imposta il testo nel campo input corretto
     textInput.value = text;
@@ -2572,7 +2582,7 @@ async function sendVoiceMessage(text) {
         setVoiceStatusText('In ascolto...');
         setTimeout(() => {
             if (!voiceModeActive) return;
-            voiceRecognition = buildVoiceRecognition();
+            // Riutilizza l'istanza esistente invece di ricrearla
             try { voiceRecognition?.start(); } catch(e) {}
         }, 1500);
     });
