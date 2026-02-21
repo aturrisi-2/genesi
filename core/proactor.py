@@ -916,9 +916,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         for parola, cifra in NUMERI_ITALIANI.items():
             msg_normalized = re.sub(rf'\b{parola}\b', str(cifra), msg_normalized)
         
-        from datetime import timezone, timedelta
-        CET = timezone(timedelta(hours=1))
-        now = datetime.now(CET).replace(tzinfo=None)
+        now = datetime.now()
         
         # 1️⃣ Estrai testo dopo "ricordami di" / "ricordami che"
         reminder_text = ""
