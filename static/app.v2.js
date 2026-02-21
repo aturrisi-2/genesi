@@ -892,7 +892,52 @@ function addMessage(text, sender) {
   // Usa renderMessageContent per formattazione code blocks + escape HTML
   const renderedContent = renderMessageContent(parsed.text);
 
-  el.innerHTML = renderedContent + renderImages(parsed.images);
+  if (sender === 'user' && parsed.text.length > 500 && parsed.text.includes('\\n')) {
+    const snippetHtml = `
+      <div class="long-text-snippet">
+        <div class="snippet-header">
+          <span class="snippet-title">📄 Documento di testo (${parsed.text.length} caratteri)</span>
+          <div class="snippet-controls">
+            <button class="expand-btn">Espandi</button>
+            <button class="download-btn">Scarica</button>
+          </div>
+        </div>
+        <div class="snippet-content" style="display:none;">
+          ${renderedContent}
+        </div>
+      </div>
+    `;
+    el.innerHTML = snippetHtml + renderImages(parsed.images);
+
+    // Gestione eventi per espandere/collassare e scaricare
+    const expandBtn = el.querySelector('.expand-btn');
+    const contentDiv = el.querySelector('.snippet-content');
+    expandBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (contentDiv.style.display === 'none') {
+        contentDiv.style.display = 'block';
+        expandBtn.textContent = 'Riduci';
+      } else {
+        contentDiv.style.display = 'none';
+        expandBtn.textContent = 'Espandi';
+      }
+      setTimeout(scrollToBottom, 50);
+    });
+
+    const dlBtn = el.querySelector('.download-btn');
+    dlBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const blob = new Blob([parsed.text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = "allegato.txt";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  } else {
+    el.innerHTML = renderedContent + renderImages(parsed.images);
+  }
 
   // Assign rotating neon hue
   const hue = _neonHues[_neonIdx % _neonHues.length];

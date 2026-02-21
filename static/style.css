@@ -2061,3 +2061,56 @@ body {
     transform: translate(-100%, 0);
   }
 }
+
+/* 6. Long Text Snippet UI */
+.long-text-snippet {
+  background: rgba(10, 15, 20, 0.6);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+
+.snippet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(0, 50, 80, 0.3);
+  border-bottom: 1px solid rgba(0, 229, 255, 0.1);
+}
+
+.snippet-title {
+  font-size: 0.85rem;
+  color: #8ab4f8;
+  font-weight: 500;
+}
+
+.snippet-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.snippet-controls button {
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.snippet-controls button:hover {
+  background: rgba(0, 229, 255, 0.2);
+  border-color: rgba(0, 229, 255, 0.5);
+}
+
+.snippet-content {
+  padding: 14px;
+  font-size: 0.95rem;
+  color: #e0e0e0;
+  max-height: none;
+}
