@@ -989,6 +989,7 @@ async function sendMessage() {
   _warmTTSCtx();
 
   const text = textInput.value.trim();
+  console.log('SEND_MSG_STATE state=' + currentState + ' text_len=' + text.length);
   if (!text || currentState !== STATES.IDLE) return;
 
   textInput.value = '';
@@ -2549,6 +2550,10 @@ async function sendVoiceMessage(text) {
 
     const input = document.getElementById('message-input');
     if (input) { input.value = text; input.style.height = 'auto'; }
+    
+    // Forza stato IDLE prima di chiamare sendMessage() per evitare il blocco
+    setState(STATES.IDLE);
+    
     if (typeof sendMessage === 'function') await sendMessage(text);
 
     setVoiceOrbState('speaking');
