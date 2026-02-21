@@ -158,48 +158,6 @@ class IntentClassifier:
         
         # 0.5️⃣ PRIORITY OVERRIDES for mixed intents
         
-        # 🔥 NEW: Guardia per messaggi brevi contestuali
-        if self._should_block_weather_override(message_lower):
-            # Continua con la classificazione normale - non applicare weather override
-            pass
-        else:
-            # Blocca override weather per richieste tempo/data
-            time_keywords = [
-                "che ore",
-                "ora",
-                "orario",
-                "che giorno",
-                "data",
-                "oggi è",
-                "dimmi la data",
-            ]
-            
-            if any(k in message_lower for k in time_keywords):
-                # Continua con la classificazione normale, non applicare weather override
-                pass
-            else:
-                # Check for weather keywords (solo parole meteo reali)
-                weather_keywords = [
-                    "meteo",
-                    "tempo",
-                    "pioggia",
-                    "sole",
-                    "nuvol",
-                    "vento",
-                    "temperatura",
-                    "gradi",
-                    "umidità",
-                    "temporale",
-                ]
-                if any(kw in message_lower for kw in weather_keywords) and self._should_override_to_weather(message):
-                    log("INTENT_OVERRIDE_APPLIED", original="mixed", final="weather", message=message[:50])
-                    return "weather"
-                
-                # Check for follow-up weather patterns (solo città pura)
-                if self._is_followup_weather(message_lower):
-                    log("INTENT_OVERRIDE_APPLIED", original="mixed", final="weather", message=message[:50])
-                    return "weather"
-        
         # Check for reminder keywords
         reminder_keywords = ["ricorda", "ricordami", "promemoria", "appuntamento", "ricordare"]
         if any(kw in message_lower for kw in reminder_keywords):
@@ -547,6 +505,8 @@ Se l'intenzione non è chiara o se l'utente menziona strumenti ambiguamente, imp
                     # Se lo score < 0.8 per intent che azionano tool/api specifiche, ferma e chiedi chiarimenti
                     tool_intents = ["weather", "news", "time", "date", "reminder_create", "reminder_delete", "reminder_update", "reminder_list"]
                     if score < 0.8 and intent in tool_intents:
+                        if intent == "weather":
+                            return "ambiguous_weather"
                         return "ambiguous_tool"
                     
                     return intent

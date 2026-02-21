@@ -318,6 +318,9 @@ class Proactor:
             if intent is None:
                 intent = await intent_classifier.classify_async(message, user_id)
                 
+            if intent == "ambiguous_weather":
+                return "Dove vuoi sapere il meteo?", "tool"
+                
             if intent == "ambiguous_tool":
                 return "Non sono sicuro di aver capito. Intendevi usare uno strumento specifico come un promemoria o il meteo? Puoi chiarire per favore?", "tool"
 
