@@ -892,7 +892,7 @@ function addMessage(text, sender) {
   // Usa renderMessageContent per formattazione code blocks + escape HTML
   const renderedContent = renderMessageContent(parsed.text);
 
-  if (sender === 'user' && parsed.text.length > 500 && parsed.text.includes('\\n')) {
+  if (sender === 'user' && parsed.text.length > 500 && parsed.text.includes('\n')) {
     const snippetHtml = `
       <div class="long-text-snippet">
         <div class="snippet-header">
