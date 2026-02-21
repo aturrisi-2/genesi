@@ -2735,8 +2735,6 @@ function setVoiceStatusText(text) {
     console.log(
       `[WEATHER_WIDGET] OK city=${payload.city} temp=${payload.temp}° condition=${payload.condition}`
     );
-    // Aggiorna l'orario ogni minuto
-    setInterval(updateClock, 60_000);
   }
 
   async function fetchWeather(lat, lon) {
@@ -2765,25 +2763,33 @@ function setVoiceStatusText(text) {
       });
   }
 
+  function refreshMeteoData() {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        pos => loadWithCoords(pos.coords.latitude, pos.coords.longitude),
+        _err => {
+          console.info('[WEATHER_WIDGET] Geolocation negata — fallback IP');
+          fetchWeather(null, null)
+            .then(renderWeather)
+            .catch(() => showState('error'));
+        },
+        { timeout: 6000, maximumAge: 300_000 }
+      );
+    } else {
+      console.info('[WEATHER_WIDGET] Geolocation non disponibile — fallback IP');
+      fetchWeather(null, null)
+        .then(renderWeather)
+        .catch(() => showState('error'));
+    }
+  }
+
   // ── Entry point ──────────────────────────────────────────────
   showState('loading');
+  refreshMeteoData();
 
-  if ('geolocation' in navigator) {
-    navigator.geolocation.getCurrentPosition(
-      pos => loadWithCoords(pos.coords.latitude, pos.coords.longitude),
-      _err => {
-        console.info('[WEATHER_WIDGET] Geolocation negata — fallback IP');
-        fetchWeather(null, null)
-          .then(renderWeather)
-          .catch(() => showState('error'));
-      },
-      { timeout: 6000, maximumAge: 300_000 }
-    );
-  } else {
-    console.info('[WEATHER_WIDGET] Geolocation non disponibile — fallback IP');
-    fetchWeather(null, null)
-      .then(renderWeather)
-      .catch(() => showState('error'));
-  }
+  // Aggiorna orologio ogni minuto
+  setInterval(updateClock, 60_000);
+  // Aggiorna i dati meteo ogni 15 minuti (900.000 ms)
+  setInterval(refreshMeteoData, 900_000);
 
 })();
