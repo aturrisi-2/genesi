@@ -155,7 +155,7 @@ class Proactor:
     # HANDLE — Entry point, routing obbligatorio
     # ═══════════════════════════════════════════════════════════════
 
-    async def handle(self, user_id: str, message: str = None, intent: str = None) -> str:
+    async def handle(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None) -> str:
         """
         Orchestrazione centrale v4.
         Returns: response_text (SOLO stringa - nessuna tupla, nessun dict)
@@ -167,7 +167,7 @@ class Proactor:
         
         NOTE: user_id validation for empty values is handled in _handle_internal
         """
-        result = await self._handle_internal(user_id, message, intent)
+        result = await self._handle_internal(user_id, message, intent, conversation_id)
         # Handle nested tuples: ((response, source), source) -> response
         if isinstance(result, tuple):
             if len(result) == 2 and isinstance(result[0], tuple):
@@ -180,7 +180,7 @@ class Proactor:
             response = result
         return response
 
-    def handle_response_only(self, user_id: str, message: str = None, intent: str = None) -> str:
+    def handle_response_only(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None) -> str:
         """
         New contract: returns only response_string.
         Uses asyncio.run() only if no event loop is active.
@@ -194,10 +194,10 @@ class Proactor:
             raise RuntimeError("Cannot call handle_response_only from within async context")
         except RuntimeError:
             # No event loop running, safe to use asyncio.run()
-            response, _ = asyncio.run(self.handle(user_id, message, intent))
+            response, _ = asyncio.run(self.handle(user_id, message, intent, conversation_id))
             return response
     
-    async def _handle_internal(self, user_id: str, message: str = None, intent: str = None) -> tuple[str, str]:
+    async def _handle_internal(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None) -> tuple[str, str]:
         try:
             # STEP 0.5: Image Search detection (prima del routing normale)
             image_query = extract_image_query(message)
@@ -1146,7 +1146,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         # 🔥 NEW: Build separate messages for LLM conversation thread
         messages = self._build_conversation_messages(user_id, message, profile)
         
-        conversation_ctx = build_conversation_context(user_id, message, profile)
+        conversation_ctx = build_conversation_context(user_id, message, profile, conversation_id)
         logger.info("CONVERSATION_CONTEXT_BUILT user=%s len=%d", user_id, len(conversation_ctx))
 
         latent = brain_state.get("latent", {})
@@ -1383,7 +1383,7 @@ Messaggio utente: {message}"""
         """
         # Build conversation context — MUST include chat history
         profile = await storage.load(f"profile:{user_id}", default={})
-        conversation_ctx = build_conversation_context(user_id, message, profile)
+        conversation_ctx = build_conversation_context(user_id, message, profile, conversation_id)
 
         knowledge_prompt = f"""Sei Genesi.
 Rispondi in italiano, in modo chiaro, preciso, conciso.
@@ -1441,7 +1441,7 @@ Domanda: {message}"""
         Returns: (response_text: str, source: str)
         """
         # Build conversation context (includes document injection via step E)
-        conversation_ctx = build_conversation_context(user_id, message, profile)
+        conversation_ctx = build_conversation_context(user_id, message, profile, conversation_id)
         logger.info("PROACTOR_LLM_CALL user=%s route=document_query ctx_len=%d", user_id, len(conversation_ctx))
 
         doc_prompt = f"""Sei Genesi. L'utente ha caricato uno o più documenti e ti sta chiedendo qualcosa su di essi.

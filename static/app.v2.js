@@ -923,7 +923,10 @@ async function sendChatMessage(message) {
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ message })
+      body: JSON.stringify({
+        message,
+        conversation_id: typeof currentConvId !== 'undefined' ? currentConvId : null
+      })
     });
     if (res.status === 401) {
       const refreshed = await tryRefreshToken();

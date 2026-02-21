@@ -224,7 +224,7 @@ def detect_topic(message: str, history: List[Dict] = None) -> str:
 
 
 def build_conversation_context(user_id: str, current_message: str,
-                                profile: Dict[str, Any]) -> str:
+                                profile: Dict[str, Any], conversation_id: str = None) -> str:
     """
     Builds structured conversation context for LLM:
     A) Last 15 messages (user/assistant alternating)
@@ -234,18 +234,40 @@ def build_conversation_context(user_id: str, current_message: str,
     sections = []
 
     # --- A) Chat history thread ---
-    history = chat_memory.get_messages(user_id, limit=15)
-    if history:
-        thread_lines = []
-        for entry in history:
-            user_msg = entry.get("user_message", "")
-            sys_resp = entry.get("system_response", "")
-            if user_msg:
-                thread_lines.append(f"Utente: {user_msg}")
-            if sys_resp:
-                thread_lines.append(f"Genesi: {sys_resp}")
-        if thread_lines:
-            sections.append("CONVERSAZIONE RECENTE:\n" + "\n".join(thread_lines))
+    thread_lines = []
+    history = []
+    
+    if conversation_id:
+        try:
+            from api.conversations import _load_conv
+            conv = _load_conv(user_id, conversation_id)
+            if conv and "messages" in conv:
+                msgs = conv["messages"][-15:]
+                for m in msgs:
+                    if m.get("role") == "user":
+                        thread_lines.append(f"Utente: {m.get('content', '')}")
+                        history.append({"user_message": m.get('content', '')})
+                    elif m.get("role") in ("assistant", "genesi", "system", "model"):
+                        thread_lines.append(f"Genesi: {m.get('content', '')}")
+                        if history:
+                            history[-1]["system_response"] = m.get('content', '')
+        except Exception as e:
+            logger.error(f"Error loading conversation {conversation_id}: {e}")
+
+    # Fallback and topic detection history
+    if not thread_lines:
+        history = chat_memory.get_messages(user_id, limit=15)
+        if history:
+            for entry in history:
+                user_msg = entry.get("user_message", "")
+                sys_resp = entry.get("system_response", "")
+                if user_msg:
+                    thread_lines.append(f"Utente: {user_msg}")
+                if sys_resp:
+                    thread_lines.append(f"Genesi: {sys_resp}")
+                    
+    if thread_lines:
+        sections.append("CONVERSAZIONE RECENTE:\n" + "\n".join(thread_lines))
 
     # --- B) Stable identity summary ---
     assembler = ContextAssembler(None, None)

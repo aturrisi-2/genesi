@@ -29,6 +29,7 @@ router = APIRouter(prefix="/chat")
 
 class ChatRequest(BaseModel):
     message: str
+    conversation_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -93,7 +94,7 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             await storage.save(f"profile:{user_id}", profile.model_dump(mode="json"))
             log("STORAGE_SAVE", key=f"profile:{user_id}")
 
-        response = await simple_chat_handler(user_id, request.message)
+        response = await simple_chat_handler(user_id, request.message, request.conversation_id)
         
         # Defensive normalization: ensure response is always a string
         if isinstance(response, tuple):
