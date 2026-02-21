@@ -136,10 +136,11 @@ async def _call_proactor_with_shadow(
         "- Se hai bisogno di vedere un file o un log, chiedilo esplicitamente\n"
         "- Usa markdown per formattare codice con syntax highlighting\n"
         "- Sii conciso nell'analisi, preciso nel codice\n\n"
-        "RISPONDI SEMPRE usando esattamente questa struttura:\n"
-        "- Prima: analisi del problema (2-3 righe)\n"
-        "- Poi: codice pronto (in blocchi ```language)\n"
-        "- Infine: istruzioni dove incollare\n"
+        "RISPONDI IN MODO NATURALE. Puoi ispirarti a questa traccia:\n"
+        "- Analisi iniziale del problema (breve)\n"
+        "- Codice pronto all'uso (in blocchi ```language)\n"
+        "- Istruzioni chiare su dove/come applicarlo\n"
+        "Non inserire mai rigide intestazioni come 'Prima:', 'Poi:' o 'Infine:'."
     )
 
     enriched_message = f"{system_prompt}\n\nRichiesta utente:\n{message}"

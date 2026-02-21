@@ -483,6 +483,79 @@ class IntentClassifier:
         
         return True
 
+    async def classify_async(self, message: str, user_id: str = None) -> str:
+        """
+        Classificazione tramite LLM con valutazione score e contesto.
+        Sostituisce le keyword statiche come logica primaria.
+        """
+        from core.chat_memory import chat_memory
+        from core.llm_service import llm_service
+        import json
+        import re
+
+        # Raccogli ultimi messaggi per il contesto
+        history = chat_memory.get_messages(user_id, limit=5) if user_id else []
+        history_text = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in history])
+        
+        system_prompt = """Sei un classificatore di intent. Analizza l'ultimo messaggio dell'utente considerando il contesto recente.
+Valuta il parametro "score" tra 0.0 e 1.0 (dove 1.0 è certezza assoluta).
+
+INTENT POSSIBILI:
+- weather: richieste sul meteo o temperatura
+- news: richieste di notizie o aggiornamenti
+- time: richieste sull'ora
+- date: richieste sulla data
+- reminder_create: creare o impostare un promemoria (es: "ricordami di...")
+- reminder_list: elenco promemoria attivi o in programma
+- reminder_delete: cancellare promemoria
+- reminder_update: modificare giorno/ora promemoria
+- tecnica: questioni tecniche, programmazione, architettura, sistemi
+- debug: errori codice, stacktrace, malfunzionamenti software 
+- spiegazione: richiesta di spiegazione dettagliata "perchè", "come mai"
+- identity: chi sono io, che lavoro faccio, come mi chiamo
+- emotional: l'utente esprime un suo stato d'animo, tristezza, ansia
+- memory_context: l'utente fa un riferimento esplicito a conversazioni precedenti
+- chat_free: salutare, ringraziare, o intent generico non elencato
+
+Devi restituire esclusivamente un payload JSON valido in questa forma:
+{"intent": "scelta_tra_i_possibili", "score": 0.95}
+
+Se l'intenzione non è chiara o se l'utente menziona strumenti ambiguamente, imposta uno score basso (es. 0.5)."""
+
+        user_prompt = f"Contesto recente della chat:\n{history_text}\n\nUltimo messaggio utente:\n{message}"
+        
+        try:
+            response = await llm_service._call_with_protection(
+                model="gpt-4o-mini",
+                prompt=system_prompt,
+                message=user_prompt,
+                user_id=user_id or "system",
+                route="classification"
+            )
+            
+            if response:
+                json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                if json_match:
+                    data = json.loads(json_match.group(0))
+                    intent = data.get("intent", "chat_free")
+                    score = float(data.get("score", 0.0))
+                    
+                    # LOGGING
+                    log("LLM_INTENT_CLASSIFICATION", intent=intent, score=score, message=message[:50], user_id=user_id)
+                    logger.info(f"LLM_INTENT_CLASSIFICATION intent={intent} score={score}")
+                    
+                    # Se lo score < 0.8 per intent che azionano tool/api specifiche, ferma e chiedi chiarimenti
+                    tool_intents = ["weather", "news", "time", "date", "reminder_create", "reminder_delete", "reminder_update", "reminder_list"]
+                    if score < 0.8 and intent in tool_intents:
+                        return "ambiguous_tool"
+                    
+                    return intent
+        except Exception as e:
+            logger.error(f"Errore nella classificazione JSON LLM: {str(e)}")
+            
+        # Fallback alla vecchia regex classification se LLM fallisce
+        return self.classify(message, user_id)
+
 
 # Istanza globale
 intent_classifier = IntentClassifier()

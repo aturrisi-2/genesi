@@ -316,7 +316,10 @@ class Proactor:
 
             # STEP 4: INTENT CLASSIFICATION
             if intent is None:
-                intent = intent_classifier.classify(message, user_id)
+                intent = await intent_classifier.classify_async(message, user_id)
+                
+            if intent == "ambiguous_tool":
+                return "Non sono sicuro di aver capito. Intendevi usare uno strumento specifico come un promemoria o il meteo? Puoi chiarire per favore?", "tool"
 
             # STEP 4.5: INTENT INHERITANCE — geographic follow-up
             inherited = resolve_inherited_intent(user_id, message, intent)
