@@ -2532,6 +2532,7 @@ function startVoiceMode() {
 }
 
 async function sendVoiceMessage(text) {
+    console.log('SEND_VOICE_MSG text="' + text + '" len=' + (text?.length || 0));
     if (!text?.trim() || !voiceModeActive) return;
     clearTimeout(voiceSilenceTimer);
     voiceSilenceTimer = null;
