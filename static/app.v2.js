@@ -9,6 +9,11 @@ let currentConvId = null;
 let currentMode = "chat"; // "chat" | "coding"
 
 // ===============================
+// TTS TIMING STATE
+// ===============================
+window.lastTTSStart = 0;
+
+// ===============================
 // AUDIO PRIMING
 // ===============================
 let _primedAudio = null;
@@ -2151,25 +2156,24 @@ async function playSimpleAudio(blob) {
     cleanup();
   };
   
-  audio.onerror = (error) => {
-    console.error('[TTS] Errore audio genId=' + myGenId, error);
-    cleanup();
-  };
+audio.onerror = (error) => {
+console.error('[TTS] Errore audio genId=' + myGenId, error);
+cleanup();
+};
   
-  // Final generation check before play
-  if (ttsGenerationId !== myGenId) {
-    console.log('[TTS] playSimpleAudio skipped — stale genId=' + myGenId + ' current=' + ttsGenerationId);
-    cleanup();
-    return;
-  }
+// Final generation check before play
+if (ttsGenerationId !== myGenId) {
+console.log('[TTS] playSimpleAudio skipped — stale genId=' + myGenId + ' current=' + ttsGenerationId);
+cleanup();
+return;
+}
   
-  // Avvia playback
-  console.log('[TTS] Avvio playback genId=' + myGenId);
-  await audio.play();
+// Imposta timestamp TTS PRIMA del playback
+window.lastTTSStart = Date.now();
   
-  // Aggiorna stato TTS
-  _ttsSource = audio;
-  _isPlayingChunk = true;
+// Avvia playback
+console.log('[TTS] Avvio playback genId=' + myGenId);
+await audio.play();
   _wasPlayingChunk = true;
   
   window.ttsPlaying = true; console.log('[TTS] Audio avviato genId=' + myGenId + ' activeSources=' + activeTTSSources.length);
@@ -2565,41 +2569,23 @@ async function sendVoiceMessage(text) {
 }
 
 function waitForTTSEnd(callback) {
-    let ttsStarted = false;
-    let ttsDetected = false;
     const startTime = Date.now();
-    
-    // Check rapido per TTS assente
-    const ttsCheckTimer = setTimeout(() => {
-        if (!ttsStarted && !ttsDetected) {
-            console.log('TTS_NOT_DETECTED timestamp=' + Date.now() + ' dopo 2s senza TTS');
-            callback();
-        }
-    }, 2000);
-    
     const poll = setInterval(() => {
-        if (window.ttsPlaying === true) {
-            ttsStarted = true;
-            ttsDetected = true;
-            console.log('TTS_DETECTED timestamp=' + Date.now());
-            clearTimeout(ttsCheckTimer);
-        }
+        const ttsStarted = window.lastTTSStart > startTime;
         if (ttsStarted && window.ttsPlaying !== true) {
             clearInterval(poll);
-            clearTimeout(ttsCheckTimer);
             setTimeout(callback, 400);
         }
     }, 150);
-    
-    // Timeout di sicurezza aumentato a 30 secondi
-    setTimeout(() => { 
-        clearInterval(poll); 
-        clearTimeout(ttsCheckTimer);
-        if (voiceModeActive) {
-            console.log('TTS_TIMEOUT timestamp=' + Date.now() + ' dopo 30s');
-            callback(); 
+    // Fallback: se TTS non parte entro 2s, sblocca subito
+    setTimeout(() => {
+        clearInterval(poll);
+        const ttsStarted = window.lastTTSStart > startTime;
+        if (!ttsStarted) {
+            console.log('TTS_NOT_DETECTED timestamp=' + Date.now() + ' dopo 2s senza TTS');
         }
-    }, 30000);
+        if (voiceModeActive) callback();
+    }, 2000);
 }
 
 function stopVoiceMode() {
