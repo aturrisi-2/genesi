@@ -2877,13 +2877,15 @@ if ('serviceWorker' in navigator) {
 }
 
 // ── Push Notifications — richiesta permesso e subscription ──
-(function initPushNotifications() {
+; (function initPushNotifications() {
   'use strict';
 
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     console.info('[PUSH] Non supportato su questo browser.');
     return;
   }
+
+  console.log('[PUSH] Supportato, registro handlers...');
 
   async function getVapidKey() {
     const resp = await fetch('/api/push/vapid-public-key');
@@ -2937,6 +2939,7 @@ if ('serviceWorker' in navigator) {
       return;
     }
 
+    console.log('[PUSH] Requesting permission...');
     const permission = await Notification.requestPermission();
     console.log('[PUSH] Permesso notifiche:', permission);
 
@@ -2946,9 +2949,13 @@ if ('serviceWorker' in navigator) {
   }
 
   // Avvia dopo che il SW è pronto
-  navigator.serviceWorker.ready.then(() => {
+  navigator.serviceWorker.ready.then((reg) => {
+    console.log('[PUSH] SW ready risolto, reg:', reg.scope);
     // Piccolo delay per non sovraccaricare il primo caricamento
-    setTimeout(initPush, 2000);
-  });
+    setTimeout(() => {
+      console.log('[PUSH] trigger initPush (da setTimeout)');
+      initPush().catch(e => console.error('[PUSH] Errore in initPush:', e));
+    }, 2000);
+  }).catch(e => console.error('[PUSH] Errore in SW ready:', e));
 
 })();
