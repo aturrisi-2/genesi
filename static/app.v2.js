@@ -2458,6 +2458,10 @@ let voiceSilenceTimer = null;
 let voiceBlockedUntil = 0;
 const VOICE_SILENCE_MS = 1500;
 
+// Singleton per waitForTTSEnd - previene chiamate parallele
+let voiceTTSPollInterval = null;
+let voiceTTSPollTimeout = null;
+
 function initVoiceMode() {
     const btn = document.getElementById('voice-mode-btn');
     const stopBtn = document.getElementById('voice-mode-stop-btn');
@@ -2575,19 +2579,36 @@ async function sendVoiceMessage(text) {
 }
 
 function waitForTTSEnd(callback) {
+    // Cancella poll precedenti per evitare chiamate parallele
+    if (voiceTTSPollInterval) { 
+        clearInterval(voiceTTSPollInterval); 
+        voiceTTSPollInterval = null; 
+    }
+    if (voiceTTSPollTimeout) { 
+        clearTimeout(voiceTTSPollTimeout); 
+        voiceTTSPollTimeout = null; 
+    }
+
     const startTime = Date.now();
-    const poll = setInterval(() => {
+    voiceTTSPollInterval = setInterval(() => {
         const ttsStarted = window.lastTTSStart > startTime;
         const ttsEnded = ttsStarted && window.ttsPlaying !== true;
         const safeDelay = (Date.now() - window.lastTTSStart) > 500;
         if (ttsEnded && safeDelay) {
-            clearInterval(poll);
+            clearInterval(voiceTTSPollInterval); 
+            voiceTTSPollInterval = null;
+            clearTimeout(voiceTTSPollTimeout); 
+            voiceTTSPollTimeout = null;
             setTimeout(callback, 800);
         }
     }, 150);
+    
     // Fallback: se TTS non parte entro 10s, sblocca subito
-    setTimeout(() => {
-        clearInterval(poll);
+    voiceTTSPollTimeout = setTimeout(() => {
+        clearInterval(voiceTTSPollInterval); 
+        voiceTTSPollInterval = null;
+        clearTimeout(voiceTTSPollTimeout); 
+        voiceTTSPollTimeout = null;
         const ttsStarted = window.lastTTSStart > startTime;
         if (!ttsStarted) {
             console.log('TTS_NOT_DETECTED timestamp=' + Date.now() + ' dopo 10s senza TTS');
