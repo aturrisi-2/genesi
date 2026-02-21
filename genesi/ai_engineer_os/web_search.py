@@ -34,6 +34,10 @@ def should_search(message: str) -> bool:
         # Inglese
         'latest', 'version', 'how to', 'example', 'docs',
         'install', 'setup', 'release', 'update', 'import',
+        # Coding & Debugging
+        'fix', 'error', 'traceback', 'exception', 'debug', 'undefined', 
+        'null', 'import error', 'syntax', 'typeerror', 'attributeerror',
+        'cannot', 'failed', 'not working', 'broken'
     ]
     msg_lower = message.lower()
     return any(kw in msg_lower for kw in keywords)
@@ -96,4 +100,47 @@ async def search_web(query: str, max_results: int = 4) -> Optional[str]:
     
     except Exception as e:
         logger.warning(f"WEB_SEARCH_ERROR query='{query}' error={e}")
+        return None
+
+def search_github(query: str) -> Optional[str]:
+    """
+    Cerca su GitHub via Search API senza auth.
+    I risultati vengono integrati dopo quelli di web search.
+    """
+    import urllib.parse
+    import requests
+    try:
+        q = urllib.parse.quote(query)
+        url = f"https://api.github.com/search/code?q={q}&per_page=3"
+        headers = {
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "Genesi-AI-Engineer-OS"
+        }
+        resp = requests.get(url, headers=headers, timeout=5.0)
+        if resp.status_code != 200:
+            return None
+            
+        items = resp.json().get("items", [])
+        if not items:
+            return None
+            
+        lines = [
+            "=== RICERCA GITHUB (risultati di codice reale) ===",
+            f"Query: {query}",
+            ""
+        ]
+        
+        for i, item in enumerate(items, 1):
+            repo = item.get("repository", {}).get("full_name", "")
+            path = item.get("path", "")
+            lines.append(f"[{i}] {repo}")
+            lines.append(f"    Path: {path}")
+            lines.append(f"    URL: {item.get('html_url')}")
+            lines.append("")
+            
+        lines.append("=== FINE RICERCA GITHUB ===")
+        logger.info(f"GITHUB_SEARCH_OK query='{query}' results={len(items)}")
+        return '\n'.join(lines)
+    except Exception as e:
+        logger.warning(f"GITHUB_SEARCH_ERROR query='{query}' error={e}")
         return None
