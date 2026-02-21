@@ -57,6 +57,16 @@ def build_search_query(message: str) -> str:
     # Limita lunghezza query
     return query[:150]
 
+def build_github_query(message: str) -> str:
+    """Estrae keywords tecniche in inglese per GitHub search."""
+    import re
+    # Rimuovi stopwords italiane comuni
+    stopwords = ['come', 'si', 'implementa', 'un', 'con', 'cercami', 
+                 'esempi', 'su', 'il', 'la', 'lo', 'ho', 'una',
+                 'che', 'per', 'del', 'della', 'dei', 'quale', 'cosa']
+    words = message.lower().split()
+    keywords = [w for w in words if w not in stopwords and len(w) > 3]
+    return ' '.join(keywords[:4])  # max 4 parole
 
 async def search_web(query: str, max_results: int = 4) -> Optional[str]:
     """

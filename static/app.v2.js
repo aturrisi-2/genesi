@@ -419,15 +419,15 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
   console.log('[TTS] CHUNKING: total_len=' + text.length + ' mode=' + tts_mode);
   console.log('[TTS] CHUNKS:', chunks.map((c, i) => `${i + 1}: "${c.substring(0, 50)}..." (${c.length}char)`));
 
-  // Array per i blob pre-caricati
-  const chunkBlobs = new Array(chunks.length);
+  // Array per le promise dei blob pre-caricati
+  const chunkFetchPromises = new Array(chunks.length);
 
   // Capture generationId at start of this segmented session
   const myGenId = ttsGenerationId;
 
   // Funzione per fetch di un chunk
   const fetchChunk = async (index) => {
-    if (_ttsAborted || ttsGenerationId !== myGenId) return;
+    if (_ttsAborted || ttsGenerationId !== myGenId) return null;
     const chunk = chunks[index];
     const normalizedChunk = normalizeTextForTTS(chunk);
     console.log('[TTS_PREFETCH] index=' + (index + 1) + '/total=' + chunks.length + ' len=' + chunk.length + ' genId=' + myGenId);
@@ -447,20 +447,20 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
       }
 
       const blob = await response.blob();
-      chunkBlobs[index] = blob;
       console.log('[TTS_PREFETCH_DONE] index=' + (index + 1) + ' size=' + blob.size);
+      return blob;
     } catch (e) {
       if (e.name === 'AbortError') {
         console.log('[TTS_PREFETCH_ABORTED] index=' + (index + 1));
       } else {
         console.error('[TTS_PREFETCH_ERROR] index=' + (index + 1), e);
       }
-      chunkBlobs[index] = null;
+      return null;
     }
   };
 
   // Pre-fetch del primo chunk
-  await fetchChunk(0);
+  chunkFetchPromises[0] = fetchChunk(0);
 
   // Ciclo principale con prefetch
   for (let i = 0; i < chunks.length; i++) {
@@ -473,8 +473,8 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
     console.log('[TTS_FLOW] step=4.' + (i + 1) + ' processing_chunk_' + (i + 1) + '/' + chunks.length);
 
     // Avvia prefetch del chunk successivo mentre questo suona
-    if (i < chunks.length - 1) {
-      fetchChunk(i + 1); // Non await per fetch in background
+    if (i < chunks.length - 1 && !chunkFetchPromises[i + 1]) {
+      chunkFetchPromises[i + 1] = fetchChunk(i + 1);
     }
 
     const chunk = chunks[i];
@@ -488,7 +488,10 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
       // Misura tempo tra chunk
       const chunkStartTime = performance.now();
 
-      await _playTTSChunkWithBlob(chunk, chunkBlobs[i], i);
+      // ATTENDI esplicitamente che il fetch del chunk corrente sia completato prima del playback
+      const blob = await chunkFetchPromises[i];
+
+      await _playTTSChunkWithBlob(chunk, blob, i);
 
       const chunkEndTime = performance.now();
       const chunkDuration = chunkEndTime - chunkStartTime;

@@ -21,7 +21,7 @@ from core.proactor import proactor
 from genesi.ai_engineer_os.shadow_orchestrator import ShadowOrchestrator
 from genesi.ai_engineer_os.feature_flags import ai_engineer_os_flags
 from genesi.ai_engineer_os.feature_flags import FeatureFlag
-from genesi.ai_engineer_os.web_search import should_search, build_search_query, search_web, search_github
+from genesi.ai_engineer_os.web_search import should_search, build_search_query, search_web, search_github, build_github_query
 
 logger = logging.getLogger(__name__)
 
@@ -149,11 +149,12 @@ async def _call_proactor_with_shadow(
     # Cerca solo se il messaggio lo richiede
     if should_search(message):
         query = build_search_query(message)
+        github_query = build_github_query(message)  # query breve in inglese
         web_context = await search_web(query)
         
         import asyncio
         loop = asyncio.get_event_loop()
-        github_context = await loop.run_in_executor(None, lambda: search_github(query))
+        github_context = await loop.run_in_executor(None, lambda: search_github(github_query))
         
         combined_contexts = []
         if web_context:
