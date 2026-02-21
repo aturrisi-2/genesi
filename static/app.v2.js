@@ -2542,8 +2542,8 @@ async function sendVoiceMessage(text) {
     clearTimeout(voiceSilenceTimer);
     voiceSilenceTimer = null;
 
-    voiceBlockedUntil = Date.now() + 8000;  
-    console.log('VOICE_BLOCKED_START timestamp=' + Date.now() + ' will unblock after 8s');
+    voiceBlockedUntil = Date.now() + 12000;  
+    console.log('VOICE_BLOCKED_START timestamp=' + Date.now() + ' will unblock after 12s');
 
     try { voiceRecognition?.stop(); } catch(e) {}
     voiceRecognition = null;
@@ -2585,15 +2585,15 @@ function waitForTTSEnd(callback) {
             setTimeout(callback, 800);
         }
     }, 150);
-    // Fallback: se TTS non parte entro 2s, sblocca subito
+    // Fallback: se TTS non parte entro 10s, sblocca subito
     setTimeout(() => {
         clearInterval(poll);
         const ttsStarted = window.lastTTSStart > startTime;
         if (!ttsStarted) {
-            console.log('TTS_NOT_DETECTED timestamp=' + Date.now() + ' dopo 2s senza TTS');
+            console.log('TTS_NOT_DETECTED timestamp=' + Date.now() + ' dopo 10s senza TTS');
         }
         if (voiceModeActive) callback();
-    }, 2000);
+    }, 10000);
 }
 
 function stopVoiceMode() {
