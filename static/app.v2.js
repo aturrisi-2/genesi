@@ -2671,3 +2671,126 @@ function setVoiceStatusText(text) {
   const el = document.querySelector('.voice-status-text');
   if (el) el.textContent = text;
 }
+
+// ═══════════════════════════════════════════════════════════════
+// WEATHER WIDGET
+// Chiamato al caricamento della pagina, non blocca nulla.
+// Non usa Bearer token — endpoint pubblico della homepage.
+// ═══════════════════════════════════════════════════════════════
+
+(function initWeatherWidget() {
+  'use strict';
+
+  // Mappa condition OpenWeather → emoji
+  const WEATHER_ICONS = {
+    clear: '☀️',
+    clouds: '☁️',
+    rain: '🌧️',
+    drizzle: '🌦️',
+    thunderstorm: '⛈️',
+    snow: '❄️',
+    mist: '🌫️',
+    fog: '🌫️',
+    haze: '🌫️',
+    smoke: '🌫️',
+    dust: '🌪️',
+    sand: '🌪️',
+    ash: '🌋',
+    squall: '💨',
+    tornado: '🌪️',
+  };
+
+  const els = {
+    widget: document.getElementById('weather-widget'),
+    loading: document.getElementById('ww-loading'),
+    data: document.getElementById('ww-data'),
+    error: document.getElementById('ww-error'),
+    icon: document.getElementById('ww-icon'),
+    city: document.getElementById('ww-city'),
+    temp: document.getElementById('ww-temp'),
+    desc: document.getElementById('ww-desc'),
+    meta: document.getElementById('ww-meta'),
+    time: document.getElementById('ww-time'),
+  };
+
+  if (!els.widget) {
+    console.warn('[WEATHER_WIDGET] Elemento #weather-widget non trovato nel DOM.');
+    return;
+  }
+
+  function showState(state) {
+    els.loading.hidden = state !== 'loading';
+    els.data.hidden = state !== 'data';
+    els.error.hidden = state !== 'error';
+  }
+
+  function updateClock() {
+    const now = new Date();
+    const time = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    if (els.time) els.time.textContent = time;
+  }
+
+  function renderWeather(payload) {
+    const icon = WEATHER_ICONS[payload.condition] || '🌡️';
+    els.icon.textContent = icon;
+    els.city.textContent = payload.city;
+    els.temp.textContent = `${payload.temp}°`;
+    els.desc.textContent = payload.description;
+    els.meta.textContent = `${payload.humidity}% umidità · ${payload.wind_speed} km/h`;
+    updateClock();
+    showState('data');
+    console.log(
+      `[WEATHER_WIDGET] OK city=${payload.city} temp=${payload.temp}° condition=${payload.condition}`
+    );
+    // Aggiorna l'orario ogni minuto
+    setInterval(updateClock, 60_000);
+  }
+
+  async function fetchWeather(lat, lon) {
+    const url = lat !== null && lon !== null
+      ? `/api/weather-widget?lat=${lat}&lon=${lon}`
+      : `/api/weather-widget`;
+
+    const resp = await fetch(url, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return resp.json();
+  }
+
+  function loadWithCoords(lat, lon) {
+    fetchWeather(lat, lon)
+      .then(renderWeather)
+      .catch(err => {
+        console.warn('[WEATHER_WIDGET] Fetch con coordinate fallita:', err);
+        // Secondo tentativo: fallback IP
+        fetchWeather(null, null)
+          .then(renderWeather)
+          .catch(() => showState('error'));
+      });
+  }
+
+  // ── Entry point ──────────────────────────────────────────────
+  showState('loading');
+
+  if ('geolocation' in navigator) {
+    navigator.geolocation.getCurrentPosition(
+      pos => loadWithCoords(pos.coords.latitude, pos.coords.longitude),
+      _err => {
+        console.info('[WEATHER_WIDGET] Geolocation negata — fallback IP');
+        fetchWeather(null, null)
+          .then(renderWeather)
+          .catch(() => showState('error'));
+      },
+      { timeout: 6000, maximumAge: 300_000 }
+    );
+  } else {
+    console.info('[WEATHER_WIDGET] Geolocation non disponibile — fallback IP');
+    fetchWeather(null, null)
+      .then(renderWeather)
+      .catch(() => showState('error'));
+  }
+
+})();

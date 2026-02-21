@@ -123,6 +123,44 @@
                     </div>
                 </div>
 
+                <!-- ═══════════════════════════════════════════════
+     WEATHER WIDGET — Inserito sopra #presence
+     Non spostare. Non annidare dentro altri elementi.
+     ═══════════════════════════════════════════════ -->
+<div id="weather-widget" class="weather-widget" aria-live="polite" aria-atomic="true">
+  <div class="weather-widget__inner">
+
+    <!-- Stato: loading -->
+    <div class="weather-widget__loading" id="ww-loading">
+      <span class="weather-widget__dot"></span>
+      <span class="weather-widget__dot"></span>
+      <span class="weather-widget__dot"></span>
+    </div>
+
+    <!-- Stato: dati -->
+    <div class="weather-widget__data" id="ww-data" hidden>
+      <div class="weather-widget__icon-wrap">
+        <span class="weather-widget__icon" id="ww-icon">☁️</span>
+      </div>
+      <div class="weather-widget__details">
+        <span class="weather-widget__city"    id="ww-city">—</span>
+        <span class="weather-widget__temp"    id="ww-temp">—°</span>
+        <span class="weather-widget__desc"    id="ww-desc">—</span>
+        <span class="weather-widget__meta"    id="ww-meta">—</span>
+        <span class="weather-widget__time"    id="ww-time">—</span>
+      </div>
+    </div>
+
+    <!-- Stato: errore -->
+    <div class="weather-widget__error" id="ww-error" hidden>
+      <span class="weather-widget__error-text">
+        Meteo non disponibile
+      </span>
+    </div>
+
+  </div>
+</div>
+<!-- /WEATHER WIDGET -->
                 <header id="presence">
                     <p>Ciò che conta davvero è come attraversi il fuoco.</p>
                 </header>

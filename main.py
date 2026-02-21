@@ -246,6 +246,8 @@ app.include_router(upload_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")
 app.include_router(coding_router)
+from api.weather_widget import router as weather_widget_router
+app.include_router(weather_widget_router)
 
 # ===============================
 # Health check
