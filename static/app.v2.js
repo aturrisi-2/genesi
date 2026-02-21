@@ -27,8 +27,8 @@ const STATES = { IDLE: 'idle', THINKING: 'thinking', RECORDING: 'recording' };
 // DEV_MODE for local development
 // ===============================
 const DEV_MODE =
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "127.0.0.1";
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1";
 
 // ===============================
 // DOM
@@ -108,7 +108,7 @@ function doLogout() {
     fetch('/auth/logout', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token },
-    }).catch(() => {});
+    }).catch(() => { });
   }
   localStorage.removeItem('genesi_access_token');
   localStorage.removeItem('genesi_refresh_token');
@@ -236,27 +236,27 @@ let ttsGenerationId = 0;              // Monotonic ID — stale async skips play
 // ===============================
 function normalizeTextForTTS(text) {
   if (!text || typeof text !== 'string') return text;
-  
+
   const original = text;
-  
+
   // Converta "..." e "...." in "."
   text = text.replace(/\.{3,4}/g, '.');
-  
+
   // Garantisce uno spazio dopo il punto se manca e c'è un carattere
   text = text.replace(/\.([a-zA-ZàèéìòùÀÈÉÌÒÙ])/g, '. $1');
-  
+
   // Rimuove chunk contenenti solo punteggiatura
   text = text.replace(/^[.,;:!?]+$/, '');
-  
+
   // Rimuove spazi multipli
   text = text.replace(/\s+/g, ' ').trim();
-  
+
   // Log debug solo se necessario
   if (original !== text) {
     console.log('[TTS_NORMALIZE] before:', JSON.stringify(original));
     console.log('[TTS_NORMALIZE] after:', JSON.stringify(text));
   }
-  
+
   return text;
 }
 
@@ -266,7 +266,7 @@ function _getTTSCtx() {
     console.error('[TTS] Global AudioContext not available - audio not unlocked');
     return null;
   }
-  
+
   console.log('[TTS] Using global AudioContext, state=' + window.audioContext.state);
   return window.audioContext;
 }
@@ -280,9 +280,9 @@ function _warmTTSCtx() {
     console.warn('[TTS] Cannot warm - no global AudioContext');
     return;
   }
-  
+
   console.log('[TTS] WarmTTSCtx - state=' + ctx.state);
-  
+
   // Resume per qualsiasi stato non-running
   if (ctx.state === 'suspended' || ctx.state === 'interrupted') {
     ctx.resume().then(() => {
@@ -299,14 +299,14 @@ function primeAudio() {
   if (!_primedAudio) {
     _primedAudio = new Audio();
     _primedAudio.muted = true;
-    _primedAudio.play().catch(() => {});
+    _primedAudio.play().catch(() => { });
     console.log('[AUDIO] primed');
   }
 }
 
 function stopAudio() {
   if (_ttsSource) {
-    try { _ttsSource.stop(); } catch (e) {}
+    try { _ttsSource.stop(); } catch (e) { }
     _ttsSource = null;
   }
 }
@@ -319,17 +319,18 @@ function stopAllTTS() {
 
   // 1. Abort all in-flight TTS fetch requests
   if (currentTTSAbortController) {
-    try { currentTTSAbortController.abort(); } catch (e) {}
+    try { currentTTSAbortController.abort(); } catch (e) { }
     currentTTSAbortController = null;
   }
 
   // 2. Stop ALL tracked audio sources
   activeTTSSources.forEach(src => {
     try {
-      src.pause();
+      if (typeof src.stop === 'function') src.stop();
+      if (typeof src.pause === 'function') src.pause();
       src.currentTime = 0;
       src.src = '';
-    } catch (e) {}
+    } catch (e) { }
   });
   activeTTSSources = [];
 
@@ -339,7 +340,7 @@ function stopAllTTS() {
       _ttsSource.pause();
       _ttsSource.currentTime = 0;
       _ttsSource.src = '';
-    } catch (e) {}
+    } catch (e) { }
     _ttsSource = null;
   }
 
@@ -366,14 +367,14 @@ function _splitTextForTTS(text, tts_mode = 'normal') {
   const sentences = text.split(/([.!?]+)\s*/);
   const chunks = [];
   let currentChunk = '';
-  
+
   // Per psychological: max 1 frase per chunk, più brevi
   const maxChunkSize = tts_mode === 'psychological' ? 150 : 200;
-  
+
   for (let i = 0; i < sentences.length; i += 2) {
     const sentence = sentences[i] + (sentences[i + 1] || '');
     if (!sentence.trim()) continue;
-    
+
     // Per psychological: forza 1 frase per chunk
     if (tts_mode === 'psychological') {
       if (currentChunk.trim()) {
@@ -392,35 +393,35 @@ function _splitTextForTTS(text, tts_mode = 'normal') {
       }
     }
   }
-  
+
   // Aggiungi l'ultimo chunk
   if (currentChunk.trim()) {
     chunks.push(currentChunk.trim());
   }
-  
+
   return chunks;
 }
 
 async function playTTSSegmented(text, tts_mode = 'normal') {
   console.log('[TTS_FLOW] step=1 segmented_start len=' + text.length + ' mode=' + tts_mode);
-  
+
   // Reset abort flag at start of new segmented playback
   _ttsAborted = false;
-  
+
   if (!text || text.trim().length === 0) {
     console.log('[TTS_ABORT] reason=segmented_empty_text text_len=' + (text ? text.length : 0));
     console.log('[TTS_FLOW] step=2 segmented_skip_empty_text');
     return;
   }
-  
+
   const chunks = _splitTextForTTS(text, tts_mode);
   console.log('[TTS_FLOW] step=3 segmented_chunks_created count=' + chunks.length);
   console.log('[TTS] CHUNKING: total_len=' + text.length + ' mode=' + tts_mode);
   console.log('[TTS] CHUNKS:', chunks.map((c, i) => `${i + 1}: "${c.substring(0, 50)}..." (${c.length}char)`));
-  
+
   // Array per i blob pre-caricati
   const chunkBlobs = new Array(chunks.length);
-  
+
   // Capture generationId at start of this segmented session
   const myGenId = ttsGenerationId;
 
@@ -430,7 +431,7 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
     const chunk = chunks[index];
     const normalizedChunk = normalizeTextForTTS(chunk);
     console.log('[TTS_PREFETCH] index=' + (index + 1) + '/total=' + chunks.length + ' len=' + chunk.length + ' genId=' + myGenId);
-    
+
     try {
       const headers = authHeaders();
       console.log('[TTS_PREFETCH] AUTH HEADERS: ' + JSON.stringify(headers));
@@ -440,11 +441,11 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
         body: JSON.stringify({ text: normalizedChunk }),
         signal: currentTTSAbortController ? currentTTSAbortController.signal : undefined
       });
-      
+
       if (!response.ok) {
         throw new Error('TTS fetch failed: ' + response.status);
       }
-      
+
       const blob = await response.blob();
       chunkBlobs[index] = blob;
       console.log('[TTS_PREFETCH_DONE] index=' + (index + 1) + ' size=' + blob.size);
@@ -457,10 +458,10 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
       chunkBlobs[index] = null;
     }
   };
-  
+
   // Pre-fetch del primo chunk
   await fetchChunk(0);
-  
+
   // Ciclo principale con prefetch
   for (let i = 0; i < chunks.length; i++) {
     // CHECK ABORT FLAG + GENERATION ID before every chunk
@@ -468,32 +469,32 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
       console.log('[TTS_FLOW] step=ABORTED chunk_' + (i + 1) + '/' + chunks.length + ' aborted=' + _ttsAborted + ' genStale=' + (ttsGenerationId !== myGenId));
       break;
     }
-    
+
     console.log('[TTS_FLOW] step=4.' + (i + 1) + ' processing_chunk_' + (i + 1) + '/' + chunks.length);
-    
+
     // Avvia prefetch del chunk successivo mentre questo suona
     if (i < chunks.length - 1) {
       fetchChunk(i + 1); // Non await per fetch in background
     }
-    
+
     const chunk = chunks[i];
     console.log('[TTS_CHUNK] index=' + (i + 1) + '/total=' + chunks.length + ' len=' + chunk.length);
     console.log('[TTS] PLAYING chunk', i + 1, '/', chunks.length, 'len=' + chunk.length);
     console.log('[TTS] CHUNK TEXT:', chunk);
-    
+
     try {
       console.log('[TTS_FLOW] step=6.' + (i + 1) + ' calling_playTTSChunk');
-      
+
       // Misura tempo tra chunk
       const chunkStartTime = performance.now();
-      
+
       await _playTTSChunkWithBlob(chunk, chunkBlobs[i], i);
-      
+
       const chunkEndTime = performance.now();
       const chunkDuration = chunkEndTime - chunkStartTime;
-      
+
       console.log('[TTS_FLOW] step=7.' + (i + 1) + ' playTTSChunk_completed duration=' + chunkDuration.toFixed(2) + 'ms');
-      
+
       // PAUSA LUNGA per psychological tra chunk — but check abort
       if (tts_mode === 'psychological' && i < chunks.length - 1 && !_ttsAborted && ttsGenerationId === myGenId) {
         console.log('[TTS_FLOW] step=8.' + (i + 1) + ' psychological_pause');
@@ -505,7 +506,7 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
       break;
     }
   }
-  
+
   console.log('[TTS_FLOW] step=11 segmented_finished aborted=' + _ttsAborted);
   console.log('[TTS_DONE] total_chunks=' + chunks.length);
   // Resetta stato solo alla fine di tutti i chunk
@@ -514,29 +515,29 @@ async function playTTSSegmented(text, tts_mode = 'normal') {
 
 async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
   console.log('[TTS_FLOW] step=1 chunk_start len=' + text.length);
-  
+
   if (!text || text.trim().length === 0) {
     console.log('[TTS_ABORT] reason=chunk_empty_text text_len=' + (text ? text.length : 0));
     console.log('[TTS_FLOW] step=2 chunk_skip_empty_text');
     return;
   }
-  
+
   if (!blob || blob.size === 0) {
     console.log('[TTS_EMPTY_BLOB] prefetched blob is empty or null');
     console.log('[TTS_FLOW] step=3 empty_prefetched_blob');
     return;
   }
-  
+
   console.log('[TTS] _playTTSChunkWithBlob len=' + text.length + ' blob_size=' + blob.size);
   console.log('[TTS] TEXT:', text);
-  
+
   // VERIFICA AUDIO UNLOCK PRIMA DI PROCEDERE
   if (!window.audioUnlocked) {
     console.warn('[TTS] Audio not unlocked - skipping TTS playback (blob)');
     console.log('[TTS_ABORT] reason=audio_not_unlocked_blob');
     return;
   }
-  
+
   // VERIFICA E RIPRISTINA AudioContext PRIMA della riproduzione
   const ttsCtx = _getTTSCtx();
   if (!ttsCtx) {
@@ -544,21 +545,21 @@ async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
     console.log('[TTS_ABORT] reason=no_audiocontext_blob');
     return;
   }
-  
+
   console.log('[TTS] AudioContext check (blob) - state=' + ttsCtx.state);
-  
+
   if (ttsCtx.state === 'suspended' || ttsCtx.state === 'interrupted') {
     console.log('[TTS] Resuming AudioContext before blob playback');
     await ttsCtx.resume();
     console.log('[TTS] AudioContext resumed (blob) - state=' + ttsCtx.state);
   }
-  
+
   try {
     console.log('[TTS_FLOW] step=7 calling_playTTSAudio');
-    
+
     // USA NUOVA FUNZIONE playTTSAudio con decodeAudioData
     await playTTSAudio(blob);
-    
+
     // ATTENDI CHE IL CHUNK FINISCA PRIMA DI PASSARE AL SUCCESSIVO
     console.log('[TTS_FLOW] step=8 waiting_for_chunk_end');
     await new Promise(resolve => {
@@ -573,7 +574,7 @@ async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
       };
       checkEnded();
     });
-    
+
   } catch (e) {
     console.log('[TTS_FLOW] step=ERROR chunk_exception');
     console.error('[TTS] _playTTSChunkWithBlob error:', e);
@@ -583,23 +584,23 @@ async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
 
 async function _playTTSChunk(text) {
   console.log('[TTS_FLOW] step=1 chunk_start len=' + text.length);
-  
+
   if (!text || text.trim().length === 0) {
     console.log('[TTS_ABORT] reason=chunk_empty_text text_len=' + (text ? text.length : 0));
     console.log('[TTS_FLOW] step=2 chunk_skip_empty_text');
     return;
   }
-  
+
   console.log('[TTS] _playTTSChunk len=' + text.length);
   console.log('[TTS] TEXT:', text);
-  
+
   // VERIFICA AUDIO UNLOCK PRIMA DI PROCEDERE
   if (!window.audioUnlocked) {
     console.warn('[TTS] Audio not unlocked - skipping TTS playback');
     console.log('[TTS_ABORT] reason=audio_not_unlocked');
     return;
   }
-  
+
   // VERIFICA E RIPRISTINA AudioContext PRIMA della riproduzione
   const ttsCtx = _getTTSCtx();
   if (!ttsCtx) {
@@ -607,20 +608,20 @@ async function _playTTSChunk(text) {
     console.log('[TTS_ABORT] reason=no_audiocontext');
     return;
   }
-  
+
   console.log('[TTS] AudioContext check - state=' + ttsCtx.state);
-  
+
   if (ttsCtx.state === 'suspended' || ttsCtx.state === 'interrupted') {
     console.log('[TTS] Resuming AudioContext before playback');
     await ttsCtx.resume();
     console.log('[TTS] AudioContext resumed - state=' + ttsCtx.state);
   }
-  
+
   try {
     console.log('[TTS_FLOW] step=3 calling_fetch_tts');
     console.log('[TTS] FETCH: calling /tts...');
     console.log('[TTS] richiesta inviata - text_len=' + text.length);
-    
+
     const normalizedText = normalizeTextForTTS(text);
     const headers = authHeaders();
     console.log('[TTS] AUTH HEADERS: ' + JSON.stringify(headers));
@@ -630,33 +631,33 @@ async function _playTTSChunk(text) {
       body: JSON.stringify({ text: normalizedText }),
       signal: currentTTSAbortController ? currentTTSAbortController.signal : undefined
     });
-    
+
     console.log('[TTS_FLOW] step=4 fetch_response_received');
     console.log('[TTS] RESPONSE: status=' + response.status + ' headers=' + JSON.stringify(Object.fromEntries(response.headers)));
-    
+
     if (!response.ok) {
       console.log('[TTS_ABORT] reason=fetch_failed status=' + response.status);
       console.log('[TTS_FLOW] step=5 fetch_failed');
       return;
     }
-    
+
     console.log('[TTS_FLOW] step=5 reading_blob');
     const blob = await response.blob();
     console.log('[TTS_FLOW] step=6 blob_received');
     console.log('[TTS] BLOB: size=' + blob.size + ' type=' + blob.type);
     console.log('[TTS] TTS blob ricevuto - size=' + blob.size + ' type=' + blob.type);
-    
+
     if (!blob || blob.size === 0) {
       console.log('[TTS_EMPTY_BLOB] fetched blob is empty, size=' + (blob ? blob.size : 'null'));
       console.log('[TTS_FLOW] step=7 empty_blob');
       return;
     }
-    
+
     console.log('[TTS_FLOW] step=7 calling_playTTSAudio');
-    
+
     // USA NUOVA FUNZIONE playTTSAudio con decodeAudioData
     await playTTSAudio(blob);
-    
+
     // ATTENDI CHE IL CHUNK FINISCA PRIMA DI PASSARE AL SUCCESSIVO
     console.log('[TTS_FLOW] step=8 waiting_for_chunk_end');
     await new Promise(resolve => {
@@ -671,7 +672,7 @@ async function _playTTSChunk(text) {
       };
       checkEnded();
     });
-    
+
   } catch (e) {
     console.log('[TTS_FLOW] step=ERROR chunk_exception');
     console.error('[TTS] _playTTSChunk error:', e);
@@ -682,23 +683,23 @@ async function _playTTSChunk(text) {
 async function playTTS(text, tts_mode = 'normal') {
   console.log('[TTS_FLOW] step=1 playTTS_start len=' + text.length + ' mode=' + tts_mode);
   console.log("STEP_2_TTS_REQUESTED");
-  
+
   if (_ttsAborted) {
     console.log('[TTS_ABORT] reason=aborted_before_start');
     return;
   }
-  
+
   if (!text || text.trim().length === 0) {
     console.log('[TTS_ABORT] reason=empty_text text_len=' + (text ? text.length : 0));
     console.log('[TTS_FLOW] step=2 playTTS_skip_empty_text');
     return;
   }
-  
+
   console.log('[TTS_FLOW] step=3 playTTS_checking_segmentation');
-  
+
   // FORZA segmentazione per testi informativi, psychological o lunghi
   console.log('[TTS_FLOW] step=3.5 checking_conditions tts_mode=' + tts_mode + ' len=' + text.length);
-  
+
   return new Promise((resolve, reject) => {
     const executeTTS = async () => {
       try {
@@ -713,17 +714,17 @@ async function playTTS(text, tts_mode = 'normal') {
           await _playTTSChunk(text);
           console.log('[TTS_FLOW] step=5 playTTS_single_chunk_completed');
         }
-        
+
         console.log('[TTS_FLOW] step=6 playTTS_finished');
         console.log("STEP_3_TTS_READY");
         resolve();
-        
+
       } catch (error) {
         console.error('[TTS] Error in playTTS:', error);
         resolve(); // NON bloccare UI anche in caso di errore
       }
     };
-    
+
     executeTTS();
   });
 }
@@ -741,48 +742,48 @@ let userIdentity = {};
 
 // Polling notifiche reminder — avvia dopo login
 function startNotificationPolling() {
-    const authToken = getAuthToken();
-    if (!authToken) {
-        console.log("NOTIFICATION_POLLING_SKIPPED_NO_TOKEN");
+  const authToken = getAuthToken();
+  if (!authToken) {
+    console.log("NOTIFICATION_POLLING_SKIPPED_NO_TOKEN");
+    return;
+  }
+
+  const notificationInterval = setInterval(async () => {
+    try {
+      const response = await fetch('/api/notifications/pending', {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+
+      if (response.status === 401) {
+        console.warn("NOTIFICATION_POLLING_STOPPED_401");
+        clearInterval(notificationInterval);
         return;
-    }
+      }
 
-    const notificationInterval = setInterval(async () => {
-        try {
-            const response = await fetch('/api/notifications/pending', {
-                headers: { 'Authorization': `Bearer ${authToken}` }
-            });
-            
-            if (response.status === 401) {
-                console.warn("NOTIFICATION_POLLING_STOPPED_401");
-                clearInterval(notificationInterval);
-                return;
-            }
-            
-            if (!response.ok) return;
+      if (!response.ok) return;
 
-            const data = await response.json();
-            if (data.count > 0) {
-                for (const notif of data.notifications) {
-                    // Mostra solo se non già mostrata
-                    const key = `notif_shown_${notif.id}`;
-                    if (sessionStorage.getItem(key)) continue;
-                    sessionStorage.setItem(key, '1');
+      const data = await response.json();
+      if (data.count > 0) {
+        for (const notif of data.notifications) {
+          // Mostra solo se non già mostrata
+          const key = `notif_shown_${notif.id}`;
+          if (sessionStorage.getItem(key)) continue;
+          sessionStorage.setItem(key, '1');
 
-                    // Inserisci in chat come messaggio assistente
-                    addMessage(`🔔 Promemoria: ${notif.text}`, 'genesi');
+          // Inserisci in chat come messaggio assistente
+          addMessage(`🔔 Promemoria: ${notif.text}`, 'genesi');
 
-                    // Marca come letta chiamando endpoint ack
-                    await fetch(`/api/notifications/ack/${notif.id}`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${authToken}` }
-                    });
-                }
-            }
-        } catch (err) {
-            console.error("NOTIFICATION_POLLING_ERROR", err);
+          // Marca come letta chiamando endpoint ack
+          await fetch(`/api/notifications/ack/${notif.id}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}` }
+          });
         }
-    }, 30000);
+      }
+    } catch (err) {
+      console.error("NOTIFICATION_POLLING_ERROR", err);
+    }
+  }, 30000);
 }
 
 async function bootstrapUser() {
@@ -828,26 +829,26 @@ const _neonHues = [180, 300, 90, 210, 330, 45, 270, 150, 0, 60];
 let _neonIdx = 0;
 
 function parseResponse(rawResponse) {
-    // Prova a parsare come JSON con immagini
-    if (typeof rawResponse === 'string' && rawResponse.trim().startsWith('{')) {
-        try {
-            const parsed = JSON.parse(rawResponse);
-            if (parsed.text && parsed.images) {
-                return parsed;
-            }
-        } catch(e) {}
-    }
-    // Risposta normale come stringa
-    return { text: rawResponse, images: [] };
+  // Prova a parsare come JSON con immagini
+  if (typeof rawResponse === 'string' && rawResponse.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(rawResponse);
+      if (parsed.text && parsed.images) {
+        return parsed;
+      }
+    } catch (e) { }
+  }
+  // Risposta normale come stringa
+  return { text: rawResponse, images: [] };
 }
 
 function renderImages(images) {
-    if (!images || images.length === 0) return '';
-    
-    let html = '<div class="image-grid" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
-    images.forEach(img => {
-        const thumb = img.thumbnail || img.url;
-        html += `
+  if (!images || images.length === 0) return '';
+
+  let html = '<div class="image-grid" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
+  images.forEach(img => {
+    const thumb = img.thumbnail || img.url;
+    html += `
             <div style="width:160px;text-align:center;">
                 <img src="${thumb}" 
                      alt="${img.title}"
@@ -857,41 +858,41 @@ function renderImages(images) {
                      style="width:100%;height:110px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,0.15);">
                 <div style="font-size:10px;color:#888;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${img.source}</div>
             </div>`;
-    });
-    html += '</div>';
-    return html;
+  });
+  html += '</div>';
+  return html;
 }
 
 function renderMessageContent(text) {
-    // Escape HTML base
-    const escape = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    
-    // Sostituisci ```lang\n...\n``` con <pre><code>
-    let html = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-        return `<pre class="code-block"><code class="${lang ? 'lang-'+lang : ''}">${escape(code.trim())}</code></pre>`;
-    });
-    
-    // Sostituisci `inline code` con <code>
-    html = html.replace(/`([^`]+)`/g, (_, code) => `<code class="inline-code">${escape(code)}</code>`);
-    
-    // Newline → <br> per testo normale (solo fuori dai pre)
-    html = html.replace(/(?<!<\/pre>)\n(?!<pre)/g, '<br>');
-    
-    return html;
+  // Escape HTML base
+  const escape = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // Sostituisci ```lang\n...\n``` con <pre><code>
+  let html = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    return `<pre class="code-block"><code class="${lang ? 'lang-' + lang : ''}">${escape(code.trim())}</code></pre>`;
+  });
+
+  // Sostituisci `inline code` con <code>
+  html = html.replace(/`([^`]+)`/g, (_, code) => `<code class="inline-code">${escape(code)}</code>`);
+
+  // Newline → <br> per testo normale (solo fuori dai pre)
+  html = html.replace(/(?<!<\/pre>)\n(?!<pre)/g, '<br>');
+
+  return html;
 }
 
 function addMessage(text, sender) {
   const el = document.createElement('div');
   el.className = `message ${sender}`;
-  
+
   // Parse response per gestire immagini
   const parsed = parseResponse(text);
-  
+
   // Usa renderMessageContent per formattazione code blocks + escape HTML
   const renderedContent = renderMessageContent(parsed.text);
-  
+
   el.innerHTML = renderedContent + renderImages(parsed.images);
-  
+
   // Assign rotating neon hue
   const hue = _neonHues[_neonIdx % _neonHues.length];
   el.style.setProperty('--neon-hue', hue + 'deg');
@@ -901,10 +902,10 @@ function addMessage(text, sender) {
 
   // Always scroll on new message (user just sent or received)
   requestAnimationFrame(() => scrollToBottom());
-  
+
   // Log per debugging del rendering
   console.log('[RENDER] Message added:', { sender, textLength: text.length, element: el });
-  
+
   return el;
 }
 
@@ -917,7 +918,7 @@ async function sendChatMessage(message) {
   try {
     // Route to different endpoint based on current mode
     const endpoint = currentMode === "coding" ? "/coding/" : "/api/chat";
-    
+
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: authHeaders(),
@@ -942,33 +943,33 @@ async function sendChatMessage(message) {
 // AUTO-RESIZE INPUT
 // ===============================
 function autoResizeInput(el) {
-    el.style.height = 'auto';
-    const newHeight = Math.min(el.scrollHeight, 150);
-    el.style.height = newHeight + 'px';
-    
-    // Aggiusta l'altezza del container chat per compensare
-    const chatBox = document.querySelector('#dialogue');
-    if (chatBox) {
-        const inputArea = el.closest('#input-container') || el.parentElement;
-        const inputHeight = inputArea ? inputArea.offsetHeight : newHeight;
-        chatBox.style.paddingBottom = inputHeight + 'px';
-    }
+  el.style.height = 'auto';
+  const newHeight = Math.min(el.scrollHeight, 150);
+  el.style.height = newHeight + 'px';
+
+  // Aggiusta l'altezza del container chat per compensare
+  const chatBox = document.querySelector('#dialogue');
+  if (chatBox) {
+    const inputArea = el.closest('#input-container') || el.parentElement;
+    const inputHeight = inputArea ? inputArea.offsetHeight : newHeight;
+    chatBox.style.paddingBottom = inputHeight + 'px';
+  }
 }
 
 // ===============================
 // CHAT RESPONSE HANDLER
 // ===============================
 function handleChatResponse(rawResponse) {
-    // Controlla se è una risposta con immagini
-    if (typeof rawResponse === 'string' && rawResponse.trim().startsWith('{"text"')) {
-        try {
-            const parsed = JSON.parse(rawResponse);
-            if (parsed.text && parsed.images) {
-                return { text: parsed.text, images: parsed.images };
-            }
-        } catch(e) {}
-    }
-    return { text: rawResponse, images: [] };
+  // Controlla se è una risposta con immagini
+  if (typeof rawResponse === 'string' && rawResponse.trim().startsWith('{"text"')) {
+    try {
+      const parsed = JSON.parse(rawResponse);
+      if (parsed.text && parsed.images) {
+        return { text: parsed.text, images: parsed.images };
+      }
+    } catch (e) { }
+  }
+  return { text: rawResponse, images: [] };
 }
 
 // ===============================
@@ -977,14 +978,14 @@ function handleChatResponse(rawResponse) {
 async function sendMessage(voiceText = null) {
   // Audio Priming: previeni NotAllowedError su Safari/iOS
   primeAudio();
-  
+
   // Barge-in: increment generation + force-stop ALL TTS
   // MA NON durante voice mode conversazionale!
   ttsGenerationId++;
   if (!voiceModeActive) {
     stopAllTTS();
   }
-  
+
   // Warm AudioContext NOW (sync, during user gesture) — iOS requires this
   _warmTTSCtx();
 
@@ -1004,10 +1005,10 @@ async function sendMessage(voiceText = null) {
   ic.classList.add('pulse');
 
   addUserMessage(text);
-  
+
   // Salva messaggio utente nella conversazione corrente
   saveMessageToConversation('user', text);
-  
+
   // PARTE 1: Mostra animazione thinking come messaggio reale
   setState(STATES.THINKING);
   showThinking();
@@ -1017,28 +1018,28 @@ async function sendMessage(voiceText = null) {
     // PARTE 1: Chiama /api/chat
     const data = await sendChatMessage(text);
     console.log('[FRONTEND] response received');
-    
+
     // USA SEMPRE response - CONTRATTO API BACKEND
     const botMessage = data.response;
-    
+
     if (!botMessage || botMessage.trim().length === 0) return;
-    
+
     console.log(`LLM_RESPONSE_LENGTH: ${botMessage.length} chars`);
-    
+
     // RENDER IMMEDIATO — il testo appare SUBITO, senza attendere TTS
     hideThinking();
     const parsed = handleChatResponse(botMessage);
     if (parsed.images && parsed.images.length > 0) {
-        // Aggiungi messaggio testo
-        addMessage(parsed.text, 'genesi');
-        // Salva risposta assistente nella conversazione corrente
-        saveMessageToConversation('assistant', parsed.text);
-        // Aggiungi griglia immagini
-        const lastMsg = document.querySelector('.message.genesi:last-child');
-        if (lastMsg) {
-            let grid = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
-            parsed.images.forEach(img => {
-                grid += `<div style="width:150px;text-align:center;">
+      // Aggiungi messaggio testo
+      addMessage(parsed.text, 'genesi');
+      // Salva risposta assistente nella conversazione corrente
+      saveMessageToConversation('assistant', parsed.text);
+      // Aggiungi griglia immagini
+      const lastMsg = document.querySelector('.message.genesi:last-child');
+      if (lastMsg) {
+        let grid = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
+        parsed.images.forEach(img => {
+          grid += `<div style="width:150px;text-align:center;">
                     <img src="${img.thumbnail || img.url}" 
                          alt="${img.title}"
                          loading="lazy"
@@ -1047,36 +1048,36 @@ async function sendMessage(voiceText = null) {
                          style="width:100%;height:100px;object-fit:cover;border-radius:8px;cursor:pointer;">
                     <div style="font-size:10px;color:#888;margin-top:2px;">${img.source}</div>
                 </div>`;
-            });
-            grid += '</div>';
-            lastMsg.insertAdjacentHTML('beforeend', grid);
-        }
+        });
+        grid += '</div>';
+        lastMsg.insertAdjacentHTML('beforeend', grid);
+      }
     } else {
-        addMessage(parsed.text, 'genesi');
-        // Salva risposta assistente nella conversazione corrente
-        saveMessageToConversation('assistant', parsed.text);
+      addMessage(parsed.text, 'genesi');
+      // Salva risposta assistente nella conversazione corrente
+      saveMessageToConversation('assistant', parsed.text);
     }
     console.log('[TEXT_RENDERED] text_len=' + parsed.text.length);
-    
+
     // TTS ASINCRONO — completamente scollegato dal render
     const rawTtsText = data.tts_text || data.response;
     function stripCodeForTTS(text) {
-        return text
-            .replace(/```[\s\S]*?```/g, '. ')
-            .replace(/`[^`]+`/g, '')
-            .trim();
+      return text
+        .replace(/```[\s\S]*?```/g, '. ')
+        .replace(/`[^`]+`/g, '')
+        .trim();
     }
     const ttsText = (currentMode === 'coding') ? stripCodeForTTS(rawTtsText) : rawTtsText;
-    
+
     // Se ttsText è vuoto o solo spazi dopo il filtro, non chiamare TTS affatto
     if (!ttsText || ttsText.trim().length === 0) {
       console.log('[TTS_ASYNC] Skipped: empty after code filtering in coding mode');
       return;
     }
-    
+
     console.log('[TTS_ASYNC_START] tts_text_len=' + ttsText.length);
     playTTSAsync(ttsText, data.tts_mode);
-    
+
   } catch (e) {
     console.error('Chat error:', e);
     // PARTE 4: Fallback in caso di errore
@@ -1096,7 +1097,7 @@ function playTTSAsync(text, mode) {
   _ttsAborted = false;
   currentTTSAbortController = new AbortController();
   const myGenId = ttsGenerationId;
-  
+
   // Fire-and-forget: TTS non blocca MAI il render del testo
   (async () => {
     try {
@@ -1155,11 +1156,11 @@ const _isIOS = (() => {
 const _isSafari = (() => {
   // Safari detection basata su feature, non solo userAgent
   const isSafariLike = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-  const hasSafariFeatures = 
+  const hasSafariFeatures =
     typeof safari !== 'undefined' || // Safari extension object
     !window.chrome || // No Chrome
     (window.safari && window.safari.pushNotification); // Safari push notifications
-  
+
   return isSafariLike || hasSafariFeatures;
 })();
 
@@ -1191,7 +1192,7 @@ function getSupportedMimeType() {
     ? ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']
     : ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
   for (const t of types) {
-    try { if (MediaRecorder.isTypeSupported(t)) return t; } catch(e) {}
+    try { if (MediaRecorder.isTypeSupported(t)) return t; } catch (e) { }
   }
   return '';
 }
@@ -1253,11 +1254,11 @@ function resetMicrophoneState() {
   _pcmLength = 0;
   if (_scriptNode) { _scriptNode.disconnect(); _scriptNode = null; }
   if (_audioCtx && _audioCtx.state !== 'closed') {
-    try { _audioCtx.close(); } catch(e) {}
+    try { _audioCtx.close(); } catch (e) { }
   }
   _audioCtx = null;
   if (_gainContext && _gainContext.state !== 'closed') {
-    try { _gainContext.close(); } catch(e) {}
+    try { _gainContext.close(); } catch (e) { }
   }
   _gainContext = null;
   isRecording = false;
@@ -1287,14 +1288,14 @@ async function startRecording() {
   // SAFARI DESKTOP: controllo specifico
   if (_isSafari && !_isIOS) {
     console.log('[MIC][DESKTOP] Safari desktop detected');
-    
+
     // Verifica che getUserMedia sia disponibile
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       console.error('[MIC][DESKTOP] getUserMedia not available in Safari');
       alert('Microfono non disponibile in Safari. Assicurati di aver concesso il permesso e di usare Safari 11+.');
       return;
     }
-    
+
     console.log('[MIC][DESKTOP] getUserMedia available, requesting permission...');
   }
 
@@ -1315,46 +1316,46 @@ async function startRecording() {
   try {
     console.log('[MIC] requesting permission...');
     const constraints = {
-      audio: { 
-        echoCancellation: false, 
-        noiseSuppression: false, 
-        autoGainControl: false 
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
       }
     };
-    
+
     // SAFARI (desktop + iOS): use simple constraints — complex ones can fail
     if (_isSafari || _isIOS) {
       console.log('[MIC] Safari/iOS: using simple audio constraints');
       constraints.audio = true;
     }
-    
+
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    
+
     if (_isSafari && !_isIOS) {
       console.log('[MIC][DESKTOP] permission granted, Safari desktop stream ready');
     }
-    
+
     console.log('[MIC] permission granted, tracks=' + stream.getAudioTracks().length);
     currentStream = stream;
 
     if (_useWebAudio) {
       // --- FALLBACK: ScriptProcessor for ancient iOS without MediaRecorder ---
       console.log('[iOS STT] setting up AudioContext recording (no MediaRecorder)');
-      
+
       try {
         // Do NOT force sampleRate — let iOS choose its native rate
         _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        
+
         // iOS requires resume after user gesture
         if (_audioCtx.state === 'suspended') {
           await _audioCtx.resume();
           console.log('[iOS STT] AudioContext resumed');
         }
-        
+
         console.log('[iOS STT] AudioContext rate=' + _audioCtx.sampleRate + ' state=' + _audioCtx.state);
 
         const source = _audioCtx.createMediaStreamSource(stream);
-        
+
         _scriptNode = _audioCtx.createScriptProcessor(4096, 1, 1);
         _pcmBuffers = [];
         _pcmLength = 0;
@@ -1369,29 +1370,29 @@ async function startRecording() {
 
         source.connect(_scriptNode);
         _scriptNode.connect(_audioCtx.destination);
-        
+
         console.log('[iOS STT] ScriptProcessor connected');
 
         isRecording = true;
         setState(STATES.RECORDING);
         micButton.classList.add('recording');
         console.log('[iOS STT] recording started');
-        
+
       } catch (error) {
         console.error('[iOS STT] AudioContext setup failed:', error);
         _useWebAudio = false;
       }
     }
-    
+
     if (!_useWebAudio) {
       // --- MAIN PATH: MediaRecorder (Chrome, Android, Firefox, iOS 14.5+, Safari) ---
       const mimeType = getSupportedMimeType();
       console.log('[MIC] MediaRecorder mimeType=' + mimeType + ' isIOS=' + _isIOS);
-      
+
       // iOS Safari: use raw stream (GainNode + createMediaStreamDestination can fail)
       // Other browsers: apply gain via AudioContext
       let recordStream = stream;
-      
+
       if (!_isIOS) {
         try {
           const gainCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1411,7 +1412,7 @@ async function startRecording() {
       } else {
         console.log('[MIC][iOS] using raw stream (no GainNode)');
       }
-      
+
       const recOptions = mimeType ? { mimeType } : {};
       mediaRecorder = new MediaRecorder(recordStream, recOptions);
       audioChunks = [];
@@ -1437,7 +1438,7 @@ async function startRecording() {
     isRecording = true;
     setState(STATES.RECORDING);
     micButton.classList.add('recording');
-    
+
     if (_isSafari && !_isIOS) {
       console.log('[MIC][DESKTOP] Safari desktop recording active');
     } else {
@@ -1458,14 +1459,14 @@ function stopRecording() {
     // --- iOS: stop ScriptProcessor, build WAV, send ---
     if (_scriptNode) _scriptNode.disconnect();
     if (_audioCtx && _audioCtx.state !== 'closed') {
-      try { _audioCtx.close(); } catch(e) {}
+      try { _audioCtx.close(); } catch (e) { }
     }
     const nativeSR = _audioCtx ? _audioCtx.sampleRate : _SAMPLE_RATE;
     const stream = currentStream;
 
     // Merge PCM buffers
     console.log('[iOS STT] merging PCM buffers: ' + _pcmBuffers.length + ' buffers, total length: ' + _pcmLength);
-    
+
     if (_pcmLength === 0) {
       console.error('[iOS STT] NO PCM DATA COLLECTED - microphone issue');
       resetMicrophoneState();
@@ -1473,7 +1474,7 @@ function stopRecording() {
       setState(STATES.IDLE);
       return;
     }
-    
+
     const merged = new Float32Array(_pcmLength);
     let offset = 0;
     for (const buf of _pcmBuffers) { merged.set(buf, offset); offset += buf.length; }
@@ -1497,34 +1498,34 @@ function stopRecording() {
 
 async function transcribeAudio(blob) {
   console.log('[STT] request sent size=' + blob.size + ' type=' + blob.type);
-  
+
   setState(STATES.THINKING);
-  
+
   // FASE 4: FINALLY GLOBALE PER GARANTIRE STOP MICROFONO
   try {
     const ext = blob.type.includes('wav') ? '.wav' : blob.type.includes('mp4') ? '.mp4' : '.webm';
     const fd = new FormData();
     fd.append('audio', blob, 'rec' + ext);
-    
+
     console.log('[STT] sending POST /api/stt/ ...');
     const res = await fetch('/api/stt/', { method: 'POST', body: fd, headers: authHeadersRaw() });
     console.log('[STT] response status=' + res.status);
-    
+
     if (!res.ok) {
       console.error('[STT] HTTP error: ' + res.status);
       throw new Error('STT ' + res.status);
     }
-    
+
     const result = await res.json();
     const text = result.text?.trim() || '';
     const status = result.stt_status || result.status || '';
     console.log('[STT] transcription received: "' + text + '" stt_status=' + status);
-    
+
     // GESTIONE STATI EMPTY/ERROR/NOISE
     if (status === 'empty' || status === 'error' || status === 'noise') {
       console.log('[STT] ' + status + ' transcription → showing feedback');
       setState(STATES.IDLE);
-      
+
       // Feedback appropriato
       if (status === 'empty' && result.action === 'retry') {
         _showSTTRetryFeedback();
@@ -1535,18 +1536,18 @@ async function transcribeAudio(blob) {
       }
       return; // NON inviare nulla a /chat
     }
-    
+
     // INVIA SOLO se trascrizione valida
     console.log('[STT] setting input and sending message...');
     textInput.value = text;
     setState(STATES.IDLE);
     sendMessage();
-    
+
   } catch (e) {
     console.error('[STT] request failed:', e);
     setState(STATES.IDLE);
     _showSTTErrorFeedback();
-    
+
   } finally {
     // FASE 4: GARANTISCI STOP MICROFONO SEMPRE
     if (isRecording) {
@@ -1565,7 +1566,7 @@ async function transcribeAudio(blob) {
         }
       }
     }
-    
+
     console.log('[STT] FINALLY: microphone cleanup completed');
   }
 }
@@ -1580,7 +1581,7 @@ function _showSTTNoiseFeedback(issues) {
       micButton.style.backgroundColor = '';
     }, 1000);
   }
-  
+
   // Mostra tooltip con dettagli problemi
   const issueText = Array.isArray(issues) ? issues.join(', ') : 'rumore rilevato';
   const tooltip = document.createElement('div');
@@ -1600,7 +1601,7 @@ function _showSTTNoiseFeedback(issues) {
     max-width: 300px;
     text-align: center;
   `;
-  
+
   document.body.appendChild(tooltip);
   setTimeout(() => {
     if (tooltip.parentNode) {
@@ -1619,7 +1620,7 @@ function _showSTTErrorFeedback() {
       micButton.style.backgroundColor = '';
     }, 1000);
   }
-  
+
   // Mostra tooltip errore
   const tooltip = document.createElement('div');
   tooltip.textContent = 'Errore microfono, riprova';
@@ -1636,7 +1637,7 @@ function _showSTTErrorFeedback() {
     z-index: 1000;
     animation: fadeInOut 2s ease-in-out;
   `;
-  
+
   document.body.appendChild(tooltip);
   setTimeout(() => {
     if (tooltip.parentNode) {
@@ -1655,7 +1656,7 @@ function _showSTTRetryFeedback() {
       micButton.style.animation = '';
     }, 2000);
   }
-  
+
   // Mostra tooltip temporaneo
   const tooltip = document.createElement('div');
   tooltip.textContent = 'Non ho sentito bene, riprova';
@@ -1672,7 +1673,7 @@ function _showSTTRetryFeedback() {
     z-index: 1000;
     animation: fadeInOut 2s ease-in-out;
   `;
-  
+
   document.body.appendChild(tooltip);
   setTimeout(() => {
     if (tooltip.parentNode) {
@@ -1861,13 +1862,13 @@ function handleFileUpload() {
       addMessage(result.response || "File ricevuto.", 'genesi');
 
       // Auto-dismiss bubble after 6s
-      setTimeout(() => { try { _dismissFileBubble(); } catch(_){} }, 6000);
+      setTimeout(() => { try { _dismissFileBubble(); } catch (_) { } }, 6000);
     } catch (e) {
       console.error('Upload error:', e);
       if (loadingMsg) loadingMsg.remove();
-      try { _updateBubbleStatus('Errore'); } catch(_){}
+      try { _updateBubbleStatus('Errore'); } catch (_) { }
       addMessage("Errore nel caricamento. Riprova.", 'genesi');
-      setTimeout(() => { try { _dismissFileBubble(); } catch(_){} }, 3000);
+      setTimeout(() => { try { _dismissFileBubble(); } catch (_) { } }, 3000);
     } finally {
       setState(STATES.IDLE);
     }
@@ -2006,7 +2007,7 @@ chatForm.addEventListener('submit', async (e) => {
 const handleMicToggle = (e) => {
   // Audio Priming: previeni NotAllowedError su Safari/iOS
   primeAudio();
-  
+
   if (e.type === 'touchstart') e.preventDefault();
   isRecording ? stopRecording() : startRecording();
 };
@@ -2045,7 +2046,7 @@ textInput.addEventListener('input', () => {
 });
 
 // Enter invia, Shift+Enter va a capo
-textInput.addEventListener('keydown', function(e) {
+textInput.addEventListener('keydown', function (e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     sendMessage();
@@ -2056,21 +2057,21 @@ textInput.addEventListener('keydown', function(e) {
 // CONVERSATION PERSISTENCE
 // ===============================
 async function saveMessageToConversation(role, content) {
-    if (!currentConvId) {
-        console.warn('SAVE_SKIPPED no currentConvId');
-        return;
-    }
-    const convId = currentConvId; // snapshot locale per evitare race condition
-    try {
-        await fetch(`/api/conversations/${convId}/messages`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${getAuthToken()}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ role, content })
-        });
-    } catch(e) { console.warn('saveMessage error', e); }
+  if (!currentConvId) {
+    console.warn('SAVE_SKIPPED no currentConvId');
+    return;
+  }
+  const convId = currentConvId; // snapshot locale per evitare race condition
+  try {
+    await fetch(`/api/conversations/${convId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${getAuthToken()}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ role, content })
+    });
+  } catch (e) { console.warn('saveMessage error', e); }
 }
 
 function unlockAudio() {
@@ -2078,14 +2079,14 @@ function unlockAudio() {
     console.log('[AUDIO] Already unlocked');
     return;
   }
-  
+
   console.log('[AUDIO] Unlocking audio on first user gesture');
-  
+
   try {
     // Crea AudioContext globale
     window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
     console.log('[AUDIO] Global AudioContext created, state=' + window.audioContext.state);
-    
+
     // Resume immediato
     window.audioContext.resume().then(() => {
       console.log('[AUDIO] Global AudioContext resumed successfully');
@@ -2095,7 +2096,7 @@ function unlockAudio() {
       console.error('[AUDIO] Global AudioContext resume failed:', err);
       window.audioUnlocked = true; // Anche se fallisce, consideriamo unlocked
     });
-    
+
   } catch (error) {
     console.error('[AUDIO] Failed to create global AudioContext:', error);
     window.audioUnlocked = true; // Fallback
@@ -2112,11 +2113,11 @@ function isAudioUnlocked() {
 // ===============================
 async function playTTSAudio(blob) {
   console.log('[TTS] TTS blob ricevuto - size=' + blob.size + ' type=' + blob.type);
-  
+
   try {
     // SIMPLE PLAYBACK: Usa HTMLAudioElement diretto
     await playSimpleAudio(blob);
-    
+
   } catch (error) {
     console.error('[TTS] Errore durante playback TTS:', error);
     console.error('[TTS] Errore details:', error.message);
@@ -2126,69 +2127,82 @@ async function playTTSAudio(blob) {
 }
 
 async function playSimpleAudio(blob) {
-  console.log('[TTS] Avvio semplice playback con HTMLAudioElement');
-  
+  console.log('[TTS] Avvio playback con Web Audio API (decodeAudioData)');
+
   // Guard: skip if generation changed during async
   const myGenId = ttsGenerationId;
   if (_ttsAborted) {
     console.log('[TTS] playSimpleAudio skipped — aborted');
     return;
   }
-  
-  // Crea URL e Audio element
-  const audioUrl = URL.createObjectURL(blob);
-  const audio = new Audio(audioUrl);
-  console.log('[TTS] Audio element creato genId=' + myGenId);
-  
-  // Track in activeTTSSources
-  activeTTSSources.push(audio);
-  
-  // Cleanup helper
-  const cleanup = () => {
-    URL.revokeObjectURL(audioUrl);
-    activeTTSSources = activeTTSSources.filter(s => s !== audio);
-    if (_ttsSource === audio) _ttsSource = null;
+
+  const ctx = _getTTSCtx();
+  if (!ctx) {
+    console.error('[TTS] AudioContext non disponibile per playSimpleAudio.');
+    return;
+  }
+
+  try {
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+    // Final generation check before play
+    if (ttsGenerationId !== myGenId || _ttsAborted) {
+      console.log('[TTS] playSimpleAudio skipped — stale genId=' + myGenId + ' current=' + ttsGenerationId);
+      return;
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(ctx.destination);
+
+    console.log('[TTS] AudioBufferSource creato genId=' + myGenId);
+
+    // Track in activeTTSSources
+    activeTTSSources.push(source);
+
+    // Cleanup helper
+    const cleanup = () => {
+      activeTTSSources = activeTTSSources.filter(s => s !== source);
+      if (_ttsSource === source) _ttsSource = null;
+      _isPlayingChunk = false;
+    };
+
+    // Configura eventi
+    source.onended = () => {
+      window.ttsPlaying = false;
+      console.log('[TTS] Playback completato genId=' + myGenId);
+      cleanup();
+    };
+
+    // Imposta timestamp TTS PRIMA del playback
+    window.lastTTSStart = Date.now();
+
+    // Set variables before start
+    window.ttsPlaying = true;
+    _wasPlayingChunk = true;
+
+    // Avvia playback
+    console.log('[TTS] Avvio playback genId=' + myGenId);
+    source.start(0);
+    console.log('[TTS] Audio avviato genId=' + myGenId + ' activeSources=' + activeTTSSources.length);
+
+  } catch (error) {
+    console.error('[TTS] Errore decodifica o playback genId=' + myGenId, error);
     _isPlayingChunk = false;
-  };
-  
-  // Configura eventi
-  audio.onended = () => {
-    window.ttsPlaying = false; console.log('[TTS] Playback completato genId=' + myGenId);
-    cleanup();
-  };
-  
-audio.onerror = (error) => {
-console.error('[TTS] Errore audio genId=' + myGenId, error);
-cleanup();
-};
-  
-// Final generation check before play
-if (ttsGenerationId !== myGenId) {
-console.log('[TTS] playSimpleAudio skipped — stale genId=' + myGenId + ' current=' + ttsGenerationId);
-cleanup();
-return;
-}
-  
-// Imposta timestamp TTS PRIMA del playback
-window.lastTTSStart = Date.now();
-  
-// Avvia playback
-console.log('[TTS] Avvio playback genId=' + myGenId);
-await audio.play();
-  _wasPlayingChunk = true;
-  
-  window.ttsPlaying = true; console.log('[TTS] Audio avviato genId=' + myGenId + ' activeSources=' + activeTTSSources.length);
+    window.ttsPlaying = false;
+  }
 }
 
 // iOS: pre-unlock AudioContext on very first user interaction
 document.addEventListener('touchstart', function _firstTouch() {
   console.log('[AUDIO] First touch detected - unlocking audio');
   unlockAudio();
-  
+
   // Audio Priming: previeni NotAllowedError su Safari/iOS
   primeAudio();
   _warmTTSCtx();
-  
+
   document.removeEventListener('touchstart', _firstTouch);
 }, { once: true });
 
@@ -2199,7 +2213,7 @@ document.addEventListener('click', function _firstClick(e) {
     console.log('[AUDIO] First click detected - unlocking audio');
     unlockAudio();
   }
-  
+
   document.removeEventListener('click', _firstClick);
 }, { once: true });
 
@@ -2207,189 +2221,189 @@ document.addEventListener('click', function _firstClick(e) {
 // GLOBAL SIDEBAR FUNCTIONS
 // ===============================
 function clearChat() {
-    const dialogue = document.getElementById('dialogue');
-    if (dialogue) {
-        dialogue.innerHTML = '';
-    }
+  const dialogue = document.getElementById('dialogue');
+  if (dialogue) {
+    dialogue.innerHTML = '';
+  }
 }
 
 async function loadConversations() {
-    try {
-        const res = await fetch('/api/conversations', {
-            headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-        });
-        const data = await res.json();
-        renderConvList(data.conversations || []);
-    } catch (e) { console.warn('loadConversations error', e); }
+  try {
+    const res = await fetch('/api/conversations', {
+      headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+    });
+    const data = await res.json();
+    renderConvList(data.conversations || []);
+  } catch (e) { console.warn('loadConversations error', e); }
 }
 
 function renderConvList(convs) {
-    const list = document.getElementById('conv-list');
-    if (!list) return;
-    list.innerHTML = '';
-    convs.forEach(c => {
-        const item = document.createElement('div');
-        item.className = 'conv-item' + (c.id === currentConvId ? ' active' : '');
-        item.dataset.id = c.id;
-        item.innerHTML = `
+  const list = document.getElementById('conv-list');
+  if (!list) return;
+  list.innerHTML = '';
+  convs.forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'conv-item' + (c.id === currentConvId ? ' active' : '');
+    item.dataset.id = c.id;
+    item.innerHTML = `
             <span class="conv-title" title="${c.title}">${c.title}</span>
             <div class="conv-actions">
                 <button class="conv-btn" onclick="renameConv('${c.id}')" title="Rinomina">✎</button>
                 <button class="conv-btn" onclick="deleteConv('${c.id}')" title="Elimina">✕</button>
             </div>`;
-        item.addEventListener('click', (e) => {
-            if (e.target.classList.contains('conv-btn')) return;
-            openConversation(c.id);
-        });
-        list.appendChild(item);
+    item.addEventListener('click', (e) => {
+      if (e.target.classList.contains('conv-btn')) return;
+      openConversation(c.id);
     });
+    list.appendChild(item);
+  });
 }
 
 async function createNewConversation() {
-    const res = await fetch('/api/conversations', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-    });
-    const conv = await res.json();
-    currentConvId = conv.id;
-    clearChat(); // funzione esistente o equivalente per pulire la UI
-    await loadConversations();
+  const res = await fetch('/api/conversations', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+  });
+  const conv = await res.json();
+  currentConvId = conv.id;
+  clearChat(); // funzione esistente o equivalente per pulire la UI
+  await loadConversations();
 }
 
 async function openConversation(convId) {
-    currentConvId = convId;
-    const res = await fetch(`/api/conversations/${convId}`, {
-        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-    });
-    const conv = await res.json();
-    clearChat();
-    (conv.messages || []).forEach(m => addMessage(m.content, m.role));
-    await loadConversations(); // aggiorna active state
+  currentConvId = convId;
+  const res = await fetch(`/api/conversations/${convId}`, {
+    headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+  });
+  const conv = await res.json();
+  clearChat();
+  (conv.messages || []).forEach(m => addMessage(m.content, m.role));
+  await loadConversations(); // aggiorna active state
 }
 
 async function renameConv(convId) {
-    const newTitle = prompt('Nuovo nome:');
-    if (!newTitle) return;
-    await fetch(`/api/conversations/${convId}`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newTitle })
-    });
-    await loadConversations();
+  const newTitle = prompt('Nuovo nome:');
+  if (!newTitle) return;
+  await fetch(`/api/conversations/${convId}`, {
+    method: 'PATCH',
+    headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: newTitle })
+  });
+  await loadConversations();
 }
 
 async function deleteConv(convId) {
-    if (!confirm('Eliminare questa conversazione?')) return;
-    await fetch(`/api/conversations/${convId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-    });
-    if (currentConvId === convId) {
-        currentConvId = null;
-        clearChat();
-    }
-    await loadConversations();
+  if (!confirm('Eliminare questa conversazione?')) return;
+  await fetch(`/api/conversations/${convId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+  });
+  if (currentConvId === convId) {
+    currentConvId = null;
+    clearChat();
+  }
+  await loadConversations();
 }
 
 function toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
-    sidebar.classList.toggle('sidebar-collapsed', !isCollapsed);
-    document.getElementById('sidebar-open-btn').style.display = isCollapsed ? 'none' : 'block';
+  const sidebar = document.getElementById('sidebar');
+  const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
+  sidebar.classList.toggle('sidebar-collapsed', !isCollapsed);
+  document.getElementById('sidebar-open-btn').style.display = isCollapsed ? 'none' : 'block';
 }
 
 function toggleCodingMode() {
-    const codingBtn = document.getElementById('coding-mode-btn');
-    
-    // Toggle mode
-    if (currentMode === "chat") {
-        currentMode = "coding";
-        codingBtn.classList.add('active');
-        codingBtn.style.backgroundColor = '#00ff88';
-        codingBtn.style.color = '#000';
-        console.log('CODING_MODE_ACTIVATED');
-    } else {
-        currentMode = "chat";
-        codingBtn.classList.remove('active');
-        codingBtn.style.backgroundColor = '';
-        codingBtn.style.color = '';
-        console.log('CODING_MODE_DEACTIVATED');
-    }
-    
-    // Clear chat when switching modes
-    clearChat();
-    startNewSession();
+  const codingBtn = document.getElementById('coding-mode-btn');
+
+  // Toggle mode
+  if (currentMode === "chat") {
+    currentMode = "coding";
+    codingBtn.classList.add('active');
+    codingBtn.style.backgroundColor = '#00ff88';
+    codingBtn.style.color = '#000';
+    console.log('CODING_MODE_ACTIVATED');
+  } else {
+    currentMode = "chat";
+    codingBtn.classList.remove('active');
+    codingBtn.style.backgroundColor = '';
+    codingBtn.style.color = '';
+    console.log('CODING_MODE_DEACTIVATED');
+  }
+
+  // Clear chat when switching modes
+  clearChat();
+  startNewSession();
 }
 
 // Pulizia conversazioni vuote all'avvio
 async function cleanEmptyConversations() {
-    try {
-        const res = await fetch('/api/conversations', {
-            headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+  try {
+    const res = await fetch('/api/conversations', {
+      headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+    });
+    const convs = await res.json();
+    for (const c of convs) {
+      // Se il titolo è "Nuova chat" e non ha messaggi
+      const hasMessages = c.message_count > 0 ||
+        (c.messages && c.messages.length > 0) ||
+        (c.title && c.title !== 'Nuova chat');
+      if (!hasMessages) {
+        await fetch(`/api/conversations/${c.id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${getAuthToken()}` }
         });
-        const convs = await res.json();
-        for (const c of convs) {
-            // Se il titolo è "Nuova chat" e non ha messaggi
-            const hasMessages = c.message_count > 0 || 
-                               (c.messages && c.messages.length > 0) ||
-                               (c.title && c.title !== 'Nuova chat');
-            if (!hasMessages) {
-                await fetch(`/api/conversations/${c.id}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-                });
-            }
-        }
-        console.log('CLEANED_EMPTY_CONVS completed');
-    } catch(e) { console.warn('cleanEmptyConversations error', e); }
+      }
+    }
+    console.log('CLEANED_EMPTY_CONVS completed');
+  } catch (e) { console.warn('cleanEmptyConversations error', e); }
 }
 
 // Crea nuova conversazione all'avvio
 async function startNewSession() {
-    try {
-        // 1. Cancella tutte le conv vuote sul backend
-        await fetch('/api/conversations/empty', {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-        });
+  try {
+    // 1. Cancella tutte le conv vuote sul backend
+    await fetch('/api/conversations/empty', {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+    });
 
-        // 2. Controlla se esiste già UNA conv vuota (appena creata)
-        const listRes = await fetch('/api/conversations', {
-            headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-        });
-        const convData = await listRes.json(); const convs = Array.isArray(convData) ? convData : (convData.conversations || convData.items || Object.values(convData) || []);
+    // 2. Controlla se esiste già UNA conv vuota (appena creata)
+    const listRes = await fetch('/api/conversations', {
+      headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+    });
+    const convData = await listRes.json(); const convs = Array.isArray(convData) ? convData : (convData.conversations || convData.items || Object.values(convData) || []);
 
-        // DEBUG — stampa la struttura raw delle conv
-        console.log('CONVS_RAW:', JSON.stringify(convs.slice(0,3)));
+    // DEBUG — stampa la struttura raw delle conv
+    console.log('CONVS_RAW:', JSON.stringify(convs.slice(0, 3)));
 
-        const existingEmpty = convs.find(c =>
-            (!c.messages || c.messages.length === 0) &&
-            (c.title === 'Nuova chat' || !c.title)
-        );
+    const existingEmpty = convs.find(c =>
+      (!c.messages || c.messages.length === 0) &&
+      (c.title === 'Nuova chat' || !c.title)
+    );
 
-        console.log('EXISTING_EMPTY:', existingEmpty ? existingEmpty.id : 'none');
+    console.log('EXISTING_EMPTY:', existingEmpty ? existingEmpty.id : 'none');
 
-        if (existingEmpty) {
-            // Riusa quella vuota invece di crearne una nuova
-            currentConvId = existingEmpty.id;
-            console.log('SESSION_REUSE conv_id=' + currentConvId);
-        } else {
-            // Crea nuova solo se non esiste una vuota
-            const res = await fetch('/api/conversations', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${getAuthToken()}` }
-            });
-            const conv = await res.json();
-            console.log('CONV_CREATED_RAW:', JSON.stringify(conv));  
-            currentConvId = conv.id;
-            console.log('SESSION_STARTED conv_id=' + currentConvId);
-        }
-
-        console.log('CURRENT_CONV_ID_AFTER_START:', currentConvId);  
-        await loadConversations();
-    } catch(e) {
-        console.error('startNewSession FATAL:', e);
+    if (existingEmpty) {
+      // Riusa quella vuota invece di crearne una nuova
+      currentConvId = existingEmpty.id;
+      console.log('SESSION_REUSE conv_id=' + currentConvId);
+    } else {
+      // Crea nuova solo se non esiste una vuota
+      const res = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+      });
+      const conv = await res.json();
+      console.log('CONV_CREATED_RAW:', JSON.stringify(conv));
+      currentConvId = conv.id;
+      console.log('SESSION_STARTED conv_id=' + currentConvId);
     }
+
+    console.log('CURRENT_CONV_ID_AFTER_START:', currentConvId);
+    await loadConversations();
+  } catch (e) {
+    console.error('startNewSession FATAL:', e);
+  }
 }
 
 (async () => {
@@ -2398,12 +2412,12 @@ async function startNewSession() {
 
   // Bootstrap utente SEMPRE
   await bootstrapUser();
-  
+
   // Avvia polling notifiche se loggato
   if (isLoggedIn()) {
     startNotificationPolling();
   }
-  
+
   scrollToBottom();
 
   console.log("SIDEBAR_INIT_START");
@@ -2419,18 +2433,18 @@ async function startNewSession() {
 
   // FORZA RE-INIZIALIZZAZIONE DOPO LOGIN
   if (isLoggedIn()) {
-      console.log("SIDEBAR_LOADING_CONVERSATIONS");
-      await startNewSession();
-      
-      // Validazione DOM
-      const sidebarEl = document.querySelector(".sidebar");
-      if (!sidebarEl) {
-          console.error("SIDEBAR_DOM_ERROR: .sidebar element not found");
-      } else if (!sidebarEl.children.length) {
-          console.warn("SIDEBAR_DOM_WARNING: .sidebar exists but is empty");
-      } else {
-          console.log("SIDEBAR_DOM_OK: sidebar rendered with", sidebarEl.children.length, "children");
-      }
+    console.log("SIDEBAR_LOADING_CONVERSATIONS");
+    await startNewSession();
+
+    // Validazione DOM
+    const sidebarEl = document.querySelector(".sidebar");
+    if (!sidebarEl) {
+      console.error("SIDEBAR_DOM_ERROR: .sidebar element not found");
+    } else if (!sidebarEl.children.length) {
+      console.warn("SIDEBAR_DOM_WARNING: .sidebar exists but is empty");
+    } else {
+      console.log("SIDEBAR_DOM_OK: sidebar rendered with", sidebarEl.children.length, "children");
+    }
   }
 
   console.log("SIDEBAR_INIT_DONE");
@@ -2463,190 +2477,190 @@ let voiceTTSPollInterval = null;
 let voiceTTSPollTimeout = null;
 
 function initVoiceMode() {
-    const btn = document.getElementById('voice-mode-btn');
-    const stopBtn = document.getElementById('voice-mode-stop-btn');
-    if (!btn) return;
-    btn.addEventListener('click', () => voiceModeActive ? stopVoiceMode() : startVoiceMode());
-    stopBtn?.addEventListener('click', stopVoiceMode);
+  const btn = document.getElementById('voice-mode-btn');
+  const stopBtn = document.getElementById('voice-mode-stop-btn');
+  if (!btn) return;
+  btn.addEventListener('click', () => voiceModeActive ? stopVoiceMode() : startVoiceMode());
+  stopBtn?.addEventListener('click', stopVoiceMode);
 }
 
 function buildVoiceRecognition() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return null;
-    const rec = new SpeechRecognition();
-    rec.lang = 'it-IT';
-    rec.continuous = false;
-    rec.interimResults = true;
-    let finalTranscript = '';
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return null;
+  const rec = new SpeechRecognition();
+  rec.lang = 'it-IT';
+  rec.continuous = false;
+  rec.interimResults = true;
+  let finalTranscript = '';
 
-    rec.onresult = (event) => {
-        if (Date.now() < voiceBlockedUntil) {
-            console.log('VOICE_BLOCKED transcript ignored remaining=' + (voiceBlockedUntil - Date.now()) + 'ms');
-            return;
-        }
+  rec.onresult = (event) => {
+    if (Date.now() < voiceBlockedUntil) {
+      console.log('VOICE_BLOCKED transcript ignored remaining=' + (voiceBlockedUntil - Date.now()) + 'ms');
+      return;
+    }
+    if (!voiceModeActive) return;
+    finalTranscript = '';
+    let interim = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
+      else interim += event.results[i][0].transcript;
+    }
+    const inp = document.getElementById('message-input');
+    if (inp) inp.value = finalTranscript || interim;
+    clearTimeout(voiceSilenceTimer);
+    if (finalTranscript) {
+      voiceSilenceTimer = setTimeout(() => {
+        if (Date.now() >= voiceBlockedUntil) sendVoiceMessage(finalTranscript);
+      }, VOICE_SILENCE_MS);
+    }
+  };
+
+  rec.onend = () => {
+    if (!voiceModeActive) return;
+    const waitMs = Math.max(1500, voiceBlockedUntil - Date.now());
+    setTimeout(() => {
+      if (!voiceModeActive) return;
+      if (Date.now() < voiceBlockedUntil) return;
+      try {
+        voiceRecognition.stop();
+      } catch (e) { }
+      setTimeout(() => {
         if (!voiceModeActive) return;
-        finalTranscript = '';
-        let interim = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
-            else interim += event.results[i][0].transcript;
-        }
-        const inp = document.getElementById('message-input');
-        if (inp) inp.value = finalTranscript || interim;
-        clearTimeout(voiceSilenceTimer);
-        if (finalTranscript) {
-            voiceSilenceTimer = setTimeout(() => {
-                if (Date.now() >= voiceBlockedUntil) sendVoiceMessage(finalTranscript);
-            }, VOICE_SILENCE_MS);
-        }
-    };
+        try { voiceRecognition.start(); }
+        catch (e) { console.warn('VOICE_RESTART_ERROR', e); }
+      }, 300);
+    }, waitMs);
+  };
 
-    rec.onend = () => {
-        if (!voiceModeActive) return;
-        const waitMs = Math.max(1500, voiceBlockedUntil - Date.now());
-        setTimeout(() => {
-            if (!voiceModeActive) return;
-            if (Date.now() < voiceBlockedUntil) return;
-            try { 
-                voiceRecognition.stop();
-            } catch(e) {}
-            setTimeout(() => {
-                if (!voiceModeActive) return;
-                try { voiceRecognition.start(); }
-                catch(e) { console.warn('VOICE_RESTART_ERROR', e); }
-            }, 300);
-        }, waitMs);
-    };
+  rec.onerror = (e) => {
+    console.warn('VOICE_REC_ERROR', e.error);
+    if (!voiceModeActive || e.error === 'aborted') return;
+    setTimeout(() => {
+      if (voiceModeActive && Date.now() >= voiceBlockedUntil) {
+        try { voiceRecognition = buildVoiceRecognition(); voiceRecognition?.start(); }
+        catch (e2) { }
+      }
+    }, 600);
+  };
 
-    rec.onerror = (e) => {
-        console.warn('VOICE_REC_ERROR', e.error);
-        if (!voiceModeActive || e.error === 'aborted') return;
-        setTimeout(() => {
-            if (voiceModeActive && Date.now() >= voiceBlockedUntil) {
-                try { voiceRecognition = buildVoiceRecognition(); voiceRecognition?.start(); }
-                catch(e2) {}
-            }
-        }, 600);
-    };
-
-    return rec;
+  return rec;
 }
 
 function startVoiceMode() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { alert('Browser non supporta il riconoscimento vocale.'); return; }
-    voiceModeActive = true;
-    voiceBlockedUntil = 0;
-    document.getElementById('voice-mode-btn')?.classList.add('active');
-    document.getElementById('voice-mode-overlay')?.classList.replace('hidden', 'visible');
-    setVoiceOrbState('listening');
-    setVoiceStatusText('In ascolto...');
-    
-    // Crea la recognition UNA SOLA VOLTA
-    if (!voiceRecognition) {
-        voiceRecognition = buildVoiceRecognition();
-    }
-    voiceRecognition?.start();
-    console.log('VOICE_MODE_STARTED');
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { alert('Browser non supporta il riconoscimento vocale.'); return; }
+  voiceModeActive = true;
+  voiceBlockedUntil = 0;
+  document.getElementById('voice-mode-btn')?.classList.add('active');
+  document.getElementById('voice-mode-overlay')?.classList.replace('hidden', 'visible');
+  setVoiceOrbState('listening');
+  setVoiceStatusText('In ascolto...');
+
+  // Crea la recognition UNA SOLA VOLTA
+  if (!voiceRecognition) {
+    voiceRecognition = buildVoiceRecognition();
+  }
+  voiceRecognition?.start();
+  console.log('VOICE_MODE_STARTED');
 }
 
 async function sendVoiceMessage(text) {
-    console.log('SEND_VOICE_MSG text="' + text + '" len=' + (text?.length || 0));
-    if (!text?.trim() || !voiceModeActive) return;
-    clearTimeout(voiceSilenceTimer);
-    voiceSilenceTimer = null;
+  console.log('SEND_VOICE_MSG text="' + text + '" len=' + (text?.length || 0));
+  if (!text?.trim() || !voiceModeActive) return;
+  clearTimeout(voiceSilenceTimer);
+  voiceSilenceTimer = null;
 
-    voiceBlockedUntil = Date.now() + 12000;  
-    console.log('VOICE_BLOCKED_START timestamp=' + Date.now() + ' will unblock after 12s');
+  voiceBlockedUntil = Date.now() + 12000;
+  console.log('VOICE_BLOCKED_START timestamp=' + Date.now() + ' will unblock after 12s');
 
-    // NON fare voiceRecognition?.stop() e NON fare voiceRecognition = null
-    // Lascia che sia onend a gestire il ciclo
+  // NON fare voiceRecognition?.stop() e NON fare voiceRecognition = null
+  // Lascia che sia onend a gestire il ciclo
 
-    // Imposta il testo nel campo input corretto
-    textInput.value = text;
-    textInput.style.height = 'auto';
-    
-    // Forza stato IDLE prima di chiamare sendMessage() per evitare il blocco
-    setState(STATES.IDLE);
-    
-    await sendMessage(text);
+  // Imposta il testo nel campo input corretto
+  textInput.value = text;
+  textInput.style.height = 'auto';
 
-    setVoiceOrbState('speaking');
-    setVoiceStatusText('Genesi risponde...');
+  // Forza stato IDLE prima di chiamare sendMessage() per evitare il blocco
+  setState(STATES.IDLE);
 
-    waitForTTSEnd(() => {
-        if (!voiceModeActive) return;
-        voiceBlockedUntil = Date.now() + 1500;
-        console.log('VOICE_UNBLOCKED timestamp=' + Date.now() + ' riavvio ascolto fra 1.5s');
-        setVoiceOrbState('listening');
-        setVoiceStatusText('In ascolto...');
-        setTimeout(() => {
-            if (!voiceModeActive) return;
-            // Riutilizza l'istanza esistente invece di ricrearla
-            try { voiceRecognition?.start(); } catch(e) {}
-        }, 1500);
-    });
+  await sendMessage(text);
+
+  setVoiceOrbState('speaking');
+  setVoiceStatusText('Genesi risponde...');
+
+  waitForTTSEnd(() => {
+    if (!voiceModeActive) return;
+    voiceBlockedUntil = Date.now() + 1500;
+    console.log('VOICE_UNBLOCKED timestamp=' + Date.now() + ' riavvio ascolto fra 1.5s');
+    setVoiceOrbState('listening');
+    setVoiceStatusText('In ascolto...');
+    setTimeout(() => {
+      if (!voiceModeActive) return;
+      // Riutilizza l'istanza esistente invece di ricrearla
+      try { voiceRecognition?.start(); } catch (e) { }
+    }, 1500);
+  });
 }
 
 function waitForTTSEnd(callback) {
-    // Cancella poll precedenti per evitare chiamate parallele
-    if (voiceTTSPollInterval) { 
-        clearInterval(voiceTTSPollInterval); 
-        voiceTTSPollInterval = null; 
-    }
-    if (voiceTTSPollTimeout) { 
-        clearTimeout(voiceTTSPollTimeout); 
-        voiceTTSPollTimeout = null; 
-    }
+  // Cancella poll precedenti per evitare chiamate parallele
+  if (voiceTTSPollInterval) {
+    clearInterval(voiceTTSPollInterval);
+    voiceTTSPollInterval = null;
+  }
+  if (voiceTTSPollTimeout) {
+    clearTimeout(voiceTTSPollTimeout);
+    voiceTTSPollTimeout = null;
+  }
 
-    const startTime = Date.now();
-    voiceTTSPollInterval = setInterval(() => {
-        const ttsStarted = window.lastTTSStart > startTime;
-        const ttsEnded = ttsStarted && window.ttsPlaying !== true;
-        const safeDelay = (Date.now() - window.lastTTSStart) > 500;
-        if (ttsEnded && safeDelay) {
-            clearInterval(voiceTTSPollInterval); 
-            voiceTTSPollInterval = null;
-            clearTimeout(voiceTTSPollTimeout); 
-            voiceTTSPollTimeout = null;
-            setTimeout(callback, 800);
-        }
-    }, 150);
-    
-    // Fallback: se TTS non parte entro 10s, sblocca subito
-    voiceTTSPollTimeout = setTimeout(() => {
-        clearInterval(voiceTTSPollInterval); 
-        voiceTTSPollInterval = null;
-        clearTimeout(voiceTTSPollTimeout); 
-        voiceTTSPollTimeout = null;
-        const ttsStarted = window.lastTTSStart > startTime;
-        if (!ttsStarted) {
-            console.log('TTS_NOT_DETECTED timestamp=' + Date.now() + ' dopo 10s senza TTS');
-        }
-        if (voiceModeActive) callback();
-    }, 10000);
+  const startTime = Date.now();
+  voiceTTSPollInterval = setInterval(() => {
+    const ttsStarted = window.lastTTSStart > startTime;
+    const ttsEnded = ttsStarted && window.ttsPlaying !== true;
+    const safeDelay = (Date.now() - window.lastTTSStart) > 500;
+    if (ttsEnded && safeDelay) {
+      clearInterval(voiceTTSPollInterval);
+      voiceTTSPollInterval = null;
+      clearTimeout(voiceTTSPollTimeout);
+      voiceTTSPollTimeout = null;
+      setTimeout(callback, 800);
+    }
+  }, 150);
+
+  // Fallback: se TTS non parte entro 10s, sblocca subito
+  voiceTTSPollTimeout = setTimeout(() => {
+    clearInterval(voiceTTSPollInterval);
+    voiceTTSPollInterval = null;
+    clearTimeout(voiceTTSPollTimeout);
+    voiceTTSPollTimeout = null;
+    const ttsStarted = window.lastTTSStart > startTime;
+    if (!ttsStarted) {
+      console.log('TTS_NOT_DETECTED timestamp=' + Date.now() + ' dopo 10s senza TTS');
+    }
+    if (voiceModeActive) callback();
+  }, 10000);
 }
 
 function stopVoiceMode() {
-    voiceModeActive = false;
-    voiceBlockedUntil = 0;
-    clearTimeout(voiceSilenceTimer);
-    voiceSilenceTimer = null;
-    try { voiceRecognition?.stop(); } catch(e) {}
-    voiceRecognition = null;
-    document.getElementById('voice-mode-btn')?.classList.remove('active');
-    document.getElementById('voice-mode-overlay')?.classList.replace('visible', 'hidden');
-    console.log('VOICE_MODE_STOPPED');
+  voiceModeActive = false;
+  voiceBlockedUntil = 0;
+  clearTimeout(voiceSilenceTimer);
+  voiceSilenceTimer = null;
+  try { voiceRecognition?.stop(); } catch (e) { }
+  voiceRecognition = null;
+  document.getElementById('voice-mode-btn')?.classList.remove('active');
+  document.getElementById('voice-mode-overlay')?.classList.replace('visible', 'hidden');
+  console.log('VOICE_MODE_STOPPED');
 }
 
 function setVoiceOrbState(state) {
-    const orb = document.querySelector('.voice-orb');
-    if (!orb) return;
-    orb.classList.remove('listening', 'speaking', 'idle');
-    orb.classList.add(state);
+  const orb = document.querySelector('.voice-orb');
+  if (!orb) return;
+  orb.classList.remove('listening', 'speaking', 'idle');
+  orb.classList.add(state);
 }
 
 function setVoiceStatusText(text) {
-    const el = document.querySelector('.voice-status-text');
-    if (el) el.textContent = text;
+  const el = document.querySelector('.voice-status-text');
+  if (el) el.textContent = text;
 }
