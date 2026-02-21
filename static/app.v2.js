@@ -183,6 +183,7 @@ updateAppHeight();
 if (window.visualViewport) {
   const _onViewport = () => {
     updateAppHeight();
+    window.scrollTo(0, 0);
     requestAnimationFrame(() => scrollToBottom());
   };
   window.visualViewport.addEventListener('resize', _onViewport);
