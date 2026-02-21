@@ -2864,16 +2864,14 @@ function setVoiceStatusText(text) {
 
 // ── PWA: registrazione Service Worker ───────────────────────
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js')
-      .then((reg) => {
-        console.log('[PWA] Service Worker registrato:', reg.scope);
-      })
-      .catch((err) => {
-        console.warn('[PWA] Service Worker non registrato:', err);
-      });
-  });
+  navigator.serviceWorker
+    .register('/sw.js')
+    .then((reg) => {
+      console.log('[PWA] Service Worker registrato:', reg.scope);
+    })
+    .catch((err) => {
+      console.warn('[PWA] Service Worker non registrato:', err);
+    });
 }
 
 // ── Push Notifications — richiesta permesso e subscription ──
@@ -2948,14 +2946,15 @@ if ('serviceWorker' in navigator) {
     }
   }
 
-  // Avvia dopo che il SW è pronto
+  // Avvia dopo che il SW è pronto o fallisce
+  console.log('🔴🔴🔴 [PUSH] Eseguo blocco SW ready...');
   navigator.serviceWorker.ready.then((reg) => {
-    console.log('[PUSH] SW ready risolto, reg:', reg.scope);
+    console.log('🔴🔴🔴 [PUSH] SW ready risolto, reg:', reg.scope);
     // Piccolo delay per non sovraccaricare il primo caricamento
     setTimeout(() => {
-      console.log('[PUSH] trigger initPush (da setTimeout)');
-      initPush().catch(e => console.error('[PUSH] Errore in initPush:', e));
+      console.log('🔴🔴🔴 [PUSH] trigger initPush (da setTimeout)');
+      initPush().catch(e => console.error('🔴🔴🔴 [PUSH] Errore in initPush:', e));
     }, 2000);
-  }).catch(e => console.error('[PUSH] Errore in SW ready:', e));
+  }).catch(e => console.error('🔴🔴🔴 [PUSH] Errore in SW ready:', e));
 
 })();
