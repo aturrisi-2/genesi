@@ -982,6 +982,9 @@ async function sendMessage(voiceText = null) {
   // Audio Priming: previeni NotAllowedError su Safari/iOS
   primeAudio();
 
+  // Fix: when called as event listener, voiceText is an Event object
+  const textToUse = (typeof voiceText === 'string') ? voiceText : textInput.value.trim();
+
   // Barge-in: increment generation + force-stop ALL TTS
   // MA NON durante voice mode conversazionale!
   ttsGenerationId++;
@@ -992,7 +995,7 @@ async function sendMessage(voiceText = null) {
   // Warm AudioContext NOW (sync, during user gesture) — iOS requires this
   _warmTTSCtx();
 
-  const text = voiceText !== null ? voiceText : textInput.value.trim();
+  const text = textToUse;
   console.log('SEND_MSG_STATE state=' + currentState + ' text_len=' + text.length);
   if (!text || currentState !== STATES.IDLE) return;
 
