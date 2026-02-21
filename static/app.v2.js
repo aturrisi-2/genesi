@@ -2337,7 +2337,7 @@ function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
   const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
   sidebar.classList.toggle('sidebar-collapsed', !isCollapsed);
-  document.getElementById('sidebar-open-btn').style.display = isCollapsed ? 'none' : 'block';
+  document.getElementById('sidebar-open-btn').style.setProperty('display', isCollapsed ? 'none' : 'flex', 'important');
 }
 
 function toggleCodingMode() {
