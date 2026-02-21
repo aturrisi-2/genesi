@@ -2861,3 +2861,17 @@ function setVoiceStatusText(text) {
   setInterval(refreshMeteoData, 900_000);
 
 })();
+
+// ── PWA: registrazione Service Worker ───────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/static/sw.js')
+      .then((reg) => {
+        console.log('[PWA] Service Worker registrato:', reg.scope);
+      })
+      .catch((err) => {
+        console.warn('[PWA] Service Worker non registrato:', err);
+      });
+  });
+}

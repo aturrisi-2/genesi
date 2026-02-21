@@ -1,16 +1,25 @@
 {
     "name": "Genesi",
     "short_name": "Genesi",
-    "description": "Genesi AI Assistant",
+    "description": "Il tuo assistente AI personale",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#0a0a0a",
     "theme_color": "#0a0a0a",
+    "orientation": "portrait-primary",
+    "lang": "it",
     "icons": [
         {
             "src": "/static/icon.png",
             "sizes": "192x192 512x512",
-            "type": "image/png"
+            "type": "image/png",
+            "purpose": "any maskable"
         }
-    ]
+    ],
+    "screenshots": [],
+    "categories": [
+        "productivity",
+        "utilities"
+    ],
+    "prefer_related_applications": false
 }
