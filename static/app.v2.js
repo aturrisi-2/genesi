@@ -2562,15 +2562,15 @@ async function sendVoiceMessage(text) {
 
     waitForTTSEnd(() => {
         if (!voiceModeActive) return;
-        voiceBlockedUntil = Date.now() + 1000;
-        console.log('VOICE_UNBLOCKED timestamp=' + Date.now() + ' riavvio ascolto fra 1s');
+        voiceBlockedUntil = Date.now() + 1500;
+        console.log('VOICE_UNBLOCKED timestamp=' + Date.now() + ' riavvio ascolto fra 1.5s');
         setVoiceOrbState('listening');
         setVoiceStatusText('In ascolto...');
         setTimeout(() => {
             if (!voiceModeActive) return;
             voiceRecognition = buildVoiceRecognition();
             try { voiceRecognition?.start(); } catch(e) {}
-        }, 1000);
+        }, 1500);
     });
 }
 
@@ -2578,9 +2578,11 @@ function waitForTTSEnd(callback) {
     const startTime = Date.now();
     const poll = setInterval(() => {
         const ttsStarted = window.lastTTSStart > startTime;
-        if (ttsStarted && window.ttsPlaying !== true) {
+        const ttsEnded = ttsStarted && window.ttsPlaying !== true;
+        const safeDelay = (Date.now() - window.lastTTSStart) > 500;
+        if (ttsEnded && safeDelay) {
             clearInterval(poll);
-            setTimeout(callback, 400);
+            setTimeout(callback, 800);
         }
     }, 150);
     // Fallback: se TTS non parte entro 2s, sblocca subito
