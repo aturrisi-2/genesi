@@ -1968,7 +1968,7 @@ body {
 
 /* 4. Aumento dimensioni colpo d'occhio Widget Meteo */
 .weather-widget {
-  margin-top: 25px !important;
+  margin-top: 5px !important;
   margin-bottom: 25px !important;
 }
 
@@ -1994,4 +1994,51 @@ body {
 .weather-widget__time {
   font-size: 1rem !important;
   opacity: 0.65 !important;
+}
+
+/* 5. Ticker News marquee / Rimuove box neon */
+#presence {
+  width: 100% !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+  padding: 10px 0 0 0 !important;
+  margin-top: 15px !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  text-align: left !important;
+  flex-shrink: 0 !important;
+}
+
+#presence p {
+  display: inline-block !important;
+  font-family: 'Cormorant Garamond', serif !important;
+  font-style: italic !important;
+  font-size: 1.15rem !important;
+  font-weight: 500 !important;
+  color: rgba(0, 229, 255, 0.5) !important;
+  padding-left: 100% !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  padding-right: 0 !important;
+  animation: marqueeTicker 16s linear infinite !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  max-width: none !important;
+}
+
+@keyframes marqueeTicker {
+  0% {
+    transform: translate(0, 0);
+  }
+
+  100% {
+    transform: translate(-100%, 0);
+  }
 }
