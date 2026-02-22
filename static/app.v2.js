@@ -2595,21 +2595,30 @@ async function startNewSession() {
       .then(r => r.json())
       .then(data => {
         if (data.status === 'ok' && data.items) {
-          // Ferma l'animazione temporaneamente
+          // Rimuove qualsiasi influenza CSS che causa accelerazioni "ease" o bug di reflow
           presenceP.style.animation = 'none';
+          presenceP.style.paddingLeft = '0';
 
           const headlines = data.items.slice(0, 10).map(item => "📰 " + item.title).join(" | \u00a0\u00a0\u00a0\u00a0 ");
           const fullText = headlines + " | \u00a0\u00a0\u00a0\u00a0 " + headlines;
           presenceP.textContent = fullText;
 
-          // Velocita' calcolata dal numero di caratteri. 
-          // Per una lettura tranquilla: circa 4-5 caratteri al secondo.
-          // Esempio: 2000 caratteri / 5 = 400 secondi totali.
-          const charsPerSecond = 5;
-          const scrollSpeed = Math.floor(fullText.length / charsPerSecond);
+          // Misura il container e forza il motore a scorrere in pixel assoluti
+          const containerWidth = document.querySelector('#presence').offsetWidth;
 
-          // Riapplica l'animazione forzata
-          presenceP.style.animation = `newsMarquee ${scrollSpeed}s linear infinite`;
+          // Durata fissa calcolata solo dai caratteri (es. velocità tartaruga, no accelerazioni)
+          const charsPerSecond = 8;
+          const scrollSpeedMs = Math.max(20000, Math.floor(fullText.length / charsPerSecond) * 1000);
+
+          // Web Animations API: garantisce scorrimento matematicamente lineare
+          presenceP.animate([
+            { transform: `translateX(${containerWidth}px)` },
+            { transform: `translateX(-100%)` }
+          ], {
+            duration: scrollSpeedMs,
+            iterations: Infinity,
+            easing: 'linear'
+          });
         } else {
           presenceP.textContent = "Nessuna notizia disponibile al momento | Genesi OS v3";
         }
