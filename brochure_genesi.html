@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genesi - Faro nell'Oceano</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700&family=Inter:wght@300;400&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --gold: #D4AF37;
+            --dark: #0A0A0B;
+            --glass: rgba(255, 255, 255, 0.05);
+            --text: #E0E0E0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--dark);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        h1,
+        h2,
+        h3 {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+        }
+
+        .gradient-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle at 50% 50%, #1a1a1c 0%, #0a0a0b 100%);
+            z-index: -1;
+        }
+
+        .faro-light {
+            position: absolute;
+            top: -20%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            height: 150%;
+            background: conic-gradient(from 0deg at 50% 50%, transparent, rgba(212, 175, 55, 0.03), transparent);
+            animation: rotate 20s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes rotate {
+            from {
+                transform: translateX(-50%) rotate(0deg);
+            }
+
+            to {
+                transform: translateX(-50%) rotate(360deg);
+            }
+        }
+
+        header {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .badge {
+            background: var(--gold);
+            color: black;
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 2rem;
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.4);
+        }
+
+        h1 {
+            font-size: 5rem;
+            letter-spacing: -2px;
+            background: linear-gradient(135deg, white 0%, var(--gold) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1rem;
+        }
+
+        .hero-sub {
+            font-size: 1.5rem;
+            font-weight: 300;
+            max-width: 600px;
+            opacity: 0.8;
+        }
+
+        .skills-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            padding: 5rem 10%;
+            background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.8));
+        }
+
+        .skill-card {
+            background: var(--glass);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 3rem;
+            border-radius: 20px;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            backdrop-filter: blur(10px);
+        }
+
+        .skill-card:hover {
+            transform: translateY(-10px);
+            border-color: var(--gold);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .skill-card h3 {
+            color: var(--gold);
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+        }
+
+        .cta-button {
+            margin-top: 3rem;
+            padding: 1.2rem 3rem;
+            background: transparent;
+            border: 2px solid var(--gold);
+            color: var(--gold);
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+
+        .cta-button:hover {
+            background: var(--gold);
+            color: black;
+            box-shadow: 0 0 30px rgba(212, 175, 55, 0.5);
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 3rem;
+            }
+
+            .hero-sub {
+                font-size: 1.1rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="gradient-bg"></div>
+    <div class="faro-light"></div>
+
+    <header>
+        <div class="badge">FARO_Nell_oceano Edition</div>
+        <h1>Genesi</h1>
+        <p class="hero-sub">Non è un assistente. È lo specchio intelligente della tua esistenza.</p>
+        <a href="#" class="cta-button">Inizia il Dialogo</a>
+    </header>
+
+    <section class="skills-grid">
+        <div class="skill-card">
+            <h3>Mente Profonda</h3>
+            <p>Sbloccata la potenza di Claude 3 Opus. Genesi analizza i tuoi pensieri con una profondità psicofisica
+                senza precedenti.</p>
+        </div>
+        <div class="skill-card">
+            <h3>Roccia Resiliente</h3>
+            <p>Architettura Dual-Provider. Se il mondo cade, Genesi resta online. OpenAI e OpenRouter fusi in un unico
+                corpo indissolubile.</p>
+        </div>
+        <div class="skill-card">
+            <h3>Evoluzione Personale</h3>
+            <p>Il Relational Engine impara da te. Ogni conversazione rafforza l'identità di un'assistente che ti conosce
+                meglio di chiunque altro.</p>
+        </div>
+        <div class="skill-card">
+            <h3>Azioni Reali</h3>
+            <p>Reminder, Meteo, Strumenti. Gestione della vita quotidiana con la grazia del linguaggio umano.</p>
+        </div>
+    </section>
+
+</body>
+
+</html>
