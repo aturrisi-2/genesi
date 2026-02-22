@@ -114,6 +114,23 @@
         opacity: 0.3;
       }
     }
+
+    #brochure-link {
+      color: #D4AF37;
+      text-decoration: none;
+      font-weight: bold;
+      margin-right: 15px;
+      font-size: 0.9rem;
+      border: 1px solid rgba(212, 175, 55, 0.3);
+      padding: 4px 10px;
+      border-radius: 4px;
+      transition: all 0.3s;
+    }
+
+    #brochure-link:hover {
+      background: rgba(212, 175, 55, 0.1);
+      box-shadow: 0 0 10px rgba(212, 175, 55, 0.2);
+    }
   </style>
 </head>
 
@@ -162,6 +179,7 @@
         <div id="user-bar">
 
           <div id="user-bar-actions">
+            <a href="/brochure" id="brochure-link">Brochure</a>
             <a href="/admin" id="admin-link" style="display:none;">Admin</a>
             <button id="logout-btn" type="button" style="display:none;">Esci</button>
           </div>

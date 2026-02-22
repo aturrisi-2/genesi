@@ -223,6 +223,10 @@ async def serve_reset_password():
 async def serve_admin():
     return FileResponse(BASE_DIR / "static" / "admin.html")
 
+@app.get("/brochure")
+async def serve_brochure():
+    return FileResponse(BASE_DIR / "static" / "brochure.html")
+
 @app.get("/sw.js")
 async def serve_sw():
     return FileResponse(BASE_DIR / "static" / "sw.js")
