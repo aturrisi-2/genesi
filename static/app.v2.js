@@ -41,6 +41,24 @@ const micButton = document.getElementById('mic-button');
 const plusButton = document.getElementById('plus-button');
 const chatForm = document.getElementById('chat-form');
 
+// Inline menu variables
+const moreActionsBtn = document.getElementById('more-actions-btn');
+const inlineActionsMenu = document.getElementById('inline-actions-menu');
+
+if (moreActionsBtn && inlineActionsMenu) {
+  moreActionsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    inlineActionsMenu.classList.toggle('visible');
+  });
+
+  // Close menu if clicked outside
+  document.addEventListener('click', (e) => {
+    if (!inlineActionsMenu.contains(e.target) && e.target !== moreActionsBtn) {
+      inlineActionsMenu.classList.remove('visible');
+    }
+  });
+}
+
 // Camera state
 let cameraStream = null;
 let cameraVideo = null;
@@ -185,6 +203,8 @@ if (window.visualViewport) {
     updateAppHeight();
     window.scrollTo(0, 0);
     requestAnimationFrame(() => scrollToBottom());
+    setTimeout(scrollToBottom, 50);
+    setTimeout(scrollToBottom, 300);
   };
   window.visualViewport.addEventListener('resize', _onViewport);
   window.visualViewport.addEventListener('scroll', _onViewport);

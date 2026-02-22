@@ -372,7 +372,8 @@ body::after {
 
 #input-container {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
+  /* Align wave button strictly at the bottom */
   gap: 8px;
   background: transparent;
   border: none;
@@ -380,13 +381,21 @@ body::after {
 }
 
 /* ─── INPUT BOX ─────────────────────────────────────────── */
+.input-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
 #text-input,
 textarea#text-input {
-  border-radius: 999px;
+  border-radius: 20px;
   background: #111;
   border: 1px solid #222;
   color: #ddd;
-  padding: 12px 52px 12px 22px;
+  padding: 12px 42px 12px 18px;
+  /* space for 3 dots */
   font-size: 14px;
   min-height: 46px;
   max-height: 140px;
@@ -458,11 +467,72 @@ textarea#text-input:focus {
 }
 
 /* ===============================
+   INLINE ACTIONS (3 DOTS + MENU)
+   =============================== */
+#inline-actions-container {
+  position: absolute;
+  right: 6px;
+  bottom: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#more-actions-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: #666;
+  /* Base color for svg fill */
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+
+#more-actions-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+#more-actions-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ddd;
+}
+
+#inline-actions-menu {
+  position: absolute;
+  right: 0;
+  bottom: 40px;
+  /* Above the 3 dots */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #181818;
+  border: 1px solid #333;
+  border-radius: 20px;
+  padding: 6px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px) scale(0.95);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 100;
+}
+
+#inline-actions-menu.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+/* ===============================
    MIC BUTTON — TECNICO
    =============================== */
 #mic-button {
-  order: 3;
-  flex-shrink: 0;
   width: 2.2rem;
   height: 2.2rem;
   border-radius: 50%;
@@ -558,8 +628,6 @@ textarea#text-input:focus {
    SEND BUTTON
    =============================== */
 #send-button {
-  order: 5;
-  flex-shrink: 0;
   width: 2.2rem;
   height: 2.2rem;
   background: rgba(255, 255, 255, 0.03);
