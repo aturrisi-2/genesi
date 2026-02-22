@@ -1826,9 +1826,8 @@ body {
   top: 0 !important;
   left: 0 !important;
   right: 0 !important;
-  bottom: 0 !important;
   width: 100% !important;
-  height: 100dvh !important;
+  height: var(--app-height, 100dvh) !important;
   overflow: hidden !important;
   margin: 0 !important;
   padding: 0 !important;
@@ -1838,10 +1837,9 @@ body {
 #genesi-app {
   position: absolute !important;
   top: 0 !important;
-  bottom: 0 !important;
   left: 0 !important;
   right: 0 !important;
-  height: 100% !important;
+  height: var(--app-height, 100dvh) !important;
   width: 100% !important;
   display: flex;
   overflow: hidden !important;

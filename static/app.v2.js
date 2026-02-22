@@ -188,9 +188,15 @@ if (logoutBtn) {
 
 function updateAppHeight() {
   if (window.visualViewport) {
+    // 1. Forza l'altezza sull'intera pagina così scompare ogni barra di scrolling di sistema
     const h = window.visualViewport.height;
     document.documentElement.style.setProperty('--app-height', h + 'px');
-    document.getElementById('genesi-app').style.transform = '';
+    document.body.style.height = h + 'px';
+    const appWrapper = document.getElementById('genesi-app');
+    if (appWrapper) appWrapper.style.height = h + 'px';
+
+    // 2. Tira su la visual viewport (su iOS quando apri la tastiera la finestra può esser schiacciata giù)
+    window.scrollTo({ top: 0, behavior: 'instant' });
   } else {
     document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
   }
@@ -201,13 +207,22 @@ updateAppHeight();
 if (window.visualViewport) {
   const _onViewport = () => {
     updateAppHeight();
-    window.scrollTo(0, 0);
-    requestAnimationFrame(() => scrollToBottom());
+    // 3. Spinge la chat al bottom senza esitazioni o easing che si impallano mentre la tastiera sale
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 0);
+      scrollToBottom();
+    });
     setTimeout(scrollToBottom, 50);
-    setTimeout(scrollToBottom, 300);
+    setTimeout(scrollToBottom, 200);
   };
   window.visualViewport.addEventListener('resize', _onViewport);
   window.visualViewport.addEventListener('scroll', _onViewport);
+
+  // 4. Se la casella acquista il Focus, forziamo il tracking viewport aggiuntivo (salvagente per delay iOS)
+  const tgInput = document.getElementById('text-input');
+  if (tgInput) {
+    tgInput.addEventListener('focus', () => { setTimeout(_onViewport, 300); });
+  }
 } else {
   window.addEventListener('resize', updateAppHeight);
 }
