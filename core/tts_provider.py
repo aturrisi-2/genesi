@@ -125,7 +125,7 @@ class PiperTTSProvider(TTSProvider):
 class EdgeTTSProvider(TTSProvider):
     """Provider TTS basato su Edge TTS (Microsoft)."""
     
-    def __init__(self, voice: str = "it-IT-DiegoNeural", rate: str = "+0%", volume: str = "+0%"):
+    def __init__(self, voice: str = "it-IT-IsabellaNeural", rate: str = "+0%", volume: str = "+0%"):
         self.voice = voice
         self.rate = rate
         self.volume = volume
@@ -167,7 +167,7 @@ class EdgeTTSProvider(TTSProvider):
 class OpenAITTSProvider(TTSProvider):
     """Provider TTS usando OpenAI API — voce onyx profonda e naturale."""
 
-    def __init__(self, voice: str = "onyx", model: str = "tts-1", speed: float = 1.0):
+    def __init__(self, voice: str = "nova", model: str = "tts-1", speed: float = 1.0):
         import os
         self.voice = voice
         self.model = model
@@ -202,8 +202,8 @@ class OpenAITTSProvider(TTSProvider):
         import httpx
 
         try:
-            # Applica padding solo per Onyx
-            if self.voice == "onyx":
+            # Applica padding per limitare i tagli
+            if self.voice in ["onyx", "nova"]:
                 text = self._pad_tts_text(text)
             
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -301,14 +301,14 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
             import os
             cfg = providers_cfg.get("openai", {})
             return OpenAITTSProvider(
-                voice=cfg.get("voice", "onyx"),
+                voice=cfg.get("voice", "nova"),
                 model=os.getenv("OPENAI_TTS_MODEL", cfg.get("model", "tts-1")),
                 speed=float(os.getenv("ONYX_SPEED", str(cfg.get("speed", 1.0))))
             )
         elif primary == "edge_tts":
             cfg = providers_cfg.get("edge_tts", {})
             return EdgeTTSProvider(
-                voice=cfg.get("voice", "it-IT-DiegoNeural"),
+                voice=cfg.get("voice", "it-IT-IsabellaNeural"),
                 rate=cfg.get("rate", "+0%"),
                 volume=cfg.get("volume", "+0%")
             )
@@ -320,7 +320,7 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
         if secondary == "edge_tts":
             cfg = providers_cfg.get("edge_tts", {})
             return EdgeTTSProvider(
-                voice=cfg.get("voice", "it-IT-DiegoNeural"),
+                voice=cfg.get("voice", "it-IT-IsabellaNeural"),
                 rate=cfg.get("rate", "+0%"),
                 volume=cfg.get("volume", "+0%")
             )
@@ -328,7 +328,7 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
             import os
             cfg = providers_cfg.get("openai", {})
             return OpenAITTSProvider(
-                voice=cfg.get("voice", "onyx"),
+                voice=cfg.get("voice", "nova"),
                 model=os.getenv("OPENAI_TTS_MODEL", cfg.get("model", "tts-1")),
                 speed=float(os.getenv("ONYX_SPEED", str(cfg.get("speed", 1.0))))
             )
@@ -390,14 +390,14 @@ def get_tts_provider() -> TTSProvider:
             elif active_provider == "edge_tts":
                 edge_config = providers.get("edge_tts", {})
                 _tts_provider_instance = EdgeTTSProvider(
-                    voice=edge_config.get("voice", "it-IT-DiegoNeural"),
+                    voice=edge_config.get("voice", "it-IT-IsabellaNeural"),
                     rate=edge_config.get("rate", "+0%"),
                     volume=edge_config.get("volume", "+0%")
                 )
             elif active_provider == "openai":
                 cfg = providers.get("openai", {})
                 _tts_provider_instance = OpenAITTSProvider(
-                    voice=cfg.get("voice", "onyx"),
+                    voice=cfg.get("voice", "nova"),
                     model=cfg.get("model", "tts-1"),
                     speed=cfg.get("speed", 1.0)
                 )
