@@ -1162,6 +1162,9 @@ async function sendMessage(voiceText = null) {
 // TTS ASYNC — completamente scollegato dal render
 // ===============================
 function playTTSAsync(text, mode) {
+  // Ferma qualsiasi TTS attualmente in corso per evitare sovrapposizioni
+  stopAllTTS();
+
   // Reset abort flag + create fresh AbortController for this generation
   _ttsAborted = false;
   currentTTSAbortController = new AbortController();

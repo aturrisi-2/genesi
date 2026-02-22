@@ -60,12 +60,16 @@ def build_search_query(message: str) -> str:
 def build_github_query(message: str) -> str:
     """Estrae keywords tecniche in inglese per GitHub search."""
     import re
-    # Rimuovi stopwords italiane comuni
-    stopwords = ['come', 'si', 'implementa', 'un', 'con', 'cercami', 
+    # Espandi le stopwords per rimuovere query "chattate" e preposizioni
+    stopwords = {'come', 'si', 'implementa', 'un', 'con', 'cercami', 
                  'esempi', 'su', 'il', 'la', 'lo', 'ho', 'una',
-                 'che', 'per', 'del', 'della', 'dei', 'quale', 'cosa']
-    words = message.lower().split()
-    keywords = [w for w in words if w not in stopwords and len(w) > 3]
+                 'che', 'per', 'del', 'della', 'dei', 'quale', 'cosa',
+                 'spiegami', 'github', 'repo', 'repository', "l'ultima",
+                 'ultimo', 'ultima', 'cerca', 'di', 'e', 'è', 'sono', 'un',
+                 "l'", "all'"}
+    # Usa regexp per separare meglio le parole (mantiene trattini e underscore per github reponames)
+    words = re.findall(r'\b[\w-]+\b', message.lower())
+    keywords = [w for w in words if w not in stopwords and len(w) > 2]
     return ' '.join(keywords[:4])  # max 4 parole
 
 async def search_web(query: str, max_results: int = 4) -> Optional[str]:
