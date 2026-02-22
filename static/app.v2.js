@@ -2596,7 +2596,11 @@ async function startNewSession() {
       .then(data => {
         if (data.status === 'ok' && data.items) {
           const headlines = data.items.slice(0, 10).map(item => "📰 " + item.title).join(" | \u00a0\u00a0\u00a0\u00a0 ");
-          presenceP.textContent = headlines + " | \u00a0\u00a0\u00a0\u00a0 " + headlines;
+          const fullText = headlines + " | \u00a0\u00a0\u00a0\u00a0 " + headlines;
+          presenceP.textContent = fullText;
+          // Rallenta dinamicamente in base alla lunghezza (circa 5 caratteri al secondo)
+          const scrollSpeed = Math.max(90, fullText.length * 0.2);
+          presenceP.style.animationDuration = `${scrollSpeed}s`;
         } else {
           presenceP.textContent = "Nessuna notizia disponibile al momento | Genesi OS v3";
         }
