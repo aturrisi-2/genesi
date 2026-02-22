@@ -1048,7 +1048,14 @@ async function sendMessage(voiceText = null) {
   textInput.value = '';
   textInput.style.height = '44px';
   autoResizeInput(textInput);
-  textInput.blur(); // Chiude la tastiera su mobile per mostrare la risposta
+
+  // Decide if we keep focus on the input box based on device
+  const isMobile = window.innerWidth <= 768 || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  if (isMobile) {
+    textInput.blur(); // Chiude la tastiera su mobile
+  } else {
+    setTimeout(() => textInput.focus(), 10); // Mantiene fissa la tastiera pronta per scrivere su pc
+  }
 
   // Pulse shockwave on send
   const ic = document.getElementById('input-container');
