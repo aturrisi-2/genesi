@@ -1181,10 +1181,9 @@ body {
 .sidebar-handle-wrapper {
   position: absolute;
   left: 0;
-  top: 12.5%;
-  height: 75%;
-  width: 15px;
-  /* clickable target area */
+  top: 16px;
+  height: 48px;
+  width: 20px;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -1195,24 +1194,24 @@ body {
 #sidebar-neon-handle {
   position: absolute;
   left: 0;
-  width: 5px;
+  width: 6px;
   height: 100%;
-  background: rgba(0, 229, 255, 0.5);
-  border-radius: 0 4px 4px 0;
+  background: rgba(0, 229, 255, 0.6);
+  border-radius: 0 6px 6px 0;
   box-shadow:
-    0 0 10px rgba(0, 229, 255, 0.5),
-    0 0 20px rgba(0, 229, 255, 0.3),
-    0 0 30px rgba(0, 229, 255, 0.2);
+    0 0 10px rgba(0, 229, 255, 0.6),
+    0 0 20px rgba(0, 229, 255, 0.4),
+    0 0 30px rgba(0, 229, 255, 0.3);
   transition: background 0.3s, box-shadow 0.3s, width 0.3s;
 }
 
 .sidebar-handle-wrapper:hover #sidebar-neon-handle {
-  background: rgba(0, 229, 255, 0.9);
-  width: 7px;
+  background: rgba(0, 229, 255, 1);
+  width: 8px;
   box-shadow:
-    0 0 12px rgba(0, 229, 255, 0.8),
-    0 0 24px rgba(0, 229, 255, 0.5),
-    0 0 38px rgba(0, 229, 255, 0.3);
+    0 0 15px rgba(0, 229, 255, 0.9),
+    0 0 30px rgba(0, 229, 255, 0.6),
+    0 0 45px rgba(0, 229, 255, 0.4);
 }
 
 .sidebar-header {
