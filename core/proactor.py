@@ -599,7 +599,7 @@ class Proactor:
 L'utente ora chiede: "{message}"
 
 Rispondi in modo naturale facendo riferimento ai nostri scambi precedenti quando pertinente.
-ISTRUZIONE OBBLIGATORIA: Inizia la tua risposta confermando esplicitamente all'utente che hai appena riletto la storia della chat (es. "Ho riletto i nostri vecchi scambi e...", "Ho controllato la nostra conversazione...").
+Non aggiungere frasi fatte o conferme robotiche all'inizio o alla fine, la conversazione deve sembrare fluida e naturale.
 Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
             # Use LLM for natural response
