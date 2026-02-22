@@ -104,7 +104,10 @@ class LLMService:
     async def generate_response(self, prompt: str, message: str, user_id: str = None, route: str = "general", messages: Optional[List[Dict[str, str]]] = None) -> str:
         """Genera una risposta usando il modello selezionato con fallback deterministico."""
         model = model_selector(message, route)
-        
+        return await self._call_with_protection(model, prompt, message, user_id, route, messages)
+
+    async def _call_with_protection(self, model: str, prompt: str, message: str, user_id: str = None, route: str = "general", messages: Optional[List[Dict[str, str]]] = None) -> str:
+        """Metodo di interfaccia protetto (compatibile con Proactor)."""
         # Sostituisce system prompt con quello adattivo se disponibile
         adaptive_prompt = self._load_adaptive_prompt()
         final_prompt = adaptive_prompt if adaptive_prompt else prompt
@@ -132,7 +135,9 @@ class LLMService:
         except Exception as e:
             logger.error("LLM_SERVICE_FATAL: %s", str(e))
 
-        # Fallback deterministico se tutto fallisce
+        # Se siamo qui e Proactor aspetta None per fare il suo fallback autonomo, restituiamo None
+        # ma per messaggi generici usiamo il deterministico
+        if route == "relational": return None
         return self._deterministic_fallback(message, route, user_id)
 
     async def _call_model(self, model: str, prompt: str, message: str, user_id: str, route: str, messages: Optional[List[Dict[str, str]]] = None) -> Optional[str]:
