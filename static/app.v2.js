@@ -2841,8 +2841,8 @@ function setVoiceStatusText(text) {
 
   async function fetchWeather(lat, lon) {
     const url = lat !== null && lon !== null
-      ? `/ api / weather - widget ? lat = ${lat} & lon=${lon}`
-      : `/ api / weather - widget`;
+      ? `/api/weather-widget?lat=${lat}&lon=${lon}`
+      : `/api/weather-widget`;
 
     const resp = await fetch(url, {
       method: 'GET',
