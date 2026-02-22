@@ -2602,14 +2602,13 @@ async function startNewSession() {
           const fullText = headlines + " | \u00a0\u00a0\u00a0\u00a0 " + headlines;
           presenceP.textContent = fullText;
 
-          // Forza un ricalcolo del layout prima di riapplicare l'animazione
-          void presenceP.offsetWidth;
+          // Velocita' calcolata dal numero di caratteri. 
+          // Per una lettura tranquilla: circa 4-5 caratteri al secondo.
+          // Esempio: 2000 caratteri / 5 = 400 secondi totali.
+          const charsPerSecond = 5;
+          const scrollSpeed = Math.floor(fullText.length / charsPerSecond);
 
-          // Velocita' lenta fissa e costante: ~15 secondi per ogni 1000 pixel di testo
-          const rawSpeed = (presenceP.offsetWidth / 1000) * 15;
-          const scrollSpeed = Math.max(120, rawSpeed);
-
-          // Riapplica l'animazione con il tempo ricalcolato per essere costante
+          // Riapplica l'animazione forzata
           presenceP.style.animation = `newsMarquee ${scrollSpeed}s linear infinite`;
         } else {
           presenceP.textContent = "Nessuna notizia disponibile al momento | Genesi OS v3";
