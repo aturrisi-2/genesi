@@ -2595,12 +2595,22 @@ async function startNewSession() {
       .then(r => r.json())
       .then(data => {
         if (data.status === 'ok' && data.items) {
+          // Ferma l'animazione temporaneamente
+          presenceP.style.animation = 'none';
+
           const headlines = data.items.slice(0, 10).map(item => "📰 " + item.title).join(" | \u00a0\u00a0\u00a0\u00a0 ");
           const fullText = headlines + " | \u00a0\u00a0\u00a0\u00a0 " + headlines;
           presenceP.textContent = fullText;
-          // Rallenta dinamicamente in base alla lunghezza (circa 5 caratteri al secondo)
-          const scrollSpeed = Math.max(90, fullText.length * 0.2);
-          presenceP.style.animationDuration = `${scrollSpeed}s`;
+
+          // Forza un ricalcolo del layout prima di riapplicare l'animazione
+          void presenceP.offsetWidth;
+
+          // Velocita' lenta fissa e costante: ~15 secondi per ogni 1000 pixel di testo
+          const rawSpeed = (presenceP.offsetWidth / 1000) * 15;
+          const scrollSpeed = Math.max(120, rawSpeed);
+
+          // Riapplica l'animazione con il tempo ricalcolato per essere costante
+          presenceP.style.animation = `newsMarquee ${scrollSpeed}s linear infinite`;
         } else {
           presenceP.textContent = "Nessuna notizia disponibile al momento | Genesi OS v3";
         }
