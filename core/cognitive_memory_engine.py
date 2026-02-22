@@ -47,7 +47,7 @@ class CognitiveMemoryEngine:
         
         # Load existing profile data (sync)
         try:
-            existing_profile_data = storage._storage.get(f"long_term_profile:{user_id}", {})
+            existing_profile_data = storage._storage.get(f"profile:{user_id}", {})
         except:
             existing_profile_data = {}
         
@@ -95,9 +95,9 @@ class CognitiveMemoryEngine:
             logger.info("COGNITIVE_NAME_EXTRACT value=%s", value)
             
             # FIX DEFINITIVO: Scrittura diretta su storage
-            profile = await storage.load(f"long_term_profile:{user_id}", default={}) or {}
+            profile = await storage.load(f"profile:{user_id}", default={}) or {}
             profile["name"] = extracted_name
-            await storage.save(f"long_term_profile:{user_id}", profile)
+            await storage.save(f"profile:{user_id}", profile)
             logger.info("STORAGE_DIRECT_WRITE user=%s name=%s", user_id, extracted_name)
             
         if city_match:
@@ -132,9 +132,9 @@ class CognitiveMemoryEngine:
             logger.info("COGNITIVE_PROFESSION_EXTRACT value=%s", value)
             
             # FIX DEFINITIVO: Scrittura diretta su storage
-            profile = await storage.load(f"long_term_profile:{user_id}", default={}) or {}
+            profile = await storage.load(f"profile:{user_id}", default={}) or {}
             profile["profession"] = new_profession
-            await storage.save(f"long_term_profile:{user_id}", profile)
+            await storage.save(f"profile:{user_id}", profile)
             logger.info("STORAGE_DIRECT_WRITE user=%s profession=%s", user_id, new_profession)
 
         if spouse_match:
@@ -147,9 +147,9 @@ class CognitiveMemoryEngine:
             logger.info("COGNITIVE_SPOUSE_EXTRACT value=%s", value)
             
             # FIX DEFINITIVO: Scrittura diretta su storage
-            profile = await storage.load(f"long_term_profile:{user_id}", default={}) or {}
+            profile = await storage.load(f"profile:{user_id}", default={}) or {}
             profile["spouse"] = extracted_spouse
-            await storage.save(f"long_term_profile:{user_id}", profile)
+            await storage.save(f"profile:{user_id}", profile)
             logger.info("STORAGE_DIRECT_WRITE user=%s spouse=%s", user_id, extracted_spouse)
 
         if children_match:
@@ -222,12 +222,12 @@ class CognitiveMemoryEngine:
             # Save to storage if persist=True
             if persist and memory_type == "profile":
                 # Save to sync storage for immediate persistence
-                storage._storage[f"long_term_profile:{user_id}"] = extracted_profile_data
+                storage._storage[f"profile:{user_id}"] = extracted_profile_data
                 # Also trigger async save in background (fire and forget)
                 import asyncio
                 try:
                     loop = asyncio.get_running_loop()
-                    asyncio.create_task(storage.save(f"long_term_profile:{user_id}", extracted_profile_data))
+                    asyncio.create_task(storage.save(f"profile:{user_id}", extracted_profile_data))
                 except RuntimeError:
                     # No event loop, skip async save - sync storage is enough
                     pass

@@ -6,7 +6,7 @@ Only saves declarative, stable, non-situational identity data.
 
 import json
 import logging
-from typing import List
+from typing import List, Dict, Optional
 from pydantic import BaseModel, Field
 from openai import AsyncOpenAI
 import os
@@ -18,43 +18,35 @@ class IdentityUpdate(BaseModel):
     interests: List[str] = Field(default_factory=list)
     preferences: List[str] = Field(default_factory=list)
     traits: List[str] = Field(default_factory=list)
+    pets: List[Dict[str, str]] = Field(default_factory=list)
+    children: List[Dict[str, str]] = Field(default_factory=list)
+    spouse: Optional[str] = None
 
 
 EXTRACTION_PROMPT = """Sei un classificatore di identita' personale.
-Analizza il messaggio dell'utente e estrai SOLO informazioni identitarie STABILI.
+Analizza il messaggio dell'utente considerando il contesto recente, e estrai SOLO informazioni identitarie STABILI.
 
 REGOLE:
-- Salva SOLO dichiarazioni stabili su se stessi (gusti, preferenze durature, tratti caratteriali)
-- NON salvare stati temporanei (stanchezza, umore del momento, piani futuri)
-- NON salvare informazioni situazionali (dove va oggi, cosa fa adesso)
-- Normalizza tutto in lowercase
-- Rispondi SOLO con JSON valido, nessun altro testo
+- Salva SOLO dichiarazioni stabili (gusti, preferenze, tratti, nomi di animali domestici o familiari)
+- Animali (pets) devono avere "type" (es. dog, cat) e "name"
+- Figli (children) devono avere "name"
+- Coniuge (spouse) e' una stringa col nome
+- NON salvare stati temporanei (stanchezza, umore)
+- Rispondi SOLO con JSON valido
 
-ESEMPI DI COSA SALVARE:
-- "Adoro la musica elettronica" -> interests: ["musica elettronica"]
-- "Mi piace la fotografia" -> interests: ["fotografia"]
-- "Sono una persona introversa" -> traits: ["introverso"]
-- "Preferisco lavorare di notte" -> preferences: ["lavorare di notte"]
+ESEMPI:
+- "Adoro la musica elettronica" -> {"interests": ["musica elettronica"]}
+- "I miei gatti Mignolo e Prof" -> {"pets": [{"type": "cat", "name": "Mignolo"}, {"type": "cat", "name": "Prof"}]}
+- "Mia figlia Zoe" -> {"children": [{"name": "Zoe"}]}
 
-ESEMPI DI COSA NON SALVARE:
-- "Oggi sono stanco" -> {} (stato temporaneo)
-- "Mi fa male la testa" -> {} (stato temporaneo)
-- "Domani vado al mare" -> {} (piano futuro)
-- "Sono nervoso ora" -> {} (stato temporaneo)
-- "Ciao come stai" -> {} (saluto)
-
-Rispondi con questo formato JSON esatto:
-{"interests": [], "preferences": [], "traits": []}
-
-Se non c'e' nulla di stabile da estrarre, rispondi con:
-{"interests": [], "preferences": [], "traits": []}
-
-Messaggio utente: """
+Rispondi con questo formato JSON (aggiungi solo i campi pertinenti, omettendo quelli non trovati, e tieni validi quelli vuoti di default):
+{"interests": [], "preferences": [], "traits": [], "pets": [], "children": [], "spouse": null}
+"""
 
 
-async def extract_identity_updates(message: str) -> IdentityUpdate:
+async def extract_identity_updates(message: str, history_text: str = "") -> IdentityUpdate:
     """
-    Extract stable identity updates from a user message using LLM classification.
+    Extract stable identity updates from a user message and history context using LLM.
     Returns empty IdentityUpdate if extraction fails or nothing stable found.
     Never interrupts chat flow.
     """
@@ -69,7 +61,7 @@ async def extract_identity_updates(message: str) -> IdentityUpdate:
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": EXTRACTION_PROMPT},
-                {"role": "user", "content": message}
+                {"role": "user", "content": f"Contesto recente: {history_text}\nMessaggio utente: {message}" if history_text else message}
             ],
             temperature=0.0,
             max_tokens=200
@@ -86,11 +78,8 @@ async def extract_identity_updates(message: str) -> IdentityUpdate:
         update.preferences = [p.lower().strip() for p in update.preferences if p.strip()]
         update.traits = [t.lower().strip() for t in update.traits if t.strip()]
 
-        if update.interests or update.preferences or update.traits:
-            logger.info(
-                "IDENTITY_EXTRACTOR_RESULT interests=%s preferences=%s traits=%s",
-                update.interests, update.preferences, update.traits
-            )
+        if update.interests or update.preferences or update.traits or update.pets or update.children or update.spouse:
+            logger.info("IDENTITY_EXTRACTOR_RESULT has_data=true")
         else:
             logger.debug("IDENTITY_EXTRACTOR_RESULT empty=true")
 
@@ -113,7 +102,6 @@ def merge_identity_update(profile, update: IdentityUpdate):
         existing = getattr(profile, field_name)
         new_values = getattr(update, field_name)
 
-        # Normalize existing to lowercase for comparison
         existing_lower = {v.lower().strip() for v in existing}
 
         for val in new_values:
@@ -122,4 +110,21 @@ def merge_identity_update(profile, update: IdentityUpdate):
                 existing.append(normalized)
                 existing_lower.add(normalized)
 
+    if update.spouse:
+        profile.spouse = update.spouse
+    
+    if update.pets:
+        from core.models.profile_model import Pet
+        existing_pets_names = [p.name.lower() for p in profile.pets]
+        for p in update.pets:
+            if "name" in p and p["name"].lower() not in existing_pets_names:
+                profile.pets.append(Pet(type=p.get("type", "unknown"), name=p["name"]))
+
+    if update.children:
+        from core.models.profile_model import Child
+        existing_children_names = [c.name.lower() for c in profile.children]
+        for c in update.children:
+            if "name" in c and c["name"].lower() not in existing_children_names:
+                profile.children.append(Child(name=c["name"]))
+    
     return profile

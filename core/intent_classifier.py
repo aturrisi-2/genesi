@@ -93,8 +93,8 @@ class IntentClassifier:
         # Pattern per GPT-4o (tecnica)
         self.gpt_patterns = {
             "reminder_create": [
-                "ricordami", "ricorda", "promemoria", "appuntamento", "ricordare",
-                "imposta promemoria", "crea promemoria", "nuovo promemoria"
+                "segnami un promemoria", "promemoria", "appuntamento",
+                "imposta promemoria", "crea promemoria", "nuovo promemoria", "memorizza promemoria"
             ],
             "reminder_list": [
                 "quali promemoria ho", "che appuntamenti ho", "lista promemoria",
@@ -159,7 +159,7 @@ class IntentClassifier:
         # 0.5️⃣ PRIORITY OVERRIDES for mixed intents
         
         # Check for reminder keywords
-        reminder_keywords = ["ricorda", "ricordami", "promemoria", "appuntamento", "ricordare"]
+        reminder_keywords = ["promemoria", "appuntamento", "segnami un promemoria"]
         if any(kw in message_lower for kw in reminder_keywords):
             log("INTENT_OVERRIDE_APPLIED", original="mixed", final="reminder_create", message=message[:50])
             # APPLICA REMINDER GUARD LAYER
@@ -383,7 +383,7 @@ class IntentClassifier:
                 log("REMINDER_GUARD_VALIDATED", intent=intent, has_datetime=True, message=message[:50])
         
         # 5️⃣ Altri casi ambigui con parole reminder ma azione non chiara
-        reminder_keywords = ["ricordami", "ricorda", "promemoria", "appuntamento", "ricordare"]
+        reminder_keywords = ["promemoria", "appuntamento", "segnami un promemoria"]
         if any(keyword in message_lower for keyword in reminder_keywords):
             # Se contiene reminder keywords ma non è stato classificato come reminder_*
             # e non ha data/orario chiara → downgrade a chat_free
@@ -463,7 +463,7 @@ INTENT POSSIBILI:
 - news: richieste di notizie o aggiornamenti
 - time: richieste sull'ora
 - date: richieste sulla data
-- reminder_create: creare o impostare un promemoria (es: "ricordami di...")
+- reminder_create: creare o impostare un promemoria SOLO QUANDO L'UTENTE CHIEDE ESPLICITAMENTE un "promemoria" o appuntamento
 - reminder_list: elenco promemoria attivi o in programma
 - reminder_delete: cancellare promemoria
 - reminder_update: modificare giorno/ora promemoria

@@ -82,9 +82,14 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
 
                 profile_changed = True
 
-        # Identity extractor: stable interests, preferences, traits
-        identity_update = await extract_identity_updates(request.message)
-        if identity_update.interests or identity_update.preferences or identity_update.traits:
+        # Identity extractor: stable interests, preferences, traits, pets, children, spouse
+        history = chat_memory.get_messages(user_id, limit=3) if user_id else []
+        history_text = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in history])
+        identity_update = await extract_identity_updates(request.message, history_text)
+        
+        if identity_update.interests or identity_update.preferences or \
+           identity_update.traits or identity_update.pets or \
+           identity_update.children or identity_update.spouse:
             merge_identity_update(profile, identity_update)
             profile_changed = True
 
