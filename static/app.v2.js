@@ -2257,6 +2257,7 @@ async function playSimpleAudio(blob) {
     // Set variables before start
     window.ttsPlaying = true;
     _wasPlayingChunk = true;
+    _isPlayingChunk = true;
 
     // Avvia playback
     console.log('[TTS] Avvio playback genId=' + myGenId);
