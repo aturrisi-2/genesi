@@ -60,17 +60,19 @@ def reload_tuning_state() -> Dict[str, Any]:
     return _TUNING_STATE
 
 # ═══════════════════════════════════════════════════════════════
-# MODEL CONFIGURATION — cost-optimized defaults
+# MODEL CONFIGURATION — OpenRouter defaults
 # ═══════════════════════════════════════════════════════════════
 
-LLM_DEFAULT_MODEL = "gpt-4o"
-LLM_FALLBACK_MODEL = "gpt-4o-mini"
-LLM_DEEP_MODEL = "claude-opus"
+LLM_DEFAULT_MODEL = "openai/gpt-4o"
+LLM_FALLBACK_MODEL = "openai/gpt-4o-mini"
+LLM_DEEP_MODEL = "anthropic/claude-3-opus"
 
 # Trigger per upgrade a Claude Opus (deep analysis)
 DEEP_ANALYSIS_TRIGGERS = [
     "analisi profonda",
-    "deep psychological analysis"
+    "deep psychological analysis",
+    "riflessione complessa",
+    "analisi esistenziale"
 ]
 
 
@@ -87,25 +89,41 @@ def model_selector(message: str, route: str = "general") -> str:
         selected_model = LLM_DEEP_MODEL
         reason = "deep analysis trigger"
 
+    # Force Opus for specific emotional routes if intensity is high
+    if route == "relational" and ("perché" in message.lower() or "senso" in message.lower()):
+        selected_model = LLM_DEEP_MODEL
+        reason = "psychological depth"
+
     logger.info("LLM_MODEL_SELECTED=%s reason=%s", selected_model, reason)
     return selected_model
 
 
 class LLMService:
     """
-    LLM Service v3 — Cost-optimized con rate limit protection.
-    Default: gpt-4o. Auto-downgrade su rate limit. Fallback deterministico.
+    LLM Service v4 — OpenRouter support with Claude Opus integration.
+    Default: openai/gpt-4o. Deep: anthropic/claude-3-opus.
     """
 
     def __init__(self):
-        self.client = AsyncOpenAI()
+        # Priorità a OPENROUTER_API_KEY, fallback su OPENAI_API_KEY
+        self.api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY", "")
+        
+        # Se è una chiave OpenRouter, usa il base_url corretto
+        self.base_url = "https://openrouter.ai/api/v1" if "sk-or-v1" in self.api_key else None
+        
+        self.client = AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url
+        )
+        
         self.default_model = LLM_DEFAULT_MODEL
         self.fallback_model = LLM_FALLBACK_MODEL
-        _api_key = os.environ.get("OPENAI_API_KEY", "")
-        if not _api_key or _api_key.startswith("sk-test"):
-            logger.warning("LLM_SERVICE: OPENAI_API_KEY missing or test-only")
-        log("LLM_SERVICE_ACTIVE")
-        logger.info("LLM_ENGINE_DEFAULT=%s ARCHITECTURE_MODE=cost_optimized_v1", self.default_model)
+        
+        if not self.api_key:
+            logger.warning("LLM_SERVICE: API_KEY missing")
+        
+        log("LLM_SERVICE_ACTIVE", provider="OpenRouter" if self.base_url else "OpenAI")
+        logger.info("LLM_ENGINE_DEFAULT=%s BASE_URL=%s", self.default_model, self.base_url)
         
         # 🆕 Relational State Engine
         from core.relational_state_engine import RelationalStateEngine
@@ -617,7 +635,11 @@ CARATTERE:
             response = await self.client.chat.completions.create(
                 model=model,
                 messages=chat_messages,
-                temperature=0.3
+                temperature=0.3,
+                extra_headers={
+                    "HTTP-Referer": "https://genesi.app",
+                    "X-Title": "Genesi"
+                }
             )
             llm_response = response.choices[0].message.content.strip()
             if not llm_response:
