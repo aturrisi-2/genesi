@@ -177,6 +177,11 @@ class LLMService:
             except: pass
 
             logger.info("%s_OK model=%s len=%d", tag, model, len(llm_response))
+            
+            # Se è analisi profonda, aggiungiamo un marker invisibile per il regolatore
+            if model == LLM_DEEP_MODEL:
+                llm_response = llm_response + "\n<!-- MODE:DEEP -->"
+                
             return llm_response
 
         except Exception as e:
