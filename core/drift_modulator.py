@@ -189,8 +189,9 @@ class DriftModulator:
     def _apply_warmth(self, text: str, warmth: float) -> str:
         """Aggiunge chiusura calda con probabilita' proporzionale a warmth."""
         # Probability of adding warm suffix scales with warmth
-        p = _sigmoid(warmth, center=0.55, steepness=8.0) * 0.35
-        if random.random() > p:
+        # Disabilitato (0.0) perche' le frasi fisse ("Ci sono") suonano artefatte per l'utente
+        p = 0.0
+        if random.random() >= p:
             return text
 
         # Don't add if text already ends with a warm phrase
@@ -229,7 +230,8 @@ class DriftModulator:
 
         if expansiveness > 0.6 and len(sentences) == 1 and len(text) < 60:
             # Probabilistic expansion
-            p = _sigmoid(expansiveness, center=0.6, steepness=8.0) * 0.30
+            # Disabilitato (0.0) per evitare aggiunte fisse artefatte a fine frase
+            p = 0.0
             if random.random() < p:
                 bridges = [
                     "Raccontami di piu'.",
@@ -255,10 +257,10 @@ class DriftModulator:
                               groundedness: float) -> str:
         """Aggiunge qualita' riflessiva/evocativa."""
         # Only trigger with meaningful probability at high evocativeness + low groundedness
-        p = _sigmoid(evocativeness, center=0.6, steepness=8.0) * \
-            (1.0 - _sigmoid(groundedness, center=0.6, steepness=6.0)) * 0.20
+        # Disabilitato (0.0) per evitare monologhi fissi artefatti 
+        p = 0.0
 
-        if random.random() > p:
+        if random.random() >= p:
             return text
 
         # Reflective insertions — context-free, universally applicable
