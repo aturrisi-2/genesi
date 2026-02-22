@@ -18,7 +18,7 @@ logger = logging.getLogger("genesi")
 # Modelli OpenRouter (vengono mappati automaticamente su OpenAI se necessario)
 LLM_DEFAULT_MODEL = "openai/gpt-4o"
 LLM_FALLBACK_MODEL = "openai/gpt-4o-mini"
-LLM_DEEP_MODEL = "anthropic/claude-3-opus"
+LLM_DEEP_MODEL = "anthropic/claude-opus-4"
 
 DEEP_ANALYSIS_TRIGGERS = [
     "analisi profonda", 
