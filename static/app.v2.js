@@ -2379,7 +2379,7 @@ async function createNewConversation() {
 
 async function openConversation(convId) {
   currentConvId = convId;
-  const res = await fetch(`/ api / conversations / ${convId}`, {
+  const res = await fetch(`/api/conversations/${convId}`, {
     headers: { 'Authorization': `Bearer ${getAuthToken()}` }
   });
   const conv = await res.json();
@@ -2391,7 +2391,7 @@ async function openConversation(convId) {
 async function renameConv(convId) {
   const newTitle = prompt('Nuovo nome:');
   if (!newTitle) return;
-  await fetch(`/ api / conversations / ${convId}`, {
+  await fetch(`/api/conversations/${convId}`, {
     method: 'PATCH',
     headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: newTitle })
@@ -2401,7 +2401,7 @@ async function renameConv(convId) {
 
 async function deleteConv(convId) {
   if (!confirm('Eliminare questa conversazione?')) return;
-  await fetch(`/ api / conversations / ${convId}`, {
+  await fetch(`/api/conversations/${convId}`, {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${getAuthToken()}` }
   });
