@@ -2314,23 +2314,57 @@ function renderConvList(convs) {
   const list = document.getElementById('conv-list');
   if (!list) return;
   list.innerHTML = '';
+
+  // Sort conversations: pinned first, then by the original backend date sorting
+  convs.sort((a, b) => {
+    if (a.pinned === b.pinned) return 0;
+    return a.pinned ? -1 : 1;
+  });
+
   convs.forEach(c => {
     const item = document.createElement('div');
-    item.className = 'conv-item' + (c.id === currentConvId ? ' active' : '');
+    item.className = 'conv-item' + (c.id === currentConvId ? ' active' : '') + (c.pinned ? ' pinned' : '');
     item.dataset.id = c.id;
     item.innerHTML = `
-            <span class="conv-title" title="${c.title}">${c.title}</span>
+            <span class="conv-title" title="${c.title}">${c.pinned ? '📌 ' : ''}${c.title}</span>
             <div class="conv-actions">
+                <button class="conv-btn" onclick="togglePinConv('${c.id}', ${!c.pinned})" title="${c.pinned ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}">${c.pinned ? '★' : '☆'}</button>
                 <button class="conv-btn" onclick="renameConv('${c.id}')" title="Rinomina">✎</button>
                 <button class="conv-btn" onclick="deleteConv('${c.id}')" title="Elimina">✕</button>
             </div>`;
     item.addEventListener('click', (e) => {
-      if (e.target.classList.contains('conv-btn')) return;
+      if (e.target.closest('.conv-btn')) return;
       openConversation(c.id);
+
+      // Nascondi sidebar su mobile (larghezza <= 768px di solito, ma chiudiamo la sidebar)
+      if (window.innerWidth <= 768) {
+        document.getElementById('sidebar').classList.add('sidebar-collapsed');
+        document.getElementById('sidebar-open-btn').style.setProperty('display', 'flex', 'important');
+      }
     });
     list.appendChild(item);
   });
 }
+
+window.togglePinConv = async function (convId, pinValue) {
+  await fetch(`/api/conversations/${convId}/pin`, {
+    method: 'PATCH',
+    headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pinned: pinValue })
+  });
+  await loadConversations();
+};
+
+window.clearAllConvs = async function () {
+  if (!confirm('Sei sicuro di voler svuotare TUTTE le chat? Questa azione è irreversibile.')) return;
+  await fetch('/api/conversations', {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+  });
+  currentConvId = null;
+  clearChat();
+  await loadConversations();
+};
 
 async function createNewConversation() {
   const res = await fetch('/api/conversations', {
@@ -2345,7 +2379,7 @@ async function createNewConversation() {
 
 async function openConversation(convId) {
   currentConvId = convId;
-  const res = await fetch(`/api/conversations/${convId}`, {
+  const res = await fetch(`/ api / conversations / ${convId}`, {
     headers: { 'Authorization': `Bearer ${getAuthToken()}` }
   });
   const conv = await res.json();
@@ -2357,7 +2391,7 @@ async function openConversation(convId) {
 async function renameConv(convId) {
   const newTitle = prompt('Nuovo nome:');
   if (!newTitle) return;
-  await fetch(`/api/conversations/${convId}`, {
+  await fetch(`/ api / conversations / ${convId}`, {
     method: 'PATCH',
     headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: newTitle })
@@ -2367,7 +2401,7 @@ async function renameConv(convId) {
 
 async function deleteConv(convId) {
   if (!confirm('Eliminare questa conversazione?')) return;
-  await fetch(`/api/conversations/${convId}`, {
+  await fetch(`/ api / conversations / ${convId}`, {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${getAuthToken()}` }
   });
@@ -2421,7 +2455,7 @@ async function cleanEmptyConversations() {
         (c.messages && c.messages.length > 0) ||
         (c.title && c.title !== 'Nuova chat');
       if (!hasMessages) {
-        await fetch(`/api/conversations/${c.id}`, {
+        await fetch(`/ api / conversations / ${c.id}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${getAuthToken()}` }
         });
@@ -2797,18 +2831,18 @@ function setVoiceStatusText(text) {
     els.city.textContent = payload.city;
     els.temp.textContent = `${payload.temp}°`;
     els.desc.textContent = payload.description;
-    els.meta.textContent = `${payload.humidity}% umidità · ${payload.wind_speed} km/h`;
+    els.meta.textContent = `${payload.humidity} % umidità · ${payload.wind_speed} km / h`;
     updateClock();
     showState('data');
     console.log(
-      `[WEATHER_WIDGET] OK city=${payload.city} temp=${payload.temp}° condition=${payload.condition}`
+      `[WEATHER_WIDGET] OK city = ${payload.city} temp = ${payload.temp}° condition = ${payload.condition}`
     );
   }
 
   async function fetchWeather(lat, lon) {
     const url = lat !== null && lon !== null
-      ? `/api/weather-widget?lat=${lat}&lon=${lon}`
-      : `/api/weather-widget`;
+      ? `/ api / weather - widget ? lat = ${lat} & lon=${lon}`
+      : `/ api / weather - widget`;
 
     const resp = await fetch(url, {
       method: 'GET',

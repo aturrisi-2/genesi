@@ -39,6 +39,7 @@ async def list_conversations(current_user: AuthUser = Depends(require_auth)):
             convs.append({
                 "id": c["id"], 
                 "title": c.get("title", "Nuova chat"), 
+                "pinned": c.get("pinned", False),
                 "updated_at": c.get("updated_at"),
                 "message_count": len(messages),
                 "messages": messages  # <-- aggiunto per frontend
@@ -49,7 +50,7 @@ async def list_conversations(current_user: AuthUser = Depends(require_auth)):
 @router.post("/conversations")
 async def create_conversation(current_user: AuthUser = Depends(require_auth)):
     user_id = str(current_user.id)
-    conv = {"id": str(uuid.uuid4()), "title": "Nuova chat", "messages": [], "created_at": datetime.now().isoformat(), "updated_at": datetime.now().isoformat()}
+    conv = {"id": str(uuid.uuid4()), "title": "Nuova chat", "messages": [], "pinned": False, "created_at": datetime.now().isoformat(), "updated_at": datetime.now().isoformat()}
     _save_conv(user_id, conv)
     log("CONVERSATION_CREATE", user_id=user_id, conv_id=conv["id"])
     return conv
@@ -96,6 +97,33 @@ async def delete_conversation(conv_id: str, current_user: AuthUser = Depends(req
     if path.exists(): path.unlink()
     log("CONVERSATION_DELETE", user_id=user_id, conv_id=conv_id)
     return {"status": "ok"}
+
+@router.delete("/conversations")
+async def delete_all_conversations(current_user: AuthUser = Depends(require_auth)):
+    user_id = str(current_user.id)
+    user_dir = Path(CONV_DIR) / user_id
+    if not user_dir.exists():
+        return {"deleted": 0}
+    deleted = 0
+    for f in user_dir.glob("*.json"):
+        try:
+            f.unlink()
+            deleted += 1
+        except:
+            pass
+    log("CONVERSATIONS_DELETE_ALL", user_id=user_id, deleted=deleted)
+    return {"status": "ok", "deleted": deleted}
+
+@router.patch("/conversations/{conv_id}/pin")
+async def toggle_pin_conversation(conv_id: str, body: dict, current_user: AuthUser = Depends(require_auth)):
+    user_id = str(current_user.id)
+    conv = _load_conv(user_id, conv_id)
+    if not conv: return {"error": "not found"}
+    conv["pinned"] = body.get("pinned", False)
+    conv["updated_at"] = datetime.now().isoformat()
+    _save_conv(user_id, conv)
+    log("CONVERSATION_PIN_TOGGLE", user_id=user_id, conv_id=conv_id, pinned=conv["pinned"])
+    return {"status": "ok", "pinned": conv["pinned"]}
 
 @router.post("/conversations/{conv_id}/messages")
 async def append_message(conv_id: str, body: dict, current_user: AuthUser = Depends(require_auth)):
