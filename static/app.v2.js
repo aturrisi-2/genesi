@@ -2587,14 +2587,23 @@ async function startNewSession() {
 
   console.log("SIDEBAR_INIT_DONE");
 
-  // Neon flicker — wrap each word of the presence text in a span
+  // Giornalismo Ticker — pull ANSA news
   const presenceP = document.querySelector('#presence p');
   if (presenceP) {
-    const words = presenceP.textContent.split(' ');
-    presenceP.innerHTML = words.map((w, i) => {
-      const flicker = (i === 2 || i === 5) ? ' style="animation: neonFlicker 6s ' + (i * 0.7) + 's infinite"' : '';
-      return '<span' + flicker + '>' + w + '</span>';
-    }).join(' ');
+    presenceP.textContent = "Caricamento ultime notizie...";
+    fetch('https://api.rss2json.com/v1/api.json?rss_url=https://www.ansa.it/sito/ansait_rss.xml')
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === 'ok' && data.items) {
+          const headlines = data.items.slice(0, 10).map(item => "📰 " + item.title).join(" | \u00a0\u00a0\u00a0\u00a0 ");
+          presenceP.textContent = headlines + " | \u00a0\u00a0\u00a0\u00a0 " + headlines;
+        } else {
+          presenceP.textContent = "Nessuna notizia disponibile al momento | Genesi OS v3";
+        }
+      })
+      .catch(e => {
+        presenceP.textContent = "Errore nel caricamento notizie | Genesi OS v3";
+      });
   }
 })();
 

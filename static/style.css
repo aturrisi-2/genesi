@@ -98,112 +98,45 @@ body::after {
 }
 
 /* ===============================
-   PRESENCE HEADER — NEON SIGN BOARD
+   PRESENCE HEADER — NEWS TICKER
    =============================== */
 #presence {
   flex-shrink: 0;
-  text-align: center;
-  padding: 1.4rem 1.2rem 1rem;
-  transition: var(--transition);
+  width: 100%;
+  overflow: hidden;
+  background: #0a0a0e;
+  border-bottom: 1px solid #2a2a35;
+  border-top: 1px solid #1a1a24;
+  padding: 0.4rem 0;
+  white-space: nowrap;
 }
 
 #presence p {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 1.25rem;
-  font-weight: 500;
-  font-style: italic;
-  letter-spacing: 0.03em;
-  max-width: 26ch;
-  margin: 0 auto;
-  line-height: 1.5;
-  color: #00e5ff;
-  padding: 1rem 1.6rem;
-  background: var(--sign-bg);
-  border-radius: 0.3rem;
-  /* Double frame: outer metallic + inner neon */
-  border: 3px solid #2a2a35;
-  outline: 2px solid rgba(0, 229, 255, 0.4);
-  outline-offset: 3px;
-  text-shadow:
-    0 0 4px #00e5ff,
-    0 0 12px rgba(0, 229, 255, 0.7),
-    0 0 28px rgba(0, 229, 255, 0.35),
-    0 0 50px rgba(0, 229, 255, 0.15);
-  box-shadow:
-    inset 0 0 20px rgba(0, 229, 255, 0.06),
-    0 0 15px rgba(0, 229, 255, 0.12),
-    0 0 40px rgba(0, 229, 255, 0.06);
-  animation: signFlicker 6s ease-in-out infinite;
-  will-change: text-shadow, opacity;
+  display: inline-block;
+  font-family: 'Times New Roman', Georgia, serif;
+  font-size: 1.15rem;
+  letter-spacing: 0.5px;
+  color: #cccccc;
+  margin: 0;
+  padding-left: 100%;
+  animation: newsMarquee 35s linear infinite;
+  text-transform: uppercase;
 }
 
-@keyframes signFlicker {
+#presence p:hover {
+  animation-play-state: paused;
+}
 
-  0%,
+@keyframes newsMarquee {
+  0% {
+    transform: translateX(0);
+  }
+
   100% {
-    opacity: 1;
-  }
-
-  18% {
-    opacity: 1;
-  }
-
-  19% {
-    opacity: 0.55;
-  }
-
-  20% {
-    opacity: 1;
-  }
-
-  53% {
-    opacity: 1;
-  }
-
-  54% {
-    opacity: 0.4;
-  }
-
-  55% {
-    opacity: 0.85;
-  }
-
-  56% {
-    opacity: 1;
-  }
-
-  78% {
-    opacity: 1;
-  }
-
-  79% {
-    opacity: 0.6;
-  }
-
-  80% {
-    opacity: 1;
+    transform: translateX(-100%);
   }
 }
 
-@keyframes neonFlicker {
-
-  0%,
-  19%,
-  21%,
-  23%,
-  25%,
-  54%,
-  56%,
-  100% {
-    opacity: 1;
-  }
-
-  20%,
-  24%,
-  55% {
-    opacity: 0.3;
-  }
-}
 
 /* ===============================
    DIALOGUE — SCROLL AREA
@@ -372,8 +305,8 @@ body::after {
 
 #input-container {
   display: flex;
-  align-items: flex-end;
-  /* Align wave button strictly at the bottom */
+  align-items: center;
+  /* Allineamento al baricentro */
   gap: 8px;
   background: transparent;
   border: none;
@@ -886,12 +819,12 @@ body {
    =============================== */
 @media (max-width: 600px) {
   #presence {
-    padding: 0.8rem 0.6rem 0.6rem;
+    padding: 0.3rem 0;
   }
 
   #presence p {
-    font-size: 1.05rem;
-    padding: 0.8rem 1rem;
+    font-size: 1rem;
+    padding-left: 100%;
   }
 
   .message {
