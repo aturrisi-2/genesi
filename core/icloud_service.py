@@ -30,20 +30,20 @@ class ICloudService:
                 log("ICLOUD_AUTH_MISSING", level="ERROR")
                 return None
             try:
-                # iCloud spesso blocca richieste senza un User-Agent credibile
-                import requests
-                session = requests.Session()
-                session.headers.update({
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                })
-
+                # Inizializza client (caldav 2.2.6 potrebbe non accettare requests_session nel costruttore)
                 self._client = caldav.DAVClient(
                     url=self.url,
                     username=self.username,
-                    password=self.password,
-                    proxy=None,
-                    requests_session=session
+                    password=self.password
                 )
+                
+                # Imposta User-Agent per evitare blocchi da iCloud
+                ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+                if hasattr(self._client, 'session'):
+                    self._client.session.headers.update({'User-Agent': ua})
+                elif hasattr(self._client, 'headers'):
+                    self._client.headers.update({'User-Agent': ua})
+                
                 self._principal = self._client.principal()
                 log("ICLOUD_AUTH_SUCCESS")
             except Exception as e:
