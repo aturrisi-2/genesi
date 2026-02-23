@@ -92,18 +92,26 @@ class ICloudService:
             collections = data.get('Collections', [])
             all_reminders = data.get('Reminders', [])
             
-            # Trova GUID della lista target (fuzzy matching)
+            # Trova GUID della lista target
             target_guid = None
-            list_name_lower = list_name.lower()
             
+            # 1. Tentativo: match esatto GUID (ID)
             for c in collections:
-                title = c.get('title', '').lower()
-                if list_name_lower in title or title in list_name_lower:
+                if c.get('guid') == list_name:
                     target_guid = c.get('guid')
                     break
             
+            # 2. Tentativo: fuzzy matching sul nome
+            if not target_guid:
+                list_name_lower = list_name.lower()
+                for c in collections:
+                    title = c.get('title', '').lower()
+                    if list_name_lower in title or title in list_name_lower:
+                        target_guid = c.get('guid')
+                        break
+            
+            # 3. Fallback: Promemoria default
             if not target_guid and collections:
-                # Se non trova match, usa 'Promemoria' o la prima lista
                 for c in collections:
                     if "promemoria" in c.get('title', '').lower():
                         target_guid = c.get('guid')

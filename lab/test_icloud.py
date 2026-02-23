@@ -38,15 +38,16 @@ def test_connection():
     for l in lists:
         print(f"   - {l['name']} (ID: {l['id']})")
 
-    # 2. Prova a leggere i promemoria da TUTTE le liste per trovare dove sono i dati
+    # 2. Prova a leggere i promemoria da TUTTE le liste usando l'ID (GUID)
     print("\n📥 Scansione liste per trovare promemoria...")
     found_any = False
     for l in lists:
         name = l['name']
-        reminders = icloud_service.get_reminders(name)
+        list_id = l['id']
+        reminders = icloud_service.get_reminders(list_id) # Usiamo ID invece del nome
         if reminders:
             found_any = True
-            print(f"✅ Trovati {len(reminders)} promemoria in '{name}':")
+            print(f"✅ Trovati {len(reminders)} promemoria in '{name}' (ID: {list_id}):")
             for r in reminders[:5]:
                 print(f"   - {r['summary']}")
         else:
