@@ -116,21 +116,23 @@ class ICloudService:
                 try:
                     # Nome della lista
                     current_list_name = getattr(calendar, 'name', 'Senza nome')
+                    logger.debug(f"Checking CalDAV calendar: {current_list_name}")
                     
                     # Filtriamo: vogliamo solo calendari che supportano VTODO (Promemoria)
-                    # Nota: alcuni calendari Apple non rinfrescano 'supported_components' correttamente
-                    # Proviamo a chiedere i todo a prescindere, catturando l'errore se non supportati
                     try:
                         todos = calendar.todos(include_completed=False)
-                    except:
+                        logger.debug(f"Found {len(todos)} items in {current_list_name}")
+                    except Exception as e:
                         # Se il calendario non supporta TODO, saltiamo
+                        logger.debug(f"Calendar {current_list_name} does not support items: {e}")
                         continue
                     
                     for todo in todos:
                         try:
                             # Parsing data iCalendar
                             v = readOne(todo.data)
-                            task = v.vtodo
+                            task = getattr(v, 'vtodo', None)
+                            if not task: continue
                             
                             summary = str(task.summary.value) if hasattr(task, 'summary') else "Senza titolo"
                             guid = str(task.uid.value) if hasattr(task, 'uid') else None
@@ -149,10 +151,11 @@ class ICloudService:
                                 "due": due_iso,
                                 "list": current_list_name
                             })
-                        except Exception:
+                        except Exception as e:
+                            logger.debug(f"Error parsing task in {current_list_name}: {e}")
                             continue
                 except Exception as cal_err:
-                    logger.debug(f"Errore scansione calendario {calendar}: {cal_err}")
+                    log("ICLOUD_CALDAV_CAL_ERROR", calendar=str(calendar), error=str(cal_err), level="DEBUG")
                     continue
 
             log("ICLOUD_CALDAV_SYNC_SUCCESS", count=len(all_reminders), user=self.username)
