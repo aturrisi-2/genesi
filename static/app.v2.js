@@ -2986,6 +2986,138 @@ if ('serviceWorker' in navigator) {
     });
 }
 
+// ===============================
+// ICLOUD INTEGRATION SYSTEM
+// ===============================
+const icloudModal = document.getElementById('icloud-modal');
+const icloudBtn = document.getElementById('icloud-sync-btn');
+const icloudStatusArea = document.getElementById('icloud-status-area');
+const icloudSetupForm = document.getElementById('icloud-setup-form');
+const icloud2FAForm = document.getElementById('icloud-2fa-form');
+const icloudActiveActions = document.getElementById('icloud-active-actions');
+
+if (icloudBtn) {
+  icloudBtn.addEventListener('click', () => {
+    icloudModal.classList.remove('hidden');
+    refreshICloudStatus();
+  });
+}
+
+const closeModalBtn = icloudModal ? icloudModal.querySelector('.close-modal') : null;
+if (closeModalBtn) {
+  closeModalBtn.addEventListener('click', () => icloudModal.classList.add('hidden'));
+}
+
+async function refreshICloudStatus() {
+  if (!icloudStatusArea) return;
+  icloudStatusArea.innerHTML = '<p>Controllo stato...</p>';
+  icloudSetupForm.classList.add('hidden');
+  icloud2FAForm.classList.add('hidden');
+  icloudActiveActions.classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/proactor/icloud/status', { headers: authHeaders() });
+    const data = await res.json();
+
+    if (!data.configured) {
+      icloudStatusArea.innerHTML = '<p>Non ancora collegato a iCloud.</p>';
+      icloudSetupForm.classList.remove('hidden');
+    } else if (data.needs_2fa) {
+      icloudStatusArea.innerHTML = `<p>Collegato come <b>${data.email}</b>, ma richiede verifica 2FA.</p>`;
+      icloud2FAForm.classList.remove('hidden');
+    } else if (data.verified) {
+      icloudStatusArea.innerHTML = `<p>✅ iCloud attivo: <b>${data.email}</b></p>`;
+      if (data.last_sync) {
+        icloudStatusArea.innerHTML += `<p style="font-size:0.8rem; color:#888;">Ultima sincronizzazione: ${new Date(data.last_sync * 1000).toLocaleString()}</p>`;
+      }
+      icloudActiveActions.classList.remove('hidden');
+    } else {
+      icloudStatusArea.innerHTML = `<p>Account <b>${data.email}</b> non verificato.</p>`;
+      icloudSetupForm.classList.remove('hidden');
+    }
+  } catch (e) {
+    icloudStatusArea.innerHTML = '<p class="error">Errore nel caricamento dello stato.</p>';
+  }
+}
+
+const saveICloudBtn = document.getElementById('save-icloud-btn');
+if (saveICloudBtn) {
+  saveICloudBtn.addEventListener('click', async () => {
+    const email = document.getElementById('icloud-email').value;
+    const password = document.getElementById('icloud-password').value;
+    if (!email || !password) return alert("Inserisci email e password.");
+
+    saveICloudBtn.disabled = true;
+    saveICloudBtn.innerText = "Connessione...";
+
+    try {
+      const res = await fetch('/api/proactor/icloud/setup', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (data.status === 'ok') {
+        refreshICloudStatus();
+      } else {
+        alert("Errore durante il setup.");
+      }
+    } catch (e) {
+      alert("Si è verificato un errore.");
+    } finally {
+      saveICloudBtn.disabled = false;
+      saveICloudBtn.innerText = "Collega Account";
+    }
+  });
+}
+
+const verify2FABtn = document.getElementById('verify-2fa-btn');
+if (verify2FABtn) {
+  verify2FABtn.addEventListener('click', async () => {
+    const code = document.getElementById('icloud-2fa-code').value;
+    if (!code) return alert("Inserisci il codice.");
+
+    verify2FABtn.disabled = true;
+    try {
+      const res = await fetch('/api/proactor/icloud/2fa', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ code })
+      });
+      const data = await res.json();
+      if (data.status === 'ok') {
+        alert("Sincronizzazione attivata!");
+        refreshICloudStatus();
+      } else {
+        alert(data.message || "Errore durante la verifica.");
+      }
+    } catch (e) {
+      alert("Errore di rete.");
+    } finally {
+      verify2FABtn.disabled = false;
+    }
+  });
+}
+
+const manualSyncBtn = document.getElementById('manual-sync-btn');
+if (manualSyncBtn) {
+  manualSyncBtn.addEventListener('click', async () => {
+    manualSyncBtn.disabled = true;
+    manualSyncBtn.innerText = "Sincronizzazione...";
+    try {
+      const res = await fetch('/api/proactor/icloud/sync', { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      alert(`Sincronizzazione completata! ${data.count} nuovi promemoria trovati.`);
+      refreshICloudStatus();
+    } catch (e) {
+      alert("Errore durante la sincronizzazione.");
+    } finally {
+      manualSyncBtn.disabled = false;
+      manualSyncBtn.innerText = "Sincronizza Ora";
+    }
+  });
+}
+
 // ── Push Notifications — richiesta permesso e subscription ──
 ; (function initPushNotifications() {
   'use strict';
@@ -2996,138 +3128,6 @@ if ('serviceWorker' in navigator) {
   }
 
   console.log('[PUSH] Supportato, registro handlers...');
-
-  // ===============================
-  // ICLOUD INTEGRATION SYSTEM
-  // ===============================
-  const icloudModal = document.getElementById('icloud-modal');
-  const icloudBtn = document.getElementById('icloud-sync-btn');
-  const icloudStatusArea = document.getElementById('icloud-status-area');
-  const icloudSetupForm = document.getElementById('icloud-setup-form');
-  const icloud2FAForm = document.getElementById('icloud-2fa-form');
-  const icloudActiveActions = document.getElementById('icloud-active-actions');
-
-  if (icloudBtn) {
-    icloudBtn.addEventListener('click', () => {
-      icloudModal.classList.remove('hidden');
-      refreshICloudStatus();
-    });
-  }
-
-  const closeModalBtn = icloudModal ? icloudModal.querySelector('.close-modal') : null;
-  if (closeModalBtn) {
-    closeModalBtn.addEventListener('click', () => icloudModal.classList.add('hidden'));
-  }
-
-  async function refreshICloudStatus() {
-    if (!icloudStatusArea) return;
-    icloudStatusArea.innerHTML = '<p>Controllo stato...</p>';
-    icloudSetupForm.classList.add('hidden');
-    icloud2FAForm.classList.add('hidden');
-    icloudActiveActions.classList.add('hidden');
-
-    try {
-      const res = await fetch('/api/proactor/icloud/status', { headers: authHeaders() });
-      const data = await res.json();
-
-      if (!data.configured) {
-        icloudStatusArea.innerHTML = '<p>Non ancora collegato a iCloud.</p>';
-        icloudSetupForm.classList.remove('hidden');
-      } else if (data.needs_2fa) {
-        icloudStatusArea.innerHTML = `<p>Collegato come <b>${data.email}</b>, ma richiede verifica 2FA.</p>`;
-        icloud2FAForm.classList.remove('hidden');
-      } else if (data.verified) {
-        icloudStatusArea.innerHTML = `<p>✅ iCloud attivo: <b>${data.email}</b></p>`;
-        if (data.last_sync) {
-          icloudStatusArea.innerHTML += `<p style="font-size:0.8rem; color:#888;">Ultima sincronizzazione: ${new Date(data.last_sync).toLocaleString()}</p>`;
-        }
-        icloudActiveActions.classList.remove('hidden');
-      } else {
-        icloudStatusArea.innerHTML = `<p>Account <b>${data.email}</b> non verificato.</p>`;
-        icloudSetupForm.classList.remove('hidden');
-      }
-    } catch (e) {
-      icloudStatusArea.innerHTML = '<p class="error">Errore nel caricamento dello stato.</p>';
-    }
-  }
-
-  const saveICloudBtn = document.getElementById('save-icloud-btn');
-  if (saveICloudBtn) {
-    saveICloudBtn.addEventListener('click', async () => {
-      const email = document.getElementById('icloud-email').value;
-      const password = document.getElementById('icloud-password').value;
-      if (!email || !password) return alert("Inserisci email e password.");
-
-      saveICloudBtn.disabled = true;
-      saveICloudBtn.innerText = "Connessione...";
-
-      try {
-        const res = await fetch('/api/proactor/icloud/setup', {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify({ email, password })
-        });
-        const data = await res.json();
-        if (data.status === 'ok') {
-          refreshICloudStatus();
-        } else {
-          alert("Errore durante il setup.");
-        }
-      } catch (e) {
-        alert("Si è verificato un errore.");
-      } finally {
-        saveICloudBtn.disabled = false;
-        saveICloudBtn.innerText = "Collega Account";
-      }
-    });
-  }
-
-  const verify2FABtn = document.getElementById('verify-2fa-btn');
-  if (verify2FABtn) {
-    verify2FABtn.addEventListener('click', async () => {
-      const code = document.getElementById('icloud-2fa-code').value;
-      if (!code) return alert("Inserisci il codice.");
-
-      verify2FABtn.disabled = true;
-      try {
-        const res = await fetch('/api/proactor/icloud/2fa', {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify({ code })
-        });
-        const data = await res.json();
-        if (data.status === 'ok') {
-          alert("Sincronizzazione attivata!");
-          refreshICloudStatus();
-        } else {
-          alert(data.message || "Errore durante la verifica.");
-        }
-      } catch (e) {
-        alert("Errore di rete.");
-      } finally {
-        verify2FABtn.disabled = false;
-      }
-    });
-  }
-
-  const manualSyncBtn = document.getElementById('manual-sync-btn');
-  if (manualSyncBtn) {
-    manualSyncBtn.addEventListener('click', async () => {
-      manualSyncBtn.disabled = true;
-      manualSyncBtn.innerText = "Sincronizzazione...";
-      try {
-        const res = await fetch('/api/proactor/icloud/sync', { method: 'POST', headers: authHeaders() });
-        const data = await res.json();
-        alert(`Sincronizzazione completata! ${data.count} nuovi promemoria trovati.`);
-        refreshICloudStatus();
-      } catch (e) {
-        alert("Errore durante la sincronizzazione.");
-      } finally {
-        manualSyncBtn.disabled = false;
-        manualSyncBtn.innerText = "Sincronizza Ora";
-      }
-    });
-  }
 
   async function getVapidKey() {
     const resp = await fetch('/api/push/vapid-public-key');
