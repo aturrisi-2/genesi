@@ -66,7 +66,7 @@ class ICloudService:
             return []
 
     def get_reminders(self, list_name: str = "Reminders") -> List[Dict[str, Any]]:
-        """Recupera i promemoria da una lista specifica con fallback intelligente."""
+        """Recupera i promemoria con massima resilienza per iCloud (evita 500)."""
         client = self._get_client()
         if not client or not self._principal:
             return []
@@ -75,13 +75,12 @@ class ICloudService:
             calendars = self._principal.calendars()
             target_list = None
             
-            # 1. Cerca per nome esatto (case insensitive)
+            # Identificazione lista (come prima)
             for cal in calendars:
                 if cal.name and cal.name.lower() == list_name.lower():
                     target_list = cal
                     break
             
-            # 2. Fallback: Cerca per keyword nel nome (se list_name è Reminders/Promemoria)
             if not target_list and list_name.lower() in ["reminders", "promemoria"]:
                 for cal in calendars:
                     name = (cal.name or "").lower()
@@ -89,7 +88,6 @@ class ICloudService:
                         target_list = cal
                         break
             
-            # 3. Fallback estremo: cerca "tasks" nell'URL
             if not target_list:
                 for cal in calendars:
                     if "/tasks/" in str(cal.url).lower():
@@ -102,44 +100,53 @@ class ICloudService:
 
             log("ICLOUD_LIST_SELECTED", name=target_list.name)
             
-            # Prova diversi metodi di fetch perché i server Apple possono dare 500 su query massive
+            # FETCHING STRATEGY
+            # iCloud 500 spesso capita su query troppo ampie.
+            # Proviamo in ordine di "sicurezza"
             todos = []
+            
+            # Metodo A: fetch_todos (nuova API caldav)
             try:
-                # Metodo 1: Search filtrato (carico minore sul server)
-                # include_completed=False spesso evita il 500 se ci sono migliaia di task vecchi
+                log("ICLOUD_FETCH_TRY", method="fetch_todos")
                 todos = target_list.search(todo=True, include_completed=False)
-                log("ICLOUD_FETCH_METHOD", method="search_filtered", count=len(todos))
             except Exception as e:
-                log("ICLOUD_SEARCH_ERROR", error=str(e), level="WARNING")
+                log("ICLOUD_A_FAILED", error=str(e))
+                # Metodo B: children (più grezzo, evita filtri lato server che crashano)
                 try:
-                    # Metodo 2: Search totale
-                    todos = target_list.search(todo=True)
-                    log("ICLOUD_FETCH_METHOD", method="search_full", count=len(todos))
+                    log("ICLOUD_FETCH_TRY", method="children")
+                    # Recuperiamo tutti gli oggetti e filtriamo in locale
+                    all_objects = target_list.children()
+                    todos = [obj for obj in all_objects if "VTODO" in obj.data]
                 except Exception as e2:
-                    log("ICLOUD_SEARCH_FULL_ERROR", error=str(e2), level="WARNING")
+                    log("ICLOUD_B_FAILED", error=str(e2))
+                    # Metodo C: todos() classico
                     try:
-                        # Metodo 3: todos() (fallback classico)
+                        log("ICLOUD_FETCH_TRY", method="todos_legacy")
                         todos = target_list.todos()
-                        log("ICLOUD_FETCH_METHOD", method="todos", count=len(todos))
                     except Exception as e3:
-                        log("ICLOUD_TODOS_ERROR", error=str(e3), level="ERROR")
+                        log("ICLOUD_C_FAILED", error=str(e3), level="ERROR")
                         return []
 
             reminders = []
             for todo in todos:
                 try:
-                    # Carica i dati se non presenti
+                    # Forza caricamento dati se necessario
                     if not hasattr(todo, 'vobject_instance') or todo.vobject_instance is None:
                         todo.load()
                     
                     vobj = todo.vobject_instance.vtodo
+                    
+                    # Filtro locale per escludere completati se non già filtrati
+                    status = vobj.status.value.lower() if hasattr(vobj, 'status') else "unknown"
+                    if status == "completed":
+                        continue
+
                     reminders.append({
                         "summary": vobj.summary.value if hasattr(vobj, 'summary') else "Senza titolo",
-                        "status": vobj.status.value if hasattr(vobj, 'status') else "unknown",
+                        "status": status,
                         "due": vobj.due.value.isoformat() if hasattr(vobj, 'due') else None,
                     })
-                except Exception as e:
-                    # Salta eventuali task corrotti
+                except Exception:
                     continue
             
             log("ICLOUD_REMINDERS_FETCH", count=len(reminders), list=target_list.name)
