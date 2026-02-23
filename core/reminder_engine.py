@@ -145,6 +145,12 @@ class ReminderEngine:
             log("ICLOUD_SERVICE_GET_ERROR", user_id=user_id, error=str(e))
             return None
 
+    async def create_icloud_reminder(self, user_id: str, text: str, due_dt: datetime) -> bool:
+        """Pushes a new reminder to iCloud."""
+        svc = await self._get_icloud_service(user_id)
+        if not svc: return False
+        return svc.create_reminder(text, due_dt, list_name="Promemoria")
+
     async def fetch_icloud_reminders(self, user_id: str, list_name: str = "Promemoria", force: bool = False) -> List[Dict[str, Any]]:
         """
         Fetch reminders from iCloud and MERGE them into local storage.

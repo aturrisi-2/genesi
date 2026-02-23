@@ -1,29 +1,14 @@
 """
 ICLOUD SERVICE - Genesi Core
-Integrazione con iCloud Reminders via PyiCloud (Web API).
-Include monkeypatch per riparare le date malformate di Apple.
+Integrazione con iCloud Reminders via CalDAV protocol.
+Supporta fetch ottimizzato e creazione promemoria.
 """
 
 import os
 import logging
 import datetime
-import json
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-from core.log import log
-from pyicloud import PyiCloudService
-
-logger = logging.getLogger(__name__)
-
-# --- RIMOZIONE PATCH GLOBALE ---
-# La patch globale è stata rimossa perché causava incompatibilità con SQLAlchemy/SQLite.
-# La riparazione delle date viene ora gestita localmente nei metodi di fetch.
-# ------------------------------
-
-import os
-import logging
-import datetime
 import caldav
+import uuid
 from vobject import readOne
 from typing import List, Dict, Any, Optional
 from core.log import log
@@ -83,8 +68,7 @@ class ICloudService:
     def get_reminders(self, list_name: str = "Reminders") -> List[Dict[str, Any]]:
         """
         Recupera i promemoria da tutte le liste di iCloud usando CalDAV.
-        Evita le richieste 'REPORT' (REPORT/calendar-query) che spesso danno errore 500 su Apple,
-        preferendo una scansione manuale degli oggetti del calendario.
+        Tenta il metodo veloce 'todos()' prima di passare alla scansione manuale.
         """
         if not self.client:
             if not self._connect(): return []
@@ -92,84 +76,51 @@ class ICloudService:
         all_reminders = []
         try:
             principal = self.client.principal()
+            calendars = principal.calendars()
             
-            calendars = []
-            try:
-                calendars = principal.calendars()
-                log("ICLOUD_CALDAV_DISCOVERY", count=len(calendars))
-            except Exception as e:
-                log("ICLOUD_CALDAV_DISCOVERY_WARN", error=str(e))
-                # Fallback manuale se Principal.calendars() fallisce
-                try:
-                    home_set = principal.get_properties([caldav.elements.ical.CalendarHomeSet()])
-                    home_url = home_set.get(caldav.elements.ical.CalendarHomeSet.tag)
-                    if home_url:
-                        calendars = self.client.calendar(url=home_url).children()
-                        log("ICLOUD_CALDAV_DISCOVERY", count=len(calendars), method="manual")
-                except Exception as e2:
-                    log("ICLOUD_CALDAV_DISCOVERY_FATAL", error=str(e2), level="ERROR")
-                    return []
-
             for calendar in calendars:
                 try:
                     name = getattr(calendar, 'name', 'Senza nome')
-                    url = str(calendar.url)
+                    url = str(calendar.url).lower()
                     
-                    if any(x in url.lower() for x in ["inbox", "outbox", "notification"]):
+                    if any(x in url for x in ["inbox", "outbox", "notification"]):
                         continue
 
                     log("ICLOUD_CALDAV_LIST_CHECK", name=name)
                     
-                    # Proviamo prima il metodo "giusto" (todos) con il nuovo User-Agent
+                    # Prova prima il metodo veloce (REPORT)
                     todos = []
                     try:
                         todos = calendar.todos(include_completed=False)
                     except Exception:
-                        pass
-                    
-                    # Se non ha funzionato, proviamo la scansione grezza
-                    if not todos:
-                        try:
-                            all_objs = calendar.objects()
-                            if all_objs:
-                                # Filtriamo manualmente scorrendo la collezione e caricando i dati se mancanti
-                                todos = []
-                                for o in all_objs:
-                                    try:
-                                        # Forza il caricamento se il dato è vuoto (tipico di iCloud)
-                                        d = o.data if hasattr(o, 'data') else ""
-                                        if not d:
-                                            try:
-                                                o.load()
-                                                d = o.data
-                                            except Exception: continue
-                                        
-                                        if d and 'VTODO' in d.upper():
-                                            todos.append(o)
-                                    except Exception:
-                                        continue
-                        except Exception as e:
-                            log("ICLOUD_CALDAV_LIST_SKIP", name=name, error=str(e))
-                            continue
-                    
-                    if not todos:
-                        log("ICLOUD_CALDAV_LIST_EMPTY", name=name)
-                        continue
+                        # Fallback alla scansione manuale
+                        all_objs = calendar.objects()
+                        for o in all_objs:
+                            try:
+                                d = o.data if hasattr(o, 'data') else ""
+                                if not d: 
+                                    o.load()
+                                    d = o.data
+                                if d and 'VTODO' in d.upper():
+                                    todos.append(o)
+                            except Exception: continue
 
-                    log("ICLOUD_CALDAV_LIST_SCAN", name=name, count=len(todos))
-                    
-                    found_count = 0
                     for todo in todos:
                         try:
-                            data = todo.data if hasattr(todo, 'data') else ""
-                            if not data: continue
+                            data = todo.data
+                            if not data or 'VTODO' not in data.upper(): continue
                             
                             v = readOne(data)
                             task = getattr(v, 'vtodo', None)
                             if not task: continue
                             
+                            # FILTRO AGGRESSIVO COMPLETATI (sia STATUS che presenza di data completamento o % 100)
                             status = str(getattr(task, 'status', '')).upper()
-                            if status in ['COMPLETED', 'CANCELLED']:
+                            if status in ['COMPLETED', 'CANCELLED'] or hasattr(task, 'completed'):
+                                continue
+                            
+                            percent = getattr(task, 'percent_complete', None)
+                            if percent and str(percent.value) == "100":
                                 continue
 
                             summary = str(task.summary.value) if hasattr(task, 'summary') else "Senza titolo"
@@ -188,18 +139,8 @@ class ICloudService:
                                 "due": due_iso,
                                 "list": name
                             })
-                            found_count += 1
-                        except Exception:
-                            continue
-                    
-                    if found_count > 0:
-                        log("ICLOUD_CALDAV_LIST_FOUND", name=name, items=found_count)
-                    else:
-                        log("ICLOUD_CALDAV_LIST_NO_TASKS", name=name)
-
-                except Exception as cal_err:
-                    log("ICLOUD_CALDAV_CAL_ERROR", name=name, error=str(cal_err), level="DEBUG")
-                    continue
+                        except Exception: continue
+                except Exception: continue
 
             log("ICLOUD_CALDAV_SYNC_SUCCESS", count=len(all_reminders), user=self.username)
             return all_reminders
@@ -207,6 +148,65 @@ class ICloudService:
         except Exception as e:
             log("ICLOUD_CALDAV_FETCH_ERROR", user=self.username, error=str(e), level="ERROR")
             return []
+
+    def create_reminder(self, text: str, due_dt: Optional[datetime.datetime] = None, list_name: str = "Promemoria") -> bool:
+        """Crea un nuovo promemoria direttamente su iCloud."""
+        if not self.client:
+            if not self._connect(): return False
+            
+        try:
+            principal = self.client.principal()
+            calendars = principal.calendars()
+            
+            # Trova la lista giusta (default: 'Promemoria')
+            target_cal = None
+            for cal in calendars:
+                cal_name = getattr(cal, 'name', '').lower()
+                if list_name.lower() in cal_name:
+                    target_cal = cal
+                    break
+            
+            if not target_cal and calendars:
+                # Cerca una lista generica che non sia di sistema
+                for cal in calendars:
+                    url = str(cal.url).lower()
+                    if not any(x in url for x in ["inbox", "outbox", "notification"]):
+                        target_cal = cal
+                        break
+                
+            if not target_cal: return False
+
+            # Genera UID e timestamp
+            uid = str(uuid.uuid4()).upper()
+            now = datetime.datetime.now().strftime("%Y%m%dT%H%M%SZ")
+            
+            # Formatta iCalendar
+            ical = [
+                "BEGIN:VCALENDAR",
+                "VERSION:2.0",
+                "PRODID:-//Genesi AI//NONSGML v1.0//EN",
+                "BEGIN:VTODO",
+                f"UID:{uid}",
+                f"DTSTAMP:{now}",
+                f"SUMMARY:{text}"
+            ]
+            
+            if due_dt:
+                dt_str = due_dt.strftime("%Y%m%dT%H%M%SZ")
+                ical.append(f"DUE:{dt_str}")
+                ical.append(f"DTSTART:{dt_str}")
+            else:
+                ical.append(f"DTSTART:{now}")
+                
+            ical.append("END:VTODO")
+            ical.append("END:VCALENDAR")
+            
+            target_cal.add_todo("\n".join(ical))
+            log("ICLOUD_REMINDER_CREATED", text=text, list=getattr(target_cal, 'name', 'Unknown'))
+            return True
+        except Exception as e:
+            log("ICLOUD_REMINDER_CREATE_ERROR", error=str(e), level="ERROR")
+            return False
 
 # Istanza globale
 icloud_service = ICloudService()

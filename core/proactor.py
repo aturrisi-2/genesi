@@ -636,33 +636,29 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
     async def _handle_reminder_creation(self, user_id: str, message: str) -> str:
         """
         Handle reminder creation requests with STRICT logic.
-        SOLO se presente orario esplicito (HH:MM) o data esplicita.
-        MAI fallback automatici.
-        Returns: (response_text: str, source: str)
         """
         try:
             # Extract reminder text and datetime from message
             reminder_text, reminder_datetime = self._parse_reminder_request_strict(message)
             
-            # Se manca data o ora → chiedere chiarimento
             if not reminder_datetime:
                 return "Non ho capito quando vuoi che ti ricordi. Prova a dire 'ricordami di [azione] [giorno] alle [ora]'.", "reminder"
             
-            # Se abbiamo datetime ma manca testo → chiedere cosa ricordare
-            if reminder_datetime and not reminder_text:
-                return "Cosa vuoi che ti ricordi?", "reminder"
-            
-            # Caso completo: testo + datetime validi
             if reminder_text and reminder_datetime:
-                # Create the reminder
+                # Creazione LOCALE
                 reminder_id, response = reminder_engine.create_reminder_with_response(user_id, reminder_text, reminder_datetime)
                 
-                if reminder_id:
-                    return response, "reminder"
-                else:
-                    return response, "reminder"
+                # Creazione ICLOUD (se richiesto nel messaggio)
+                if "icloud" in message.lower():
+                    success = await reminder_engine.create_icloud_reminder(user_id, reminder_text, reminder_datetime)
+                    if success:
+                        response = response.replace("Perfetto.", "Perfetto, aggiunto anche su iCloud.")
+                    else:
+                        response += " (Nota: non sono riuscito a scriverlo su iCloud, ma l'ho salvato localmente)."
+                
+                return response, "reminder"
             
-            return "Quando vuoi che te lo ricordi?", "reminder"
+            return "Cosa vuoi che ti ricordi?", "reminder"
                 
         except Exception as e:
             logger.error("REMINDER_CREATION_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
