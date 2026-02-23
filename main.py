@@ -134,14 +134,19 @@ async def reminder_checker_background():
                     try:
                         from core.notification_email import send_reminder_email
                         from auth.database import get_user_by_id
+                        from core.storage import storage
 
                         user = await get_user_by_id(user_id)
                         if user and user.email:
+                            # Tenta di recuperare il nome dal profilo
+                            profile = await storage.load(f"profile:{user_id}", default={})
+                            user_name = profile.get("name", "")
+                            
                             asyncio.create_task(
                                 send_reminder_email(
                                     user_email=user.email,
                                     reminder_text=reminder_text,
-                                    user_name=user.username or ""
+                                    user_name=user_name
                                 )
                             )
                     except Exception as e:
