@@ -81,7 +81,8 @@ class ReminderEngine:
             
             reminders = self._load_reminders(user_id)
             reminders.append(reminder)
-            reminders.sort(key=lambda r: r["datetime"])
+            # Handle None datetimes by putting them at the end
+            reminders.sort(key=lambda r: (r.get("datetime") is None, r.get("datetime")))
             
             if self._save_reminders(user_id, reminders):
                 log("REMINDER_CREATE", user_id=user_id, reminder_id=reminder_id, 
@@ -222,8 +223,8 @@ class ReminderEngine:
             if status_filter:
                 reminders = [r for r in reminders if r.get("status") == status_filter]
             
-            # Sort per data
-            reminders.sort(key=lambda r: r.get("datetime") or "")
+            # Sort per data (None alla fine)
+            reminders.sort(key=lambda r: (r.get("datetime") is None, r.get("datetime") or ""))
             
             log("REMINDER_LIST", user_id=user_id, count=len(reminders), status_filter=status_filter)
             return reminders
