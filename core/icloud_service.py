@@ -4,10 +4,13 @@ Integrazione con iCloud Reminders e Calendar via CalDAV.
 """
 
 import os
+import logging
 import caldav
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from core.log import log
+
+logger = logging.getLogger(__name__)
 
 class ICloudService:
     def __init__(self, username: Optional[str] = None, password: Optional[str] = None, cookie_directory: Optional[str] = None):
