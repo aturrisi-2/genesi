@@ -30,18 +30,25 @@ async def get_icloud_status(user: AuthUser = Depends(require_auth)):
         
         # Se configurato, controlliamo se serve 2FA attualmente
         needs_2fa = False
+        error_msg = None
         if email:
             password = profile.get("icloud_password")
             svc = ICloudService(username=email, password=password, cookie_directory=f"memory/icloud_sessions/{user_id}")
-            api = svc._get_client()
-            if api and api.requires_2fa:
-                needs_2fa = True
+            try:
+                api = svc._get_client()
+                if api and api.requires_2fa:
+                    needs_2fa = True
+                if not api:
+                    error_msg = "Impossibile inizializzare il servizio iCloud."
+            except Exception as e:
+                error_msg = str(e)
         
         return {
             "configured": bool(email),
             "email": email,
             "verified": is_verified,
             "needs_2fa": needs_2fa,
+            "error": error_msg,
             "last_sync": profile.get("last_icloud_sync")
         }
     except Exception as e:
@@ -63,12 +70,18 @@ async def setup_icloud(req: ICloudSetupRequest, user: AuthUser = Depends(require
         
         # Tenta inizializzazione per triggerare eventuale 2FA
         svc = ICloudService(username=req.email, password=req.password, cookie_directory=f"memory/icloud_sessions/{user_id}")
-        api = svc._get_client()
-        
-        return {
-            "status": "ok",
-            "needs_2fa": api.requires_2fa if api else False
-        }
+        try:
+            api = svc._get_client()
+            return {
+                "status": "ok",
+                "needs_2fa": api.requires_2fa if api else False,
+                "error": None if api else "Autenticazione fallita (controlla credenziali o 2FA)."
+            }
+        except Exception as api_e:
+            return {
+                "status": "error",
+                "error": str(api_e)
+            }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

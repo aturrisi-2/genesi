@@ -3019,8 +3019,12 @@ async function refreshICloudStatus() {
     const res = await fetch('/api/proactor/icloud/status', { headers: authHeaders() });
     const data = await res.json();
 
+    if (data.error) {
+      icloudStatusArea.innerHTML = `<p class="warningText">⚠️ ${data.error}</p>`;
+    }
+
     if (!data.configured) {
-      icloudStatusArea.innerHTML = '<p>Non ancora collegato a iCloud.</p>';
+      if (!data.error) icloudStatusArea.innerHTML = '<p>Non ancora collegato a iCloud.</p>';
       icloudSetupForm.classList.remove('hidden');
     } else if (data.needs_2fa) {
       icloudStatusArea.innerHTML = `<p>Collegato come <b>${data.email}</b>, ma richiede verifica 2FA.</p>`;
@@ -3032,7 +3036,7 @@ async function refreshICloudStatus() {
       }
       icloudActiveActions.classList.remove('hidden');
     } else {
-      icloudStatusArea.innerHTML = `<p>Account <b>${data.email}</b> non verificato.</p>`;
+      if (!data.error) icloudStatusArea.innerHTML = `<p>Account <b>${data.email}</b> non verificato.</p>`;
       icloudSetupForm.classList.remove('hidden');
     }
   } catch (e) {
@@ -3058,9 +3062,12 @@ if (saveICloudBtn) {
       });
       const data = await res.json();
       if (data.status === 'ok') {
+        if (data.error) {
+          alert(data.error);
+        }
         refreshICloudStatus();
       } else {
-        alert("Errore durante il setup.");
+        alert(data.error || "Errore durante il setup.");
       }
     } catch (e) {
       alert("Si è verificato un errore.");
