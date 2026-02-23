@@ -94,7 +94,24 @@ class ICloudService:
             # Assicuriamoci che la cartella dei cookie esista
             os.makedirs(self.cookie_directory, exist_ok=True)
             
-            api = PyiCloudService(self.username, self.password, cookie_directory=self.cookie_directory)
+            try:
+                api = PyiCloudService(self.username, self.password, cookie_directory=self.cookie_directory)
+            except Exception as e:
+                # Se fallisce con Service Unavailable o SRP error, proviamo a pulire i cookie e riprovare una volta
+                err_str = str(e).lower()
+                if "service" in err_str or "srp" in err_str or "unavailable" in err_str:
+                    log("ICLOUD_SESSION_CLEANUP", user=self.username, reason="auth_failure_retry")
+                    import shutil
+                    if os.path.exists(self.cookie_directory):
+                        for filename in os.listdir(self.cookie_directory):
+                            file_path = os.path.join(self.cookie_directory, filename)
+                            try:
+                                if os.path.isfile(file_path): os.unlink(file_path)
+                            except: pass
+                    # Secondo tentativo
+                    api = PyiCloudService(self.username, self.password, cookie_directory=self.cookie_directory)
+                else:
+                    raise e
             
             # Se richiede 2FA, logghiamo la necessità
             if api.requires_2fa:
@@ -104,8 +121,11 @@ class ICloudService:
             log("ICLOUD_API_CLIENT_INIT", user=self.username)
             return api
         except Exception as e:
-            log("ICLOUD_API_INIT_ERROR", user=self.username, error=str(e), level="ERROR")
-            return None
+            error_msg = str(e)
+            if "Service Unavailable" in error_msg:
+                error_msg = "Apple ha bloccato la richiesta (Service Unavailable). Riprova tra 5 minuti."
+            log("ICLOUD_API_INIT_ERROR", user=self.username, error=error_msg, level="ERROR")
+            raise Exception(error_msg)
 
     def validate_2fa(self, code: str) -> bool:
         """Valida il codice 2FA inviato dall'utente."""
