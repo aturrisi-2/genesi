@@ -44,17 +44,24 @@ class ICloudService:
             self._connect()
 
     def _connect(self):
-        """Stabilisce la connessione CalDAV usando l'endpoint ufficiale."""
+        """Stabilisce la connessione CalDAV usando l'endpoint ufficiale e un User-Agent credibile."""
         try:
-            # Torniamo all'endpoint ufficiale che almeno permetteva il discovery
             url = "https://caldav.icloud.com"
+            # Importante: Apple blocca o limita i client che non sembrano 'ufficiali' 
+            # o che non dichiarano un User-Agent standard di un dispositivo Apple.
             self.client = caldav.DAVClient(
                 url=url,
                 username=self.username,
                 password=self.password,
                 timeout=30
             )
-            log("ICLOUD_CALDAV_CONNECT", user=self.username, endpoint="standard")
+            # Simuliamo un client iOS/macOS per maggiore stabilità
+            self.client.session.headers.update({
+                'User-Agent': 'iOS/17.0 (21A329) Reminders/1.0',
+                'Accept': 'text/xml',
+                'Prefer': 'return=minimal'
+            })
+            log("ICLOUD_CALDAV_CONNECT", user=self.username, endpoint="standard_masqueraded")
             return True
         except Exception as e:
             log("ICLOUD_CALDAV_CONNECT_ERROR", user=self.username, error=str(e), level="ERROR")
@@ -65,8 +72,6 @@ class ICloudService:
         try:
             if not self.client:
                 if not self._connect(): return False
-            
-            # Tenta di recuperare il principal in modo resiliente
             try:
                 principal = self.client.principal()
                 return principal is not None
@@ -78,7 +83,8 @@ class ICloudService:
     def get_reminders(self, list_name: str = "Reminders") -> List[Dict[str, Any]]:
         """
         Recupera i promemoria da tutte le liste di iCloud usando CalDAV.
-        Usa strategie multiple di fetch per superare gli errori 500 di Apple.
+        Evita le richieste 'REPORT' (REPORT/calendar-query) che spesso danno errore 500 su Apple,
+        preferendo una scansione manuale degli oggetti del calendario.
         """
         if not self.client:
             if not self._connect(): return []
@@ -90,9 +96,10 @@ class ICloudService:
             calendars = []
             try:
                 calendars = principal.calendars()
-                log("ICLOUD_CALDAV_DISCOVERY", count=len(calendars), method="standard")
+                log("ICLOUD_CALDAV_DISCOVERY", count=len(calendars))
             except Exception as e:
                 log("ICLOUD_CALDAV_DISCOVERY_WARN", error=str(e))
+                # Fallback manuale se Principal.calendars() fallisce
                 try:
                     home_set = principal.get_properties([caldav.elements.ical.CalendarHomeSet()])
                     home_url = home_set.get(caldav.elements.ical.CalendarHomeSet.tag)
@@ -106,38 +113,45 @@ class ICloudService:
             for calendar in calendars:
                 try:
                     name = getattr(calendar, 'name', 'Senza nome')
+                    url = str(calendar.url)
+                    
+                    # Ignoriamo i calendari che sembrano palesemente NO-VTODO (es. Compleanni o Inbox)
+                    if "inbox" in url.lower() or "outbox" in url.lower():
+                        continue
+
                     log("ICLOUD_CALDAV_LIST_CHECK", name=name)
                     
-                    todos = []
-                    # Tentativo 1: todos standard
+                    # Invece di calendar.todos(), usiamo objects() che fa un PROPFIND depth 1.
+                    # Questo è molto più tollerato dai server Apple rispetto ai REPORT complessi.
                     try:
-                        # Nota: Alcuni server Apple falliscono con 500 se include_completed è False
-                        # Proviamo prima così, poi senza filtri
-                        todos = calendar.todos(include_completed=False)
-                    except Exception as e1:
-                        # Tentativo 2: query per componenti VTODO
-                        try:
-                            todos = calendar.objects_by_filters(components=['VTODO'])
-                            log("ICLOUD_CALDAV_FALLBACK_OK", name=name, count=len(todos))
-                        except Exception as e2:
-                            log("ICLOUD_CALDAV_LIST_SKIP", name=name, error="500/FetchError")
-                            continue
+                        # Recuperiamo tutti gli oggetti della collezione
+                        objs = calendar.objects()
+                    except Exception as e:
+                        log("ICLOUD_CALDAV_LIST_SKIP", name=name, error=str(e))
+                        continue
                     
-                    if not todos:
+                    if not objs:
                         log("ICLOUD_CALDAV_LIST_EMPTY", name=name)
                         continue
 
-                    log("ICLOUD_CALDAV_LIST_FOUND", name=name, items=len(todos))
-                    
-                    for todo in todos:
+                    found_in_list = 0
+                    for obj in objs:
                         try:
-                            v = readOne(todo.data)
+                            # Otteniamo i dati grezzi iCalendar
+                            data = obj.data
+                            if 'VTODO' not in data:
+                                continue # Non è un promemoria (magari è un evento VEVENT)
+                            
+                            v = readOne(data)
                             task = getattr(v, 'vtodo', None)
                             if not task: continue
                             
-                            # Ignoriamo i già completati (giusto per sicurezza)
+                            # Filtro completati
                             status = str(getattr(task, 'status', '')).upper()
                             if status == 'COMPLETED': continue
+                            
+                            # Filtro cancellati
+                            if status == 'CANCELLED': continue
 
                             summary = str(task.summary.value) if hasattr(task, 'summary') else "Senza titolo"
                             guid = str(task.uid.value) if hasattr(task, 'uid') else None
@@ -155,8 +169,15 @@ class ICloudService:
                                 "due": due_iso,
                                 "list": name
                             })
+                            found_in_list += 1
                         except Exception:
                             continue
+                    
+                    if found_in_list > 0:
+                        log("ICLOUD_CALDAV_LIST_FOUND", name=name, items=found_in_list)
+                    else:
+                        log("ICLOUD_CALDAV_LIST_EMPTY", name=name)
+
                 except Exception as cal_err:
                     log("ICLOUD_CALDAV_CAL_ERROR", error=str(cal_err), level="DEBUG")
                     continue
