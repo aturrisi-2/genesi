@@ -138,43 +138,53 @@ class ICloudService:
             import re
             for target_cal in target_cals:
                 try:
-                    tasks = []
-                    # Fallback Raw Fetch
+                    url_str = str(target_cal.url)
+                    log("ICLOUD_SCANNING_LIST", list=url_str)
+                    
+                    all_objs = []
                     try:
                         all_objs = target_cal.objects()
-                        for obj in all_objs:
-                            try:
-                                raw_data = obj.data
-                                if "VTODO" not in raw_data.upper(): continue
+                        log("ICLOUD_RAW_COUNT", count=len(all_objs), list=url_str)
+                    except Exception as e:
+                        logger.error("ICLOUD_LIST_FETCH_FAIL list=%s error=%s", url_str, str(e))
+                        continue
+
+                    for obj in all_objs:
+                        try:
+                            # OBBLIGHIAMO il caricamento dei dati se non presenti
+                            if not hasattr(obj, 'data') or not obj.data:
+                                obj.load()
                                 
-                                # Estrazione SUMMARY ultra-robusta con Regex
-                                summary = "Senza titolo"
-                                s_match = re.search(r'SUMMARY(?:;[^:]*)?:(.*)', raw_data, re.IGNORECASE)
-                                if s_match:
-                                    summary = s_match.group(1).strip().replace('\\', '')
-                                
-                                # Controllo completato (più tollerante)
-                                is_completed = False
-                                if "STATUS:COMPLETED" in raw_data.upper() or "PERCENT-COMPLETE:100" in raw_data.upper():
-                                    is_completed = True
-                                
-                                log("ICLOUD_REMINDER_FOUND", summary=summary, completed=is_completed, list=str(target_cal.url))
-                                
-                                if not is_completed:
-                                    all_reminders.append({
-                                        "summary": summary,
-                                        "status": "pending",
-                                        "due": None
-                                    })
-                            except: continue
-                    except Exception as raw_err:
-                        logger.error("ICLOUD_RAW_FETCH_FAILED list=%s error=%s", str(target_cal.url), str(raw_err))
+                            raw_data = obj.data
+                            if not raw_data or "VTODO" not in raw_data.upper():
+                                continue
+                            
+                            # Estrazione SUMMARY brutale
+                            summary = "Senza titolo"
+                            s_match = re.search(r'SUMMARY(?:;[^:]*)?:(.*)', raw_data, re.IGNORECASE)
+                            if s_match:
+                                summary = s_match.group(1).strip().replace('\\', '')
+                            
+                            # Per ora prendiamo TUTTO, non filtriamo i completati per essere sicuri
+                            is_completed = "STATUS:COMPLETED" in raw_data.upper() or "PERCENT-COMPLETE:100" in raw_data.upper()
+                            
+                            log("ICLOUD_REMINDER_EXTRACTED", summary=summary, completed=is_completed)
+                            
+                            # Inseriamo nei risultati (anche se completati per prova)
+                            all_reminders.append({
+                                "summary": summary,
+                                "status": "pending",
+                                "due": None
+                            })
+                        except Exception as obj_err:
+                            logger.debug("ICLOUD_OBJ_RECOVERY_FAIL error=%s", str(obj_err))
+                            continue
 
                 except Exception as e:
-                    logger.warning("ICLOUD_LIST_SKIP list=%s error=%s", str(target_cal.url), str(e))
+                    logger.warning("ICLOUD_LIST_SKIP_LOOP list=%s error=%s", str(target_cal.url), str(e))
                     continue
                 
-            log("ICLOUD_CALDAV_REMINDERS_FETCH", count=len(all_reminders), user=self.username)
+            log("ICLOUD_SYNC_FINAL_COUNT", count=len(all_reminders), user=self.username)
             return all_reminders
                 
         except Exception as e:
