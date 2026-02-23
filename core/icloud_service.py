@@ -141,45 +141,53 @@ class ICloudService:
             all_reminders = []
             for target_cal in target_cals:
                 try:
-                    # Tentativo 1: Metodo standard .todos() (usa REPORT con filtri)
                     tasks = []
+                    # Tentativo 1: Metodo standard .todos()
                     try:
                         tasks = target_cal.todos()
-                    except Exception as e:
-                        logger.warning("ICLOUD_TODO_REPORT_FAIL list=%s, trying fallback fetch-all", str(target_cal.url))
-                        # Tentativo 2: Scarica TUTTO il contenuto della lista e filtra in memoria
-                        # Questo bypassa il bug del server 500 sui filtri REPORT
+                    except Exception:
+                        # Tentativo 2: Scarica TUTTI gli oggetti grezzi
+                        # Apple vaak 500-errors op REPORT queries con filtri, ma OK su PROPFIND/GET base
+                        log("ICLOUD_FALLBACK_RAW_FETCH", list=str(target_cal.url))
                         try:
-                            # .objects() scarica i metadati di tutto (eventi, todo, ecc)
+                            # .objects() esegue una ricerca meno filtrata degli oggetti nella collezione
                             all_objs = target_cal.objects()
-                            tasks = []
+                            log("ICLOUD_RAW_OBJECTS_FOUND", count=len(all_objs), list=str(target_cal.url))
+                            
                             for obj in all_objs:
-                                # Verifichiamo se è un VTODO scaricando l'istanza se necessario
                                 try:
-                                    if obj.vobject_instance and hasattr(obj.vobject_instance, 'vtodo'):
-                                        tasks.append(obj)
+                                    # Evitiamo di caricare l'intera istanza se possiamo capirlo dal testo
+                                    raw_data = obj.data.upper()
+                                    if "VTODO" in raw_data:
+                                        # Solo se è un TODO carichiamo i dettagli
+                                        if obj.vobject_instance and hasattr(obj.vobject_instance, 'vtodo'):
+                                            tasks.append(obj)
                                 except: continue
-                        except:
-                            logger.error("ICLOUD_FALLBACK_FETCH_ALL_FAIL list=%s", str(target_cal.url))
+                        except Exception as raw_err:
+                            logger.error("ICLOUD_RAW_FETCH_FAILED list=%s error=%s", str(target_cal.url), str(raw_err))
 
                     for task in tasks:
                         try:
-                            if not task.vobject_instance: continue
+                            if not task.vobject_instance or not hasattr(task.vobject_instance, 'vtodo'):
+                                continue
+                            
                             vobj = task.vobject_instance.vtodo
                             
-                            # Filtro completati
+                            # Filtro completati (sia status 'COMPLETED' che proprietà 'completed')
                             status = (getattr(vobj, 'status', None) and vobj.status.value.lower()) or ""
-                            if status in ['completed', 'fatto']: continue
-                            if hasattr(vobj, 'completed'): continue
+                            if status in ['completed', 'fatto', 'completato']: continue
+                            if hasattr(vobj, 'completed') and vobj.completed.value: continue
+                            if hasattr(vobj, 'percent_complete') and vobj.percent_complete.value == 100: continue
                                 
+                            summary = vobj.summary.value if hasattr(vobj, 'summary') else "Senza titolo"
                             all_reminders.append({
-                                "summary": vobj.summary.value if hasattr(vobj, 'summary') else "Senza titolo",
+                                "summary": summary,
                                 "status": "pending",
                                 "due": None
                             })
                         except: continue
                 except Exception as e:
-                    logger.warning("ICLOUD_LIST_SKIP fatal_error=list=%s error=%s", str(target_cal.url), str(e))
+                    logger.warning("ICLOUD_LIST_SKIP list=%s error=%s", str(target_cal.url), str(e))
                     continue
                 
             log("ICLOUD_CALDAV_REMINDERS_FETCH", count=len(all_reminders), user=self.username)
