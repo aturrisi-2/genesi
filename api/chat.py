@@ -56,8 +56,8 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         profile_changed = False
 
         # Cognitive memory: explicit identity fields
-        if decision['persist']:
-            if decision['memory_type'] == 'profile':
+        if decision.get('persist'):
+            if decision.get('memory_type') == 'profile':
                 key = decision['key']
                 val = decision['value']
 

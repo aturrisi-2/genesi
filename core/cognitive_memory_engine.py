@@ -57,7 +57,13 @@ class CognitiveMemoryEngine:
         
         # Check for strong emotional patterns first
         if _is_strong_emotional(message):
-            return {"persist": True}
+            return {
+                "persist": True,
+                "memory_type": "emotional",
+                "key": "emotional_state",
+                "value": message.strip(),
+                "confidence": 0.9
+            }
 
         # Semantic classification using regex
         name_match = re.search(r"mi chiamo (\w+)", message, re.IGNORECASE)
