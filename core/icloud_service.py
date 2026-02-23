@@ -48,22 +48,21 @@ class ICloudService:
         try:
             principal = client.principal()
             
-            # Tentativo 1: Chiediamo solo collezioni che supportano VTODO (Promemoria)
-            # Questo evita di scansionare calendari, indirizzi, ecc. che causano il 500.
+            # Tentativo 1: Standard calendars()
             try:
-                calendars = principal.find_calendars(ctype='todo')
-                if calendars:
-                    log("ICLOUD_CALDAV_DISCOVERY_SUCCESS", count=len(calendars), user=self.username)
-                    return calendars
+                # calendars() restituisce la lista delle collezioni
+                # Se questo dà 500, proveremo find_calendars (se esiste) o discovery manuale
+                cals = principal.calendars()
+                log("ICLOUD_CALDAV_DISCOVERY_SUCCESS", count=len(cals), user=self.username)
+                return cals
             except Exception as e:
-                log("ICLOUD_CALDAV_DISCOVERY_TODO_FAIL", error=str(e), level="WARNING")
-
-            # Tentativo 2: Fallback su ricerca generica ma ultra-protetta
-            try:
-                all_cals = principal.calendars()
-                return [c for c in all_cals if c is not None]
-            except Exception as e:
-                log("ICLOUD_CALDAV_DISCOVERY_GENERIC_FAIL", error=str(e), level="ERROR")
+                log("ICLOUD_CALDAV_DISCOVERY_STD_FAIL", error=str(e), level="WARNING")
+                
+                # Tentativo 2: Usiamo find_calendars su Principal (alcune versioni lo hanno)
+                if hasattr(principal, 'find_calendars'):
+                    try:
+                        return principal.find_calendars(ctype='todo')
+                    except: pass
                 
             return []
         except Exception as e:
@@ -80,14 +79,16 @@ class ICloudService:
             lists = []
             for cal in calendars:
                 try:
-                    # Otteniamo il nome in modo sicuro
+                    # Otteniamo il nome in modo sicuro. iCloud può dare 500 qui su alcune liste.
                     props = cal.get_properties([caldav.elements.dav.DisplayName()])
                     name = props.get('{DAV:}displayname', 'Senza nome')
                     lists.append({
                         "id": str(cal.url),
                         "name": name
                     })
-                except: continue
+                except Exception as e:
+                    # Saltiamo silenziosamente le liste che danno errore (es. cartelle di sistema)
+                    continue
             
             return lists
         except Exception as e:
@@ -103,48 +104,71 @@ class ICloudService:
             calendars = self._get_calendars(client)
             if not calendars: return []
 
-            target_cal = None
+            target_cals = []
             list_name_lower = list_name.lower()
             
-            # 1. Cerca match esatto o parziale nel nome
+            # 1. Filtriamo le liste che sembrano promemoria
             for cal in calendars:
                 try:
-                    props = cal.get_properties([caldav.elements.dav.DisplayName()])
-                    name = (props.get('{DAV:}displayname') or '').lower()
-                    if list_name_lower in name or name in list_name_lower or "reminder" in name or "promemoria" in name:
-                        target_cal = cal
-                        break
+                    # Alcuni cal sono None o inaccessibili
+                    if cal is None: continue
+                    
+                    url_str = str(cal.url).lower()
+                    
+                    # iCloud spesso ha cartelle che non sono veri calendari e danno 500
+                    # Proviamo a leggere il nome, se fallisce la saltiamo
+                    try:
+                        props = cal.get_properties([caldav.elements.dav.DisplayName()])
+                        name = (props.get('{DAV:}displayname') or '').lower()
+                    except:
+                        # Se get_properties fallisce, proviamo solo con l'URL se contiene 'tasks'
+                        name = ""
+                        if 'tasks' not in url_str and 'reminders' not in url_str:
+                            continue
+
+                    # Matcher
+                    if (list_name_lower in name or 
+                        "reminder" in name or 
+                        "promemoria" in name or 
+                        "tasks" in url_str or 
+                        "reminders" in url_str):
+                        target_cals.append(cal)
                 except: continue
             
-            # 2. Se non trovato, usa il primo disponibile che ha dei todo
-            if not target_cal and calendars:
-                target_cal = calendars[0]
+            # Se non abbiamo trovato nulla col nome, usiamo tutte le liste disponibili come fallback
+            if not target_cals:
+                target_cals = [c for c in calendars if c is not None]
 
-            if not target_cal: return []
-
-            # 3. Fetch dei todo con protezione 500
-            try:
-                tasks = target_cal.todos()
-                reminders = []
-                for task in tasks:
-                    try:
-                        vobj = task.vobject_instance.vtodo
-                        status = (getattr(vobj, 'status', None) and vobj.status.value.lower()) or ""
-                        if status == 'completed': continue
-                        if hasattr(vobj, 'completed'): continue
+            all_reminders = []
+            for target_cal in target_cals:
+                # 3. Fetch dei todo con protezione 500 per ogni lista
+                try:
+                    # Usiamo search invece di todos() per essere più precisi
+                    tasks = target_cal.todos()
+                    
+                    for task in tasks:
+                        try:
+                            # vobject_instance può essere None
+                            if not task.vobject_instance: continue
+                            vobj = task.vobject_instance.vtodo
                             
-                        reminders.append({
-                            "summary": vobj.summary.value if hasattr(vobj, 'summary') else "Senza titolo",
-                            "status": "pending",
-                            "due": None
-                        })
-                    except: continue
+                            status = (getattr(vobj, 'status', None) and vobj.status.value.lower()) or ""
+                            if status == 'completed': continue
+                            if hasattr(vobj, 'completed'): continue
+                                
+                            all_reminders.append({
+                                "summary": vobj.summary.value if hasattr(vobj, 'summary') else "Senza titolo",
+                                "status": "pending",
+                                "due": None
+                            })
+                        except: continue
+                except Exception as e:
+                    # Se una lista specifica dà 500, passiamo alla prossima
+                    logger.warning("ICLOUD_LIST_SKIP list=%s error=%s", str(target_cal.url), str(e))
+                    continue
                 
-                log("ICLOUD_CALDAV_REMINDERS_FETCH", count=len(reminders), user=self.username)
-                return reminders
-            except Exception as e:
-                log("ICLOUD_CALDAV_LIST_FETCH_ERROR", list=str(target_cal.url), error=str(e), level="ERROR")
-                return []
+            log("ICLOUD_CALDAV_REMINDERS_FETCH", count=len(all_reminders), user=self.username)
+            return all_reminders
                 
         except Exception as e:
             log("ICLOUD_CALDAV_FETCH_ERROR", user=self.username, error=str(e), level="ERROR")
