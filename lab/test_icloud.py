@@ -22,7 +22,7 @@ from core.icloud_service import icloud_service
 def test_connection():
     print("🔍 Controllo credenziali...")
     user = os.environ.get("ICLOUD_USER")
-    if not user or user == "your_apple_id@icloud.com":
+    if not user:
         print("❌ ICLOUD_USER non configurato nel .env")
         return
 
@@ -34,35 +34,26 @@ def test_connection():
         print("❌ Nessuna lista trovata o errore di autenticazione.")
         return
 
-    print(f"✅ Connessione riuscita! Trovate {len(lists)} liste/calendari:")
+    print(f"✅ Connessione riuscita! Trovate {len(lists)} liste:")
     for l in lists:
         print(f"   - {l['name']} (ID: {l['id']})")
 
-    # 2. Prova a leggere i promemoria (da 'Promemoria', 'Reminders' o prima lista disponibile)
-    default_list = "Promemoria"
-    print(f"\n📥 Recupero promemoria dalla lista '{default_list}'...")
-    reminders = icloud_service.get_reminders(default_list)
-    
-    if reminders:
-        print(f"✅ Trovati {len(reminders)} promemoria (Metodo Discovery):")
-    else:
-        print("ℹ️ Fallito metodo discovery. Tentativo accesso DIRETTO all'URL...")
-        # Proviamo ad accedere direttamente all'URL che abbiamo visto prima
-        try:
-            client = icloud_service._get_client()
-            # Usiamo l'ID esatto visto nel log precedente
-            direct_url = "https://p112-caldav.icloud.com:443/10668443658/calendars/tasks/"
-            print(f"🔗 Tentativo su: {direct_url}")
-            calendar = client.calendar(url=direct_url)
+    # 2. Prova a leggere i promemoria da TUTTE le liste per trovare dove sono i dati
+    print("\n📥 Scansione liste per trovare promemoria...")
+    found_any = False
+    for l in lists:
+        name = l['name']
+        reminders = icloud_service.get_reminders(name)
+        if reminders:
+            found_any = True
+            print(f"✅ Trovati {len(reminders)} promemoria in '{name}':")
+            for r in reminders[:5]:
+                print(f"   - {r['summary']}")
+        else:
+            print(f"ℹ️ Lista '{name}' vuota.")
             
-            # Proviamo a leggere
-            todos = calendar.search(todo=True, include_completed=False)
-            if todos:
-                print(f"✅ FUNZIONA! Trovati {len(todos)} promemoria via URL diretto.")
-            else:
-                print("ℹ️ Lista vuota anche via URL diretto.")
-        except Exception as e:
-            print(f"❌ Errore accesso diretto: {e}")
+    if not found_any:
+        print("\n❌ Nessun promemoria trovato in nessuna lista.")
 
 if __name__ == "__main__":
     test_connection()
