@@ -21,6 +21,12 @@ class ICloudService:
     def _get_client(self):
         """Lazy-init del client CalDAV."""
         if not self._client:
+            # Refresh credentials if not set at init (handle late load_dotenv)
+            if not self.username:
+                self.username = os.environ.get("ICLOUD_USER")
+            if not self.password:
+                self.password = os.environ.get("ICLOUD_PASSWORD")
+
             if not self.username or not self.password:
                 log("ICLOUD_AUTH_MISSING", level="ERROR")
                 return None

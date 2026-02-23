@@ -13,10 +13,11 @@ root_dir = Path(__file__).parent.parent
 sys.path.append(str(root_dir))
 
 from dotenv import load_dotenv
-from core.icloud_service import icloud_service
 
-# Carica variabili d'ambiente
+# Carica variabili d'ambiente PRIMA di importare il servizio
 load_dotenv()
+
+from core.icloud_service import icloud_service
 
 def test_connection():
     print("🔍 Controllo credenziali...")
