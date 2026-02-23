@@ -4,6 +4,12 @@ Architettura: Chat libera (Qwen) vs Tecnica (GPT) con Proactor
 1 intent → 1 funzione con orchestratore centrale
 """
 
+import os
+from dotenv import load_dotenv
+
+# Carica variabili d'ambiente IMMEDIATAMENTE (prima degli import che le usano)
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
