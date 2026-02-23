@@ -43,10 +43,11 @@ class PatchedDatetime(original_datetime):
             if len(new_args) > 5 and (new_args[5] < 0 or new_args[5] > 59): new_args[5] = 0
 
         try:
-            return original_datetime.__new__(cls, *tuple(new_args), **kwargs)
+            # IMPORTANTE: Ritorniamo un'istanza della classe ORIGINALE
+            # Questo evita errori di tipo in librerie come SQLAlchemy/SQLite
+            return original_datetime.__new__(original_datetime, *tuple(new_args), **kwargs)
         except:
-            # Fallback estremo se ancora fallisce
-            return original_datetime.__new__(cls, 2024, 1, 1)
+            return original_datetime.__new__(original_datetime, 2024, 1, 1)
 
 class PatchedDate(original_date):
     def __new__(cls, *args, **kwargs):
@@ -64,9 +65,9 @@ class PatchedDate(original_date):
                 else:
                     new_args = [y, m, d]
         try:
-            return original_date.__new__(cls, *tuple(new_args), **kwargs)
+            return original_date.__new__(original_date, *tuple(new_args), **kwargs)
         except:
-            return original_date.__new__(cls, 2024, 1, 1)
+            return original_date.__new__(original_date, 2024, 1, 1)
 
 # Applica la patch globale all'interno del processo Genesi
 datetime.datetime = PatchedDatetime
