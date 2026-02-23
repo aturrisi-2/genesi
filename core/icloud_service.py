@@ -108,32 +108,39 @@ class ICloudService:
             calendars = self._get_calendars(client)
             if not calendars: return []
 
-            # 1. Prendiamo TUTTE le liste
+            # 1. Prendiamo tutte le liste
             target_cals = [c for c in calendars if c is not None]
             log("ICLOUD_FULL_SCAN_START", list_count=len(target_cals))
 
             all_reminders = []
             for target_cal in target_cals:
+                url_str = str(target_cal.url).lower()
                 display_name = "Sconosciuta"
-                url_str = str(target_cal.url)
                 try:
                     props = target_cal.get_properties([caldav.elements.dav.DisplayName()])
                     display_name = props.get('{DAV:}displayname', 'Senza nome')
                 except: pass
                 
+                # OTTIMIZZAZIONE: Saltiamo la lista "Calendar" che di solito ha centinaia di eventi e 0 todo
+                if "calendar" in display_name.lower() or "/calendars/4240634c" in url_str:
+                    log("ICLOUD_SKIP_CALENDAR", name=display_name)
+                    continue
+
                 try:
+                    # PROVA 1: Ricerca specifica per TODO (molto più veloce)
                     all_objs = []
                     try:
-                        all_objs = target_cal.objects()
-                    except Exception as e:
-                        logger.error("ICLOUD_LIST_FETCH_ERR name=%s url=%s err=%s", display_name, url_str, str(e))
-                        continue
-
-                    # Logghiamo comunque la scansione, anche se 0 oggetti
-                    log("ICLOUD_SCANNING_LIST", name=display_name, count=len(all_objs), url=url_str)
+                        all_objs = target_cal.search(todo=True)
+                    except:
+                        # PROVA 2: Fallback su oggetti grezzi se la ricerca fallisce (es. errore 500)
+                        try:
+                            all_objs = target_cal.objects()
+                        except: continue
 
                     if not all_objs:
                         continue
+
+                    log("ICLOUD_SCANNING_LIST", name=display_name, count=len(all_objs))
 
                     for obj in all_objs:
                         try:
@@ -150,7 +157,7 @@ class ICloudService:
                             if s_match:
                                 summary = s_match.group(1).strip().replace('\\', '')
                             
-                            # Filtro completati intelligente
+                            # Filtro completati
                             raw_upper = raw_data.upper()
                             is_completed = ("STATUS:COMPLETED" in raw_upper or 
                                           "PERCENT-COMPLETE:100" in raw_upper or
@@ -163,15 +170,8 @@ class ICloudService:
                                     "status": "pending",
                                     "due": None
                                 })
-                            else:
-                                # Log leggero per i completati solo se sospetti
-                                pass
-                        except Exception as e:
-                            logger.debug("ICLOUD_ITEM_LOAD_ERR err=%s", str(e))
-                            continue
-                except Exception as e:
-                    logger.error("ICLOUD_LIST_CRITICAL_ERR name=%s err=%s", display_name, str(e))
-                    continue
+                        except: continue
+                except: continue
                 
             log("ICLOUD_SYNC_FINAL_SUCCESS", count=len(all_reminders), user=self.username)
             return all_reminders
