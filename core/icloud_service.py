@@ -113,45 +113,45 @@ class ICloudService:
             # 1. Filtriamo le liste che sembrano promemoria
             for cal in calendars:
                 try:
-                    # Alcuni cal sono None o inaccessibili
                     if cal is None: continue
+                    url_str = str(cal.url)
                     
-                    url_str = str(cal.url).lower()
-                    
-                    # iCloud spesso ha cartelle che non sono veri calendari e danno 500
-                    # Proviamo a leggere il nome, se fallisce la saltiamo
+                    name = "Sconosciuta"
                     try:
                         props = cal.get_properties([caldav.elements.dav.DisplayName()])
-                        name = (props.get('{DAV:}displayname') or '').lower()
-                    except:
-                        # Se get_properties fallisce, proviamo solo con l'URL se contiene 'tasks'
-                        name = ""
-                        if 'tasks' not in url_str and 'reminders' not in url_str:
-                            continue
+                        name = props.get('{DAV:}displayname', 'Senza nome')
+                    except: pass
+                    
+                    log("ICLOUD_CALDAV_LIST_DISCOVERED", name=name, url=url_str, user=self.username)
 
-                    # Matcher
-                    if (list_name_lower in name or 
-                        "reminder" in name or 
-                        "promemoria" in name or 
-                        "tasks" in url_str or 
-                        "reminders" in url_str):
+                    # Matcher migliorato
+                    name_l = name.lower()
+                    url_l = url_str.lower()
+                    if (list_name_lower in name_l or 
+                        "reminder" in name_l or 
+                        "promemoria" in name_l or 
+                        "task" in url_l or 
+                        "reminder" in url_l):
                         target_cals.append(cal)
                 except: continue
             
-            # Se non abbiamo trovato nulla col nome, usiamo tutte le liste disponibili come fallback
             if not target_cals:
                 target_cals = [c for c in calendars if c is not None]
 
             all_reminders = []
             for target_cal in target_cals:
-                # 3. Fetch dei todo con protezione 500 per ogni lista
                 try:
-                    # Usiamo search invece di todos() per essere più precisi
-                    tasks = target_cal.todos()
-                    
+                    # Prova 1: Metodo standard .todos()
+                    try:
+                        tasks = target_cal.todos()
+                    except Exception as e:
+                        # Prova 2: Se dà 500, proviamo a chiedere i compiti in modo più grezzo (senza filtri)
+                        # Molti server Apple 500ano se chiedi filtri ma accettano search base
+                        logger.warning("ICLOUD_STD_TODO_FAIL list=%s, trying fallback search", str(target_cal.url))
+                        tasks = target_cal.search(compfilter='VTODO')
+
                     for task in tasks:
                         try:
-                            # vobject_instance può essere None
                             if not task.vobject_instance: continue
                             vobj = task.vobject_instance.vtodo
                             
@@ -166,7 +166,6 @@ class ICloudService:
                             })
                         except: continue
                 except Exception as e:
-                    # Se una lista specifica dà 500, passiamo alla prossima
                     logger.warning("ICLOUD_LIST_SKIP list=%s error=%s", str(target_cal.url), str(e))
                     continue
                 
