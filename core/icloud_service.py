@@ -115,45 +115,42 @@ class ICloudService:
                     name = getattr(calendar, 'name', 'Senza nome')
                     url = str(calendar.url)
                     
-                    # Ignoriamo i calendari di sistema che non contengono mai promemoria
-                    if any(x in url.lower() for x in ["inbox", "outbox", "notification"]):
+                    # Salta calendari di sistema palesi
+                    if any(x in url.lower() for x in ["inbox", "outbox", "notification", "tasks"]):
                         continue
 
                     log("ICLOUD_CALDAV_LIST_CHECK", name=name)
                     
-                    todos = []
-                    # Tentativo 1: Ricerca specifica per componenti (più "leggera" del REPORT completo)
+                    # Strategia: Scarichiamo TUTTI gli oggetti della lista. 
+                    # Spesso iCloud non filtra bene i VTODO lato server, quindi filtriamo noi.
                     try:
-                        todos = calendar.search(comp_class='VTODO')
-                    except Exception:
-                        # Tentativo 2: Metodo standard CalDAV
-                        try:
-                            todos = calendar.todos(include_completed=False)
-                        except Exception:
-                            # Tentativo 3: Scansione oggetti (già provata, ma la teniamo come ultima spiaggia)
-                            try:
-                                all_objs = calendar.objects()
-                                todos = [o for o in all_objs if 'VTODO' in (o.data or '')]
-                            except Exception:
-                                log("ICLOUD_CALDAV_LIST_SKIP", name=name, error="All methods failed")
-                                continue
+                        all_objs = calendar.objects()
+                    except Exception as e:
+                        log("ICLOUD_CALDAV_LIST_SKIP", name=name, error=str(e))
+                        continue
                     
-                    if not todos:
+                    if not all_objs:
                         log("ICLOUD_CALDAV_LIST_EMPTY", name=name)
                         continue
 
+                    log("ICLOUD_CALDAV_LIST_SCAN", name=name, total_objects=len(all_objs))
+                    
                     found_count = 0
-                    for todo in todos:
+                    for obj in all_objs:
                         try:
-                            # Otteniamo i dati iCalendar
-                            data = todo.data if hasattr(todo, 'data') else ""
-                            if not data: continue
+                            # Otteniamo i dati grezzi
+                            data = obj.data if hasattr(obj, 'data') else ""
+                            if not data or 'VTODO' not in data.upper():
+                                continue # Non è un promemoria
+                            
+                            # Logghiamo il ritrovamento per debug
+                            log("ICLOUD_RAW_OBJ_FOUND", list=name, length=len(data), level="DEBUG")
                             
                             v = readOne(data)
                             task = getattr(v, 'vtodo', None)
                             if not task: continue
                             
-                            # Filtriamo i completati manualmente per essere sicuri
+                            # Filtriamo i completati/cancellati
                             status = str(getattr(task, 'status', '')).upper()
                             if status in ['COMPLETED', 'CANCELLED']:
                                 continue
@@ -181,7 +178,7 @@ class ICloudService:
                     if found_count > 0:
                         log("ICLOUD_CALDAV_LIST_FOUND", name=name, items=found_count)
                     else:
-                        log("ICLOUD_CALDAV_LIST_EMPTY", name=name)
+                        log("ICLOUD_CALDAV_LIST_NO_TASKS", name=name)
 
                 except Exception as cal_err:
                     log("ICLOUD_CALDAV_CAL_ERROR", name=name, error=str(cal_err), level="DEBUG")
