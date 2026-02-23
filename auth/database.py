@@ -12,8 +12,20 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 
 
 async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    import asyncio
+    retries = 5
+    while retries > 0:
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            return
+        except Exception as e:
+            if "locked" in str(e).lower() and retries > 1:
+                print(f"[DB] Database locked, retrying in 2s... ({retries-1} left)")
+                await asyncio.sleep(2)
+                retries -= 1
+            else:
+                raise e
 
 
 async def get_db() -> AsyncSession:
