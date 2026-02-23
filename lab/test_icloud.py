@@ -38,8 +38,8 @@ def test_connection():
     for l in lists:
         print(f"   - {l['name']} (ID: {l['id']})")
 
-    # 2. Prova a leggere i promemoria (da 'Reminders' o prima lista disponibile)
-    default_list = "Reminders"
+    # 2. Prova a leggere i promemoria (da 'Promemoria', 'Reminders' o prima lista disponibile)
+    default_list = "Promemoria"
     print(f"\n📥 Recupero promemoria dalla lista '{default_list}'...")
     reminders = icloud_service.get_reminders(default_list)
     

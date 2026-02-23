@@ -66,34 +66,56 @@ class ICloudService:
             return []
 
     def get_reminders(self, list_name: str = "Reminders") -> List[Dict[str, Any]]:
-        """Recupera i promemoria da una lista specifica."""
+        """Recupera i promemoria da una lista specifica con fallback intelligente."""
         client = self._get_client()
         if not client or not self._principal:
             return []
 
         try:
-            # Trova la lista specifica
+            calendars = self._principal.calendars()
             target_list = None
-            for cal in self._principal.calendars():
-                if cal.name.lower() == list_name.lower():
+            
+            # 1. Cerca per nome esatto (case insensitive)
+            for cal in calendars:
+                if cal.name and cal.name.lower() == list_name.lower():
                     target_list = cal
                     break
             
+            # 2. Fallback: Cerca per keyword nel nome (se list_name è Reminders/Promemoria)
+            if not target_list and list_name.lower() in ["reminders", "promemoria"]:
+                for cal in calendars:
+                    name = (cal.name or "").lower()
+                    if "promemoria" in name or "reminders" in name:
+                        target_list = cal
+                        break
+            
+            # 3. Fallback estremo: cerca "tasks" nell'URL
+            if not target_list:
+                for cal in calendars:
+                    if "/tasks/" in str(cal.url).lower():
+                        target_list = cal
+                        break
+
             if not target_list:
                 log("ICLOUD_LIST_NOT_FOUND", list_name=list_name)
                 return []
 
+            log("ICLOUD_LIST_SELECTED", name=target_list.name)
             todos = target_list.todos()
             reminders = []
             for todo in todos:
-                vobj = todo.vobject_instance.vtodo
-                reminders.append({
-                    "summary": vobj.summary.value if hasattr(vobj, 'summary') else "Senza titolo",
-                    "status": vobj.status.value if hasattr(vobj, 'status') else "unknown",
-                    "due": vobj.due.value.isoformat() if hasattr(vobj, 'due') else None,
-                })
+                try:
+                    vobj = todo.vobject_instance.vtodo
+                    reminders.append({
+                        "summary": vobj.summary.value if hasattr(vobj, 'summary') else "Senza titolo",
+                        "status": vobj.status.value if hasattr(vobj, 'status') else "unknown",
+                        "due": vobj.due.value.isoformat() if hasattr(vobj, 'due') else None,
+                    })
+                except Exception as e:
+                    # Salta eventuali task corrotti
+                    continue
             
-            log("ICLOUD_REMINDERS_FETCH", count=len(reminders), list=list_name)
+            log("ICLOUD_REMINDERS_FETCH", count=len(reminders), list=target_list.name)
             return reminders
         except Exception as e:
             log("ICLOUD_REMINDERS_FETCH_ERROR", error=str(e), level="ERROR")
