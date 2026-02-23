@@ -105,25 +105,31 @@ class ICloudService:
             # Prova diversi metodi di fetch perché i server Apple possono dare 500 su query massive
             todos = []
             try:
-                # Metodo 1: Search (spesso più stabile su iCloud)
-                todos = target_list.search(todo=True)
-                log("ICLOUD_FETCH_METHOD", method="search")
+                # Metodo 1: Search filtrato (carico minore sul server)
+                # include_completed=False spesso evita il 500 se ci sono migliaia di task vecchi
+                todos = target_list.search(todo=True, include_completed=False)
+                log("ICLOUD_FETCH_METHOD", method="search_filtered", count=len(todos))
             except Exception as e:
                 log("ICLOUD_SEARCH_ERROR", error=str(e), level="WARNING")
                 try:
-                    # Metodo 2: todos() (fallback classico)
-                    todos = target_list.todos()
-                    log("ICLOUD_FETCH_METHOD", method="todos")
+                    # Metodo 2: Search totale
+                    todos = target_list.search(todo=True)
+                    log("ICLOUD_FETCH_METHOD", method="search_full", count=len(todos))
                 except Exception as e2:
-                    log("ICLOUD_TODOS_ERROR", error=str(e2), level="ERROR")
-                    return []
+                    log("ICLOUD_SEARCH_FULL_ERROR", error=str(e2), level="WARNING")
+                    try:
+                        # Metodo 3: todos() (fallback classico)
+                        todos = target_list.todos()
+                        log("ICLOUD_FETCH_METHOD", method="todos", count=len(todos))
+                    except Exception as e3:
+                        log("ICLOUD_TODOS_ERROR", error=str(e3), level="ERROR")
+                        return []
 
             reminders = []
             for todo in todos:
                 try:
-                    # Carica i dati del task
-                    # Alcune versioni di caldav richiedono .load() se search non ha caricato tutto
-                    if not hasattr(todo, 'vobject_instance'):
+                    # Carica i dati se non presenti
+                    if not hasattr(todo, 'vobject_instance') or todo.vobject_instance is None:
                         todo.load()
                     
                     vobj = todo.vobject_instance.vtodo
