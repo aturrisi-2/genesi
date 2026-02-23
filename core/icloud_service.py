@@ -156,11 +156,18 @@ class ICloudService:
                             
                             for obj in all_objs:
                                 try:
-                                    # Evitiamo di caricare l'intera istanza se possiamo capirlo dal testo
-                                    raw_data = obj.data.upper()
-                                    if "VTODO" in raw_data:
-                                        # Solo se è un TODO carichiamo i dettagli
+                                    raw_data = obj.data
+                                    # LOG DI DEBUG - Vediamo cosa c'è dentro
+                                    log("ICLOUD_DEBUG_RAW_CONTENT", snippet=raw_data[:100].replace("\n", " "), list=str(target_cal.url))
+                                    
+                                    if "VTODO" in raw_data.upper():
+                                        # Carichiamo l'istanza
                                         if obj.vobject_instance and hasattr(obj.vobject_instance, 'vtodo'):
+                                            tasks.append(obj)
+                                    else:
+                                        # Se non c'è VTODO, proviamo a vedere se è comunque un oggetto valido
+                                        # Alcuni server formattano in modo strano
+                                        if "BEGIN:VTODO" in raw_data.upper():
                                             tasks.append(obj)
                                 except: continue
                         except Exception as raw_err:
@@ -168,18 +175,18 @@ class ICloudService:
 
                     for task in tasks:
                         try:
-                            if not task.vobject_instance or not hasattr(task.vobject_instance, 'vtodo'):
-                                continue
+                            # Se non abbiamo vobject_instance, proviamo a caricarlo esplicitamente
+                            vtodo_obj = None
+                            if task.vobject_instance and hasattr(task.vobject_instance, 'vtodo'):
+                                vtodo_obj = task.vobject_instance.vtodo
                             
-                            vobj = task.vobject_instance.vtodo
+                            if not vtodo_obj: continue
                             
-                            # Filtro completati (sia status 'COMPLETED' che proprietà 'completed')
-                            status = (getattr(vobj, 'status', None) and vobj.status.value.lower()) or ""
-                            if status in ['completed', 'fatto', 'completato']: continue
-                            if hasattr(vobj, 'completed') and vobj.completed.value: continue
-                            if hasattr(vobj, 'percent_complete') and vobj.percent_complete.value == 100: continue
+                            # Filtro completati MOLTO permissivo per il test
+                            status = (getattr(vtodo_obj, 'status', None) and vtodo_obj.status.value.lower()) or ""
+                            if status in ['completed', 'completed']: continue # Solo se esplicitamente completato in inglese
                                 
-                            summary = vobj.summary.value if hasattr(vobj, 'summary') else "Senza titolo"
+                            summary = vtodo_obj.summary.value if hasattr(vtodo_obj, 'summary') else "Senza titolo"
                             all_reminders.append({
                                 "summary": summary,
                                 "status": "pending",
