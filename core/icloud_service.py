@@ -110,12 +110,11 @@ class ICloudService:
             target_cals = []
             list_name_lower = list_name.lower()
             
-            # 1. Filtriamo le liste che sembrano promemoria
+            # 1. Filtriamo le liste che sembrano promemoria (più ampio per l'italiano)
             for cal in calendars:
                 try:
                     if cal is None: continue
                     url_str = str(cal.url)
-                    
                     name = "Sconosciuta"
                     try:
                         props = cal.get_properties([caldav.elements.dav.DisplayName()])
@@ -124,14 +123,11 @@ class ICloudService:
                     
                     log("ICLOUD_CALDAV_LIST_DISCOVERED", name=name, url=url_str, user=self.username)
 
-                    # Matcher migliorato
                     name_l = name.lower()
                     url_l = url_str.lower()
                     if (list_name_lower in name_l or 
-                        "reminder" in name_l or 
-                        "promemoria" in name_l or 
-                        "task" in url_l or 
-                        "reminder" in url_l):
+                        any(kw in name_l for kw in ["reminder", "promemoria", "task", "casa", "lavoro", "famiglia", "personale"]) or
+                        any(kw in url_l for kw in ["reminder", "task", "home", "work", "family"])):
                         target_cals.append(cal)
                 except: continue
             
@@ -139,84 +135,41 @@ class ICloudService:
                 target_cals = [c for c in calendars if c is not None]
 
             all_reminders = []
+            import re
             for target_cal in target_cals:
                 try:
                     tasks = []
-                    # Tentativo 1: Metodo standard .todos()
+                    # Fallback Raw Fetch
                     try:
-                        tasks = target_cal.todos()
-                    except Exception:
-                        # Tentativo 2: Scarica TUTTI gli oggetti grezzi
-                        # Apple vaak 500-errors op REPORT queries con filtri, ma OK su PROPFIND/GET base
-                        log("ICLOUD_FALLBACK_RAW_FETCH", list=str(target_cal.url))
-                        try:
-                            # .objects() esegue una ricerca meno filtrata degli oggetti nella collezione
-                            all_objs = target_cal.objects()
-                            log("ICLOUD_RAW_OBJECTS_FOUND", count=len(all_objs), list=str(target_cal.url))
-                            
-                            for obj in all_objs:
-                                try:
-                                    # Caricamento esplicito per evitare pigrizia della libreria
-                                    try:
-                                        obj.load()
-                                    except Exception as load_err:
-                                        # Se load() fallisce, proviamo comunque a leggere .data 
-                                        # (alcune versioni lo popolano diversamente)
-                                        pass
-                                    
-                                    raw_data = obj.data
-                                    if not raw_data:
-                                        logger.debug("ICLOUD_OBJ_EMPTY list=%s", str(target_cal.url))
-                                        continue
-                                        
-                                    # Se non c'è VTODO nel testo, saltiamo subito
-                                    if "VTODO" not in raw_data.upper(): continue
-                                    
-                                    log("ICLOUD_VTODO_FOUND", list=str(target_cal.url))
-                                    
-                                    # Estraiamo il SUMMARY a mano (più affidabile se il parser fallisce)
-                                    summary = "Senza titolo"
-                                    lines = raw_data.split("\n")
-                                    is_completed = False
-                                    
-                                    for line in lines:
-                                        line = line.strip()
-                                        if line.upper().startswith("SUMMARY"): # Match più flessibile
-                                            parts = line.split(":", 1)
-                                            if len(parts) > 1:
-                                                summary = parts[1].strip()
-                                        if "STATUS:COMPLETED" in line.upper() or "STATUS:COMPLETATO" in line.upper():
-                                            is_completed = True
-                                        if "PERCENT-COMPLETE:100" in line.upper():
-                                            is_completed = True
-                                    
-                                    if not is_completed:
-                                        all_reminders.append({
-                                            "summary": summary,
-                                            "status": "pending",
-                                            "due": None
-                                        })
-                                except Exception as e: 
-                                    logger.error("ICLOUD_OBJ_PARSE_FAIL error=%s", str(e))
-                                    continue
-                        except Exception as raw_err:
-                            logger.error("ICLOUD_RAW_FETCH_FAILED list=%s error=%s", str(target_cal.url), str(raw_err))
+                        all_objs = target_cal.objects()
+                        for obj in all_objs:
+                            try:
+                                raw_data = obj.data
+                                if "VTODO" not in raw_data.upper(): continue
+                                
+                                # Estrazione SUMMARY ultra-robusta con Regex
+                                summary = "Senza titolo"
+                                s_match = re.search(r'SUMMARY(?:;[^:]*)?:(.*)', raw_data, re.IGNORECASE)
+                                if s_match:
+                                    summary = s_match.group(1).strip().replace('\\', '')
+                                
+                                # Controllo completato (più tollerante)
+                                is_completed = False
+                                if "STATUS:COMPLETED" in raw_data.upper() or "PERCENT-COMPLETE:100" in raw_data.upper():
+                                    is_completed = True
+                                
+                                log("ICLOUD_REMINDER_FOUND", summary=summary, completed=is_completed, list=str(target_cal.url))
+                                
+                                if not is_completed:
+                                    all_reminders.append({
+                                        "summary": summary,
+                                        "status": "pending",
+                                        "due": None
+                                    })
+                            except: continue
+                    except Exception as raw_err:
+                        logger.error("ICLOUD_RAW_FETCH_FAILED list=%s error=%s", str(target_cal.url), str(raw_err))
 
-                    for task in tasks:
-                        # (Questo ramo viene usato solo se .todos() ha funzionato sopra)
-                        try:
-                            if not task.vobject_instance or not hasattr(task.vobject_instance, 'vtodo'):
-                                continue
-                            vobj = task.vobject_instance.vtodo
-                            status = (getattr(vobj, 'status', None) and vobj.status.value.lower()) or ""
-                            if status in ['completed', 'completed']: continue
-                            summary = vobj.summary.value if hasattr(vobj, 'summary') else "Senza titolo"
-                            all_reminders.append({
-                                "summary": summary,
-                                "status": "pending",
-                                "due": None
-                            })
-                        except: continue
                 except Exception as e:
                     logger.warning("ICLOUD_LIST_SKIP list=%s error=%s", str(target_cal.url), str(e))
                     continue
