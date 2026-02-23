@@ -108,12 +108,20 @@ def test_pyicloud_patched():
             
         for name, coll in collections.items():
             print(f"📂 Lista: '{name}'")
+            # Debug: cosa c'è dentro coll?
+            # print(f"   Debug keys: {coll.keys()}")
+            
             reminders = coll.get('reminders', [])
             if not reminders:
+                # Prova a cercare in altre chiavi se 'reminders' è vuoto
+                # Alcune versioni usano 'tasks' o simili
                 print("   (vuota)")
-            for r in reminders[:5]:
-                title = r.get('title', 'Senza titolo')
-                print(f"   - {title}")
+            else:
+                print(f"   ✅ Trovati {len(reminders)} promemoria.")
+                for r in reminders[:5]:
+                    title = r.get('title') or r.get('summary') or "Senza titolo"
+                    due = r.get('due') or "Nessuna data"
+                    print(f"   - {title} (Scadenza: {due})")
 
     except Exception as e:
         print(f"💥 Errore residuo: {e}")
