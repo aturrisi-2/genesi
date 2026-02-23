@@ -108,29 +108,32 @@ class ICloudService:
             calendars = self._get_calendars(client)
             if not calendars: return []
 
-            # 1. Prendiamo TUTTE le liste disponibili per non perdere nulla
+            # 1. Prendiamo TUTTE le liste
             target_cals = [c for c in calendars if c is not None]
-            
             log("ICLOUD_FULL_SCAN_START", list_count=len(target_cals))
 
             all_reminders = []
             for target_cal in target_cals:
+                display_name = "Sconosciuta"
+                url_str = str(target_cal.url)
                 try:
-                    # Recuperiamo il nome per il log
-                    display_name = "Sconosciuta"
-                    try:
-                        props = target_cal.get_properties([caldav.elements.dav.DisplayName()])
-                        display_name = props.get('{DAV:}displayname', 'Senza nome')
-                    except: pass
-                    
+                    props = target_cal.get_properties([caldav.elements.dav.DisplayName()])
+                    display_name = props.get('{DAV:}displayname', 'Senza nome')
+                except: pass
+                
+                try:
                     all_objs = []
                     try:
                         all_objs = target_cal.objects()
-                    except Exception: continue
+                    except Exception as e:
+                        logger.error("ICLOUD_LIST_FETCH_ERR name=%s url=%s err=%s", display_name, url_str, str(e))
+                        continue
 
-                    if not all_objs: continue
-                    
-                    log("ICLOUD_SCANNING_LIST", name=display_name, count=len(all_objs))
+                    # Logghiamo comunque la scansione, anche se 0 oggetti
+                    log("ICLOUD_SCANNING_LIST", name=display_name, count=len(all_objs), url=url_str)
+
+                    if not all_objs:
+                        continue
 
                     for obj in all_objs:
                         try:
@@ -147,30 +150,30 @@ class ICloudService:
                             if s_match:
                                 summary = s_match.group(1).strip().replace('\\', '')
                             
-                            # Estrazione STATUS per debug
-                            status = "UNKNOWN"
-                            st_match = re.search(r'STATUS:(.*)', raw_data, re.IGNORECASE)
-                            if st_match:
-                                status = st_match.group(1).strip().upper()
-                            
                             # Filtro completati intelligente
                             raw_upper = raw_data.upper()
                             is_completed = ("STATUS:COMPLETED" in raw_upper or 
                                           "PERCENT-COMPLETE:100" in raw_upper or
                                           "STATUS:CANCELLED" in raw_upper)
                             
-                            log("ICLOUD_ITEM_DEBUG", summary=summary, status=status, completed=is_completed, list=display_name)
-                            
                             if not is_completed:
+                                log("ICLOUD_REMINDER_VALID", summary=summary, list=display_name)
                                 all_reminders.append({
                                     "summary": summary,
                                     "status": "pending",
                                     "due": None
                                 })
-                        except: continue
-                except: continue
+                            else:
+                                # Log leggero per i completati solo se sospetti
+                                pass
+                        except Exception as e:
+                            logger.debug("ICLOUD_ITEM_LOAD_ERR err=%s", str(e))
+                            continue
+                except Exception as e:
+                    logger.error("ICLOUD_LIST_CRITICAL_ERR name=%s err=%s", display_name, str(e))
+                    continue
                 
-            log("ICLOUD_SYNC_SUCCESS", count=len(all_reminders), user=self.username)
+            log("ICLOUD_SYNC_FINAL_SUCCESS", count=len(all_reminders), user=self.username)
             return all_reminders
                 
         except Exception as e:
