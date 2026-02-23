@@ -7,6 +7,7 @@ import os
 import logging
 import caldav
 from datetime import datetime
+import re
 from typing import List, Dict, Any, Optional
 from core.log import log
 
@@ -135,23 +136,16 @@ class ICloudService:
                 target_cals = [c for c in calendars if c is not None]
 
             all_reminders = []
-            import re
             for target_cal in target_cals:
                 try:
-                    url_str = str(target_cal.url)
-                    log("ICLOUD_SCANNING_LIST", list=url_str)
-                    
                     all_objs = []
                     try:
                         all_objs = target_cal.objects()
-                        log("ICLOUD_RAW_COUNT", count=len(all_objs), list=url_str)
-                    except Exception as e:
-                        logger.error("ICLOUD_LIST_FETCH_FAIL list=%s error=%s", url_str, str(e))
-                        continue
+                    except Exception: continue
 
                     for obj in all_objs:
                         try:
-                            # OBBLIGHIAMO il caricamento dei dati se non presenti
+                            # Lazy load content
                             if not hasattr(obj, 'data') or not obj.data:
                                 obj.load()
                                 
@@ -159,32 +153,26 @@ class ICloudService:
                             if not raw_data or "VTODO" not in raw_data.upper():
                                 continue
                             
-                            # Estrazione SUMMARY brutale
+                            # Estrazione SUMMARY
                             summary = "Senza titolo"
                             s_match = re.search(r'SUMMARY(?:;[^:]*)?:(.*)', raw_data, re.IGNORECASE)
                             if s_match:
                                 summary = s_match.group(1).strip().replace('\\', '')
                             
-                            # Per ora prendiamo TUTTO, non filtriamo i completati per essere sicuri
-                            is_completed = "STATUS:COMPLETED" in raw_data.upper() or "PERCENT-COMPLETE:100" in raw_data.upper()
+                            # Filtro completati (STATUS o PERCENT-COMPLETE)
+                            raw_upper = raw_data.upper()
+                            is_completed = "STATUS:COMPLETED" in raw_upper or "PERCENT-COMPLETE:100" in raw_upper
                             
-                            log("ICLOUD_REMINDER_EXTRACTED", summary=summary, completed=is_completed)
-                            
-                            # Inseriamo nei risultati (anche se completati per prova)
-                            all_reminders.append({
-                                "summary": summary,
-                                "status": "pending",
-                                "due": None
-                            })
-                        except Exception as obj_err:
-                            logger.debug("ICLOUD_OBJ_RECOVERY_FAIL error=%s", str(obj_err))
-                            continue
-
-                except Exception as e:
-                    logger.warning("ICLOUD_LIST_SKIP_LOOP list=%s error=%s", str(target_cal.url), str(e))
-                    continue
+                            if not is_completed:
+                                all_reminders.append({
+                                    "summary": summary,
+                                    "status": "pending",
+                                    "due": None
+                                })
+                        except: continue
+                except: continue
                 
-            log("ICLOUD_SYNC_FINAL_COUNT", count=len(all_reminders), user=self.username)
+            log("ICLOUD_SYNC_SUCCESS", count=len(all_reminders), user=self.username)
             return all_reminders
                 
         except Exception as e:
