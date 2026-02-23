@@ -713,7 +713,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             if number_match:
                 index = int(number_match.group(1)) - 1  # Convert to 0-based
                 
-                reminders = reminder_engine.list_reminders(user_id, status_filter="pending")
+                reminders = await reminder_engine.list_reminders(user_id, status_filter="pending")
                 
                 if 0 <= index < len(reminders):
                     reminder_id = reminders[index]["id"]
@@ -740,7 +740,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                         break
             
             if search_text:
-                reminders = reminder_engine.list_reminders(user_id, status_filter="pending")
+                reminders = await reminder_engine.list_reminders(user_id, status_filter="pending")
                 
                 # Fuzzy match semplice: cerca testo parziale
                 for reminder in reminders:
@@ -788,7 +788,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             if number_match:
                 index = int(number_match.group(1)) - 1  # Convert to 0-based
                 
-                reminders = reminder_engine.list_reminders(user_id, status_filter="pending")
+                reminders = await reminder_engine.list_reminders(user_id, status_filter="pending")
                 
                 if 0 <= index < len(reminders):
                     target_reminder = reminders[index]
