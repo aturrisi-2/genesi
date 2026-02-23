@@ -15,64 +15,10 @@ from pyicloud import PyiCloudService
 
 logger = logging.getLogger(__name__)
 
-# --- MONKEYPATCH DATETIME ---
-# Apple a volte manda date come YYYYMMDD in un campo che la libreria legge come 'anno'.
-# Intercettiamo queste chiamate e ripariamo la data al volo per evitare "year out of range".
-original_datetime = datetime.datetime
-original_date = datetime.date
-
-class PatchedDatetime(original_datetime):
-    def __new__(cls, *args, **kwargs):
-        new_args = list(args)
-        if new_args:
-            year = new_args[0]
-            if year > 9999: # Caso YYYYMMDD impaccato
-                y = year // 10000
-                m = (year % 10000) // 100
-                d = year % 100
-                if len(new_args) > 1:
-                    new_args[0] = y
-                    if len(new_args) > 1: new_args[1] = m
-                    if len(new_args) > 2: new_args[2] = d
-                else:
-                    new_args = [y, m, d]
-            
-            # Clamping per ore/minuti/secondi fuori range
-            if len(new_args) > 3 and (new_args[3] < 0 or new_args[3] > 23): new_args[3] = 0
-            if len(new_args) > 4 and (new_args[4] < 0 or new_args[4] > 59): new_args[4] = 0
-            if len(new_args) > 5 and (new_args[5] < 0 or new_args[5] > 59): new_args[5] = 0
-
-        try:
-            # IMPORTANTE: Ritorniamo un'istanza della classe ORIGINALE
-            # Questo evita errori di tipo in librerie come SQLAlchemy/SQLite
-            return original_datetime.__new__(original_datetime, *tuple(new_args), **kwargs)
-        except:
-            return original_datetime.__new__(original_datetime, 2024, 1, 1)
-
-class PatchedDate(original_date):
-    def __new__(cls, *args, **kwargs):
-        new_args = list(args)
-        if new_args:
-            year = new_args[0]
-            if year > 9999:
-                y = year // 10000
-                m = (year % 10000) // 100
-                d = year % 100
-                if len(new_args) > 1:
-                    new_args[0] = y
-                    if len(new_args) > 1: new_args[1] = m
-                    if len(new_args) > 2: new_args[2] = d
-                else:
-                    new_args = [y, m, d]
-        try:
-            return original_date.__new__(original_date, *tuple(new_args), **kwargs)
-        except:
-            return original_date.__new__(original_date, 2024, 1, 1)
-
-# Applica la patch globale all'interno del processo Genesi
-datetime.datetime = PatchedDatetime
-datetime.date = PatchedDate
-# --- FINE PATCH ---
+# --- RIMOZIONE PATCH GLOBALE ---
+# La patch globale è stata rimossa perché causava incompatibilità con SQLAlchemy/SQLite.
+# La riparazione delle date viene ora gestita localmente nei metodi di fetch.
+# ------------------------------
 
 class ICloudService:
     def __init__(self, username: Optional[str] = None, password: Optional[str] = None, cookie_directory: Optional[str] = None):
