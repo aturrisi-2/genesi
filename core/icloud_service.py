@@ -156,7 +156,19 @@ class ICloudService:
                             
                             for obj in all_objs:
                                 try:
+                                    # Caricamento esplicito per evitare pigrizia della libreria
+                                    try:
+                                        obj.load()
+                                    except Exception as load_err:
+                                        # Se load() fallisce, proviamo comunque a leggere .data 
+                                        # (alcune versioni lo popolano diversamente)
+                                        pass
+                                    
                                     raw_data = obj.data
+                                    if not raw_data:
+                                        logger.debug("ICLOUD_OBJ_EMPTY list=%s", str(target_cal.url))
+                                        continue
+                                        
                                     # Se non c'è VTODO nel testo, saltiamo subito
                                     if "VTODO" not in raw_data.upper(): continue
                                     
@@ -169,11 +181,13 @@ class ICloudService:
                                     
                                     for line in lines:
                                         line = line.strip()
-                                        if line.upper().startswith("SUMMARY:"):
-                                            summary = line[8:].strip()
-                                        if line.upper().startswith("STATUS:COMPLETED"):
+                                        if line.upper().startswith("SUMMARY"): # Match più flessibile
+                                            parts = line.split(":", 1)
+                                            if len(parts) > 1:
+                                                summary = parts[1].strip()
+                                        if "STATUS:COMPLETED" in line.upper() or "STATUS:COMPLETATO" in line.upper():
                                             is_completed = True
-                                        if line.upper().startswith("PERCENT-COMPLETE:100"):
+                                        if "PERCENT-COMPLETE:100" in line.upper():
                                             is_completed = True
                                     
                                     if not is_completed:
@@ -183,7 +197,7 @@ class ICloudService:
                                             "due": None
                                         })
                                 except Exception as e: 
-                                    logger.debug("ICLOUD_OBJ_PARSE_FAIL error=%s", str(e))
+                                    logger.error("ICLOUD_OBJ_PARSE_FAIL error=%s", str(e))
                                     continue
                         except Exception as raw_err:
                             logger.error("ICLOUD_RAW_FETCH_FAILED list=%s error=%s", str(target_cal.url), str(raw_err))
