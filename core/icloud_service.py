@@ -43,26 +43,49 @@ class ICloudService:
 
     # Removed authenticate_with_2fa as it's specific to pyicloud
 
+    def _get_calendars(self, client):
+        """Discovery robusto dei calendari iCloud bypassando i crash 500."""
+        try:
+            principal = client.principal()
+            
+            # Tentativo 1: Standard calendars()
+            try:
+                return principal.calendars()
+            except Exception as e:
+                log("ICLOUD_CALDAV_DISCOVERY_STD_FAIL", error=str(e), level="WARNING")
+
+            # Tentativo 2: Derivazione URL (Pattern comune iCloud /principal/ -> /calendars/)
+            p_url = str(principal.url)
+            if "/principal/" in p_url:
+                cal_root_url = p_url.replace("/principal/", "/calendars/")
+                # Creiamo un "pseudo-calendario" alla radice e cerchiamo i figli
+                root_cal = client.calendar(url=cal_root_url)
+                # find_calendars() è più flessibile di principal.calendars()
+                return principal.find_calendars() or []
+                
+            return []
+        except Exception as e:
+            log("ICLOUD_CALDAV_DISCOVERY_FATAL", error=str(e), level="ERROR")
+            return []
+
     def get_reminders_lists(self) -> List[Dict[str, Any]]:
         """Recupera le liste di promemoria tramite CalDAV."""
         client = self._get_client()
         if not client: return []
         
         try:
-            principal = client.principal()
-            calendars = principal.calendars()
+            calendars = self._get_calendars(client)
             
             lists = []
             for cal in calendars:
-                # Verifichiamo se è una lista di promemoria (task) o calendario (event)
-                # In iCloud sono spesso misti o separati da proprietà
-                props = cal.get_properties([caldav.elements.dav.DisplayName()])
-                name = props.get('{DAV:}displayname', 'Senza nome')
-                
-                lists.append({
-                    "id": cal.url,
-                    "name": name
-                })
+                try:
+                    props = cal.get_properties([caldav.elements.dav.DisplayName()])
+                    name = props.get('{DAV:}displayname', 'Senza nome')
+                    lists.append({
+                        "id": str(cal.url),
+                        "name": name
+                    })
+                except: continue
             
             log("ICLOUD_CALDAV_LISTS_FOUND", count=len(lists), user=self.username)
             return lists
@@ -76,47 +99,61 @@ class ICloudService:
         if not client: return []
         
         try:
-            principal = client.principal()
-            calendars = principal.calendars()
+            calendars = self._get_calendars(client)
             
             target_cal = None
             list_name_lower = list_name.lower()
             
-            # Cerca la lista per nome
+            # Cerca la lista per nome o URL
             for cal in calendars:
-                props = cal.get_properties([caldav.elements.dav.DisplayName()])
-                name = (props.get('{DAV:}displayname') or '').lower()
-                if list_name_lower in name:
-                    target_cal = cal
-                    break
+                try:
+                    props = cal.get_properties([caldav.elements.dav.DisplayName()])
+                    name = (props.get('{DAV:}displayname') or '').lower()
+                    if list_name_lower in name or list_name_lower in str(cal.url).lower():
+                        target_cal = cal
+                        break
+                except: continue
             
-            # Fallback alla prima se non trovata
+            # Fallback: cerca una lista che contenga "promemoria" o sia la prima disponibile
+            if not target_cal:
+                for cal in calendars:
+                    try:
+                        props = cal.get_properties([caldav.elements.dav.DisplayName()])
+                        name = (props.get('{DAV:}displayname') or '').lower()
+                        if "promemoria" in name or "reminder" in name:
+                            target_cal = cal
+                            break
+                    except: continue
+
             if not target_cal and calendars:
                 target_cal = calendars[0]
                 
             if not target_cal:
+                log("ICLOUD_CALDAV_NO_LIST_FOUND", user=self.username, level="WARNING")
                 return []
 
             # Fetch tasks (VTODO)
+            # Nota: alcuni nodi 500 se non specificato Depth o filter. caldav.todos() è ok.
             tasks = target_cal.todos()
             
             reminders = []
             for task in tasks:
-                vobj = task.vobject_instance.vtodo
-                
-                # Escludi completati
-                if hasattr(vobj, 'status') and vobj.status.value.lower() == 'completed':
-                    continue
-                if hasattr(vobj, 'completed'):
-                    continue
+                try:
+                    vobj = task.vobject_instance.vtodo
                     
-                summary = vobj.summary.value if hasattr(vobj, 'summary') else "Senza titolo"
-                
-                reminders.append({
-                    "summary": summary,
-                    "status": "not_completed",
-                    "due": None # Parsing date rimosso per stabilità
-                })
+                    # Escludi completati
+                    status = (getattr(vobj, 'status', None) and vobj.status.value.lower()) or ""
+                    if status == 'completed': continue
+                    if hasattr(vobj, 'completed'): continue
+                        
+                    summary = vobj.summary.value if hasattr(vobj, 'summary') else "Senza titolo"
+                    
+                    reminders.append({
+                        "summary": summary,
+                        "status": "not_completed",
+                        "due": None
+                    })
+                except: continue
                 
             log("ICLOUD_CALDAV_REMINDERS_FETCH", count=len(reminders), user=self.username)
             return reminders
