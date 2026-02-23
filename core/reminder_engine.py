@@ -241,11 +241,23 @@ class ReminderEngine:
                 reminders = self._load_reminders(user_id)
                 for reminder in reminders:
                     rem_date = reminder.get("datetime")
-                    if (reminder.get("status") == "pending" and rem_date and
-                        datetime.fromisoformat(rem_date) <= now):
-                        reminder_copy = reminder.copy()
-                        reminder_copy["user_id"] = user_id
-                        due_reminders.append(reminder_copy)
+                    if reminder.get("status") == "pending" and rem_date:
+                        try:
+                            rem_dt = datetime.fromisoformat(rem_date)
+                            # Handle offset-naive vs offset-aware comparison
+                            if rem_dt.tzinfo is not None:
+                                current_now = datetime.now(rem_dt.tzinfo)
+                            else:
+                                current_now = now
+                                
+                            if rem_dt <= current_now:
+                                reminder_copy = reminder.copy()
+                                reminder_copy["user_id"] = user_id
+                                due_reminders.append(reminder_copy)
+                        except Exception as parse_err:
+                            log("REMINDER_DATE_PARSE_ERROR", error=str(parse_err), date=rem_date)
+                            continue
+
             return due_reminders
         except Exception as e:
             log("REMINDER_DUE_ERROR", error=str(e))
