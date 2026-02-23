@@ -1,212 +1,204 @@
 """
 ICLOUD SERVICE - Genesi Core
-Integrazione con iCloud Reminders e Calendar via CalDAV.
+Integrazione con iCloud Reminders via PyiCloud (Web API).
+Include monkeypatch per riparare le date malformate di Apple.
 """
 
 import os
 import logging
-import caldav
-from datetime import datetime
-import re
+import datetime
+import json
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from core.log import log
+from pyicloud import PyiCloudService
 
 logger = logging.getLogger(__name__)
+
+# --- MONKEYPATCH DATETIME ---
+# Apple a volte manda date come YYYYMMDD in un campo che la libreria legge come 'anno'.
+# Intercettiamo queste chiamate e ripariamo la data al volo per evitare "year out of range".
+original_datetime = datetime.datetime
+original_date = datetime.date
+
+class PatchedDatetime(original_datetime):
+    def __new__(cls, *args, **kwargs):
+        new_args = list(args)
+        if new_args:
+            year = new_args[0]
+            if year > 9999: # Caso YYYYMMDD impaccato
+                y = year // 10000
+                m = (year % 10000) // 100
+                d = year % 100
+                if len(new_args) > 1:
+                    new_args[0] = y
+                    if len(new_args) > 1: new_args[1] = m
+                    if len(new_args) > 2: new_args[2] = d
+                else:
+                    new_args = [y, m, d]
+            
+            # Clamping per ore/minuti/secondi fuori range
+            if len(new_args) > 3 and (new_args[3] < 0 or new_args[3] > 23): new_args[3] = 0
+            if len(new_args) > 4 and (new_args[4] < 0 or new_args[4] > 59): new_args[4] = 0
+            if len(new_args) > 5 and (new_args[5] < 0 or new_args[5] > 59): new_args[5] = 0
+
+        try:
+            return original_datetime.__new__(cls, *tuple(new_args), **kwargs)
+        except:
+            # Fallback estremo se ancora fallisce
+            return original_datetime.__new__(cls, 2024, 1, 1)
+
+class PatchedDate(original_date):
+    def __new__(cls, *args, **kwargs):
+        new_args = list(args)
+        if new_args:
+            year = new_args[0]
+            if year > 9999:
+                y = year // 10000
+                m = (year % 10000) // 100
+                d = year % 100
+                if len(new_args) > 1:
+                    new_args[0] = y
+                    if len(new_args) > 1: new_args[1] = m
+                    if len(new_args) > 2: new_args[2] = d
+                else:
+                    new_args = [y, m, d]
+        try:
+            return original_date.__new__(cls, *tuple(new_args), **kwargs)
+        except:
+            return original_date.__new__(cls, 2024, 1, 1)
+
+# Applica la patch globale all'interno del processo Genesi
+datetime.datetime = PatchedDatetime
+datetime.date = PatchedDate
+# --- FINE PATCH ---
 
 class ICloudService:
     def __init__(self, username: Optional[str] = None, password: Optional[str] = None, cookie_directory: Optional[str] = None):
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD")
-        self.cookie_directory = cookie_directory
-        self._client = None # Changed from _api to _client
+        self.cookie_directory = cookie_directory or f"memory/icloud_sessions/default"
+        self._api = None
         log("ICLOUD_SERVICE_INIT", user=self.username)
 
     def _get_client(self):
-        """Inizializza il client CalDAV con la password specifica per le app."""
-        if self._client: # Added caching for the client
-            return self._client
+        """Inizializza il client PyiCloud con gestione sessione."""
+        if self._api:
+            return self._api
 
         if not self.username or not self.password:
             log("ICLOUD_AUTH_MISSING", user=self.username, level="ERROR")
             return None
             
         try:
-            # Apple richiede l'URL diretto per evitare bug di discovery
-            # Spesso funziona il generico, ma caldav library gestisce bene il redirect
-            client = caldav.DAVClient(
-                url="https://caldav.icloud.com",
-                username=self.username,
-                password=self.password
-            )
-            self._client = client # Store the client
-            log("ICLOUD_CALDAV_CLIENT_INIT", user=self.username)
-            return client
+            # Assicuriamoci che la cartella dei cookie esista
+            os.makedirs(self.cookie_directory, exist_ok=True)
+            
+            api = PyiCloudService(self.username, self.password, cookie_directory=self.cookie_directory)
+            
+            # Se richiede 2FA, logghiamo la necessità
+            if api.requires_2fa:
+                log("ICLOUD_2FA_REQUIRED", user=self.username, level="WARNING")
+            
+            self._api = api
+            log("ICLOUD_API_CLIENT_INIT", user=self.username)
+            return api
         except Exception as e:
-            log("ICLOUD_CALDAV_INIT_ERROR", user=self.username, error=str(e), level="ERROR")
+            log("ICLOUD_API_INIT_ERROR", user=self.username, error=str(e), level="ERROR")
             return None
 
-    # Removed authenticate_with_2fa as it's specific to pyicloud
-
-    def _get_calendars(self, client):
-        """Discovery ultra-selettivo per evitare errori 500 su iCloud."""
-        try:
-            principal = client.principal()
-            
-            # Tentativo 1: Standard calendars()
-            try:
-                # calendars() restituisce la lista delle collezioni
-                # Se questo dà 500, proveremo find_calendars (se esiste) o discovery manuale
-                cals = principal.calendars()
-                log("ICLOUD_CALDAV_DISCOVERY_SUCCESS", count=len(cals), user=self.username)
-                return cals
-            except Exception as e:
-                log("ICLOUD_CALDAV_DISCOVERY_STD_FAIL", error=str(e), level="WARNING")
-                
-                # Tentativo 2: Usiamo find_calendars su Principal (alcune versioni lo hanno)
-                if hasattr(principal, 'find_calendars'):
-                    try:
-                        return principal.find_calendars(ctype='todo')
-                    except: pass
-                
-            return []
-        except Exception as e:
-            log("ICLOUD_CALDAV_DISCOVERY_FATAL", error=str(e), level="ERROR")
-            return []
-
     def get_reminders_lists(self) -> List[Dict[str, Any]]:
-        """Recupera le liste di promemoria tramite CalDAV."""
-        client = self._get_client()
-        if not client: return []
+        """Recupera le liste di promemoria disponibili."""
+        api = self._get_client()
+        if not api: return []
         
         try:
-            calendars = self._get_calendars(client)
+            collections = api.reminders.collections
             lists = []
-            for cal in calendars:
-                try:
-                    # Otteniamo il nome in modo sicuro. iCloud può dare 500 qui su alcune liste.
-                    props = cal.get_properties([caldav.elements.dav.DisplayName()])
-                    name = props.get('{DAV:}displayname', 'Senza nome')
-                    lists.append({
-                        "id": str(cal.url),
-                        "name": name
-                    })
-                except Exception as e:
-                    # Saltiamo silenziosamente le liste che danno errore (es. cartelle di sistema)
-                    continue
-            
+            for name, coll in collections.items():
+                lists.append({
+                    "id": name,
+                    "name": name
+                })
             return lists
         except Exception as e:
-            log("ICLOUD_CALDAV_LIST_ERROR", user=self.username, error=str(e), level="ERROR")
+            log("ICLOUD_LIST_FETCH_ERROR", user=self.username, error=str(e), level="ERROR")
             return []
 
     def get_reminders(self, list_name: str = "Promemoria") -> List[Dict[str, Any]]:
-        """Recupera i promemoria pendenti con gestione errori per-lista."""
-        client = self._get_client()
-        if not client: return []
+        """Recupera i promemoria filtrando quelli completati e riparando le date."""
+        api = self._get_client()
+        if not api: return []
         
         try:
-            calendars = self._get_calendars(client)
-            if not calendars: return []
+            log("ICLOUD_SYNC_START", user=self.username, target_list=list_name)
+            
+            try:
+                api.reminders.refresh()
+            except Exception as refresh_err:
+                log("ICLOUD_REFRESH_WARNING", error=str(refresh_err), level="WARNING")
 
-            # 1. Prendiamo tutte le liste
-            target_cals = [c for c in calendars if c is not None]
-            log("ICLOUD_FULL_SCAN_START", list_count=len(target_cals))
-
+            collections = api.reminders.collections
             all_reminders = []
-            for target_cal in target_cals:
-                url_str = str(target_cal.url).lower()
-                display_name = "Sconosciuta"
-                try:
-                    props = target_cal.get_properties([caldav.elements.dav.DisplayName()])
-                    display_name = props.get('{DAV:}displayname', 'Senza nome')
-                except: pass
+            
+            # Se viene indicata una lista specifica, cerchiamo solo quella
+            target_names = [list_name] if list_name in collections else collections.keys()
+
+            for name in target_names:
+                coll = collections.get(name)
+                if not coll: continue
                 
-                if "calendar" in display_name.lower() or "/calendars/4240634c" in url_str:
-                    continue
-
-                try:
-                    log("ICLOUD_LIST_START", name=display_name)
-                    all_objs = []
-                    # Strategie di caricamento progressive
+                tasks = coll.get('reminders') or coll.get('tasks') or []
+                
+                for task in tasks:
                     try:
-                        all_objs = target_cal.search(todo=True)
-                    except:
-                        try:
-                            all_objs = target_cal.todos()
-                        except:
-                            try:
-                                all_objs = target_cal.objects()
-                            except: continue
+                        # 1. Filtro completati
+                        status = (task.get('status') or 'NEEDS-ACTION').upper()
+                        percent = task.get('percent_complete', 0)
+                        is_completed = (status in ["COMPLETED", "CANCELLED"] or 
+                                       percent == 100 or 
+                                       task.get('completed_date') is not None)
+                        
+                        if is_completed:
+                            continue
 
-                    if not all_objs:
-                        log("ICLOUD_LIST_EMPTY", name=display_name)
-                        continue
-
-                    for obj in all_objs:
-                        try:
-                            if not hasattr(obj, 'data') or not obj.data:
-                                obj.load()
-                                
-                            raw_data = obj.data
-                            if not raw_data or "VTODO" not in raw_data.upper():
-                                continue
-                            
-                            raw_upper = raw_data.upper()
-                            
-                            # 1. Filtro PREVENTIVO: se è completato, saltiamo subito
-                            # Cerchiamo STATUS:COMPLETED o PERCENT-COMPLETE:100
-                            st_match = re.search(r'STATUS:(.*)', raw_data, re.IGNORECASE)
-                            status = st_match.group(1).strip().upper() if st_match else "NEEDS-ACTION"
-                            
-                            is_completed = (status in ["COMPLETED", "CANCELLED"] or 
-                                          "PERCENT-COMPLETE:100" in raw_upper or
-                                          "COMPLETED:" in raw_upper)
-                            
-                            if is_completed:
-                                continue
-
-                            # 2. Estrazione GUID (UID)
-                            guid = None
-                            uid_match = re.search(r'UID:(.*)', raw_data, re.IGNORECASE)
-                            if uid_match:
-                                guid = uid_match.group(1).strip()
-                            
-                            # 3. Estrazione SUMMARY
-                            summary = "Senza titolo"
-                            s_match = re.search(r'SUMMARY(?:;[^:]*)?:(.*)', raw_data, re.IGNORECASE)
-                            if s_match:
-                                summary = s_match.group(1).strip().replace('\\', '')
-                            
-                            # 4. Estrazione DUE date
-                            due_date = None
-                            # Cerchiamo DUE o DTSTART
-                            due_match = re.search(r'(?:DUE|DTSTART)(?:;[^:]*)?:(\d{8}T\d{6}Z?)', raw_data, re.IGNORECASE)
-                            if due_match:
-                                date_str = due_match.group(1)
+                        # 2. Estrazione dati
+                        guid = task.get('guid')
+                        title = task.get('title') or task.get('summary') or "Senza titolo"
+                        
+                        # 3. Gestione Data Scadenza
+                        due = None
+                        due_data = task.get('due_date')
+                        
+                        if due_data:
+                            if isinstance(due_data, list) and len(due_data) >= 3:
                                 try:
-                                    # Formato CalDAV standard: YYYYMMDDTHHMMSSZ
-                                    if 'T' in date_str:
-                                        ts = datetime.strptime(date_str.replace('Z', ''), "%Y%m%dT%H%M%S")
-                                        due_date = ts.isoformat()
+                                    dt_args = list(due_data[:6])
+                                    while len(dt_args) < 6: dt_args.append(0)
+                                    ts = datetime.datetime(*dt_args)
+                                    due = ts.isoformat()
+                                except: pass
+                            elif isinstance(due_data, (int, float)):
+                                try:
+                                    ts = datetime.datetime.fromtimestamp(due_data/1000 if due_data > 10**10 else due_data)
+                                    due = ts.isoformat()
                                 except: pass
 
-                            # Aggiungiamo solo se non completato
-                            all_reminders.append({
-                                "guid": guid,
-                                "summary": summary,
-                                "status": "pending",
-                                "due": due_date,
-                                "list": display_name
-                            })
-                        except: continue
-                except: continue
-                
-            log("ICLOUD_SYNC_FINAL_SUCCESS", count=len(all_reminders), user=self.username)
+                        all_reminders.append({
+                            "guid": guid,
+                            "summary": title,
+                            "status": "pending",
+                            "due": due,
+                            "list": name
+                        })
+                    except: continue
+
+            log("ICLOUD_SYNC_SUCCESS", count=len(all_reminders), user=self.username)
             return all_reminders
                 
         except Exception as e:
-            log("ICLOUD_CALDAV_FETCH_ERROR", user=self.username, error=str(e), level="ERROR")
+            log("ICLOUD_FETCH_ERROR", user=self.username, error=str(e), level="ERROR")
             return []
 
-# Istanza per compatibilità (fallback su env se non specificato)
+# Istanza per compatibilità
 icloud_service = ICloudService()

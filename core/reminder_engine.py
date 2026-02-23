@@ -148,17 +148,33 @@ class ReminderEngine:
             log("ICLOUD_SERVICE_GET_ERROR", user_id=user_id, error=str(e))
             return None
 
-    async def fetch_icloud_reminders(self, user_id: str, list_name: str = "Promemoria") -> List[Dict[str, Any]]:
+    async def fetch_icloud_reminders(self, user_id: str, list_name: str = "Promemoria", force: bool = False) -> List[Dict[str, Any]]:
         """
         Fetch reminders from iCloud and MERGE them into local storage.
         Returns only the newly added reminders.
         """
+        # --- PERFORMANCE OPTIMIZATION: SYNC COOLDOWN ---
+        profile = await storage.load(f"profile:{user_id}", default={})
+        last_sync = profile.get("last_icloud_sync")
+        now_ts = datetime.now().timestamp()
+        
+        # Se non forzato, non sincronizzare se l'ultima è stata meno di 5 minuti fa
+        if not force and last_sync and (now_ts - last_sync < 300):
+            log("ICLOUD_SYNC_SKIPPED", user_id=user_id, reason="cooldown", 
+                remaining=int(300 - (now_ts - last_sync)))
+            return []
+
         svc = await self._get_icloud_service(user_id)
         if not svc:
             return []
         
         try:
             icloud_data = svc.get_reminders(list_name)
+            
+            # Aggiorna timestamp ultima sync (anche se non ci sono dati nuovi, per evitare loop)
+            profile["last_icloud_sync"] = now_ts
+            await storage.save(f"profile:{user_id}", profile)
+            
             if not icloud_data:
                 return []
 

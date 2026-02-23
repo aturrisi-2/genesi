@@ -675,8 +675,8 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         Returns: (response_text: str, source: str)
         """
         try:
-            # Get pending reminders
-            reminders = await reminder_engine.list_reminders(user_id, status_filter="pending")
+            # Get pending reminders - INCLUDIAMO iCloud sync (gestito dal cooldown)
+            reminders = await reminder_engine.list_reminders(user_id, status_filter="pending", include_icloud=True)
             
             if not reminders:
                 return "Non hai promemoria impostati.", "reminder"
@@ -868,18 +868,25 @@ Messaggio: {message}"""
             # Verifica credenziali immediatamente
             from core.icloud_service import ICloudService
             svc = ICloudService(username=email, password=password, cookie_directory=f"memory/icloud_sessions/{user_id}")
-            client = svc._get_client()
+            api = svc._get_client()
             
-            if client:
+            if api:
                 try:
-                    # Test minimo: prova a ottenere il principal
-                    client.principal()
+                    # Test minimo: prova a leggere le collezioni di promemoria
+                    # Se non solleva eccezioni, le credenziali sono accettate (anche se richiede 2FA)
+                    _ = api.reminders.collections
+                    
+                    if api.requires_2fa:
+                        profile["icloud_verified"] = False
+                        await storage.save(f"profile:{user_id}", profile)
+                        return f"Le credenziali per {email} sono corrette, ma iCloud richiede l'autenticazione a due fattori (2FA). Controlla i tuoi dispositivi e autorizza l'accesso. (Nota: al momento Genesi non può ricevere il codice 2FA via chat, dovrai autorizzare il dispositivo manualmente se possibile o riprovare dopo averlo fatto in un test script)."
+                    
                     profile["icloud_verified"] = True
                     await storage.save(f"profile:{user_id}", profile)
                     return f"Fantastico! Ho collegato correttamente il tuo account iCloud ({email}). Ora posso sincronizzare i tuoi promemoria."
                 except Exception as auth_err:
                     logger.warning("ICLOUD_AUTH_TEST_FAIL: %s", str(auth_err))
-                    return "Le credenziali sembrano corrette, ma iCloud ha rifiutato la connessione. Assicurati che la password sia una 'Password specifica per le app' e non quella principale."
+                    return "Le credenziali sembrano errate o iCloud ha rifiutato la connessione. Assicurati di usare l'email corretta e la password specifica per le app."
             else:
                 return "Non sono riuscito a contattare i server iCloud. Riprova tra poco."
                 
