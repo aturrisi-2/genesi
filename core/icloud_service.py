@@ -101,10 +101,31 @@ class ICloudService:
                 return []
 
             log("ICLOUD_LIST_SELECTED", name=target_list.name)
-            todos = target_list.todos()
+            
+            # Prova diversi metodi di fetch perché i server Apple possono dare 500 su query massive
+            todos = []
+            try:
+                # Metodo 1: Search (spesso più stabile su iCloud)
+                todos = target_list.search(todo=True)
+                log("ICLOUD_FETCH_METHOD", method="search")
+            except Exception as e:
+                log("ICLOUD_SEARCH_ERROR", error=str(e), level="WARNING")
+                try:
+                    # Metodo 2: todos() (fallback classico)
+                    todos = target_list.todos()
+                    log("ICLOUD_FETCH_METHOD", method="todos")
+                except Exception as e2:
+                    log("ICLOUD_TODOS_ERROR", error=str(e2), level="ERROR")
+                    return []
+
             reminders = []
             for todo in todos:
                 try:
+                    # Carica i dati del task
+                    # Alcune versioni di caldav richiedono .load() se search non ha caricato tutto
+                    if not hasattr(todo, 'vobject_instance'):
+                        todo.load()
+                    
                     vobj = todo.vobject_instance.vtodo
                     reminders.append({
                         "summary": vobj.summary.value if hasattr(vobj, 'summary') else "Senza titolo",
