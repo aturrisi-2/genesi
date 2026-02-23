@@ -46,21 +46,20 @@ class ICloudService:
     def get_reminders_lists(self) -> List[Dict[str, Any]]:
         """Recupera le liste di promemoria disponibili."""
         client = self._get_client()
-        if not client:
+        if not client or not self._principal:
             return []
 
         try:
             calendars = self._principal.calendars()
             lists = []
             for cal in calendars:
-                # Filtra per calendari che supportano i task (VTODO)
-                props = cal.get_properties([caldav.elements.dav.SupportedComponentSet()])
-                # Note: properties access can vary, some servers use different methods
-                # Simple check for reminders often involves 'task' in metadata or just listing all
+                # Aggiungiamo tutte le liste, poi filtreremo nell'uso
                 lists.append({
                     "id": str(cal.url),
-                    "name": cal.name,
+                    "name": cal.name or "Senza nome",
                 })
+            
+            log("ICLOUD_LISTS_FOUND", count=len(lists))
             return lists
         except Exception as e:
             log("ICLOUD_LIST_FETCH_ERROR", error=str(e), level="ERROR")
