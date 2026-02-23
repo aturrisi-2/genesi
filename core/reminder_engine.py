@@ -149,43 +149,69 @@ class ReminderEngine:
             return None
 
     async def fetch_icloud_reminders(self, user_id: str, list_name: str = "Promemoria") -> List[Dict[str, Any]]:
-        """Fetch reminders from iCloud for this user."""
+        """
+        Fetch reminders from iCloud and MERGE them into local storage.
+        Returns only the newly added reminders.
+        """
         svc = await self._get_icloud_service(user_id)
         if not svc:
             return []
         
         try:
             icloud_data = svc.get_reminders(list_name)
-            reminders = []
+            if not icloud_data:
+                return []
+
+            # Carichiamo i locali per il merge
+            local_reminders = self._load_reminders(user_id)
+            existing_guids = {r.get("id") for r in local_reminders}
+            
+            new_added = []
             for item in icloud_data:
-                reminders.append({
-                    "id": f"icloud_{item.get('guid', uuid.uuid4())}",
-                    "text": item.get('summary', 'Senza titolo'),
-                    "datetime": None,
-                    "status": "pending",
-                    "source": "icloud"
-                })
-            return reminders
+                # Creiamo un ID stabile per iCloud usando il GUID
+                guid = item.get('guid')
+                reminder_id = f"icloud_{guid}" if guid else f"icloud_{uuid.uuid4()}"
+                
+                if reminder_id not in existing_guids:
+                    new_item = {
+                        "id": reminder_id,
+                        "text": item.get('summary', 'Senza titolo'),
+                        "datetime": item.get('due'), # Nessun fallback a 'now', altrimenti suonano subito
+                        "status": "pending",
+                        "source": "icloud",
+                        "list": item.get('list', 'iCloud')
+                    }
+                    local_reminders.append(new_item)
+                    new_added.append(new_item)
+            
+            if new_added:
+                self._save_reminders(user_id, local_reminders)
+                log("REMINDER_ICLOUD_MERGED", user_id=user_id, new_count=len(new_added))
+            
+            return new_added
+            
         except Exception as e:
             log("ICLOUD_FETCH_ERROR", user_id=user_id, error=str(e))
             return []
 
-    async def list_reminders(self, user_id: str, status_filter: Optional[str] = None, include_icloud: bool = True) -> List[Dict[str, Any]]:
+    async def list_reminders(self, user_id: str, status_filter: Optional[str] = None, include_icloud: bool = False) -> List[Dict[str, Any]]:
         """
-        List reminders for a user, combining local and optional iCloud data.
+        List reminders for a user. 
+        include_icloud=False di default per evitare congestione durante il polling.
         """
         try:
+            # Se richiesto iCloud, facciamo il fetch reale
+            if include_icloud:
+                await self.fetch_icloud_reminders(user_id)
+
+            # Leggiamo sempre dal file locale (che ora contiene anche quelli di iCloud syncati)
             reminders = self._load_reminders(user_id)
+            
             if status_filter:
                 reminders = [r for r in reminders if r.get("status") == status_filter]
             
+            # Sort per data
             reminders.sort(key=lambda r: r.get("datetime") or "")
-            
-            if include_icloud:
-                icloud_reminders = await self.fetch_icloud_reminders(user_id)
-                if icloud_reminders:
-                    log("REMINDER_LIST_ICLOUD_MERGE", user_id=user_id, count=len(icloud_reminders))
-                    reminders.extend(icloud_reminders)
             
             log("REMINDER_LIST", user_id=user_id, count=len(reminders), status_filter=status_filter)
             return reminders
@@ -202,8 +228,9 @@ class ReminderEngine:
                 user_id = file_path.stem
                 reminders = self._load_reminders(user_id)
                 for reminder in reminders:
-                    if (reminder.get("status") == "pending" and 
-                        datetime.fromisoformat(reminder["datetime"]) <= now):
+                    rem_date = reminder.get("datetime")
+                    if (reminder.get("status") == "pending" and rem_date and
+                        datetime.fromisoformat(rem_date) <= now):
                         reminder_copy = reminder.copy()
                         reminder_copy["user_id"] = user_id
                         due_reminders.append(reminder_copy)

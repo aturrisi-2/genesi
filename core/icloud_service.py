@@ -151,32 +151,53 @@ class ICloudService:
                             if not raw_data or "VTODO" not in raw_data.upper():
                                 continue
                             
-                            # Estrazione SUMMARY
+                            raw_upper = raw_data.upper()
+                            
+                            # 1. Filtro PREVENTIVO: se è completato, saltiamo subito
+                            # Cerchiamo STATUS:COMPLETED o PERCENT-COMPLETE:100
+                            st_match = re.search(r'STATUS:(.*)', raw_data, re.IGNORECASE)
+                            status = st_match.group(1).strip().upper() if st_match else "NEEDS-ACTION"
+                            
+                            is_completed = (status in ["COMPLETED", "CANCELLED"] or 
+                                          "PERCENT-COMPLETE:100" in raw_upper or
+                                          "COMPLETED:" in raw_upper)
+                            
+                            if is_completed:
+                                continue
+
+                            # 2. Estrazione GUID (UID)
+                            guid = None
+                            uid_match = re.search(r'UID:(.*)', raw_data, re.IGNORECASE)
+                            if uid_match:
+                                guid = uid_match.group(1).strip()
+                            
+                            # 3. Estrazione SUMMARY
                             summary = "Senza titolo"
                             s_match = re.search(r'SUMMARY(?:;[^:]*)?:(.*)', raw_data, re.IGNORECASE)
                             if s_match:
                                 summary = s_match.group(1).strip().replace('\\', '')
                             
-                            # Estrazione STATUS
-                            status = "NEEDS-ACTION"
-                            st_match = re.search(r'STATUS:(.*)', raw_data, re.IGNORECASE)
-                            if st_match:
-                                status = st_match.group(1).strip().upper()
-                            
-                            # Filtro completati
-                            raw_upper = raw_data.upper()
-                            is_completed = (status in ["COMPLETED", "CANCELLED"] or 
-                                          "PERCENT-COMPLETE:100" in raw_upper)
-                            
-                            # LOG VERBOSE: Vediamo tutto per capire l'errore
-                            log("ICLOUD_RAW_ITEM", summary=summary, status=status, list=display_name)
-                            
-                            if not is_completed:
-                                all_reminders.append({
-                                    "summary": summary,
-                                    "status": "pending",
-                                    "due": None
-                                })
+                            # 4. Estrazione DUE date
+                            due_date = None
+                            # Cerchiamo DUE o DTSTART
+                            due_match = re.search(r'(?:DUE|DTSTART)(?:;[^:]*)?:(\d{8}T\d{6}Z?)', raw_data, re.IGNORECASE)
+                            if due_match:
+                                date_str = due_match.group(1)
+                                try:
+                                    # Formato CalDAV standard: YYYYMMDDTHHMMSSZ
+                                    if 'T' in date_str:
+                                        ts = datetime.strptime(date_str.replace('Z', ''), "%Y%m%dT%H%M%S")
+                                        due_date = ts.isoformat()
+                                except: pass
+
+                            # Aggiungiamo solo se non completato
+                            all_reminders.append({
+                                "guid": guid,
+                                "summary": summary,
+                                "status": "pending",
+                                "due": due_date,
+                                "list": display_name
+                            })
                         except: continue
                 except: continue
                 
