@@ -44,16 +44,17 @@ class ICloudService:
             self._connect()
 
     def _connect(self):
-        """Stabilisce la connessione CalDAV."""
+        """Stabilisce la connessione CalDAV usando l'endpoint specifico per i Promemoria."""
         try:
-            # Endpoint ufficiale CalDAV di Apple
-            url = f"https://caldav.icloud.com"
+            # Endpoint dedicato ai promemoria (più stabile per la nuova architettura iOS 13+)
+            url = "https://reminders.icloud.com"
             self.client = caldav.DAVClient(
                 url=url,
                 username=self.username,
-                password=self.password
+                password=self.password,
+                timeout=30 # Apple a volte è lenta
             )
-            log("ICLOUD_CALDAV_CONNECT", user=self.username)
+            log("ICLOUD_CALDAV_CONNECT", user=self.username, endpoint="reminders")
             return True
         except Exception as e:
             log("ICLOUD_CALDAV_CONNECT_ERROR", user=self.username, error=str(e), level="ERROR")
