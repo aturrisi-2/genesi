@@ -113,14 +113,28 @@ class ICloudService:
             for calendar in calendars:
                 try:
                     current_list_name = getattr(calendar, 'name', 'Senza nome')
+                    # Logghiamo ogni lista che proviamo a scansionare
+                    log("ICLOUD_CALDAV_LIST_CHECK", name=current_list_name)
                     
-                    # Proviamo a scaricare i todo. Molte liste iCloud non dichiarano 
-                    # esplicitamente il supporto VTODO ma lo contengono.
                     try:
+                        # Alcuni server Apple richiedono un fetch esplicito
                         todos = calendar.todos(include_completed=False)
+                        
+                        # Se è vuoto, proviamo a chiedere genericamente tutti gli oggetti 
+                        # del calendario per vedere se ci sono VTODO "nascosti"
+                        if not todos:
+                            objs = calendar.objects_by_filters(components=['VTODO'])
+                            if objs:
+                                todos = objs
+                                log("ICLOUD_CALDAV_VTODO_FALLBACK", name=current_list_name, count=len(todos))
+                        
                         if len(todos) > 0:
                             log("ICLOUD_CALDAV_LIST_FOUND", name=current_list_name, items=len(todos))
-                    except Exception:
+                        else:
+                            # Logghiamo anche quando è vuota, per conferma
+                            log("ICLOUD_CALDAV_LIST_EMPTY", name=current_list_name)
+                    except Exception as e:
+                        log("ICLOUD_CALDAV_LIST_ERROR", name=current_list_name, error=str(e))
                         continue
                     
                     for todo in todos:
