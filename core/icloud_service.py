@@ -107,6 +107,22 @@ class ICloudService:
             log("ICLOUD_API_INIT_ERROR", user=self.username, error=str(e), level="ERROR")
             return None
 
+    def validate_2fa(self, code: str) -> bool:
+        """Valida il codice 2FA inviato dall'utente."""
+        api = self._get_client()
+        if not api: return False
+        
+        if not api.requires_2fa:
+            return True
+            
+        try:
+            result = api.validate_2fa_code(code)
+            log("ICLOUD_2FA_VALIDATION", user=self.username, success=result)
+            return result
+        except Exception as e:
+            log("ICLOUD_2FA_VALIDATION_ERROR", user=self.username, error=str(e), level="ERROR")
+            return False
+
     def get_reminders_lists(self) -> List[Dict[str, Any]]:
         """Recupera le liste di promemoria disponibili."""
         api = self._get_client()

@@ -145,6 +145,14 @@
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
         </button>
+        <button id="icloud-sync-btn" class="icon-btn" title="iCloud Integration">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path
+              d="M17.5 19c.6 0 1.1-.4 1.3-.9.3-.6.6-1.1.9-1.5.8-1.1 1.3-2.4 1.3-3.6 0-3.9-3.1-7-7-7-2.3 0-4.4 1.1-5.7 2.8C7.1 8.3 6 8 4.8 8c-2.7 0-4.8 2.2-4.8 5 0 2.2 1.4 4 3.3 4.7l.5.1">
+            </path>
+          </svg>
+        </button>
         <button id="coding-mode-btn" class="icon-btn" title="Coding Mode">
           <svg viewBox="0 0 24 24">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
@@ -299,6 +307,39 @@
 
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ICloud Modal -->
+  <div id="icloud-modal" class="modal hidden">
+    <div class="modal-content icloud-card">
+      <div class="modal-header">
+        <h3>Integrazione iCloud</h3>
+        <button class="close-modal">&times;</button>
+      </div>
+      <div id="icloud-status-area">
+        <p>Caricamento stato...</p>
+      </div>
+
+      <div id="icloud-setup-form" class="hidden">
+        <label>Email Apple ID</label>
+        <input type="email" id="icloud-email" placeholder="esempio@icloud.com">
+        <label>Password (o Password App)</label>
+        <input type="password" id="icloud-password" placeholder="••••••••">
+        <button id="save-icloud-btn">Collega Account</button>
+      </div>
+
+      <div id="icloud-2fa-form" class="hidden">
+        <p class="warningText">iCloud ha richiesto un codice di verifica. Inserisci il codice a 6 cifre inviato ai tuoi
+          dispositivi Apple.</p>
+        <input type="text" id="icloud-2fa-code" placeholder="123456" maxlength="6">
+        <button id="verify-2fa-btn">Verifica Codice</button>
+      </div>
+
+      <div id="icloud-active-actions" class="hidden">
+        <button id="manual-sync-btn" class="primary">Sincronizza Ora</button>
+        <button id="disconnect-icloud-btn" class="danger">Disconnetti</button>
       </div>
     </div>
   </div>
