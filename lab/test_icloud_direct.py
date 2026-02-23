@@ -17,17 +17,25 @@ def test_direct():
     user = os.environ.get("ICLOUD_USER")
     password = os.environ.get("ICLOUD_PASSWORD")
     
-    # URL diretto scoperto dai log precedenti
-    # NOTA: L'ID '10668443658' sembra essere il tuo DSID interno di iCloud
+    # Identifichiamo il server corretto dall'URL diretto per evitare l'errore 'can't be joined'
+    base_server = "https://p112-caldav.icloud.com"
     direct_url = "https://p112-caldav.icloud.com:443/10668443658/calendars/tasks/"
     
     print(f"🔗 Tentativo di connessione DIRETTA a: {direct_url}")
     print(f"👤 Utente: {user}")
-    print(f"🔑 Password tipo: {'Specifica per app' if '-' in (password or '') else 'POSSIBILE PASSWORD REALE (ERRORE!)'}")
     
+    # Verifica tipo password
+    is_app_specific = "-" in (password or "")
+    print(f"🔑 Password tipo: {'Specifica per app (OK)' if is_app_specific else 'REALE (ERRORE!) - Cambiala nel .env'}")
+    
+    if not is_app_specific:
+        print("\n❌ FERMA TUTTO: Per questo test DEVI usare la password specifica (xxxx-xxxx-xxxx-xxxx).")
+        print("La trovi su appleid.apple.com -> Password specifiche per le app.")
+        return
+
     try:
         client = caldav.DAVClient(
-            url="https://caldav.icloud.com", # Base URL
+            url=base_server, # Usiamo lo stesso server dell'URL diretto
             username=user,
             password=password
         )
