@@ -5,6 +5,13 @@ Assicurati di aver configurato ICLOUD_USER e ICLOUD_PASSWORD nel file .env (usa 
 """
 
 import os
+import sys
+from pathlib import Path
+
+# Aggiungi la root del progetto al path per trovare il modulo 'core'
+root_dir = Path(__file__).parent.parent
+sys.path.append(str(root_dir))
+
 from dotenv import load_dotenv
 from core.icloud_service import icloud_service
 
