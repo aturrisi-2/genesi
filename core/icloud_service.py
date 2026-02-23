@@ -141,22 +141,35 @@ class ICloudService:
             all_reminders = []
             for target_cal in target_cals:
                 try:
-                    # Prova 1: Metodo standard .todos()
+                    # Tentativo 1: Metodo standard .todos() (usa REPORT con filtri)
+                    tasks = []
                     try:
                         tasks = target_cal.todos()
                     except Exception as e:
-                        # Prova 2: Se dà 500, proviamo a chiedere i compiti in modo più grezzo (senza filtri)
-                        # Molti server Apple 500ano se chiedi filtri ma accettano search base
-                        logger.warning("ICLOUD_STD_TODO_FAIL list=%s, trying fallback search", str(target_cal.url))
-                        tasks = target_cal.search(compfilter='VTODO')
+                        logger.warning("ICLOUD_TODO_REPORT_FAIL list=%s, trying fallback fetch-all", str(target_cal.url))
+                        # Tentativo 2: Scarica TUTTO il contenuto della lista e filtra in memoria
+                        # Questo bypassa il bug del server 500 sui filtri REPORT
+                        try:
+                            # .objects() scarica i metadati di tutto (eventi, todo, ecc)
+                            all_objs = target_cal.objects()
+                            tasks = []
+                            for obj in all_objs:
+                                # Verifichiamo se è un VTODO scaricando l'istanza se necessario
+                                try:
+                                    if obj.vobject_instance and hasattr(obj.vobject_instance, 'vtodo'):
+                                        tasks.append(obj)
+                                except: continue
+                        except:
+                            logger.error("ICLOUD_FALLBACK_FETCH_ALL_FAIL list=%s", str(target_cal.url))
 
                     for task in tasks:
                         try:
                             if not task.vobject_instance: continue
                             vobj = task.vobject_instance.vtodo
                             
+                            # Filtro completati
                             status = (getattr(vobj, 'status', None) and vobj.status.value.lower()) or ""
-                            if status == 'completed': continue
+                            if status in ['completed', 'fatto']: continue
                             if hasattr(vobj, 'completed'): continue
                                 
                             all_reminders.append({
@@ -166,7 +179,7 @@ class ICloudService:
                             })
                         except: continue
                 except Exception as e:
-                    logger.warning("ICLOUD_LIST_SKIP list=%s error=%s", str(target_cal.url), str(e))
+                    logger.warning("ICLOUD_LIST_SKIP fatal_error=list=%s error=%s", str(target_cal.url), str(e))
                     continue
                 
             log("ICLOUD_CALDAV_REMINDERS_FETCH", count=len(all_reminders), user=self.username)
