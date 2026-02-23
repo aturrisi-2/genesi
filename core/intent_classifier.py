@@ -149,12 +149,18 @@ class IntentClassifier:
         """
         message_lower = message.lower().strip()
         
-        # 0️⃣ PRIORITA' MASSIMA: reminder patterns (tutti)
+        # 0️⃣ PRIORITA' MASSIMA: iCloud patterns
+        for intent in ["icloud_setup", "icloud_sync"]:
+            keywords = self.gpt_patterns.get(intent, [])
+            if any(keyword in message_lower for keyword in keywords):
+                log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="regex", message=message[:50])
+                return intent
+
+        # 1️⃣ PRIORITA' ALTA: reminder patterns (tutti)
         for intent, keywords in self.gpt_patterns.items():
             if intent.startswith('reminder_'):
                 if any(keyword in message_lower for keyword in keywords):
-                    log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="gpt-4o", message=message[:50])
-                    logger.info("INTENT_ENGINE=gpt-4o-mini intent=%s", intent)
+                    log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="regex", message=message[:50])
                     # APPLICA REMINDER GUARD LAYER
                     normalized_intent = self.normalize_reminder_intent(message, intent)
                     return normalized_intent
@@ -186,12 +192,12 @@ class IntentClassifier:
             log("INTENT_OVERRIDE_APPLIED", original="mixed", final="tecnica", message=message[:50])
             return "tecnica"
         
-        # 1️⃣ Pattern tecnici (GPT-4o)
+        # 2️⃣ Altri pattern tecnici (GPT-4o)
         for intent, keywords in self.gpt_patterns.items():
+            if intent.startswith('icloud_'): continue # Già gestiti sopra
             if any(keyword in message_lower for keyword in keywords):
-                log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="gpt-4o", message=message[:50])
-                logger.info("INTENT_ENGINE=gpt-4o-mini intent=%s", intent)
-                # APPLICA REMINDER GUARD LAYER solo per reminder intents
+                log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="regex", message=message[:50])
+                # APPLICA REMINDER GUARD LAYER solo per reminder intents (anche se qui non dovrebbero essercene rimasti)
                 if intent.startswith('reminder_'):
                     normalized_intent = self.normalize_reminder_intent(message, intent)
                     return normalized_intent
@@ -351,6 +357,14 @@ class IntentClassifier:
             Intent normalizzato (reminder_*, chat_free, o intent originale)
         """
         message_lower = message.lower().strip()
+        
+        # 0️⃣ Parole chiave iCloud → forza icloud_sync / icloud_setup
+        if "icloud" in message_lower:
+            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "importa", "scarica"]):
+                return "icloud_sync"
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login"]):
+                return "icloud_setup"
+                
         forced_intent = False
         
         # 1️⃣ Parole chiave CANCELLAZIONE → forza reminder_delete
@@ -479,6 +493,8 @@ INTENT POSSIBILI:
 - debug: errori codice, stacktrace, malfunzionamenti software 
 - spiegazione: richiesta di spiegazione dettagliata "perchè", "come mai"
 - identity: chi sono io, che lavoro faccio, come mi chiamo
+- icloud_setup: collegare, configurare o impostare l'account iCloud
+- icloud_sync: sincronizzare, aggiornare o scaricare promemoria da iCloud
 - emotional: l'utente esprime un suo stato d'animo, tristezza, ansia
 - memory_context: l'utente fa un riferimento esplicito a conversazioni precedenti
 - chat_free: salutare, ringraziare, o intent generico non elencato
