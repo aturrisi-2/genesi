@@ -10,39 +10,57 @@ from typing import List, Dict, Any, Optional
 from core.log import log
 
 class ICloudService:
-    def __init__(self):
-        self.username = os.environ.get("ICLOUD_USER")
-        self.password = os.environ.get("ICLOUD_PASSWORD")
-        self.url = "https://caldav.icloud.com"
-        self._client = None
-        self._principal = None
+    def __init__(self, username: Optional[str] = None, password: Optional[str] = None, cookie_directory: Optional[str] = None):
+        self.username = username or os.environ.get("ICLOUD_USER")
+        self.password = password or os.environ.get("ICLOUD_PASSWORD")
+        self.cookie_directory = cookie_directory
         self._api = None
-        log("ICLOUD_SERVICE_INIT")
+        log("ICLOUD_SERVICE_INIT", user=self.username)
 
     def _get_api(self):
-        """Inizializza l'interfaccia pyicloud con gestione 2FA."""
+        """Inizializza l'interfaccia pyicloud con gestione 2FA e sessione isolata."""
         if self._api:
             return self._api
             
         if not self.username or not self.password:
-            log("ICLOUD_AUTH_MISSING", level="ERROR")
+            log("ICLOUD_AUTH_MISSING", user=self.username, level="ERROR")
             return None
             
         try:
             from pyicloud import PyiCloudService
-            self._api = PyiCloudService(self.username, self.password)
+            # Uso directory dedicata per sessione (multi-utente)
+            self._api = PyiCloudService(
+                self.username, 
+                self.password, 
+                cookie_directory=self.cookie_directory
+            )
             
             if self._api.requires_2fa:
-                log("ICLOUD_2FA_REQUIRED", level="WARNING")
-                # In un ambiente server, qui dovremmo avere un modo per iniettare il codice
-                # Per ora logghiamo il problema
+                log("ICLOUD_2FA_REQUIRED", user=self.username, level="WARNING")
                 return None
                 
-            log("ICLOUD_WEB_AUTH_SUCCESS")
+            log("ICLOUD_WEB_AUTH_SUCCESS", user=self.username)
             return self._api
         except Exception as e:
-            log("ICLOUD_WEB_AUTH_ERROR", error=str(e), level="ERROR")
+            log("ICLOUD_WEB_AUTH_ERROR", user=self.username, error=str(e), level="ERROR")
             return None
+
+    def authenticate_with_2fa(self, code: str) -> bool:
+        """Valida il codice 2FA per l'utente corrente."""
+        api = self._get_api()
+        if not api: return False
+        
+        try:
+            result = api.validate_2fa_code(code)
+            if result:
+                log("ICLOUD_2FA_SUCCESS", user=self.username)
+                return True
+            else:
+                log("ICLOUD_2FA_FAILED", user=self.username, level="ERROR")
+                return False
+        except Exception as e:
+            log("ICLOUD_2FA_ERROR", user=self.username, error=str(e), level="ERROR")
+            return False
 
     def get_reminders_lists(self) -> List[Dict[str, Any]]:
         """Recupera le liste usando il metodo Raw Web."""
@@ -51,12 +69,19 @@ class ICloudService:
         
         try:
             # Bypass crash: fetch raw collections
-            host = api._webservices.get('reminders', {}).get('url')
-            if not host: return []
+            host = None
+            if hasattr(api, '_webservices'):
+                host = api._webservices.get('reminders', {}).get('url')
+            
+            if not host:
+                log("ICLOUD_SERVICE_URL_NOT_FOUND", user=self.username, level="ERROR")
+                return []
             
             url = f"{host}/rd/startup"
             response = api.session.get(url, params=api.params)
-            if response.status_code != 200: return []
+            if response.status_code != 200: 
+                log("ICLOUD_HTTP_ERROR", status=response.status_code, user=self.username)
+                return []
             
             data = response.json()
             collections = data.get('Collections', [])
@@ -68,10 +93,10 @@ class ICloudService:
                     "name": c.get('title', 'Senza nome'),
                 })
             
-            log("ICLOUD_LISTS_FOUND", count=len(lists))
+            log("ICLOUD_LISTS_FOUND", count=len(lists), user=self.username)
             return lists
         except Exception as e:
-            log("ICLOUD_LIST_FETCH_ERROR", error=str(e), level="ERROR")
+            log("ICLOUD_LIST_FETCH_ERROR", user=self.username, error=str(e), level="ERROR")
             return []
 
     def get_reminders(self, list_name: str = "Promemoria") -> List[Dict[str, Any]]:
@@ -81,7 +106,10 @@ class ICloudService:
         
         try:
             # Bypass crash: fetch raw data
-            host = api._webservices.get('reminders', {}).get('url')
+            host = None
+            if hasattr(api, '_webservices'):
+                host = api._webservices.get('reminders', {}).get('url')
+                
             if not host: return []
             
             url = f"{host}/rd/startup"
@@ -105,7 +133,7 @@ class ICloudService:
             if not target_guid:
                 list_name_lower = list_name.lower()
                 for c in collections:
-                    title = c.get('title', '').lower()
+                    title = (c.get('title') or '').lower()
                     if list_name_lower in title or title in list_name_lower:
                         target_guid = c.get('guid')
                         break
@@ -113,7 +141,7 @@ class ICloudService:
             # 3. Fallback: Promemoria default
             if not target_guid and collections:
                 for c in collections:
-                    if "promemoria" in c.get('title', '').lower():
+                    if "promemoria" in (c.get('title') or '').lower():
                         target_guid = c.get('guid')
                         break
                 if not target_guid: target_guid = collections[0].get('guid')
@@ -128,14 +156,14 @@ class ICloudService:
                     reminders.append({
                         "summary": r.get('title', 'Senza titolo'),
                         "status": "not_completed",
-                        "due": None # Le date sono il problema, per ora le ignoriamo o le formattiamo con cautela
+                        "due": None 
                     })
             
-            log("ICLOUD_REMINDERS_FETCH", count=len(reminders), list=list_name)
+            log("ICLOUD_REMINDERS_FETCH", count=len(reminders), list=list_name, user=self.username)
             return reminders
         except Exception as e:
-            log("ICLOUD_REMINDERS_FETCH_ERROR", error=str(e), level="ERROR")
+            log("ICLOUD_REMINDERS_FETCH_ERROR", user=self.username, error=str(e), level="ERROR")
             return []
 
-# Istanza globale
+# Istanza per compatibilità (fallback su env se non specificato)
 icloud_service = ICloudService()

@@ -344,6 +344,16 @@ class Proactor:
                 return response, "tool"
             
             # STEP 5.6: REMINDER ROUTING STRICT
+            if intent == "icloud_setup":
+                log("ROUTING_DECISION", route="icloud_setup", user_id=user_id)
+                response = await self._handle_icloud_setup(user_id, message)
+                return response, "tool"
+            
+            if intent == "icloud_sync":
+                log("ROUTING_DECISION", route="icloud_sync", user_id=user_id)
+                response = await self._handle_icloud_sync(user_id, message)
+                return response, "tool"
+
             if intent == "reminder_create":
                 log("ROUTING_DECISION", route="reminder_create", user_id=user_id)
                 response = await self._handle_reminder_creation(user_id, message)
@@ -666,7 +676,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         """
         try:
             # Get pending reminders
-            reminders = reminder_engine.list_reminders(user_id, status_filter="pending")
+            reminders = await reminder_engine.list_reminders(user_id, status_filter="pending")
             
             if not reminders:
                 return "Non hai promemoria impostati.", "reminder"
@@ -810,6 +820,82 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         except Exception as e:
             logger.error("REMINDER_UPDATE_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
             return "Mi dispiace, ho avuto un problema con l'aggiornamento. Riprova.", "reminder"
+
+    async def _handle_icloud_setup(self, user_id: str, message: str) -> str:
+        """
+        Gestisce la configurazione dell'account iCloud dell'utente.
+        Estrae email e password (specifica per app) dal messaggio.
+        """
+        try:
+            msg_lower = message.lower()
+            
+            # Use LLM to extract credentials safely
+            setup_prompt = f"""Estrai l'email iCloud e la password specifica per le app dal seguente messaggio.
+Rispondi con un JSON nel formato: {{"email": "...", "password": "..."}}
+Se i dati mancano, lascia i campi null. Non inventare dati.
+
+Messaggio: {message}"""
+            
+            from core.llm_service import llm_service
+            import json
+            
+            response = await llm_service._call_with_protection(
+                "gpt-4o-mini", setup_prompt, message, user_id=user_id, route="icloud"
+            )
+            
+            creds = {}
+            if response:
+                try:
+                    import re
+                    json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                    if json_match:
+                        creds = json.loads(json_match.group(0))
+                except: pass
+            
+            email = creds.get("email")
+            password = creds.get("password")
+            
+            if not email or not password:
+                return "Per configurare iCloud ho bisogno dei tuoi dati. Prova a dirmi qualcosa come: 'Collega il mio iCloud id@email.com con password xxxx-xxxx-xxxx-xxxx'. Ricorda di usare una password specifica per le app!"
+            
+            # Salva nel profilo
+            profile = await storage.load(f"profile:{user_id}", default={})
+            profile["icloud_user"] = email
+            profile["icloud_password"] = password
+            profile["icloud_verified"] = False # Richiede primo test
+            await storage.save(f"profile:{user_id}", profile)
+            
+            # Verifica credenziali immediatamente
+            from core.icloud_service import ICloudService
+            svc = ICloudService(username=email, password=password, cookie_directory=f"memory/icloud_sessions/{user_id}")
+            api = svc._get_api()
+            
+            if api:
+                profile["icloud_verified"] = True
+                await storage.save(f"profile:{user_id}", profile)
+                return f"Fantastico! Ho collegato correttamente il tuo account iCloud ({email}). Ora posso sincronizzare i tuoi promemoria."
+            else:
+                return "Sembra che ci sia un problema con le credenziali fornite. Assicurati che l'email sia corretta e che la password sia una 'Password specifica per le app' generata dal sito Apple ID."
+                
+        except Exception as e:
+            logger.error("ICLOUD_SETUP_ERROR user=%s error=%s", user_id, str(e))
+            return "Problema tecnico durante la configurazione di iCloud. Riprova più tardi."
+
+    async def _handle_icloud_sync(self, user_id: str, message: str) -> str:
+        """Sincronizza i promemoria iCloud immediatamente."""
+        try:
+            # Forza fetch da iCloud
+            reminders = await reminder_engine.fetch_icloud_reminders(user_id)
+            if reminders:
+                return f"Sincronizzazione completata! Ho trovato {len(reminders)} promemoria sul tuo account iCloud."
+            else:
+                profile = await storage.load(f"profile:{user_id}", default={})
+                if not profile.get("icloud_user"):
+                    return "Il tuo account iCloud non è ancora configurato. Dimmi 'collega icloud' per iniziare."
+                return "Sincronizzazione completata. Non ho trovato nuovi promemoria su iCloud."
+        except Exception as e:
+            logger.error("ICLOUD_SYNC_ERROR user=%s error=%s", user_id, str(e))
+            return "Errore durante la sincronizzazione con iCloud."
 
     def _parse_update_datetime_strict(self, message: str) -> Optional[datetime]:
         """

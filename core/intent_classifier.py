@@ -125,6 +125,14 @@ class IntentClassifier:
             "spiegazione": [
                 "spiega", "spiegazione", "come funziona", "perché", "come mai",
                 "dettagli", "approfondire", "chiarire", "illustrare"
+            ],
+            "icloud_setup": [
+                "collega icloud", "configura icloud", "imposta icloud", "accesso icloud",
+                "connetti icloud", "login icloud", "account icloud"
+            ],
+            "icloud_sync": [
+                "sincronizza icloud", "aggiorna icloud", "scarica da icloud",
+                "sincronizza promemoria", "importa promemoria"
             ]
         }
     
