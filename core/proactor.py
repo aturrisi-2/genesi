@@ -868,14 +868,20 @@ Messaggio: {message}"""
             # Verifica credenziali immediatamente
             from core.icloud_service import ICloudService
             svc = ICloudService(username=email, password=password, cookie_directory=f"memory/icloud_sessions/{user_id}")
-            api = svc._get_api()
+            client = svc._get_client()
             
-            if api:
-                profile["icloud_verified"] = True
-                await storage.save(f"profile:{user_id}", profile)
-                return f"Fantastico! Ho collegato correttamente il tuo account iCloud ({email}). Ora posso sincronizzare i tuoi promemoria."
+            if client:
+                try:
+                    # Test minimo: prova a ottenere il principal
+                    client.principal()
+                    profile["icloud_verified"] = True
+                    await storage.save(f"profile:{user_id}", profile)
+                    return f"Fantastico! Ho collegato correttamente il tuo account iCloud ({email}). Ora posso sincronizzare i tuoi promemoria."
+                except Exception as auth_err:
+                    logger.warning("ICLOUD_AUTH_TEST_FAIL: %s", str(auth_err))
+                    return "Le credenziali sembrano corrette, ma iCloud ha rifiutato la connessione. Assicurati che la password sia una 'Password specifica per le app' e non quella principale."
             else:
-                return "Sembra che ci sia un problema con le credenziali fornite. Assicurati che l'email sia corretta e che la password sia una 'Password specifica per le app' generata dal sito Apple ID."
+                return "Non sono riuscito a contattare i server iCloud. Riprova tra poco."
                 
         except Exception as e:
             logger.error("ICLOUD_SETUP_ERROR user=%s error=%s", user_id, str(e))
