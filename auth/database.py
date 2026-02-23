@@ -13,16 +13,19 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 
 async def init_db():
     import asyncio
-    retries = 5
+    from sqlalchemy import text
+    retries = 10
     while retries > 0:
         try:
             async with engine.begin() as conn:
+                # Impostiamo il timeout anche via PRAGMA per sicurezza
+                await conn.execute(text("PRAGMA busy_timeout = 30000"))
                 await conn.run_sync(Base.metadata.create_all)
             return
         except Exception as e:
             if "locked" in str(e).lower() and retries > 1:
-                print(f"[DB] Database locked, retrying in 2s... ({retries-1} left)")
-                await asyncio.sleep(2)
+                print(f"[DB] Database locked, waiting for release... ({retries-1} left)")
+                await asyncio.sleep(3)
                 retries -= 1
             else:
                 raise e
