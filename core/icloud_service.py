@@ -115,43 +115,48 @@ class ICloudService:
                     name = getattr(calendar, 'name', 'Senza nome')
                     url = str(calendar.url)
                     
-                    # Ignoriamo i calendari che sembrano palesemente NO-VTODO (es. Compleanni o Inbox)
-                    if "inbox" in url.lower() or "outbox" in url.lower():
+                    # Ignoriamo i calendari di sistema che non contengono mai promemoria
+                    if any(x in url.lower() for x in ["inbox", "outbox", "notification"]):
                         continue
 
                     log("ICLOUD_CALDAV_LIST_CHECK", name=name)
                     
-                    # Invece di calendar.todos(), usiamo objects() che fa un PROPFIND depth 1.
-                    # Questo è molto più tollerato dai server Apple rispetto ai REPORT complessi.
+                    todos = []
+                    # Tentativo 1: Ricerca specifica per componenti (più "leggera" del REPORT completo)
                     try:
-                        # Recuperiamo tutti gli oggetti della collezione
-                        objs = calendar.objects()
-                    except Exception as e:
-                        log("ICLOUD_CALDAV_LIST_SKIP", name=name, error=str(e))
-                        continue
+                        todos = calendar.search(comp_class='VTODO')
+                    except Exception:
+                        # Tentativo 2: Metodo standard CalDAV
+                        try:
+                            todos = calendar.todos(include_completed=False)
+                        except Exception:
+                            # Tentativo 3: Scansione oggetti (già provata, ma la teniamo come ultima spiaggia)
+                            try:
+                                all_objs = calendar.objects()
+                                todos = [o for o in all_objs if 'VTODO' in (o.data or '')]
+                            except Exception:
+                                log("ICLOUD_CALDAV_LIST_SKIP", name=name, error="All methods failed")
+                                continue
                     
-                    if not objs:
+                    if not todos:
                         log("ICLOUD_CALDAV_LIST_EMPTY", name=name)
                         continue
 
-                    found_in_list = 0
-                    for obj in objs:
+                    found_count = 0
+                    for todo in todos:
                         try:
-                            # Otteniamo i dati grezzi iCalendar
-                            data = obj.data
-                            if 'VTODO' not in data:
-                                continue # Non è un promemoria (magari è un evento VEVENT)
+                            # Otteniamo i dati iCalendar
+                            data = todo.data if hasattr(todo, 'data') else ""
+                            if not data: continue
                             
                             v = readOne(data)
                             task = getattr(v, 'vtodo', None)
                             if not task: continue
                             
-                            # Filtro completati
+                            # Filtriamo i completati manualmente per essere sicuri
                             status = str(getattr(task, 'status', '')).upper()
-                            if status == 'COMPLETED': continue
-                            
-                            # Filtro cancellati
-                            if status == 'CANCELLED': continue
+                            if status in ['COMPLETED', 'CANCELLED']:
+                                continue
 
                             summary = str(task.summary.value) if hasattr(task, 'summary') else "Senza titolo"
                             guid = str(task.uid.value) if hasattr(task, 'uid') else None
@@ -169,17 +174,17 @@ class ICloudService:
                                 "due": due_iso,
                                 "list": name
                             })
-                            found_in_list += 1
+                            found_count += 1
                         except Exception:
                             continue
                     
-                    if found_in_list > 0:
-                        log("ICLOUD_CALDAV_LIST_FOUND", name=name, items=found_in_list)
+                    if found_count > 0:
+                        log("ICLOUD_CALDAV_LIST_FOUND", name=name, items=found_count)
                     else:
                         log("ICLOUD_CALDAV_LIST_EMPTY", name=name)
 
                 except Exception as cal_err:
-                    log("ICLOUD_CALDAV_CAL_ERROR", error=str(cal_err), level="DEBUG")
+                    log("ICLOUD_CALDAV_CAL_ERROR", name=name, error=str(cal_err), level="DEBUG")
                     continue
 
             log("ICLOUD_CALDAV_SYNC_SUCCESS", count=len(all_reminders), user=self.username)
