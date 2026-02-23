@@ -108,44 +108,32 @@ class ICloudService:
             calendars = self._get_calendars(client)
             if not calendars: return []
 
-            target_cals = []
-            list_name_lower = list_name.lower()
+            # 1. Prendiamo TUTTE le liste disponibili per non perdere nulla
+            target_cals = [c for c in calendars if c is not None]
             
-            # 1. Filtriamo le liste che sembrano promemoria (più ampio per l'italiano)
-            for cal in calendars:
-                try:
-                    if cal is None: continue
-                    url_str = str(cal.url)
-                    name = "Sconosciuta"
-                    try:
-                        props = cal.get_properties([caldav.elements.dav.DisplayName()])
-                        name = props.get('{DAV:}displayname', 'Senza nome')
-                    except: pass
-                    
-                    log("ICLOUD_CALDAV_LIST_DISCOVERED", name=name, url=url_str, user=self.username)
-
-                    name_l = name.lower()
-                    url_l = url_str.lower()
-                    if (list_name_lower in name_l or 
-                        any(kw in name_l for kw in ["reminder", "promemoria", "task", "casa", "lavoro", "famiglia", "personale"]) or
-                        any(kw in url_l for kw in ["reminder", "task", "home", "work", "family"])):
-                        target_cals.append(cal)
-                except: continue
-            
-            if not target_cals:
-                target_cals = [c for c in calendars if c is not None]
+            log("ICLOUD_FULL_SCAN_START", list_count=len(target_cals))
 
             all_reminders = []
             for target_cal in target_cals:
                 try:
+                    # Recuperiamo il nome per il log
+                    display_name = "Sconosciuta"
+                    try:
+                        props = target_cal.get_properties([caldav.elements.dav.DisplayName()])
+                        display_name = props.get('{DAV:}displayname', 'Senza nome')
+                    except: pass
+                    
                     all_objs = []
                     try:
                         all_objs = target_cal.objects()
                     except Exception: continue
 
+                    if not all_objs: continue
+                    
+                    log("ICLOUD_SCANNING_LIST", name=display_name, count=len(all_objs))
+
                     for obj in all_objs:
                         try:
-                            # Lazy load content
                             if not hasattr(obj, 'data') or not obj.data:
                                 obj.load()
                                 
@@ -159,9 +147,19 @@ class ICloudService:
                             if s_match:
                                 summary = s_match.group(1).strip().replace('\\', '')
                             
-                            # Filtro completati (STATUS o PERCENT-COMPLETE)
+                            # Estrazione STATUS per debug
+                            status = "UNKNOWN"
+                            st_match = re.search(r'STATUS:(.*)', raw_data, re.IGNORECASE)
+                            if st_match:
+                                status = st_match.group(1).strip().upper()
+                            
+                            # Filtro completati intelligente
                             raw_upper = raw_data.upper()
-                            is_completed = "STATUS:COMPLETED" in raw_upper or "PERCENT-COMPLETE:100" in raw_upper
+                            is_completed = ("STATUS:COMPLETED" in raw_upper or 
+                                          "PERCENT-COMPLETE:100" in raw_upper or
+                                          "STATUS:CANCELLED" in raw_upper)
+                            
+                            log("ICLOUD_ITEM_DEBUG", summary=summary, status=status, completed=is_completed, list=display_name)
                             
                             if not is_completed:
                                 all_reminders.append({
