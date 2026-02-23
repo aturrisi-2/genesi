@@ -132,22 +132,18 @@ class ICloudService:
                         try:
                             all_objs = calendar.objects()
                             if all_objs:
-                                # Usiamo un iteratore per evitare l'errore 'not subscriptable'
-                                first_obj = None
-                                try:
-                                    first_obj = next(iter(all_objs), None)
-                                except Exception: pass
-                                
-                                if first_obj:
-                                    sample_data = first_obj.data if hasattr(first_obj, 'data') else ""
-                                    if 'VTODO' not in (sample_data or '').upper():
-                                        log("ICLOUD_DATA_SAMPLE", list=name, sample=sample_data[:200] if sample_data else "EMPTY", level="DEBUG")
-                                
-                                # Filtriamo manualmente scorrendo la collezione
+                                # Filtriamo manualmente scorrendo la collezione e caricando i dati se mancanti
                                 todos = []
                                 for o in all_objs:
                                     try:
+                                        # Forza il caricamento se il dato è vuoto (tipico di iCloud)
                                         d = o.data if hasattr(o, 'data') else ""
+                                        if not d:
+                                            try:
+                                                o.load()
+                                                d = o.data
+                                            except Exception: continue
+                                        
                                         if d and 'VTODO' in d.upper():
                                             todos.append(o)
                                     except Exception:
