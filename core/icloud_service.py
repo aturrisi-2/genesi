@@ -19,9 +19,8 @@ class ICloudService:
         log("ICLOUD_SERVICE_INIT")
 
     def _get_client(self):
-        """Lazy-init del client CalDAV."""
+        """Lazy-init del client CalDAV con User-Agent personalizzato."""
         if not self._client:
-            # Refresh credentials if not set at init (handle late load_dotenv)
             if not self.username:
                 self.username = os.environ.get("ICLOUD_USER")
             if not self.password:
@@ -31,10 +30,19 @@ class ICloudService:
                 log("ICLOUD_AUTH_MISSING", level="ERROR")
                 return None
             try:
+                # iCloud spesso blocca richieste senza un User-Agent credibile
+                import requests
+                session = requests.Session()
+                session.headers.update({
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                })
+
                 self._client = caldav.DAVClient(
                     url=self.url,
                     username=self.username,
-                    password=self.password
+                    password=self.password,
+                    proxy=None,
+                    requests_session=session
                 )
                 self._principal = self._client.principal()
                 log("ICLOUD_AUTH_SUCCESS")
@@ -114,9 +122,20 @@ class ICloudService:
                 # Metodo B: children (più grezzo, evita filtri lato server che crashano)
                 try:
                     log("ICLOUD_FETCH_TRY", method="children")
-                    # Recuperiamo tutti gli oggetti e filtriamo in locale
+                    # Recuperiamo tutti gli oggetti della lista
                     all_objects = target_list.children()
-                    todos = [obj for obj in all_objects if "VTODO" in obj.data]
+                    
+                    # Filtriamo in locale per VTODO
+                    todos = []
+                    for obj in all_objects:
+                        try:
+                            # caldav objects usually have .data
+                            data = obj.data if hasattr(obj, 'data') else ""
+                            if "VTODO" in data:
+                                todos.append(obj)
+                        except:
+                            continue
+                    log("ICLOUD_B_SUCCESS", count=len(todos))
                 except Exception as e2:
                     log("ICLOUD_B_FAILED", error=str(e2))
                     # Metodo C: todos() classico
