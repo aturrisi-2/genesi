@@ -32,13 +32,28 @@ def test_raw_web():
     print("✅ Autenticato.")
 
     try:
-        # Recuperiamo l'URL della webservice 'reminders' SENZA inizializzare il servizio (che crasherebbe)
-        reminders_service = api.webservices.get('reminders')
-        if not reminders_service:
-            print("❌ Servizio 'reminders' non trovato nelle webservices di Apple.")
+        # Tenta di recuperare l'host dei promemoria dai dati di sessione
+        host = None
+        if hasattr(api, 'webservices'): # Alcune versioni
+            host = api.webservices.get('reminders', {}).get('url')
+        
+        if not host and hasattr(api, '_webservices'): # Versioni recenti
+            host = api._webservices.get('reminders', {}).get('url')
+            
+        if not host:
+            # Fallback: proviamo a cercarlo nei dati grezzi della sessione
+            print("🔍 Ricerca host nelle webservices...")
+            for name, svc in api.data.get('webservices', {}).items():
+                if name == 'reminders':
+                    host = svc.get('url')
+                    break
+        
+        if not host:
+            print("❌ Impossibile trovare l'URL del servizio Reminders.")
+            # Stampiamo le chiavi disponibili per debug
+            print(f"Chiavi API: {list(api.__dict__.keys())}")
             return
             
-        host = reminders_service.get('url')
         print(f"🔗 Reminders Host: {host}")
         
         url = f"{host}/rd/startup"
@@ -48,7 +63,7 @@ def test_raw_web():
             "lang": "it-it",
         })
 
-        print(f"📥 Richiesta dati grezzi a Apple (Bypassando RemindersService)...")
+        print(f"📥 Richiesta dati grezzi a Apple (Total Bypass)...")
         response = api.session.get(url, params=params)
         
         if response.status_code != 200:
