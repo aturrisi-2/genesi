@@ -98,33 +98,38 @@ def test_pyicloud_patched():
     print("✅ Autenticato (Sessione Riparata).")
 
     try:
-        print("\n📥 Recupero promemoria...")
+        print("\n📥 Recupero promemoria (Deep Inspection)...")
         # Il refresh() ora non dovrebbe più crashare grazie alla patch
         api.reminders.refresh()
         
+        # Debug: mostriamo cosa vede pyicloud a livello alto
+        print(f"DEBUG: Reminders Service Keys: {list(api.reminders.data.keys()) if hasattr(api.reminders, 'data') else 'N/A'}")
+
         collections = api.reminders.collections
         if not collections:
-            print("ℹ️ Nessuna lista trovata (ma la connessione è OK).")
+            print("ℹ️ Nessuna lista trovata nel servizio Reminders.")
             
         for name, coll in collections.items():
-            print(f"📂 Lista: '{name}'")
-            # Debug: cosa c'è dentro coll?
-            # print(f"   Debug keys: {coll.keys()}")
+            print(f"\n📂 Lista: '{name}'")
+            # Stampiamo TUTTE le chiavi di questa collezione per capire dove sono i dati
+            print(f"   Chiavi disponibili: {list(coll.keys())}")
             
-            reminders = coll.get('reminders', [])
-            if not reminders:
-                # Prova a cercare in altre chiavi se 'reminders' è vuoto
-                # Alcune versioni usano 'tasks' o simili
-                print("   (vuota)")
+            # Proviamo diverse chiavi note
+            tasks = coll.get('reminders') or coll.get('tasks') or coll.get('items') or []
+            
+            if not tasks:
+                print("   (Nessun task trovato con le chiavi standard)")
+                # Se è vuota, stampiamo il contenuto grezzo (primi 200 caratteri) per debug
+                import json
+                raw_debug = json.dumps(coll, indent=2)[:500]
+                # print(f"   Dati grezzi (estratto):\n{raw_debug}...")
             else:
-                print(f"   ✅ Trovati {len(reminders)} promemoria.")
-                for r in reminders[:5]:
-                    title = r.get('title') or r.get('summary') or "Senza titolo"
-                    due = r.get('due') or "Nessuna data"
-                    print(f"   - {title} (Scadenza: {due})")
+                print(f"   ✅ Trovati {len(tasks)} elementi.")
+                for r in tasks[:3]:
+                    print(f"   - {r.get('title') or r.get('summary') or 'Senza titolo'}")
 
     except Exception as e:
-        print(f"💥 Errore residuo: {e}")
+        print(f"💥 Errore durante l'ispezione: {e}")
         import traceback
         traceback.print_exc()
 
