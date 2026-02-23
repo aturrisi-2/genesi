@@ -41,13 +41,35 @@ class ICloudService:
             # Assicuriamoci che la cartella dei cookie esista
             os.makedirs(self.cookie_directory, exist_ok=True)
             
-            # Custom User-Agent per sembrare un browser reale
-            # Questo aiuta a superare i filtri SRP di Apple
-            user_agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+            import requests
+            import time
+            import random
             
+            session = requests.Session()
+            # User-Agent moderno e realistico
+            session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept': '*/*'
+            })
+
+            def init_api():
+                # Warm-up: facciamo una richiesta alla home di iCloud per "scaldare" l'IP
+                try:
+                    session.get("https://www.icloud.com", timeout=10)
+                    time.sleep(random.uniform(1, 3))
+                except: pass
+                
+                # Inizializzazione con la nostra sessione custom
+                return PyiCloudService(
+                    self.username, 
+                    self.password, 
+                    cookie_directory=self.cookie_directory,
+                    session_manager=session # Alcune versioni di pyicloud supportano session_manager
+                )
+
             try:
-                # Proviamo inizializzazione standard
-                api = PyiCloudService(self.username, self.password, cookie_directory=self.cookie_directory)
+                api = init_api()
             except Exception as e:
                 err_str = str(e).lower()
                 # Se fallisce con Service Unavailable o SRP error, o finta password errata
@@ -60,8 +82,8 @@ class ICloudService:
                                 if os.path.isfile(file_path): os.unlink(file_path)
                             except: pass
                     
-                    # Tentativo con parametri di sessione più puliti
-                    api = PyiCloudService(self.username, self.password, cookie_directory=self.cookie_directory)
+                    time.sleep(random.uniform(2, 5))
+                    api = init_api()
                 else:
                     raise e
             
@@ -75,9 +97,10 @@ class ICloudService:
         except Exception as e:
             error_msg = str(e)
             if "Service Unavailable" in error_msg:
-                error_msg = "Il server Apple è momentaneamente non raggiungibile. Riprova tra 15 minuti."
+                error_msg = "Apple ha bloccato temporaneamente (503). Riprova tra 30 minuti."
             elif "Invalid email/password" in error_msg:
-                error_msg = "Accesso negato da Apple (Controlla password REALE o riprova tra 30 min per sbloccare l'IP)."
+                # Spesso è un falso errore di Apple quando rileva un bot
+                error_msg = "Apple ha negato l'accesso. Controlla la password o attendi 30 min (possibile blocco IP)."
             log("ICLOUD_API_INIT_ERROR", user=self.username, error=error_msg, level="ERROR")
             raise Exception(error_msg)
 
