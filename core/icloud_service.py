@@ -121,26 +121,34 @@ class ICloudService:
                     display_name = props.get('{DAV:}displayname', 'Senza nome')
                 except: pass
                 
-                # OTTIMIZZAZIONE: Saltiamo la lista "Calendar" che di solito ha centinaia di eventi e 0 todo
+                # Logghiamo l'inizio del processamento di QUESTA lista
+                log("ICLOUD_LIST_START", name=display_name, url=url_str)
+
+                # OTTIMIZZAZIONE: Saltiamo le liste che sono palesemente calendari di eventi
+                # Spesso hanno nomi come "Calendar" o URL specifici
                 if "calendar" in display_name.lower() or "/calendars/4240634c" in url_str:
-                    log("ICLOUD_SKIP_CALENDAR", name=display_name)
+                    log("ICLOUD_SKIP_LIST", reason="is_calendar", name=display_name)
                     continue
 
                 try:
-                    # PROVA 1: Ricerca specifica per TODO (molto più veloce)
+                    # PROVA 1: Ricerca specifica per TODO (veloce)
                     all_objs = []
                     try:
                         all_objs = target_cal.search(todo=True)
-                    except:
-                        # PROVA 2: Fallback su oggetti grezzi se la ricerca fallisce (es. errore 500)
+                        log("ICLOUD_SEARCH_TODO_OK", count=len(all_objs), name=display_name)
+                    except Exception as e:
+                        logger.debug("ICLOUD_SEARCH_TODO_FAIL name=%s err=%s", display_name, str(e))
+                        # PROVA 2: Fallback su oggetti grezzi
                         try:
                             all_objs = target_cal.objects()
-                        except: continue
+                            log("ICLOUD_FALLBACK_OBJECTS_OK", count=len(all_objs), name=display_name)
+                        except Exception as e2:
+                            logger.error("ICLOUD_LIST_ACCESS_FAILED name=%s err=%s", display_name, str(e2))
+                            continue
 
                     if not all_objs:
+                        log("ICLOUD_LIST_EMPTY", name=display_name)
                         continue
-
-                    log("ICLOUD_SCANNING_LIST", name=display_name, count=len(all_objs))
 
                     for obj in all_objs:
                         try:
@@ -170,8 +178,12 @@ class ICloudService:
                                     "status": "pending",
                                     "due": None
                                 })
-                        except: continue
-                except: continue
+                        except Exception as obj_err:
+                            logger.debug("ICLOUD_OBJ_LOAD_ERR list=%s err=%s", display_name, str(obj_err))
+                            continue
+                except Exception as e:
+                    logger.error("ICLOUD_LIST_CRITICAL_ERR name=%s err=%s", display_name, str(e))
+                    continue
                 
             log("ICLOUD_SYNC_FINAL_SUCCESS", count=len(all_reminders), user=self.username)
             return all_reminders
