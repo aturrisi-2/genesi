@@ -132,13 +132,26 @@ class ICloudService:
                         try:
                             all_objs = calendar.objects()
                             if all_objs:
-                                # Telemetria: vediamo cosa c'è dentro il primo oggetto se non troviamo VTODO
-                                sample_data = all_objs[0].data if hasattr(all_objs[0], 'data') else ""
-                                if 'VTODO' not in (sample_data or '').upper():
-                                    log("ICLOUD_DATA_SAMPLE", list=name, sample=sample_data[:200] if sample_data else "EMPTY", level="DEBUG")
+                                # Usiamo un iteratore per evitare l'errore 'not subscriptable'
+                                first_obj = None
+                                try:
+                                    first_obj = next(iter(all_objs), None)
+                                except Exception: pass
                                 
-                                # Filtriamo manualmente
-                                todos = [o for o in all_objs if 'VTODO' in (o.data or '').upper()]
+                                if first_obj:
+                                    sample_data = first_obj.data if hasattr(first_obj, 'data') else ""
+                                    if 'VTODO' not in (sample_data or '').upper():
+                                        log("ICLOUD_DATA_SAMPLE", list=name, sample=sample_data[:200] if sample_data else "EMPTY", level="DEBUG")
+                                
+                                # Filtriamo manualmente scorrendo la collezione
+                                todos = []
+                                for o in all_objs:
+                                    try:
+                                        d = o.data if hasattr(o, 'data') else ""
+                                        if d and 'VTODO' in d.upper():
+                                            todos.append(o)
+                                    except Exception:
+                                        continue
                         except Exception as e:
                             log("ICLOUD_CALDAV_LIST_SKIP", name=name, error=str(e))
                             continue
