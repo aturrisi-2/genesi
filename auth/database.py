@@ -3,7 +3,11 @@ from sqlalchemy import select
 from auth.config import DATABASE_URL
 from auth.models import Base, AuthUser
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+engine = create_async_engine(
+    DATABASE_URL, 
+    echo=False,
+    connect_args={"timeout": 30}
+)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
