@@ -65,16 +65,25 @@ class ICloudService:
             if not self.client:
                 if not self._connect(): return False
             
-            # Tenta di recuperare il principal per confermare l'identità
-            principal = self.client.principal()
-            return principal is not None
+            # Tenta di recuperare il principal in modo resiliente
+            try:
+                principal = self.client.principal()
+                return principal is not None
+            except Exception as e:
+                # Se il principal fallisce, proviamo almeno a vedere se l'autenticazione passa
+                # facendo una richiesta PROPFIND di base sulla root
+                try:
+                    self.client.propfind("", props=[caldav.elements.dav.CurrentUserPrincipal()], depth=0)
+                    return True
+                except:
+                    return False
         except Exception:
             return False
 
     def get_reminders(self, list_name: str = "Reminders") -> List[Dict[str, Any]]:
         """
         Recupera i promemoria da tutte le liste di iCloud usando CalDAV.
-        Filtra automaticamente quelli completati.
+        Usa una strategia di discovery più robusta per evitare errori 500 di Apple.
         """
         if not self.client:
             if not self._connect(): return []
@@ -82,46 +91,69 @@ class ICloudService:
         all_reminders = []
         try:
             principal = self.client.principal()
-            calendars = principal.calendars()
+            
+            # Strategia 1: Proviamo a recuperare i calendari tramite principal
+            # Se fallisce (comune su iCloud), proviamo a interrogare direttamente il home set
+            calendars = []
+            try:
+                calendars = principal.calendars()
+            except Exception as e:
+                logger.debug(f"CalDAV standard discovery failed: {e}. Trying manual discovery...")
+                # Molte implementazioni di iCloud richiedono di interrogare esplicitamente il home set
+                try:
+                    # Spesso il discovery fallisce se non specifichiamo bene il path.
+                    # Proviamo a forzare la ricerca nel calendar-home-set
+                    home_set = principal.get_properties([caldav.elements.ical.CalendarHomeSet()])
+                    home_url = home_set.get(caldav.elements.ical.CalendarHomeSet.tag)
+                    if home_url:
+                        # Se abbiamo un home_url, cerchiamo lì dentro
+                        calendars = self.client.calendar(url=home_url).children()
+                except Exception as e2:
+                    log("ICLOUD_CALDAV_DISCOVERY_FATAL", error=str(e2), level="ERROR")
+                    return []
 
             for calendar in calendars:
-                # In CalDAV, le liste di promemoria sono calendari che supportano VTODO
-                comps = calendar.get_supported_components()
-                if 'VTODO' not in comps:
-                    continue
-                
-                # Nome della lista (calendario)
-                current_list_name = calendar.name
-                
-                # Recuperiamo tutti i TODO (non completati di default nella query CalDAV)
-                todos = calendar.todos(include_completed=False)
-                
-                for todo in todos:
+                try:
+                    # Nome della lista
+                    current_list_name = getattr(calendar, 'name', 'Senza nome')
+                    
+                    # Filtriamo: vogliamo solo calendari che supportano VTODO (Promemoria)
+                    # Nota: alcuni calendari Apple non rinfrescano 'supported_components' correttamente
+                    # Proviamo a chiedere i todo a prescindere, catturando l'errore se non supportati
                     try:
-                        # Usiamo vobject per parsare i dati iCalendar (.ics)
-                        v = readOne(todo.data)
-                        task = v.vtodo
-                        
-                        summary = str(task.summary.value) if hasattr(task, 'summary') else "Senza titolo"
-                        guid = str(task.uid.value) if hasattr(task, 'uid') else None
-                        
-                        # Gestione data di scadenza (due date)
-                        due_iso = None
-                        if hasattr(task, 'due'):
-                            due_val = task.due.value
-                            if isinstance(due_val, (datetime.datetime, datetime.date)):
-                                due_iso = due_val.isoformat()
-
-                        all_reminders.append({
-                            "guid": guid,
-                            "summary": summary,
-                            "status": "pending",
-                            "due": due_iso,
-                            "list": current_list_name
-                        })
-                    except Exception as task_err:
-                        logger.debug(f"Errore parsing task CalDAV: {task_err}")
+                        todos = calendar.todos(include_completed=False)
+                    except:
+                        # Se il calendario non supporta TODO, saltiamo
                         continue
+                    
+                    for todo in todos:
+                        try:
+                            # Parsing data iCalendar
+                            v = readOne(todo.data)
+                            task = v.vtodo
+                            
+                            summary = str(task.summary.value) if hasattr(task, 'summary') else "Senza titolo"
+                            guid = str(task.uid.value) if hasattr(task, 'uid') else None
+                            
+                            # Data scadenza
+                            due_iso = None
+                            if hasattr(task, 'due'):
+                                due_val = task.due.value
+                                if isinstance(due_val, (datetime.datetime, datetime.date)):
+                                    due_iso = due_val.isoformat()
+
+                            all_reminders.append({
+                                "guid": guid,
+                                "summary": summary,
+                                "status": "pending",
+                                "due": due_iso,
+                                "list": current_list_name
+                            })
+                        except Exception:
+                            continue
+                except Exception as cal_err:
+                    logger.debug(f"Errore scansione calendario {calendar}: {cal_err}")
+                    continue
 
             log("ICLOUD_CALDAV_SYNC_SUCCESS", count=len(all_reminders), user=self.username)
             return all_reminders
