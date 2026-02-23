@@ -103,7 +103,16 @@ def test_pyicloud_patched():
         api.reminders.refresh()
         
         # Debug: mostriamo cosa vede pyicloud a livello alto
-        print(f"DEBUG: Reminders Service Keys: {list(api.reminders.data.keys()) if hasattr(api.reminders, 'data') else 'N/A'}")
+        if hasattr(api.reminders, 'data'):
+            print(f"DEBUG: Reminders Service Keys: {list(api.reminders.data.keys())}")
+            # Se esiste una chiave globale 'reminders', proviamola
+            global_reminders = api.reminders.data.get('reminders', [])
+            if global_reminders:
+                print(f"✅ Trovati {len(global_reminders)} promemoria GLOBALI.")
+                for r in global_reminders[:3]:
+                    print(f"   - {r.get('title')}")
+        else:
+            print("DEBUG: api.reminders.data non esiste.")
 
         collections = api.reminders.collections
         if not collections:

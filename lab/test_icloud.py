@@ -44,13 +44,25 @@ def test_connection():
     reminders = icloud_service.get_reminders(default_list)
     
     if reminders:
-        print(f"✅ Trovati {len(reminders)} promemoria:")
-        for r in reminders[:5]:  # Mostra primi 5
-            print(f"   - [{r['status']}] {r['summary']} (Scadenza: {r['due']})")
-        if len(reminders) > 5:
-            print(f"   ...e altri {len(reminders) - 5}")
+        print(f"✅ Trovati {len(reminders)} promemoria (Metodo Discovery):")
     else:
-        print("ℹ️ Nessun promemoria trovato o lista vuota.")
+        print("ℹ️ Fallito metodo discovery. Tentativo accesso DIRETTO all'URL...")
+        # Proviamo ad accedere direttamente all'URL che abbiamo visto prima
+        try:
+            client = icloud_service._get_client()
+            # Usiamo l'ID esatto visto nel log precedente
+            direct_url = "https://p112-caldav.icloud.com:443/10668443658/calendars/tasks/"
+            print(f"🔗 Tentativo su: {direct_url}")
+            calendar = client.calendar(url=direct_url)
+            
+            # Proviamo a leggere
+            todos = calendar.search(todo=True, include_completed=False)
+            if todos:
+                print(f"✅ FUNZIONA! Trovati {len(todos)} promemoria via URL diretto.")
+            else:
+                print("ℹ️ Lista vuota anche via URL diretto.")
+        except Exception as e:
+            print(f"❌ Errore accesso diretto: {e}")
 
 if __name__ == "__main__":
     test_connection()
