@@ -122,10 +122,9 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
         # Build response for frontend
         filename = result.get("meta", {}).get("filename", file.filename or "file")
         file_type = result.get("type", "unknown")
-        content_preview = (result.get("content", "") or "")[:300]
-
         if file_type == "image":
-            response_text = f"Ho analizzato l'immagine '{filename}'. {content_preview}"
+            # Per le immagini, l'utente vuole la descrizione completa
+            response_text = f"Ho analizzato l'immagine '{filename}'. {result.get('content', '')}"
         elif file_type == "pdf":
             pages = result.get("meta", {}).get("pages", "?")
             response_text = f"Ho letto il PDF '{filename}' ({pages} pagine). Puoi chiedermi qualsiasi cosa su di esso."

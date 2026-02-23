@@ -189,8 +189,7 @@ class DriftModulator:
     def _apply_warmth(self, text: str, warmth: float) -> str:
         """Aggiunge chiusura calda con probabilita' proporzionale a warmth."""
         # Probability of adding warm suffix scales with warmth
-        # Disabilitato (0.0) perche' le frasi fisse ("Ci sono") suonano artefatte per l'utente
-        p = 0.0
+        p = 0.3
         if random.random() >= p:
             return text
 
@@ -230,8 +229,7 @@ class DriftModulator:
 
         if expansiveness > 0.6 and len(sentences) == 1 and len(text) < 60:
             # Probabilistic expansion
-            # Disabilitato (0.0) per evitare aggiunte fisse artefatte a fine frase
-            p = 0.0
+            p = 0.3
             if random.random() < p:
                 bridges = [
                     "Raccontami di piu'.",

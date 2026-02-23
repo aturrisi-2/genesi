@@ -402,7 +402,7 @@ function _splitTextForTTS(text, tts_mode = 'normal') {
   let currentChunk = '';
 
   // Per psychological: max 1 frase per chunk, più brevi
-  const maxChunkSize = tts_mode === 'psychological' ? 150 : 200;
+  const maxChunkSize = tts_mode === 'psychological' ? 200 : 300;
 
   for (let i = 0; i < sentences.length; i += 2) {
     const sentence = sentences[i] + (sentences[i + 1] || '');
@@ -1977,6 +1977,7 @@ function handleFileUpload() {
 
       // Full analysis in chat message (not in bubble)
       addMessage(result.response || "File ricevuto.", 'genesi');
+      if (result.response) playTTSAsync(result.response, result.tts_mode || 'normal');
 
       // Auto-dismiss bubble after 6s
       setTimeout(() => { try { _dismissFileBubble(); } catch (_) { } }, 6000);
@@ -2085,6 +2086,7 @@ async function uploadCapturedImage(blob) {
     if (loadingMsg) loadingMsg.remove();
 
     addMessage(data.response || "Foto caricata.", 'genesi');
+    if (data.response) playTTSAsync(data.response, data.tts_mode || 'normal');
 
     console.log("[CAMERA_UPLOAD] success doc_id=", data.doc_id);
   } catch (err) {

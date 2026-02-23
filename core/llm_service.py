@@ -157,7 +157,7 @@ class LLMService:
             return await client.chat.completions.create(
                 model=model_name,
                 messages=messages if messages else [{"role": "system", "content": prompt}, {"role": "user", "content": message}],
-                temperature=0.3,
+                temperature=0.7,
                 extra_headers=headers
             )
 
