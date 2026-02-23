@@ -110,35 +110,27 @@ class ICloudService:
             
             # FETCHING STRATEGY
             # iCloud 500 spesso capita su query troppo ampie.
-            # Proviamo in ordine di "sicurezza"
             todos = []
             
-            # Metodo A: fetch_todos (nuova API caldav)
+            # Metodo A: Search filtrato
             try:
-                log("ICLOUD_FETCH_TRY", method="fetch_todos")
+                log("ICLOUD_FETCH_TRY", method="search_filtered")
                 todos = target_list.search(todo=True, include_completed=False)
             except Exception as e:
                 log("ICLOUD_A_FAILED", error=str(e))
-                # Metodo B: children (più grezzo, evita filtri lato server che crashano)
+                # Metodo B: Fetch totale senza filtri server-side (spesso risolve il 500)
                 try:
-                    log("ICLOUD_FETCH_TRY", method="children")
-                    # Recuperiamo tutti gli oggetti della lista
-                    all_objects = target_list.children()
-                    
-                    # Filtriamo in locale per VTODO
+                    log("ICLOUD_FETCH_TRY", method="all_objects_brute")
+                    # Chiediamo tutti gli oggetti e filtriamo noi per "VTODO"
+                    all_objs = target_list.children() # O target_list.objects()
                     todos = []
-                    for obj in all_objects:
-                        try:
-                            # caldav objects usually have .data
-                            data = obj.data if hasattr(obj, 'data') else ""
-                            if "VTODO" in data:
-                                todos.append(obj)
-                        except:
-                            continue
-                    log("ICLOUD_B_SUCCESS", count=len(todos))
+                    for o in all_objs:
+                        # Se il server dà 500 qui, significa che la lista è bloccata
+                        if "VTODO" in (o.data or ""):
+                            todos.append(o)
                 except Exception as e2:
                     log("ICLOUD_B_FAILED", error=str(e2))
-                    # Metodo C: todos() classico
+                    # Ultima spiaggia: todos() classico
                     try:
                         log("ICLOUD_FETCH_TRY", method="todos_legacy")
                         todos = target_list.todos()
