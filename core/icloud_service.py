@@ -157,36 +157,46 @@ class ICloudService:
                             for obj in all_objs:
                                 try:
                                     raw_data = obj.data
-                                    # LOG DI DEBUG - Vediamo cosa c'è dentro
-                                    log("ICLOUD_DEBUG_RAW_CONTENT", snippet=raw_data[:100].replace("\n", " "), list=str(target_cal.url))
+                                    # Se non c'è VTODO nel testo, saltiamo subito
+                                    if "VTODO" not in raw_data.upper(): continue
                                     
-                                    if "VTODO" in raw_data.upper():
-                                        # Carichiamo l'istanza
-                                        if obj.vobject_instance and hasattr(obj.vobject_instance, 'vtodo'):
-                                            tasks.append(obj)
-                                    else:
-                                        # Se non c'è VTODO, proviamo a vedere se è comunque un oggetto valido
-                                        # Alcuni server formattano in modo strano
-                                        if "BEGIN:VTODO" in raw_data.upper():
-                                            tasks.append(obj)
-                                except: continue
+                                    log("ICLOUD_VTODO_FOUND", list=str(target_cal.url))
+                                    
+                                    # Estraiamo il SUMMARY a mano (più affidabile se il parser fallisce)
+                                    summary = "Senza titolo"
+                                    lines = raw_data.split("\n")
+                                    is_completed = False
+                                    
+                                    for line in lines:
+                                        line = line.strip()
+                                        if line.upper().startswith("SUMMARY:"):
+                                            summary = line[8:].strip()
+                                        if line.upper().startswith("STATUS:COMPLETED"):
+                                            is_completed = True
+                                        if line.upper().startswith("PERCENT-COMPLETE:100"):
+                                            is_completed = True
+                                    
+                                    if not is_completed:
+                                        all_reminders.append({
+                                            "summary": summary,
+                                            "status": "pending",
+                                            "due": None
+                                        })
+                                except Exception as e: 
+                                    logger.debug("ICLOUD_OBJ_PARSE_FAIL error=%s", str(e))
+                                    continue
                         except Exception as raw_err:
                             logger.error("ICLOUD_RAW_FETCH_FAILED list=%s error=%s", str(target_cal.url), str(raw_err))
 
                     for task in tasks:
+                        # (Questo ramo viene usato solo se .todos() ha funzionato sopra)
                         try:
-                            # Se non abbiamo vobject_instance, proviamo a caricarlo esplicitamente
-                            vtodo_obj = None
-                            if task.vobject_instance and hasattr(task.vobject_instance, 'vtodo'):
-                                vtodo_obj = task.vobject_instance.vtodo
-                            
-                            if not vtodo_obj: continue
-                            
-                            # Filtro completati MOLTO permissivo per il test
-                            status = (getattr(vtodo_obj, 'status', None) and vtodo_obj.status.value.lower()) or ""
-                            if status in ['completed', 'completed']: continue # Solo se esplicitamente completato in inglese
-                                
-                            summary = vtodo_obj.summary.value if hasattr(vtodo_obj, 'summary') else "Senza titolo"
+                            if not task.vobject_instance or not hasattr(task.vobject_instance, 'vtodo'):
+                                continue
+                            vobj = task.vobject_instance.vtodo
+                            status = (getattr(vobj, 'status', None) and vobj.status.value.lower()) or ""
+                            if status in ['completed', 'completed']: continue
+                            summary = vobj.summary.value if hasattr(vobj, 'summary') else "Senza titolo"
                             all_reminders.append({
                                 "summary": summary,
                                 "status": "pending",
