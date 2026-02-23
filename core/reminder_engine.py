@@ -136,13 +136,9 @@ class ReminderEngine:
                 return None
             
             from core.icloud_service import ICloudService
-            cookie_dir = f"memory/icloud_sessions/{user_id}"
-            os.makedirs(cookie_dir, exist_ok=True)
-            
             return ICloudService(
                 username=icloud_user,
-                password=icloud_pass,
-                cookie_directory=cookie_dir
+                password=icloud_pass
             )
         except Exception as e:
             log("ICLOUD_SERVICE_GET_ERROR", user_id=user_id, error=str(e))

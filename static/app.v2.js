@@ -3012,7 +3012,6 @@ async function refreshICloudStatus() {
   if (!icloudStatusArea) return;
   icloudStatusArea.innerHTML = '<p>Controllo stato...</p>';
   icloudSetupForm.classList.add('hidden');
-  icloud2FAForm.classList.add('hidden');
   icloudActiveActions.classList.add('hidden');
 
   try {
@@ -3026,18 +3025,12 @@ async function refreshICloudStatus() {
     if (!data.configured) {
       if (!data.error) icloudStatusArea.innerHTML = '<p>Non ancora collegato a iCloud.</p>';
       icloudSetupForm.classList.remove('hidden');
-    } else if (data.needs_2fa) {
-      icloudStatusArea.innerHTML = `<p>Collegato come <b>${data.email}</b>, ma richiede verifica 2FA.</p>`;
-      icloud2FAForm.classList.remove('hidden');
-    } else if (data.verified) {
+    } else {
       icloudStatusArea.innerHTML = `<p>✅ iCloud attivo: <b>${data.email}</b></p>`;
       if (data.last_sync) {
         icloudStatusArea.innerHTML += `<p style="font-size:0.8rem; color:#888;">Ultima sincronizzazione: ${new Date(data.last_sync * 1000).toLocaleString()}</p>`;
       }
       icloudActiveActions.classList.remove('hidden');
-    } else {
-      if (!data.error) icloudStatusArea.innerHTML = `<p>Account <b>${data.email}</b> non verificato.</p>`;
-      icloudSetupForm.classList.remove('hidden');
     }
   } catch (e) {
     icloudStatusArea.innerHTML = '<p class="error">Errore nel caricamento dello stato.</p>';
@@ -3062,46 +3055,30 @@ if (saveICloudBtn) {
       });
       const data = await res.json();
       if (data.status === 'ok') {
-        if (data.error) {
-          alert(data.error);
-        }
+        alert(data.message || "Collegato!");
         refreshICloudStatus();
       } else {
-        alert(data.error || "Errore durante il setup.");
+        alert(data.message || "Errore durante il setup.");
       }
     } catch (e) {
       alert("Si è verificato un errore.");
     } finally {
       saveICloudBtn.disabled = false;
-      saveICloudBtn.innerText = "Collega Account";
+      saveICloudBtn.innerText = "Collega con CalDAV";
     }
   });
 }
 
-const verify2FABtn = document.getElementById('verify-2fa-btn');
-if (verify2FABtn) {
-  verify2FABtn.addEventListener('click', async () => {
-    const code = document.getElementById('icloud-2fa-code').value;
-    if (!code) return alert("Inserisci il codice.");
-
-    verify2FABtn.disabled = true;
+const disconnectICloudBtn = document.getElementById('disconnect-icloud-btn');
+if (disconnectICloudBtn) {
+  disconnectICloudBtn.addEventListener('click', async () => {
+    if (!confirm("Vuoi davvero scollegare l'account iCloud?")) return;
     try {
-      const res = await fetch('/api/proactor/icloud/2fa', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ code })
-      });
-      const data = await res.json();
-      if (data.status === 'ok') {
-        alert("Sincronizzazione attivata!");
-        refreshICloudStatus();
-      } else {
-        alert(data.message || "Errore durante la verifica.");
-      }
+      const res = await fetch('/api/proactor/icloud/status', { method: 'DELETE', headers: authHeaders() });
+      alert("Account scollegato.");
+      refreshICloudStatus();
     } catch (e) {
-      alert("Errore di rete.");
-    } finally {
-      verify2FABtn.disabled = false;
+      alert("Errore durante la disconnessione.");
     }
   });
 }

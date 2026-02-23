@@ -325,21 +325,19 @@
       <div id="icloud-setup-form" class="hidden">
         <label>Email Apple ID</label>
         <input type="email" id="icloud-email" placeholder="esempio@icloud.com">
-        <label>Password (o Password App)</label>
-        <input type="password" id="icloud-password" placeholder="••••••••">
-        <button id="save-icloud-btn">Collega Account</button>
-      </div>
-
-      <div id="icloud-2fa-form" class="hidden">
-        <p class="warningText">iCloud ha richiesto un codice di verifica. Inserisci il codice a 6 cifre inviato ai tuoi
-          dispositivi Apple.</p>
-        <input type="text" id="icloud-2fa-code" placeholder="123456" maxlength="6">
-        <button id="verify-2fa-btn">Verifica Codice</button>
+        <label>Password specifica per le app</label>
+        <input type="password" id="icloud-password" placeholder="xxxx-xxxx-xxxx-xxxx">
+        <p style="font-size:0.8rem; color:#888; margin-top:0.5rem;">
+          Per sicurezza, Apple richiede una password dedicata.
+          <a href="https://support.apple.com/it-it/102654" target="_blank" style="color:#00e5ff;">Scopri come
+            crearla</a>
+        </p>
+        <button id="save-icloud-btn">Collega con CalDAV</button>
       </div>
 
       <div id="icloud-active-actions" class="hidden">
         <button id="manual-sync-btn" class="primary">Sincronizza Ora</button>
-        <button id="disconnect-icloud-btn" class="danger">Disconnetti</button>
+        <button id="disconnect-icloud-btn" class="danger">Scollega Account</button>
       </div>
     </div>
   </div>

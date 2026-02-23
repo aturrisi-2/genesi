@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import Optional
 from core.proactor import proactor
@@ -18,72 +18,55 @@ class ICloudSetupRequest(BaseModel):
 class ICloud2FARequest(BaseModel):
     code: str
 
-@router.get("/icloud/status")
-async def get_icloud_status(user: AuthUser = Depends(require_auth)):
-    """Ottiene lo stato dell'integrazione iCloud del profilo."""
-    try:
-        user_id = user.id
-        profile = await storage.load(f"profile:{user_id}", default={})
-        
-        email = profile.get("icloud_user")
-        is_verified = profile.get("icloud_verified", False)
-        
-        # Se configurato, controlliamo se serve 2FA attualmente
-        needs_2fa = False
-        error_msg = None
-        if email:
-            password = profile.get("icloud_password")
-            svc = ICloudService(username=email, password=password, cookie_directory=f"memory/icloud_sessions/{user_id}")
-            try:
-                api = svc._get_client()
-                if api and api.requires_2fa:
-                    needs_2fa = True
-                if not api:
-                    error_msg = "Impossibile inizializzare il servizio iCloud."
-            except Exception as e:
-                error_msg = str(e)
-        
-        return {
-            "configured": bool(email),
-            "email": email,
-            "verified": is_verified,
-            "needs_2fa": needs_2fa,
-            "error": error_msg,
-            "last_sync": profile.get("last_icloud_sync")
-        }
-    except Exception as e:
-        log("ICLOUD_STATUS_API_ERROR", error=str(e))
-        return {"error": str(e)}
+@router.api_route("/icloud/status", methods=["GET", "DELETE"])
+async def handle_icloud_status(user: AuthUser = Depends(require_auth), request: Request = None):
+    """Gestisce lo stato o la disconnessione di iCloud."""
+    user_id = user.id
+    profile = await storage.load(f"profile:{user_id}", default={})
+    
+    if request.method == "DELETE":
+        profile.pop("icloud_user", None)
+        profile.pop("icloud_password", None)
+        profile.pop("icloud_verified", None)
+        await storage.save(f"profile:{user_id}", profile)
+        return {"status": "ok", "message": "Account scollegato."}
+    
+    # GET logic
+    email = profile.get("icloud_user")
+    is_verified = profile.get("icloud_verified", False)
+    return {
+        "configured": bool(email),
+        "email": email,
+        "verified": is_verified,
+        "last_sync": profile.get("last_icloud_sync")
+    }
 
 @router.post("/icloud/setup")
 async def setup_icloud(req: ICloudSetupRequest, user: AuthUser = Depends(require_auth)):
-    """Configura credenziali iCloud."""
+    """Configura credenziali iCloud (CalDAV con Password specifica)."""
     try:
         user_id = user.id
         profile = await storage.load(f"profile:{user_id}", default={})
         
-        profile["icloud_user"] = req.email
-        profile["icloud_password"] = req.password
-        profile["icloud_verified"] = False # Richiede verifica/2FA
-        
-        await storage.save(f"profile:{user_id}", profile)
-        
-        # Tenta inizializzazione per triggerare eventuale 2FA
-        svc = ICloudService(username=req.email, password=req.password, cookie_directory=f"memory/icloud_sessions/{user_id}")
-        try:
-            api = svc._get_client()
-            return {
-                "status": "ok",
-                "needs_2fa": api.requires_2fa if api else False,
-                "error": None if api else "Autenticazione fallita (controlla credenziali o 2FA)."
-            }
-        except Exception as api_e:
-            return {
-                "status": "error",
-                "error": str(api_e)
-            }
+        # Inizializza il servizio per testare la connessione
+        svc = ICloudService(username=req.email, password=req.password)
+        if svc.validate_credentials():
+            profile["icloud_user"] = req.email
+            profile["icloud_password"] = req.password
+            profile["icloud_verified"] = True
+            await storage.save(f"profile:{user_id}", profile)
+            
+            # Sincronizza subito
+            from core.reminder_engine import reminder_engine
+            await reminder_engine.fetch_icloud_reminders(user_id, force=True)
+            
+            return {"status": "ok", "message": "Connessione stabilita con successo."}
+        else:
+            return {"status": "error", "message": "Credenziali non valide. Assicurati di usare una 'Password specifica per le app'."}
+            
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        log("ICLOUD_SETUP_ERROR", error=str(e))
+        return {"status": "error", "message": str(e)}
 
 @router.post("/icloud/2fa")
 async def validate_icloud_2fa(req: ICloud2FARequest, user: AuthUser = Depends(require_auth)):

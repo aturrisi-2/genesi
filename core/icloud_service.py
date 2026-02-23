@@ -20,198 +20,115 @@ logger = logging.getLogger(__name__)
 # La riparazione delle date viene ora gestita localmente nei metodi di fetch.
 # ------------------------------
 
+import os
+import logging
+import datetime
+import caldav
+from vobject import readOne
+from typing import List, Dict, Any, Optional
+from core.log import log
+
+logger = logging.getLogger(__name__)
+
 class ICloudService:
-    def __init__(self, username: Optional[str] = None, password: Optional[str] = None, cookie_directory: Optional[str] = None):
+    def __init__(self, username: Optional[str] = None, password: Optional[str] = None, **kwargs):
+        """
+        Inizializza il servizio iCloud usando il protocollo ufficiale CalDAV.
+        Richiede una 'Password specifica per le app' generata su appleid.apple.com.
+        """
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD")
-        self.cookie_directory = cookie_directory or f"memory/icloud_sessions/default"
-        self._api = None
-        log("ICLOUD_SERVICE_INIT", user=self.username)
-
-    def _get_client(self):
-        """Inizializza il client PyiCloud con gestione sessione."""
-        if self._api:
-            return self._api
-
-        if not self.username or not self.password:
-            log("ICLOUD_AUTH_MISSING", user=self.username, level="ERROR")
-            return None
-            
-        try:
-            # Assicuriamoci che la cartella dei cookie esista
-            os.makedirs(self.cookie_directory, exist_ok=True)
-            
-            import requests
-            import time
-            import random
-            
-            session = requests.Session()
-            # User-Agent moderno e realistico
-            session.headers.update({
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Accept': '*/*'
-            })
-
-            def init_api():
-                # Warm-up: facciamo una richiesta alla home di iCloud per "scaldare" l'IP
-                try:
-                    session.get("https://www.icloud.com", timeout=10)
-                    time.sleep(random.uniform(1, 3))
-                except: pass
-                
-                # Inizializzazione con la nostra sessione custom
-                return PyiCloudService(
-                    self.username, 
-                    self.password, 
-                    cookie_directory=self.cookie_directory,
-                    session_manager=session # Alcune versioni di pyicloud supportano session_manager
-                )
-
-            try:
-                api = init_api()
-            except Exception as e:
-                err_str = str(e).lower()
-                # Se fallisce con Service Unavailable o SRP error, o finta password errata
-                if any(x in err_str for x in ["service", "srp", "unavailable", "invalid"]):
-                    log("ICLOUD_SESSION_RESET", user=self.username, reason="auth_failure_retry")
-                    if os.path.exists(self.cookie_directory):
-                        for filename in os.listdir(self.cookie_directory):
-                            file_path = os.path.join(self.cookie_directory, filename)
-                            try:
-                                if os.path.isfile(file_path): os.unlink(file_path)
-                            except: pass
-                    
-                    time.sleep(random.uniform(2, 5))
-                    api = init_api()
-                else:
-                    raise e
-            
-            # Se richiede 2FA, logghiamo la necessità
-            if api.requires_2fa:
-                log("ICLOUD_2FA_REQUIRED", user=self.username, level="WARNING")
-            
-            self._api = api
-            log("ICLOUD_API_CLIENT_INIT", user=self.username)
-            return api
-        except Exception as e:
-            error_msg = str(e)
-            if "Service Unavailable" in error_msg:
-                error_msg = "Apple ha bloccato temporaneamente (503). Riprova tra 30 minuti."
-            elif "Invalid email/password" in error_msg:
-                # Spesso è un falso errore di Apple quando rileva un bot
-                error_msg = "Apple ha negato l'accesso. Controlla la password o attendi 30 min (possibile blocco IP)."
-            log("ICLOUD_API_INIT_ERROR", user=self.username, error=error_msg, level="ERROR")
-            raise Exception(error_msg)
-
-    def validate_2fa(self, code: str) -> bool:
-        """Valida il codice 2FA inviato dall'utente."""
-        api = self._get_client()
-        if not api: return False
+        self.client = None
         
-        if not api.requires_2fa:
-            return True
-            
+        if self.username and self.password:
+            self._connect()
+
+    def _connect(self):
+        """Stabilisce la connessione CalDAV."""
         try:
-            result = api.validate_2fa_code(code)
-            log("ICLOUD_2FA_VALIDATION", user=self.username, success=result)
-            return result
+            # Endpoint ufficiale CalDAV di Apple
+            url = f"https://caldav.icloud.com"
+            self.client = caldav.DAVClient(
+                url=url,
+                username=self.username,
+                password=self.password
+            )
+            log("ICLOUD_CALDAV_CONNECT", user=self.username)
+            return True
         except Exception as e:
-            log("ICLOUD_2FA_VALIDATION_ERROR", user=self.username, error=str(e), level="ERROR")
+            log("ICLOUD_CALDAV_CONNECT_ERROR", user=self.username, error=str(e), level="ERROR")
             return False
 
-    def get_reminders_lists(self) -> List[Dict[str, Any]]:
-        """Recupera le liste di promemoria disponibili."""
-        api = self._get_client()
-        if not api: return []
-        
+    def validate_credentials(self) -> bool:
+        """Verifica se le credenziali (App-Specific Password) sono corrette."""
         try:
-            collections = api.reminders.collections
-            lists = []
-            for name, coll in collections.items():
-                lists.append({
-                    "id": name,
-                    "name": name
-                })
-            return lists
-        except Exception as e:
-            log("ICLOUD_LIST_FETCH_ERROR", user=self.username, error=str(e), level="ERROR")
-            return []
+            if not self.client:
+                if not self._connect(): return False
+            
+            # Tenta di recuperare il principal per confermare l'identità
+            principal = self.client.principal()
+            return principal is not None
+        except Exception:
+            return False
 
-    def get_reminders(self, list_name: str = "Promemoria") -> List[Dict[str, Any]]:
-        """Recupera i promemoria filtrando quelli completati e riparando le date."""
-        api = self._get_client()
-        if not api: return []
-        
+    def get_reminders(self, list_name: str = "Reminders") -> List[Dict[str, Any]]:
+        """
+        Recupera i promemoria da tutte le liste di iCloud usando CalDAV.
+        Filtra automaticamente quelli completati.
+        """
+        if not self.client:
+            if not self._connect(): return []
+
+        all_reminders = []
         try:
-            log("ICLOUD_SYNC_START", user=self.username, target_list=list_name)
-            
-            try:
-                api.reminders.refresh()
-            except Exception as refresh_err:
-                log("ICLOUD_REFRESH_WARNING", error=str(refresh_err), level="WARNING")
+            principal = self.client.principal()
+            calendars = principal.calendars()
 
-            collections = api.reminders.collections
-            all_reminders = []
-            
-            # Se viene indicata una lista specifica, cerchiamo solo quella
-            target_names = [list_name] if list_name in collections else collections.keys()
-
-            for name in target_names:
-                coll = collections.get(name)
-                if not coll: continue
+            for calendar in calendars:
+                # In CalDAV, le liste di promemoria sono calendari che supportano VTODO
+                comps = calendar.get_supported_components()
+                if 'VTODO' not in comps:
+                    continue
                 
-                tasks = coll.get('reminders') or coll.get('tasks') or []
+                # Nome della lista (calendario)
+                current_list_name = calendar.name
                 
-                for task in tasks:
+                # Recuperiamo tutti i TODO (non completati di default nella query CalDAV)
+                todos = calendar.todos(include_completed=False)
+                
+                for todo in todos:
                     try:
-                        # 1. Filtro completati
-                        status = (task.get('status') or 'NEEDS-ACTION').upper()
-                        percent = task.get('percent_complete', 0)
-                        is_completed = (status in ["COMPLETED", "CANCELLED"] or 
-                                       percent == 100 or 
-                                       task.get('completed_date') is not None)
+                        # Usiamo vobject per parsare i dati iCalendar (.ics)
+                        v = readOne(todo.data)
+                        task = v.vtodo
                         
-                        if is_completed:
-                            continue
-
-                        # 2. Estrazione dati
-                        guid = task.get('guid')
-                        title = task.get('title') or task.get('summary') or "Senza titolo"
+                        summary = str(task.summary.value) if hasattr(task, 'summary') else "Senza titolo"
+                        guid = str(task.uid.value) if hasattr(task, 'uid') else None
                         
-                        # 3. Gestione Data Scadenza
-                        due = None
-                        due_data = task.get('due_date')
-                        
-                        if due_data:
-                            if isinstance(due_data, list) and len(due_data) >= 3:
-                                try:
-                                    dt_args = list(due_data[:6])
-                                    while len(dt_args) < 6: dt_args.append(0)
-                                    ts = datetime.datetime(*dt_args)
-                                    due = ts.isoformat()
-                                except: pass
-                            elif isinstance(due_data, (int, float)):
-                                try:
-                                    ts = datetime.datetime.fromtimestamp(due_data/1000 if due_data > 10**10 else due_data)
-                                    due = ts.isoformat()
-                                except: pass
+                        # Gestione data di scadenza (due date)
+                        due_iso = None
+                        if hasattr(task, 'due'):
+                            due_val = task.due.value
+                            if isinstance(due_val, (datetime.datetime, datetime.date)):
+                                due_iso = due_val.isoformat()
 
                         all_reminders.append({
                             "guid": guid,
-                            "summary": title,
+                            "summary": summary,
                             "status": "pending",
-                            "due": due,
-                            "list": name
+                            "due": due_iso,
+                            "list": current_list_name
                         })
-                    except: continue
+                    except Exception as task_err:
+                        logger.debug(f"Errore parsing task CalDAV: {task_err}")
+                        continue
 
-            log("ICLOUD_SYNC_SUCCESS", count=len(all_reminders), user=self.username)
+            log("ICLOUD_CALDAV_SYNC_SUCCESS", count=len(all_reminders), user=self.username)
             return all_reminders
-                
+
         except Exception as e:
-            log("ICLOUD_FETCH_ERROR", user=self.username, error=str(e), level="ERROR")
+            log("ICLOUD_CALDAV_FETCH_ERROR", user=self.username, error=str(e), level="ERROR")
             return []
 
-# Istanza per compatibilità
+# Istanza globale
 icloud_service = ICloudService()
