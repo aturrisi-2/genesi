@@ -93,43 +93,38 @@ class ICloudService:
             principal = self.client.principal()
             
             # Strategia 1: Proviamo a recuperare i calendari tramite principal
-            # Se fallisce (comune su iCloud), proviamo a interrogare direttamente il home set
             calendars = []
             try:
                 calendars = principal.calendars()
+                log("ICLOUD_CALDAV_DISCOVERY", count=len(calendars), method="standard")
             except Exception as e:
-                logger.debug(f"CalDAV standard discovery failed: {e}. Trying manual discovery...")
-                # Molte implementazioni di iCloud richiedono di interrogare esplicitamente il home set
+                log("ICLOUD_CALDAV_DISCOVERY_WARN", error=str(e), method="standard")
+                # Strategia 2: Manual discovery via home set
                 try:
-                    # Spesso il discovery fallisce se non specifichiamo bene il path.
-                    # Proviamo a forzare la ricerca nel calendar-home-set
                     home_set = principal.get_properties([caldav.elements.ical.CalendarHomeSet()])
                     home_url = home_set.get(caldav.elements.ical.CalendarHomeSet.tag)
                     if home_url:
-                        # Se abbiamo un home_url, cerchiamo lì dentro
                         calendars = self.client.calendar(url=home_url).children()
+                        log("ICLOUD_CALDAV_DISCOVERY", count=len(calendars), method="manual_home")
                 except Exception as e2:
                     log("ICLOUD_CALDAV_DISCOVERY_FATAL", error=str(e2), level="ERROR")
                     return []
 
             for calendar in calendars:
                 try:
-                    # Nome della lista
                     current_list_name = getattr(calendar, 'name', 'Senza nome')
-                    logger.debug(f"Checking CalDAV calendar: {current_list_name}")
                     
-                    # Filtriamo: vogliamo solo calendari che supportano VTODO (Promemoria)
+                    # Proviamo a scaricare i todo. Molte liste iCloud non dichiarano 
+                    # esplicitamente il supporto VTODO ma lo contengono.
                     try:
                         todos = calendar.todos(include_completed=False)
-                        logger.debug(f"Found {len(todos)} items in {current_list_name}")
-                    except Exception as e:
-                        # Se il calendario non supporta TODO, saltiamo
-                        logger.debug(f"Calendar {current_list_name} does not support items: {e}")
+                        if len(todos) > 0:
+                            log("ICLOUD_CALDAV_LIST_FOUND", name=current_list_name, items=len(todos))
+                    except Exception:
                         continue
                     
                     for todo in todos:
                         try:
-                            # Parsing data iCalendar
                             v = readOne(todo.data)
                             task = getattr(v, 'vtodo', None)
                             if not task: continue
@@ -137,7 +132,6 @@ class ICloudService:
                             summary = str(task.summary.value) if hasattr(task, 'summary') else "Senza titolo"
                             guid = str(task.uid.value) if hasattr(task, 'uid') else None
                             
-                            # Data scadenza
                             due_iso = None
                             if hasattr(task, 'due'):
                                 due_val = task.due.value
@@ -152,10 +146,10 @@ class ICloudService:
                                 "list": current_list_name
                             })
                         except Exception as e:
-                            logger.debug(f"Error parsing task in {current_list_name}: {e}")
+                            log("ICLOUD_CALDAV_TASK_PARSE_ERROR", error=str(e), level="DEBUG")
                             continue
                 except Exception as cal_err:
-                    log("ICLOUD_CALDAV_CAL_ERROR", calendar=str(calendar), error=str(cal_err), level="DEBUG")
+                    log("ICLOUD_CALDAV_CAL_ERROR", error=str(cal_err), level="DEBUG")
                     continue
 
             log("ICLOUD_CALDAV_SYNC_SUCCESS", count=len(all_reminders), user=self.username)
