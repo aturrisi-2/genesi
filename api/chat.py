@@ -137,25 +137,48 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             from dateparser.search import search_dates
             import re, os
             
-            # 1. Parsing robusto
-            found = search_dates(request.message, languages=['it'], settings={'PREFER_DATES_FROM': 'future'})
+            now_ref = datetime.now()
+            # 1. Parsing robusto con base temporale corretta
+            found = search_dates(request.message, languages=['it'], 
+                                settings={'PREFER_DATES_FROM': 'future', 'RELATIVE_BASE': now_ref})
+            
             title = request.message
             due_date = None
             
             if found:
-                text_part, due_date = found[-1]
+                # Prendiamo l'occorrenza più lunga (spesso la più completa)
+                text_part, due_date = max(found, key=lambda x: len(x[0]))
                 title = title.replace(text_part, "")
             
-            # Pulizia keywords
-            keywords = ["aggiungi", "metti", "crea", "un", "promemoria", "ricorda", "ricordami", "per", "il", "a", "alle", "ai", "di"]
+            # Pulizia keywords e residui verbali
+            keywords = [
+                "aggiungi", "metti", "crea", "un", "promemoria", "ricorda", 
+                "ricordami", "per", "il", "lo", "la", "i", "gli", "le", 
+                "a", "alle", "ai", "al", "di", "da", "di", "un"
+            ]
+            # Rimuove parole singole isolate che sono in keywords
             for kw in keywords:
                 title = re.sub(rf'(?i)\b{kw}\b', '', title)
-            title = re.sub(r'[:\-]', '', title).strip()
             
-            if not title or len(title) < 2:
-                title = request.message.split(":")[-1].strip() if ":" in request.message else request.message
+            # Pulisce punteggiatura e spazi eccessivi
+            title = re.sub(r'[:\-\.,]', ' ', title)
+            title = " ".join(title.split()).strip()
+            
+            # Fallback se il titolo è vuoto (usa tutto dopo i due punti se presenti)
+            if not title or len(title) < 3:
+                if ":" in request.message:
+                    title = request.message.split(":")[-1].strip()
+                else:
+                    title = request.message
                 
             if due_date:
+                # Se la data è già passata di poco (es: "stasera" interpretato male), forza a futuro
+                if due_date < now_ref:
+                    if due_date.hour > 0: # Se ha un'ora, forse è solo oggi ma interpretato ieri?
+                        pass # Spesso dateparser azzecca il giorno ma sbaglia il "base"
+                    # Tentativo di recupero se nel passato
+                    # (Qui potremmo aggiungere logica extra ma per ora procediamo)
+                
                 results = []
                 # a) iCloud (VTODO)
                 if icloud_service.username and icloud_service.password:

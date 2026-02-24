@@ -94,13 +94,15 @@ class IntentClassifier:
         self.gpt_patterns = {
             "reminder_create": [
                 "ricordami", "ricordamelo", "segnami un promemoria", "promemoria", "appuntamento",
-                "imposta promemoria", "crea promemoria", "nuovo promemoria", "memorizza promemoria"
+                "imposta promemoria", "crea promemoria", "nuovo promemoria", "memorizza promemoria",
+                "metti in agenda", "segna in agenda", "nuovo appuntamento", "meeting", "riunione"
             ],
             "reminder_list": [
                 "quali promemoria ho", "che appuntamenti ho", "lista promemoria",
                 "i miei promemoria", "mostra promemoria", "elenco appuntamenti",
                 "promemoria attivi", "appuntamenti impostati", "ricordami i promemoria",
-                "appuntamenti ho", "quali appuntamenti"
+                "appuntamenti ho", "quali appuntamenti", "cosa ho da fare", "miei impegni",
+                "agenda di oggi", "agenda di domani", "cosa ho in agenda"
             ],
             "reminder_delete": [
                 "cancella promemoria", "cancella tutti i promemoria", "elimina promemoria",

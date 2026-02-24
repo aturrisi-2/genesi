@@ -139,6 +139,27 @@ class UnifiedCalendar:
         else:
             return self._add_local(title, dt)
 
+    async def check_async(self) -> List[Dict[str, Any]]:
+        """Controlla se ci sono eventi imminentissimi (prossimi 5-10 min)."""
+        rems = self.list_reminders(days=1)
+        due = []
+        now = datetime.now()
+        window = timedelta(minutes=10)
+        
+        for r in rems:
+            dt_str = r.get("due")
+            if not dt_str: continue
+            try:
+                # Normalizzazione basilare
+                clean_dt = dt_str.replace("Z", "+00:00").split(".")[0] if "T" in dt_str else dt_str
+                dt = datetime.fromisoformat(clean_dt)
+                if dt.tzinfo: dt = dt.replace(tzinfo=None) # Comparison simplified
+                
+                if now <= dt <= now + window:
+                    due.append({"text": r["summary"], "time": dt_str})
+            except: continue
+        return due
+
     def _add_local(self, title, dt):
         try:
             reminder_entry = {

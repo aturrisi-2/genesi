@@ -241,27 +241,31 @@ class ReminderEngine:
             # 3. Load from local (includes iCloud synced items)
             reminders = self._load_reminders(user_id)
             
+            # 4. Merge Google items (only if relevant to filter)
+            if not status_filter or status_filter == "pending":
+                # Deduplication hashes
+                existing_hashes = {f"{r['text'].lower()}_{r.get('datetime')}" for r in reminders if r.get('text')}
+                
+                for gi in google_items:
+                    summary = gi.get('summary')
+                    due = gi.get('due')
+                    item_hash = f"{summary.lower()}_{due}"
+                    if item_hash not in existing_hashes:
+                        reminders.append({
+                            "id": f"google_{hash(summary)}_{due}",
+                            "text": summary,
+                            "datetime": due,
+                            "source": "google",
+                            "status": "pending"
+                        })
+                        existing_hashes.add(item_hash)
+
+            # 5. Apply Status Filter to the final list
             if status_filter:
                 reminders = [r for r in reminders if r.get("status") == status_filter]
                 
-            # 4. Merge Google items (preventing duplicates with local/icloud)
-            existing_hashes = {f"{r['text'].lower()}_{r.get('datetime')}" for r in reminders if r.get('text')}
-            
-            for gi in google_items:
-                summary = gi.get('summary')
-                due = gi.get('due')
-                item_hash = f"{summary.lower()}_{due}"
-                if item_hash not in existing_hashes:
-                    reminders.append({
-                        "text": summary,
-                        "datetime": due,
-                        "source": "google",
-                        "status": "pending"
-                    })
-                    existing_hashes.add(item_hash)
-            
             reminders.sort(key=lambda r: (r.get("datetime") is None, r.get("datetime") or ""))
-            log("REMINDER_LIST_UNIFIED", user_id=user_id, count=len(reminders))
+            log("REMINDER_LIST_UNIFIED", user_id=user_id, count=len(reminders), filter=status_filter)
             return reminders
             
         except Exception as e:

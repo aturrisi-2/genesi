@@ -134,17 +134,27 @@ class ICloudService:
             calendars = principal.calendars()
             now = datetime.datetime.now()
             
+            log("ICLOUD_SYNC_START", calendars_count=len(calendars))
+            
             for calendar in calendars:
                 try:
                     name = getattr(calendar, 'name', 'Senza nome')
+                    # Tenta di recuperare i todo
                     todos = calendar.todos()
+                    if not todos: continue
+                    
+                    found_in_cal = 0
                     for todo in todos:
                         try:
                             v = readOne(todo.data)
-                            item = getattr(v, 'vtodo', None)
+                            # Supporta sia vtodo che VTODO
+                            item = getattr(v, 'vtodo', getattr(v, 'VTODO', None))
                             if not item: continue
                             
-                            if hasattr(item, 'status') and str(item.status.value).upper() == 'COMPLETED': continue
+                            # Filtro completati
+                            status = getattr(item, 'status', None)
+                            if status and str(status.value).upper() in ['COMPLETED', 'CANCELLED']: 
+                                continue
                             
                             summary = str(item.summary.value) if hasattr(item, 'summary') else "Senza titolo"
                             guid = str(item.uid.value) if hasattr(item, 'uid') else None
@@ -154,11 +164,13 @@ class ICloudService:
                             elif hasattr(item, 'dtstart'): due_dt = item.dtstart.value
                             
                             if due_dt:
+                                # Filtro temporale (7 giorni default)
                                 cmp_dt = due_dt if isinstance(due_dt, datetime.datetime) else datetime.datetime.combine(due_dt, datetime.time())
                                 if cmp_dt.tzinfo is None:
                                     if cmp_dt < now - datetime.timedelta(days=1): continue
                                 else:
-                                    if cmp_dt < now.astimezone(cmp_dt.tzinfo) - datetime.timedelta(days=1): continue
+                                    now_tz = now.astimezone(cmp_dt.tzinfo)
+                                    if cmp_dt < now_tz - datetime.timedelta(days=1): continue
                                 due_str = due_dt.isoformat()
                             else:
                                 due_str = None
@@ -172,10 +184,21 @@ class ICloudService:
                                 "source": "icloud",
                                 "type": "todo"
                             })
-                        except: continue
-                except: continue
+                            found_in_cal += 1
+                        except Exception as e:
+                            log("ICLOUD_TODO_PARSE_ERR", error=str(e), level="DEBUG")
+                            continue
+                    
+                    if found_in_cal > 0:
+                        log("ICLOUD_CAL_SYNCED", name=name, count=found_in_cal)
+                        
+                except Exception as e:
+                    # Molti calendari non supportano VTODO, ignoriamo silenziosamente
+                    continue
+                    
             return all_todos
-        except:
+        except Exception as e:
+            log("ICLOUD_VTODO_FETCH_ERR", error=str(e), level="ERROR")
             return []
 
     def get_all_items(self, days: int = 7) -> List[Dict[str, Any]]:
