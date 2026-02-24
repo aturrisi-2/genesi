@@ -166,7 +166,7 @@ class UnifiedCalendar:
             return False
 
     def list_reminders(self, days: int = 7) -> List[Dict[str, Any]]:
-        """Lists only Google Calendar events and local events (Apple reminders are handled by the ReminderEngine)."""
+        """Lists Google Calendar events, iCloud events, and local events."""
         all_rems = []
         now = datetime.now()
         end_date = now + timedelta(days=days)
@@ -174,7 +174,6 @@ class UnifiedCalendar:
         # 1. Google Calendar (Upcoming Events)
         if self._google_service:
             try:
-                # Use a slightly wider window to ensure we don't miss today's events
                 time_min = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + 'Z'
                 events_result = self._google_service.events().list(
                     calendarId='primary', 
@@ -197,7 +196,22 @@ class UnifiedCalendar:
             except Exception as e:
                 log("GOOGLE_LIST_ERROR", error=str(e))
 
-        # 2. Local (Managed locally here as backup/fallback)
+        # 2. iCloud (Upcoming Events) - NEW
+        if self._icloud_user:
+            try:
+                iclp_events = icloud_service.get_events(days=days)
+                for ev in iclp_events:
+                    all_rems.append({
+                        "summary": ev.get('summary', 'Senza titolo'),
+                        "due": ev.get('due'),
+                        "provider": "icloud",
+                        "status": "pending"
+                    })
+                log("ICLOUD_LIST_SUCCESS", count=len(iclp_events))
+            except Exception as e:
+                log("ICLOUD_LIST_ERROR", error=str(e))
+
+        # 3. Local
         for r in self.local_reminders:
             if r['status'] == 'pending':
                 all_rems.append({
