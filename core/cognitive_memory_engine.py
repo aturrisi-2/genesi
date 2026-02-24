@@ -116,7 +116,13 @@ class CognitiveMemoryEngine:
             
         if profession_match:
             new_profession = profession_match.group(1).strip().lower()  # lowercase come richiesto
-            old_profession = extracted_profile_data.get("profession")
+            
+            # GUARD: Evita di estrarre domande sugli account come professione
+            if any(kw in new_profession for kw in ["account", "collega", "miei", "quali"]):
+                logger.info("COGNITIVE_PROFESSION_SKIP value=%s", new_profession)
+                profession_match = None
+            else:
+                old_profession = extracted_profile_data.get("profession")
             
             # Handle profession contradiction
             if old_profession and old_profession != new_profession:

@@ -48,7 +48,6 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         # Handle commands like /cal
         if request.message.startswith("/cal"):
             from calendar_manager import calendar_manager
-            from datetime import datetime
             parts = request.message.split(" ", 2)
             if len(parts) < 2:
                 response = "Usa: /cal [provider] [titolo] [data ISO]\nEsempio: /cal apple \"Cena\" 2026-03-01T20:00:00"

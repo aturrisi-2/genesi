@@ -65,7 +65,8 @@ IDENTITY_TRIGGERS = [
     "come si chiamano i miei figli",
     "cosa mi piace", "che musica mi piace", "quali sono i miei interessi",
     "quali sono le mie preferenze", "come sono", "che tipo di persona sono",
-    "quale frutto mi piace", "cosa sai di me",
+    "quale frutto mi piace", "cosa sai di me", "account collegati", 
+    "miei account", "quali account ho", "i miei account"
 ]
 
 RELATIONAL_TRIGGERS = [
@@ -484,6 +485,21 @@ class Proactor:
             if age:
                 return f"Hai {age} anni."
             return "Non me lo hai ancora detto."
+
+        # Domanda specifica: account collegati
+        if any(kw in msg_lower for kw in ["account collegati", "miei account", "quali account ho"]):
+            linked = []
+            if profile.get("icloud_user") or profile.get("icloud_verified"):
+                email = profile.get("icloud_user") or "iCloud"
+                linked.append(f"iCloud ({email})")
+            
+            from calendar_manager import calendar_manager
+            if calendar_manager._google_service:
+                linked.append("Google Calendar")
+            
+            if not linked:
+                return "Non hai ancora collegato alcun account. Puoi dirmi 'collega iCloud' o 'usa Google' per iniziare."
+            return "Hai collegato i seguenti account: " + ", ".join(linked) + "."
 
         # Domanda generica: "chi sono"
         if "chi sono" in msg_lower:
@@ -990,7 +1006,6 @@ Messaggio: {message}"""
             New datetime or None if invalid
         """
         import re
-        from datetime import datetime, timedelta
         
         msg_lower = message.lower().strip()
         now = datetime.now()
@@ -1064,7 +1079,6 @@ Messaggio: {message}"""
             Tuple of (reminder_text, reminder_datetime)
         """
         import re
-        from datetime import datetime, timedelta
         from typing import Optional
         
         # Dizionario conversione numeri italiani
@@ -1234,7 +1248,6 @@ Messaggio: {message}"""
             from core.llm_service import llm_service
             import json
             import re
-            from datetime import datetime
             
             now = datetime.now()
             prompt = f"""Estrai il TESTO del promemoria e la DATA/ORA dal messaggio dell'utente.
