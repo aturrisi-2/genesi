@@ -340,7 +340,7 @@ class ICloudService:
                     item = cal_v.add('vtodo')
                     item.add('summary').value = text
                     
-                    # iCloud fix: vobject non ama i tz aware senza nome (Unable to guess TZID)
+                    # iCloud fix: vobject e tz aware 
                     if dt.tzinfo:
                         dt = dt.replace(tzinfo=None)
 
@@ -348,6 +348,13 @@ class ICloudService:
                     item.add('dtstart').value = dt
                     item.add('priority').value = '5' 
                     item.add('status').value = 'NEEDS-ACTION'
+                    
+                    # Metadata per Apple Reminders
+                    now_utc = datetime.datetime.utcnow()
+                    item.add('created').value = now_utc
+                    item.add('last-modified').value = now_utc
+                    item.add('description').value = text
+                    
                     alarm = item.add('valarm')
                     alarm.add('action').value = 'DISPLAY'
                     alarm.add('description').value = text
@@ -358,9 +365,14 @@ class ICloudService:
                     item.add('dtstart').value = dt
                     item.add('dtend').value = dt + datetime.timedelta(hours=1)
                     
-                uid = str(uuid.uuid4()).upper()
+                # Apple preferisce UID minuscoli o comunque consistenti
+                uid = str(uuid.uuid4()).lower()
                 item.add('uid').value = uid
                 item.add('dtstamp').value = datetime.datetime.utcnow()
+                
+                # Aggiungiamo PRODID per identificarci
+                if not hasattr(cal_v, 'prodid'):
+                    cal_v.add('prodid').value = '-//Genesi Assistant//Official//IT'
                 
                 target_cal.add_event(cal_v.serialize())
                 

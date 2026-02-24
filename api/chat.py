@@ -166,7 +166,8 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             keywords = [
                 "aggiungi", "metti", "crea", "un", "promemoria", "ricorda", 
                 "ricordami", "per", "il", "lo", "la", "i", "gli", "le", 
-                "a", "alle", "ai", "al", "di", "da", "di", "un"
+                "a", "alle", "ai", "al", "di", "da", "di", "un", "tra", "fra",
+                "entro", "che", "genesi"
             ]
             # Rimuove parole singole isolate che sono in keywords
             for kw in keywords:

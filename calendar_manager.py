@@ -18,6 +18,9 @@ try:
 except ImportError:
     Reminders = None
 
+import asyncio
+import threading
+
 # Genesi Imports
 from core.log import log
 from core.icloud_service import icloud_service
@@ -25,6 +28,7 @@ from core.calendar_history import calendar_history
 
 class UnifiedCalendar:
     def __init__(self):
+        self._lock = threading.Lock()
         self._google_service = None
         self._icloud_user = os.environ.get("ICLOUD_USER")
         self._icloud_pass = os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
@@ -92,12 +96,13 @@ class UnifiedCalendar:
         return self._perform_sync(days)
 
     def _perform_sync(self, days: int = 7) -> List[Dict[str, Any]]:
-        """Esegue la sincronizzazione reale (bloccante)."""
-        all_rems = []
-        now = datetime.now()
-        now_ts = now.timestamp()
-        
-        # 1. Google Calendar
+        """Esegue la sincronizzazione reale con Lock (v4.5)."""
+        with self._lock:
+            all_rems = []
+            now = datetime.now()
+            now_ts = now.timestamp()
+            
+            # 1. Google Calendar
         if self._google_service:
             try:
                 # Use UTC for Google API consistency
