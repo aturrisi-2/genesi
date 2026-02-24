@@ -45,7 +45,7 @@ class ICloudService:
                 url=url,
                 username=self.username,
                 password=self.password,
-                timeout=60
+                timeout=15
             )
             # Simuliamo un client iOS storico per massima compatibilità
             self.client.session.headers.update({

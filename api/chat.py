@@ -341,16 +341,19 @@ async def _generate_human_reminder_list(user_id: str, message: str, reminders: l
         dt = r.get('datetime') or r.get('due') or 'Non specificato'
         items_text += f"- {r['text']} ({dt})\n"
 
-    prompt = f"""L'utente chiede i suoi impegni: "{message}"
-Sulla base di questi dati trovati:
+    prompt = f"""Sei Genesi, l'assistente personale intelligente dell'utente. 
+L'utente ti ha appena chiesto dei suoi impegni con questo messaggio: "{message}"
+
+Ecco i dati reali che ho trovato nei tuoi archivi (iCloud, Google e Locale):
 {items_text}
 
-Rispondi come un segretario personale umano, cordiale e scattante.
-- Riassumi gli impegni in modo naturale (es: "Oggi hai due cose importanti: la cena alle 20 e...").
-- Se ci sono molti impegni, sii sintetico ma non schematico.
-- Se l'utente chiede di "oggi" e ci sono impegni di altri giorni, dai la priorità a quelli di oggi ma accenna brevemente agli altri se sono imminenti.
-- Non usare liste puntate schematiche, scrivi un paragrafo fluido.
-- Usa un tono amichevole.
+Rispondi come farebbe un segretario umano molto efficiente e cordiale:
+- Se l'utente chiede cosa fare "oggi" o "stasera", focalizzati sugli impegni imminenti.
+- Non elencare i dati in modo freddo (es. non dire "ID: 123, Data: ...").
+- Usa frasi naturali: "Per oggi hai in programma...", "Ricordati che domani alle...", "Stasera non dimenticare di...".
+- Sii breve ma caldo. Se non ci sono impegni per il periodo richiesto, dillo gentilmente.
+- Se ci sono impegni passati non completati, accennali come cose da recuperare.
+- Non usare mai liste puntate schematiche, scrivi un unico paragrafo fluido e piacevole da leggere.
 """
     try:
         response = await llm_service._call_with_protection(

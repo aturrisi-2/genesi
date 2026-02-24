@@ -71,15 +71,31 @@ class UnifiedCalendar:
                 log("GOOGLE_SERVICE_BUILD_ERROR", error=str(e))
 
     def list_reminders(self, days: int = 7, force_sync: bool = False) -> List[Dict[str, Any]]:
-        """Recupera promemoria unificati con Cache (v4.3)."""
+        """Recupera promemoria unificati con Cache Ottimistica (v4.4)."""
         now_ts = datetime.now().timestamp()
-        if not force_sync and (now_ts - self._last_sync < 300) and self._cache_rems:
-            log("UNIFIED_CACHE_HIT", count=len(self._cache_rems))
-            return self._cache_rems
+        
+        # LOGICA OTTIMISTICA: Se abbiamo cache < 10 minuti, la usiamo SUBITO.
+        # Se ha tra 1 e 10 minuti, facciamo anche un refresh in background per la prossima volta.
+        cache_age = now_ts - self._last_sync
+        
+        if not force_sync and self._cache_rems:
+            if cache_age < 60: # < 1 minuto: freschissima
+                return self._cache_rems
+            elif cache_age < 600: # 1-10 minuti: usabile ma da rinfrescare
+                log("OPTIMISTIC_CACHE_HIT", age=int(cache_age))
+                # Trigger background refresh (senza bloccare)
+                import threading
+                threading.Thread(target=self._perform_sync, args=(days,), daemon=True).start()
+                return self._cache_rems
 
+        # Se siamo qui, o force_sync=True, o cache troppo vecchia (>10m), o assente.
+        return self._perform_sync(days)
+
+    def _perform_sync(self, days: int = 7) -> List[Dict[str, Any]]:
+        """Esegue la sincronizzazione reale (bloccante)."""
         all_rems = []
         now = datetime.now()
-        end_date = now + timedelta(days=days)
+        now_ts = now.timestamp()
         
         # 1. Google Calendar
         if self._google_service:
