@@ -58,11 +58,10 @@ class UnifiedCalendar:
 
     def add_event(self, title: str, dt: datetime, provider: str = 'detect'):
         """
-        Adds an event or reminder to the specified provider.
-        Provider can be 'apple', 'google', 'local', or 'detect'.
+        Adds an event or reminder. 
+        Provider: 'apple', 'apple_rem', 'google', 'local', 'detect'.
         """
         if provider == 'detect':
-            # Logic: If ICLOUD_USER is set and we're likely an Apple user (Merate IT hint)
             if self._icloud_user:
                 provider = 'apple'
             elif self._google_service:
@@ -73,22 +72,50 @@ class UnifiedCalendar:
         log("CALENDAR_ADD_REQUEST", title=title, provider=provider, time=dt.isoformat())
 
         if provider == 'apple':
-            return self._add_apple(title, dt)
+            # iCloud Calendar via CalDAV (using existing service)
+            return icloud_service.create_reminder(title, dt)
+        elif provider == 'apple_rem':
+            # iCloud Reminders via pyremindkit (if credentials provided)
+            if Reminders and self._icloud_user and self._icloud_pass:
+                try:
+                    # Note: pyremindkit might need specific setup not shown in snippet
+                    # but following the user's example:
+                    client = Reminders(self._icloud_user, self._icloud_pass)
+                    client.reminders().create(title=title, due_date=dt.strftime("%Y-%m-%d"))
+                    log("APPLE_REM_CREATED", title=title)
+                    return True
+                except Exception as e:
+                    log("APPLE_REM_ERROR", error=str(e))
+            return icloud_service.create_reminder(title, dt) # Fallback
         elif provider == 'google':
             return self._add_google(title, dt)
         else:
             return self._add_local(title, dt)
 
-    def _add_apple(self, title, dt):
-        # Prefer icloud_service (CalDAV) as it's already integrated
-        try:
-            success = icloud_service.create_reminder(title, dt)
-            if success:
-                log("APPLE_EVENT_CREATED", title=title)
-                return True
-        except Exception as e:
-            log("APPLE_EVENT_ERROR", error=str(e))
-        return False
+    def _add_local(self, title, dt):
+        # Using icalendar for local storage
+        cal = Calendar()
+        event = Event()
+        event.add('summary', title)
+        event.add('dtstart', dt)
+        event.add('dtend', dt + timedelta(hours=1))
+        cal.add_component(event)
+        
+        # Save to local file
+        os.makedirs("data", exist_ok=True)
+        with open("data/local_events.ics", "ab") as f:
+            f.write(cal.to_ical())
+            
+        reminder_entry = {
+            "id": len(self.local_reminders) + 1,
+            "text": title,
+            "due": dt.isoformat(),
+            "status": "pending",
+            "provider": "local"
+        }
+        self.local_reminders.append(reminder_entry)
+        log("LOCAL_REMINDER_CREATED", title=title)
+        return True
 
     def _add_google(self, title, dt):
         if not self._google_service:
@@ -114,18 +141,6 @@ class UnifiedCalendar:
         except Exception as e:
             log("GOOGLE_EVENT_ERROR", error=str(e))
             return False
-
-    def _add_local(self, title, dt):
-        # Simple local list for now
-        reminder_entry = {
-            "id": len(self.local_reminders) + 1,
-            "text": title,
-            "due": dt.isoformat(),
-            "status": "pending"
-        }
-        self.local_reminders.append(reminder_entry)
-        log("LOCAL_REMINDER_CREATED", title=title)
-        return True
 
     def list_reminders(self) -> List[Dict[str, Any]]:
         """Lists pending reminders from all active sources."""
