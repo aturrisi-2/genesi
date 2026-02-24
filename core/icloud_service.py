@@ -26,7 +26,7 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="5.0")
+        log("ICLOUD_SERVICE_VERSION", version="5.0.4")
         self._cache_vtodo = []
         self._last_sync_vtodo = 0
         self._cache_events = []
@@ -331,25 +331,29 @@ class ICloudService:
                 matching_component = 'VTODO' if is_todo else 'VEVENT'
                 
                 best_match = None
+                all_cals_info = []
                 for cal in calendars:
                     try:
                         supported = cal.get_supported_components()
                         if not supported: continue
                         
                         can_do = matching_component in supported
-                        name = getattr(cal, 'name', '').lower()
+                        name = getattr(cal, 'name', 'Unnamed').lower()
+                        all_cals_info.append(f"{name}({supported})")
                         
                         if can_do:
                             # Priorità per nome
-                            keywords = ["promemoria", "tasks", "reminders"] if is_todo else ["calendar", "calendario", "home", "casa"]
+                            keywords = ["promemoria", "tasks", "reminders"] if is_todo else ["calendar", "calendario", "home", "casa", "lavoro", "work"]
                             if any(x in name for x in keywords):
-                                best_match = cal
-                                target_name = name
-                                break
+                                if not best_match or any(x in name for x in ["home", "casa", "promemoria"]): # Prio alta
+                                    best_match = cal
+                                    target_name = name
                             if not best_match:
                                 best_match = cal
                                 target_name = name
                     except: pass
+                
+                log("ICLOUD_AVAILABLE_CALENDARS", count=len(calendars), lists=all_cals_info)
                 
                 target_cal = best_match
                 if not target_cal and calendars: 
@@ -396,8 +400,12 @@ class ICloudService:
                     if hasattr(event_dt, 'tzinfo') and event_dt.tzinfo:
                         event_dt = event_dt.replace(tzinfo=None)
                         
+                        
                     item.add('dtstart').value = event_dt
                     item.add('dtend').value = event_dt + datetime.timedelta(hours=1)
+                    item.add('status').value = 'CONFIRMED'
+                    item.add('transp').value = 'OPAQUE'
+                    item.add('priority').value = '5'
                     
                 # Generazione ID unico per Apple
                 uid = str(uuid.uuid4()).lower()
