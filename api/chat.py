@@ -192,8 +192,8 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             for kw in keywords:
                 title = re.sub(rf'(?i)\b{kw}\b', '', title)
             
-            # Ultra-cleaning (v5.0)
-            title = re.sub(r'(?i)\b(genesi|ricordami|di|che|a|per|il|la|gli|le|lo|un|una|uno)\b', '', title)
+            # Ultra-cleaning (v5.0.3)
+            title = re.sub(r'(?i)\b(genesi|ricordami|di|che|a|per|il|la|gli|le|lo|un|una|uno|nel|calendario|devo|voglio|metti|segna|agenda)\b', '', title)
             title = re.sub(r'[:\-\.,]', ' ', title)
             title = " ".join(title.split()).strip()
             
