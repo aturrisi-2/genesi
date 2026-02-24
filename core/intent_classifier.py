@@ -154,7 +154,7 @@ class IntentClassifier:
         
         # 0️⃣ PRIORITA' MASSIMA: Cloud patterns (Robust)
         if "google" in message_lower:
-            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "scarica", "aggiungi", "metti", "salva"]):
+            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "scarica"]):
                 log("INTENT_CLASSIFIED", intent="google_sync", user_id=user_id, engine="regex_robust", message=message[:50])
                 return "google_sync"
             if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login", "usa", "account", "user", "email"]):
@@ -162,7 +162,7 @@ class IntentClassifier:
                 return "google_setup"
         
         if "icloud" in message_lower or "apple" in message_lower:
-            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "scarica", "importa", "aggiungi", "metti", "salva"]):
+            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "importa", "scarica"]):
                 log("INTENT_CLASSIFIED", intent="icloud_sync", user_id=user_id, engine="regex_robust", message=message[:50])
                 return "icloud_sync"
             if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login", "usa", "account", "user", "email"]):
@@ -388,13 +388,13 @@ class IntentClassifier:
         
         # 0️⃣ Parole chiave iCloud → forza icloud_sync / icloud_setup
         if any(kw in message_lower for kw in ["icloud", "apple"]):
-            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "importa", "scarica", "aggiungi", "metti", "salva"]):
+            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "importa", "scarica"]):
                 return "icloud_sync"
             if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login", "usa", "account", "user", "email"]):
                 return "icloud_setup"
         
         if "google" in message_lower:
-            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "scarica", "aggiungi", "metti", "salva"]):
+            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "scarica"]):
                 return "google_sync"
             if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login", "usa", "account", "user", "email"]):
                 return "google_setup"
