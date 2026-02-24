@@ -652,12 +652,21 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 reminder_id, response = reminder_engine.create_reminder_with_response(user_id, reminder_text, reminder_datetime)
                 
                 # Creazione ICLOUD (se richiesto nel messaggio)
-                if "icloud" in message.lower():
+                if "icloud" in message.lower() or "apple" in message.lower():
                     success = await reminder_engine.create_icloud_reminder(user_id, reminder_text, reminder_datetime)
                     if success:
                         response = response.replace("Perfetto.", "Perfetto, aggiunto anche su iCloud.")
                     else:
                         response += " (Nota: non sono riuscito a scriverlo su iCloud, ma l'ho salvato localmente)."
+                
+                # Creazione GOOGLE (se richiesto nel messaggio)
+                if "google" in message.lower():
+                    from calendar_manager import calendar_manager
+                    success = calendar_manager.add_event(reminder_text, reminder_datetime, provider='google')
+                    if success:
+                        response = response.replace("Perfetto.", "Perfetto, aggiunto anche su Google Calendar.")
+                    else:
+                        response += " (Nota: non sono riuscito a scriverlo su Google, ma l'ho salvato localmente)."
                 
                 return response, "reminder"
             
@@ -674,8 +683,24 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         Returns: (response_text: str, source: str)
         """
         try:
-            # Get pending reminders - INCLUDIAMO iCloud sync (gestito dal cooldown)
+            # Get pending reminders from local engine (includes iCloud sync)
             reminders = await reminder_engine.list_reminders(user_id, status_filter="pending", include_icloud=True)
+            
+            # Get from Unified Calendar (Google and others)
+            from calendar_manager import calendar_manager
+            unified_rems = calendar_manager.list_reminders()
+            
+            # Merge and deduplicate (very simple by summary/text)
+            existing_texts = {r["text"].lower() for r in reminders}
+            for ur in unified_rems:
+                if ur.get('summary', '').lower() not in existing_texts:
+                    # Convert format to match reminder_engine
+                    reminders.append({
+                        "text": ur.get('summary', 'Senza titolo'),
+                        "datetime": ur.get('due'),
+                        "source": ur.get('provider', 'cloud'),
+                        "status": "pending"
+                    })
             
             if not reminders:
                 return "Non hai promemoria impostati.", "reminder"

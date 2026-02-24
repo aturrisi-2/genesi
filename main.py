@@ -52,14 +52,14 @@ async def lifespan(app: FastAPI):
     await init_db()
     log("AUTH_DB_INIT", status="ok")
     
-    # Start reminder checker background task
+    # Start background tasks
     reminder_task = asyncio.create_task(reminder_checker_background())
-    
-    # Start calendar checker background task (5 min)
     calendar_task = asyncio.create_task(calendar_checker_background())
+    evolution_task = asyncio.create_task(evolution_scheduler())
     
     log("REMINDER_CHECKER_STARTED", status="ok")
     log("CALENDAR_CHECKER_STARTED", status="ok")
+    log("EVOLUTION_SCHEDULER_STARTED", status="ok")
     
     yield  # ← app in esecuzione
     

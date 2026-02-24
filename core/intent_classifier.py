@@ -93,7 +93,7 @@ class IntentClassifier:
         # Pattern per GPT-4o (tecnica)
         self.gpt_patterns = {
             "reminder_create": [
-                "segnami un promemoria", "promemoria", "appuntamento",
+                "ricordami", "ricordamelo", "segnami un promemoria", "promemoria", "appuntamento",
                 "imposta promemoria", "crea promemoria", "nuovo promemoria", "memorizza promemoria"
             ],
             "reminder_list": [
@@ -176,7 +176,7 @@ class IntentClassifier:
         # 0.5️⃣ PRIORITY OVERRIDES for mixed intents
         
         # Check for reminder keywords
-        reminder_keywords = ["promemoria", "appuntamento", "segnami un promemoria"]
+        reminder_keywords = ["ricordami", "ricordamelo", "promemoria", "appuntamento", "segnami un promemoria"]
         if any(kw in message_lower for kw in reminder_keywords):
             log("INTENT_OVERRIDE_APPLIED", original="mixed", final="reminder_create", message=message[:50])
             # APPLICA REMINDER GUARD LAYER
@@ -414,13 +414,20 @@ class IntentClassifier:
                 log("REMINDER_GUARD_VALIDATED", intent=intent, has_datetime=True, message=message[:50])
         
         # 5️⃣ Altri casi ambigui con parole reminder ma azione non chiara
-        reminder_keywords = ["promemoria", "appuntamento", "segnami un promemoria"]
+        reminder_keywords = ["ricordami", "ricordamelo", "promemoria", "appuntamento", "segnami un promemoria"]
         if any(keyword in message_lower for keyword in reminder_keywords):
+            # Forza reminder_create se è un "ricordami" con data/ora
+            if self._has_datetime_reference(message_lower):
+                log("REMINDER_GUARD_FORCED", original_intent=intent, forced_intent="reminder_create", reason="reminder_keyword_with_dt", message=message[:50])
+                return "reminder_create"
+            
             # Se contiene reminder keywords ma non è stato classificato come reminder_*
             # e non ha data/orario chiara → downgrade a chat_free
             if not intent.startswith('reminder_') and not self._has_datetime_reference(message_lower):
                 log("REMINDER_GUARD_AMBIGUOUS", original_intent=intent, final_intent="chat_free", reason="ambiguous_reminder", message=message[:50])
                 return "chat_free"
+        
+        return intent
         
         return intent
     
@@ -498,7 +505,7 @@ INTENT POSSIBILI:
 - news: richieste di notizie o aggiornamenti
 - time: richieste sull'ora
 - date: richieste sulla data
-- reminder_create: creare o impostare un promemoria SOLO QUANDO L'UTENTE CHIEDE ESPLICITAMENTE un "promemoria" o appuntamento
+- reminder_create: creare o impostare un promemoria (es: "ricordami di", "imposta promemoria")
 - reminder_list: elenco promemoria attivi o in programma
 - reminder_delete: cancellare promemoria
 - reminder_update: modificare giorno/ora promemoria
@@ -546,7 +553,7 @@ Se l'intenzione non è chiara o se l'utente menziona strumenti ambiguamente, imp
                             return "ambiguous_weather"
                         return "ambiguous_tool"
                     
-                    return intent
+                    return self.normalize_reminder_intent(message, intent)
         except Exception as e:
             logger.error(f"Errore nella classificazione JSON LLM: {str(e)}")
             
