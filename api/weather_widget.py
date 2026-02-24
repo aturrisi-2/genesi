@@ -28,11 +28,19 @@ async def get_weather_widget(
     """
     api_key = os.getenv("OPENWEATHER_API_KEY")
     if not api_key:
-        logger.error("WEATHER_WIDGET_NO_API_KEY")
-        return JSONResponse(
-            status_code=503,
-            content={"error": "weather_unavailable", "message": "API key non configurata"}
-        )
+        logger.warning("WEATHER_WIDGET_DEMO_MODE: OPENWEATHER_API_KEY missing. Providing simulated data.")
+        # Simulated payload for Siderno
+        payload = {
+            "city": "Siderno",
+            "temp": 18,
+            "feels_like": 17,
+            "humidity": 65,
+            "description": "Cielo parzialmente nuvoloso (Simulato)",
+            "icon_code": "02d",
+            "wind_speed": 12,
+            "condition": "clouds"
+        }
+        return JSONResponse(content=payload)
 
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:
