@@ -37,11 +37,23 @@ class ChatResponse(BaseModel):
     intent: Optional[str] = None
     user_id: Optional[str] = None
 
+# Anti-bounce per evitare invii doppi
+LAST_MESSAGES = {}
+
 @router.post("", response_model=ChatResponse)
 @router.post("/", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_auth)):
     try:
         user_id = user.id
+        
+        # 1. Anti-bounce: blocca messaggi identici < 2 secondi
+        import time
+        now = time.time()
+        last = LAST_MESSAGES.get(user_id, {"msg": "", "time": 0})
+        if request.message == last["msg"] and (now - last["time"]) < 2:
+            log("CHAT_DUPLICATE_IGNORED", user_id=user_id, message=request.message[:50])
+            return ChatResponse(response="Sto già elaborando la tua richiesta...", status="ok", intent="duplicate")
+        LAST_MESSAGES[user_id] = {"msg": request.message, "time": now}
 
         log("API_CHAT", message=request.message[:100], user_id=user_id)
 

@@ -158,6 +158,8 @@ class ICloudService:
                         log("ICLOUD_LIST_EMPTY", name=name)
                         continue
                     
+                    log("ICLOUD_LIST_FOUND", name=name, total_raw_count=len(todos))
+                    
                     found_in_cal = 0
                     for todo in todos:
                         try:
