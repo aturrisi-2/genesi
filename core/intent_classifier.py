@@ -197,7 +197,10 @@ class IntentClassifier:
         # 0.5️⃣ PRIORITY OVERRIDES for mixed intents
         
         # Check for reminder keywords
-        reminder_keywords = ["ricordami", "ricordamelo", "promemoria", "appuntamento", "segnami un promemoria"]
+        reminder_keywords = [
+            "ricordami", "ricordamelo", "promemoria", "appuntamento", 
+            "segnami un promemoria", "calendario", "agenda", "metti nel", "segna nel"
+        ]
         if any(kw in message_lower for kw in reminder_keywords):
             log("INTENT_OVERRIDE_APPLIED", original="mixed", final="reminder_create", message=message[:50])
             # APPLICA REMINDER GUARD LAYER
@@ -443,9 +446,12 @@ class IntentClassifier:
                 log("REMINDER_GUARD_VALIDATED", intent=intent, has_datetime=True, message=message[:50])
         
         # 5️⃣ Altri casi ambigui con parole reminder ma azione non chiara
-        reminder_keywords = ["ricordami", "ricordamelo", "promemoria", "appuntamento", "segnami un promemoria"]
+        reminder_keywords = [
+            "ricordami", "ricordamelo", "promemoria", "appuntamento", 
+            "segnami un promemoria", "calendario", "agenda", "metti nel", "segna nel"
+        ]
         if any(keyword in message_lower for keyword in reminder_keywords):
-            # Forza reminder_create se è un "ricordami" con data/ora
+            # Forza reminder_create se c'è una data/ora
             if self._has_datetime_reference(message_lower):
                 log("REMINDER_GUARD_FORCED", original_intent=intent, forced_intent="reminder_create", reason="reminder_keyword_with_dt", message=message[:50])
                 return "reminder_create"

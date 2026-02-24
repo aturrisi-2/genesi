@@ -95,7 +95,7 @@ class ReminderEngine:
             
             if self._save_reminders(user_id, reminders):
                 log("REMINDER_CREATE", user_id=user_id, reminder_id=reminder_id, 
-                    text=clean_text[:50], datetime=reminder_datetime.isoformat())
+                    text=clean_text[:50], datetime=reminder_datetime.isoformat() if reminder_datetime else None)
                 return reminder_id
             
             return None
