@@ -189,27 +189,31 @@ class Proactor:
         else:
             response = result
             
-        # PROACTIVE CLOUD SUGGESTION (Fluid Onboarding)
-        try:
-            profile = await storage.load(f"profile:{user_id}", default={})
-            rel_sum = await memory_brain.relational.get_state_summary(user_id)
-            total_msgs = rel_sum.get("total_messages", 0)
-            
-            # Suggest only if: 
-            # 1. Early in the relationship (0 to 10 messages)
-            # 2. No cloud user or google service active
-            # 3. Message doesn't already contain setup keywords
-            has_icloud = profile.get("icloud_user") or os.environ.get("ICLOUD_USER")
-            from calendar_manager import calendar_manager
-            has_google = calendar_manager._google_service is not None
-            
-            if total_msgs < 10 and not has_icloud and not has_google:
-                if not any(kw in response.lower() for kw in ["cloud", "icloud", "google", "calendar", "sincronizza", "collega"]):
-                    # Small welcoming onboarding tip
-                    tip = "\n\n✨ *Benvenuto! Prima di iniziare, se vuoi posso aiutarti a sincronizzare i tuoi calendari. Basta dirmi 'collega account Google' o 'usa iCloud'.*" if total_msgs <= 1 else "\n\n💡 *Tip: Posso gestire i tuoi impegni se scrivi 'collega Google' o 'usa iCloud' per i calendari.*"
-                    response += tip
-        except Exception as e:
-            logger.error(f"ONBOARDING_ERROR: {e}")
+            # PROACTIVE CLOUD SUGGESTION (Fluid Onboarding)
+            try:
+                profile = await storage.load(f"profile:{user_id}", default={})
+                rel_sum = await memory_brain.relational.get_state_summary(user_id)
+                total_msgs = rel_sum.get("total_messages", 0)
+                
+                # Check if is admin for global credentials fallback
+                from auth.config import ADMIN_EMAILS
+                user_email = profile.get("email", "")
+                is_admin = user_email in ADMIN_EMAILS
+                
+                # Suggest only if: 
+                # 1. Early in the relationship (0 to 10 messages)
+                # 2. No cloud user (for admin, check env too)
+                has_icloud = profile.get("icloud_user") or (is_admin and os.environ.get("ICLOUD_USER"))
+                from calendar_manager import calendar_manager
+                has_google = profile.get("google_token") or (is_admin and calendar_manager._google_service is not None)
+                
+                if total_msgs < 10 and not has_icloud and not has_google:
+                    if not any(kw in response.lower() for kw in ["cloud", "icloud", "google", "calendar", "sincronizza", "collega"]):
+                        # Small welcoming onboarding tip
+                        tip = "\n\n✨ *Benvenuto! Prima di iniziare, se vuoi posso aiutarti a sincronizzare i tuoi calendari. Basta dirmi 'collega account Google' o 'usa iCloud'.*" if total_msgs <= 1 else "\n\n💡 *Tip: Posso gestire i tuoi impegni se scrivi 'collega Google' o 'usa iCloud' per i calendari.*"
+                        response += tip
+            except Exception as e:
+                logger.error(f"ONBOARDING_ERROR: {e}")
             
         return response
 
@@ -772,31 +776,11 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         Returns: (response_text: str, source: str)
         """
         try:
-            # Get pending reminders from local engine (includes iCloud sync)
+            # Get pending reminders from central engine. 
+            # IMPORTANT: reminder_engine.list_reminders handles both local AND cloud sync
+            # while maintaining STRICT user isolation (admin check).
+            # We NO LONGER call calendar_manager directly here to avoid cache leakage.
             reminders = await reminder_engine.list_reminders(user_id, status_filter="pending", include_icloud=True)
-            
-            # Get from Unified Calendar (Google and others)
-            from calendar_manager import calendar_manager
-            unified_rems = calendar_manager.list_reminders()
-            
-            # Merge and deduplicate (by text and datetime to avoid collisions)
-            existing_hashes = {f"{r['text'].lower()}_{r.get('datetime')}" for r in reminders}
-            
-            for ur in unified_rems:
-                summary = ur.get('summary') or ur.get('text', 'Senza titolo')
-                dt = ur.get('due')
-                provider = ur.get('provider', 'cloud')
-                
-                # Deduplication check
-                item_hash = f"{summary.lower()}_{dt}"
-                if item_hash not in existing_hashes:
-                    reminders.append({
-                        "text": summary,
-                        "datetime": dt,
-                        "source": provider,
-                        "status": "pending"
-                    })
-                    existing_hashes.add(item_hash)
             
             if not reminders:
                 return "Non hai promemoria impostati.", "reminder"
@@ -1950,6 +1934,15 @@ Messaggio utente: {message}"""
         
         subcmd = cmd_parts[1].lower()
         if subcmd == "list":
+            # SECURITY CHECK: only admin can use global list without filters
+            profile = await storage.load(f"profile:{user_id}", default={})
+            from auth.config import ADMIN_EMAILS
+            is_admin = profile.get("email") in ADMIN_EMAILS
+            
+            if not is_admin:
+                # Redirect to standard reminder list which is segmented
+                return await self._handle_reminder_list(user_id, "quali sono i miei impegni")
+                
             reminders = calendar_manager.list_reminders()
             if not reminders:
                 return "Nessun impegno trovato."
@@ -1997,7 +1990,13 @@ Messaggio utente: {message}"""
 
         # 2. Google
         from calendar_manager import calendar_manager
-        if calendar_manager._google_service:
+        profile = await storage.load(f"profile:{user_id}", default={})
+        from auth.config import ADMIN_EMAILS
+        is_admin = profile.get("email") in ADMIN_EMAILS
+        
+        has_google = (is_admin and calendar_manager._google_service) or profile.get("google_token")
+        
+        if has_google:
             results.append("Google (sincronizzato)")
         else:
             results.append("Google (non ancora collegato)")
@@ -2030,7 +2029,12 @@ Messaggio utente: {message}"""
                 return "C'è stato un errore nell'aggiunta al calendario Google."
 
         # Il setup_google viene chiamato all'init del manager
-        if calendar_manager._google_service:
+        profile = await storage.load(f"profile:{user_id}", default={})
+        from auth.config import ADMIN_EMAILS
+        is_admin = profile.get("email") in ADMIN_EMAILS
+        has_google = (is_admin and calendar_manager._google_service) or profile.get("google_token")
+
+        if has_google:
             return "Sincronizzazione Google Calendar completata."
         return "Non ho ancora il permesso per accedere al tuo Google Calendar. Dimmi 'collega account Google' e lo faremo in un attimo."
 
