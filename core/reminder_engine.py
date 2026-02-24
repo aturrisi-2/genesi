@@ -154,10 +154,21 @@ class ReminderEngine:
             return None
 
     async def create_icloud_reminder(self, user_id: str, text: str, due_dt: datetime) -> bool:
-        """Pushes a new reminder to iCloud."""
-        svc = await self._get_icloud_service(user_id)
-        if not svc: return False
-        return svc.create_reminder(text, due_dt, list_name="Promemoria")
+        """Pushes a new reminder to iCloud using VTODO."""
+        try:
+            profile = await storage.load(f"profile:{user_id}", default={})
+            icloud_user = profile.get("icloud_user") or os.environ.get("ICLOUD_USER")
+            icloud_pass = profile.get("icloud_password") or os.environ.get("ICLOUD_PASSWORD")
+            
+            if not icloud_user or not icloud_pass:
+                return False
+                
+            from core.icloud_reminder_creator import ICloudReminderCreator
+            creator = ICloudReminderCreator(user=icloud_user, password=icloud_pass)
+            return await creator.create_reminder(text, due_dt)
+        except Exception as e:
+            log("ICLOUD_REMINDER_ENGINE_ERROR", error=str(e), user_id=user_id)
+            return False
 
     async def fetch_icloud_reminders(self, user_id: str, list_name: str = "Promemoria", force: bool = False) -> List[Dict[str, Any]]:
         """

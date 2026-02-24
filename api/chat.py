@@ -129,42 +129,65 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             await storage.save(f"profile:{user_id}", profile.model_dump(mode="json"))
             log("STORAGE_SAVE", key=f"profile:{user_id}")
 
-        # Deterministic Reminder Creation Handler (Patch)
+        # Deterministic Reminder Creation Handler (Smarter Version)
         intent = intent_classifier.classify(request.message)
         if intent == "reminder_create":
             from core.icloud_reminder_creator import ICloudReminderCreator
-            import re, dateparser, os
+            import re, os, dateparser
+            from dateparser.search import search_dates
             
-            # Parse messaggio: "Aggiungi promemoria [testo] per [data] alle [ora]"
-            match = re.search(r"(?:promemoria|ricorda|aggiungi).*?(.+?)(?:per|il|a le)?\s*(\d{1,2}[a-zA-Z]*)\s*(?:alle)?\s*(\d{1,2}:\d{2})?", request.message, re.IGNORECASE)
+            # 1. Trova la data nel messaggio usando dateparser.search (molto più robusto della regex)
+            found = search_dates(request.message, languages=['it'], settings={'PREFER_DATES_FROM': 'future'})
             
-            if match:
-                title = match.group(1).strip()
-                day = match.group(2) or "domani"
-                time = match.group(3) or "15:00"
+            title = None
+            due_date = None
+            
+            if found:
+                # Prendiamo l'ultima data trovata (di solito la più specifica)
+                date_text, due_date = found[-1]
                 
-                due_str = f"{day} alle {time}"
-                due_date = dateparser.parse(due_str, languages=['it'])
+                # 2. Estrai il titolo pulendo il messaggio
+                title = request.message
+                # Rimuovi la parte della data trovata
+                title = title.replace(date_text, "")
+                # Rimuovi verbi e keywords comuni (case-insensitive)
+                keywords = [
+                    "aggiungi", "metti", "crea", "un", "promemoria", "ricorda", "ricordami", 
+                    "di", "per", "il", "a", "alle", "ai", "al"
+                ]
+                for kw in keywords:
+                    title = re.sub(rf'(?i)\b{kw}\b', '', title)
                 
-                if due_date:
-                    creator = ICloudReminderCreator(
-                        user=raw_profile.get('icloud_user') or os.environ.get("ICLOUD_USER"),
-                        password=raw_profile.get('icloud_password') or os.environ.get("ICLOUD_PASSWORD")
-                    )
-                    
+                # Pulizia finale
+                title = re.sub(r'[:\-]', '', title).strip()
+            
+            if title and due_date:
+                # Se il titolo è rimasto vuoto o troppo corto per errore di pulizia, usa il messaggio originale troncato
+                if len(title) < 2:
+                    title = request.message.split(":")[1].strip() if ":" in request.message else request.message
+                
+                # Credenziali
+                user_creds = raw_profile.get('icloud_user') or os.environ.get("ICLOUD_USER")
+                pass_creds = raw_profile.get('icloud_password') or os.environ.get("ICLOUD_PASSWORD")
+                
+                if user_creds and pass_creds:
+                    creator = ICloudReminderCreator(user=user_creds, password=pass_creds)
                     success = await creator.create_reminder(title, due_date)
+                    
                     if success:
                         response = f"✅ Promemoria creato su iCloud: '{title}' per {due_date.strftime('%d/%m %H:%M')}"
-                        # Log message locally too
+                        # Log locale per persistenza
                         from core.reminder_engine import reminder_engine
                         reminder_engine.create_reminder(user_id, title, due_date)
                         chat_memory.add_message(user_id, request.message, response, intent)
                     else:
-                        response = "❌ Errore creazione promemoria iCloud. Verifica le credenziali o il calendario 'Promemoria'."
+                        response = f"❌ Errore durante la creazione su iCloud. Ho comunque salvato il promemoria localmente: '{title}'"
+                        from core.reminder_engine import reminder_engine
+                        reminder_engine.create_reminder(user_id, title, due_date)
                 else:
-                    response = "❌ Data non compresa. Prova con 'domani alle 15'."
+                    response = "❌ Account iCloud non configurato. Non posso salvare il promemoria online."
             else:
-                # Fallback to proactor if regex fails
+                # Fallback al Proactor se il parsing fallisce
                 response = await simple_chat_handler(user_id, request.message, request.conversation_id)
         else:
             response = await simple_chat_handler(user_id, request.message, request.conversation_id)

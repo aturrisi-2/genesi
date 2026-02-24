@@ -1,6 +1,6 @@
 import caldav, vobject
 from datetime import datetime
-import logging, os
+import logging, os, uuid
 from core.log import log
 
 logger = logging.getLogger(__name__)
@@ -23,36 +23,44 @@ class ICloudReminderCreator:
             reminder_cal = None
             for cal in calendars:
                 name = getattr(cal, 'name', '').lower()
-                if "promemoria" in name or "reminders" in name:
+                if any(x in name for x in ["promemoria", "reminders"]):
                     reminder_cal = cal
                     break
             
             if not reminder_cal:
-                # Fallback to the first calendar if "Promemoria" not found
+                # Fallback: cerca il primo che supporta VTODO se possibile
+                # o semplicemente usa il primo calendario disponibile
                 if calendars:
-                    reminder_cal = calendars[0]
-                else:
-                    logger.error("Nessun calendario trovato")
-                    return False
+                    reminder_cal = list(calendars.values())[0] if isinstance(calendars, dict) else calendars[0]
+            
+            if not reminder_cal:
+                log("ICLOUD_REMINDER_NO_CAL", level="ERROR")
+                return False
             
             # Crea VTODO
             cal_vobj = vobject.iCalendar()
             vtodo = cal_vobj.add('vtodo')
             vtodo.add('summary').value = title
-            
-            # Formattazione data
-            if due_date:
-                vtodo.add('due').value = due_date
-                vtodo.add('dtstart').value = due_date
-            
+            vtodo.add('uid').value = str(uuid.uuid4()).upper()
             vtodo.add('dtstamp').value = datetime.utcnow()
+            
+            if due_date:
+                # Per Apple Reminders, la data di scadenza è 'due'
+                vtodo.add('due').value = due_date
+                # Alcuni server vogliono anche dtstart
+                vtodo.add('dtstart').value = due_date
             
             if notes:
                 vtodo.add('description').value = notes
             
+            # Serialization
+            ics_data = cal_vobj.serialize()
+            
             # Salva su iCloud
             log("ICLOUD_REMINDER_SENDING", title=title, list=getattr(reminder_cal, 'name', 'Unknown'))
-            reminder_cal.add_todo(cal_vobj.serialize())
+            
+            # add_event è il metodo universale per iniettare ICS (VEVENT o VTODO)
+            reminder_cal.add_event(ics_data)
             
             log("ICLOUD_REMINDER_CREATED", title=title)
             return True
