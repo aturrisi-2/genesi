@@ -26,7 +26,7 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="4.0")
+        log("ICLOUD_SERVICE_VERSION", version="4.1")
         self._cache_vtodo = []
         self._last_sync_vtodo = 0
         self._vtodo_lists = set() 
@@ -310,7 +310,8 @@ class ICloudService:
             target_cal = None
             for cal in calendars:
                 name = getattr(cal, 'name', '').lower()
-                if any(x in name for x in ["promemoria", "reminders"]):
+                # Favoreggi mappe specifiche di task conosciute in iCloud
+                if any(x in name for x in ["promemoria", "tasks", "reminders"]):
                     target_cal = cal
                     break
             if not target_cal and calendars: target_cal = calendars[0]
@@ -318,10 +319,24 @@ class ICloudService:
 
             import vobject
             cal_v = vobject.iCalendar()
+            # Apple richiede X-WR-CALNAME per alcuni contesti ma non è obbligatorio per VTODO singolo
+            
             if is_todo:
                 item = cal_v.add('vtodo')
                 item.add('summary').value = text
+                
+                # Assicuriamoci che la data sia consapevole del fuso orario (naive -> local)
+                if dt.tzinfo is None:
+                    # Se non ha timezone, assumiamo sia locale (o UTC, iCloud corregge)
+                    pass 
+
+                # Apple Reminders vuole DUE e spesso DTSTART per visualizzarli correttamente
                 item.add('due').value = dt
+                item.add('dtstart').value = dt
+                
+                # Metadati extra per compatibilità UI Apple
+                item.add('priority').value = '5' # Media
+                item.add('status').value = 'NEEDS-ACTION'
             else:
                 item = cal_v.add('vevent')
                 item.add('summary').value = text
