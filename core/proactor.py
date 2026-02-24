@@ -716,12 +716,15 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 # Salva in sessione per follow-up (es. "Aggiungilo a Google")
                 self.last_reminder_per_user[user_id] = {"text": reminder_text, "dt": reminder_datetime}
                 
-                # 3. CREAZIONE CLOUD (Automatica se configurato)
+                # 3. CREAZIONE CLOUD (Automatica se configurata o richiesta)
+                sync_keywords = ["sincronizza", "tutti", "account", "cloud", "online"]
+                force_sync = any(kw in message.lower() for kw in sync_keywords)
+                
                 # Creazione ICLOUD
                 profile = await storage.load(f"profile:{user_id}", default={})
                 has_icloud = profile.get("icloud_user") or os.environ.get("ICLOUD_USER")
                 
-                if "icloud" in message.lower() or "apple" in message.lower() or has_icloud:
+                if force_sync or "icloud" in message.lower() or "apple" in message.lower() or has_icloud:
                     success = await reminder_engine.create_icloud_reminder(user_id, reminder_text, reminder_datetime)
                     if success:
                         if "Perfetto." in response:
@@ -730,13 +733,13 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                             response += " (Sincronizzato su iCloud)."
                     else:
                         # Non segnaliamo errore se non esplicitamente chiesto
-                        if "icloud" in message.lower() or "apple" in message.lower():
+                        if "icloud" in message.lower() or "apple" in message.lower() or "tutti" in message.lower():
                             response += " (Nota: non sono riuscito a scriverlo su iCloud)."
                 
                 # Creazione GOOGLE (se richiesto o se disponibile)
                 from calendar_manager import calendar_manager
                 has_google = calendar_manager._google_service is not None
-                if "google" in message.lower() or ("calendario" in message.lower() and has_google):
+                if force_sync or "google" in message.lower() or ("calendario" in message.lower() and has_google) or has_google:
                     success = calendar_manager.add_event(reminder_text, reminder_datetime, provider='google')
                     if success:
                         if "Perfetto." in response:
@@ -744,7 +747,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                         else:
                             response += " (Aggiunto a Google Calendar)."
                     else:
-                        if "google" in message.lower():
+                        if "google" in message.lower() or "tutti" in message.lower():
                             response += " (Nota: errore durante il salvataggio su Google Calendar)."
                 
                 return response, "reminder"
@@ -958,6 +961,14 @@ Messaggio: {message}"""
             email = creds.get("email")
             password = creds.get("password")
             
+            # AUTO-FIX COMMON TYPOS (e.g. .com.com)
+            if email and isinstance(email, str):
+                if email.endswith(".com.com"):
+                    email = email.replace(".com.com", ".com")
+                    logger.info("ICLOUD_SETUP_AUTOFIX_EMAIL original=%s current=%s", creds.get("email"), email)
+                elif email.endswith(".it.it"):
+                    email = email.replace(".it.it", ".it")
+
             if not email or not password:
                 return "Per configurare iCloud ho bisogno dei tuoi dati. Prova a dirmi qualcosa come: 'Collega il mio iCloud id@email.com con password xxxx-xxxx-xxxx-xxxx'. Ricorda di usare una password specifica per le app!"
             
