@@ -39,22 +39,45 @@ class UnifiedCalendar:
 
     def _setup_google(self):
         token_path = os.environ.get("GOOGLE_TOKEN_PATH", "token.json")
-        if not os.path.exists(token_path):
-            return
-            
-        try:
-            with open(token_path, 'rb') as token:
-                creds = pickle.load(token)
-            
+        creds_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "credentials.json")
+        scopes = ['https://www.googleapis.com/auth/calendar']
+        
+        creds = None
+        if os.path.exists(token_path):
+            try:
+                with open(token_path, 'rb') as token:
+                    creds = pickle.load(token)
+            except Exception as e:
+                log("GOOGLE_TOKEN_LOAD_ERROR", error=str(e))
+
+        # If no valid credentials, try to get them
+        if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-                with open(token_path, 'wb') as token:
-                    pickle.dump(creds, token)
+                try:
+                    creds.refresh(Request())
+                except Exception as e:
+                    log("GOOGLE_CREDENTIALS_REFRESH_ERROR", error=str(e))
+                    creds = None
             
-            if creds and creds.valid:
+            if not creds and os.path.exists(creds_path):
+                # This requires interaction, might be tricky on a VPS
+                # But we implement it as requested
+                try:
+                    flow = InstalledAppFlow.from_client_secrets_file(creds_path, scopes)
+                    creds = flow.run_local_server(port=0)
+                    # Save the credentials for the next run
+                    with open(token_path, 'wb') as token:
+                        pickle.dump(creds, token)
+                    log("GOOGLE_AUTH_FLOW_COMPLETED")
+                except Exception as e:
+                    log("GOOGLE_AUTH_FLOW_ERROR", error=str(e))
+
+        if creds and creds.valid:
+            try:
                 self._google_service = build('calendar', 'v3', credentials=creds)
-        except Exception as e:
-            log("GOOGLE_AUTH_ERROR", error=str(e))
+                log("GOOGLE_CALENDAR_SERVICE_READY")
+            except Exception as e:
+                log("GOOGLE_SERVICE_BUILD_ERROR", error=str(e))
 
     def add_event(self, title: str, dt: datetime, provider: str = 'detect'):
         """
