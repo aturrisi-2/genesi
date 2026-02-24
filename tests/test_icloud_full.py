@@ -42,6 +42,11 @@ async def test_icloud_connection():
     success = icloud_service._connect()
     assert success is True, "Connessione CalDAV fallita"
     print("✅ Connessione riuscita")
+    
+    print("\n[DIAGNOSTIC] Elenco liste iCloud trovate:")
+    cals = icloud_service.client.principal().calendars()
+    for c in cals:
+        print(f"- {c.name}")
 
 @pytest.mark.asyncio
 async def test_icloud_fetch():

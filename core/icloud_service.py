@@ -331,7 +331,10 @@ class ICloudService:
                 if not target_cal and calendars: 
                     target_cal = calendars[0]
                     target_name = getattr(target_cal, 'name', 'Reminders')
+                
                 if not target_cal: return False
+                
+                log("ICLOUD_TARGET_CALENDAR", name=target_name)
 
                 import vobject
                 cal_v = vobject.iCalendar()

@@ -415,10 +415,11 @@ class IntentClassifier:
         list_keywords = [
             "quali", "mostra", "lista", "che appuntamenti", "che promemoria", "i miei", 
             "elenco", "appuntamenti ho", "cosa mi devi ricordare", "cosa devi ricordarmi", 
-            "cosa devo fare", "dimmi i promemoria", "elenca i promemoria", "che promemoria ho"
+            "cosa devo fare", "dimmi i promemoria", "elenca i promemoria", "che promemoria ho",
+            "impegni", "agenda", "cosa ho oggi", "cosa ho domani", "programmi"
         ]
         if any(keyword in message_lower for keyword in list_keywords):
-            if "promemoria" in message_lower or "appuntament" in message_lower:
+            if any(kw in message_lower for kw in ["promemoria", "appuntament", "impegn", "agenda"]):
                 log("REMINDER_GUARD_FORCED", original_intent=intent, forced_intent="reminder_list", reason="list_keyword", message=message[:50])
                 return "reminder_list"
         
@@ -473,25 +474,25 @@ class IntentClassifier:
         import re
         
         # Pattern orario HH:MM
-        if re.search(r'\d{1,2}:\d{2}', message_lower):
+        if re.search(r'\b\d{1,2}:\d{2}\b', message_lower):
             return True
         
         # Pattern "alle H" (senza minuti)
-        if re.search(r'alle\s+\d{1,2}(?::\d{2})?', message_lower):
+        if re.search(r'\balle\s+\d{1,2}\b', message_lower):
             return True
         
         # Parole chiave data
-        date_keywords = ["domani", "oggi", "dopodomani", "ieri"]
+        date_keywords = ["domani", "oggi", "dopodomani", "ieri", "stasera", "pomeriggio", "mattina"]
         if any(keyword in message_lower for keyword in date_keywords):
             return True
         
         # Giorni della settimana
-        weekdays = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]
+        weekdays = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica", "lunedi", "martedi", "mercoledi", "giovedi", "venerdi"]
         if any(day in message_lower for day in weekdays):
             return True
             
         # Pattern relativo "tra X minuti/ore"
-        if re.search(r'tra\s+\d+\s+(minut|or|second|giorn)', message_lower):
+        if re.search(r'\b(tra|fra|entro)\s+(\d+|un|una|uno|due|tre)\s+(minut|or|second|giorn|settiman)\b', message_lower):
             return True
         
         return False

@@ -150,17 +150,36 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             import re, os
             
             now_ref = datetime.now()
+            
+            # Normalizzazione linguistica per dateparser (un/una/uno -> 1)
+            norm_msg = request.message.lower()
+            norm_msg = re.sub(r'\b(un|una|uno)\b', '1', norm_msg)
+            norm_msg = re.sub(r'\bdue\b', '2', norm_msg)
+            norm_msg = re.sub(r'\btre\b', '3', norm_msg)
+            
             # 1. Parsing robusto con base temporale corretta
-            found = search_dates(request.message, languages=['it'], 
+            found = search_dates(norm_msg, languages=['it'], 
                                 settings={'PREFER_DATES_FROM': 'future', 'RELATIVE_BASE': now_ref})
             
             title = request.message
             due_date = None
             
             if found:
-                # Prendiamo l'occorrenza più lunga (spesso la più completa)
+                # Prendiamo l'occorrenza più lunga
                 text_part, due_date = max(found, key=lambda x: len(x[0]))
-                title = title.replace(text_part, "")
+                log("DATE_PARSED", text=text_part, dt=due_date.isoformat())
+                
+                # Se dateparser ha trovato "1" (da un/una) e ha dato mezzanotte, è un errore di granularità
+                if due_date.hour == 0 and due_date.minute == 0 and "minut" in text_part:
+                    # Recupero manuale se necessario o lascia così se è oggi
+                    pass
+                
+                # Rimuove la parte temporale originale dal titolo (usa il messaggio originale per il titolo)
+                # Dobbiamo essere attenti: found usa norm_msg, ma vogliamo pulire title
+                title = title.replace(text_part, "") 
+                # Se non la trova perché norm_msg è diversa, prova a rimuovere anche le versioni testuali
+                for w in ["tra un minuto", "un minuto", "tra una settimana", "tra un'ora"]:
+                    title = title.replace(w, "")
             
             # Pulizia keywords e residui verbali
             keywords = [
