@@ -236,7 +236,14 @@ class IntentClassifier:
             log("INTENT_OVERRIDE_APPLIED", original="chat_free", final="emotional", message=message[:50])
             return "emotional"
         
-        # 3️⃣ Default: chat libera (GPT-4o)
+        # 3️⃣ Default: chat libera (GPT-4o) con normalizzazione finale
+        intent = "chat_free"
+        normalized_intent = self.normalize_reminder_intent(message, intent)
+        
+        if normalized_intent != intent:
+             log("INTENT_GUARD_RECOVERY", original=intent, final=normalized_intent, message=message[:50])
+             return normalized_intent
+
         log("INTENT_DEFAULT", intent="chat_free", user_id=user_id, engine="gpt-4o", message=message[:50])
         logger.info("INTENT_ENGINE=gpt-4o-mini intent=chat_free")
         return "chat_free"

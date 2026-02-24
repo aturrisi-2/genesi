@@ -343,12 +343,25 @@ class ReminderEngine:
                 dt_iso = reminder.get("datetime")
                 date_str = ""
                 if dt_iso:
-                    dt = datetime.fromisoformat(dt_iso)
-                    date_str = dt.strftime("%d %b %H:%M") + " – "
-                text = reminder["text"]
+                    # ISO Format resilience
+                    clean_dt = dt_iso.replace("Z", "+00:00").split(".")[0] if "T" in dt_iso else dt_iso
+                    try:
+                        dt = datetime.fromisoformat(clean_dt)
+                        date_str = dt.strftime("%d %b %H:%M") + " – "
+                    except:
+                        date_str = f"({dt_iso}) – "
+                
+                text = reminder.get("text", "Senza titolo")
                 status = reminder.get("status", "pending")
-                source = reminder.get("source", "local")
-                source_tag = " (iCloud)" if source == "icloud" else ""
+                source = str(reminder.get("source", "local")).lower()
+                
+                # Source Labeling
+                source_tag = ""
+                if source == "icloud" or source == "apple":
+                    source_tag = " (iCloud)"
+                elif source == "google":
+                    source_tag = " (Google)"
+                
                 status_icon = "✅" if status == "done" else "⏰" if status == "pending" else "🔔" if status == "triggered" else "❌"
                 lines.append(f"{i}. {date_str}{text}{source_tag} {status_icon}")
             except: continue

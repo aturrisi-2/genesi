@@ -166,7 +166,7 @@ class UnifiedCalendar:
             return False
 
     def list_reminders(self, days: int = 7) -> List[Dict[str, Any]]:
-        """Lists pending reminders and upcoming calendar events from all active sources."""
+        """Lists only Google Calendar events and local events (Apple reminders are handled by the ReminderEngine)."""
         all_rems = []
         now = datetime.now()
         end_date = now + timedelta(days=days)
@@ -174,11 +174,13 @@ class UnifiedCalendar:
         # 1. Google Calendar (Upcoming Events)
         if self._google_service:
             try:
+                # Use a slightly wider window to ensure we don't miss today's events
+                time_min = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + 'Z'
                 events_result = self._google_service.events().list(
                     calendarId='primary', 
-                    timeMin=now.isoformat() + 'Z',
+                    timeMin=time_min,
                     timeMax=end_date.isoformat() + 'Z',
-                    maxResults=10, 
+                    maxResults=15, 
                     singleEvents=True,
                     orderBy='startTime'
                 ).execute()
@@ -195,24 +197,12 @@ class UnifiedCalendar:
             except Exception as e:
                 log("GOOGLE_LIST_ERROR", error=str(e))
 
-        # 2. Apple (Reminders)
-        if self._icloud_user:
-            try:
-                apple_rems = icloud_service.get_reminders()
-                for r in apple_rems:
-                    r['provider'] = 'apple'
-                    all_rems.append(r)
-            except Exception as e:
-                log("APPLE_LIST_ERROR", error=str(e))
-
-        # 3. Local
+        # 2. Local (Managed locally here as backup/fallback)
         for r in self.local_reminders:
             if r['status'] == 'pending':
-                r['provider'] = 'local'
-                # Match schema
                 all_rems.append({
-                    "summary": r.get('text'),
-                    "due": r.get('due'),
+                    "summary": r.get('text') or r.get('summary'),
+                    "due": r.get('due') or r.get('datetime'),
                     "provider": "local",
                     "status": "pending"
                 })

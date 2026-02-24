@@ -93,10 +93,6 @@ class ICloudService:
             scanned_count = 0
 
             for calendar in ordered_cals:
-                # Se abbiamo trovato già qualcosa nelle prioritarie, possiamo fermarci o limitare
-                if scanned_count > 5 and len(all_reminders) > 0:
-                    break
-
                 try:
                     name = getattr(calendar, 'name', 'Senza nome')
                     url = str(calendar.url).lower()
@@ -109,9 +105,9 @@ class ICloudService:
                     
                     # REPORT query limitata per prestazioni
                     todos = calendar.todos(include_completed=False)
+                    found_on_this_list = 0
                     for todo in todos:
                         try:
-                            # ... (parsing logic remains same) ...
                             v = readOne(todo.data)
                             task = getattr(v, 'vtodo', None)
                             if not task: continue
@@ -124,10 +120,13 @@ class ICloudService:
                             guid = str(task.uid.value) if hasattr(task, 'uid') else None
                             
                             due_iso = None
-                            if hasattr(task, 'due'):
-                                due_val = task.due.value
-                                if isinstance(due_val, (datetime.datetime, datetime.date)):
-                                    due_iso = due_val.isoformat()
+                            # Fallback chain for due date: DUE -> DTSTART -> created
+                            for attr in ['due', 'dtstart', 'created']:
+                                if hasattr(task, attr):
+                                    val = getattr(task, attr).value
+                                    if isinstance(val, (datetime.datetime, datetime.date)):
+                                        due_iso = val.isoformat()
+                                        break
 
                             all_reminders.append({
                                 "guid": guid,
@@ -136,7 +135,17 @@ class ICloudService:
                                 "due": due_iso,
                                 "list": name
                             })
+                            found_on_this_list += 1
                         except: continue
+                    
+                    # PERFORMANCE EXIT: Se abbiamo trovato dati nella lista prioritaria, fermati subito
+                    if any(x in name.lower() for x in ["promemoria", "reminders"]) and found_on_this_list > 0:
+                        log("ICLOUD_CALDAV_PRIORITY_EXIT", name=name, count=found_on_this_list)
+                        break
+                    
+                    if scanned_count >= 5: # Massimo 5 liste totali se non prioritarie
+                        break
+                        
                 except: continue
 
             log("ICLOUD_CALDAV_SYNC_SUCCESS", count=len(all_reminders), user=self.username)
