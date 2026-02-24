@@ -148,7 +148,7 @@ async def register(req: RegisterRequest, http_request: Request, db: AsyncSession
     if auto_verify:
          _log("AUTH_REGISTER_AUTO_VERIFIED", user_id=user.id, email=email)
          # Inizializza ambiente subito se auto-verificato
-         initialize_user_environment(user.id, user.preferences)
+         initialize_user_environment(user.id, user.email, user.preferences)
          await db.commit()
          return {
              "message": "Registrazione completata con successo (Accesso immediato abilitato).",
@@ -222,7 +222,7 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
     _log("AUTH_VERIFY", user_id=user.id, email=user.email)
 
     # Inizializza ambiente Genesi
-    initialize_user_environment(user.id, user.preferences)
+    initialize_user_environment(user.id, user.email, user.preferences)
 
     return HTMLResponse(
         content=_html_page(

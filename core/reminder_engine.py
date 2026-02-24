@@ -158,8 +158,16 @@ class ReminderEngine:
         """Pushes a new reminder to iCloud using VTODO."""
         try:
             profile = await storage.load(f"profile:{user_id}", default={})
-            icloud_user = profile.get("icloud_user") or os.environ.get("ICLOUD_USER")
-            icloud_pass = profile.get("icloud_password") or os.environ.get("ICLOUD_PASSWORD")
+            icloud_user = profile.get("icloud_user")
+            icloud_pass = profile.get("icloud_password")
+            
+            # Fallback to env ONLY for Admin
+            if not icloud_user or not icloud_pass:
+                from auth.config import ADMIN_EMAILS
+                is_admin = profile.get("email") in ADMIN_EMAILS or user_id in ADMIN_EMAILS # Check both for safety
+                if is_admin:
+                    icloud_user = os.environ.get("ICLOUD_USER")
+                    icloud_pass = os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
             
             if not icloud_user or not icloud_pass:
                 return False
@@ -247,21 +255,31 @@ class ReminderEngine:
         List unified reminders: Local + iCloud + Google.
         """
         try:
-            # 1. Fetch iCloud (VTODO + VEVENT)
-            if include_icloud:
-                # Usa il calendario unificato che ha la sua cache
-                from calendar_manager import calendar_manager
-                await asyncio.to_thread(calendar_manager.list_reminders)
-
-            # 2. Fetch Google/Unified
-            unified_items = []
-            try:
-                from calendar_manager import calendar_manager
-                unified_items = calendar_manager.list_reminders(days=7)
-            except: pass
-
-            # 3. Load from local (includes iCloud synced items)
+            # Load from local (includes iCloud synced items)
             reminders = self._load_reminders(user_id)
+            
+            # 1. Fetch iCloud/Google ONLY if user is Admin or has credentials
+            # This prevents common users from seeing Admin's calendars defined in .env
+            from auth.config import ADMIN_EMAILS
+            # Get email from profile to check admin status
+            profile = await storage.load(f"profile:{user_id}", default={})
+            user_email = profile.get("email", "")
+            
+            # Debug: log the identifies being used
+            is_admin = user_email in ADMIN_EMAILS
+            has_own_creds = bool(profile.get("icloud_user") or profile.get("google_token"))
+
+            unified_items = []
+            if include_icloud and (is_admin or has_own_creds):
+                try:
+                    from calendar_manager import calendar_manager
+                    # Se l'utente ha credenziali proprie, dovremmo idealmente usare un'istanza dedicata.
+                    # Per ora, se è Admin usa quella globale (che ha i dati in .env)
+                    if is_admin:
+                        await asyncio.to_thread(calendar_manager.list_reminders)
+                        unified_items = calendar_manager.list_reminders(days=7)
+                except Exception as e:
+                    log("REMINDER_SYNC_SKIP", user_id=user_id, reason=str(e))
             
             # 4. Merge Google items (only if relevant to filter)
             if not status_filter or status_filter == "pending":
@@ -288,7 +306,7 @@ class ReminderEngine:
                 reminders = [r for r in reminders if r.get("status") == status_filter]
                 
             reminders.sort(key=lambda r: (r.get("datetime") is None, r.get("datetime") or ""))
-            log("REMINDER_LIST_UNIFIED", user_id=user_id, count=len(reminders), filter=status_filter)
+            log("REMINDER_LIST_UNIFIED", user_id=user_id, count=len(reminders), filter=status_filter, is_admin=is_admin)
             return reminders
             
         except Exception as e:

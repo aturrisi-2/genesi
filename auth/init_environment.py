@@ -5,7 +5,7 @@ import json
 from core.log import log as _log
 
 
-def initialize_user_environment(user_id: str, preferences: dict = None):
+def initialize_user_environment(user_id: str, email: str, preferences: dict = None):
     """
     Inizializza l'ambiente Genesi per un utente appena verificato.
     - Crea directory utente
@@ -30,6 +30,7 @@ def initialize_user_environment(user_id: str, preferences: dict = None):
         if not profile_path.exists():
             default_profile = {
                 "user_id": user_id,
+                "email": email,
                 "created_at": datetime.utcnow().isoformat(),
                 "preferences": preferences or {},
             }
