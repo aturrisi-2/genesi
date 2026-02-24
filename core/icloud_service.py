@@ -107,32 +107,31 @@ class ICloudService:
                     todos = []
                     try:
                         todos = calendar.todos(include_completed=False)
-                    except:
-                        log("ICLOUD_CALDAV_TODOS_ERR", name=name)
+                    except Exception as e:
+                        log("ICLOUD_CALDAV_TODOS_ERR", name=name, error=str(e))
 
-                    # 2. FALLBACK SE VUOTO: Filtro manuale oggetti
+                    # 2. FALLBACK SE VUOTO: Ricerca filtrata su VTODO
                     if not todos:
                         try:
-                            # Filtro XML manuale per VTODO
-                            todos = calendar.objects_by_filter({
-                                "comp_filter": {
-                                    "name": "VCALENDAR",
-                                    "comp_filter": {
-                                        "name": "VTODO",
-                                        "prop_filter": {
-                                            "name": "STATUS",
-                                            "text_match": {"negate-condition": "yes", "text": "COMPLETED"}
-                                        }
-                                    }
-                                }
-                            })
-                            if todos: log("ICLOUD_CALDAV_FALLBACK_OK", name=name, count=len(todos))
+                            # caldav 2.2.6+ search
+                            todos = calendar.search(comp_class="VTODO")
+                            if todos: log("ICLOUD_CALDAV_SEARCH_OK", name=name, count=len(todos))
                         except Exception as e:
-                            log("ICLOUD_CALDAV_FILTER_ERR", error=str(e))
+                            log("ICLOUD_CALDAV_SEARCH_ERR", name=name, error=str(e))
+
+                    # 3. ULTIMO FALLBACK: Tutti gli oggetti
+                    if not todos:
+                        try:
+                            todos = calendar.objects()
+                        except: pass
 
                     found_on_this_list = 0
                     for todo in todos:
                         try:
+                            # Filtriamo noi se abbiamo usato objects()
+                            if "VTODO" not in todo.data:
+                                continue
+
                             v = readOne(todo.data)
                             task = getattr(v, 'vtodo', None)
                             if not task: continue
@@ -168,7 +167,7 @@ class ICloudService:
                         log("ICLOUD_CALDAV_PRIORITY_EXIT", name=name, count=found_on_this_list)
                         break
                     
-                    if scanned_count >= 6: # Leggermente più tollerante
+                    if scanned_count >= 8: # Più ampio
                         break
                         
                 except Exception as e: 
@@ -212,41 +211,38 @@ class ICloudService:
             uid = str(uuid.uuid4()).upper()
             now_utc = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
             
-            # iCalendar richiede CRLF (\r\n) per specifica RFC 5545
-            # Aggiungiamo CREATED, LAST-MODIFIED e VALARM
-            ical = [
-                "BEGIN:VCALENDAR",
-                "VERSION:2.0",
-                "PRODID:-//Apple Inc.//Mac OS X 10.15.7//EN",
-                "BEGIN:VTODO",
-                f"UID:{uid}",
-                f"DTSTAMP:{now_utc}",
-                f"CREATED:{now_utc}",
-                f"LAST-MODIFIED:{now_utc}",
-                f"SUMMARY:{text}",
-                "STATUS:NEEDS-ACTION",
-                "SEQUENCE:0"
-            ]
+            # Genera UID e timestamp
+            import vobject
+            cal = vobject.iCalendar()
+            cal.add('prodid').value = "-//Apple Inc.//Mac OS X 10.15.7//EN"
+            
+            todo = cal.add('vtodo')
+            todo.add('uid').value = str(uuid.uuid4()).upper()
+            todo.add('summary').value = text
+            todo.add('status').value = 'NEEDS-ACTION'
+            
+            now = datetime.datetime.utcnow()
+            todo.add('dtstamp').value = now
+            todo.add('created').value = now
+            todo.add('last-modified').value = now
             
             if due_dt:
-                dt_str = due_dt.strftime("%Y%m%dT%H%M%S")
-                ical.append(f"DTSTART:{dt_str}")
-                ical.append(f"DUE:{dt_str}")
-                # Aggiungiamo un allarme 5 minuti prima
-                ical.append("BEGIN:VALARM")
-                ical.append("ACTION:DISPLAY")
-                ical.append("DESCRIPTION:Reminder")
-                ical.append("TRIGGER:-PT15M") # 15 min prima
-                ical.append("END:VALARM")
-            else:
-                ical.append(f"DTSTART:{now_utc}")
+                # iCloud preferisce DTSTART == DUE per i promemoria puntuali
+                todo.add('dtstart').value = due_dt
+                todo.add('due').value = due_dt
                 
-            ical.append("END:VTODO")
-            ical.append("END:VCALENDAR")
+                # Allarme
+                alarm = todo.add('valarm')
+                alarm.add('action').value = 'DISPLAY'
+                alarm.add('description').value = 'Reminder'
+                alarm.add('trigger').value = datetime.timedelta(minutes=-15)
+            else:
+                todo.add('dtstart').value = now
+
+            # Serializzazione con CRLF (default di vobject)
+            ical_str = cal.serialize()
             
-            # Uniamo con CRLF
-            ical_str = "\r\n".join(ical) + "\r\n"
-            
+            log("ICLOUD_REMINDER_SENDING", list=getattr(target_cal, 'name', 'Unknown'), text=text)
             target_cal.add_todo(ical_str)
             log("ICLOUD_REMINDER_CREATED", text=text, list=getattr(target_cal, 'name', 'Unknown'))
             return True
