@@ -24,7 +24,7 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="2.5")
+        log("ICLOUD_SERVICE_VERSION", version="2.6")
         
         if self.username and self.password:
             self._connect()
@@ -165,13 +165,26 @@ class ICloudService:
                     skipped_past = 0
                     
                     found_in_cal = 0
+                    first_item_type = None
+                    
                     for todo in todos:
                         try:
-                            # Filtriamo noi per capire se è un VTODO
-                            data = todo.data
-                            if not data or 'VTODO' not in data: continue
+                            raw_data = todo.data
+                            if not raw_data: continue
                             
-                            v = readOne(data)
+                            # Decodifica se necessario
+                            data_str = raw_data.decode('utf-8', errors='ignore') if isinstance(raw_data, bytes) else str(raw_data)
+                            
+                            # Logghiamo il tipo del primo elemento per debug
+                            if first_item_type is None:
+                                if 'VTODO' in data_str.upper(): first_item_type = 'VTODO'
+                                elif 'VEVENT' in data_str.upper(): first_item_type = 'VEVENT'
+                                else: first_item_type = 'UNKNOWN'
+                                log("ICLOUD_FIRST_ITEM", name=name, type=first_item_type)
+
+                            if 'VTODO' not in data_str.upper(): continue
+                            
+                            v = readOne(data_str)
                             # Supporta sia vtodo che VTODO
                             item = getattr(v, 'vtodo', getattr(v, 'VTODO', None))
                             if not item: continue
