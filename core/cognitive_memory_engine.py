@@ -118,36 +118,35 @@ class CognitiveMemoryEngine:
             new_profession = profession_match.group(1).strip().lower()  # lowercase come richiesto
             
             # GUARD: Evita di estrarre domande sugli account come professione
-            if any(kw in new_profession for kw in ["account", "collega", "miei", "quali"]):
+            if any(kw in new_profession for kw in ["account", "collega", "miei", "quali", "appuntamento", "promemoria"]):
                 logger.info("COGNITIVE_PROFESSION_SKIP value=%s", new_profession)
-                profession_match = None
             else:
                 old_profession = extracted_profile_data.get("profession")
-            
-            # Handle profession contradiction
-            if old_profession and old_profession != new_profession:
-                # Update to new profession
-                extracted_profile_data["profession"] = new_profession
-                field = "profession"
-                value = new_profession
-                persist = True
-                memory_type = "profile"
-                logger.info("COGNITIVE_PROFESSION_UPDATED old=%s new=%s", old_profession, new_profession)
-            else:
-                # First time setting profession
-                extracted_profile_data["profession"] = new_profession
-                field = "profession"
-                value = new_profession
-                persist = True
-                memory_type = "profile"
-            
-            logger.info("COGNITIVE_PROFESSION_EXTRACT value=%s", value)
-            
-            # FIX DEFINITIVO: Scrittura diretta su storage
-            profile = await storage.load(f"profile:{user_id}", default={}) or {}
-            profile["profession"] = new_profession
-            await storage.save(f"profile:{user_id}", profile)
-            logger.info("STORAGE_DIRECT_WRITE user=%s profession=%s", user_id, new_profession)
+                
+                # Handle profession contradiction
+                if old_profession and old_profession != new_profession:
+                    # Update to new profession
+                    extracted_profile_data["profession"] = new_profession
+                    field = "profession"
+                    value = new_profession
+                    persist = True
+                    memory_type = "profile"
+                    logger.info("COGNITIVE_PROFESSION_UPDATED old=%s new=%s", old_profession, new_profession)
+                else:
+                    # First time setting profession
+                    extracted_profile_data["profession"] = new_profession
+                    field = "profession"
+                    value = new_profession
+                    persist = True
+                    memory_type = "profile"
+                
+                logger.info("COGNITIVE_PROFESSION_EXTRACT value=%s", value)
+                
+                # FIX DEFINITIVO: Scrittura diretta su storage
+                profile = await storage.load(f"profile:{user_id}", default={}) or {}
+                profile["profession"] = new_profession
+                await storage.save(f"profile:{user_id}", profile)
+                logger.info("STORAGE_DIRECT_WRITE user=%s profession=%s", user_id, new_profession)
 
         if spouse_match:
             extracted_spouse = spouse_match.group(1)
