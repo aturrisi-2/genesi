@@ -44,6 +44,14 @@ class ReminderEngine:
             
         except Exception as e:
             log("REMINDER_LOAD_ERROR", user_id=user_id, error=str(e))
+            # Resilience: if file is corrupted, move it to avoid persistent crash
+            try:
+                file_path = self._get_reminders_file(user_id)
+                if file_path.exists():
+                    bak_path = file_path.with_suffix(".json.bak")
+                    file_path.rename(bak_path)
+                    log("REMINDER_FILE_CORRUPTED_MV", path=str(bak_path))
+            except: pass
             return []
     
     def _save_reminders(self, user_id: str, reminders: List[Dict[str, Any]]) -> bool:
