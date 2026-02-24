@@ -21,7 +21,10 @@ class ICloudService:
         Inizializza il servizio iCloud usando il protocollo ufficiale CalDAV.
         Richiede una 'Password specifica per le app' generata su appleid.apple.com.
         """
-        log("ICLOUD_SERVICE_VERSION", version="2.8")
+        self.username = username or os.environ.get("ICLOUD_USER")
+        self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
+        self.client = None
+        log("ICLOUD_SERVICE_VERSION", version="2.8.1")
         self._cache_vtodo = []
         self._last_sync_vtodo = 0
         
