@@ -26,7 +26,7 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="4.1")
+        log("ICLOUD_SERVICE_VERSION", version="4.2")
         self._cache_vtodo = []
         self._last_sync_vtodo = 0
         self._vtodo_lists = set() 
@@ -140,6 +140,8 @@ class ICloudService:
 
         # Cache di 5 minuti per evitare attese lunghe ad ogni domanda
         now_ts = time.time()
+        # Se abbiamo sincronizzato negli ultimi 5 minuti, usa la cache
+        # A meno che non sia passato pochissimo tempo e la cache sia vuota
         if (now_ts - self._last_sync_vtodo) < 300 and self._cache_vtodo:
             log("ICLOUD_CACHE_HIT", count=len(self._cache_vtodo))
             return self._cache_vtodo
@@ -308,13 +310,16 @@ class ICloudService:
             principal = self.client.principal()
             calendars = principal.calendars()
             target_cal = None
+            target_name = "Reminders"
             for cal in calendars:
                 name = getattr(cal, 'name', '').lower()
-                # Favoreggi mappe specifiche di task conosciute in iCloud
                 if any(x in name for x in ["promemoria", "tasks", "reminders"]):
                     target_cal = cal
+                    target_name = getattr(cal, 'name', 'Reminders')
                     break
-            if not target_cal and calendars: target_cal = calendars[0]
+            if not target_cal and calendars: 
+                target_cal = calendars[0]
+                target_name = getattr(target_cal, 'name', 'Reminders')
             if not target_cal: return False
 
             import vobject
@@ -325,27 +330,51 @@ class ICloudService:
                 item = cal_v.add('vtodo')
                 item.add('summary').value = text
                 
-                # Assicuriamoci che la data sia consapevole del fuso orario (naive -> local)
+                # Normalizzazione Timezone: iCloud preferisce UTC o offset espliciti
                 if dt.tzinfo is None:
-                    # Se non ha timezone, assumiamo sia locale (o UTC, iCloud corregge)
-                    pass 
+                    # Se naive, assumiamo local (che per il VPS è probabile UTC o Italia)
+                    # Forziamo una consapevolezza minima per evitare che iCloud lo scarti
+                    dt = dt.replace(tzinfo=datetime.timezone.utc)
 
-                # Apple Reminders vuole DUE e spesso DTSTART per visualizzarli correttamente
                 item.add('due').value = dt
                 item.add('dtstart').value = dt
                 
-                # Metadati extra per compatibilità UI Apple
-                item.add('priority').value = '5' # Media
+                # Apple Reminders richiede questi per la visibilità immediata
+                item.add('priority').value = '5' 
                 item.add('status').value = 'NEEDS-ACTION'
+                
+                # AGGIUNTA SVEGLIA (VALARM): Fondamentale per far suonare l'iPhone
+                alarm = item.add('valarm')
+                alarm.add('action').value = 'DISPLAY'
+                alarm.add('description').value = text
+                alarm.add('trigger').value = datetime.timedelta(minutes=0) # Al momento esatto
             else:
                 item = cal_v.add('vevent')
                 item.add('summary').value = text
                 item.add('dtstart').value = dt
                 item.add('dtend').value = dt + datetime.timedelta(hours=1)
                 
-            item.add('uid').value = str(uuid.uuid4()).upper()
+            uid = str(uuid.uuid4()).upper()
+            item.add('uid').value = uid
             item.add('dtstamp').value = datetime.datetime.utcnow()
+            
             target_cal.add_event(cal_v.serialize())
+            
+            # OTTIMIZZAZIONE 4.2: Inserimento istantaneo in cache per risposta immediata
+            new_item = {
+                "guid": uid,
+                "summary": text,
+                "status": "NEEDS-ACTION",
+                "due": dt.isoformat(),
+                "list": target_name,
+                "source": "icloud",
+                "type": "todo",
+                "updated_at": datetime.datetime.now().isoformat()
+            }
+            self._cache_vtodo.append(new_item)
+            calendar_history.add_item(uid, new_item)
+            calendar_history.save()
+
             log("ICLOUD_ITEM_CREATED", type="todo" if is_todo else "event", text=text)
             return True
         except Exception as e:
