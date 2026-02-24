@@ -174,7 +174,7 @@ class UnifiedCalendar:
         if provider == 'google':
             return self._add_google(title, dt)
         elif provider == 'apple' or provider == 'icloud':
-            return icloud_service.create_reminder(title, dt)
+            return icloud_service.create_event(title, dt, is_todo=True)
         else:
             return self._add_local(title, dt)
 

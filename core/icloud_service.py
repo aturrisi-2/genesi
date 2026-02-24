@@ -26,7 +26,7 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="4.4")
+        log("ICLOUD_SERVICE_VERSION", version="4.9.6")
         self._cache_vtodo = []
         self._last_sync_vtodo = 0
         self._cache_events = []
@@ -183,15 +183,14 @@ class ICloudService:
                     if name.lower() in ['calendar', 'calendario']:
                         continue
 
-                    # Controllo metadati se supportato
                     try:
                         supported = calendar.get_supported_components()
+                        log("ICLOUD_SCANNING_LIST", name=name, url=str(calendar.url), supports=supported)
                         if supported and 'VTODO' not in supported:
                             log("ICLOUD_SKIP_CAL", name=name, reason="metadata_no_vtodo")
                             continue
-                    except: pass
-
-                    log("ICLOUD_SCANNING_LIST", name=name)
+                    except: 
+                        log("ICLOUD_SCANNING_LIST", name=name, url=str(calendar.url), supports="unknown")
 
                     todos = []
                     try:
@@ -354,7 +353,7 @@ class ICloudService:
                     target_name = getattr(target_cal, 'name', 'Default')
                 
                 if not target_cal: return False
-                log("ICLOUD_TARGET_CALENDAR", name=target_name)
+                log("ICLOUD_TARGET_CALENDAR", name=target_name, url=str(target_cal.url))
 
                 import vobject
                 cal_v = vobject.iCalendar()
@@ -421,7 +420,7 @@ class ICloudService:
                 calendar_history.add_item(uid, new_item)
                 calendar_history.save()
 
-                log("ICLOUD_ITEM_CREATED", type="todo" if is_todo else "event", text=text)
+                log("ICLOUD_ITEM_CREATED", type="todo" if is_todo else "event", text=text, uid=uid)
                 return True
             except Exception as e:
                 log("ICLOUD_CREATE_RETRY", attempt=attempt+1, error=str(e))

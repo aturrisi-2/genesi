@@ -9,6 +9,9 @@ from pathlib import Path
 # Aggiungi il path della root del progetto
 sys.path.append(str(Path(__file__).parent.parent))
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from core.icloud_service import icloud_service
 from core.log import log
 

@@ -83,7 +83,7 @@ class ReminderEngine:
             reminder = {
                 "id": reminder_id,
                 "text": clean_text,
-                "datetime": reminder_datetime.isoformat(),
+                "datetime": reminder_datetime.isoformat() if reminder_datetime else None,
                 "status": "pending",
                 "created_at": now.isoformat()
             }
@@ -194,29 +194,48 @@ class ReminderEngine:
             if not icloud_data: return []
 
             local_reminders = self._load_reminders(user_id)
-            existing_guids = {r.get("id") for r in local_reminders}
-            
             new_added = []
+            updates_count = 0
+            
+            # Mappa per accesso rapido
+            local_map = {r.get("id"): i for i, r in enumerate(local_reminders)}
+            
             for item in icloud_data:
                 guid = item.get('guid')
-                reminder_id = f"icloud_{guid}" if guid else f"icloud_{uuid.uuid4()}"
+                reminder_id = f"icloud_{guid}" if guid else None
+                if not reminder_id: continue
                 
-                if reminder_id not in existing_guids:
-                    new_item = {
-                        "id": reminder_id,
-                        "text": item.get('summary', 'Senza titolo'),
-                        "datetime": item.get('due'),
-                        "status": "pending",
-                        "source": "icloud",
-                        "list": item.get('list', 'iCloud')
-                    }
-                    local_reminders.append(new_item)
-                    new_added.append(new_item)
+                status_val = item.get('status', 'pending')
+                # Mappatura stati Apple -> Genesi
+                if status_val in ['COMPLETED', 'CANCELLED']:
+                    local_status = 'completed'
+                else:
+                    local_status = 'pending'
+
+                new_data = {
+                    "id": reminder_id,
+                    "text": item.get('summary', 'Senza titolo'),
+                    "datetime": item.get('due'),
+                    "status": local_status,
+                    "source": "icloud",
+                    "list": item.get('list', 'iCloud')
+                }
+                
+                if reminder_id in local_map:
+                    # Aggiorna se diverso
+                    idx = local_map[reminder_id]
+                    old_item = local_reminders[idx]
+                    if old_item.get("status") != local_status or old_item.get("text") != new_data["text"]:
+                        local_reminders[idx].update(new_data)
+                        updates_count += 1
+                else:
+                    local_reminders.append(new_data)
+                    new_added.append(new_data)
             
-            if new_added:
-                local_reminders.sort(key=lambda r: (r.get("datetime") is None, r.get("datetime") or ""))
+            if new_added or updates_count > 0:
+                local_reminders.sort(key=lambda r: (r.get("status") == "completed", r.get("datetime") is None, r.get("datetime") or ""))
                 self._save_reminders(user_id, local_reminders)
-                log("REMINDER_ICLOUD_MERGED", user_id=user_id, new_count=len(new_added))
+                log("REMINDER_ICLOUD_SYNC_RES", user_id=user_id, added=len(new_added), updated=updates_count)
             
             return new_added
         except Exception as e:
@@ -252,13 +271,14 @@ class ReminderEngine:
                 for gi in unified_items:
                     summary = gi.get('summary')
                     due = gi.get('due')
+                    provider = gi.get('provider', 'unified')
                     item_hash = f"{summary.lower()}_{due}"
                     if item_hash not in existing_hashes:
                         reminders.append({
-                            "id": f"google_{hash(summary)}_{due}",
+                            "id": f"{provider}_{hash(summary)}_{due}",
                             "text": summary,
                             "datetime": due,
-                            "source": "google",
+                            "source": provider,
                             "status": "pending"
                         })
                         existing_hashes.add(item_hash)
