@@ -115,16 +115,24 @@ async def register(req: RegisterRequest, http_request: Request, db: AsyncSession
     _validate_password(req.password)
 
     # Check duplicato
-    existing = await db.execute(select(AuthUser).where(AuthUser.email == email))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Email già registrata.")
+    existing_result = await db.execute(select(AuthUser).where(AuthUser.email == email))
+    existing = existing_result.scalar_one_or_none()
+    if existing:
+        _log("AUTH_REGISTER_FAIL", email=email, reason="duplicate", user_id=existing.id)
+        if existing.is_verified:
+            raise HTTPException(status_code=409, detail="Email già registrata. Prova ad accedere.")
+        else:
+            raise HTTPException(status_code=409, detail="Email registrata ma non verificata. Controlla la tua posta o richiedi un nuovo invio.")
 
     # Crea utente
     is_admin = email in ADMIN_EMAILS
+    # In DEV_MODE auto-verifichiamo l'utente
+    auto_verify = DEV_MODE
+    
     user = AuthUser(
         email=email,
         password_hash=hash_password(req.password),
-        is_verified=False,
+        is_verified=auto_verify,
         is_admin=is_admin,
         preferences=req.preferences or {
             "language": "it",
@@ -137,7 +145,18 @@ async def register(req: RegisterRequest, http_request: Request, db: AsyncSession
     db.add(user)
     await db.flush()  # Assegna user.id prima di creare il token
 
-    # Token verifica email
+    if auto_verify:
+         _log("AUTH_REGISTER_AUTO_VERIFIED", user_id=user.id, email=email)
+         # Inizializza ambiente subito se auto-verificato
+         initialize_user_environment(user.id, user.preferences)
+         await db.commit()
+         return {
+             "message": "Registrazione completata con successo (Accesso immediato abilitato).",
+             "user_id": user.id,
+             "auto_verified": True
+         }
+
+    # Token verifica email (solo se non auto-verificato)
     token_str = generate_secure_token()
     token = AuthToken(
         user_id=user.id,

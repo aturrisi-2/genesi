@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Registrazione — Genesi</title>
     <link rel="stylesheet" href="/static/auth.css">
 </head>
+
 <body>
     <div class="auth-card">
         <h1>Crea il tuo account</h1>
@@ -18,11 +20,13 @@
             </div>
             <div class="field">
                 <label for="password">Password</label>
-                <input type="password" id="password" placeholder="Minimo 8 caratteri, 1 maiuscola, 1 numero" required autocomplete="new-password">
+                <input type="password" id="password" placeholder="Minimo 8 caratteri, 1 maiuscola, 1 numero" required
+                    autocomplete="new-password">
             </div>
             <div class="field">
                 <label for="password2">Conferma password</label>
-                <input type="password" id="password2" placeholder="Ripeti la password" required autocomplete="new-password">
+                <input type="password" id="password2" placeholder="Ripeti la password" required
+                    autocomplete="new-password">
             </div>
             <button type="submit" class="btn" id="submit-btn">Registrati</button>
         </form>
@@ -35,52 +39,61 @@
     </div>
 
     <script>
-    const form = document.getElementById('register-form');
-    const msg = document.getElementById('msg');
-    const btn = document.getElementById('submit-btn');
+        const form = document.getElementById('register-form');
+        const msg = document.getElementById('msg');
+        const btn = document.getElementById('submit-btn');
 
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        msg.className = 'msg';
-        msg.style.display = 'none';
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            msg.className = 'msg';
+            msg.style.display = 'none';
 
-        const email = document.getElementById('email').value.trim();
-        const password = document.getElementById('password').value;
-        const password2 = document.getElementById('password2').value;
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const password2 = document.getElementById('password2').value;
 
-        if (password !== password2) {
-            msg.textContent = 'Le password non coincidono.';
-            msg.className = 'msg error';
-            return;
-        }
-
-        btn.disabled = true;
-        btn.textContent = 'Registrazione...';
-
-        try {
-            const res = await fetch('/auth/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
-            });
-            const data = await res.json();
-
-            if (res.ok) {
-                msg.textContent = data.message || 'Registrazione completata! Controlla la tua email.';
-                msg.className = 'msg success';
-                form.reset();
-            } else {
-                msg.textContent = data.detail || 'Errore durante la registrazione.';
+            if (password !== password2) {
+                msg.textContent = 'Le password non coincidono.';
                 msg.className = 'msg error';
+                return;
             }
-        } catch (err) {
-            msg.textContent = 'Errore di connessione.';
-            msg.className = 'msg error';
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Registrati';
-        }
-    });
+
+            btn.disabled = true;
+            btn.textContent = 'Registrazione...';
+
+            try {
+                const res = await fetch('/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password }),
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    msg.innerHTML = `<strong>Registrazione completata!</strong><br>${data.message || 'Controlla la tua email per verificare l\'account.'}`;
+                    msg.className = 'msg success';
+                    form.reset();
+                    // Optional: redirect to login after 3 seconds
+                    setTimeout(() => { if (res.ok) window.location.href = '/login'; }, 3000);
+                } else {
+                    let errorMsg = 'Errore durante la registrazione.';
+                    if (typeof data.detail === 'string') {
+                        errorMsg = data.detail;
+                    } else if (Array.isArray(data.detail)) {
+                        errorMsg = data.detail.map(err => err.msg).join('<br>');
+                    }
+                    msg.innerHTML = errorMsg;
+                    msg.className = 'msg error';
+                }
+            } catch (err) {
+                msg.textContent = 'Errore di connessione.';
+                msg.className = 'msg error';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Registrati';
+            }
+        });
     </script>
 </body>
+
 </html>
