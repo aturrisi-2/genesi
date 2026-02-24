@@ -24,10 +24,10 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="2.9.1")
+        log("ICLOUD_SERVICE_VERSION", version="3.0")
         self._cache_vtodo = []
         self._last_sync_vtodo = 0
-        self._vtodo_lists = set() # Nomi delle liste che contengono effettivamente dei task
+        self._vtodo_lists = set() 
         
         if self.username and self.password:
             self._connect()
@@ -187,6 +187,18 @@ class ICloudService:
                     if not todos:
                         continue
                     
+                    # OTTIMIZZAZIONE 3.0: Caricamento parallelo degli oggetti (Turbo-Fetch)
+                    from concurrent.futures import ThreadPoolExecutor
+                    def _safe_load(t):
+                        try:
+                            if not hasattr(t, 'data') or not t.data:
+                                t.load()
+                            return t
+                        except: return None
+
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        list(executor.map(_safe_load, todos))
+
                     skipped_completed = 0
                     skipped_past = 0
                     
@@ -195,14 +207,7 @@ class ICloudService:
                     
                     for todo in todos:
                         try:
-                            # Carichiamo i dati se il proxy è vuoto
-                            if not hasattr(todo, 'data') or not todo.data:
-                                try:
-                                    todo.load()
-                                except:
-                                    continue
-
-                            raw_data = todo.data
+                            raw_data = getattr(todo, 'data', None)
                             if not raw_data: continue
                             
                             # Decodifica se necessario
