@@ -1180,7 +1180,9 @@ Messaggio: {message}"""
                 reminder_text = parts[1].strip()
                 # Rimuovi pattern temporali dalla fine
                 temp_patterns = [
+                    r'\s+dopodomani(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
                     r'\s+domani(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
+                    r'\s+stasera(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
                     r'\s+oggi(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
                     r'\s+(?:lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica)(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
                     r'\s+alle\s+\d{1,2}(?::\d{2})?',
@@ -1239,12 +1241,18 @@ Messaggio: {message}"""
         # 3️⃣ Pattern data esplicita
         target_date = None
         
-        # Oggi
-        if "oggi" in msg_lower:
+        # Oggi / Stasera
+        if "oggi" in msg_lower or "stasera" in msg_lower:
             target_date = now.date()
+            if "stasera" in msg_lower and hour is None:
+                hour = 20
+                minute = 0
         # Domani
         elif "domani" in msg_lower:
             target_date = (now + timedelta(days=1)).date()
+        # Dopodomani
+        elif "dopodomani" in msg_lower:
+            target_date = (now + timedelta(days=2)).date()
         # Ieri
         elif "ieri" in msg_lower:
             target_date = (now - timedelta(days=1)).date()
@@ -1358,7 +1366,9 @@ Messaggio: "{message}" """
         
         # Remove date/time part from the reminder text
         date_time_patterns = [
+            r'\s+dopodomani(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
             r'\s+domani(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
+            r'\s+stasera(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
             r'\s+oggi(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
             r'\s+(?:lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica)(?:\s+alle\s+\d{1,2}(?::\d{2})?)?',
             r'\s+alle\s+\d{1,2}(?::\d{2})?'
@@ -1386,8 +1396,20 @@ Messaggio: "{message}" """
             hour, minute = 9, 0  # 9:00 AM
         
         # Date patterns
-        if "domani" in msg_lower:
+        if "dopodomani" in msg_lower:
+            reminder_datetime = now.replace(hour=hour, minute=minute) + timedelta(days=2)
+        elif "domani" in msg_lower:
             reminder_datetime = now.replace(hour=hour, minute=minute) + timedelta(days=1)
+        elif "stasera" in msg_lower:
+            # If "stasera" is used without a time, default to 20:00
+            target_hour = hour if time_match else 20
+            target_minute = minute if time_match else 0
+            reminder_datetime = now.replace(hour=target_hour, minute=target_minute)
+            if reminder_datetime <= now:
+                # If it's already past 20:00 today, set for tomorrow?
+                # Actually "stasera" usually means today. If too late, maybe next evening?
+                # Standard choice: if past, it's just past.
+                pass
         elif "oggi" in msg_lower:
             reminder_datetime = now.replace(hour=hour, minute=minute)
             # If time is in the past, move to tomorrow
