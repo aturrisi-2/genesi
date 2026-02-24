@@ -21,10 +21,9 @@ class ICloudService:
         Inizializza il servizio iCloud usando il protocollo ufficiale CalDAV.
         Richiede una 'Password specifica per le app' generata su appleid.apple.com.
         """
-        self.username = username or os.environ.get("ICLOUD_USER")
-        self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
-        self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="2.7")
+        log("ICLOUD_SERVICE_VERSION", version="2.8")
+        self._cache_vtodo = []
+        self._last_sync_vtodo = 0
         
         if self.username and self.password:
             self._connect()
@@ -132,6 +131,13 @@ class ICloudService:
         if not self.client:
             if not self._connect(): return []
 
+        # Cache di 5 minuti per evitare attese lunghe ad ogni domanda
+        import time
+        now_ts = time.time()
+        if (now_ts - self._last_sync_vtodo) < 300 and self._cache_vtodo:
+            log("ICLOUD_CACHE_HIT", count=len(self._cache_vtodo))
+            return self._cache_vtodo
+
         all_todos = []
         try:
             principal = self.client.principal()
@@ -143,8 +149,12 @@ class ICloudService:
             for calendar in calendars:
                 try:
                     name = getattr(calendar, 'name', 'Senza nome')
-                    # Verifichiamo se il calendario supporta effettivamente i task
-                    # Se va in 500, proviamo a ignorarlo o forzare fetch
+                    # OTTIMIZZAZIONE 2.8: Salta il calendario principale "Calendar" per i task
+                    # Solitamente contiene centinaia di eventi e rallenta tutto (161+ oggetti)
+                    if name.lower() in ['calendar', 'calendario']:
+                        log("ICLOUD_SKIP_CAL", name=name, reason="event_only_list")
+                        continue
+
                     log("ICLOUD_SCANNING_LIST", name=name, url=str(calendar.url))
 
                     todos = []
@@ -245,9 +255,10 @@ class ICloudService:
                     log("ICLOUD_CAL_SYNC_RES", name=name, found=found_in_cal, skipped_completed=skipped_completed, skipped_past=skipped_past)
                         
                 except Exception as e:
-                    # Molti calendari non supportano VTODO, ignoriamo silenziosamente
                     continue
-                    
+            
+            self._cache_vtodo = all_todos
+            self._last_sync_vtodo = time.time()
             return all_todos
         except Exception as e:
             log("ICLOUD_VTODO_FETCH_ERR", error=str(e), level="ERROR")
