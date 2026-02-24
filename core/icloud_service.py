@@ -78,7 +78,25 @@ class ICloudService:
             principal = self.client.principal()
             calendars = principal.calendars()
             
-            for calendar in calendars:
+            # PERFORMANCE BOOST: Cerca prima la lista principale
+            priority_calendars = []
+            other_calendars = []
+            for cal in calendars:
+                name = getattr(cal, 'name', '').lower()
+                if any(x in name for x in ["promemoria", "reminders"]):
+                    priority_calendars.append(cal)
+                else:
+                    other_calendars.append(cal)
+            
+            # Processa prima le prioritarie, poi le altre (limitando la scansione totale)
+            ordered_cals = priority_calendars + other_calendars
+            scanned_count = 0
+
+            for calendar in ordered_cals:
+                # Se abbiamo trovato già qualcosa nelle prioritarie, possiamo fermarci o limitare
+                if scanned_count > 5 and len(all_reminders) > 0:
+                    break
+
                 try:
                     name = getattr(calendar, 'name', 'Senza nome')
                     url = str(calendar.url).lower()
@@ -86,43 +104,22 @@ class ICloudService:
                     if any(x in url for x in ["inbox", "outbox", "notification"]):
                         continue
 
+                    scanned_count += 1
                     log("ICLOUD_CALDAV_LIST_CHECK", name=name)
                     
-                    # Prova prima il metodo veloce (REPORT)
-                    todos = []
-                    try:
-                        todos = calendar.todos(include_completed=False)
-                    except Exception:
-                        # Fallback alla scansione manuale
-                        all_objs = calendar.objects()
-                        for o in all_objs:
-                            try:
-                                d = o.data if hasattr(o, 'data') else ""
-                                if not d: 
-                                    o.load()
-                                    d = o.data
-                                if d and 'VTODO' in d.upper():
-                                    todos.append(o)
-                            except Exception: continue
-
+                    # REPORT query limitata per prestazioni
+                    todos = calendar.todos(include_completed=False)
                     for todo in todos:
                         try:
-                            data = todo.data
-                            if not data or 'VTODO' not in data.upper(): continue
-                            
-                            v = readOne(data)
+                            # ... (parsing logic remains same) ...
+                            v = readOne(todo.data)
                             task = getattr(v, 'vtodo', None)
                             if not task: continue
                             
-                            # FILTRO AGGRESSIVO COMPLETATI (sia STATUS che presenza di data completamento o % 100)
                             status = str(getattr(task, 'status', '')).upper()
                             if status in ['COMPLETED', 'CANCELLED'] or hasattr(task, 'completed'):
                                 continue
                             
-                            percent = getattr(task, 'percent_complete', None)
-                            if percent and str(percent.value) == "100":
-                                continue
-
                             summary = str(task.summary.value) if hasattr(task, 'summary') else "Senza titolo"
                             guid = str(task.uid.value) if hasattr(task, 'uid') else None
                             
@@ -139,8 +136,8 @@ class ICloudService:
                                 "due": due_iso,
                                 "list": name
                             })
-                        except Exception: continue
-                except Exception: continue
+                        except: continue
+                except: continue
 
             log("ICLOUD_CALDAV_SYNC_SUCCESS", count=len(all_reminders), user=self.username)
             return all_reminders
@@ -176,9 +173,9 @@ class ICloudService:
                 
             if not target_cal: return False
 
-            # Genera UID e timestamp
+            # Genera UID e timestamp (FORMATO ICAL CORRETTO)
             uid = str(uuid.uuid4()).upper()
-            now = datetime.datetime.now().strftime("%Y%m%dT%H%M%SZ")
+            now_utc = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
             
             # Formatta iCalendar
             ical = [
@@ -187,16 +184,19 @@ class ICloudService:
                 "PRODID:-//Genesi AI//NONSGML v1.0//EN",
                 "BEGIN:VTODO",
                 f"UID:{uid}",
-                f"DTSTAMP:{now}",
+                f"DTSTAMP:{now_utc}",
                 f"SUMMARY:{text}"
             ]
             
             if due_dt:
-                dt_str = due_dt.strftime("%Y%m%dT%H%M%SZ")
-                ical.append(f"DUE:{dt_str}")
+                # Per iCloud, se non specifichiamo TZID, usiamo UTC (Z)
+                # Oppure usiamo floating time (senza Z) se vogliamo che appaia all'ora locale del dispositivo
+                dt_str = due_dt.strftime("%Y%m%dT%H%M%S")
+                # iCloud preferisce DTSTART e DUE coerenti
                 ical.append(f"DTSTART:{dt_str}")
+                ical.append(f"DUE:{dt_str}")
             else:
-                ical.append(f"DTSTART:{now}")
+                ical.append(f"DTSTART:{now_utc}")
                 
             ical.append("END:VTODO")
             ical.append("END:VCALENDAR")

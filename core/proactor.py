@@ -772,17 +772,24 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             from calendar_manager import calendar_manager
             unified_rems = calendar_manager.list_reminders()
             
-            # Merge and deduplicate (very simple by summary/text)
-            existing_texts = {r["text"].lower() for r in reminders}
+            # Merge and deduplicate (by text and datetime to avoid collisions)
+            existing_hashes = {f"{r['text'].lower()}_{r.get('datetime')}" for r in reminders}
+            
             for ur in unified_rems:
-                if ur.get('summary', '').lower() not in existing_texts:
-                    # Convert format to match reminder_engine
+                summary = ur.get('summary') or ur.get('text', 'Senza titolo')
+                dt = ur.get('due')
+                provider = ur.get('provider', 'cloud')
+                
+                # Deduplication check
+                item_hash = f"{summary.lower()}_{dt}"
+                if item_hash not in existing_hashes:
                     reminders.append({
-                        "text": ur.get('summary', 'Senza titolo'),
-                        "datetime": ur.get('due'),
-                        "source": ur.get('provider', 'cloud'),
+                        "text": summary,
+                        "datetime": dt,
+                        "source": provider,
                         "status": "pending"
                     })
+                    existing_hashes.add(item_hash)
             
             if not reminders:
                 return "Non hai promemoria impostati.", "reminder"

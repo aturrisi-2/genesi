@@ -165,11 +165,37 @@ class UnifiedCalendar:
             log("GOOGLE_EVENT_ERROR", error=str(e))
             return False
 
-    def list_reminders(self) -> List[Dict[str, Any]]:
-        """Lists pending reminders from all active sources."""
+    def list_reminders(self, days: int = 7) -> List[Dict[str, Any]]:
+        """Lists pending reminders and upcoming calendar events from all active sources."""
         all_rems = []
+        now = datetime.now()
+        end_date = now + timedelta(days=days)
         
-        # Apple
+        # 1. Google Calendar (Upcoming Events)
+        if self._google_service:
+            try:
+                events_result = self._google_service.events().list(
+                    calendarId='primary', 
+                    timeMin=now.isoformat() + 'Z',
+                    timeMax=end_date.isoformat() + 'Z',
+                    maxResults=10, 
+                    singleEvents=True,
+                    orderBy='startTime'
+                ).execute()
+                events = events_result.get('items', [])
+                for e in events:
+                    start = e['start'].get('dateTime', e['start'].get('date'))
+                    all_rems.append({
+                        "summary": e.get('summary', 'Senza titolo'),
+                        "due": start,
+                        "provider": "google",
+                        "status": "pending"
+                    })
+                log("GOOGLE_LIST_SUCCESS", count=len(events))
+            except Exception as e:
+                log("GOOGLE_LIST_ERROR", error=str(e))
+
+        # 2. Apple (Reminders)
         if self._icloud_user:
             try:
                 apple_rems = icloud_service.get_reminders()
@@ -179,11 +205,17 @@ class UnifiedCalendar:
             except Exception as e:
                 log("APPLE_LIST_ERROR", error=str(e))
 
-        # Local
+        # 3. Local
         for r in self.local_reminders:
             if r['status'] == 'pending':
                 r['provider'] = 'local'
-                all_rems.append(r)
+                # Match schema
+                all_rems.append({
+                    "summary": r.get('text'),
+                    "due": r.get('due'),
+                    "provider": "local",
+                    "status": "pending"
+                })
 
         return all_rems
 
