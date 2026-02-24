@@ -152,12 +152,30 @@ class IntentClassifier:
         """
         message_lower = message.lower().strip()
         
-        # 0️⃣ PRIORITA' MASSIMA: Cloud patterns
+        # 0️⃣ PRIORITA' MASSIMA: Cloud patterns (Robust)
+        if "google" in message_lower:
+            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "scarica"]):
+                log("INTENT_CLASSIFIED", intent="google_sync", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "google_sync"
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login"]):
+                log("INTENT_CLASSIFIED", intent="google_setup", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "google_setup"
+        
+        if "icloud" in message_lower:
+            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "scarica", "importa"]):
+                log("INTENT_CLASSIFIED", intent="icloud_sync", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "icloud_sync"
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login"]):
+                log("INTENT_CLASSIFIED", intent="icloud_setup", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "icloud_setup"
+
+        # 0.5️⃣ PRIORITA' ALTA: Cloud patterns (Exact)
         for intent in ["icloud_setup", "icloud_sync", "google_setup", "google_sync"]:
             keywords = self.gpt_patterns.get(intent, [])
-            if any(keyword in message_lower for keyword in keywords):
-                log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="regex", message=message[:50])
-                return intent
+            for keyword in keywords:
+                if re.search(rf'\b{re.escape(keyword)}\b', message_lower):
+                    log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="regex", message=message[:50])
+                    return intent
 
         # 1️⃣ PRIORITA' ALTA: reminder patterns (tutti)
         for intent, keywords in self.gpt_patterns.items():
