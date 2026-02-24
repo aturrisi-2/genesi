@@ -24,7 +24,7 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="2.3")
+        log("ICLOUD_SERVICE_VERSION", version="2.4")
         
         if self.username and self.password:
             self._connect()
@@ -39,9 +39,9 @@ class ICloudService:
                 password=self.password,
                 timeout=60
             )
-            # Simuliamo un client iOS/macOS per maggiore stabilità
+            # Simuliamo un client iOS storico per massima compatibilità
             self.client.session.headers.update({
-                'User-Agent': 'Reminders/2301.5.1 CFNetwork/1408.0.4 Darwin/22.5.0',
+                'User-Agent': 'iOS/15.0 (19A344) Reminders/1.0',
                 'Connection': 'keep-alive'
             })
             # Ottimizzazione sessione per evitare timeout su liste lunghe
@@ -143,42 +143,32 @@ class ICloudService:
             for calendar in calendars:
                 try:
                     name = getattr(calendar, 'name', 'Senza nome')
-                    # Logghiamo ogni calendario per debug
-                    log("ICLOUD_SCANNING_LIST", name=name)
-                    
                     # Verifichiamo se il calendario supporta effettivamente i task
-                    supported = []
-                    try:
-                        supported = calendar.get_supported_components()
-                    except:
-                        pass
-                    
-                    if supported and 'VTODO' not in supported:
-                        log("ICLOUD_SKIP_CAL", name=name, reason="no_vtodo_support")
-                        continue
+                    # Se va in 500, proviamo a ignorarlo o forzare fetch
+                    log("ICLOUD_SCANNING_LIST", name=name, url=str(calendar.url))
 
                     todos = []
                     try:
-                        # Proviamo a usare search che è talvolta più stabile su Apple
-                        todos = calendar.search(comp_class='VTODO')
+                        # STRATEGIA 2.4: Fetch brutale di TUTTI gli oggetti per evitare errore 500 del filtraggio server
+                        # Molto più stabile se il server è schizzinoso sui filtri
+                        todos = calendar.objects()
+                        if todos:
+                            log("ICLOUD_RAW_FETCH", name=name, count=len(todos))
                     except Exception as te:
-                        # Fallback al metodo standard se search fallisce
-                        try:
-                            todos = calendar.todos()
-                        except Exception as te2:
-                            log("ICLOUD_TODO_ERROR", name=name, error=str(te2), level="DEBUG")
-                            continue
+                        log("ICLOUD_FETCH_ERROR", name=name, error=str(te), level="DEBUG")
+                        continue
                         
                     if not todos:
-                        log("ICLOUD_LIST_EMPTY", name=name)
                         continue
-                    
-                    log("ICLOUD_LIST_FOUND", name=name, total_raw_count=len(todos))
                     
                     found_in_cal = 0
                     for todo in todos:
                         try:
-                            v = readOne(todo.data)
+                            # Filtriamo noi per capire se è un VTODO
+                            data = todo.data
+                            if 'VTODO' not in data: continue
+                            
+                            v = readOne(data)
                             # Supporta sia vtodo che VTODO
                             item = getattr(v, 'vtodo', getattr(v, 'VTODO', None))
                             if not item: continue
