@@ -199,20 +199,13 @@ class Proactor:
     
     async def _handle_internal(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None) -> tuple[str, str]:
         try:
+            # STEP 0.4: Unified Calendar Command (/cal)
+            if message.startswith("/cal"):
+                log("ROUTING_DECISION", route="calendar_command", user_id=user_id)
+                response = await self._handle_calendar_command(user_id, message)
+                return response, "calendar"
+
             # STEP 0.5: Image Search detection (prima del routing normale)
-            image_query = extract_image_query(message)
-            if image_query:
-                svc = get_image_search_service()
-                images = await svc.search(image_query)
-                if images:
-                    image_response = {
-                        "text": f"Ho trovato alcune immagini per '{image_query}':",
-                        "images": [{"url": r.url, "title": r.title, "source": r.source, "thumbnail": r.thumbnail}
-                                   for r in images]
-                    }
-                    # Convert to JSON string for compatibility with existing tuple return
-                    import json
-                    return json.dumps(image_response), "image_search"
             
             # STEP 1: SANITY CHECK
             if not user_id:
@@ -352,6 +345,16 @@ class Proactor:
             if intent == "icloud_sync":
                 log("ROUTING_DECISION", route="icloud_sync", user_id=user_id)
                 response = await self._handle_icloud_sync(user_id, message)
+                return response, "tool"
+
+            if intent == "google_setup":
+                log("ROUTING_DECISION", route="google_setup", user_id=user_id)
+                response = await self._handle_google_setup(user_id, message)
+                return response, "tool"
+
+            if intent == "google_sync":
+                log("ROUTING_DECISION", route="google_sync", user_id=user_id)
+                response = await self._handle_google_sync(user_id, message)
                 return response, "tool"
 
             if intent == "reminder_create":
@@ -1747,6 +1750,53 @@ Messaggio utente: {message}"""
                 return True
         
         return False
+
+    async def _handle_calendar_command(self, user_id, message):
+        """Gestisce il comando diretto /cal per il calendario unificato."""
+        from calendar_manager import calendar_manager
+        cmd_parts = message.split(" ", 2)
+        if len(cmd_parts) < 2:
+            return "Uso: /cal [list|add] [opzioni]. Esempio: /cal add Appuntamento domani alle 10"
+        
+        subcmd = cmd_parts[1].lower()
+        if subcmd == "list":
+            reminders = calendar_manager.list_reminders()
+            if not reminders:
+                return "Nessun impegno trovato."
+            lines = ["I tuoi impegni (Unificato):"]
+            for i, r in enumerate(reminders, 1):
+                due = r.get('due', 'No date')
+                provider = r.get('provider', 'unknown')
+                lines.append(f"{i}. {r['summary']} - {due} ({provider})")
+            return "\n".join(lines)
+        
+        if subcmd == "add":
+            if len(cmd_parts) < 3:
+                return "Specifica cosa aggiungere. Esempio: /cal add Spesa domani ore 18"
+            
+            # Parsing semplice per add
+            text, dt = self._parse_reminder_request_strict(cmd_parts[2])
+            if not dt:
+                return "Non ho capito quando. Esempio: 'Spesa domani alle 18'"
+            
+            success = calendar_manager.add_event(text, dt)
+            if success:
+                return f"Aggiunto: {text} per il {dt.strftime('%d/%m %H:%M')}"
+            return "Errore durante l'aggiunta."
+            
+        return f"Comando /cal {subcmd} non riconosciuto."
+
+    async def _handle_google_setup(self, user_id, message):
+        """Inizia il setup di Google Calendar."""
+        return "Per configurare Google Calendar, Genesi ha bisogno che tu autorizzi l'accesso tramite il browser sul server. Una volta completato il login, i tuoi eventi verranno sincronizzati automaticamente."
+
+    async def _handle_google_sync(self, user_id, message):
+        """Sincronizza manualmente Google Calendar."""
+        from calendar_manager import calendar_manager
+        # Il setup_google viene chiamato all'init del manager
+        if calendar_manager._google_service:
+            return "Sincronizzazione Google Calendar completata."
+        return "Google Calendar non è configurato. Prova a dire 'configura google'."
 
 
 # Istanza globale

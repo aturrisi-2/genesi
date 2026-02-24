@@ -126,13 +126,16 @@ class IntentClassifier:
                 "spiega", "spiegazione", "come funziona", "perché", "come mai",
                 "dettagli", "approfondire", "chiarire", "illustrare"
             ],
-            "icloud_setup": [
-                "collega icloud", "configura icloud", "imposta icloud", "accesso icloud",
-                "connetti icloud", "login icloud", "account icloud"
-            ],
             "icloud_sync": [
                 "sincronizza icloud", "aggiorna icloud", "scarica da icloud",
                 "sincronizza promemoria", "importa promemoria"
+            ],
+            "google_setup": [
+                "collega google", "configura google", "imposta google", "accesso google",
+                "connetti google", "login google", "account google"
+            ],
+            "google_sync": [
+                "sincronizza google", "aggiorna google", "scarica da google"
             ]
         }
     
@@ -149,8 +152,8 @@ class IntentClassifier:
         """
         message_lower = message.lower().strip()
         
-        # 0️⃣ PRIORITA' MASSIMA: iCloud patterns
-        for intent in ["icloud_setup", "icloud_sync"]:
+        # 0️⃣ PRIORITA' MASSIMA: Cloud patterns
+        for intent in ["icloud_setup", "icloud_sync", "google_setup", "google_sync"]:
             keywords = self.gpt_patterns.get(intent, [])
             if any(keyword in message_lower for keyword in keywords):
                 log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="regex", message=message[:50])
@@ -364,6 +367,12 @@ class IntentClassifier:
                 return "icloud_sync"
             if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login"]):
                 return "icloud_setup"
+        
+        if "google" in message_lower:
+            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "scarica"]):
+                return "google_sync"
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login"]):
+                return "google_setup"
                 
         forced_intent = False
         
@@ -444,6 +453,10 @@ class IntentClassifier:
         # Giorni della settimana
         weekdays = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]
         if any(day in message_lower for day in weekdays):
+            return True
+            
+        # Pattern relativo "tra X minuti/ore"
+        if re.search(r'tra\s+\d+\s+(minut|or|second|giorn)', message_lower):
             return True
         
         return False
