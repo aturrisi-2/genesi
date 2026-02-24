@@ -24,7 +24,7 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="2.4")
+        log("ICLOUD_SERVICE_VERSION", version="2.5")
         
         if self.username and self.password:
             self._connect()
@@ -161,6 +161,9 @@ class ICloudService:
                     if not todos:
                         continue
                     
+                    skipped_completed = 0
+                    skipped_past = 0
+                    
                     found_in_cal = 0
                     for todo in todos:
                         try:
@@ -176,6 +179,7 @@ class ICloudService:
                             # Filtro completati
                             status = getattr(item, 'status', None)
                             if status and str(status.value).upper() in ['COMPLETED', 'CANCELLED']: 
+                                skipped_completed += 1
                                 continue
                             
                             summary = str(item.summary.value) if hasattr(item, 'summary') else "Senza titolo"
@@ -186,13 +190,20 @@ class ICloudService:
                             elif hasattr(item, 'dtstart'): due_dt = item.dtstart.value
                             
                             if due_dt:
-                                # Filtro temporale (7 giorni default)
+                                # Filtro temporale (include scaduti fino a 30 giorni fa se non completati)
                                 cmp_dt = due_dt if isinstance(due_dt, datetime.datetime) else datetime.datetime.combine(due_dt, datetime.time())
+                                limit_past = now - datetime.timedelta(days=30)
+                                
                                 if cmp_dt.tzinfo is None:
-                                    if cmp_dt < now - datetime.timedelta(days=1): continue
+                                    if cmp_dt < limit_past: 
+                                        skipped_past += 1
+                                        continue
                                 else:
                                     now_tz = now.astimezone(cmp_dt.tzinfo)
-                                    if cmp_dt < now_tz - datetime.timedelta(days=1): continue
+                                    limit_past_tz = (now - datetime.timedelta(days=30)).astimezone(cmp_dt.tzinfo)
+                                    if cmp_dt < limit_past_tz: 
+                                        skipped_past += 1
+                                        continue
                                 due_str = due_dt.isoformat()
                             else:
                                 due_str = None
@@ -211,8 +222,7 @@ class ICloudService:
                             log("ICLOUD_TODO_PARSE_ERR", error=str(e), level="DEBUG")
                             continue
                     
-                    if found_in_cal > 0:
-                        log("ICLOUD_CAL_SYNCED", name=name, count=found_in_cal)
+                    log("ICLOUD_CAL_SYNC_RES", name=name, found=found_in_cal, skipped_completed=skipped_completed, skipped_past=skipped_past)
                         
                 except Exception as e:
                     # Molti calendari non supportano VTODO, ignoriamo silenziosamente
