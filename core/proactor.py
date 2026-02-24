@@ -15,7 +15,7 @@ GPT chiamato SOLO da Relational Router o Knowledge Router.
 import logging
 import re
 from typing import Dict, Any, Optional, List, Tuple, Union
-from datetime import datetime
+from datetime import datetime, timedelta
 from core.log import log
 from core.memory_brain import memory_brain
 from core.latent_state import latent_state_engine
@@ -641,8 +641,13 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         Handle reminder creation requests with STRICT logic.
         """
         try:
-            # Extract reminder text and datetime from message
+            # 1. TENTA PARSING DETERMINISTICO (STRICT)
             reminder_text, reminder_datetime = self._parse_reminder_request_strict(message)
+            
+            # 2. FALLBACK A PARSING NATURALE SE MANCANO DATI
+            if not reminder_text or not reminder_datetime:
+                logger.info("FALLBACK_NATURAL_PARSING message=%s", message)
+                reminder_text, reminder_datetime = await self._parse_reminder_natural(message, user_id)
             
             if not reminder_datetime:
                 return "Non ho capito quando vuoi che ti ricordi. Prova a dire 'ricordami di [azione] [giorno] alle [ora]'.", "reminder"
@@ -651,22 +656,36 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 # Creazione LOCALE
                 reminder_id, response = reminder_engine.create_reminder_with_response(user_id, reminder_text, reminder_datetime)
                 
-                # Creazione ICLOUD (se richiesto nel messaggio)
-                if "icloud" in message.lower() or "apple" in message.lower():
+                # 3. CREAZIONE CLOUD (Automatica se configurato)
+                # Creazione ICLOUD
+                profile = await storage.load(f"profile:{user_id}", default={})
+                has_icloud = profile.get("icloud_user") or os.environ.get("ICLOUD_USER")
+                
+                if "icloud" in message.lower() or "apple" in message.lower() or has_icloud:
                     success = await reminder_engine.create_icloud_reminder(user_id, reminder_text, reminder_datetime)
                     if success:
-                        response = response.replace("Perfetto.", "Perfetto, aggiunto anche su iCloud.")
+                        if "Perfetto." in response:
+                            response = response.replace("Perfetto.", "Perfetto, sincronizzato anche su iCloud.")
+                        else:
+                            response += " (Sincronizzato su iCloud)."
                     else:
-                        response += " (Nota: non sono riuscito a scriverlo su iCloud, ma l'ho salvato localmente)."
+                        # Non segnaliamo errore se non esplicitamente chiesto
+                        if "icloud" in message.lower() or "apple" in message.lower():
+                            response += " (Nota: non sono riuscito a scriverlo su iCloud)."
                 
-                # Creazione GOOGLE (se richiesto nel messaggio)
-                if "google" in message.lower():
-                    from calendar_manager import calendar_manager
+                # Creazione GOOGLE (se richiesto o se disponibile)
+                from calendar_manager import calendar_manager
+                has_google = calendar_manager._google_service is not None
+                if "google" in message.lower() or ("calendario" in message.lower() and has_google):
                     success = calendar_manager.add_event(reminder_text, reminder_datetime, provider='google')
                     if success:
-                        response = response.replace("Perfetto.", "Perfetto, aggiunto anche su Google Calendar.")
+                        if "Perfetto." in response:
+                            response = response.replace("Perfetto.", "Perfetto, aggiunto al tuo Google Calendar.")
+                        else:
+                            response += " (Aggiunto a Google Calendar)."
                     else:
-                        response += " (Nota: non sono riuscito a scriverlo su Google, ma l'ho salvato localmente)."
+                        if "google" in message.lower():
+                            response += " (Nota: errore durante il salvataggio su Google Calendar)."
                 
                 return response, "reminder"
             
@@ -1043,9 +1062,9 @@ Messaggio: {message}"""
         
         # 1️⃣ Estrai testo dopo "ricordami di" / "ricordami che"
         reminder_text = ""
-        if "ricordami di " in message:
+        if "ricordami di " in msg_lower:
             # Estrai fino ai pattern temporali
-            parts = message.split("ricordami di ", 1)
+            parts = msg_lower.split("ricordami di ", 1)
             if len(parts) > 1:
                 reminder_text = parts[1].strip()
                 # Rimuovi pattern temporali dalla fine
@@ -1059,8 +1078,8 @@ Messaggio: {message}"""
                 for pattern in temp_patterns:
                     reminder_text = re.sub(pattern, '', reminder_text)
                 reminder_text = reminder_text.strip()
-        elif "ricordami che " in message:
-            parts = message.split("ricordami che ", 1)
+        elif "ricordami che " in msg_lower:
+            parts = msg_lower.split("ricordami che ", 1)
             if len(parts) > 1:
                 reminder_text = parts[1].strip()
                 # Rimuovi pattern temporali dalla fine
@@ -1074,8 +1093,8 @@ Messaggio: {message}"""
                 for pattern in temp_patterns:
                     reminder_text = re.sub(pattern, '', reminder_text)
                 reminder_text = reminder_text.strip()
-        elif "ricordami " in message:
-            parts = message.split("ricordami ", 1)
+        elif "ricordami " in msg_lower:
+            parts = msg_lower.split("ricordami ", 1)
             if len(parts) > 1:
                 reminder_text = parts[1].strip()
                 # Rimuovi pattern temporali dalla fine
@@ -1182,6 +1201,50 @@ Messaggio: {message}"""
             reminder_datetime = None
         
         return reminder_text, reminder_datetime
+
+    async def _parse_reminder_natural(self, message: str, user_id: str) -> tuple[Optional[str], Optional[datetime]]:
+        """
+        Extrazione naturale tramite LLM per promemoria complessi.
+        """
+        try:
+            from core.llm_service import llm_service
+            import json
+            import re
+            from datetime import datetime
+            
+            now = datetime.now()
+            prompt = f"""Estrai il TESTO del promemoria e la DATA/ORA dal messaggio dell'utente.
+Data e ora corrente: {now.strftime('%A %d %B %Y, %H:%M')}
+
+REGOLE:
+1. Se l'utente dice "domani", intende { (now + timedelta(days=1)).strftime('%Y-%m-%d') }.
+2. Restituisci un JSON nel formato: {{"text": "cosa fare", "dt": "YYYY-MM-DD HH:MM"}}
+3. Se non riesci a capire l'ora, usa 09:00 come default.
+4. Se non riesci a capire la data, usa null.
+
+Messaggio: "{message}" """
+
+            response = await llm_service._call_with_protection(
+                "gpt-4o-mini", prompt, message, user_id=user_id, route="reminder"
+            )
+            
+            if response:
+                json_match = re.search(r'\{.*\}', response, re.S)
+                if json_match:
+                    try:
+                        data = json.loads(json_match.group(0))
+                        text = data.get("text")
+                        dt_str = data.get("dt")
+                        
+                        if text and dt_str:
+                            dt = datetime.strptime(dt_str, '%Y-%m-%d %H:%M')
+                            return text, dt
+                    except: pass
+            
+            return None, None
+        except Exception as e:
+            logger.error("NATURAL_PARSING_ERROR: %s", str(e))
+            return None, None
 
     def _parse_reminder_request(self, message: str) -> tuple[str, datetime]:
         """
