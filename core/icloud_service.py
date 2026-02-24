@@ -144,18 +144,25 @@ class ICloudService:
             return []
 
     def get_vtodo(self, days: int = 7, force_sync: bool = False) -> List[Dict[str, Any]]:
-        """Recupera i promemoria (VTODO) da iCloud."""
-        if not self.client:
-            if not self._connect(): return []
+        """Fetch VTODOs con Delta Sync migliorato (v4.8)."""
+        if not self.username or not self.password: return []
 
-        # Cache di 5 minuti per evitare attese lunghe ad ogni domanda
         now_ts = time.time()
-        # Se abbiamo sincronizzato negli ultimi 5 minuti, usa la cache
+        # Cache di 5 minuti per la lista rapida, ma forziamo se richiesto
         if not force_sync and (now_ts - self._last_sync_vtodo) < 300 and self._cache_vtodo:
             log("ICLOUD_CACHE_HIT", count=len(self._cache_vtodo))
             return self._cache_vtodo
 
+        # Ogni 15 minuti forziamo un deep sync per beccare i cambiamenti di stato
+        is_periodic_deep = (now_ts - self._last_sync_vtodo) > 900
+        if is_periodic_deep:
+            log("ICLOUD_PERIODIC_DEEP_SYNC")
+            self._deep_sync_done = False
+
         all_todos = []
+        if not self.client:
+            if not self._connect(): return []
+            
         try:
             principal = self.client.principal()
             calendars = principal.calendars()
@@ -206,9 +213,9 @@ class ICloudService:
                     
                     to_load = []
                     for t in todos:
-                        guid = str(t.url)
-                        if not self._deep_sync_done or not calendar_history.exists(guid):
-                            to_load.append(t)
+                        # OTTIMIZZAZIONE v4.9: Carichiamo tutto per ora per evitare item obsoleti
+                        # (Il collo di bottiglia è lo stato COMPLETED che cambia sul cell)
+                        to_load.append(t)
                     
                     def _safe_load(t):
                         try:
@@ -321,19 +328,32 @@ class ICloudService:
                 principal = self.client.principal()
                 calendars = principal.calendars()
                 target_cal = None
-                target_name = "Reminders"
+                target_name = "None"
+                
+                # Strategia: 1. Cerca per nome e supporto VTODO, 2. Cerca solo supporto VTODO
+                best_match = None
                 for cal in calendars:
-                    name = getattr(cal, 'name', '').lower()
-                    if any(x in name for x in ["promemoria", "tasks", "reminders"]):
-                        target_cal = cal
-                        target_name = getattr(cal, 'name', 'Reminders')
-                        break
+                    try:
+                        supported = cal.get_supported_components()
+                        is_todo_supported = supported and 'VTODO' in supported
+                        name = getattr(cal, 'name', '').lower()
+                        
+                        if is_todo_supported:
+                            if any(x in name for x in ["promemoria", "tasks", "reminders"]):
+                                best_match = cal
+                                target_name = name
+                                break
+                            if not best_match:
+                                best_match = cal
+                                target_name = name
+                    except: pass
+                
+                target_cal = best_match
                 if not target_cal and calendars: 
                     target_cal = calendars[0]
-                    target_name = getattr(target_cal, 'name', 'Reminders')
+                    target_name = getattr(target_cal, 'name', 'Default')
                 
                 if not target_cal: return False
-                
                 log("ICLOUD_TARGET_CALENDAR", name=target_name)
 
                 import vobject
@@ -344,11 +364,13 @@ class ICloudService:
                     item.add('summary').value = text
                     
                     # iCloud fix: vobject e tz aware 
-                    if dt.tzinfo:
-                        dt = dt.replace(tzinfo=None)
+                    if dt:
+                        if hasattr(dt, 'tzinfo') and dt.tzinfo:
+                            dt = dt.replace(tzinfo=None)
 
-                    item.add('due').value = dt
-                    item.add('dtstart').value = dt
+                        item.add('due').value = dt
+                        item.add('dtstart').value = dt
+                        
                     item.add('priority').value = '5' 
                     item.add('status').value = 'NEEDS-ACTION'
                     
@@ -368,23 +390,26 @@ class ICloudService:
                     item.add('dtstart').value = dt
                     item.add('dtend').value = dt + datetime.timedelta(hours=1)
                     
-                # Apple preferisce UID minuscoli o comunque consistenti
+                # Generazione ID unico per Apple
                 uid = str(uuid.uuid4()).lower()
                 item.add('uid').value = uid
                 item.add('dtstamp').value = datetime.datetime.utcnow()
-                
-                # Aggiungiamo PRODID per identificarci
                 if not hasattr(cal_v, 'prodid'):
                     cal_v.add('prodid').value = '-//Genesi Assistant//Official//IT'
+
+                # Apple Reminders preferisce VCALENDAR 2.0 pulito
+                v_str = cal_v.serialize()
+                if isinstance(v_str, bytes): v_str = v_str.decode('utf-8')
                 
-                target_cal.add_event(cal_v.serialize())
+                resp = target_cal.add_event(v_str)
+                log("ICLOUD_CREATE_RESULT", uid=uid, success=bool(resp))
                 
-                # Cache Injection
+                # Cache Injection immediata per reattività (v4.9)
                 new_item = {
                     "guid": uid,
                     "summary": text,
                     "status": "NEEDS-ACTION",
-                    "due": dt.isoformat(),
+                    "due": dt.isoformat() if dt else None, # Use dt.isoformat() if dt is not None
                     "list": target_name,
                     "source": "icloud",
                     "type": "todo" if is_todo else "event",

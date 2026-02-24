@@ -9,6 +9,9 @@ from pathlib import Path
 root_path = Path(__file__).parent.parent
 sys.path.append(str(root_path))
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from core.icloud_service import icloud_service
 from core.storage import storage
 

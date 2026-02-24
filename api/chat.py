@@ -203,19 +203,21 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                 else:
                     title = request.message
                 
-            if due_date:
-                # Se la data è già passata di poco (es: "stasera" interpretato male), forza a futuro
-                if due_date < now_ref:
-                    if due_date.hour > 0: # Se ha un'ora, forse è solo oggi ma interpretato ieri?
-                        pass # Spesso dateparser azzecca il giorno ma sbaglia il "base"
-                    # Tentativo di recupero se nel passato
-                    # (Qui potremmo aggiungere logica extra ma per ora procediamo)
-                
-                results = []
-                # a) iCloud (VTODO)
-                if icloud_service.username and icloud_service.password:
-                   if icloud_service.create_event(title, due_date, is_todo=True): results.append("iCloud ✅")
-                   else: results.append("iCloud ❌")
+            # Se non c'è una data, ma l'intent è reminder_create, usiamo 'oggi' come fallback
+            if not due_date and intent == "reminder_create":
+                log("REMINDER_NO_DATE_FALLBACK", message=request.message)
+                # Opzione A: Crea senza data (dateless todo)
+                # Opzione B: Forza per oggi alle 20:00 (più utile per notifiche)
+                # Per ora, proviamo A (dateless) se il servizio lo supporta, o B.
+                # Apple Reminders gestisce bene i dateless.
+            
+            results = []
+            # Procediamo anche se due_date è None (v4.9.2)
+            
+            # a) iCloud (VTODO)
+            if icloud_service.username and icloud_service.password:
+                if icloud_service.create_event(title, due_date, is_todo=True): results.append("iCloud ✅")
+                else: results.append("iCloud ❌")
                 
                 # b) Google
                 if calendar_manager._google_service:
@@ -228,10 +230,9 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                 results.append("Local 💾")
                 
                 status_str = ", ".join(results)
-                response = f"✅ Promemoria impostato: '{title}' per il {due_date.strftime('%d/%m %H:%M')}.\nSalvataggio: {status_str}"
+                date_repr = due_date.strftime('%d/%m %H:%M') if due_date else "senza data specificata"
+                response = f"✅ Promemoria impostato: '{title}' ({date_repr}).\nSalvataggio: {status_str}"
                 chat_memory.add_message(user_id, request.message, response, intent)
-            else:
-                response = await simple_chat_handler(user_id, request.message, request.conversation_id)
         elif intent == "reminder_list":
              from core.reminder_engine import reminder_engine
              rems = await reminder_engine.list_reminders(user_id, status_filter="pending", include_icloud=True)
