@@ -26,7 +26,7 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="4.3")
+        log("ICLOUD_SERVICE_VERSION", version="4.4")
         self._cache_vtodo = []
         self._last_sync_vtodo = 0
         self._cache_events = []
