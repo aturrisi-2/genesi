@@ -35,13 +35,15 @@ class UnifiedCalendar:
         self.local_reminders = []
         self._cache_rems = []
         self._last_sync = 0
+        self._is_syncing = False
         
         # Initialize Google if possible
         self._setup_google()
         
         log("UNIFIED_CALENDAR_INIT", 
             google_active=self._google_service is not None,
-            icloud_active=bool(self._icloud_user)
+            icloud_active=bool(self._icloud_user),
+            version="4.6"
         )
 
     def _setup_google(self):
@@ -86,88 +88,84 @@ class UnifiedCalendar:
             if cache_age < 60: # < 1 minuto: freschissima
                 return self._cache_rems
             elif cache_age < 600: # 1-10 minuti: usabile ma da rinfrescare
-                log("OPTIMISTIC_CACHE_HIT", age=int(cache_age))
-                # Trigger background refresh (senza bloccare)
-                import threading
-                threading.Thread(target=self._perform_sync, args=(days,), daemon=True).start()
+                # Trigger background refresh (solo se non sta già sincronizzando)
+                if not self._is_syncing:
+                    log("OPTIMISTIC_CACHE_HIT_REFRESH", age=int(cache_age))
+                    import threading
+                    threading.Thread(target=self._perform_sync, args=(days,), daemon=True).start()
                 return self._cache_rems
 
         # Se siamo qui, o force_sync=True, o cache troppo vecchia (>10m), o assente.
         return self._perform_sync(days)
 
     def _perform_sync(self, days: int = 7) -> List[Dict[str, Any]]:
-        """Esegue la sincronizzazione reale con Lock (v4.5)."""
-        with self._lock:
-            all_rems = []
-            now = datetime.now()
-            now_ts = now.timestamp()
+        """Esegue la sincronizzazione reale con Lock (v4.6)."""
+        if self._is_syncing:
+            return self._cache_rems or []
             
-            # 1. Google Calendar
-        if self._google_service:
-            try:
-                # Use UTC for Google API consistency
-                time_min = datetime.utcnow().isoformat() + 'Z'
-                time_max = (datetime.utcnow() + timedelta(days=days)).isoformat() + 'Z'
+        self._is_syncing = True
+        try:
+            with self._lock:
+                all_rems = []
+                now = datetime.now()
+                now_ts = now.timestamp()
                 
-                events_result = self._google_service.events().list(
-                    calendarId='primary', 
-                    timeMin=time_min,
-                    timeMax=time_max,
-                    maxResults=25, 
-                    singleEvents=True,
-                    orderBy='startTime'
-                ).execute()
-                
-                for e in events_result.get('items', []):
-                    start = e['start'].get('dateTime', e['start'].get('date'))
-                    guid = e.get('id', f"google_{start}_{e.get('summary')}")
-                    
-                    item_data = {
-                        "guid": guid,
-                        "summary": e.get('summary', 'Senza titolo'),
-                        "due": start,
-                        "provider": "google",
-                        "status": "pending",
-                        "updated_at": datetime.now().isoformat()
-                    }
-                    
-                    # Salva nello storico
-                    calendar_history.add_item(guid, item_data)
-                    all_rems.append(item_data)
-                
-                calendar_history.save()
-                log("GOOGLE_LIST_CONNECTED", count=len(events_result.get('items', [])))
-            except Exception as e:
-                log("GOOGLE_LIST_ERROR", error=str(e))
+                # 1. Google Calendar
+                if self._google_service:
+                    try:
+                        time_min = datetime.utcnow().isoformat() + 'Z'
+                        time_max = (datetime.utcnow() + timedelta(days=days)).isoformat() + 'Z'
+                        events_result = self._google_service.events().list(
+                            calendarId='primary', timeMin=time_min, timeMax=time_max,
+                            maxResults=25, singleEvents=True, orderBy='startTime'
+                        ).execute()
+                        
+                        for e in events_result.get('items', []):
+                            start = e['start'].get('dateTime', e['start'].get('date'))
+                            guid = e.get('id', f"google_{start}_{e.get('summary')}")
+                            item_data = {
+                                "guid": guid, "summary": e.get('summary', 'Senza titolo'),
+                                "due": start, "provider": "google", "status": "pending",
+                                "updated_at": datetime.now().isoformat()
+                            }
+                            calendar_history.add_item(guid, item_data)
+                            all_rems.append(item_data)
+                        calendar_history.save()
+                        log("GOOGLE_LIST_CONNECTED", count=len(events_result.get('items', [])))
+                    except Exception as e:
+                        log("GOOGLE_LIST_ERROR", error=str(e))
 
-        # 2. iCloud (Unified)
-        if icloud_service.username:
-            try:
-                ic_items = icloud_service.get_all_items(days=days)
-                for item in ic_items:
-                    all_rems.append({
-                        "summary": item.get('summary', 'Senza titolo'),
-                        "due": item.get('due'),
-                        "provider": "icloud",
-                        "status": "pending"
-                    })
-                log("ICLOUD_LIST_CONNECTED", count=len(ic_items))
-            except Exception as e:
-                log("ICLOUD_LIST_ERROR", error=str(e))
+                # 2. iCloud (Unified)
+                if icloud_service.username:
+                    try:
+                        ic_items = icloud_service.get_all_items(days=days)
+                        for item in ic_items:
+                            all_rems.append({
+                                "summary": item.get('summary', 'Senza titolo'),
+                                "due": item.get('due'),
+                                "provider": "icloud",
+                                "status": "pending"
+                            })
+                        log("ICLOUD_LIST_CONNECTED", count=len(ic_items))
+                    except Exception as e:
+                        log("ICLOUD_LIST_ERROR", error=str(e))
 
-        # 3. Local
-        for r in self.local_reminders:
-            if r.get('status') == 'pending':
-                all_rems.append({
-                    "summary": r.get('text') or r.get('summary'),
-                    "due": r.get('due') or r.get('datetime'),
-                    "provider": "local",
-                    "status": "pending"
-                })
-        
-        self._cache_rems = all_rems
-        self._last_sync = now_ts
-        return all_rems
+                # 3. Local
+                for r in self.local_reminders:
+                    if r.get('status') == 'pending':
+                        all_rems.append({
+                            "summary": r.get('text') or r.get('summary'),
+                            "due": r.get('due') or r.get('datetime'),
+                            "provider": "local",
+                            "status": "pending"
+                        })
+                
+                self._cache_rems = all_rems
+                self._last_sync = now_ts
+                return all_rems
+        finally:
+            self._is_syncing = False
+        return []
 
     def add_event(self, title: str, dt: datetime, provider: str = 'detect'):
         if provider == 'detect':
