@@ -9,9 +9,11 @@ import logging
 import datetime
 import caldav
 import uuid
+import time
 from vobject import readOne
 from typing import List, Dict, Any, Optional
 from core.log import log
+from core.calendar_history import calendar_history
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +26,11 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="3.0")
+        log("ICLOUD_SERVICE_VERSION", version="4.0")
         self._cache_vtodo = []
         self._last_sync_vtodo = 0
         self._vtodo_lists = set() 
+        self._deep_sync_done = False
         
         if self.username and self.password:
             self._connect()
@@ -136,7 +139,6 @@ class ICloudService:
             if not self._connect(): return []
 
         # Cache di 5 minuti per evitare attese lunghe ad ogni domanda
-        import time
         now_ts = time.time()
         if (now_ts - self._last_sync_vtodo) < 300 and self._cache_vtodo:
             log("ICLOUD_CACHE_HIT", count=len(self._cache_vtodo))
@@ -188,7 +190,15 @@ class ICloudService:
                         continue
                     
                     # OTTIMIZZAZIONE 3.0: Caricamento parallelo degli oggetti (Turbo-Fetch)
+                    # OTTIMIZZAZIONE 4.0: Filtriamo cosa caricare (Delta Sync)
                     from concurrent.futures import ThreadPoolExecutor
+                    
+                    to_load = []
+                    for t in todos:
+                        guid = str(t.url)
+                        if not self._deep_sync_done or not calendar_history.exists(guid):
+                            to_load.append(t)
+                    
                     def _safe_load(t):
                         try:
                             if not hasattr(t, 'data') or not t.data:
@@ -196,79 +206,73 @@ class ICloudService:
                             return t
                         except: return None
 
-                    with ThreadPoolExecutor(max_workers=10) as executor:
-                        list(executor.map(_safe_load, todos))
+                    if to_load:
+                        log("ICLOUD_DELTA_LOAD", name=name, count=len(to_load))
+                        with ThreadPoolExecutor(max_workers=10) as executor:
+                            list(executor.map(_safe_load, to_load))
 
                     skipped_completed = 0
                     skipped_past = 0
                     
                     found_in_cal = 0
-                    first_item_type = None
                     
                     for todo in todos:
                         try:
+                            guid = str(todo.url)
                             raw_data = getattr(todo, 'data', None)
-                            if not raw_data: continue
                             
-                            # Decodifica se necessario
+                            # Se non abbiamo dati e non è in cache, passiamo (potrebbe essere già caricato o fallito)
+                            if not raw_data:
+                                if calendar_history.exists(guid):
+                                    # Recuperiamo dallo storico locale per evitare fetch
+                                    hist_item = calendar_history.history["items"][guid]
+                                    if hist_item.get("status", "").upper() not in ['COMPLETED', 'CANCELLED']:
+                                        all_todos.append(hist_item)
+                                        found_in_cal += 1
+                                    continue
+                                else: continue
+
+                            # Decodifica
                             data_str = raw_data.decode('utf-8', errors='ignore') if isinstance(raw_data, bytes) else str(raw_data)
                             
-                            # Logghiamo il tipo del primo elemento per debug
-                            if first_item_type is None:
-                                if 'VTODO' in data_str.upper(): first_item_type = 'VTODO'
-                                elif 'VEVENT' in data_str.upper(): first_item_type = 'VEVENT'
-                                else: first_item_type = 'UNKNOWN'
-                                log("ICLOUD_FIRST_ITEM", name=name, type=first_item_type)
-
                             if 'VTODO' not in data_str.upper(): continue
                             
                             v = readOne(data_str)
-                            # Supporta sia vtodo che VTODO
                             item = getattr(v, 'vtodo', getattr(v, 'VTODO', None))
                             if not item: continue
                             
-                            # Filtro completati
-                            status = getattr(item, 'status', None)
-                            if status and str(status.value).upper() in ['COMPLETED', 'CANCELLED']: 
-                                skipped_completed += 1
-                                continue
-                            
+                            # Estrazione dati
                             summary = str(item.summary.value) if hasattr(item, 'summary') else "Senza titolo"
-                            guid = str(item.uid.value) if hasattr(item, 'uid') else None
+                            raw_uid = str(item.uid.value) if hasattr(item, 'uid') else guid
+                            status_val = str(getattr(item, 'status', 'pending')).upper()
                             
                             due_dt = None
                             if hasattr(item, 'due'): due_dt = item.due.value
                             elif hasattr(item, 'dtstart'): due_dt = item.dtstart.value
-                            
-                            if due_dt:
-                                # Filtro temporale (include scaduti fino a 30 giorni fa se non completati)
-                                cmp_dt = due_dt if isinstance(due_dt, datetime.datetime) else datetime.datetime.combine(due_dt, datetime.time())
-                                limit_past = now - datetime.timedelta(days=30)
-                                
-                                if cmp_dt.tzinfo is None:
-                                    if cmp_dt < limit_past: 
-                                        skipped_past += 1
-                                        continue
-                                else:
-                                    now_tz = now.astimezone(cmp_dt.tzinfo)
-                                    limit_past_tz = (now - datetime.timedelta(days=30)).astimezone(cmp_dt.tzinfo)
-                                    if cmp_dt < limit_past_tz: 
-                                        skipped_past += 1
-                                        continue
-                                due_str = due_dt.isoformat()
-                            else:
-                                due_str = None
+                            due_str = due_dt.isoformat() if due_dt else None
 
-                            all_todos.append({
-                                "guid": guid,
+                            todo_data = {
+                                "guid": raw_uid,
                                 "summary": summary,
-                                "status": "pending",
+                                "status": status_val,
                                 "due": due_str,
                                 "list": name,
                                 "source": "icloud",
-                                "type": "todo"
-                            })
-                            found_in_cal += 1
+                                "type": "todo",
+                                "updated_at": datetime.datetime.now().isoformat()
+                            }
+                            
+                            # PERSISTENZA STORICA (Richiesta User)
+                            calendar_history.add_item(guid, todo_data)
+
+                            # Filtro per Agenda Attiva
+                            is_completed = status_val in ['COMPLETED', 'CANCELLED']
+                            if is_completed:
+                                skipped_completed += 1
+                            else:
+                                all_todos.append(todo_data)
+                                found_in_cal += 1
+
                         except Exception as e:
                             log("ICLOUD_TODO_PARSE_ERR", error=str(e), level="DEBUG")
                             continue
@@ -280,6 +284,10 @@ class ICloudService:
                         
                 except Exception as e:
                     continue
+            
+            # Salvataggio storico su VPS
+            calendar_history.save()
+            self._deep_sync_done = True 
             
             self._cache_vtodo = all_todos
             self._last_sync_vtodo = time.time()

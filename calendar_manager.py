@@ -21,6 +21,7 @@ except ImportError:
 # Genesi Imports
 from core.log import log
 from core.icloud_service import icloud_service
+from core.calendar_history import calendar_history
 
 class UnifiedCalendar:
     def __init__(self):
@@ -91,12 +92,22 @@ class UnifiedCalendar:
                 
                 for e in events_result.get('items', []):
                     start = e['start'].get('dateTime', e['start'].get('date'))
-                    all_rems.append({
+                    guid = e.get('id', f"google_{start}_{e.get('summary')}")
+                    
+                    item_data = {
+                        "guid": guid,
                         "summary": e.get('summary', 'Senza titolo'),
                         "due": start,
                         "provider": "google",
-                        "status": "pending"
-                    })
+                        "status": "pending",
+                        "updated_at": datetime.now().isoformat()
+                    }
+                    
+                    # Salva nello storico
+                    calendar_history.add_item(guid, item_data)
+                    all_rems.append(item_data)
+                
+                calendar_history.save()
                 log("GOOGLE_LIST_CONNECTED", count=len(events_result.get('items', [])))
             except Exception as e:
                 log("GOOGLE_LIST_ERROR", error=str(e))
