@@ -339,8 +339,10 @@ class ICloudService:
                 if is_todo:
                     item = cal_v.add('vtodo')
                     item.add('summary').value = text
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=datetime.timezone.utc)
+                    
+                    # iCloud fix: vobject non ama i tz aware senza nome (Unable to guess TZID)
+                    if dt.tzinfo:
+                        dt = dt.replace(tzinfo=None)
 
                     item.add('due').value = dt
                     item.add('dtstart').value = dt
