@@ -139,9 +139,19 @@ class ICloudService:
             for calendar in calendars:
                 try:
                     name = getattr(calendar, 'name', 'Senza nome')
-                    # Tenta di recuperare i todo
-                    todos = calendar.todos()
-                    if not todos: continue
+                    # Logghiamo ogni calendario per debug
+                    log("ICLOUD_SCANNING_LIST", name=name)
+                    
+                    todos = []
+                    try:
+                        todos = calendar.todos()
+                    except:
+                        # Molti calendari (es: quelli degli eventi) non supportano .todos()
+                        continue
+                        
+                    if not todos:
+                        log("ICLOUD_LIST_EMPTY", name=name)
+                        continue
                     
                     found_in_cal = 0
                     for todo in todos:
