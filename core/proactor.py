@@ -192,22 +192,24 @@ class Proactor:
         # PROACTIVE CLOUD SUGGESTION (Fluid Onboarding)
         try:
             profile = await storage.load(f"profile:{user_id}", default={})
-            rel_state = await memory_brain.relational.load(user_id)
-            total_msgs = rel_state.get("history", {}).get("total_msgs", 0)
+            rel_sum = await memory_brain.relational.get_state_summary(user_id)
+            total_msgs = rel_sum.get("total_messages", 0)
             
             # Suggest only if: 
-            # 1. Early in the relationship (2 to 8 messages)
+            # 1. Early in the relationship (0 to 10 messages)
             # 2. No cloud user or google service active
             # 3. Message doesn't already contain setup keywords
             has_icloud = profile.get("icloud_user") or os.environ.get("ICLOUD_USER")
             from calendar_manager import calendar_manager
             has_google = calendar_manager._google_service is not None
             
-            if 1 < total_msgs < 8 and not has_icloud and not has_google:
+            if total_msgs < 10 and not has_icloud and not has_google:
                 if not any(kw in response.lower() for kw in ["cloud", "icloud", "google", "calendar", "sincronizza", "collega"]):
-                    # Small non-intrusive tip
-                    response += "\n\n💡 *Tip: Se vuoi un'esperienza più fluida, puoi collegare il tuo account Google o iCloud semplicemente dicendomi 'collega iCloud' o 'usa Google Calendar'.*"
-        except: pass
+                    # Small welcoming onboarding tip
+                    tip = "\n\n✨ *Benvenuto! Prima di iniziare, se vuoi posso aiutarti a sincronizzare i tuoi calendari. Basta dirmi 'collega account Google' o 'usa iCloud'.*" if total_msgs <= 1 else "\n\n💡 *Tip: Posso gestire i tuoi impegni se scrivi 'collega Google' o 'usa iCloud' per i calendari.*"
+                    response += tip
+        except Exception as e:
+            logger.error(f"ONBOARDING_ERROR: {e}")
             
         return response
 
