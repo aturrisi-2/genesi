@@ -129,7 +129,45 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             await storage.save(f"profile:{user_id}", profile.model_dump(mode="json"))
             log("STORAGE_SAVE", key=f"profile:{user_id}")
 
-        response = await simple_chat_handler(user_id, request.message, request.conversation_id)
+        # Deterministic Reminder Creation Handler (Patch)
+        intent = intent_classifier.classify(request.message)
+        if intent == "reminder_create":
+            from core.icloud_reminder_creator import ICloudReminderCreator
+            import re, dateparser, os
+            
+            # Parse messaggio: "Aggiungi promemoria [testo] per [data] alle [ora]"
+            match = re.search(r"(?:promemoria|ricorda|aggiungi).*?(.+?)(?:per|il|a le)?\s*(\d{1,2}[a-zA-Z]*)\s*(?:alle)?\s*(\d{1,2}:\d{2})?", request.message, re.IGNORECASE)
+            
+            if match:
+                title = match.group(1).strip()
+                day = match.group(2) or "domani"
+                time = match.group(3) or "15:00"
+                
+                due_str = f"{day} alle {time}"
+                due_date = dateparser.parse(due_str, languages=['it'])
+                
+                if due_date:
+                    creator = ICloudReminderCreator(
+                        user=raw_profile.get('icloud_user') or os.environ.get("ICLOUD_USER"),
+                        password=raw_profile.get('icloud_password') or os.environ.get("ICLOUD_PASSWORD")
+                    )
+                    
+                    success = await creator.create_reminder(title, due_date)
+                    if success:
+                        response = f"✅ Promemoria creato su iCloud: '{title}' per {due_date.strftime('%d/%m %H:%M')}"
+                        # Log message locally too
+                        from core.reminder_engine import reminder_engine
+                        reminder_engine.create_reminder(user_id, title, due_date)
+                        chat_memory.add_message(user_id, request.message, response, intent)
+                    else:
+                        response = "❌ Errore creazione promemoria iCloud. Verifica le credenziali o il calendario 'Promemoria'."
+                else:
+                    response = "❌ Data non compresa. Prova con 'domani alle 15'."
+            else:
+                # Fallback to proactor if regex fails
+                response = await simple_chat_handler(user_id, request.message, request.conversation_id)
+        else:
+            response = await simple_chat_handler(user_id, request.message, request.conversation_id)
         
         # Defensive normalization: ensure response is always a string
         if isinstance(response, tuple):
