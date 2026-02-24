@@ -731,11 +731,17 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 sync_keywords = ["sincronizza", "tutti", "account", "cloud", "online"]
                 force_sync = any(kw in message.lower() for kw in sync_keywords)
                 
-                # Creazione ICLOUD
+                # Check for Admin status
+                from auth.config import ADMIN_EMAILS
                 profile = await storage.load(f"profile:{user_id}", default={})
-                has_icloud = profile.get("icloud_user") or os.environ.get("ICLOUD_USER")
+                user_email = profile.get("email", "")
+                is_admin = user_email in ADMIN_EMAILS
                 
-                if force_sync or "icloud" in message.lower() or "apple" in message.lower() or has_icloud:
+                # Creazione ICLOUD
+                has_own_icloud = bool(profile.get("icloud_user") and profile.get("icloud_password"))
+                use_global_icloud = is_admin and bool(os.environ.get("ICLOUD_USER"))
+                
+                if force_sync or "icloud" in message.lower() or "apple" in message.lower() or has_own_icloud or use_global_icloud:
                     success = await reminder_engine.create_icloud_reminder(user_id, reminder_text, reminder_datetime)
                     if success:
                         if "Perfetto." in response:
@@ -749,17 +755,22 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 
                 # Creazione GOOGLE (se richiesto o se disponibile)
                 from calendar_manager import calendar_manager
-                has_google = calendar_manager._google_service is not None
-                if force_sync or "google" in message.lower() or ("calendario" in message.lower() and has_google) or has_google:
-                    success = calendar_manager.add_event(reminder_text, reminder_datetime, provider='google')
-                    if success:
-                        if "Perfetto." in response:
-                            response = response.replace("Perfetto.", "Perfetto, aggiunto al tuo Google Calendar.")
+                has_own_google = bool(profile.get("google_token"))
+                use_global_google = is_admin and calendar_manager._google_service is not None
+                
+                if force_sync or "google" in message.lower() or ("calendario" in message.lower() and (has_own_google or use_global_google)) or has_own_google or use_global_google:
+                    # calendar_manager.add_event currently uses global service. 
+                    # If we have individual tokens, we should pass them (TODO: upgrade calendar_manager)
+                    if use_global_google or has_own_google:
+                        success = calendar_manager.add_event(reminder_text, reminder_datetime, provider='google')
+                        if success:
+                            if "Perfetto." in response:
+                                response = response.replace("Perfetto.", "Perfetto, aggiunto al tuo Google Calendar.")
+                            else:
+                                response += " (Aggiunto a Google Calendar)."
                         else:
-                            response += " (Aggiunto a Google Calendar)."
-                    else:
-                        if "google" in message.lower() or "tutti" in message.lower():
-                            response += " (Nota: errore durante il salvataggio su Google Calendar)."
+                            if "google" in message.lower() or "tutti" in message.lower():
+                                response += " (Nota: errore durante il salvataggio su Google Calendar)."
                 
                 return response, "reminder"
             
