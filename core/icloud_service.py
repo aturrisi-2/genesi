@@ -26,9 +26,11 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="4.2")
+        log("ICLOUD_SERVICE_VERSION", version="4.3")
         self._cache_vtodo = []
         self._last_sync_vtodo = 0
+        self._cache_events = []
+        self._last_sync_events = 0
         self._vtodo_lists = set() 
         self._deep_sync_done = False
         
@@ -70,10 +72,15 @@ class ICloudService:
         except:
             return False
 
-    def get_events(self, days: int = 7) -> List[Dict[str, Any]]:
-        """Recupera gli eventi (VEVENT) da tutte le liste di iCloud."""
+    def get_events(self, days: int = 7, force_sync: bool = False) -> List[Dict[str, Any]]:
+        """Recupera gli eventi (VEVENT) da tutte le liste di iCloud con Cache."""
         if not self.client:
             if not self._connect(): return []
+
+        now_ts = time.time()
+        if not force_sync and (now_ts - self._last_sync_events) < 300 and self._cache_events:
+            log("ICLOUD_EVENTS_CACHE_HIT", count=len(self._cache_events))
+            return self._cache_events
 
         all_events = []
         try:
@@ -84,6 +91,7 @@ class ICloudService:
             start_dt = now - datetime.timedelta(hours=1)
             end_dt = now + datetime.timedelta(days=days)
             
+            log("ICLOUD_EVENTS_SYNC_START")
             for calendar in calendars:
                 try:
                     name = getattr(calendar, 'name', 'Senza nome')
@@ -129,11 +137,13 @@ class ICloudService:
                             })
                         except: continue
                 except: continue
+            self._cache_events = all_events
+            self._last_sync_events = time.time()
             return all_events
         except:
             return []
 
-    def get_vtodo(self, days: int = 7) -> List[Dict[str, Any]]:
+    def get_vtodo(self, days: int = 7, force_sync: bool = False) -> List[Dict[str, Any]]:
         """Recupera i promemoria (VTODO) da iCloud."""
         if not self.client:
             if not self._connect(): return []
@@ -141,8 +151,7 @@ class ICloudService:
         # Cache di 5 minuti per evitare attese lunghe ad ogni domanda
         now_ts = time.time()
         # Se abbiamo sincronizzato negli ultimi 5 minuti, usa la cache
-        # A meno che non sia passato pochissimo tempo e la cache sia vuota
-        if (now_ts - self._last_sync_vtodo) < 300 and self._cache_vtodo:
+        if not force_sync and (now_ts - self._last_sync_vtodo) < 300 and self._cache_vtodo:
             log("ICLOUD_CACHE_HIT", count=len(self._cache_vtodo))
             return self._cache_vtodo
 
@@ -298,88 +307,86 @@ class ICloudService:
             log("ICLOUD_VTODO_FETCH_ERR", error=str(e), level="ERROR")
             return []
 
-    def get_all_items(self, days: int = 7) -> List[Dict[str, Any]]:
+    def get_all_items(self, days: int = 7, force_sync: bool = False) -> List[Dict[str, Any]]:
         """Cerca tutto: Eventi + Promemoria."""
-        return self.get_vtodo(days) + self.get_events(days)
+        return self.get_vtodo(days, force_sync) + self.get_events(days, force_sync)
 
     def create_event(self, text: str, dt: datetime.datetime, is_todo: bool = True) -> bool:
-        """Crea un nuovo elemento iCloud."""
-        if not self.client:
-            if not self._connect(): return False
-        try:
-            principal = self.client.principal()
-            calendars = principal.calendars()
-            target_cal = None
-            target_name = "Reminders"
-            for cal in calendars:
-                name = getattr(cal, 'name', '').lower()
-                if any(x in name for x in ["promemoria", "tasks", "reminders"]):
-                    target_cal = cal
-                    target_name = getattr(cal, 'name', 'Reminders')
-                    break
-            if not target_cal and calendars: 
-                target_cal = calendars[0]
-                target_name = getattr(target_cal, 'name', 'Reminders')
-            if not target_cal: return False
+        """Crea un nuovo elemento iCloud con Auto-Reconnect (v4.3)."""
+        for attempt in range(2):
+            try:
+                if not self.client or attempt > 0:
+                    if not self._connect(): continue
+                
+                principal = self.client.principal()
+                calendars = principal.calendars()
+                target_cal = None
+                target_name = "Reminders"
+                for cal in calendars:
+                    name = getattr(cal, 'name', '').lower()
+                    if any(x in name for x in ["promemoria", "tasks", "reminders"]):
+                        target_cal = cal
+                        target_name = getattr(cal, 'name', 'Reminders')
+                        break
+                if not target_cal and calendars: 
+                    target_cal = calendars[0]
+                    target_name = getattr(target_cal, 'name', 'Reminders')
+                if not target_cal: return False
 
-            import vobject
-            cal_v = vobject.iCalendar()
-            # Apple richiede X-WR-CALNAME per alcuni contesti ma non è obbligatorio per VTODO singolo
-            
-            if is_todo:
-                item = cal_v.add('vtodo')
-                item.add('summary').value = text
+                import vobject
+                cal_v = vobject.iCalendar()
                 
-                # Normalizzazione Timezone: iCloud preferisce UTC o offset espliciti
-                if dt.tzinfo is None:
-                    # Se naive, assumiamo local (che per il VPS è probabile UTC o Italia)
-                    # Forziamo una consapevolezza minima per evitare che iCloud lo scarti
-                    dt = dt.replace(tzinfo=datetime.timezone.utc)
+                if is_todo:
+                    item = cal_v.add('vtodo')
+                    item.add('summary').value = text
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=datetime.timezone.utc)
 
-                item.add('due').value = dt
-                item.add('dtstart').value = dt
+                    item.add('due').value = dt
+                    item.add('dtstart').value = dt
+                    item.add('priority').value = '5' 
+                    item.add('status').value = 'NEEDS-ACTION'
+                    alarm = item.add('valarm')
+                    alarm.add('action').value = 'DISPLAY'
+                    alarm.add('description').value = text
+                    alarm.add('trigger').value = datetime.timedelta(minutes=0)
+                else:
+                    item = cal_v.add('vevent')
+                    item.add('summary').value = text
+                    item.add('dtstart').value = dt
+                    item.add('dtend').value = dt + datetime.timedelta(hours=1)
+                    
+                uid = str(uuid.uuid4()).upper()
+                item.add('uid').value = uid
+                item.add('dtstamp').value = datetime.datetime.utcnow()
                 
-                # Apple Reminders richiede questi per la visibilità immediata
-                item.add('priority').value = '5' 
-                item.add('status').value = 'NEEDS-ACTION'
+                target_cal.add_event(cal_v.serialize())
                 
-                # AGGIUNTA SVEGLIA (VALARM): Fondamentale per far suonare l'iPhone
-                alarm = item.add('valarm')
-                alarm.add('action').value = 'DISPLAY'
-                alarm.add('description').value = text
-                alarm.add('trigger').value = datetime.timedelta(minutes=0) # Al momento esatto
-            else:
-                item = cal_v.add('vevent')
-                item.add('summary').value = text
-                item.add('dtstart').value = dt
-                item.add('dtend').value = dt + datetime.timedelta(hours=1)
+                # Cache Injection
+                new_item = {
+                    "guid": uid,
+                    "summary": text,
+                    "status": "NEEDS-ACTION",
+                    "due": dt.isoformat(),
+                    "list": target_name,
+                    "source": "icloud",
+                    "type": "todo" if is_todo else "event",
+                    "updated_at": datetime.datetime.now().isoformat()
+                }
+                if is_todo: self._cache_vtodo.append(new_item)
+                else: self._cache_events.append(new_item)
                 
-            uid = str(uuid.uuid4()).upper()
-            item.add('uid').value = uid
-            item.add('dtstamp').value = datetime.datetime.utcnow()
-            
-            target_cal.add_event(cal_v.serialize())
-            
-            # OTTIMIZZAZIONE 4.2: Inserimento istantaneo in cache per risposta immediata
-            new_item = {
-                "guid": uid,
-                "summary": text,
-                "status": "NEEDS-ACTION",
-                "due": dt.isoformat(),
-                "list": target_name,
-                "source": "icloud",
-                "type": "todo",
-                "updated_at": datetime.datetime.now().isoformat()
-            }
-            self._cache_vtodo.append(new_item)
-            calendar_history.add_item(uid, new_item)
-            calendar_history.save()
+                calendar_history.add_item(uid, new_item)
+                calendar_history.save()
 
-            log("ICLOUD_ITEM_CREATED", type="todo" if is_todo else "event", text=text)
-            return True
-        except Exception as e:
-            log("ICLOUD_CREATE_ERROR", error=str(e))
-            return False
+                log("ICLOUD_ITEM_CREATED", type="todo" if is_todo else "event", text=text)
+                return True
+            except Exception as e:
+                log("ICLOUD_CREATE_RETRY", attempt=attempt+1, error=str(e))
+                if attempt == 1:
+                    log("ICLOUD_CREATE_ERROR", error=str(e), level="ERROR")
+                    return False
+        return False
 
     def get_reminders(self, days: int = 7): return self.get_all_items(days)
     def create_reminder(self, text, dt): return self.create_event(text, dt, is_todo=True)

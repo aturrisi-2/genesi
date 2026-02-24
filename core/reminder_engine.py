@@ -229,13 +229,15 @@ class ReminderEngine:
         try:
             # 1. Fetch iCloud (VTODO + VEVENT)
             if include_icloud:
-                await self.fetch_icloud_reminders(user_id)
+                # Usa il calendario unificato che ha la sua cache
+                from calendar_manager import calendar_manager
+                await asyncio.to_thread(calendar_manager.list_reminders)
 
-            # 2. Fetch Google (if active)
-            google_items = []
+            # 2. Fetch Google/Unified
+            unified_items = []
             try:
                 from calendar_manager import calendar_manager
-                google_items = calendar_manager.list_reminders(days=7)
+                unified_items = calendar_manager.list_reminders(days=7)
             except: pass
 
             # 3. Load from local (includes iCloud synced items)
@@ -246,7 +248,7 @@ class ReminderEngine:
                 # Deduplication hashes
                 existing_hashes = {f"{r['text'].lower()}_{r.get('datetime')}" for r in reminders if r.get('text')}
                 
-                for gi in google_items:
+                for gi in unified_items:
                     summary = gi.get('summary')
                     due = gi.get('due')
                     item_hash = f"{summary.lower()}_{due}"

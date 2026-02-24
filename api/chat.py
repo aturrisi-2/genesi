@@ -215,8 +215,18 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         elif intent == "reminder_list":
              from core.reminder_engine import reminder_engine
              rems = await reminder_engine.list_reminders(user_id, status_filter="pending", include_icloud=True)
-             if not rems: response = "Non ho trovato nessun impegno o promemoria."
-             else: response = "Ecco i tuoi impegni aggiornati:\n" + reminder_engine.format_reminders_list(rems)
+             
+             if not rems: 
+                 response = "Non ho trovato nessun impegno o promemoria."
+             else:
+                 # Se la richiesta è Specifica (es. 'oggi', 'stasera', 'domani')
+                 # chiediamo a GPT di fare un riassunto umano.
+                 specific_keywords = ["oggi", "stasera", "domani", "pomeriggio", "mattina", "fare"]
+                 if any(kw in request.message.lower() for kw in specific_keywords):
+                     response = await _generate_human_reminder_list(user_id, request.message, rems)
+                 else:
+                     response = "Ecco i tuoi impegni aggiornati:\n" + reminder_engine.format_reminders_list(rems)
+             
              chat_memory.add_message(user_id, request.message, response, intent)
         else:
             response = await simple_chat_handler(user_id, request.message, request.conversation_id)
@@ -320,3 +330,33 @@ async def clear_user_messages(user: AuthUser = Depends(require_auth)):
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "version": "v2", "storage": "in-memory"}
+
+async def _generate_human_reminder_list(user_id: str, message: str, reminders: list) -> str:
+    """Genera una risposta naturale e umana agli impegni trovati."""
+    from core.llm_service import llm_service
+    
+    # Prepariamoci l'elenco testuale per il prompt
+    items_text = ""
+    for i, r in enumerate(reminders, 1):
+        dt = r.get('datetime') or r.get('due') or 'Non specificato'
+        items_text += f"- {r['text']} ({dt})\n"
+
+    prompt = f"""L'utente chiede i suoi impegni: "{message}"
+Sulla base di questi dati trovati:
+{items_text}
+
+Rispondi come un segretario personale umano, cordiale e scattante.
+- Riassumi gli impegni in modo naturale (es: "Oggi hai due cose importanti: la cena alle 20 e...").
+- Se ci sono molti impegni, sii sintetico ma non schematico.
+- Se l'utente chiede di "oggi" e ci sono impegni di altri giorni, dai la priorità a quelli di oggi ma accenna brevemente agli altri se sono imminenti.
+- Non usare liste puntate schematiche, scrivi un paragrafo fluido.
+- Usa un tono amichevole.
+"""
+    try:
+        response = await llm_service._call_with_protection(
+            "gpt-4o-mini", prompt, message, user_id=user_id, route="reminder"
+        )
+        return response or "Ecco i tuoi impegni: " + items_text
+    except:
+        from core.reminder_engine import reminder_engine
+        return "Ecco i tuoi impegni:\n" + reminder_engine.format_reminders_list(reminders)

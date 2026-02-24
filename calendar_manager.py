@@ -29,6 +29,8 @@ class UnifiedCalendar:
         self._icloud_user = os.environ.get("ICLOUD_USER")
         self._icloud_pass = os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.local_reminders = []
+        self._cache_rems = []
+        self._last_sync = 0
         
         # Initialize Google if possible
         self._setup_google()
@@ -68,8 +70,13 @@ class UnifiedCalendar:
             except Exception as e:
                 log("GOOGLE_SERVICE_BUILD_ERROR", error=str(e))
 
-    def list_reminders(self, days: int = 7) -> List[Dict[str, Any]]:
-        """Lists Google Calendar events, iCloud (Events + Reminders), and local."""
+    def list_reminders(self, days: int = 7, force_sync: bool = False) -> List[Dict[str, Any]]:
+        """Recupera promemoria unificati con Cache (v4.3)."""
+        now_ts = datetime.now().timestamp()
+        if not force_sync and (now_ts - self._last_sync < 300) and self._cache_rems:
+            log("UNIFIED_CACHE_HIT", count=len(self._cache_rems))
+            return self._cache_rems
+
         all_rems = []
         now = datetime.now()
         end_date = now + timedelta(days=days)
@@ -137,6 +144,8 @@ class UnifiedCalendar:
                     "status": "pending"
                 })
         
+        self._cache_rems = all_rems
+        self._last_sync = now_ts
         return all_rems
 
     def add_event(self, title: str, dt: datetime, provider: str = 'detect'):
