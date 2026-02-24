@@ -50,7 +50,6 @@ class UnifiedCalendar:
             except Exception as e:
                 log("GOOGLE_TOKEN_LOAD_ERROR", error=str(e))
 
-        # If no valid credentials, try to get them
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 try:
@@ -58,133 +57,39 @@ class UnifiedCalendar:
                 except Exception as e:
                     log("GOOGLE_CREDENTIALS_REFRESH_ERROR", error=str(e))
                     creds = None
-            
-            if not creds and os.path.exists(creds_path):
-                # This requires interaction, might be tricky on a VPS
-                # But we implement it as requested
-                try:
-                    flow = InstalledAppFlow.from_client_secrets_file(creds_path, scopes)
-                    creds = flow.run_local_server(port=0)
-                    # Save the credentials for the next run
-                    with open(token_path, 'wb') as token:
-                        pickle.dump(creds, token)
-                    log("GOOGLE_AUTH_FLOW_COMPLETED")
-                except Exception as e:
-                    log("GOOGLE_AUTH_FLOW_ERROR", error=str(e))
+            else:
+                creds = None
 
-        if creds and creds.valid:
+        if creds:
             try:
                 self._google_service = build('calendar', 'v3', credentials=creds)
-                log("GOOGLE_CALENDAR_SERVICE_READY")
+                log("GOOGLE_CALENDAR_CONNECTED")
             except Exception as e:
                 log("GOOGLE_SERVICE_BUILD_ERROR", error=str(e))
 
-    def add_event(self, title: str, dt: datetime, provider: str = 'detect'):
-        """
-        Adds an event or reminder. 
-        Provider: 'apple', 'apple_rem', 'google', 'local', 'detect'.
-        """
-        if provider == 'detect':
-            if self._icloud_user:
-                provider = 'apple'
-            elif self._google_service:
-                provider = 'google'
-            else:
-                provider = 'local'
-
-        log("CALENDAR_ADD_REQUEST", title=title, provider=provider, time=dt.isoformat())
-
-        if provider == 'apple':
-            # iCloud Calendar via CalDAV (using existing service)
-            return icloud_service.create_reminder(title, dt)
-        elif provider == 'apple_rem':
-            # iCloud Reminders via pyremindkit (if credentials provided)
-            if Reminders and self._icloud_user and self._icloud_pass:
-                try:
-                    # Note: pyremindkit might need specific setup not shown in snippet
-                    # but following the user's example:
-                    client = Reminders(self._icloud_user, self._icloud_pass)
-                    client.reminders().create(title=title, due_date=dt.strftime("%Y-%m-%d"))
-                    log("APPLE_REM_CREATED", title=title)
-                    return True
-                except Exception as e:
-                    log("APPLE_REM_ERROR", error=str(e))
-            return icloud_service.create_reminder(title, dt) # Fallback
-        elif provider == 'google':
-            return self._add_google(title, dt)
-        else:
-            return self._add_local(title, dt)
-
-    def _add_local(self, title, dt):
-        # Using icalendar for local storage
-        cal = Calendar()
-        event = Event()
-        event.add('summary', title)
-        event.add('dtstart', dt)
-        event.add('dtend', dt + timedelta(hours=1))
-        cal.add_component(event)
-        
-        # Save to local file
-        os.makedirs("data", exist_ok=True)
-        with open("data/local_events.ics", "ab") as f:
-            f.write(cal.to_ical())
-            
-        reminder_entry = {
-            "id": len(self.local_reminders) + 1,
-            "text": title,
-            "due": dt.isoformat(),
-            "status": "pending",
-            "provider": "local"
-        }
-        self.local_reminders.append(reminder_entry)
-        log("LOCAL_REMINDER_CREATED", title=title)
-        return True
-
-    def _add_google(self, title, dt):
-        if not self._google_service:
-            log("GOOGLE_NOT_CONFIGURED")
-            return False
-        
-        event = {
-            'summary': title,
-            'start': {
-                'dateTime': dt.isoformat(),
-                'timeZone': 'Europe/Rome',
-            },
-            'end': {
-                'dateTime': (dt + timedelta(hours=1)).isoformat(),
-                'timeZone': 'Europe/Rome',
-            },
-        }
-        
-        try:
-            self._google_service.events().insert(calendarId='primary', body=event).execute()
-            log("GOOGLE_EVENT_CREATED", title=title)
-            return True
-        except Exception as e:
-            log("GOOGLE_EVENT_ERROR", error=str(e))
-            return False
-
     def list_reminders(self, days: int = 7) -> List[Dict[str, Any]]:
-        """Lists Google Calendar events, iCloud events, and local events."""
+        """Lists Google Calendar events, iCloud (Events + Reminders), and local."""
         all_rems = []
         now = datetime.now()
         end_date = now + timedelta(days=days)
         
-        # 1. Google Calendar (Upcoming Events)
+        # 1. Google Calendar
         if self._google_service:
             try:
-                time_min = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + 'Z'
+                # Use UTC for Google API consistency
+                time_min = datetime.utcnow().isoformat() + 'Z'
+                time_max = (datetime.utcnow() + timedelta(days=days)).isoformat() + 'Z'
+                
                 events_result = self._google_service.events().list(
                     calendarId='primary', 
                     timeMin=time_min,
-                    timeMax=end_date.isoformat() + 'Z',
-                    maxResults=15, 
+                    timeMax=time_max,
+                    maxResults=25, 
                     singleEvents=True,
                     orderBy='startTime'
                 ).execute()
-                events = events_result.get('items', [])
-                for e in events:
+                
+                for e in events_result.get('items', []):
                     start = e['start'].get('dateTime', e['start'].get('date'))
                     all_rems.append({
                         "summary": e.get('summary', 'Senza titolo'),
@@ -192,51 +97,82 @@ class UnifiedCalendar:
                         "provider": "google",
                         "status": "pending"
                     })
-                log("GOOGLE_LIST_SUCCESS", count=len(events))
+                log("GOOGLE_LIST_CONNECTED", count=len(events_result.get('items', [])))
             except Exception as e:
                 log("GOOGLE_LIST_ERROR", error=str(e))
 
-        # 2. iCloud (Upcoming Events) - NEW
-        if self._icloud_user:
+        # 2. iCloud (Unified)
+        if icloud_service.username:
             try:
-                iclp_events = icloud_service.get_events(days=days)
-                for ev in iclp_events:
+                ic_items = icloud_service.get_all_items(days=days)
+                for item in ic_items:
                     all_rems.append({
-                        "summary": ev.get('summary', 'Senza titolo'),
-                        "due": ev.get('due'),
+                        "summary": item.get('summary', 'Senza titolo'),
+                        "due": item.get('due'),
                         "provider": "icloud",
                         "status": "pending"
                     })
-                log("ICLOUD_LIST_SUCCESS", count=len(iclp_events))
+                log("ICLOUD_LIST_CONNECTED", count=len(ic_items))
             except Exception as e:
                 log("ICLOUD_LIST_ERROR", error=str(e))
 
         # 3. Local
         for r in self.local_reminders:
-            if r['status'] == 'pending':
+            if r.get('status') == 'pending':
                 all_rems.append({
                     "summary": r.get('text') or r.get('summary'),
                     "due": r.get('due') or r.get('datetime'),
                     "provider": "local",
                     "status": "pending"
                 })
-
+        
         return all_rems
 
-    async def check_async(self):
-        """
-        Background task to check for pending reminders.
-        Integration point for main.py scheduler.
-        """
-        now = datetime.now()
-        due = [r for r in self.local_reminders if r['status'] == 'pending' and datetime.fromisoformat(r['due']) <= now]
-        
-        for r in due:
-            r['status'] = 'triggered'
-            log("CALENDAR_REMINDER_TRIGGERED", text=r['text'], provider=r['provider'])
-            # Here we would trigger Genesi notifications
-            
-        return due
+    def add_event(self, title: str, dt: datetime, provider: str = 'detect'):
+        if provider == 'detect':
+            provider = 'apple' if self._icloud_user else 'google' if self._google_service else 'local'
 
-# Singleton instance
+        if provider == 'google':
+            return self._add_google(title, dt)
+        elif provider == 'apple' or provider == 'icloud':
+            return icloud_service.create_reminder(title, dt)
+        else:
+            return self._add_local(title, dt)
+
+    def _add_local(self, title, dt):
+        try:
+            reminder_entry = {
+                "id": len(self.local_reminders) + 1,
+                "text": title,
+                "due": dt.isoformat(),
+                "status": "pending",
+                "provider": "local"
+            }
+            self.local_reminders.append(reminder_entry)
+            log("LOCAL_REMINDER_CREATED", title=title)
+            return True
+        except: return False
+
+    def _add_google(self, title, dt):
+        if not self._google_service: 
+            return False
+        
+        # Assume Europe/Rome if naive
+        iso_str = dt.isoformat()
+        
+        event_body = {
+            'summary': title,
+            'start': {'dateTime': iso_str, 'timeZone': 'Europe/Rome'},
+            'end': {'dateTime': (dt + timedelta(hours=1)).isoformat(), 'timeZone': 'Europe/Rome'},
+        }
+        
+        try:
+            self._google_service.events().insert(calendarId='primary', body=event_body).execute()
+            log("GOOGLE_EVENT_CREATED", title=title)
+            return True
+        except Exception as e:
+            log("GOOGLE_EVENT_ERROR", error=str(e))
+            return False
+
+# Global instance
 calendar_manager = UnifiedCalendar()

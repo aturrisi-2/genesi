@@ -129,66 +129,60 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             await storage.save(f"profile:{user_id}", profile.model_dump(mode="json"))
             log("STORAGE_SAVE", key=f"profile:{user_id}")
 
-        # Deterministic Reminder Creation Handler (Smarter Version)
+        # Proactive Multi-Platform Reminder Creator
         intent = intent_classifier.classify(request.message)
         if intent == "reminder_create":
-            from core.icloud_reminder_creator import ICloudReminderCreator
-            import re, os, dateparser
+            from core.icloud_service import icloud_service
+            from calendar_manager import calendar_manager
             from dateparser.search import search_dates
+            import re, os
             
-            # 1. Trova la data nel messaggio usando dateparser.search (molto più robusto della regex)
+            # 1. Parsing robusto
             found = search_dates(request.message, languages=['it'], settings={'PREFER_DATES_FROM': 'future'})
-            
-            title = None
+            title = request.message
             due_date = None
             
             if found:
-                # Prendiamo l'ultima data trovata (di solito la più specifica)
-                date_text, due_date = found[-1]
-                
-                # 2. Estrai il titolo pulendo il messaggio
-                title = request.message
-                # Rimuovi la parte della data trovata
-                title = title.replace(date_text, "")
-                # Rimuovi verbi e keywords comuni (case-insensitive)
-                keywords = [
-                    "aggiungi", "metti", "crea", "un", "promemoria", "ricorda", "ricordami", 
-                    "di", "per", "il", "a", "alle", "ai", "al"
-                ]
-                for kw in keywords:
-                    title = re.sub(rf'(?i)\b{kw}\b', '', title)
-                
-                # Pulizia finale
-                title = re.sub(r'[:\-]', '', title).strip()
+                text_part, due_date = found[-1]
+                title = title.replace(text_part, "")
             
-            if title and due_date:
-                # Se il titolo è rimasto vuoto o troppo corto per errore di pulizia, usa il messaggio originale troncato
-                if len(title) < 2:
-                    title = request.message.split(":")[1].strip() if ":" in request.message else request.message
+            # Pulizia keywords
+            keywords = ["aggiungi", "metti", "crea", "un", "promemoria", "ricorda", "ricordami", "per", "il", "a", "alle", "ai", "di"]
+            for kw in keywords:
+                title = re.sub(rf'(?i)\b{kw}\b', '', title)
+            title = re.sub(r'[:\-]', '', title).strip()
+            
+            if not title or len(title) < 2:
+                title = request.message.split(":")[-1].strip() if ":" in request.message else request.message
                 
-                # Credenziali
-                user_creds = raw_profile.get('icloud_user') or os.environ.get("ICLOUD_USER")
-                pass_creds = raw_profile.get('icloud_password') or os.environ.get("ICLOUD_PASSWORD")
+            if due_date:
+                results = []
+                # a) iCloud (VTODO)
+                if icloud_service.username and icloud_service.password:
+                   if icloud_service.create_event(title, due_date, is_todo=True): results.append("iCloud ✅")
+                   else: results.append("iCloud ❌")
                 
-                if user_creds and pass_creds:
-                    creator = ICloudReminderCreator(user=user_creds, password=pass_creds)
-                    success = await creator.create_reminder(title, due_date)
-                    
-                    if success:
-                        response = f"✅ Promemoria creato su iCloud: '{title}' per {due_date.strftime('%d/%m %H:%M')}"
-                        # Log locale per persistenza
-                        from core.reminder_engine import reminder_engine
-                        reminder_engine.create_reminder(user_id, title, due_date)
-                        chat_memory.add_message(user_id, request.message, response, intent)
-                    else:
-                        response = f"❌ Errore durante la creazione su iCloud. Ho comunque salvato il promemoria localmente: '{title}'"
-                        from core.reminder_engine import reminder_engine
-                        reminder_engine.create_reminder(user_id, title, due_date)
-                else:
-                    response = "❌ Account iCloud non configurato. Non posso salvare il promemoria online."
+                # b) Google
+                if calendar_manager._google_service:
+                    if calendar_manager.add_event(title, due_date, provider='google'): results.append("Google ✅")
+                    else: results.append("Google ❌")
+                
+                # c) Locale (Sempre)
+                from core.reminder_engine import reminder_engine
+                reminder_engine.create_reminder(user_id, title, due_date)
+                results.append("Local 💾")
+                
+                status_str = ", ".join(results)
+                response = f"✅ Promemoria impostato: '{title}' per il {due_date.strftime('%d/%m %H:%M')}.\nSalvataggio: {status_str}"
+                chat_memory.add_message(user_id, request.message, response, intent)
             else:
-                # Fallback al Proactor se il parsing fallisce
                 response = await simple_chat_handler(user_id, request.message, request.conversation_id)
+        elif intent == "reminder_list":
+             from core.reminder_engine import reminder_engine
+             rems = await reminder_engine.list_reminders(user_id, status_filter="pending", include_icloud=True)
+             if not rems: response = "Non ho trovato nessun impegno o promemoria."
+             else: response = "Ecco i tuoi impegni aggiornati:\n" + reminder_engine.format_reminders_list(rems)
+             chat_memory.add_message(user_id, request.message, response, intent)
         else:
             response = await simple_chat_handler(user_id, request.message, request.conversation_id)
         

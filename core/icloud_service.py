@@ -22,7 +22,7 @@ class ICloudService:
         Richiede una 'Password specifica per le app' generata su appleid.apple.com.
         """
         self.username = username or os.environ.get("ICLOUD_USER")
-        self.password = password or os.environ.get("ICLOUD_PASSWORD")
+        self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
         
         if self.username and self.password:
@@ -32,8 +32,6 @@ class ICloudService:
         """Stabilisce la connessione CalDAV usando l'endpoint ufficiale e un User-Agent credibile."""
         try:
             url = "https://caldav.icloud.com"
-            # Importante: Apple blocca o limita i client che non sembrano 'ufficiali' 
-            # o che non dichiarano un User-Agent standard di un dispositivo Apple.
             self.client = caldav.DAVClient(
                 url=url,
                 username=self.username,
@@ -53,23 +51,17 @@ class ICloudService:
             return False
 
     def validate_credentials(self) -> bool:
-        """Verifica se le credenziali (App-Specific Password) sono corrette."""
+        """Verifica se le credenziali sono corrette."""
         try:
             if not self.client:
                 if not self._connect(): return False
-            try:
-                principal = self.client.principal()
-                return principal is not None
-            except Exception:
-                return False
-        except Exception:
+            principal = self.client.principal()
+            return principal is not None
+        except:
             return False
 
     def get_events(self, days: int = 7) -> List[Dict[str, Any]]:
-        """
-        Recupera gli eventi (VEVENT) da tutte le liste di iCloud usando CalDAV.
-        iCloud supporta VEVENT in modo molto più stabile rispetto a VTODO su alcuni endpoint.
-        """
+        """Recupera gli eventi (VEVENT) da tutte le liste di iCloud."""
         if not self.client:
             if not self._connect(): return []
 
@@ -79,33 +71,22 @@ class ICloudService:
             calendars = principal.calendars()
             
             now = datetime.datetime.now()
-            start_dt = now - datetime.timedelta(hours=1) # Leggera tolleranza
+            start_dt = now - datetime.timedelta(hours=1)
             end_dt = now + datetime.timedelta(days=days)
             
-            scanned_count = 0
             for calendar in calendars:
                 try:
                     name = getattr(calendar, 'name', 'Senza nome')
                     url = str(calendar.url).lower()
-                    
-                    if any(x in url for x in ["inbox", "outbox", "notification"]):
-                        continue
+                    if any(x in url for x in ["inbox", "outbox", "notification"]): continue
 
-                    scanned_count += 1
-                    log("ICLOUD_CALDAV_LIST_CHECK", name=name)
-                    
-                    # Recupera eventi (VEVENT) - RANGE FILTERED
                     events = []
                     try:
-                        # iCloud supporta date_search per filtrare lato server
                         events = calendar.date_search(start=start_dt, end=end_dt)
-                    except Exception as e:
-                        log("ICLOUD_CALDAV_EVENTS_ERR", name=name, error=str(e))
-                        # Fallback a all events se date_search fallisce
+                    except:
                         try: events = calendar.events()
                         except: continue
 
-                    found_on_this_list = 0
                     for event in events:
                         try:
                             v = readOne(event.data)
@@ -118,17 +99,12 @@ class ICloudService:
                             dtstart = None
                             if hasattr(item, 'dtstart'):
                                 val = item.dtstart.value
-                                # Saltiamo se l'evento è già passato (doppio controllo)
-                                if isinstance(val, (datetime.datetime, datetime.date)):
-                                    # Convert date to datetime if needed
-                                    cmp_dt = val if isinstance(val, datetime.datetime) else datetime.datetime.combine(val, datetime.time())
-                                    # Fix tz-naive vs tz-aware
-                                    if cmp_dt.tzinfo is None:
-                                        if cmp_dt < datetime.datetime.now(): continue
-                                    else:
-                                        if cmp_dt < datetime.datetime.now(cmp_dt.tzinfo): continue
-                                        
-                                    dtstart = val.isoformat()
+                                cmp_dt = val if isinstance(val, datetime.datetime) else datetime.datetime.combine(val, datetime.time())
+                                if cmp_dt.tzinfo is None:
+                                    if cmp_dt < now: continue
+                                else:
+                                    if cmp_dt < now.astimezone(cmp_dt.tzinfo): continue
+                                dtstart = val.isoformat()
 
                             if not dtstart: continue
 
@@ -138,88 +114,112 @@ class ICloudService:
                                 "status": "pending",
                                 "due": dtstart,
                                 "list": name,
-                                "source": "icloud"
+                                "source": "icloud",
+                                "type": "event"
                             })
-                            found_on_this_list += 1
                         except: continue
-                    
-                    if found_on_this_list > 0:
-                        log("ICLOUD_CALDAV_EVENT_FOUND", name=name, count=found_on_this_list)
-
-                    if scanned_count >= 10: break
-                        
-                except Exception as e: 
-                    log("ICLOUD_CALDAV_LOOP_ERR", error=str(e))
-                    continue
-
-            log("ICLOUD_CALDAV_SYNC_SUCCESS", count=len(all_events), user=self.username)
+                except: continue
             return all_events
-
-        except Exception as e:
-            log("ICLOUD_CALDAV_FETCH_ERROR", user=self.username, error=str(e), level="ERROR")
+        except:
             return []
 
-    def create_event(self, text: str, dt: datetime.datetime) -> bool:
-        """Crea un nuovo evento (VEVENT) direttamente su iCloud."""
+    def get_vtodo(self, days: int = 7) -> List[Dict[str, Any]]:
+        """Recupera i promemoria (VTODO) da iCloud."""
         if not self.client:
-            if not self._connect(): return False
-            
+            if not self._connect(): return []
+
+        all_todos = []
         try:
             principal = self.client.principal()
             calendars = principal.calendars()
+            now = datetime.datetime.now()
             
-            # Trova un calendario adatto (priorità a liste scrivibili come Promemoria/Reminders)
+            for calendar in calendars:
+                try:
+                    name = getattr(calendar, 'name', 'Senza nome')
+                    todos = calendar.todos()
+                    for todo in todos:
+                        try:
+                            v = readOne(todo.data)
+                            item = getattr(v, 'vtodo', None)
+                            if not item: continue
+                            
+                            if hasattr(item, 'status') and str(item.status.value).upper() == 'COMPLETED': continue
+                            
+                            summary = str(item.summary.value) if hasattr(item, 'summary') else "Senza titolo"
+                            guid = str(item.uid.value) if hasattr(item, 'uid') else None
+                            
+                            due_dt = None
+                            if hasattr(item, 'due'): due_dt = item.due.value
+                            elif hasattr(item, 'dtstart'): due_dt = item.dtstart.value
+                            
+                            if due_dt:
+                                cmp_dt = due_dt if isinstance(due_dt, datetime.datetime) else datetime.datetime.combine(due_dt, datetime.time())
+                                if cmp_dt.tzinfo is None:
+                                    if cmp_dt < now - datetime.timedelta(days=1): continue
+                                else:
+                                    if cmp_dt < now.astimezone(cmp_dt.tzinfo) - datetime.timedelta(days=1): continue
+                                due_str = due_dt.isoformat()
+                            else:
+                                due_str = None
+
+                            all_todos.append({
+                                "guid": guid,
+                                "summary": summary,
+                                "status": "pending",
+                                "due": due_str,
+                                "list": name,
+                                "source": "icloud",
+                                "type": "todo"
+                            })
+                        except: continue
+                except: continue
+            return all_todos
+        except:
+            return []
+
+    def get_all_items(self, days: int = 7) -> List[Dict[str, Any]]:
+        """Cerca tutto: Eventi + Promemoria."""
+        return self.get_vtodo(days) + self.get_events(days)
+
+    def create_event(self, text: str, dt: datetime.datetime, is_todo: bool = True) -> bool:
+        """Crea un nuovo elemento iCloud."""
+        if not self.client:
+            if not self._connect(): return False
+        try:
+            principal = self.client.principal()
+            calendars = principal.calendars()
             target_cal = None
-            
-            # 1. Cerca "Promemoria" o "Reminders" (tipicamente scrivibili)
             for cal in calendars:
                 name = getattr(cal, 'name', '').lower()
-                if "promemoria" in name or "reminders" in name:
+                if any(x in name for x in ["promemoria", "reminders"]):
                     target_cal = cal
                     break
-
-            # 2. Se non trovato, cerca un calendario generico non di sistema
-            if not target_cal:
-                for cal in calendars:
-                    url = str(cal.url).lower()
-                    if not any(x in url for x in ["inbox", "outbox", "notification"]):
-                        target_cal = cal
-                        break
-            
-            if not target_cal and calendars:
-                target_cal = calendars[0]
-                
+            if not target_cal and calendars: target_cal = calendars[0]
             if not target_cal: return False
 
             import vobject
-            cal = vobject.iCalendar()
-            cal.add('prodid').value = "-//Apple Inc.//Mac OS X 10.15.7//EN"
-            
-            event = cal.add('vevent')
-            event.add('uid').value = str(uuid.uuid4()).upper()
-            event.add('summary').value = text
-            
-            now = datetime.datetime.utcnow()
-            event.add('dtstamp').value = now
-            event.add('dtstart').value = dt
-            event.add('dtend').value = dt + datetime.timedelta(hours=1)
-            
-            ical_str = cal.serialize()
-            
-            log("ICLOUD_EVENT_SENDING", list=getattr(target_cal, 'name', 'Unknown'), text=text)
-            target_cal.add_event(ical_str)
-            log("ICLOUD_EVENT_CREATED", text=text, list=getattr(target_cal, 'name', 'Unknown'))
+            cal_v = vobject.iCalendar()
+            if is_todo:
+                item = cal_v.add('vtodo')
+                item.add('summary').value = text
+                item.add('due').value = dt
+            else:
+                item = cal_v.add('vevent')
+                item.add('summary').value = text
+                item.add('dtstart').value = dt
+                item.add('dtend').value = dt + datetime.timedelta(hours=1)
+                
+            item.add('uid').value = str(uuid.uuid4()).upper()
+            item.add('dtstamp').value = datetime.datetime.utcnow()
+            target_cal.add_event(cal_v.serialize())
+            log("ICLOUD_ITEM_CREATED", type="todo" if is_todo else "event", text=text)
             return True
         except Exception as e:
-            log("ICLOUD_EVENT_CREATE_ERROR", error=str(e), level="ERROR")
+            log("ICLOUD_CREATE_ERROR", error=str(e))
             return False
 
-    # Manteniamo compatibilità per ora o facciamo alias
-    def get_reminders(self, *args, **kwargs):
-        return self.get_events()
-    
-    def create_reminder(self, text, dt, *args, **kwargs):
-        return self.create_event(text, dt)
+    def get_reminders(self, days: int = 7): return self.get_all_items(days)
+    def create_reminder(self, text, dt): return self.create_event(text, dt, is_todo=True)
 
-# Istanza globale
 icloud_service = ICloudService()

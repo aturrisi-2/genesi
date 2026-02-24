@@ -172,57 +172,39 @@ class ReminderEngine:
 
     async def fetch_icloud_reminders(self, user_id: str, list_name: str = "Promemoria", force: bool = False) -> List[Dict[str, Any]]:
         """
-        Fetch reminders from iCloud and MERGE them into local storage.
-        Returns only the newly added reminders.
+        Fetch reminders from iCloud (VTODO + VEVENT) and MERGE them into local storage.
         """
-        # --- PERFORMANCE OPTIMIZATION: SYNC COOLDOWN ---
         profile = await storage.load(f"profile:{user_id}", default={})
         last_sync = profile.get("last_icloud_sync")
         now_ts = datetime.now().timestamp()
         
-        # Se non forzato, non sincronizzare se l'ultima è stata meno di 30 secondi fa
         if not force and last_sync and (now_ts - last_sync < 30):
-            log("ICLOUD_SYNC_SKIPPED", user_id=user_id, reason="cooldown", 
-                remaining=int(30 - (now_ts - last_sync)))
             return []
 
         svc = await self._get_icloud_service(user_id)
-        if not svc:
-            return []
+        if not svc: return []
         
         try:
-            # Sincronizziamo eventi (VEVENT) invece di Reminders (VTODO) per stabilità
-            icloud_data = svc.get_events()
-            
-            # Aggiorna timestamp ultima sync (anche se non ci sono dati nuovi, per evitare loop)
+            # Sincronizzazione cumulativa (VTODO + VEVENT)
+            icloud_data = svc.get_all_items()
             profile["last_icloud_sync"] = now_ts
             await storage.save(f"profile:{user_id}", profile)
             
-            if not icloud_data:
-                return []
+            if not icloud_data: return []
 
-            # Carichiamo i locali per il merge
             local_reminders = self._load_reminders(user_id)
             existing_guids = {r.get("id") for r in local_reminders}
             
-            now_iso = datetime.now().isoformat()
             new_added = []
             for item in icloud_data:
-                # Creiamo un ID stabile per iCloud usando il GUID
                 guid = item.get('guid')
                 reminder_id = f"icloud_{guid}" if guid else f"icloud_{uuid.uuid4()}"
                 
-                # --- PROTEZIONE EVENTI PASSATI ---
-                due_date = item.get('due')
-                if not due_date or due_date < now_iso:
-                    log("ICLOUD_SYNC_SKIP_OLD", user_id=user_id, guid=guid, due=due_date)
-                    continue
-
                 if reminder_id not in existing_guids:
                     new_item = {
                         "id": reminder_id,
                         "text": item.get('summary', 'Senza titolo'),
-                        "datetime": due_date,
+                        "datetime": item.get('due'),
                         "status": "pending",
                         "source": "icloud",
                         "list": item.get('list', 'iCloud')
@@ -231,37 +213,55 @@ class ReminderEngine:
                     new_added.append(new_item)
             
             if new_added:
-                # Sort per data (None alla fine)
                 local_reminders.sort(key=lambda r: (r.get("datetime") is None, r.get("datetime") or ""))
                 self._save_reminders(user_id, local_reminders)
                 log("REMINDER_ICLOUD_MERGED", user_id=user_id, new_count=len(new_added))
             
             return new_added
-            
         except Exception as e:
             log("ICLOUD_FETCH_ERROR", user_id=user_id, error=str(e))
             return []
 
-    async def list_reminders(self, user_id: str, status_filter: Optional[str] = None, include_icloud: bool = False) -> List[Dict[str, Any]]:
+    async def list_reminders(self, user_id: str, status_filter: Optional[str] = None, include_icloud: bool = True) -> List[Dict[str, Any]]:
         """
-        List reminders for a user. 
-        include_icloud=False di default per evitare congestione durante il polling.
+        List unified reminders: Local + iCloud + Google.
         """
         try:
-            # Se richiesto iCloud, facciamo il fetch reale
+            # 1. Fetch iCloud (VTODO + VEVENT)
             if include_icloud:
                 await self.fetch_icloud_reminders(user_id)
 
-            # Leggiamo sempre dal file locale (che ora contiene anche quelli di iCloud syncati)
+            # 2. Fetch Google (if active)
+            google_items = []
+            try:
+                from calendar_manager import calendar_manager
+                google_items = calendar_manager.list_reminders(days=7)
+            except: pass
+
+            # 3. Load from local (includes iCloud synced items)
             reminders = self._load_reminders(user_id)
             
             if status_filter:
                 reminders = [r for r in reminders if r.get("status") == status_filter]
+                
+            # 4. Merge Google items (preventing duplicates with local/icloud)
+            existing_hashes = {f"{r['text'].lower()}_{r.get('datetime')}" for r in reminders if r.get('text')}
             
-            # Sort per data (None alla fine)
+            for gi in google_items:
+                summary = gi.get('summary')
+                due = gi.get('due')
+                item_hash = f"{summary.lower()}_{due}"
+                if item_hash not in existing_hashes:
+                    reminders.append({
+                        "text": summary,
+                        "datetime": due,
+                        "source": "google",
+                        "status": "pending"
+                    })
+                    existing_hashes.add(item_hash)
+            
             reminders.sort(key=lambda r: (r.get("datetime") is None, r.get("datetime") or ""))
-            
-            log("REMINDER_LIST", user_id=user_id, count=len(reminders), status_filter=status_filter)
+            log("REMINDER_LIST_UNIFIED", user_id=user_id, count=len(reminders))
             return reminders
             
         except Exception as e:
