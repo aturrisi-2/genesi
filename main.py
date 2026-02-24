@@ -38,6 +38,7 @@ from auth.models import Visit
 from core.log import log
 from core.reminder_engine import reminder_engine
 from lab.supervisor import SupervisorEngine
+from calendar_manager import calendar_manager
 
 # ===============================
 # Applicazione FastAPI
@@ -54,21 +55,26 @@ async def lifespan(app: FastAPI):
     # Start reminder checker background task
     reminder_task = asyncio.create_task(reminder_checker_background())
     
-    # Start evolution scheduler (12 hours)
-    evolution_task = asyncio.create_task(evolution_scheduler())
+    # Start calendar checker background task (5 min)
+    calendar_task = asyncio.create_task(calendar_checker_background())
+    
     log("REMINDER_CHECKER_STARTED", status="ok")
+    log("CALENDAR_CHECKER_STARTED", status="ok")
     
     yield  # ← app in esecuzione
     
     # SHUTDOWN
     reminder_task.cancel()
     evolution_task.cancel()
+    calendar_task.cancel()
     try:
         await reminder_task
         await evolution_task
+        await calendar_task
     except asyncio.CancelledError:
         pass
     log("REMINDER_CHECKER_STOPPED", status="ok")
+    log("CALENDAR_CHECKER_STOPPED", status="ok")
 
 app = FastAPI(title="Genesi Core v2 - Proactor Architecture", redirect_slashes=False, lifespan=lifespan)
 
@@ -174,6 +180,34 @@ async def reminder_checker_background():
             log("REMINDER_CHECKER_ERROR", error=str(e))
             # Wait 30 seconds even on error
             await asyncio.sleep(30)
+
+
+async def calendar_checker_background():
+    """
+    Background task that checks for calendar reminders every 5 minutes.
+    """
+    while True:
+        try:
+            due_events = await calendar_manager.check_async()
+            
+            if due_events:
+                log("CALENDAR_EVENTS_DUE", count=len(due_events))
+                for event in due_events:
+                    # Notifica (print and potentially push)
+                    print(f"🔔 CALENDAR NOTIFICATION: {event['text']}")
+                    
+                    # Integration with push notifications if available
+                    try:
+                        from api.push import send_push_notification
+                        # Mocking user_id for now or getting from event
+                        # asyncio.create_task(send_push_notification("System", f"Calendario: {event['text']}"))
+                    except ImportError:
+                        pass
+
+            await asyncio.sleep(300) # 5 minuti
+        except Exception as e:
+            log("CALENDAR_CHECKER_ERROR", error=str(e))
+            await asyncio.sleep(60)
 
 
 async def evolution_scheduler():

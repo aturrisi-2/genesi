@@ -45,6 +45,37 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
 
         log("API_CHAT", message=request.message[:100], user_id=user_id)
 
+        # Handle commands like /cal
+        if request.message.startswith("/cal"):
+            from calendar_manager import calendar_manager
+            from datetime import datetime
+            parts = request.message.split(" ", 2)
+            if len(parts) < 2:
+                response = "Usa: /cal [provider] [titolo] [data ISO]\nEsempio: /cal apple \"Cena\" 2026-03-01T20:00:00"
+            else:
+                # Basic command: /cal apple "Evento" 2026-03-01T10:00:00
+                cmd_parts = request.message.split(" ")
+                provider = cmd_parts[1] if len(cmd_parts) > 1 else "detect"
+                
+                # Try to extract title and date
+                # We'll use a simple approach for this urgent task
+                try:
+                    msg = request.message
+                    if '"' in msg:
+                        title = msg.split('"')[1]
+                        dt_str = msg.split('"')[2].strip()
+                    else:
+                        title = cmd_parts[2] if len(cmd_parts) > 2 else "Evento"
+                        dt_str = cmd_parts[3] if len(cmd_parts) > 3 else datetime.now().isoformat()
+                    
+                    dt = datetime.fromisoformat(dt_str)
+                    success = calendar_manager.add_event(title, dt, provider)
+                    response = f"✅ Evento '{title}' aggiunto a {provider}!" if success else f"❌ Errore aggiunta a {provider}."
+                except Exception as e:
+                    response = f"⚠️ Errore: {str(e)}. Usa: /cal apple \"Titolo\" 2026-03-01T10:00:00"
+            
+            return ChatResponse(response=response, status="ok", intent="calendar", user_id=user_id)
+
         # Cognitive Memory Evaluation
         cognitive_engine = CognitiveMemoryEngine()
         decision = await cognitive_engine.evaluate_event(user_id, request.message, {})
