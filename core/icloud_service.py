@@ -166,7 +166,7 @@ class ICloudService:
                         try:
                             # Filtriamo noi per capire se è un VTODO
                             data = todo.data
-                            if 'VTODO' not in data: continue
+                            if not data or 'VTODO' not in data: continue
                             
                             v = readOne(data)
                             # Supporta sia vtodo che VTODO
