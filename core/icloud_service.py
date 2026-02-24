@@ -24,6 +24,7 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
+        log("ICLOUD_SERVICE_VERSION", version="2.2")
         
         if self.username and self.password:
             self._connect()
@@ -150,8 +151,9 @@ class ICloudService:
                     todos = []
                     try:
                         todos = calendar.todos()
-                    except:
-                        # Molti calendari (es: quelli degli eventi) non supportano .todos()
+                    except Exception as te:
+                        # Logghiamo l'errore per capire perché fallisce (permessi, tipo di cal, etc)
+                        log("ICLOUD_TODO_ERROR", name=name, error=str(te), level="DEBUG")
                         continue
                         
                     if not todos:
