@@ -161,11 +161,11 @@ class IntentClassifier:
                 log("INTENT_CLASSIFIED", intent="google_setup", user_id=user_id, engine="regex_robust", message=message[:50])
                 return "google_setup"
         
-        if "icloud" in message_lower:
+        if "icloud" in message_lower or "apple" in message_lower:
             if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "scarica", "importa"]):
                 log("INTENT_CLASSIFIED", intent="icloud_sync", user_id=user_id, engine="regex_robust", message=message[:50])
                 return "icloud_sync"
-            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login"]):
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login", "salva", "usa", "account", "user", "email"]):
                 log("INTENT_CLASSIFIED", intent="icloud_setup", user_id=user_id, engine="regex_robust", message=message[:50])
                 return "icloud_setup"
 
@@ -380,16 +380,16 @@ class IntentClassifier:
         message_lower = message.lower().strip()
         
         # 0️⃣ Parole chiave iCloud → forza icloud_sync / icloud_setup
-        if "icloud" in message_lower:
+        if any(kw in message_lower for kw in ["icloud", "apple"]):
             if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "importa", "scarica"]):
                 return "icloud_sync"
-            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login"]):
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login", "salva", "usa", "account", "user", "email"]):
                 return "icloud_setup"
         
         if "google" in message_lower:
             if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "scarica"]):
                 return "google_sync"
-            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login"]):
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login", "salva", "usa", "account", "user", "email"]):
                 return "google_setup"
                 
         forced_intent = False

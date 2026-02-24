@@ -147,8 +147,10 @@ class Proactor:
     """
 
     def __init__(self):
+        self.latent_state_engine = latent_state_engine
         self.tool_intents = ["weather", "news", "time", "date"]
         self.context_assembler = ContextAssembler(memory_brain, latent_state_engine)
+        self.last_reminder_per_user = {} # {user_id: {"text": str, "dt": datetime}}
         logger.info("PROACTOR_V4_ACTIVE routers=identity,tool,relational,knowledge default_model=%s", LLM_DEFAULT_MODEL)
 
     # ═══════════════════════════════════════════════════════════════
@@ -656,6 +658,9 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 # Creazione LOCALE
                 reminder_id, response = reminder_engine.create_reminder_with_response(user_id, reminder_text, reminder_datetime)
                 
+                # Salva in sessione per follow-up (es. "Aggiungilo a Google")
+                self.last_reminder_per_user[user_id] = {"text": reminder_text, "dt": reminder_datetime}
+                
                 # 3. CREAZIONE CLOUD (Automatica se configurato)
                 # Creazione ICLOUD
                 profile = await storage.load(f"profile:{user_id}", default={})
@@ -938,8 +943,19 @@ Messaggio: {message}"""
             return "Problema tecnico durante la configurazione di iCloud. Riprova più tardi."
 
     async def _handle_icloud_sync(self, user_id: str, message: str) -> str:
-        """Sincronizza i promemoria iCloud immediatamente."""
+        """Sincronizza i promemoria iCloud o aggiunge l'ultimo creato."""
         try:
+            msg_lower = message.lower()
+            
+            # Caso follow-up: "Aggiungilo a iCloud"
+            if any(kw in msg_lower for kw in ["aggiungi", "salva", "metti", "scrivi"]) and user_id in self.last_reminder_per_user:
+                last_rem = self.last_reminder_per_user[user_id]
+                success = await reminder_engine.create_icloud_reminder(user_id, last_rem["text"], last_rem["dt"])
+                if success:
+                    return f"Fatto! Ho aggiunto '{last_rem['text']}' al tuo account iCloud."
+                else:
+                    return "Non sono riuscito a scriverlo su iCloud. Verifica la configurazione."
+
             # Forza fetch da iCloud
             reminders = await reminder_engine.fetch_icloud_reminders(user_id)
             if reminders:
@@ -1879,8 +1895,19 @@ Messaggio utente: {message}"""
         return "Per configurare Google Calendar, Genesi ha bisogno che tu autorizzi l'accesso tramite il browser sul server. Una volta completato il login, i tuoi eventi verranno sincronizzati automaticamente."
 
     async def _handle_google_sync(self, user_id, message):
-        """Sincronizza manualmente Google Calendar."""
+        """Sincronizza manualmente Google Calendar o aggiunge l'ultimo incarico."""
         from calendar_manager import calendar_manager
+        msg_lower = message.lower()
+        
+        # Caso follow-up: "Aggiungilo a Google"
+        if any(kw in msg_lower for kw in ["aggiungi", "salva", "metti", "scrivi"]) and user_id in self.last_reminder_per_user:
+            last_rem = self.last_reminder_per_user[user_id]
+            success = calendar_manager.add_event(last_rem["text"], last_rem["dt"], provider='google')
+            if success:
+                return f"Certamente! Ho aggiunto '{last_rem['text']}' al tuo Google Calendar."
+            else:
+                return "C'è stato un errore nell'aggiunta al calendario Google."
+
         # Il setup_google viene chiamato all'init del manager
         if calendar_manager._google_service:
             return "Sincronizzazione Google Calendar completata."
