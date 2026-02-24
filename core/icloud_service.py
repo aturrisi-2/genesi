@@ -36,14 +36,19 @@ class ICloudService:
                 url=url,
                 username=self.username,
                 password=self.password,
-                timeout=30
+                timeout=60
             )
             # Simuliamo un client iOS/macOS per maggiore stabilità
             self.client.session.headers.update({
                 'User-Agent': 'iOS/17.0 (21A329) Reminders/1.0',
                 'Accept': 'text/xml',
-                'Prefer': 'return=minimal'
+                'Prefer': 'return=minimal',
+                'Connection': 'keep-alive'
             })
+            # Ottimizzazione sessione per evitare timeout su liste lunghe
+            adapter = self.client.session.get_adapter('https://')
+            adapter.pool_connections = 10
+            adapter.pool_maxsize = 20
             log("ICLOUD_CALDAV_CONNECT", user=self.username, endpoint="standard_masqueraded")
             return True
         except Exception as e:

@@ -102,7 +102,8 @@ class IntentClassifier:
                 "i miei promemoria", "mostra promemoria", "elenco appuntamenti",
                 "promemoria attivi", "appuntamenti impostati", "ricordami i promemoria",
                 "appuntamenti ho", "quali appuntamenti", "cosa ho da fare", "miei impegni",
-                "agenda di oggi", "agenda di domani", "cosa ho in agenda"
+                "agenda di oggi", "agenda di domani", "cosa ho in agenda", "cosa devo fare",
+                "cosa ho da fare oggi", "cosa ho da fare domani"
             ],
             "reminder_delete": [
                 "cancella promemoria", "cancella tutti i promemoria", "elimina promemoria",
