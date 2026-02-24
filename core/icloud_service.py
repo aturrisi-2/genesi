@@ -103,8 +103,33 @@ class ICloudService:
                     scanned_count += 1
                     log("ICLOUD_CALDAV_LIST_CHECK", name=name)
                     
-                    # REPORT query limitata per prestazioni
-                    todos = calendar.todos(include_completed=False)
+                    # 1. TENTA IL METODO VELOCE
+                    todos = []
+                    try:
+                        todos = calendar.todos(include_completed=False)
+                    except:
+                        log("ICLOUD_CALDAV_TODOS_ERR", name=name)
+
+                    # 2. FALLBACK SE VUOTO: Filtro manuale oggetti
+                    if not todos:
+                        try:
+                            # Filtro XML manuale per VTODO
+                            todos = calendar.objects_by_filter({
+                                "comp_filter": {
+                                    "name": "VCALENDAR",
+                                    "comp_filter": {
+                                        "name": "VTODO",
+                                        "prop_filter": {
+                                            "name": "STATUS",
+                                            "text_match": {"negate-condition": "yes", "text": "COMPLETED"}
+                                        }
+                                    }
+                                }
+                            })
+                            if todos: log("ICLOUD_CALDAV_FALLBACK_OK", name=name, count=len(todos))
+                        except Exception as e:
+                            log("ICLOUD_CALDAV_FILTER_ERR", error=str(e))
+
                     found_on_this_list = 0
                     for todo in todos:
                         try:
@@ -121,7 +146,7 @@ class ICloudService:
                             
                             due_iso = None
                             # Fallback chain for due date: DUE -> DTSTART -> created
-                            for attr in ['due', 'dtstart', 'created']:
+                            for attr in ['due', 'dtstart', 'created', 'last-modified']:
                                 if hasattr(task, attr):
                                     val = getattr(task, attr).value
                                     if isinstance(val, (datetime.datetime, datetime.date)):
@@ -143,10 +168,12 @@ class ICloudService:
                         log("ICLOUD_CALDAV_PRIORITY_EXIT", name=name, count=found_on_this_list)
                         break
                     
-                    if scanned_count >= 5: # Massimo 5 liste totali se non prioritarie
+                    if scanned_count >= 6: # Leggermente più tollerante
                         break
                         
-                except: continue
+                except Exception as e: 
+                    log("ICLOUD_CALDAV_LOOP_ERR", error=str(e))
+                    continue
 
             log("ICLOUD_CALDAV_SYNC_SUCCESS", count=len(all_reminders), user=self.username)
             return all_reminders
@@ -156,7 +183,7 @@ class ICloudService:
             return []
 
     def create_reminder(self, text: str, due_dt: Optional[datetime.datetime] = None, list_name: str = "Promemoria") -> bool:
-        """Crea un nuovo promemoria direttamente su iCloud."""
+        """Crea un nuovo promemoria direttamente su iCloud con formato compatibile Apple (CRLF e VALARM)."""
         if not self.client:
             if not self._connect(): return False
             
@@ -173,7 +200,6 @@ class ICloudService:
                     break
             
             if not target_cal and calendars:
-                # Cerca una lista generica che non sia di sistema
                 for cal in calendars:
                     url = str(cal.url).lower()
                     if not any(x in url for x in ["inbox", "outbox", "notification"]):
@@ -182,35 +208,46 @@ class ICloudService:
                 
             if not target_cal: return False
 
-            # Genera UID e timestamp (FORMATO ICAL CORRETTO)
+            # Genera UID e timestamp (FORMATO ICAL COMPATIBILE APPLE)
             uid = str(uuid.uuid4()).upper()
             now_utc = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
             
-            # Formatta iCalendar
+            # iCalendar richiede CRLF (\r\n) per specifica RFC 5545
+            # Aggiungiamo CREATED, LAST-MODIFIED e VALARM
             ical = [
                 "BEGIN:VCALENDAR",
                 "VERSION:2.0",
-                "PRODID:-//Genesi AI//NONSGML v1.0//EN",
+                "PRODID:-//Apple Inc.//Mac OS X 10.15.7//EN",
                 "BEGIN:VTODO",
                 f"UID:{uid}",
                 f"DTSTAMP:{now_utc}",
-                f"SUMMARY:{text}"
+                f"CREATED:{now_utc}",
+                f"LAST-MODIFIED:{now_utc}",
+                f"SUMMARY:{text}",
+                "STATUS:NEEDS-ACTION",
+                "SEQUENCE:0"
             ]
             
             if due_dt:
-                # Per iCloud, se non specifichiamo TZID, usiamo UTC (Z)
-                # Oppure usiamo floating time (senza Z) se vogliamo che appaia all'ora locale del dispositivo
                 dt_str = due_dt.strftime("%Y%m%dT%H%M%S")
-                # iCloud preferisce DTSTART e DUE coerenti
                 ical.append(f"DTSTART:{dt_str}")
                 ical.append(f"DUE:{dt_str}")
+                # Aggiungiamo un allarme 5 minuti prima
+                ical.append("BEGIN:VALARM")
+                ical.append("ACTION:DISPLAY")
+                ical.append("DESCRIPTION:Reminder")
+                ical.append("TRIGGER:-PT15M") # 15 min prima
+                ical.append("END:VALARM")
             else:
                 ical.append(f"DTSTART:{now_utc}")
                 
             ical.append("END:VTODO")
             ical.append("END:VCALENDAR")
             
-            target_cal.add_todo("\n".join(ical))
+            # Uniamo con CRLF
+            ical_str = "\r\n".join(ical) + "\r\n"
+            
+            target_cal.add_todo(ical_str)
             log("ICLOUD_REMINDER_CREATED", text=text, list=getattr(target_cal, 'name', 'Unknown'))
             return True
         except Exception as e:

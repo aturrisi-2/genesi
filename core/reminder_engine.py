@@ -161,10 +161,10 @@ class ReminderEngine:
         last_sync = profile.get("last_icloud_sync")
         now_ts = datetime.now().timestamp()
         
-        # Se non forzato, non sincronizzare se l'ultima è stata meno di 5 minuti fa
-        if not force and last_sync and (now_ts - last_sync < 300):
+        # Se non forzato, non sincronizzare se l'ultima è stata meno di 30 secondi fa
+        if not force and last_sync and (now_ts - last_sync < 30):
             log("ICLOUD_SYNC_SKIPPED", user_id=user_id, reason="cooldown", 
-                remaining=int(300 - (now_ts - last_sync)))
+                remaining=int(30 - (now_ts - last_sync)))
             return []
 
         svc = await self._get_icloud_service(user_id)
