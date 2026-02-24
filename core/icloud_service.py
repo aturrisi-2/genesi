@@ -24,7 +24,7 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="2.6")
+        log("ICLOUD_SERVICE_VERSION", version="2.7")
         
         if self.username and self.password:
             self._connect()
@@ -169,6 +169,13 @@ class ICloudService:
                     
                     for todo in todos:
                         try:
+                            # Carichiamo i dati se il proxy è vuoto
+                            if not hasattr(todo, 'data') or not todo.data:
+                                try:
+                                    todo.load()
+                                except:
+                                    continue
+
                             raw_data = todo.data
                             if not raw_data: continue
                             
