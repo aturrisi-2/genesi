@@ -66,7 +66,7 @@ IDENTITY_TRIGGERS = [
     "cosa mi piace", "che musica mi piace", "quali sono i miei interessi",
     "quali sono le mie preferenze", "come sono", "che tipo di persona sono",
     "quale frutto mi piace", "cosa sai di me", "account collegati", 
-    "miei account", "quali account ho", "i miei account"
+    "miei account", "quali account ho", "i miei account", "e icloud", "e google"
 ]
 
 RELATIONAL_TRIGGERS = [
@@ -91,7 +91,14 @@ SKIP_RELATIONAL_INTENTS = ["tecnica", "debug", "spiegazione"]
 def is_identity_question(message: str) -> bool:
     """Rileva domande sull'identita' dell'utente. Deterministico, zero GPT."""
     msg_lower = message.lower().strip()
-    return any(trigger in msg_lower for trigger in IDENTITY_TRIGGERS)
+    if any(trigger in msg_lower for trigger in IDENTITY_TRIGGERS):
+        return True
+    
+    # Elliptical follow-ups for accounts
+    if msg_lower.startswith("e ") or msg_lower.startswith("invece "):
+        return any(kw in msg_lower for kw in ["icloud", "google", "apple", "account", "calendario"])
+    
+    return False
 
 
 def is_relational_message(message: str) -> bool:
@@ -449,6 +456,17 @@ class Proactor:
         profile = brain_state.get("profile", {})
         msg_lower = message.lower().strip()
 
+        # AUTO-CLEAN CORRUPTED DATA (Guard against old bugs)
+        prof = profile.get("profession", "")
+        if prof and isinstance(prof, str) and any(kw in prof.lower() for kw in ["account", "collega", "miei", "quali"]):
+            logger.info("IDENTITY_AUTO_CLEAN corrupted_profession=%s", prof)
+            profile["profession"] = None
+            # Update storage asynchronously to fix it permanently
+            try:
+                import asyncio
+                asyncio.create_task(storage.save(f"profile:{user_id}", profile))
+            except: pass
+
         logger.info("IDENTITY_ROUTER user=%s profile=%s", user_id,
                      {k: v for k, v in profile.items() if k != "entities" and v})
         logger.info("MEMORY_DIRECT_RESPONSE user=%s route=identity", user_id)
@@ -487,7 +505,7 @@ class Proactor:
             return "Non me lo hai ancora detto."
 
         # Domanda specifica: account collegati
-        if any(kw in msg_lower for kw in ["account collegati", "miei account", "quali account ho"]):
+        if any(kw in msg_lower for kw in ["account collegati", "miei account", "quali account ho", "icloud", "google", "apple"]):
             linked = []
             if profile.get("icloud_user") or profile.get("icloud_verified"):
                 email = profile.get("icloud_user") or "iCloud"
