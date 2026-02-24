@@ -26,7 +26,7 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="4.9.6")
+        log("ICLOUD_SERVICE_VERSION", version="5.0")
         self._cache_vtodo = []
         self._last_sync_vtodo = 0
         self._cache_events = []
@@ -328,17 +328,21 @@ class ICloudService:
                 calendars = principal.calendars()
                 target_cal = None
                 target_name = "None"
+                matching_component = 'VTODO' if is_todo else 'VEVENT'
                 
-                # Strategia: 1. Cerca per nome e supporto VTODO, 2. Cerca solo supporto VTODO
                 best_match = None
                 for cal in calendars:
                     try:
                         supported = cal.get_supported_components()
-                        is_todo_supported = supported and 'VTODO' in supported
+                        if not supported: continue
+                        
+                        can_do = matching_component in supported
                         name = getattr(cal, 'name', '').lower()
                         
-                        if is_todo_supported:
-                            if any(x in name for x in ["promemoria", "tasks", "reminders"]):
+                        if can_do:
+                            # Priorità per nome
+                            keywords = ["promemoria", "tasks", "reminders"] if is_todo else ["calendar", "calendario", "home", "casa"]
+                            if any(x in name for x in keywords):
                                 best_match = cal
                                 target_name = name
                                 break
@@ -353,7 +357,7 @@ class ICloudService:
                     target_name = getattr(target_cal, 'name', 'Default')
                 
                 if not target_cal: return False
-                log("ICLOUD_TARGET_CALENDAR", name=target_name, url=str(target_cal.url))
+                log("ICLOUD_TARGET_CALENDAR", name=target_name, type=matching_component, url=str(target_cal.url))
 
                 import vobject
                 cal_v = vobject.iCalendar()
@@ -386,8 +390,14 @@ class ICloudService:
                 else:
                     item = cal_v.add('vevent')
                     item.add('summary').value = text
-                    item.add('dtstart').value = dt
-                    item.add('dtend').value = dt + datetime.timedelta(hours=1)
+                    
+                    # VEVENT richiede date obbligatorie
+                    event_dt = dt or datetime.datetime.now()
+                    if hasattr(event_dt, 'tzinfo') and event_dt.tzinfo:
+                        event_dt = event_dt.replace(tzinfo=None)
+                        
+                    item.add('dtstart').value = event_dt
+                    item.add('dtend').value = event_dt + datetime.timedelta(hours=1)
                     
                 # Generazione ID unico per Apple
                 uid = str(uuid.uuid4()).lower()

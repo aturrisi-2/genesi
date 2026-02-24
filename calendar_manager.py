@@ -204,7 +204,7 @@ class UnifiedCalendar:
             reminder_entry = {
                 "id": len(self.local_reminders) + 1,
                 "text": title,
-                "due": dt.isoformat(),
+                "due": dt.isoformat() if dt else None,
                 "status": "pending",
                 "provider": "local"
             }
@@ -214,12 +214,10 @@ class UnifiedCalendar:
         except: return False
 
     def _add_google(self, title, dt):
-        if not self._google_service: 
+        if not self._google_service or not dt: 
             return False
-        
-        # Assume Europe/Rome if naive
+            
         iso_str = dt.isoformat()
-        
         event_body = {
             'summary': title,
             'start': {'dateTime': iso_str, 'timeZone': 'Europe/Rome'},

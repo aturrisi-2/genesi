@@ -192,31 +192,25 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             for kw in keywords:
                 title = re.sub(rf'(?i)\b{kw}\b', '', title)
             
-            # Pulisce punteggiatura e spazi eccessivi
+            # Ultra-cleaning (v5.0)
+            title = re.sub(r'(?i)\b(genesi|ricordami|di|che|a|per|il|la|gli|le|lo|un|una|uno)\b', '', title)
             title = re.sub(r'[:\-\.,]', ' ', title)
             title = " ".join(title.split()).strip()
             
-            # Fallback se il titolo è vuoto (usa tutto dopo i due punti se presenti)
-            if not title or len(title) < 3:
-                if ":" in request.message:
-                    title = request.message.split(":")[-1].strip()
-                else:
-                    title = request.message
+            if not title or len(title) < 2:
+                title = request.message.split(":")[-1].strip() if ":" in request.message else request.message
                 
-            # Se non c'è una data, ma l'intent è reminder_create, usiamo 'oggi' come fallback
+            # Se l'utente menziona "calendario", passiamo a VEVENT
+            force_calendar = any(kw in request.message.lower() for kw in ["calendario", "agenda", "evento", "appuntamento"])
             if not due_date and intent == "reminder_create":
-                log("REMINDER_NO_DATE_FALLBACK", message=request.message)
-                # Opzione A: Crea senza data (dateless todo)
-                # Opzione B: Forza per oggi alle 20:00 (più utile per notifiche)
-                # Per ora, proviamo A (dateless) se il servizio lo supporta, o B.
-                # Apple Reminders gestisce bene i dateless.
+                log("REMINDER_NO_DATE_FALLBACK")
             
             results = []
-            # Procediamo anche se due_date è None (v4.9.2)
-            
-            # a) iCloud (VTODO)
+            # a) iCloud (VTODO o VEVENT)
             if icloud_service.username and icloud_service.password:
-                if icloud_service.create_event(title, due_date, is_todo=True): results.append("iCloud ✅")
+                is_todo = not force_calendar
+                if icloud_service.create_event(title, due_date, is_todo=is_todo): 
+                    results.append(f"iCloud {'Reminder' if is_todo else 'Calendar'} ✅")
                 else: results.append("iCloud ❌")
                 
                 # b) Google
@@ -224,7 +218,7 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                     if calendar_manager.add_event(title, due_date, provider='google'): results.append("Google ✅")
                     else: results.append("Google ❌")
                 
-                # c) Locale (Sempre)
+                # c) Locale
                 from core.reminder_engine import reminder_engine
                 reminder_engine.create_reminder(user_id, title, due_date)
                 results.append("Local 💾")
