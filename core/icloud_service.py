@@ -24,9 +24,10 @@ class ICloudService:
         self.username = username or os.environ.get("ICLOUD_USER")
         self.password = password or os.environ.get("ICLOUD_PASSWORD") or os.environ.get("ICLOUD_PASS")
         self.client = None
-        log("ICLOUD_SERVICE_VERSION", version="2.8.1")
+        log("ICLOUD_SERVICE_VERSION", version="2.9.1")
         self._cache_vtodo = []
         self._last_sync_vtodo = 0
+        self._vtodo_lists = set() # Nomi delle liste che contengono effettivamente dei task
         
         if self.username and self.password:
             self._connect()
@@ -152,13 +153,25 @@ class ICloudService:
             for calendar in calendars:
                 try:
                     name = getattr(calendar, 'name', 'Senza nome')
-                    # OTTIMIZZAZIONE 2.8: Salta il calendario principale "Calendar" per i task
-                    # Solitamente contiene centinaia di eventi e rallenta tutto (161+ oggetti)
+                    
+                    # OTTIMIZZAZIONE 2.9: Se abbiamo già mappato le liste, vai dritto a quelle buone
+                    if self._vtodo_lists and name not in self._vtodo_lists:
+                        if name.lower() not in ['promemoria', 'tasks', 'reminders']:
+                            continue
+                    
+                    # OTTIMIZZAZIONE 2.8: Salta il calendario principale "Calendar"
                     if name.lower() in ['calendar', 'calendario']:
-                        log("ICLOUD_SKIP_CAL", name=name, reason="event_only_list")
                         continue
 
-                    log("ICLOUD_SCANNING_LIST", name=name, url=str(calendar.url))
+                    # Controllo metadati se supportato
+                    try:
+                        supported = calendar.get_supported_components()
+                        if supported and 'VTODO' not in supported:
+                            log("ICLOUD_SKIP_CAL", name=name, reason="metadata_no_vtodo")
+                            continue
+                    except: pass
+
+                    log("ICLOUD_SCANNING_LIST", name=name)
 
                     todos = []
                     try:
@@ -254,6 +267,9 @@ class ICloudService:
                         except Exception as e:
                             log("ICLOUD_TODO_PARSE_ERR", error=str(e), level="DEBUG")
                             continue
+                    
+                    if found_in_cal > 0:
+                        self._vtodo_lists.add(name)
                     
                     log("ICLOUD_CAL_SYNC_RES", name=name, found=found_in_cal, skipped_completed=skipped_completed, skipped_past=skipped_past)
                         
