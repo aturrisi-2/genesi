@@ -133,6 +133,10 @@ class IntentClassifier:
                 "sincronizza icloud", "aggiorna icloud", "scarica da icloud",
                 "sincronizza promemoria", "importa promemoria"
             ],
+            "calendar_sync_all": [
+                "sincronizza i miei calendari", "sincronizza calendari", "integra calendari", 
+                "collega calendari", "aggiorna tutto", "sincronizza tutto", "aggiorna calendari"
+            ],
             "google_setup": [
                 "collega google", "configura google", "imposta google", "accesso google",
                 "connetti google", "login google", "account google"

@@ -368,6 +368,11 @@ class Proactor:
                 return response, "tool"
             
             # STEP 5.6: REMINDER ROUTING STRICT
+            if intent == "calendar_sync_all":
+                log("ROUTING_DECISION", route="calendar_sync_all", user_id=user_id)
+                response = await self._handle_calendar_sync_all(user_id, message)
+                return response, "tool"
+                
             if intent == "icloud_setup":
                 log("ROUTING_DECISION", route="icloud_setup", user_id=user_id)
                 response = await self._handle_icloud_setup(user_id, message)
@@ -977,7 +982,7 @@ Messaggio: {message}"""
                     email = email.replace(".it.it", ".it")
 
             if not email or not password:
-                return "Per configurare iCloud ho bisogno dei tuoi dati. Prova a dirmi qualcosa come: 'Collega il mio iCloud id@email.com con password xxxx-xxxx-xxxx-xxxx'. Ricorda di usare una password specifica per le app!"
+                return "Configuriamo il tuo iCloud insieme? È semplicissimo: vai su appleid.apple.com, crea una 'Password specifica per le app' e poi scrivimi qui: 'Collega la mia email [tua-email] con password [tua-password]'. Mi occuperò io di tutto il resto! ✨"
             
             # Salva nel profilo
             profile = await storage.load(f"profile:{user_id}", default={})
@@ -1947,9 +1952,44 @@ Messaggio utente: {message}"""
             
         return f"Comando /cal {subcmd} non riconosciuto."
 
+    async def _handle_calendar_sync_all(self, user_id, message):
+        """Unified sync for Google and iCloud."""
+        results = []
+        
+        # 1. iCloud
+        try:
+            from core.reminder_engine import reminder_engine
+            reminders = await reminder_engine.fetch_icloud_reminders(user_id)
+            if reminders:
+                results.append(f"iCloud ({len(reminders)} nuovi)")
+            else:
+                profile = await storage.load(f"profile:{user_id}", default={})
+                if profile.get("icloud_user") or os.environ.get("ICLOUD_USER"):
+                    results.append("iCloud (allineato)")
+                else:
+                    results.append("iCloud (non ancora collegato)")
+        except:
+            results.append("iCloud (errore)")
+
+        # 2. Google
+        from calendar_manager import calendar_manager
+        if calendar_manager._google_service:
+            results.append("Google (sincronizzato)")
+        else:
+            results.append("Google (non ancora collegato)")
+            
+        summary = " | ".join(results)
+        
+        # Onboarding tips
+        tips = ""
+        if "non ancora collegato" in summary:
+            tips = "\n\n💡 *Per integrare i tuoi account è semplicissimo: dimmi 'usa Google Calendar' o 'collega il mio iCloud'.*"
+            
+        return f"Ho aggiornato tutti i tuoi calendari e promemoria: {summary}.{tips}"
+
     async def _handle_google_setup(self, user_id, message):
         """Inizia il setup di Google Calendar."""
-        return "Per configurare Google Calendar, Genesi ha bisogno che tu autorizzi l'accesso tramite il browser sul server. Una volta completato il login, i tuoi eventi verranno sincronizzati automaticamente."
+        return "Configurare Google Calendar è semplicissimo. Basta autorizzare Genesi tramite il consueto login di Google e i tuoi impegni saranno subito sincronizzati. Dimmi 'attiva Google' quando sei pronto."
 
     async def _handle_google_sync(self, user_id, message):
         """Sincronizza manualmente Google Calendar o aggiunge l'ultimo incarico."""
@@ -1968,7 +2008,7 @@ Messaggio utente: {message}"""
         # Il setup_google viene chiamato all'init del manager
         if calendar_manager._google_service:
             return "Sincronizzazione Google Calendar completata."
-        return "Google Calendar non è configurato. Prova a dire 'configura google'."
+        return "Non ho ancora il permesso per accedere al tuo Google Calendar. Dimmi 'collega account Google' e lo faremo in un attimo."
 
 
 # Istanza globale
