@@ -180,6 +180,27 @@ class Proactor:
                 response = result[0]
         else:
             response = result
+            
+        # PROACTIVE CLOUD SUGGESTION (Fluid Onboarding)
+        try:
+            profile = await storage.load(f"profile:{user_id}", default={})
+            rel_state = await memory_brain.relational.load(user_id)
+            total_msgs = rel_state.get("history", {}).get("total_msgs", 0)
+            
+            # Suggest only if: 
+            # 1. Early in the relationship (2 to 8 messages)
+            # 2. No cloud user or google service active
+            # 3. Message doesn't already contain setup keywords
+            has_icloud = profile.get("icloud_user") or os.environ.get("ICLOUD_USER")
+            from calendar_manager import calendar_manager
+            has_google = calendar_manager._google_service is not None
+            
+            if 1 < total_msgs < 8 and not has_icloud and not has_google:
+                if not any(kw in response.lower() for kw in ["cloud", "icloud", "google", "calendar", "sincronizza", "collega"]):
+                    # Small non-intrusive tip
+                    response += "\n\n💡 *Tip: Se vuoi un'esperienza più fluida, puoi collegare il tuo account Google o iCloud semplicemente dicendomi 'collega iCloud' o 'usa Google Calendar'.*"
+        except: pass
+            
         return response
 
     def handle_response_only(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None) -> str:
@@ -915,28 +936,15 @@ Messaggio: {message}"""
             
             # Verifica credenziali immediatamente
             from core.icloud_service import ICloudService
-            svc = ICloudService(username=email, password=password, cookie_directory=f"memory/icloud_sessions/{user_id}")
-            api = svc._get_client()
+            svc = ICloudService(username=email, password=password)
             
-            if api:
-                try:
-                    # Test minimo: prova a leggere le collezioni di promemoria
-                    # Se non solleva eccezioni, le credenziali sono accettate (anche se richiede 2FA)
-                    _ = api.reminders.collections
-                    
-                    if api.requires_2fa:
-                        profile["icloud_verified"] = False
-                        await storage.save(f"profile:{user_id}", profile)
-                        return f"Le credenziali per {email} sono corrette, ma iCloud richiede l'autenticazione a due fattori (2FA). Controlla i tuoi dispositivi e autorizza l'accesso. (Nota: al momento Genesi non può ricevere il codice 2FA via chat, dovrai autorizzare il dispositivo manualmente se possibile o riprovare dopo averlo fatto in un test script)."
-                    
-                    profile["icloud_verified"] = True
-                    await storage.save(f"profile:{user_id}", profile)
-                    return f"Fantastico! Ho collegato correttamente il tuo account iCloud ({email}). Ora posso sincronizzare i tuoi promemoria."
-                except Exception as auth_err:
-                    logger.warning("ICLOUD_AUTH_TEST_FAIL: %s", str(auth_err))
-                    return "Le credenziali sembrano errate o iCloud ha rifiutato la connessione. Assicurati di usare l'email corretta e la password specifica per le app."
+            if svc.validate_credentials():
+                profile["icloud_verified"] = True
+                await storage.save(f"profile:{user_id}", profile)
+                return f"Fantastico! Ho collegato correttamente il tuo account iCloud ({email}). Ora posso sincronizzare i tuoi promemoria."
             else:
-                return "Non sono riuscito a contattare i server iCloud. Riprova tra poco."
+                logger.warning("ICLOUD_AUTH_TEST_FAIL: email=%s", email)
+                return "Le credenziali sembrano errate o iCloud ha rifiutato la connessione. Assicurati di usare l'email corretta e la **password specifica per le app**."
                 
         except Exception as e:
             logger.error("ICLOUD_SETUP_ERROR user=%s error=%s", user_id, str(e))
