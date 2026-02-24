@@ -168,11 +168,19 @@ class ICloudService:
             principal = self.client.principal()
             calendars = principal.calendars()
             
-            # Trova un calendario adatto (che non sia una lista di promemoria se possibile)
+            # Trova un calendario adatto (priorità a liste scrivibili come Promemoria/Reminders)
             target_cal = None
+            
+            # 1. Cerca "Promemoria" o "Reminders" (tipicamente scrivibili)
             for cal in calendars:
                 name = getattr(cal, 'name', '').lower()
-                if "promemoria" not in name and "reminders" not in name:
+                if "promemoria" in name or "reminders" in name:
+                    target_cal = cal
+                    break
+
+            # 2. Se non trovato, cerca un calendario generico non di sistema
+            if not target_cal:
+                for cal in calendars:
                     url = str(cal.url).lower()
                     if not any(x in url for x in ["inbox", "outbox", "notification"]):
                         target_cal = cal
