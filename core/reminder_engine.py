@@ -172,7 +172,8 @@ class ReminderEngine:
             return []
         
         try:
-            icloud_data = svc.get_reminders(list_name)
+            # Sincronizziamo eventi (VEVENT) invece di Reminders (VTODO) per stabilità
+            icloud_data = svc.get_events()
             
             # Aggiorna timestamp ultima sync (anche se non ci sono dati nuovi, per evitare loop)
             profile["last_icloud_sync"] = now_ts
@@ -185,17 +186,24 @@ class ReminderEngine:
             local_reminders = self._load_reminders(user_id)
             existing_guids = {r.get("id") for r in local_reminders}
             
+            now_iso = datetime.now().isoformat()
             new_added = []
             for item in icloud_data:
                 # Creiamo un ID stabile per iCloud usando il GUID
                 guid = item.get('guid')
                 reminder_id = f"icloud_{guid}" if guid else f"icloud_{uuid.uuid4()}"
                 
+                # --- PROTEZIONE EVENTI PASSATI ---
+                due_date = item.get('due')
+                if not due_date or due_date < now_iso:
+                    log("ICLOUD_SYNC_SKIP_OLD", user_id=user_id, guid=guid, due=due_date)
+                    continue
+
                 if reminder_id not in existing_guids:
                     new_item = {
                         "id": reminder_id,
                         "text": item.get('summary', 'Senza titolo'),
-                        "datetime": item.get('due'), # Nessun fallback a 'now', altrimenti suonano subito
+                        "datetime": due_date,
                         "status": "pending",
                         "source": "icloud",
                         "list": item.get('list', 'iCloud')
@@ -204,6 +212,8 @@ class ReminderEngine:
                     new_added.append(new_item)
             
             if new_added:
+                # Sort per data (None alla fine)
+                local_reminders.sort(key=lambda r: (r.get("datetime") is None, r.get("datetime") or ""))
                 self._save_reminders(user_id, local_reminders)
                 log("REMINDER_ICLOUD_MERGED", user_id=user_id, new_count=len(new_added))
             

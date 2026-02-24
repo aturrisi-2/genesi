@@ -78,6 +78,10 @@ class ICloudService:
             principal = self.client.principal()
             calendars = principal.calendars()
             
+            now = datetime.datetime.now()
+            start_dt = now - datetime.timedelta(hours=1) # Leggera tolleranza
+            end_dt = now + datetime.timedelta(days=days)
+            
             scanned_count = 0
             for calendar in calendars:
                 try:
@@ -90,14 +94,16 @@ class ICloudService:
                     scanned_count += 1
                     log("ICLOUD_CALDAV_LIST_CHECK", name=name)
                     
-                    # Recupera eventi (VEVENT)
+                    # Recupera eventi (VEVENT) - RANGE FILTERED
                     events = []
                     try:
-                        # iCloud a volte fallisce su calendar.events() se non filtrato
-                        events = calendar.events()
+                        # iCloud supporta date_search per filtrare lato server
+                        events = calendar.date_search(start=start_dt, end=end_dt)
                     except Exception as e:
                         log("ICLOUD_CALDAV_EVENTS_ERR", name=name, error=str(e))
-                        continue
+                        # Fallback a all events se date_search fallisce
+                        try: events = calendar.events()
+                        except: continue
 
                     found_on_this_list = 0
                     for event in events:
@@ -112,8 +118,19 @@ class ICloudService:
                             dtstart = None
                             if hasattr(item, 'dtstart'):
                                 val = item.dtstart.value
+                                # Saltiamo se l'evento è già passato (doppio controllo)
                                 if isinstance(val, (datetime.datetime, datetime.date)):
+                                    # Convert date to datetime if needed
+                                    cmp_dt = val if isinstance(val, datetime.datetime) else datetime.datetime.combine(val, datetime.time())
+                                    # Fix tz-naive vs tz-aware
+                                    if cmp_dt.tzinfo is None:
+                                        if cmp_dt < datetime.datetime.now(): continue
+                                    else:
+                                        if cmp_dt < datetime.datetime.now(cmp_dt.tzinfo): continue
+                                        
                                     dtstart = val.isoformat()
+
+                            if not dtstart: continue
 
                             all_events.append({
                                 "guid": guid,
