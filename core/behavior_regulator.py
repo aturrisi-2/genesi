@@ -60,8 +60,9 @@ class BehaviorRegulator:
         # 1) Blacklist Frasi
         regulated = self._apply_blacklist(regulated)
         
-        # 2) Varianza apertura
-        regulated = self._apply_opening_variance(regulated)
+        # NOTE: _apply_opening_variance disabilitato perché causava risposte "scollegate"
+        # sostituendo aperture naturali con varianti robotiche (es. "Generalmente")
+        # regulated = self._apply_opening_variance(regulated)
         
         return regulated
     

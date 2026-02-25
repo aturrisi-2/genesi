@@ -480,8 +480,9 @@ class Proactor:
                     if current_response not in final_responses:
                         final_responses.append(current_response)
                 
-                # If we have multiple hits, we stop at the first terminal intent
-                if current_intent in terminal_intents and len(final_responses) > 0:
+                # If we have multiple hits, we stop at the first generic terminal intent
+                # We allow multiple tools and technical intents to chain.
+                if current_intent in ["chat_free", "relational"] and len(final_responses) > 0:
                     break
             
             if not final_responses:
@@ -489,7 +490,13 @@ class Proactor:
                 final_responses.append(await self._handle_relational(user_id, message, brain_state, conversation_id))
                 final_source = "relational"
 
-            return "\n\n".join(final_responses), final_source
+            # STEP 5: SYNTHESIS
+            if len(final_responses) > 1:
+                log("PROACTOR_SYNTHESIS_START", count=len(final_responses))
+                synthesized = await self._synthesize_responses(user_id, message, final_responses)
+                return synthesized, final_source
+
+            return final_responses[0] if final_responses else "", final_source
 
         except Exception as e:
             logger.exception("PROACTOR_FATAL_ERROR user=%s intent=%s", user_id, intent, exc_info=True)
@@ -1628,6 +1635,57 @@ Messaggio: "{message}" """
                      user_id, len(response),
                      brain_state.get("emotion", {}).get("emotion", "?"))
         return response
+
+    async def _synthesize_responses(self, user_id: str, message: str, responses: list[str]) -> str:
+        """
+        Synthesize multiple tool/knowledge responses into a fluid narrative.
+        Uses gpt-4o-mini for efficient post-processing.
+        """
+        if not responses:
+            return ""
+        if len(responses) == 1:
+            return responses[0]
+
+        fragments = "\n---\n".join(responses)
+        
+        # Get user name for personalization
+        profile = await storage.load(f"profile:{user_id}", default={})
+        user_name = profile.get("name", "l'utente")
+
+        prompt = f"""Sei Genesi. Hai appena eseguito diverse azioni per rispondere a una richiesta dell'utente.
+I vari moduli del sistema hanno prodotto questi frammenti di risposta separati.
+
+MESSAGGIO UTENTE: {message}
+
+FRAMMENTI DA UNIRE:
+{fragments}
+
+Il tuo compito è creare un'unica risposta armonica, fluida e ben collegata in italiano.
+REGOLE:
+1. Mantieni TUTTI i dati tecnici (meteo, news, orari) e i blocchi di codice integri. Non riassumere i dati tecnici.
+2. Inizia in modo naturale (es. salutando o confermando di aver preso in carico le richieste).
+3. Collega le varie parti con frasi di transizione (es. "Per quanto riguarda...", "Inoltre...", "Ecco invece...").
+4. Mantieni lo stile di Genesi: intelligente, profondo, ma mai robotico o prolisso.
+5. NON inventare nuove informazioni.
+6. Assicurati che il tono sia coerente.
+7. Se c'è un saluto finale, mantienilo alla fine.
+"""
+        try:
+            # We use gpt-4o-mini for speed and cost as this is a formatting task
+            synthesized = await llm_service._call_with_protection(
+                model="gpt-4o-mini",
+                prompt=prompt,
+                message=message,
+                user_id=user_id,
+                route="synthesis"
+            )
+            if synthesized:
+                log("PROACTOR_SYNTHESIS_OK", len=len(synthesized))
+                return synthesized
+        except Exception as e:
+            logger.error(f"PROACTOR_SYNTHESIS_FAIL error={str(e)}")
+            
+        return "\n\n".join(responses)
 
     def _build_short_relational_summary(self, context: Dict[str, Any]) -> str:
         """Costruisce summary breve per GPT relazionale. Tutti i fatti identitari noti."""
