@@ -19,7 +19,7 @@ from pathlib import Path
 import uvicorn
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Import base
 from api.user import router as user_router
@@ -33,6 +33,7 @@ from auth.router import router as auth_router
 from api.notifications import router as notifications_router
 from api.conversations import router as conversations_router
 from api.coding import coding_router
+from api.calendar_auth import router as calendar_auth_router
 from auth.database import init_db, async_session
 from auth.models import Visit
 from core.log import log
@@ -188,21 +189,25 @@ async def calendar_checker_background():
     """
     while True:
         try:
-            due_events = await calendar_manager.check_async()
-            
-            if due_events:
-                log("CALENDAR_EVENTS_DUE", count=len(due_events))
-                for event in due_events:
-                    # Notifica (print and potentially push)
-                    print(f"🔔 CALENDAR NOTIFICATION: {event['text']}")
-                    
-                    # Integration with push notifications if available
-                    try:
-                        from api.push import send_push_notification
-                        # Mocking user_id for now or getting from event
-                        # asyncio.create_task(send_push_notification("System", f"Calendario: {event['text']}"))
-                    except ImportError:
-                        pass
+            # Check imminent events for all users
+            reminders_path = Path("data/reminders")
+            if reminders_path.exists():
+                for file_path in reminders_path.glob("*.json"):
+                    user_id = file_path.stem
+                    rems = calendar_manager.list_reminders(user_id, days=1)
+                    now = datetime.now()
+                    window = timedelta(minutes=10)
+                    for r in rems:
+                        dt_str = r.get("due")
+                        if not dt_str: continue
+                        try:
+                            clean_dt = dt_str.replace("Z", "+00:00").split(".")[0] if "T" in dt_str else dt_str
+                            dt = datetime.fromisoformat(clean_dt)
+                            if dt.tzinfo: dt = dt.replace(tzinfo=None)
+                            if now <= dt <= now + window:
+                                log("CALENDAR_EVENT_IMMINENT", user_id=user_id, summary=r["summary"])
+                        except: continue
+
 
             await asyncio.sleep(300) # 5 minuti
         except Exception as e:
@@ -298,6 +303,7 @@ app.include_router(stt_router, prefix="/api")
 app.include_router(upload_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")
+app.include_router(calendar_auth_router, prefix="/api")
 app.include_router(coding_router)
 from api.weather_widget import router as weather_widget_router
 app.include_router(weather_widget_router)

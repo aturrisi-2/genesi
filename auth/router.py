@@ -585,11 +585,15 @@ async def logout(http_request: Request):
 async def require_auth(request: Request, db: AsyncSession = Depends(get_db)) -> AuthUser:
     """FastAPI dependency: extracts and validates JWT, returns AuthUser."""
     auth_header = request.headers.get("Authorization", "")
-    print("AUTH HEADER:", auth_header)  # DEBUG TEMPORANEO
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Autenticazione richiesta.")
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+    else:
+        # Fallback to query param for link-based flows (OAuth)
+        token = request.query_params.get("token")
 
-    token = auth_header.split(" ")[1]
+    if not token:
+        raise HTTPException(status_code=401, detail="Autenticazione richiesta.")
     print(f"TOKEN RECEIVED: {token}")  # DEBUG TEMPORANEO
     
     try:

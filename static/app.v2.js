@@ -900,18 +900,28 @@ function renderImages(images) {
 }
 
 function renderMessageContent(text) {
+  // 1. Placeholder replacement (e.g., token for auth links)
+  const token = getAuthToken() || "";
+  let processed = text.replace(/{{token}}/g, token);
+  processed = processed.replace(/%7B%7Btoken%7D%7D/g, token); // Handle URL-encoded version
+
   // Escape HTML base
   const escape = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  // Sostituisci ```lang\n...\n``` con <pre><code>
-  let html = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+  // 2. Code blocks (```lang ... ```)
+  let html = processed.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
     return `<pre class="code-block"><code class="${lang ? 'lang-' + lang : ''}">${escape(code.trim())}</code></pre>`;
   });
 
-  // Sostituisci `inline code` con <code>
+  // 3. Markdown Links [Label](URL)
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
+    return `<a href="${url}" target="_blank" class="chat-link">${escape(label)}</a>`;
+  });
+
+  // 4. Inline code (`code`)
   html = html.replace(/`([^`]+)`/g, (_, code) => `<code class="inline-code">${escape(code)}</code>`);
 
-  // Newline → <br> per testo normale (solo fuori dai pre)
+  // 5. Newline -> <br> (only outside pre blocks)
   html = html.replace(/(?<!<\/pre>)\n(?!<pre)/g, '<br>');
 
   return html;

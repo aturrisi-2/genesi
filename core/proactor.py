@@ -767,13 +767,11 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 # Creazione GOOGLE (se richiesto o se disponibile)
                 from calendar_manager import calendar_manager
                 has_own_google = bool(profile.get("google_token"))
-                use_global_google = is_admin and calendar_manager._google_service is not None
+                use_global_google = is_admin and calendar_manager._admin_google_service is not None
                 
                 if force_sync or "google" in message.lower() or ("calendario" in message.lower() and (has_own_google or use_global_google)) or has_own_google or use_global_google:
-                    # calendar_manager.add_event currently uses global service. 
-                    # If we have individual tokens, we should pass them (TODO: upgrade calendar_manager)
                     if use_global_google or has_own_google:
-                        success = calendar_manager.add_event(reminder_text, reminder_datetime, provider='google')
+                        success = calendar_manager.add_event(user_id, reminder_text, reminder_datetime, provider='google')
                         if success:
                             if "Perfetto." in response:
                                 response = response.replace("Perfetto.", "Perfetto, aggiunto al tuo Google Calendar.")
@@ -2041,10 +2039,16 @@ Messaggio utente: {message}"""
         from auth.config import ADMIN_EMAILS
         is_admin = profile.get("email") in ADMIN_EMAILS
         
-        if is_admin:
-            return "Il tuo account Google è già configurato globalmente tramite le chiavi di sistema. I tuoi eventi sono sincronizzati."
+        # Generiamo il link con il placeholder {{token}} che il client sostituirà
+        login_url = f"{os.getenv('BASE_URL')}/api/calendar/google/login?token=%7B%7Btoken%7D%7D"
         
-        return "L'integrazione con Google Calendar per gli utenti visitatori è in fase di implementazione. Presto potrai cliccare su un pulsante 'Accedi con Google' per sincronizzare i tuoi impegni. Per ora, posso gestire i tuoi promemoria internamente."
+        if profile.get("google_token"):
+             return "Il tuo account Google è già collegato! Posso leggere e scrivere i tuoi impegni sul tuo calendario personale."
+
+        if is_admin:
+            return f"Il tuo account è configurato come Admin (usi il calendario globale). Se preferisci usare il tuo account Google personale, clicca qui: [Collega Google Personale]({login_url})"
+        
+        return f"L'integrazione con Google Calendar è pronta! Per autorizzarmi a gestire i tuoi impegni, clicca sul link qui sotto e segui la procedura guidata di Google: [Accedi con Google]({login_url})"
 
     async def _handle_google_sync(self, user_id, message):
         """Sincronizza manualmente Google Calendar o aggiunge l'ultimo incarico."""
@@ -2054,7 +2058,7 @@ Messaggio utente: {message}"""
         # Caso follow-up: "Aggiungilo a Google"
         if any(kw in msg_lower for kw in ["aggiungi", "salva", "metti", "scrivi"]) and user_id in self.last_reminder_per_user:
             last_rem = self.last_reminder_per_user[user_id]
-            success = calendar_manager.add_event(last_rem["text"], last_rem["dt"], provider='google')
+            success = calendar_manager.add_event(user_id, last_rem["text"], last_rem["dt"], provider='google')
             if success:
                 return f"Certamente! Ho aggiunto '{last_rem['text']}' al tuo Google Calendar."
             else:
@@ -2064,9 +2068,10 @@ Messaggio utente: {message}"""
         profile = await storage.load(f"profile:{user_id}", default={})
         from auth.config import ADMIN_EMAILS
         is_admin = profile.get("email") in ADMIN_EMAILS
-        has_google = (is_admin and calendar_manager._google_service) or profile.get("google_token")
+        has_google = (is_admin and calendar_manager._admin_google_service) or profile.get("google_token")
 
         if has_google:
+            calendar_manager.list_reminders(user_id, force_sync=True)
             return "Sincronizzazione Google Calendar completata. I tuoi impegni sono aggiornati."
         
         if is_admin:
