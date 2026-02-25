@@ -35,6 +35,7 @@ async def google_login(user: AuthUser = Depends(require_auth)):
     # Usiamo 'state' per passare lo user_id in modo sicuro
     authorization_url, state = flow.authorization_url(
         access_type='offline',
+        prompt='consent',
         include_granted_scopes='true',
         state=user.id
     )
