@@ -15,6 +15,7 @@ class UserProfile(BaseModel):
     email: Optional[str] = None
     name: Optional[str] = None
     city: Optional[str] = None
+    timezone: Optional[str] = None
     profession: Optional[str] = None
     spouse: Optional[str] = None
     

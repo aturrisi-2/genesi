@@ -2980,7 +2980,10 @@ function setVoiceStatusText(text) {
 
     const resp = await fetch(url, {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getAuthToken()}`
+      },
     });
 
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);

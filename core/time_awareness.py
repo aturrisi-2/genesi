@@ -1,10 +1,10 @@
 from datetime import datetime
 import pytz
 
-def get_time_context():
-    """Restituisce il contesto temporale (Mattina/Pomeriggio/Sera/Notte) per Roma."""
+def get_time_context(tz: str = "Europe/Rome"):
+    """Restituisce il contesto temporale (Mattina/Pomeriggio/Sera/Notte) per una data timezone."""
     try:
-        roma_tz = pytz.timezone('Europe/Rome')
+        roma_tz = pytz.timezone(tz)
         now = datetime.now(roma_tz)
         hour = now.hour
         
@@ -24,10 +24,10 @@ def get_time_context():
         elif 18 <= hour < 23: return "sera 🌙"
         else: return "notte 🛌"
 
-def get_formatted_time():
-    """Restituisce l'ora corrente formattata in HH:MM."""
+def get_formatted_time(tz: str = "Europe/Rome"):
+    """Restituisce l'ora corrente formattata in HH:MM per una data timezone."""
     try:
-        roma_tz = pytz.timezone('Europe/Rome')
+        roma_tz = pytz.timezone(tz)
         return datetime.now(roma_tz).strftime('%H:%M')
     except Exception:
         return datetime.now().strftime('%H:%M')

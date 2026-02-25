@@ -1,7 +1,12 @@
 import os
 import httpx
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from fastapi.responses import JSONResponse
+from typing import Optional
+from auth.router import require_auth
+from auth.models import AuthUser
+from core.storage import storage
+from core.models.profile_model import UserProfile
 import logging
 
 logger = logging.getLogger(__name__)
@@ -19,6 +24,7 @@ TIMEOUT_SECONDS = 8
 async def get_weather_widget(
     lat: float | None = Query(None, description="Latitudine da Geolocation API"),
     lon: float | None = Query(None, description="Longitudine da Geolocation API"),
+    user: Optional[AuthUser] = Depends(require_auth)
 ):
     """
     Endpoint per il weather widget della homepage.
@@ -45,7 +51,15 @@ async def get_weather_widget(
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:
 
-            # ── 1. Risolvi coordinate ──────────────────────────────────────
+            # ── 1. Risolvi coordinate e Timezone ─────────────────────────
+            timezone = "Europe/Rome"
+            try:
+                ip_resp = await client.get(IPAPI_FALLBACK)
+                ip_data = ip_resp.json()
+                timezone = ip_data.get("timezone", "Europe/Rome")
+            except Exception:
+                pass
+
             if lat is not None and lon is not None:
                 resolved_lat, resolved_lon = lat, lon
                 # Reverse geocoding per nome città
@@ -58,14 +72,38 @@ async def get_weather_widget(
                             or geo_data[0].get("name", "—") if geo_data else "—"
             else:
                 # Fallback IP-based
-                ip_resp   = await client.get(IPAPI_FALLBACK)
-                ip_data   = ip_resp.json()
+                if 'ip_data' not in locals():
+                    ip_resp = await client.get(IPAPI_FALLBACK)
+                    ip_data = ip_resp.json()
+                
                 resolved_lat = ip_data.get("lat")
                 resolved_lon = ip_data.get("lon")
                 city_name    = ip_data.get("city", "—")
 
                 if not resolved_lat or not resolved_lon:
                     raise ValueError("Impossibile determinare posizione da IP")
+            
+            # ── 1.5 Salva Posizione nel Profilo ───────────────────────────
+            if user and city_name != "—":
+                user_id = user.id
+                raw_profile = await storage.load(f"profile:{user_id}", default={})
+                if raw_profile:
+                    profile_updated = False
+                    if raw_profile.get("city") != city_name:
+                        raw_profile["city"] = city_name
+                        profile_updated = True
+                    
+                    # Se abbiamo una timezone (da IP), salviamola
+                    current_tz = raw_profile.get("timezone", "Europe/Rome")
+                    new_tz = timezone if 'timezone' in locals() else current_tz
+                    
+                    if raw_profile.get("timezone") != new_tz:
+                        raw_profile["timezone"] = new_tz
+                        profile_updated = True
+                    
+                    if profile_updated:
+                        await storage.save(f"profile:{user_id}", raw_profile)
+                        logger.info(f"PROFILE_LOCATION_UPDATED user={user_id} city={city_name} tz={new_tz}")
 
             # ── 2. Dati meteo ──────────────────────────────────────────────
             weather_resp = await client.get(

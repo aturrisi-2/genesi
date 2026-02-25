@@ -1662,7 +1662,13 @@ Messaggio: "{message}" """
             logger.error(f"CALENDAR_FETCH_PROMPT_ERROR: {e}")
             calendar_info = "Errore recupero calendario."
 
-        gpt_prompt = self._build_relational_gpt_prompt(conversation_ctx, latent_synopsis, message, user_id, calendar_info)
+        # Get user timezone from profile
+        user_tz = brain_state.get("profile", {}).get("timezone", "Europe/Rome")
+
+        gpt_prompt = self._build_relational_gpt_prompt(
+            conversation_ctx, latent_synopsis, message, user_id, 
+            calendar_info=calendar_info, tz=user_tz
+        )
         
         # Add system message to messages list
         messages.insert(0, {"role": "system", "content": gpt_prompt})
@@ -1868,14 +1874,14 @@ REGOLE:
         
         return messages
 
-    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str, user_id: str = None, calendar_info: str = "") -> str:
+    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str, user_id: str = None, calendar_info: str = "", tz: str = "Europe/Rome") -> str:
         """Prompt GPT per relational router. Conversazione continua, comportamento umano."""
         user_boundaries = self._detect_user_boundaries(conversation_context, message)
         user_name = conversation_context.split("NOME: ")[1].split("\n")[0] if "NOME: " in conversation_context else "l'utente"
         
         # TIME AWARENESS
-        time_ctx = get_time_context()
-        now_formatted = get_formatted_time()
+        time_ctx = get_time_context(tz)
+        now_formatted = get_formatted_time(tz)
         
         # STEP 1: Document Context injection (NotebookLM behavior)
         system_prompt = ""
