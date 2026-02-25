@@ -72,7 +72,9 @@ TEMPLATE_BLACKLIST = [
     r"ti ascolto",
     r"ti sto ascoltando",
     r"sono qui con te",
-    r"^ci sono\.?$",
+    r"ci sono\.?",
+    r"eccomi\.?",
+    r"^come posso aiutarti\??$",
 ]
 
 # Compiled for performance

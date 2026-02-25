@@ -24,6 +24,7 @@ TIMEOUT_SECONDS = 8
 async def get_weather_widget(
     lat: float | None = Query(None, description="Latitudine da Geolocation API"),
     lon: float | None = Query(None, description="Longitudine da Geolocation API"),
+    tz: str | None = Query(None, description="Timezone passata dal client"),
     user: Optional[AuthUser] = Depends(require_auth)
 ):
     """
@@ -47,18 +48,20 @@ async def get_weather_widget(
             "condition": "clouds"
         }
         return JSONResponse(content=payload)
-
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:
 
             # ── 1. Risolvi coordinate e Timezone ─────────────────────────
-            timezone = "Europe/Rome"
-            try:
-                ip_resp = await client.get(IPAPI_FALLBACK)
-                ip_data = ip_resp.json()
-                timezone = ip_data.get("timezone", "Europe/Rome")
-            except Exception:
-                pass
+            timezone = tz or "Europe/Rome"
+            
+            # Solo se tz non è fornito, proviamo a indovinare da IP
+            if not tz:
+                try:
+                    ip_resp = await client.get(IPAPI_FALLBACK)
+                    ip_data = ip_resp.json()
+                    timezone = ip_data.get("timezone", "Europe/Rome")
+                except Exception:
+                    pass
 
             if lat is not None and lon is not None:
                 resolved_lat, resolved_lon = lat, lon

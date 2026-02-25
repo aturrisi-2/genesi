@@ -11,6 +11,7 @@ import random
 import re
 from collections import deque
 from typing import Dict, Any, Optional, List
+from core.time_awareness import get_time_context
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +240,14 @@ GREETING_EXPANSIONS_WITH_NAME = [
     "{name}, tutto bene?",
 ]
 
+# Time-aware greetings
+TIME_GREETINGS = {
+    "mattina ☀️": ["Buongiorno {name}. Come inizia la tua giornata?", "Buongiorno. Come stai stamattina?", "Ehi, buongiorno! Tutto bene?"],
+    "pomeriggio 🌅": ["Buon pomeriggio {name}. Come procede la giornata?", "Ciao! Ti senti bene questo pomeriggio?", "Ehi. Buon pomeriggio."],
+    "sera 🌙": ["Buonasera {name}. Com'è andata la giornata?", "Buonasera. Ti senti stanco o tutto ok?", "Ciao! Che si dice stasera?"],
+    "notte 🌌": ["Buonanotte {name}. Ancora sveglio?", "Ciao, buonanotte. Tutto bene?", "Ehi. Spero che la tua notte sia tranquilla."],
+}
+
 # ═══════════════════════════════════════════════════════════════
 # COGNITIVE MODES — structural unpredictability
 # ═══════════════════════════════════════════════════════════════
@@ -460,6 +469,7 @@ class EmotionalIntensityEngine:
         Returns:
             risposta espansa, mai sotto il minimo, mai passiva
         """
+        self._raw_brain_state = brain_state # Store for helpers
         emotion = brain_state.get("emotion", {})
         latent = brain_state.get("latent", {})
         profile = brain_state.get("profile", {})
@@ -638,6 +648,20 @@ class EmotionalIntensityEngine:
 
     def _handle_greeting(self, response: str, name: str, trust: float) -> str:
         """Expand greeting beyond minimal salute."""
+        profile = self._raw_brain_state.get("profile", {})
+        tz = profile.get("timezone", "Europe/Rome")
+        time_ctx = get_time_context(tz)
+        
+        # Prefer time-aware greeting
+        if time_ctx in TIME_GREETINGS:
+            opts = TIME_GREETINGS[time_ctx]
+            expansion = random.choice(opts).format(name=name or "").strip()
+            # Se name è vuoto, pulisci ", " o ". " iniziale
+            expansion = expansion.replace("  ", " ").strip(",. ")
+            if not name and expansion[0].islower():
+                 expansion = expansion[0].upper() + expansion[1:]
+            return expansion
+
         if name:
             expansion = random.choice(GREETING_EXPANSIONS_WITH_NAME).format(name=name)
         else:

@@ -2289,42 +2289,44 @@ async function playSimpleAudio(blob) {
       return;
     }
 
-    const source = ctx.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(ctx.destination);
+    return new Promise((resolve) => {
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
 
-    console.log('[TTS] AudioBufferSource creato genId=' + myGenId);
+      console.log('[TTS] AudioBufferSource creato genId=' + myGenId);
 
-    // Track in activeTTSSources
-    activeTTSSources.push(source);
+      // Track in activeTTSSources
+      activeTTSSources.push(source);
 
-    // Cleanup helper
-    const cleanup = () => {
-      const idx = activeTTSSources.indexOf(source);
-      if (idx > -1) activeTTSSources.splice(idx, 1);
-      if (_ttsSource === source) _ttsSource = null;
-      _isPlayingChunk = false;
-    };
+      // Cleanup helper
+      const cleanup = () => {
+        const idx = activeTTSSources.indexOf(source);
+        if (idx > -1) activeTTSSources.splice(idx, 1);
+        if (_ttsSource === source) _ttsSource = null;
+        _isPlayingChunk = false;
+        window.ttsPlaying = false;
+        resolve(); // Sblocca l'attesa
+      };
 
-    // Configura eventi
-    source.onended = () => {
-      window.ttsPlaying = false;
-      console.log('[TTS] Playback completato genId=' + myGenId);
-      cleanup();
-    };
+      // Configura eventi
+      source.onended = () => {
+        console.log('[TTS] Playback completato genId=' + myGenId);
+        cleanup();
+      };
 
-    // Imposta timestamp TTS PRIMA del playback
-    window.lastTTSStart = Date.now();
+      // Imposta timestamp TTS PRIMA del playback
+      window.lastTTSStart = Date.now();
 
-    // Set variables before start
-    window.ttsPlaying = true;
-    _wasPlayingChunk = true;
-    _isPlayingChunk = true;
+      // Set variables before start
+      window.ttsPlaying = true;
+      _wasPlayingChunk = true;
+      _isPlayingChunk = true;
 
-    // Avvia playback
-    console.log('[TTS] Avvio playback genId=' + myGenId);
-    source.start(0);
-    console.log('[TTS] Audio avviato genId=' + myGenId + ' activeSources=' + activeTTSSources.length);
+      // Avvia playback
+      console.log('[TTS] Avvio playback genId=' + myGenId);
+      source.start(0);
+    });
 
   } catch (error) {
     console.error('[TTS] Errore decodifica o playback genId=' + myGenId, error);
@@ -2974,9 +2976,11 @@ function setVoiceStatusText(text) {
   }
 
   async function fetchWeather(lat, lon) {
-    const url = lat !== null && lon !== null
-      ? `/api/weather-widget?lat=${lat}&lon=${lon}`
-      : `/api/weather-widget`;
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    let url = `/api/weather-widget?tz=${encodeURIComponent(tz)}`;
+    if (lat !== null && lon !== null) {
+      url += `&lat=${lat}&lon=${lon}`;
+    }
 
     const resp = await fetch(url, {
       method: 'GET',
