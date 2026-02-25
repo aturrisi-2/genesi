@@ -12,6 +12,8 @@ let currentMode = "chat"; // "chat" | "coding"
 // TTS TIMING STATE
 // ===============================
 window.lastTTSStart = 0;
+window.ttsPlaying = false;
+window.ttsSessionActive = false;
 
 // ===============================
 // AUDIO PRIMING
@@ -382,6 +384,8 @@ function stopAllTTS() {
   _ttsAborted = true;
   _isPlayingChunk = false;
   _wasPlayingChunk = false;
+  window.ttsPlaying = false;
+  window.ttsSessionActive = false;
 
   console.log('[TTS_INTERRUPTED_BY_USER]');
 }
@@ -739,6 +743,7 @@ async function playTTS(text, tts_mode = 'normal') {
 
   return new Promise((resolve, reject) => {
     const executeTTS = async () => {
+      window.ttsSessionActive = true;
       try {
         if (tts_mode === 'informative' || tts_mode === 'psychological' || text.length > 500) {
           console.log('[TTS_FLOW] step=4 playTTS_calling_segmented');
@@ -754,10 +759,12 @@ async function playTTS(text, tts_mode = 'normal') {
 
         console.log('[TTS_FLOW] step=6 playTTS_finished');
         console.log("STEP_3_TTS_READY");
+        window.ttsSessionActive = false;
         resolve();
 
       } catch (error) {
         console.error('[TTS] Error in playTTS:', error);
+        window.ttsSessionActive = false;
         resolve(); // NON bloccare UI anche in caso di errore
       }
     };
@@ -2837,10 +2844,17 @@ function waitForTTSEnd(callback) {
 
   const startTime = Date.now();
   voiceTTSPollInterval = setInterval(() => {
-    const ttsStarted = window.lastTTSStart > startTime;
-    const ttsEnded = ttsStarted && window.ttsPlaying !== true;
+    // Se la sessione o un chunk sono attivi, sposta in avanti il blocco voce
+    if (window.ttsSessionActive || window.ttsPlaying) {
+      voiceBlockedUntil = Date.now() + 3000;
+    }
+
+    const ttsStarted = (window.lastTTSStart > startTime) || window.ttsSessionActive;
+    const ttsEnded = ttsStarted && !window.ttsSessionActive && !window.ttsPlaying;
     const safeDelay = (Date.now() - window.lastTTSStart) > 500;
+
     if (ttsEnded && safeDelay) {
+      console.log('[VOICE] TTS session ended detected');
       clearInterval(voiceTTSPollInterval);
       voiceTTSPollInterval = null;
       clearTimeout(voiceTTSPollTimeout);
