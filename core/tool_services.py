@@ -245,8 +245,27 @@ class ToolService:
             except AmbiguousLocationError as e:
                 return str(e)
             except LocationNotFoundError as e:
-                # Se la città estratta non è valida, prova dal tool context
-                if user_id:
+                # Se geocoding fallisce, controlla se è una richiesta locale (qui, fuori, da me)
+                msg_low = message.lower()
+                is_local = any(kw in msg_low for kw in ["qui", "fuori", "da me", "vicino a me"])
+                
+                if is_local and user_id:
+                    try:
+                        from core.memory_brain import memory_brain
+                        brain = await memory_brain.get_brain(user_id)
+                        profile = brain.get("profile", {})
+                        profile_city = profile.get("city")
+                        
+                        if profile_city:
+                            log("WEATHER_LOCAL_FALLBACK", city=profile_city)
+                            geo = await resolve_location(profile_city, http_client=client)
+                        else:
+                            return str(e)
+                    except Exception as ex:
+                        logger.error(f"WEATHER_LOCAL_FALLBACK_ERROR: {ex}")
+                        return str(e)
+                elif user_id:
+                    # Se la città estratta non è valida, prova dal tool context
                     try:
                         from core.tool_context import get_tool_context
                         ctx = get_tool_context(user_id)

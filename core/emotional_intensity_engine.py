@@ -431,9 +431,10 @@ GROUNDED_SUGGESTIONS = {
 }
 
 STORY_STARTERS = [
-    "C'era una volta, in un paese dove il tempo scorreva diversamente, un uomo che aveva dimenticato come si faceva a sognare. Non perche' non volesse, ma perche' la vita gli aveva insegnato a tenere gli occhi aperti e i piedi per terra. Un giorno, pero', trovo' una lettera sotto la porta. Non c'era mittente, solo una frase: 'Ricordi quando credevi che tutto fosse possibile?' Quella notte, per la prima volta dopo anni, chiuse gli occhi e lascio' che la mente lo portasse dove voleva.",
-    "Ti racconto una cosa. Immagina una citta' dove ogni persona porta con se' una lanterna. La luce di ogni lanterna ha un colore diverso — dipende da quello che la persona sente dentro. Blu per la malinconia, rosso per la passione, verde per la speranza. Un giorno, una ragazza si accorse che la sua lanterna non aveva piu' colore. Era trasparente. E invece di spaventarsi, sorrise. Perche' capì che significava che era pronta a sentire tutto, senza filtri.",
-    "Lascia che ti racconti qualcosa. C'era un vecchio pescatore che ogni mattina usciva in mare, non per pescare, ma per ascoltare. Diceva che il mare gli parlava, e che ogni onda portava con se' una storia diversa. La gente del villaggio lo considerava strano, ma lui sapeva qualcosa che gli altri non capivano: che le storie piu' importanti non sono quelle che raccontiamo, ma quelle che ascoltiamo in silenzio.",
+    "C'era un bambino che collezionava passi. Non pietre o monete, ma i passi delle persone che gli volevano bene...",
+    "In una soffitta polverosa di Roma, un vecchio orologio ricominciò a battere dopo cinquant'anni...",
+    "C'è una leggenda che parla di un vento che soffia solo quando qualcuno ha bisogno di un'idea nuova...",
+    "Ti racconto di quella volta che un uomo decise di camminare solo seguendo il profumo del pane...",
 ]
 
 

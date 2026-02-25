@@ -206,12 +206,12 @@ class DriftModulator:
                 return text
 
         # Select suffix weighted by warmth level
-        if warmth > 0.7:
-            suffixes = [" Sono qui con te.", " Ci sono, sempre.", " Non sei solo."]
-        elif warmth > 0.5:
-            suffixes = [" Sono qui.", " Ci sono.", " Ti ascolto."]
+        if warmth > 0.8:
+            suffixes = [" Dimmi pure.", " Ti seguo.", ""]
+        elif warmth > 0.6:
+            suffixes = ["", " Dimmi."]
         else:
-            suffixes = [" Dimmi.", " Continua."]
+            suffixes = [""]
 
         suffix = random.choice(suffixes)
         # Avoid repetition: don't add if last word of text matches first word of suffix
@@ -291,8 +291,6 @@ class DriftModulator:
         # Probabilistic word-level substitutions
         # Each substitution has its own probability scaled by temp
         substitutions = [
-            ("sono qui", ["ci sono", "sono presente", "sono qui"]),
-            ("ti ascolto", ["ti sento", "ti ascolto", "sono in ascolto"]),
             ("raccontami", ["dimmi", "parlami", "raccontami"]),
             ("capisco", ["comprendo", "sento", "capisco"]),
             ("dimmi", ["parlami", "raccontami", "dimmi"]),

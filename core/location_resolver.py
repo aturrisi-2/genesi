@@ -96,15 +96,15 @@ _TIME_STOP_WORDS = r"(?:oggi|domani|stasera|pomeriggio|mattina|ora|adesso|luned�
 
 _DIRECT_PATTERN_CI = re.compile(
     r"(?:meteo|tempo|previsioni|notizie|news|clima)\s+(?:a|di|per|in|da|su|farà)?\s*"
-    rf"((?:(?!{_TIME_STOP_WORDS}){_CI_WORD}(?:\s+(?!{_TIME_STOP_WORDS}){_CI_WORD})*))",
+    rf"((?:(?!{_TIME_STOP_WORDS}|fa\b|fuori\b){_CI_WORD}(?:\s+(?!{_TIME_STOP_WORDS}|fa\b|fuori\b){_CI_WORD})*))",
     re.UNICODE | re.IGNORECASE
 )
 
 _TRAILING_PATTERN_CI = re.compile(
     r"(?:che\s+(?:tempo|meteo)\s+fa|com'è\s+il\s+(?:tempo|meteo)|piove|nevica|fa\s+(?:caldo|freddo))"
-    rf"\s+(?:a|ad|in|di|da|su|per)\s+"
-    rf"({_CI_WORD}(?:\s+{_CI_WORD})*)",
-    re.UNICODE
+    rf"\s+(?:a|ad|in|di|da|su|per)?\s*"
+    rf"((?:(?!{_TIME_STOP_WORDS}|fa\b|fuori\b){_CI_WORD}(?:\s+(?!{_TIME_STOP_WORDS}|fa\b|fuori\b){_CI_WORD})*))",
+    re.UNICODE | re.IGNORECASE
 )
 
 # Words to skip — common Italian words that aren't cities

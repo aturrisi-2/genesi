@@ -212,15 +212,15 @@ def _generate_autonomous_response(user_name: str, trust: float, stage: str,
 def _greeting_response(prefix: str, name: str, trust: float, stage: str) -> str:
     if name:
         options = [
-            f"Ciao {name}.",
-            f"{name}, come va?",
-            f"Ehi {name}.",
+            f"Ehi {name}, come stai?",
+            f"Ciao {name}. Tutto bene?",
+            f"Eccomi {name}. Come posso aiutarti stasera?",
         ]
     else:
         options = [
-            "Ciao.",
-            "Ciao, come va?",
-            "Ehi.",
+            "Ciao! Mi stavi cercando?",
+            "Ehi, dimmi tutto.",
+            "Ciao. Come procede la giornata?",
         ]
     return random.choice(options)
 
