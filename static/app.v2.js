@@ -22,6 +22,7 @@ let _primedAudio = null;
 // STATES
 // ===============================
 const STATES = { IDLE: 'idle', THINKING: 'thinking', RECORDING: 'recording' };
+let recognitionActive = false; // Prevents concurrent SpeechRecognition starts
 
 // ===============================
 // DEV_MODE for local development
@@ -2684,9 +2685,14 @@ function buildVoiceRecognition() {
   if (!SpeechRecognition) return null;
   const rec = new SpeechRecognition();
   rec.lang = 'it-IT';
-  rec.continuous = false;
+  rec.continuous = true;
   rec.interimResults = true;
   let finalTranscript = '';
+
+  rec.onstart = () => {
+    recognitionActive = true;
+    console.log('VOICE_REC_STARTED');
+  };
 
   rec.onresult = (event) => {
     if (Date.now() < voiceBlockedUntil) {
@@ -2697,45 +2703,59 @@ function buildVoiceRecognition() {
     finalTranscript = '';
     let interim = '';
     for (let i = event.resultIndex; i < event.results.length; i++) {
-      if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
-      else interim += event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        finalTranscript += event.results[i][0].transcript;
+      } else {
+        interim += event.results[i][0].transcript;
+      }
     }
+
+    // Check for "Stop" command or similar
+    const currentInpValue = finalTranscript || interim;
     const inp = document.getElementById('message-input');
-    if (inp) inp.value = finalTranscript || interim;
+    if (inp) inp.value = currentInpValue;
+
     clearTimeout(voiceSilenceTimer);
-    if (finalTranscript) {
+    if (finalTranscript.trim().length > 0) {
       voiceSilenceTimer = setTimeout(() => {
-        if (Date.now() >= voiceBlockedUntil) sendVoiceMessage(finalTranscript);
+        if (voiceModeActive && Date.now() >= voiceBlockedUntil) {
+          sendVoiceMessage(finalTranscript.trim());
+        }
       }, VOICE_SILENCE_MS);
     }
   };
 
   rec.onend = () => {
+    recognitionActive = false;
+    console.log('VOICE_REC_ENDED');
     if (!voiceModeActive) return;
-    const waitMs = Math.max(1500, voiceBlockedUntil - Date.now());
+
+    // Safer restart for iOS Safari
+    const waitMs = Math.max(2000, voiceBlockedUntil - Date.now());
     setTimeout(() => {
-      if (!voiceModeActive) return;
+      if (!voiceModeActive || recognitionActive) return;
       if (Date.now() < voiceBlockedUntil) return;
+
       try {
-        voiceRecognition.stop();
-      } catch (e) { }
-      setTimeout(() => {
-        if (!voiceModeActive) return;
-        try { voiceRecognition.start(); }
-        catch (e) { console.warn('VOICE_RESTART_ERROR', e); }
-      }, 300);
+        console.log('VOICE_AUTO_RESTART_ONEND');
+        voiceRecognition?.start();
+      } catch (e) {
+        // Safe skip if already running or interrupted
+      }
     }, waitMs);
   };
 
   rec.onerror = (e) => {
+    recognitionActive = false;
     console.warn('VOICE_REC_ERROR', e.error);
-    if (!voiceModeActive || e.error === 'aborted') return;
+    if (!voiceModeActive || e.error === 'aborted' || e.error === 'not-allowed') return;
+
     setTimeout(() => {
-      if (voiceModeActive && Date.now() >= voiceBlockedUntil) {
-        try { voiceRecognition = buildVoiceRecognition(); voiceRecognition?.start(); }
-        catch (e2) { }
+      if (voiceModeActive && !recognitionActive && Date.now() >= voiceBlockedUntil) {
+        try { voiceRecognition.start(); }
+        catch (err) { }
       }
-    }, 600);
+    }, 1000);
   };
 
   return rec;
@@ -2755,7 +2775,11 @@ function startVoiceMode() {
   if (!voiceRecognition) {
     voiceRecognition = buildVoiceRecognition();
   }
-  voiceRecognition?.start();
+  if (!recognitionActive) {
+    try {
+      voiceRecognition?.start();
+    } catch (e) { console.warn("VOICE_START_FAIL", e); }
+  }
   console.log('VOICE_MODE_STARTED');
 }
 
@@ -2790,9 +2814,12 @@ async function sendVoiceMessage(text) {
     setVoiceOrbState('listening');
     setVoiceStatusText('In ascolto...');
     setTimeout(() => {
-      if (!voiceModeActive) return;
+      if (!voiceModeActive || recognitionActive) return;
       // Riutilizza l'istanza esistente invece di ricrearla
-      try { voiceRecognition?.start(); } catch (e) { }
+      try {
+        console.log('VOICE_RESTART_AFTER_TTS');
+        voiceRecognition?.start();
+      } catch (e) { }
     }, 1500);
   });
 }

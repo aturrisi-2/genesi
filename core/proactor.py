@@ -216,13 +216,13 @@ class Proactor:
                 from calendar_manager import calendar_manager
                 has_google = profile.get("google_token") or (is_admin and calendar_manager._google_service is not None)
                 
-                if total_msgs < 10 and not has_icloud and not has_google:
+                if total_msgs < 1 and not has_icloud and not has_google:
                     if not any(kw in response.lower() for kw in ["cloud", "icloud", "google", "calendar", "sincronizza", "collega"]):
-                        # Small welcoming onboarding tip
+                        # Suggest only on the very first message
                         if is_admin:
-                            tip = "\n\n✨ *Benvenuto! Prima di iniziare, se vuoi posso aiutarti a sincronizzare i tuoi calendari. Basta dirmi 'collega account Google' o 'usa iCloud'.*" if total_msgs <= 1 else "\n\n💡 *Tip: Posso gestire i tuoi impegni se scrivi 'collega Google' o 'usa iCloud' per i calendari.*"
+                            tip = "\n\n✨ *Benvenuto! Prima di iniziare, se vuoi posso aiutarti a sincronizzare i tuoi calendari. Basta dirmi 'collega account Google' o 'usa iCloud'.*"
                         else:
-                            tip = "\n\n✨ *Benvenuto! Posso gestire i tuoi promemoria internamente o collegare il tuo account iCloud. Basta dirmi 'imposta iCloud' se vuoi sincronizzarli.*" if total_msgs <= 1 else "\n\n💡 *Tip: Posso sincronizzare i tuoi impegni se scrivi 'usa iCloud' o gestirli internamente se me lo chiedi.*"
+                            tip = "\n\n✨ *Benvenuto! Posso gestire i tuoi promemoria internamente o collegare il tuo account iCloud. Basta dirmi 'imposta iCloud' se vuoi sincronizzarli.*"
                         response += tip
             except Exception as e:
                 logger.error(f"ONBOARDING_ERROR: {e}")
@@ -478,6 +478,7 @@ class Proactor:
                     - Se hai sbagliato a capire un intento in precedenza, ammettilo (es. "Scusami, avevo confuso la tua richiesta di ricordi con un promemoria").
                     - Se c'è stato un problema tecnico (limiti API, quota), accennalo con garbo (es. "Ho avuto un rallentamento con i miei servizi esterni").
                     - Spiega il tuo ragionamento attuale in modo che l'utente capisca che sei "presente".
+                    - NESSUNA chiusura meccanica o scusa standardizzata. Sii umano.
                     - Non essere robotico. Non scusarti come un chatbot ("Mi scuso per il disagio"). Scusati come un compagno ("Hai ragione, mi sono perso un attimo").
                     """
                     model = model_selector(processed_message, route="knowledge")
@@ -1724,12 +1725,12 @@ FRAMMENTI DA UNIRE:
 Il tuo compito è creare un'unica risposta armonica, fluida e ben collegata in italiano.
 REGOLE:
 1. Mantieni TUTTI i dati tecnici (meteo, news, orari) e i blocchi di codice integri. Non riassumere i dati tecnici.
-2. Inizia in modo naturale (es. salutando o confermando di aver preso in carico le richieste).
-3. Collega le varie parti con frasi di transizione (es. "Per quanto riguarda...", "Inoltre...", "Ecco invece...").
+2. Inizia in modo naturale, senza frasi fatte o introduzioni rituali.
+3. Collega le varie parti con frasi di transizione fluide.
 4. Mantieni lo stile di Genesi: intelligente, profondo, ma mai robotico o prolisso.
-5. NON inventare nuove informazioni.
-6. Assicurati che il tono sia coerente.
-7. Se c'è un saluto finale, mantienilo alla fine.
+5. NON usare mai frasi come "Ecco quello che ho trovato" o "Spero sia utile".
+6. NON inventare nuove informazioni.
+7. NON inserire saluti finali o domande di chiusura standardizzate (es. "Posso aiutarti con altro?"). Sii asciutto se la risposta è già completa.
 """
         try:
             # We use gpt-4o-mini for speed and cost as this is a formatting task
@@ -1854,6 +1855,7 @@ Sei un compagno reale: pensi, ragioni, hai opinioni, reagisci e soprattutto prov
 Parli SOLO italiano. Non cambi mai lingua.
 Non menzionare MAI di essere AI, modello, sistema, programma.
 
+DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M:%f')}
 {conversation_context}
 
 STATO LATENTE: {latent_synopsis}
@@ -1918,11 +1920,13 @@ Massimo 3 frasi.
 {conversation_ctx}
 
 REGOLE:
+- DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')}
 - Rispondi SOLO con informazione concreta.
 - Usa la CONVERSAZIONE RECENTE sopra per risolvere riferimenti come "prima", "perche'", "continua".
 - Se l'utente chiede "perche'" o "secondo te", riferisciti al contesto della conversazione sopra.
 - NESSUNA frase empatica o relazionale.
 - NESSUNA frase tipo "Sono qui per te" o "Dimmi di piu'".
+- NESSUNA chiusura meccanica tipo "Spero di esserti stato utile".
 - NON dire MAI "assistente virtuale", "assistente informativo", "sono programmato".
 - NON dire MAI "non ho informazioni sufficienti" o "puoi fornire piu' contesto".
 - NON menzionare MAI di essere AI, modello, sistema, programma.

@@ -60,6 +60,15 @@ TEMPLATE_BLACKLIST = [
     r"ce la farai",
     r"non arrenderti",
     r"credi in te stess[oa]",
+    # Added mechanical endings (v4.2)
+    r"spero sia utile",
+    r"spero di averti aiutato",
+    r"ecco quello che ho trovato",
+    r"fammi sapere se hai bisogno di altro",
+    r"vuoi sapere altro",
+    r"cos'altro posso fare",
+    r"posso aiutarti con qualcosa",
+    r"sono a tua disposizione",
 ]
 
 # Compiled for performance
