@@ -829,6 +829,32 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             if not reminders:
                 return "Non hai promemoria impostati.", "reminder"
             
+            # DETERMINA SE LA RICHIESTA È "NATURALE" O "ESPLICITA"
+            msg_lower = message.lower()
+            explicit_triggers = ["lista", "elenco", "fammi vedere", "quali sono", "mostrami", "stampa", "elencami"]
+            is_explicit = any(trigger in msg_lower for trigger in explicit_triggers)
+            
+            if not is_explicit:
+                # Conversational response via LLM
+                reminders_summary = reminder_engine.format_reminders_list(reminders)
+                now_str = datetime.now().strftime("%A %d %B %H:%M")
+                prompt = f"""Oggi è {now_str}.
+L'utente chiede del suo programma: "{message}"
+I suoi impegni nel programma sono:
+{reminders_summary}
+
+Rispondi in modo naturale, empatico e discorsivo (non usare elenchi numerati o punti elenco nel testo della risposta parlata).
+Spiega all'utente i suoi impegni in modo fluido come farebbe un assistente personale.
+Fai riferimento alle fonti (Google, iCloud) solo se necessario per chiarezza, ma in modo naturale.
+Se non ci sono impegni per il periodo richiesto, faglielo presente con calore."""
+
+                model = model_selector(message, route="reminder")
+                response = await llm_service._call_with_protection(
+                    model, prompt, message, user_id=user_id, route="reminder"
+                )
+                if response:
+                    return response, "reminder"
+
             # Format and return the list
             formatted_list = reminder_engine.format_reminders_list(reminders)
             return formatted_list, "reminder"
