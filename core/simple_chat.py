@@ -30,14 +30,12 @@ async def simple_chat_handler(user_id: str, message: str, conversation_id: str =
         
         log("CHAT_INPUT", message=message[:100], user_id=user_id)
 
-        # 1. Intent classification
-        intent = intent_classifier.classify(message)
-
         # 2. Proactor orchestration (brain update + evolution engine)
+        # Pass intent=None to allow Proactor to use its new multi-intent classification
         response = await proactor.handle(
             user_id=user_id,
             message=message,
-            intent=intent,
+            intent=None, 
             conversation_id=conversation_id
         )
         
@@ -49,9 +47,9 @@ async def simple_chat_handler(user_id: str, message: str, conversation_id: str =
         if not user_manager.get_user(user_id):
             user_manager.create_user(user_id)
         user_manager.increment_messages(user_id)
-        chat_memory.add_message(user_id, message, response, intent)
+        chat_memory.add_message(user_id, message, response, "multi")
 
-        log("CHAT_OUTPUT", response=response[:100], intent=intent, user_id=user_id)
+        log("CHAT_OUTPUT", response=response[:100], intent="multi", user_id=user_id)
         return response
 
     except Exception as e:

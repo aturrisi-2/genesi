@@ -159,8 +159,8 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         if not isinstance(response, str):
             response = str(response)
         
-        # Get intent for emoji enrichment
-        intent = intent_classifier.classify(request.message)
+        # Use 'multi' for general emoji enrichment as we now support multiple intents
+        intent = "multi"
         
         # Apply emoji enrichment to final response (after all routing and fallbacks)
         if response and not response.startswith('{') and not response.startswith('['):
