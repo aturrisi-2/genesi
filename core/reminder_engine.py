@@ -276,9 +276,8 @@ class ReminderEngine:
                     from calendar_manager import calendar_manager
                     # Se l'utente ha credenziali proprie, dovremmo idealmente usare un'istanza dedicata.
                     # Per ora, se è Admin usa quella globale (che ha i dati in .env)
-                    if is_admin:
-                        await asyncio.to_thread(calendar_manager.list_reminders)
-                        unified_items = calendar_manager.list_reminders(days=7)
+                    if is_admin or has_own_creds:
+                        unified_items = await asyncio.to_thread(calendar_manager.list_reminders, user_id, 7)
                 except Exception as e:
                     log("REMINDER_SYNC_SKIP", user_id=user_id, reason=str(e))
             
