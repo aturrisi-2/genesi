@@ -349,101 +349,147 @@ class Proactor:
 
             # STEP 4: INTENT CLASSIFICATION
             if intent is None:
-                intent = await intent_classifier.classify_async(message, user_id)
+                intents = await intent_classifier.classify_async(message, user_id)
+            else:
+                intents = [intent] if isinstance(intent, str) else intent
                 
-            if intent == "ambiguous_weather":
+            if not intents:
+                intents = ["chat_free"]
+
+            if len(intents) == 1 and intents[0] == "ambiguous_weather":
                 return "Dove vuoi sapere il meteo?", "tool"
                 
-            if intent == "ambiguous_tool":
+            if len(intents) == 1 and intents[0] == "ambiguous_tool":
                 return "Non sono sicuro di aver capito. Intendevi usare uno strumento specifico come un promemoria o il meteo? Puoi chiarire per favore?", "tool"
 
-            # STEP 4.5: INTENT INHERITANCE — geographic follow-up
-            inherited = resolve_inherited_intent(user_id, message, intent)
-            if inherited:
-                logger.info("PROACTOR_INTENT_INHERITED user=%s classified=%s inherited=%s msg=%s",
-                            user_id, intent, inherited, message[:40])
-                intent = inherited
-
-            # STEP 5: TOOL ROUTES
-            if intent in self.tool_intents:
-                log("ROUTING_DECISION", route="tool", user_id=user_id)
-                response = await self._handle_tool(intent, message, user_id)
-                return response, "tool"
-
-            # STEP 5.5: MEMORY CONTEXT ROUTE
-            if intent == "memory_context":
-                log("ROUTING_DECISION", route="memory_context", user_id=user_id)
-                response = await self._handle_memory_context(user_id, message, brain_state, conversation_id)
-                return response, "tool"
+            # Multi-intent execution state
+            final_responses = []
+            final_source = "relational" # Default to relational if no tools hit
             
-            # STEP 5.6: REMINDER ROUTING STRICT
-            if intent == "calendar_sync_all":
-                log("ROUTING_DECISION", route="calendar_sync_all", user_id=user_id)
-                response = await self._handle_calendar_sync_all(user_id, message)
-                return response, "tool"
+            # STEP 4.5: LOOP THROUGH INTENTS
+            # Grouping: process tools first, then one final terminal response if present
+            # We skip terminal intents (chat_free, relational, etc) if there are multiple tools
+            # unless it's a specific technical request.
+            
+            terminal_intents = ["chat_free", "relational", "tecnica", "debug", "spiegazione", "identity", "memory_context", "emotional"]
+            
+            processed_message = message # Keep track if we need to modify it or pass it through
+            
+            for current_intent in intents:
+                current_response = None
                 
-            if intent == "icloud_setup":
-                log("ROUTING_DECISION", route="icloud_setup", user_id=user_id)
-                response = await self._handle_icloud_setup(user_id, message)
-                return response, "tool"
+                # STEP 4.6: INTENT INHERITANCE
+                inherited = resolve_inherited_intent(user_id, processed_message, current_intent)
+                if inherited:
+                    logger.info("PROACTOR_INTENT_INHERITED user=%s classified=%s inherited=%s", user_id, current_intent, inherited)
+                    current_intent = inherited
+
+                # DISPATCHER
+                if current_intent in self.tool_intents:
+                    log("ROUTING_DECISION", route="tool", user_id=user_id, intent=current_intent)
+                    current_response = await self._handle_tool(current_intent, processed_message, user_id)
+                    final_source = "tool"
+
+                elif current_intent == "memory_context":
+                    log("ROUTING_DECISION", route="memory_context", user_id=user_id)
+                    current_response = await self._handle_memory_context(user_id, processed_message, brain_state, conversation_id)
+                    final_source = "tool"
+                
+                elif current_intent == "calendar_sync_all":
+                    log("ROUTING_DECISION", route="calendar_sync_all", user_id=user_id)
+                    current_response = await self._handle_calendar_sync_all(user_id, processed_message)
+                    final_source = "tool"
+                    
+                elif current_intent == "icloud_setup":
+                    log("ROUTING_DECISION", route="icloud_setup", user_id=user_id)
+                    current_response = await self._handle_icloud_setup(user_id, processed_message)
+                    final_source = "tool"
+                
+                elif current_intent == "icloud_sync":
+                    log("ROUTING_DECISION", route="icloud_sync", user_id=user_id)
+                    current_response = await self._handle_icloud_sync(user_id, processed_message)
+                    final_source = "tool"
+
+                elif current_intent == "google_setup":
+                    log("ROUTING_DECISION", route="google_setup", user_id=user_id)
+                    current_response = await self._handle_google_setup(user_id, processed_message)
+                    final_source = "tool"
+
+                elif current_intent == "google_sync":
+                    log("ROUTING_DECISION", route="google_sync", user_id=user_id)
+                    current_response = await self._handle_google_sync(user_id, processed_message)
+                    final_source = "tool"
+
+                elif current_intent == "reminder_create":
+                    log("ROUTING_DECISION", route="reminder_create", user_id=user_id)
+                    current_response = await self._handle_reminder_creation(user_id, processed_message)
+                    final_source = "tool"
+                
+                elif current_intent == "reminder_list":
+                    log("ROUTING_DECISION", route="reminder_list", user_id=user_id)
+                    current_response = await self._handle_reminder_list(user_id, processed_message)
+                    final_source = "tool"
+                
+                elif current_intent == "reminder_delete":
+                    log("ROUTING_DECISION", route="reminder_delete", user_id=user_id)
+                    current_response = await self._handle_reminder_delete(user_id, processed_message)
+                    final_source = "tool"
+                
+                elif current_intent == "reminder_update":
+                    log("ROUTING_DECISION", route="reminder_update", user_id=user_id)
+                    current_response = await self._handle_reminder_update(user_id, processed_message)
+                    final_source = "tool"
+
+                elif current_intent in SKIP_RELATIONAL_INTENTS:
+                    # Knowledge/Technical Strict
+                    if self._should_override_to_relational(processed_message, user_id):
+                        log("ROUTING_DECISION", route="relational_override", user_id=user_id)
+                        current_response = await self._handle_relational(user_id, processed_message, brain_state, conversation_id)
+                        final_source = "relational"
+                    else:
+                        log("ROUTING_DECISION", route="knowledge_strict", user_id=user_id)
+                        current_response = await self._handle_knowledge(user_id, processed_message, conversation_id)
+                        final_source = "knowledge"
+
+                elif current_intent == "identity":
+                    log("ROUTING_DECISION", route="identity", user_id=user_id)
+                    current_response = await self._handle_identity(user_id, processed_message, brain_state)
+                    final_source = "identity"
+
+                elif current_intent == "emotional":
+                    log("ROUTING_DECISION", route="emotional", user_id=user_id)
+                    current_response = await self._handle_relational(user_id, processed_message, brain_state, conversation_id)
+                    final_source = "relational"
+
+                elif current_intent in ["chat_free", "relational"]:
+                    # Default Relational
+                    if len(intents) > 1 and final_responses:
+                        # If we already have tool responses, maybe we don't need a full relational response 
+                        # or we just need it to wrap everything up.
+                        # For now, let's just let it execute to be safe.
+                        pass
+                    log("ROUTING_DECISION", route="relational", user_id=user_id)
+                    current_response = await self._handle_relational(user_id, processed_message, brain_state, conversation_id)
+                    final_source = "relational"
+
+                if current_response:
+                    # Clean response if it's a tuple (source leaked from inner handlers)
+                    if isinstance(current_response, tuple):
+                        current_response = current_response[0]
+                    
+                    if current_response not in final_responses:
+                        final_responses.append(current_response)
+                
+                # If we have multiple hits, we stop at the first terminal intent
+                if current_intent in terminal_intents and len(final_responses) > 0:
+                    break
             
-            if intent == "icloud_sync":
-                log("ROUTING_DECISION", route="icloud_sync", user_id=user_id)
-                response = await self._handle_icloud_sync(user_id, message)
-                return response, "tool"
+            if not final_responses:
+                # Emergency fallback if no intent worked
+                final_responses.append(await self._handle_relational(user_id, message, brain_state, conversation_id))
+                final_source = "relational"
 
-            if intent == "google_setup":
-                log("ROUTING_DECISION", route="google_setup", user_id=user_id)
-                response = await self._handle_google_setup(user_id, message)
-                return response, "tool"
-
-            if intent == "google_sync":
-                log("ROUTING_DECISION", route="google_sync", user_id=user_id)
-                response = await self._handle_google_sync(user_id, message)
-                return response, "tool"
-
-            if intent == "reminder_create":
-                log("ROUTING_DECISION", route="reminder_create", user_id=user_id)
-                response = await self._handle_reminder_creation(user_id, message)
-                return response, "tool"
-            
-            if intent == "reminder_list":
-                log("ROUTING_DECISION", route="reminder_list", user_id=user_id)
-                response = await self._handle_reminder_list(user_id, message)
-                return response, "tool"
-            
-            if intent == "reminder_delete":
-                log("ROUTING_DECISION", route="reminder_delete", user_id=user_id)
-                response = await self._handle_reminder_delete(user_id, message)
-                return response, "tool"
-            
-            if intent == "reminder_update":
-                log("ROUTING_DECISION", route="reminder_update", user_id=user_id)
-                response = await self._handle_reminder_update(user_id, message)
-                return response, "tool"
-
-            # STEP 6: KNOWLEDGE STRICT — but override short contextual follow-ups
-            if intent in SKIP_RELATIONAL_INTENTS:
-                # Context-aware override: short messages with "perché"/"come mai"
-                # in a relational conversation should stay relational
-                if self._should_override_to_relational(message, user_id):
-                    logger.info("PROACTOR_INTENT_OVERRIDE user=%s intent=%s->relational reason=short_contextual", user_id, intent)
-                    response = await self._handle_relational(user_id, message, brain_state, conversation_id)
-                    return response, "tool"
-                log("ROUTING_DECISION", route="knowledge_strict", user_id=user_id)
-                response = await self._handle_knowledge(user_id, message, conversation_id)
-                return response, "tool"
-
-            # STEP 7: RELATIONAL / GENERAL
-            if is_relational_message(message):
-                log("ROUTING_DECISION", route="relational", user_id=user_id)
-                response = await self._handle_relational(user_id, message, brain_state, conversation_id)
-                return response, "tool"
-
-            # STEP 8: DEFAULT — relational pipeline (chat libera)
-            log("ROUTING_DECISION", route="default_relational", user_id=user_id)
-            response = await self._handle_relational(user_id, message, brain_state, conversation_id)
-            return response, "relational"
+            return "\n\n".join(final_responses), final_source
 
         except Exception as e:
             logger.exception("PROACTOR_FATAL_ERROR user=%s intent=%s", user_id, intent, exc_info=True)

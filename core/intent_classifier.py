@@ -119,7 +119,8 @@ class IntentClassifier:
             "tecnica": [
                 "tecnica", "tecnico", "architettura", "sistema", "implementazione",
                 "codice", "programmazione", "sviluppo", "software", "hardware",
-                "algoritmo", "database", "api", "framework", "libreria"
+                "algoritmo", "database", "api", "framework", "libreria",
+                "script", "python", "javascript", "java", "c++", "rust", "html", "css"
             ],
             "debug": [
                 "debug", "errore", "bug", "problema", "non funziona", "crash",
@@ -559,9 +560,13 @@ INTENT POSSIBILI:
 - chat_free: salutare, ringraziare, o intent generico non elencato
 
 Devi restituire esclusivamente un payload JSON valido in questa forma:
-{"intent": "scelta_tra_i_possibili", "score": 0.95}
+{"intents": ["scelta1", "scelta2"], "score": 0.95}
 
-Se l'intenzione non è chiara o se l'utente menziona strumenti ambiguamente, imposta uno score basso (es. 0.5)."""
+REGOLE SPECIALI:
+- Se l'utente chiede di scrisvere CODICE (es. "scrivimi un promemoria in Python"), l'intent è "tecnica", NON "reminder_create".
+- Se l'utente fa più richieste distinte (es. "che tempo fa e ricordami di..."), elenca entrambi gli intent in "intents".
+- Se l'intenzione non è chiara, usa un solo intent con score basso.
+"""
 
         user_prompt = f"Contesto recente della chat:\n{history_text}\n\nUltimo messaggio utente:\n{message}"
         
@@ -578,26 +583,38 @@ Se l'intenzione non è chiara o se l'utente menziona strumenti ambiguamente, imp
                 json_match = re.search(r'\{.*\}', response, re.DOTALL)
                 if json_match:
                     data = json.loads(json_match.group(0))
-                    intent = data.get("intent", "chat_free")
+                    intents = data.get("intents", [])
+                    if not intents and "intent" in data:
+                        intents = [data["intent"]]
+                    
+                    if not intents:
+                        intents = ["chat_free"]
+
                     score = float(data.get("score", 0.0))
                     
                     # LOGGING
-                    log("LLM_INTENT_CLASSIFICATION", intent=intent, score=score, message=message[:50], user_id=user_id)
-                    logger.info(f"LLM_INTENT_CLASSIFICATION intent={intent} score={score}")
+                    log("LLM_INTENT_CLASSIFICATION", intents=intents, score=score, message=message[:50], user_id=user_id)
                     
                     # Se lo score < 0.8 per intent che azionano tool/api specifiche, ferma e chiedi chiarimenti
+                    # (Solo se c'è un solo intent critico)
                     tool_intents = ["weather", "news", "time", "date", "reminder_create", "reminder_delete", "reminder_update", "reminder_list"]
-                    if score < 0.8 and intent in tool_intents:
-                        if intent == "weather":
-                            return "ambiguous_weather"
-                        return "ambiguous_tool"
+                    if len(intents) == 1 and score < 0.8 and intents[0] in tool_intents:
+                        if intents[0] == "weather":
+                            return ["ambiguous_weather"]
+                        return ["ambiguous_tool"]
                     
-                    return self.normalize_reminder_intent(message, intent)
+                    # Normalize all intents
+                    normalized = []
+                    for i in intents:
+                        norm = self.normalize_reminder_intent(message, i)
+                        if norm not in normalized:
+                            normalized.append(norm)
+                    return normalized
         except Exception as e:
             logger.error(f"Errore nella classificazione JSON LLM: {str(e)}")
             
         # Fallback alla vecchia regex classification se LLM fallisce
-        return self.classify(message, user_id)
+        return [self.classify(message, user_id)]
 
 
 # Istanza globale
