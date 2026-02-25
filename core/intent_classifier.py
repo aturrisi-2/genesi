@@ -139,10 +139,10 @@ class IntentClassifier:
             ],
             "google_setup": [
                 "collega google", "configura google", "imposta google", "accesso google",
-                "connetti google", "login google", "account google"
+                "connetti google", "login google", "account google", "attiva google", "usa google"
             ],
             "google_sync": [
-                "sincronizza google", "aggiorna google", "scarica da google"
+                "sincronizza google", "aggiorna google", "scarica da google", "scarica google"
             ]
         }
     

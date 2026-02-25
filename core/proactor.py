@@ -210,7 +210,10 @@ class Proactor:
                 if total_msgs < 10 and not has_icloud and not has_google:
                     if not any(kw in response.lower() for kw in ["cloud", "icloud", "google", "calendar", "sincronizza", "collega"]):
                         # Small welcoming onboarding tip
-                        tip = "\n\n✨ *Benvenuto! Prima di iniziare, se vuoi posso aiutarti a sincronizzare i tuoi calendari. Basta dirmi 'collega account Google' o 'usa iCloud'.*" if total_msgs <= 1 else "\n\n💡 *Tip: Posso gestire i tuoi impegni se scrivi 'collega Google' o 'usa iCloud' per i calendari.*"
+                        if is_admin:
+                            tip = "\n\n✨ *Benvenuto! Prima di iniziare, se vuoi posso aiutarti a sincronizzare i tuoi calendari. Basta dirmi 'collega account Google' o 'usa iCloud'.*" if total_msgs <= 1 else "\n\n💡 *Tip: Posso gestire i tuoi impegni se scrivi 'collega Google' o 'usa iCloud' per i calendari.*"
+                        else:
+                            tip = "\n\n✨ *Benvenuto! Posso gestire i tuoi promemoria internamente o collegare il tuo account iCloud. Basta dirmi 'imposta iCloud' se vuoi sincronizzarli.*" if total_msgs <= 1 else "\n\n💡 *Tip: Posso sincronizzare i tuoi impegni se scrivi 'usa iCloud' o gestirli internamente se me lo chiedi.*"
                         response += tip
             except Exception as e:
                 logger.error(f"ONBOARDING_ERROR: {e}")
@@ -2025,13 +2028,23 @@ Messaggio utente: {message}"""
         # Onboarding tips
         tips = ""
         if "non ancora collegato" in summary:
-            tips = "\n\n💡 *Per integrare i tuoi account è semplicissimo: dimmi 'usa Google Calendar' o 'collega il mio iCloud'.*"
+            if is_admin:
+                tips = "\n\n💡 *Per integrare i tuoi account è semplicissimo: dimmi 'usa Google Calendar' o 'collega il mio iCloud'.*"
+            else:
+                tips = "\n\n💡 *Puoi sincronizzare i tuoi promemoria Apple dicendo 'usa iCloud'. L'integrazione Google per visitatori sarà disponibile a breve.*"
             
         return f"Ho aggiornato tutti i tuoi calendari e promemoria: {summary}.{tips}"
 
     async def _handle_google_setup(self, user_id, message):
         """Inizia il setup di Google Calendar."""
-        return "Configurare Google Calendar è semplicissimo. Basta autorizzare Genesi tramite il consueto login di Google e i tuoi impegni saranno subito sincronizzati. Dimmi 'attiva Google' quando sei pronto."
+        profile = await storage.load(f"profile:{user_id}", default={})
+        from auth.config import ADMIN_EMAILS
+        is_admin = profile.get("email") in ADMIN_EMAILS
+        
+        if is_admin:
+            return "Il tuo account Google è già configurato globalmente tramite le chiavi di sistema. I tuoi eventi sono sincronizzati."
+        
+        return "L'integrazione con Google Calendar per gli utenti visitatori è in fase di implementazione. Presto potrai cliccare su un pulsante 'Accedi con Google' per sincronizzare i tuoi impegni. Per ora, posso gestire i tuoi promemoria internamente."
 
     async def _handle_google_sync(self, user_id, message):
         """Sincronizza manualmente Google Calendar o aggiunge l'ultimo incarico."""
@@ -2054,8 +2067,12 @@ Messaggio utente: {message}"""
         has_google = (is_admin and calendar_manager._google_service) or profile.get("google_token")
 
         if has_google:
-            return "Sincronizzazione Google Calendar completata."
-        return "Non ho ancora il permesso per accedere al tuo Google Calendar. Dimmi 'collega account Google' e lo faremo in un attimo."
+            return "Sincronizzazione Google Calendar completata. I tuoi impegni sono aggiornati."
+        
+        if is_admin:
+            return "Sembra che ci sia un problema con il token Google nel sistema. Verifica il file token.json."
+            
+        return "Non ho ancora il permesso per accedere al tuo Google Calendar. Questa funzione sarà disponibile a breve per tutti gli utenti tramite accesso sicuro Google OAuth."
 
 
 # Istanza globale
