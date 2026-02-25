@@ -2040,7 +2040,8 @@ Messaggio utente: {message}"""
         is_admin = profile.get("email") in ADMIN_EMAILS
         
         # Generiamo il link con il placeholder {{token}} che il client sostituirà
-        login_url = f"{os.getenv('BASE_URL')}/api/calendar/google/login?token=%7B%7Btoken%7D%7D"
+        base_url = os.getenv('BASE_URL', '')
+        login_url = f"{base_url}/api/calendar/google/login?token=%7B%7Btoken%7D%7D"
         
         if profile.get("google_token"):
              return "Il tuo account Google è già collegato! Posso leggere e scrivere i tuoi impegni sul tuo calendario personale."
