@@ -283,17 +283,23 @@ class ReminderEngine:
             
             # 4. Merge Google items (only if relevant to filter)
             if not status_filter or status_filter == "pending":
+                # Helper per normalizzare la data ai fini del matching (ignora differenze di secondi/milliseconds/offset)
+                def norm_date(d):
+                    if not d: return ""
+                    # Prende solo YYYY-MM-DDTHH:MM
+                    return str(d).replace("Z", "").split(".")[0][:16].replace(" ", "T")
+                
                 # Hash map per lookup veloce e aggiornamento source
-                rem_map = {f"{r['text'].lower()}_{r.get('datetime')}": r for r in reminders if r.get('text')}
+                rem_map = {f"{r['text'].lower().strip()}_{norm_date(r.get('datetime'))}": r for r in reminders if r.get('text')}
                 
                 for gi in unified_items:
-                    summary = gi.get('summary')
+                    summary = gi.get('summary', '').strip()
                     due = gi.get('due')
                     provider = gi.get('provider', 'unified')
-                    item_hash = f"{summary.lower()}_{due}"
+                    item_hash = f"{summary.lower()}_{norm_date(due)}"
                     
                     if item_hash in rem_map:
-                        # Se esiste già localmente, aggiorna il source per indicare che è sincronizzato
+                        # Se esiste già localmente, aggiorna il source per indicare che è sincronizzato con il cloud
                         rem_map[item_hash]["source"] = provider
                     else:
                         reminders.append({
