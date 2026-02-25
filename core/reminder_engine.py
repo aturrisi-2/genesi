@@ -284,15 +284,19 @@ class ReminderEngine:
             
             # 4. Merge Google items (only if relevant to filter)
             if not status_filter or status_filter == "pending":
-                # Deduplication hashes
-                existing_hashes = {f"{r['text'].lower()}_{r.get('datetime')}" for r in reminders if r.get('text')}
+                # Hash map per lookup veloce e aggiornamento source
+                rem_map = {f"{r['text'].lower()}_{r.get('datetime')}": r for r in reminders if r.get('text')}
                 
                 for gi in unified_items:
                     summary = gi.get('summary')
                     due = gi.get('due')
                     provider = gi.get('provider', 'unified')
                     item_hash = f"{summary.lower()}_{due}"
-                    if item_hash not in existing_hashes:
+                    
+                    if item_hash in rem_map:
+                        # Se esiste già localmente, aggiorna il source per indicare che è sincronizzato
+                        rem_map[item_hash]["source"] = provider
+                    else:
                         reminders.append({
                             "id": f"{provider}_{hash(summary)}_{due}",
                             "text": summary,
@@ -300,7 +304,7 @@ class ReminderEngine:
                             "source": provider,
                             "status": "pending"
                         })
-                        existing_hashes.add(item_hash)
+                        rem_map[item_hash] = reminders[-1]
 
             # 5. Apply Status Filter to the final list
             if status_filter:
