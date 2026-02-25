@@ -1181,7 +1181,7 @@ async function sendMessage(voiceText = null) {
     console.log('[TEXT_RENDERED] text_len=' + parsed.text.length);
 
     // TTS ASINCRONO — completamente scollegato dal render
-    const rawTtsText = data.tts_text || data.response;
+    const rawTtsText = (typeof data.tts_text !== 'undefined') ? data.tts_text : data.response;
     function stripCodeForTTS(text) {
       return text
         .replace(/```[\s\S]*?```/g, '. ')

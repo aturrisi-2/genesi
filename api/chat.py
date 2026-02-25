@@ -36,6 +36,7 @@ class ChatResponse(BaseModel):
     status: str
     intent: Optional[str] = None
     user_id: Optional[str] = None
+    tts_text: Optional[str] = None
 
 # Anti-bounce per evitare invii doppi
 LAST_MESSAGES = {}
@@ -174,11 +175,18 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                     emojis = ''.join([c for c in response if ord(c) > 127 and c in '👋😊📅⏰📋✨⚠️🤔✨💬🤝🛠️☀️🌤️🌞🌧️⛅'])
                     log("EMOJI_ENGINE_APPLIED", intent=intent, emoji=emojis, user_id=user_id)
 
+        # Handle silent responses (e.g. lists)
+        tts_text = response
+        if response.startswith("[NO_TTS]"):
+            response = response.replace("[NO_TTS]", "").strip()
+            tts_text = ""
+
         return ChatResponse(
             response=response,
             status="ok",
             intent=intent,
-            user_id=user_id
+            user_id=user_id,
+            tts_text=tts_text
         )
 
     except Exception as e:

@@ -855,9 +855,9 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
                 if response:
                     return response, "reminder"
 
-            # Format and return the list
+            # Format and return the list with NO_TTS tag
             formatted_list = reminder_engine.format_reminders_list(reminders)
-            return formatted_list, "reminder"
+            return "[NO_TTS]" + formatted_list, "reminder"
             
         except Exception as e:
             logger.error("REMINDER_LIST_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
