@@ -93,9 +93,17 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
 
         # Load profile once for all updates
         raw_profile = await storage.load(f"profile:{user_id}", default={})
+        
+        # Ensure email is in profile (critical for Proactor admin check)
+        if not raw_profile.get("email") and user.email:
+            raw_profile["email"] = user.email
+            profile_changed_email = True
+        else:
+            profile_changed_email = False
+
         normalized = normalize_profile_dict(raw_profile)
         profile = UserProfile(**normalized)
-        profile_changed = False
+        profile_changed = profile_changed_email
 
         # Cognitive memory: explicit identity fields
         if decision.get('persist'):
