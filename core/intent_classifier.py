@@ -144,6 +144,10 @@ class IntentClassifier:
             ],
             "google_sync": [
                 "sincronizza google", "aggiorna google", "scarica da google", "scarica google"
+            ],
+            "icloud_setup": [
+                "collega icloud", "configura icloud", "imposta icloud", "password icloud",
+                "accesso icloud", "account icloud", "attiva icloud", "usa icloud"
             ]
         }
     
@@ -558,6 +562,8 @@ INTENT POSSIBILI:
 - identity: chi sono io, che lavoro faccio, come mi chiamo
 - icloud_setup: collegare, configurare o impostare l'account iCloud
 - icloud_sync: sincronizzare, aggiornare o scaricare promemoria da iCloud
+- google_setup: collegare o attivare l'account Google Calendar
+- google_sync: sincronizzare o aggiornare appuntamenti da Google
 - emotional: l'utente esprime un suo stato d'animo, tristezza, ansia
 - memory_context: l'utente fa un riferimento esplicito a conversazioni precedenti
 - chat_free: salutare, ringraziare, o intent generico non elencato
@@ -566,7 +572,8 @@ Devi restituire esclusivamente un payload JSON valido in questa forma:
 {"intents": ["scelta1", "scelta2"], "score": 0.95}
 
 REGOLE SPECIALI:
-- Se l'utente chiede di scrisvere CODICE (es. "scrivimi un promemoria in Python"), l'intent è "tecnica", NON "reminder_create".
+- Se l'utente chiede di scrivere CODICE (es. "scrivimi un promemoria in Python"), l'intent è "tecnica", NON "reminder_create".
+- Se l'utente dice solo "calendario" o "account" senza specificare iCloud o Google, usa "icloud_setup" o "google_setup" con uno score molto BASSO (es. 0.5), così il sistema potrà chiedere chiarimenti.
 - Se l'utente fa più richieste distinte (es. "che tempo fa e ricordami di..."), elenca entrambi gli intent in "intents".
 - Se l'intenzione non è chiara, usa un solo intent con score basso.
 """
@@ -601,7 +608,11 @@ REGOLE SPECIALI:
                     
                     # Se lo score < 0.8 per intent che azionano tool/api specifiche, ferma e chiedi chiarimenti
                     # (Solo se c'è un solo intent critico)
-                    tool_intents = ["weather", "news", "time", "date", "reminder_create", "reminder_delete", "reminder_update", "reminder_list"]
+                    tool_intents = [
+                        "weather", "news", "time", "date", 
+                        "reminder_create", "reminder_delete", "reminder_update", "reminder_list",
+                        "icloud_setup", "google_setup", "icloud_sync", "google_sync"
+                    ]
                     if len(intents) == 1 and score < 0.8 and intents[0] in tool_intents:
                         if intents[0] == "weather":
                             return ["ambiguous_weather"]

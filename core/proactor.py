@@ -360,6 +360,10 @@ class Proactor:
                 return "Dove vuoi sapere il meteo?", "tool"
                 
             if len(intents) == 1 and intents[0] == "ambiguous_tool":
+                # Se il messaggio parla di caricamento/configurazione/calendario, sii specifico
+                msg_lower = message.lower()
+                if any(kw in msg_lower for kw in ["calendario", "account", "collega", "configura", "setup", "calendari"]):
+                    return "Vuoi configurare il tuo calendario? Posso aiutarti sia con Google che con iCloud. Quale dei due preferiresti collegare per iniziare?", "tool"
                 return "Non sono sicuro di aver capito. Intendevi usare uno strumento specifico come un promemoria o il meteo? Puoi chiarire per favore?", "tool"
 
             # Multi-intent execution state
@@ -1091,7 +1095,17 @@ Messaggio: {message}"""
                     email = email.replace(".it.it", ".it")
 
             if not email or not password:
-                return "Configuriamo il tuo iCloud insieme? È semplicissimo: vai su appleid.apple.com, crea una 'Password specifica per le app' e poi scrivimi qui: 'Collega la mia email [tua-email] con password [tua-password]'. Mi occuperò io di tutto il resto! ✨"
+                return (
+                    "Certamente! Per collegare il tuo calendario iCloud in modo sicuro, ho bisogno che crei una **password specifica per l'app**. "
+                    "In questo modo non dovrò mai conoscere la tua password principale dell'ID Apple.\n\n"
+                    "Ecco come fare in un attimo:\n"
+                    "1. Accedi al tuo account su [appleid.apple.com](https://appleid.apple.com/account/manage).\n"
+                    "2. Nella sezione **Accesso e sicurezza**, clicca su **Password specifiche per le app**.\n"
+                    "3. Clicca su **Genera una password specifica per l'app** (puoi chiamarla 'Genesi').\n"
+                    "4. Una volta ottenuta (sarà un codice di 16 caratteri tipo `abcd-efgh-ijkl-mnop`), scrivimi un messaggio come questo:\n\n"
+                    "> Collega la mia mail *nome@email.com* con password *abcd-efgh-ijkl-mnop*\n\n"
+                    "Penserò io a configurare tutto il resto! Preferisci iniziare adesso o hai bisogno di aiuto in qualche passaggio? ✨"
+                )
             
             # Salva nel profilo
             profile = await storage.load(f"profile:{user_id}", default={})
