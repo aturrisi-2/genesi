@@ -552,31 +552,29 @@ INTENT POSSIBILI:
 - news: richieste di notizie o aggiornamenti
 - time: richieste sull'ora
 - date: richieste sulla data
-- reminder_create: creare o impostare un promemoria (es: "ricordami di", "imposta promemoria")
-- reminder_list: elenco promemoria attivi o in programma
+- reminder_create: creare un promemoria (es: "ricordami di", "segna un impegno")
+- reminder_list: elenco promemoria, appuntamenti o impegni (es: "i miei impegni", "cosa ho da fare")
 - reminder_delete: cancellare promemoria
-- reminder_update: modificare giorno/ora promemoria
-- tecnica: questioni tecniche, programmazione, architettura, sistemi
-- debug: errori codice, stacktrace, malfunzionamenti software 
-- spiegazione: richiesta di spiegazione dettagliata "perchè", "come mai"
-- identity: chi sono io, che lavoro faccio, come mi chiamo
-- icloud_setup: collegare, configurare o impostare l'account iCloud
-- icloud_sync: sincronizzare, aggiornare o scaricare promemoria da iCloud
-- google_setup: collegare o attivare l'account Google Calendar
-- google_sync: sincronizzare o aggiornare appuntamenti da Google
-- emotional: l'utente esprime un suo stato d'animo, tristezza, ansia
-- memory_context: l'utente fa un riferimento esplicito a conversazioni precedenti
-- chat_free: salutare, ringraziare, o intent generico non elencato
+- reminder_update: modificare promemoria
+- tecnica: questioni tecniche, programmazione, architettura
+- debug: errori codice, malfunzionamenti software
+- spiegazione: richiesta di spiegazione "perchè", "come mai", o correzione/frustrazione (es: "perchè non hai risposto?", "hai sbagliato")
+- identity: chi sono io, che lavoro faccio, i miei account, i miei dati
+- icloud_setup: collegare o impostare account iCloud
+- icloud_sync: sincronizzare dati da iCloud
+- google_setup: collegare Google Calendar
+- google_sync: sincronizzare appuntamenti da Google
+- emotional: stato d'animo utente
+- memory_context: riferimento ESPLICITO a messaggi passati (es: "cosa ho detto prima?")
+- chat_free: salutare, ringraziare, generico
 
 Devi restituire esclusivamente un payload JSON valido in questa forma:
 {"intents": ["scelta1", "scelta2"], "score": 0.95}
 
 REGOLE SPECIALI:
-- Se l'utente chiede di scrivere CODICE (es. "scrivimi un promemoria in Python"), l'intent è "tecnica", NON "reminder_create".
-- Se l'utente specifica chiaramente il servizio (es. "collega icloud"), usa lo score massimo (0.95-1.0).
-- Se l'utente dice solo "calendario" o "account" senza specificare iCloud o Google, usa "icloud_setup" o "google_setup" con uno score basso (es. 0.5), così il sistema potrà chiedere chiarimenti.
-- Se l'utente fa più richieste distinte (es. "che tempo fa e ricordami di..."), elenca entrambi gli intent in "intents".
-- Se l'intenzione non è chiara, usa un solo intent con score basso.
+- Se l'utente chiede "impegni", "agenda" o "programma", usa SEMPRE "reminder_list".
+- Se l'utente chiede "perchè" su un comportamento passato o manifesta insoddisfazione, usa "spiegazione".
+- Se l'intenzione non è chiara, usa uno score basso.
 """
 
         user_prompt = f"Contesto recente della chat:\n{history_text}\n\nUltimo messaggio utente:\n{message}"

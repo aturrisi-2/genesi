@@ -91,10 +91,13 @@ _PREP_PATTERN_CI = re.compile(
     re.UNICODE
 )
 
+# Case-insensitive: capture until a stop word or end of string
+_TIME_STOP_WORDS = r"(?:oggi|domani|stasera|pomeriggio|mattina|ora|adesso|lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica|settimana)"
+
 _DIRECT_PATTERN_CI = re.compile(
-    r"(?:meteo|tempo|previsioni|notizie|news|clima)\s+(?:a|di|per|in|da|su)?\s*"
-    rf"({_CI_WORD}(?:\s+{_CI_WORD})*)",
-    re.UNICODE
+    r"(?:meteo|tempo|previsioni|notizie|news|clima)\s+(?:a|di|per|in|da|su|farà)?\s*"
+    rf"((?:(?!{_TIME_STOP_WORDS}){_CI_WORD}(?:\s+(?!{_TIME_STOP_WORDS}){_CI_WORD})*))",
+    re.UNICODE | re.IGNORECASE
 )
 
 _TRAILING_PATTERN_CI = re.compile(

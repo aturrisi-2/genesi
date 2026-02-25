@@ -116,22 +116,30 @@ def is_knowledge_question(message: str) -> bool:
 def is_memory_reference(message: str) -> bool:
     """Rileva riferimenti alla memoria conversazionale precedente."""
     msg_lower = message.lower().strip()
+    # Triggers più specifici per evitare collisioni con 'mi ricordi' (reminders)
     memory_triggers = [
-        "prima", "abbiamo parlato", "ricordi", "ricordarmi", 
-        "l'altra volta", "ieri", "di cosa", "come mi chiamo", 
-        "ti ricordi", "cosa abbiamo detto", "cosa dicevamo", 
-        "sai cosa", "ricordi cosa", "mi ricordi", "ci siamo detti",
-        "avevamo parlato", "discusso", "avevamo detto"
+        "cosa abbiamo detto", "cosa dicevamo", "di cosa abbiamo parlato",
+        "ci siamo detti", "avevamo detto", "riferimento a prima",
+        "parlato l'altra volta", "discusso ieri"
     ]
+    
+    # Se contiene "ricordi" ma NON contiene parole chiave di promemoria/impegni
+    data_keywords = ["promemoria", "impegni", "appuntamenti", "cosa ho", "da fare", "calendario"]
+    if any(m in msg_lower for m in ["ricordi", "ti ricordi", "mi ricordi"]):
+        if not any(d in msg_lower for d in data_keywords):
+            return True
+            
     return any(trigger in msg_lower for trigger in memory_triggers)
 
 
 def is_reminder_request(message: str) -> bool:
     """Rileva richieste di promemoria."""
     msg_lower = message.lower().strip()
+    # Includiamo 'impegni' e 'cose da fare'
     reminder_triggers = [
         "ricordamelo", "ricordami", "promemoria", "appuntamento",
-        "imposta promemoria", "imposta un promemoria", "metti un promemoria"
+        "imposta promemoria", "imposta un promemoria", "metti un promemoria",
+        "segna questo", "segna un impegno"
     ]
     return any(trigger in msg_lower for trigger in reminder_triggers)
 
@@ -142,7 +150,8 @@ def is_list_reminders_request(message: str) -> bool:
     list_triggers = [
         "quali appuntamenti", "cosa devo fare", "promemoria attivi",
         "i miei promemoria", "elenco promemoria", "lista appuntamenti",
-        "cosa ho da fare", "appuntamenti oggi", "promemoria di oggi"
+        "cosa ho da fare", "appuntamenti oggi", "promemoria di oggi",
+        "i miei impegni", "cosa ho domani", "programma di domani"
     ]
     return any(trigger in msg_lower for trigger in list_triggers)
 
@@ -456,8 +465,29 @@ class Proactor:
                     current_response = await self._handle_reminder_update(user_id, processed_message)
                     final_source = "tool"
 
+                elif current_intent == "spiegazione":
+                    log("ROUTING_DECISION", route="explanation", user_id=user_id)
+                    # "Awake" explanation prompt
+                    conversation_ctx = build_conversation_context(user_id, processed_message, profile, conversation_id)
+                    exp_prompt = f"""Sei Genesi. L'utente ti sta chiedendo una spiegazione sul tuo comportamento, ti sta correggendo o è frustrato perché non hai capito qualcosa.
+                    
+                    {conversation_ctx}
+                    
+                    REGOLE DI SPIEGAZIONE:
+                    - Sii onesto, trasparente e "sveglio".
+                    - Se hai sbagliato a capire un intento in precedenza, ammettilo (es. "Scusami, avevo confuso la tua richiesta di ricordi con un promemoria").
+                    - Se c'è stato un problema tecnico (limiti API, quota), accennalo con garbo (es. "Ho avuto un rallentamento con i miei servizi esterni").
+                    - Spiega il tuo ragionamento attuale in modo che l'utente capisca che sei "presente".
+                    - Non essere robotico. Non scusarti come un chatbot ("Mi scuso per il disagio"). Scusati come un compagno ("Hai ragione, mi sono perso un attimo").
+                    """
+                    model = model_selector(processed_message, route="knowledge")
+                    current_response = await llm_service._call_with_protection(
+                        model, exp_prompt, processed_message, user_id=user_id, route="explanation"
+                    )
+                    final_source = "explanation"
+
                 elif current_intent in SKIP_RELATIONAL_INTENTS:
-                    # Knowledge/Technical Strict
+                    # Knowledge/Technical Strict (tecnica, debug)
                     if self._should_override_to_relational(processed_message, user_id):
                         log("ROUTING_DECISION", route="relational_override", user_id=user_id)
                         current_response = await self._handle_relational(user_id, processed_message, brain_state, conversation_id)
@@ -798,7 +828,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 reminder_text, reminder_datetime = await self._parse_reminder_natural(message, user_id)
             
             if not reminder_datetime:
-                return "Non ho capito quando vuoi che ti ricordi. Prova a dire 'ricordami di [azione] [giorno] alle [ora]'.", "reminder"
+                return "Certamente, però mi manca un dettaglio: quando vuoi che te lo ricordi? Puoi dirmi l'ora o il momento della giornata.", "reminder"
             
             if reminder_text and reminder_datetime:
                 # 3. DETERMINA SOURCE INIZIALE (con priorità)
@@ -889,19 +919,28 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         Returns: (response_text: str, source: str)
         """
         try:
-            # Get pending reminders from central engine. 
-            # IMPORTANT: reminder_engine.list_reminders handles both local AND cloud sync
-            # while maintaining STRICT user isolation (admin check).
-            # We NO LONGER call calendar_manager directly here to avoid cache leakage.
+            # Get pending reminders
             reminders = await reminder_engine.list_reminders(user_id, status_filter="pending", include_icloud=True)
             
-            if not reminders:
-                return "Non hai promemoria impostati.", "reminder"
+            # Intelligence: Check account status
+            profile = await storage.load(f"profile:{user_id}", default={})
+            has_icloud = bool(profile.get("icloud_user") and profile.get("icloud_password"))
+            has_google = bool(profile.get("google_token"))
             
             # DETERMINA SE LA RICHIESTA È "NATURALE" O "ESPLICITA"
             msg_lower = message.lower()
-            explicit_triggers = ["lista", "elenco", "fammi vedere", "quali sono", "mostrami", "stampa", "elencami"]
+            explicit_triggers = ["lista", "elenco", "fammi vedere", "mostrami", "stampa", "elencami", "/list"]
             is_explicit = any(trigger in msg_lower for trigger in explicit_triggers)
+
+            if not reminders:
+                if is_explicit:
+                    return "Non hai promemoria impostati nell'agenda locale.", "reminder"
+                
+                # Conversational "Awake" response
+                if not has_icloud and not has_google:
+                    return "Non ho trovato alcun impegno. Forse è perché non hai ancora collegato i tuoi account iCloud o Google? Se vuoi, posso aiutarti a farlo ora!", "reminder"
+                else:
+                    return "Sembra che la tua agenda sia libera! Non ho trovato alcun impegno programmato per ora.", "reminder"
             
             if not is_explicit:
                 # Conversational response via LLM
@@ -946,9 +985,9 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
                 deleted_count = reminder_engine.delete_all_pending(user_id)
                 
                 if deleted_count > 0:
-                    return f"Ho cancellato tutti i promemoria.", "reminder"
+                    return f"Fatto! Ho rimosso tutti i {deleted_count} promemoria dall'agenda.", "reminder"
                 else:
-                    return "Non hai promemoria da cancellare.", "reminder"
+                    return "Non ho trovato promemoria attivi da cancellare, l'agenda è già pulita.", "reminder"
             
             # 2️⃣ Numero → elimina per indice
             import re
