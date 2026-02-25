@@ -69,7 +69,7 @@ class ReminderEngine:
             log("REMINDER_SAVE_ERROR", user_id=user_id, error=str(e))
             return False
     
-    def create_reminder(self, user_id: str, text: str, reminder_datetime: datetime) -> Optional[str]:
+    def create_reminder(self, user_id: str, text: str, reminder_datetime: datetime, source: str = "local") -> Optional[str]:
         """
         Create a new reminder for a user.
         """
@@ -85,6 +85,7 @@ class ReminderEngine:
                 "text": clean_text,
                 "datetime": reminder_datetime.isoformat() if reminder_datetime else None,
                 "status": "pending",
+                "source": source,
                 "created_at": now.isoformat()
             }
             
@@ -104,7 +105,7 @@ class ReminderEngine:
             log("REMINDER_CREATE_ERROR", user_id=user_id, error=str(e))
             return None
     
-    def create_reminder_with_response(self, user_id: str, text: str, reminder_datetime: datetime) -> tuple[Optional[str], Optional[str]]:
+    def create_reminder_with_response(self, user_id: str, text: str, reminder_datetime: datetime, source: str = "local") -> tuple[Optional[str], Optional[str]]:
         """
         Create a new reminder and return response.
         """
@@ -113,7 +114,7 @@ class ReminderEngine:
                 log("REMINDER_VALIDATION_FAILED", user_id=user_id, has_datetime=False, text=text[:50])
                 return None, "Non ho capito quando vuoi che ti ricordi."
             
-            reminder_id = self.create_reminder(user_id, text, reminder_datetime)
+            reminder_id = self.create_reminder(user_id, text, reminder_datetime, source=source)
             
             if reminder_id:
                 date_str = reminder_datetime.strftime("%d %b %H:%M")
@@ -435,6 +436,8 @@ class ReminderEngine:
                     source_tag = " (iCloud)"
                 elif source == "google":
                     source_tag = " (Google)"
+                else:
+                    source_tag = " (Genesi)"
                 
                 status_icon = "✅" if status == "done" else "⏰" if status == "pending" else "🔔" if status == "triggered" else "❌"
                 lines.append(f"{i}. {date_str}{text}{source_tag} {status_icon}")

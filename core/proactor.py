@@ -732,8 +732,17 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 return "Non ho capito quando vuoi che ti ricordi. Prova a dire 'ricordami di [azione] [giorno] alle [ora]'.", "reminder"
             
             if reminder_text and reminder_datetime:
-                # Creazione LOCALE
-                reminder_id, response = reminder_engine.create_reminder_with_response(user_id, reminder_text, reminder_datetime)
+                # 3. DETERMINA SOURCE INIZIALE (con priorità)
+                pref_source = "local"
+                if "google" in message.lower():
+                    pref_source = "google"
+                elif "icloud" in message.lower() or "apple" in message.lower():
+                    pref_source = "icloud"
+                elif "calendario" in message.lower():
+                    pref_source = "google" # Default calendario -> google
+                
+                # Creazione LOCALE (con tag iniziale)
+                reminder_id, response = reminder_engine.create_reminder_with_response(user_id, reminder_text, reminder_datetime, source=pref_source)
                 
                 # Salva in sessione per follow-up (es. "Aggiungilo a Google")
                 self.last_reminder_per_user[user_id] = {"text": reminder_text, "dt": reminder_datetime}
@@ -752,15 +761,23 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 has_own_icloud = bool(profile.get("icloud_user") and profile.get("icloud_password"))
                 use_global_icloud = is_admin and bool(os.environ.get("ICLOUD_USER"))
                 
+                cloud_success = False
                 if force_sync or "icloud" in message.lower() or "apple" in message.lower() or has_own_icloud or use_global_icloud:
                     success = await reminder_engine.create_icloud_reminder(user_id, reminder_text, reminder_datetime)
                     if success:
+                        cloud_success = True
+                        if pref_source != "icloud":
+                            # Aggiorna source in locale
+                            reminders = reminder_engine._load_reminders(user_id)
+                            for r in reminders:
+                                if r["id"] == reminder_id: r["source"] = "icloud"
+                            reminder_engine._save_reminders(user_id, reminders)
+
                         if "Perfetto." in response:
                             response = response.replace("Perfetto.", "Perfetto, sincronizzato anche su iCloud.")
                         else:
                             response += " (Sincronizzato su iCloud)."
                     else:
-                        # Non segnaliamo errore se non esplicitamente chiesto
                         if "icloud" in message.lower() or "apple" in message.lower() or "tutti" in message.lower():
                             response += " (Nota: non sono riuscito a scriverlo su iCloud)."
                 
@@ -769,10 +786,17 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 has_own_google = bool(profile.get("google_token"))
                 use_global_google = is_admin and calendar_manager._admin_google_service is not None
                 
-                if force_sync or "google" in message.lower() or ("calendario" in message.lower() and (has_own_google or use_global_google)) or has_own_google or use_global_google:
+                if not cloud_success and (force_sync or "google" in message.lower() or ("calendario" in message.lower() and (has_own_google or use_global_google)) or has_own_google or use_global_google):
                     if use_global_google or has_own_google:
                         success = calendar_manager.add_event(user_id, reminder_text, reminder_datetime, provider='google')
                         if success:
+                            # Aggiorna source in locale se necessario
+                            if pref_source != "google":
+                                reminders = reminder_engine._load_reminders(user_id)
+                                for r in reminders:
+                                    if r["id"] == reminder_id: r["source"] = "google"
+                                reminder_engine._save_reminders(user_id, reminders)
+                                
                             if "Perfetto." in response:
                                 response = response.replace("Perfetto.", "Perfetto, aggiunto al tuo Google Calendar.")
                             else:
