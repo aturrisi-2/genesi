@@ -14,7 +14,6 @@
             --card-bg: rgba(255, 255, 255, 0.03);
             --text: #E0E0E0;
             --accent: #007AFF;
-            /* Apple Blue */
         }
 
         * {
@@ -34,142 +33,177 @@
         }
 
         .container {
-            max-width: 800px;
+            max-width: 700px;
             width: 100%;
         }
 
         header {
             text-align: center;
-            margin-bottom: 4rem;
+            margin-bottom: 3rem;
         }
 
         h1 {
             font-family: 'Outfit', sans-serif;
-            font-size: 2.5rem;
+            font-size: 2.8rem;
             background: linear-gradient(135deg, #fff 0%, var(--gold) 100%);
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
-            margin-bottom: 1rem;
+            margin-bottom: 0.5rem;
         }
 
         p.subtitle {
             font-weight: 300;
-            opacity: 0.7;
+            opacity: 0.6;
+            font-size: 1.1rem;
         }
 
         .step {
             background: var(--card-bg);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 20px;
-            padding: 2rem;
-            margin-bottom: 2rem;
-            backdrop-filter: blur(10px);
-            transition: transform 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            padding: 2.5rem;
+            margin-bottom: 2.5rem;
+            position: relative;
+            overflow: hidden;
         }
 
-        .step:hover {
-            transform: translateY(-5px);
-            border-color: var(--gold);
+        .step::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--gold);
+            opacity: 0.5;
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
         }
 
         .step-num {
-            display: inline-block;
             background: var(--gold);
-            color: black;
-            width: 30px;
-            height: 30px;
-            text-align: center;
-            line-height: 30px;
+            color: #000;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
-            font-weight: bold;
-            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 0.9rem;
         }
 
         h2 {
             font-family: 'Outfit', sans-serif;
-            margin-bottom: 1rem;
-            color: white;
+            font-size: 1.5rem;
+            color: #fff;
         }
 
         .instruction {
-            margin-bottom: 1.5rem;
             font-size: 1.1rem;
+            margin-bottom: 1.5rem;
+            color: rgba(255, 255, 255, 0.8);
         }
 
-        .image-placeholder {
-            width: 100%;
+        .ui-preview {
+            background: #151517;
             border-radius: 12px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px dashed rgba(255, 255, 255, 0.2);
-            padding: 2rem;
-            text-align: center;
-            color: rgba(255, 255, 255, 0.4);
-            font-style: italic;
-        }
-
-        .code-block {
-            background: black;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             padding: 1rem;
-            border-radius: 10px;
-            font-family: monospace;
-            color: var(--gold);
-            border: 1px solid var(--gold);
-            margin: 1rem 0;
-            text-align: center;
-            font-size: 1.2rem;
-            letter-spacing: 2px;
+            margin-top: 1rem;
         }
 
-        footer {
+        .ui-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.8rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .ui-row:last-child {
+            border-bottom: none;
+        }
+
+        .ui-label {
+            font-size: 0.9rem;
+            color: #fff;
+        }
+
+        .ui-value {
+            font-size: 0.8rem;
+            color: var(--accent);
+            cursor: pointer;
+        }
+
+        .code-input {
+            background: #000;
+            border: 1px solid var(--gold);
+            color: var(--gold);
+            padding: 1.2rem;
+            border-radius: 12px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 1.25rem;
             text-align: center;
-            margin-top: 4rem;
-            opacity: 0.5;
+            margin: 1.5rem 0;
+            letter-spacing: 1px;
+            box-shadow: 0 0 15px rgba(212, 175, 55, 0.1);
+        }
+
+        .save-banner {
+            background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.1), transparent);
+            padding: 1rem;
+            text-align: center;
+            border-radius: 10px;
+            margin-top: 3rem;
             font-size: 0.9rem;
         }
 
-        .btn-print {
+        .btn-action {
             display: inline-block;
-            margin-top: 2rem;
-            padding: 0.8rem 2rem;
-            border: 1px solid var(--gold);
-            color: var(--gold);
-            text-decoration: none;
+            background: var(--gold);
+            color: #000;
+            padding: 1rem 2.5rem;
             border-radius: 50px;
+            text-decoration: none;
+            font-weight: 700;
+            margin-top: 1rem;
             transition: all 0.3s;
         }
 
-        .btn-print:hover {
-            background: var(--gold);
-            color: black;
+        .btn-action:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 25px rgba(212, 175, 55, 0.3);
         }
 
         @media print {
-            .btn-print {
-                display: none;
-            }
-
             body {
-                background: white;
-                color: black;
-                padding: 0;
+                background: #fff;
+                color: #000;
             }
 
             .step {
-                border: 1px solid #ccc;
-                background: none;
+                border: 1px solid #ddd;
+                background: #fff;
+                color: #000;
                 break-inside: avoid;
             }
 
             h1,
-            h2 {
-                color: black !important;
-                -webkit-text-fill-color: black !important;
+            h2,
+            .ui-label {
+                color: #000 !important;
+                -webkit-text-fill-color: #000 !important;
             }
 
-            .step-num {
-                background: #333;
-                color: white;
+            .btn-action {
+                display: none;
             }
         }
     </style>
@@ -178,61 +212,65 @@
 <body>
     <div class="container">
         <header>
-            <h1>Guida iCloud</h1>
-            <p class="subtitle">Come generare una password specifica per collegare i tuoi promemoria a Genesi.</p>
+            <h1>Configura iCloud</h1>
+            <p class="subtitle">Segui questi semplici passi per attivare la sincronizzazione.</p>
         </header>
 
         <div class="step">
-            <div class="step-num">1</div>
-            <h2>Accedi al tuo ID Apple</h2>
-            <p class="instruction">Vai sul sito ufficiale Apple dedicato alla gestione dell'account e inserisci le tue
-                credenziali:</p>
-            <div class="code-block" style="border-style: solid; color: #007AFF; border-color: #007AFF;">
-                appleid.apple.com
+            <div class="step-header">
+                <div class="step-num">1</div>
+                <h2>Accedi al portale Apple</h2>
             </div>
-            <p style="font-size: 0.9rem; opacity: 0.6;">(Immagine riferimento: Pagina principale "Accesso e sicurezza")
-            </p>
+            <p class="instruction">Vai alla pagina di gestione del tuo Apple ID. È il luogo sicuro dove Apple ti
+                permette di creare chiavi per app esterne.</p>
+            <a href="https://appleid.apple.com/account/manage" target="_blank" class="btn-action">Apri
+                appleid.apple.com</a>
         </div>
 
         <div class="step">
-            <div class="step-num">2</div>
-            <h2>Sezione Password Specifiche</h2>
-            <p class="instruction">Nel menu a sinistra (o nel riquadro centrale se sei da mobile), seleziona
-                <strong>Accesso e sicurezza</strong>. Quindi clicca sul riquadro <strong>Password specifiche per le
-                    app</strong>.
-            </p>
-        </div>
-
-        <div class="step">
-            <div class="step-num">3</div>
-            <h2>Genera Nuova Password</h2>
-            <p class="instruction">Clicca sul tasto <strong>+</strong> (Più) o su <strong>Genera una password specifica
-                    per l'app</strong>. Inserisci un nome per ricordarti a cosa serve, ad esempio:</p>
-            <div class="code-block">Genesi Ai</div>
-        </div>
-
-        <div class="step">
-            <div class="step-num">4</div>
-            <h2>Conferma Identità</h2>
-            <p class="instruction">Il sistema ti chiederà di inserire la tua password principale dell'ID Apple per
-                confermare l'operazione. È un passaggio di sicurezza standard.</p>
-        </div>
-
-        <div class="step">
-            <div class="step-num">5</div>
-            <h2>Copia il Codice</h2>
-            <p class="instruction">Apple ti mostrerà un codice di 16 caratteri (es. <code>abcd-efgh-ijkl-mnop</code>).
-                Copialo e invialo a Genesi in chat in questo formato:</p>
-            <div class="code-block" style="font-size: 0.9rem; letter-spacing: 0;">
-                Collega la mia mail [email] con password [codice]
+            <div class="step-header">
+                <div class="step-num">2</div>
+            </div>
+            <h2>Trova "Password App"</h2>
+            <p class="instruction">Nel menu <strong>Accesso e sicurezza</strong>, cerca il riquadro dedicato alle
+                password per le app.</p>
+            <div class="ui-preview">
+                <div class="ui-row"><span class="ui-label">Email e numeri di telefono</span><span
+                        class="ui-value">></span></div>
+                <div class="ui-row" style="background: rgba(212, 175, 55, 0.1);"><span class="ui-label">Password
+                        specifiche per le app</span><span class="ui-value">Vedi i dettagli</span></div>
+                <div class="ui-row"><span class="ui-label">Sicurezza dell'account</span><span class="ui-value">></span>
+                </div>
             </div>
         </div>
 
-        <div style="text-align: center;">
-            <a href="#" class="btn-print" onclick="window.print()">Salva come PDF / Stampa</a>
+        <div class="step">
+            <div class="step-header">
+                <div class="step-num">3</div>
+            </div>
+            <h2>Crea la chiave "Genesi"</h2>
+            <p class="instruction">Genera una nuova password. Scegli un nome che ti aiuti a riconoscerla (es:
+                <em>Genesi</em>). Dovrai confermare con la tua password Apple ID.</p>
+            <div class="code-input" style="color: #fff; border-style: dashed; opacity: 0.6;">Conferma Identità...</div>
         </div>
 
-        <footer>
+        <div class="step">
+            <div class="step-header">
+                <div class="step-num">4</div>
+            </div>
+            <h2>Copia e Invia</h2>
+            <p class="instruction">Apple ti mostrerà un codice di 16 lettere. Copialo e scrivimi in chat un messaggio
+                con questo formato:</p>
+            <div class="code-input">
+                Collega la mia mail ... con password xxxx-xxxx-xxxx-xxxx
+            </div>
+        </div>
+
+        <div class="save-banner" onclick="window.print()" style="cursor: pointer;">
+            💾 Clicca qui per <strong>Stampare</strong> o <strong>Salvare come PDF</strong> questa guida.
+        </div>
+
+        <footer style="text-align: center; padding: 2rem; opacity: 0.4; font-size: 0.8rem;">
             Genesi - Faro nell'Oceano &copy; 2026
         </footer>
     </div>

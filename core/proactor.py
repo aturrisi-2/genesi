@@ -1106,6 +1106,7 @@ Messaggio: {message}"""
                     "3. Clicca su **Genera una password specifica per l'app** (puoi chiamarla 'Genesi').\n"
                     "4. Una volta ottenuta (sarà un codice di 16 caratteri tipo `abcd-efgh-ijkl-mnop`), scrivimi un messaggio come questo:\n\n"
                     "> Collega la mia mail *nome@email.com* con password *abcd-efgh-ijkl-mnop*\n\n"
+                    "👉 **[Consulta la Guida Illustrata Passo-Passo](/guida-icloud)**\n\n"
                     "Penserò io a configurare tutto il resto! Preferisci iniziare adesso o hai bisogno di aiuto in qualche passaggio? ✨"
                 )
             
