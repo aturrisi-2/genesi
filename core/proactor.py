@@ -518,12 +518,20 @@ class Proactor:
         # Domanda specifica: account collegati
         if any(kw in msg_lower for kw in ["account collegati", "miei account", "quali account ho", "icloud", "google", "apple"]):
             linked = []
+            # Check for Admin status
+            from auth.config import ADMIN_EMAILS
+            user_email = profile.get("email", "")
+            is_admin = user_email in ADMIN_EMAILS
+
             if profile.get("icloud_user") or profile.get("icloud_verified"):
                 email = profile.get("icloud_user") or "iCloud"
                 linked.append(f"iCloud ({email})")
+            elif is_admin and os.environ.get("ICLOUD_USER"):
+                linked.append("iCloud (Admin)")
             
             from calendar_manager import calendar_manager
-            if calendar_manager._google_service:
+            # Only show global service to Admin. Others must have their own token.
+            if profile.get("google_token") or (is_admin and calendar_manager._google_service):
                 linked.append("Google Calendar")
             
             if not linked:
