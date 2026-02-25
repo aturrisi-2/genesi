@@ -903,7 +903,7 @@ function renderMessageContent(text) {
   // 1. Placeholder replacement (e.g., token for auth links)
   const token = getAuthToken() || "";
   let processed = text.replace(/{{token}}/g, token);
-  processed = processed.replace(/%7B%7Btoken%7D%7D/g, token); // Handle URL-encoded version
+  processed = processed.replace(/%7B%7Btoken%7D%7D/g, token); // URL-encoded version
 
   // Escape HTML base
   const escape = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
