@@ -1692,8 +1692,8 @@ body {
   font-family: 'Cormorant Garamond', Georgia, serif;
   font-size: 0.85rem;
   letter-spacing: 0.06em;
-  color: var(--color-text, rgba(255, 255, 255, 0.55));
-  border-top: 1px solid var(--text-muted, rgba(255, 255, 255, 0.08));
+  color: #fff;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding-top: 0.8rem;
   min-height: 2.2rem;
 }
@@ -1747,7 +1747,7 @@ body {
 .weather-widget__icon-wrap {
   font-size: 1.3rem;
   line-height: 1;
-  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.15));
+  filter: drop-shadow(0 0 8px rgba(255, 200, 50, 0.4));
 }
 
 .weather-widget__details {
@@ -1762,19 +1762,21 @@ body {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   font-size: 0.75rem;
-  opacity: 0.7;
+  opacity: 0.9;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
 }
 
 .weather-widget__temp {
   font-size: 1.05rem;
   font-weight: 300;
   letter-spacing: 0.02em;
-  color: var(--color-text, rgba(255, 255, 255, 0.8));
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
 }
 
 .weather-widget__desc {
   font-style: italic;
-  opacity: 0.65;
+  opacity: 0.85;
 }
 
 .weather-widget__meta,
@@ -1886,7 +1888,7 @@ body {
 .weather-widget__meta,
 .weather-widget__time {
   font-size: 1rem !important;
-  opacity: 0.65 !important;
+  opacity: 0.85 !important;
 }
 
 /* 5. Ticker News marquee / Rimuove box neon */
@@ -1911,7 +1913,7 @@ body {
   font-style: italic !important;
   font-size: 1.15rem !important;
   font-weight: 500 !important;
-  color: rgba(0, 229, 255, 0.5) !important;
+  color: rgba(0, 229, 255, 0.9) !important;
   padding-left: 100% !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
@@ -1922,7 +1924,7 @@ body {
   border: none !important;
   outline: none !important;
   box-shadow: none !important;
-  text-shadow: none !important;
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.4) !important;
   max-width: none !important;
 }
 
