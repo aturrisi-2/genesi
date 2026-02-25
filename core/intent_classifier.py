@@ -463,11 +463,14 @@ class IntentClassifier:
             
             # Se contiene reminder keywords ma non è stato classificato come reminder_*
             # e non ha data/orario chiara → downgrade a chat_free
+            # MA solo se non è già un intent tecnico o esplicito (weather, news, tecnica, etc.)
             if not intent.startswith('reminder_') and not self._has_datetime_reference(message_lower):
+                protected_intents = ["weather", "news", "tecnica", "debug", "spiegazione", "icloud_sync", "google_sync", "identity"]
+                if intent in protected_intents:
+                    return intent
+                
                 log("REMINDER_GUARD_AMBIGUOUS", original_intent=intent, final_intent="chat_free", reason="ambiguous_reminder", message=message[:50])
                 return "chat_free"
-        
-        return intent
         
         return intent
     
@@ -594,6 +597,7 @@ REGOLE SPECIALI:
                     
                     # LOGGING
                     log("LLM_INTENT_CLASSIFICATION", intents=intents, score=score, message=message[:50], user_id=user_id)
+                    logger.info(f"LLM_INTENT_CLASSIFICATION intents={intents} score={score}")
                     
                     # Se lo score < 0.8 per intent che azionano tool/api specifiche, ferma e chiedi chiarimenti
                     # (Solo se c'è un solo intent critico)
