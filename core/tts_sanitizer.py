@@ -129,13 +129,10 @@ def sanitize_for_tts(text: str) -> str:
     replacements = {
         "km/h": "chilometri orari",
         "kmh": "chilometri orari",
-        "km/h": "chilometri orari",
         "°C": "gradi Celsius",
         "°c": "gradi Celsius",
         "°": "gradi",
         "%": "percento",
-        "→": "",
-        "←": "",
         "→": "",
         "←": "",
         "↔": "",
@@ -159,10 +156,26 @@ def sanitize_for_tts(text: str) -> str:
         "♣": "",
         "♠": "",
         "♥": "",
+        "*": "",
+        "#": "",
+        "_": "",
+        "[": "",
+        "]": "",
+        "(": "",
+        ")": "",
     }
     
     for old, new in replacements.items():
         sanitized = sanitized.replace(old, new)
+    
+    # 2.4 Rimuovi Markdown Links [testo](url) -> mantiene "testo"
+    sanitized = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'\1', sanitized)
+
+    # 2.5 Rimuovi URL assoluti (mantenendo il testo circostante)
+    sanitized = re.sub(r'https?://[^\s]+', '', sanitized)
+
+    # 2.6 Rimuovi eventuali percorsi/slash residui che confondono il TTS
+    sanitized = sanitized.replace("/", " ").replace("\\", " ")
     
     # 3. Rimuovi spazi multipli
     sanitized = re.sub(r'\s+', ' ', sanitized)
