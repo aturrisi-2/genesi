@@ -55,6 +55,11 @@ class CognitiveMemoryEngine:
         if existing_profile_data:
             extracted_profile_data.update(existing_profile_data)
         
+        # GUARD: Non cercare di estrarre identità da domande esplicite sulla propria identità
+        if "?" in message or any(q in message.lower() for q in ["chi sono", "come mi chiamo", "che lavoro", "dove vivo", "cosa sai di me"]):
+            logger.info("COGNITIVE_IDENTITY_QUESTION_SKIP reason=question_detected message=%s", message)
+            return {"persist": False, "memory_type": None, "key": None, "value": None, "confidence": 0.0}
+
         # Check for strong emotional patterns first
         if _is_strong_emotional(message):
             return {

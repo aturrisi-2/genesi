@@ -394,7 +394,7 @@ class ReminderEngine:
         try:
             reminders = self._load_reminders(user_id)
             pending = [r for r in reminders if r.get("status") == "pending"]
-            pending.sort(key=lambda r: r["datetime"], reverse=True)
+            pending.sort(key=lambda r: (r.get("datetime") is None, r.get("datetime") or ""), reverse=True)
             return pending[0] if pending else None
         except Exception as e:
             log("REMINDER_GET_LATEST_ERROR", user_id=user_id, error=str(e))
