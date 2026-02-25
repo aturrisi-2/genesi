@@ -154,6 +154,12 @@ def is_geo_followup(message: str) -> bool:
     word_count = len(msg.split())
     if word_count >= 6:
         return False
+    
+    # Exclude common short conversational words that are definitely NOT cities
+    conversational_stops = {"no", "si", "sì", "ok", "okay", "grazie", "grazie mille", "va bene", "perfetto", "ottimo", "grazie!", "no."}
+    if msg.lower().strip() in conversational_stops:
+        return False
+
     return any(p.search(msg) for p in _GEO_FOLLOWUP_COMPILED)
 
 

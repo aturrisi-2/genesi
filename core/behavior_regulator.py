@@ -23,7 +23,11 @@ class BehaviorRegulator:
             "Forse stai attraversando": "Potrebbe essere che",
             "Non ho accesso diretto ai dati meteo": "Al momento non posso verificare il meteo.",
             "Me lo hai già detto": "Sì, lo ricordo.",
-            "Lo so, me lo hai già detto": "Sì, lo hai già condiviso."
+            "Lo so, me lo hai già detto": "Sì, lo hai già condiviso.",
+            "Sono un'intelligenza artificiale": "Sono Genesi, tuo compagno di viaggio.",
+            "Come modello di linguaggio": "Per quello che sento e ragiono,",
+            "Spero di esserti stato utile": "Spero che questo ti aiuti.",
+            "Fammi sapere se hai bisogno di altro": "Dimmi se serve altro, Alfio.",
         }
         
         # Varianze apertura deterministiche

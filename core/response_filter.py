@@ -69,6 +69,10 @@ TEMPLATE_BLACKLIST = [
     r"cos'altro posso fare",
     r"posso aiutarti con qualcosa",
     r"sono a tua disposizione",
+    r"ti ascolto",
+    r"ti sto ascoltando",
+    r"sono qui con te",
+    r"^ci sono\.?$",
 ]
 
 # Compiled for performance
