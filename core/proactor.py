@@ -363,7 +363,9 @@ class Proactor:
                 # Se il messaggio parla di caricamento/configurazione/calendario, sii specifico
                 msg_lower = message.lower()
                 if any(kw in msg_lower for kw in ["calendario", "account", "collega", "configura", "setup", "calendari"]):
-                    return "Vuoi configurare il tuo calendario? Posso aiutarti sia con Google che con iCloud. Quale dei due preferiresti collegare per iniziare?", "tool"
+                    if "icloud" not in msg_lower and "google" not in msg_lower:
+                        return "Vuoi configurare il tuo calendario? Posso aiutarti sia con Google che con iCloud. Quale dei due preferiresti collegare per iniziare?", "tool"
+                
                 return "Non sono sicuro di aver capito. Intendevi usare uno strumento specifico come un promemoria o il meteo? Puoi chiarire per favore?", "tool"
 
             # Multi-intent execution state

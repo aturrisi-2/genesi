@@ -573,7 +573,8 @@ Devi restituire esclusivamente un payload JSON valido in questa forma:
 
 REGOLE SPECIALI:
 - Se l'utente chiede di scrivere CODICE (es. "scrivimi un promemoria in Python"), l'intent è "tecnica", NON "reminder_create".
-- Se l'utente dice solo "calendario" o "account" senza specificare iCloud o Google, usa "icloud_setup" o "google_setup" con uno score molto BASSO (es. 0.5), così il sistema potrà chiedere chiarimenti.
+- Se l'utente specifica chiaramente il servizio (es. "collega icloud"), usa lo score massimo (0.95-1.0).
+- Se l'utente dice solo "calendario" o "account" senza specificare iCloud o Google, usa "icloud_setup" o "google_setup" con uno score basso (es. 0.5), così il sistema potrà chiedere chiarimenti.
 - Se l'utente fa più richieste distinte (es. "che tempo fa e ricordami di..."), elenca entrambi gli intent in "intents".
 - Se l'intenzione non è chiara, usa un solo intent con score basso.
 """
@@ -610,8 +611,7 @@ REGOLE SPECIALI:
                     # (Solo se c'è un solo intent critico)
                     tool_intents = [
                         "weather", "news", "time", "date", 
-                        "reminder_create", "reminder_delete", "reminder_update", "reminder_list",
-                        "icloud_setup", "google_setup", "icloud_sync", "google_sync"
+                        "reminder_create", "reminder_delete", "reminder_update", "reminder_list"
                     ]
                     if len(intents) == 1 and score < 0.8 and intents[0] in tool_intents:
                         if intents[0] == "weather":
