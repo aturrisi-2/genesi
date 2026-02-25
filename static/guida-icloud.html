@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guida Configurazione iCloud - Genesi</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700&family=Inter:wght@300;400&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --gold: #D4AF37;
+            --dark: #0A0A0B;
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --text: #E0E0E0;
+            --accent: #007AFF;
+            /* Apple Blue */
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--dark);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            line-height: 1.6;
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, #fff 0%, var(--gold) 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1rem;
+        }
+
+        p.subtitle {
+            font-weight: 300;
+            opacity: 0.7;
+        }
+
+        .step {
+            background: var(--card-bg);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease;
+        }
+
+        .step:hover {
+            transform: translateY(-5px);
+            border-color: var(--gold);
+        }
+
+        .step-num {
+            display: inline-block;
+            background: var(--gold);
+            color: black;
+            width: 30px;
+            height: 30px;
+            text-align: center;
+            line-height: 30px;
+            border-radius: 50%;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+
+        h2 {
+            font-family: 'Outfit', sans-serif;
+            margin-bottom: 1rem;
+            color: white;
+        }
+
+        .instruction {
+            margin-bottom: 1.5rem;
+            font-size: 1.1rem;
+        }
+
+        .image-placeholder {
+            width: 100%;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px dashed rgba(255, 255, 255, 0.2);
+            padding: 2rem;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.4);
+            font-style: italic;
+        }
+
+        .code-block {
+            background: black;
+            padding: 1rem;
+            border-radius: 10px;
+            font-family: monospace;
+            color: var(--gold);
+            border: 1px solid var(--gold);
+            margin: 1rem 0;
+            text-align: center;
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 4rem;
+            opacity: 0.5;
+            font-size: 0.9rem;
+        }
+
+        .btn-print {
+            display: inline-block;
+            margin-top: 2rem;
+            padding: 0.8rem 2rem;
+            border: 1px solid var(--gold);
+            color: var(--gold);
+            text-decoration: none;
+            border-radius: 50px;
+            transition: all 0.3s;
+        }
+
+        .btn-print:hover {
+            background: var(--gold);
+            color: black;
+        }
+
+        @media print {
+            .btn-print {
+                display: none;
+            }
+
+            body {
+                background: white;
+                color: black;
+                padding: 0;
+            }
+
+            .step {
+                border: 1px solid #ccc;
+                background: none;
+                break-inside: avoid;
+            }
+
+            h1,
+            h2 {
+                color: black !important;
+                -webkit-text-fill-color: black !important;
+            }
+
+            .step-num {
+                background: #333;
+                color: white;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Guida iCloud</h1>
+            <p class="subtitle">Come generare una password specifica per collegare i tuoi promemoria a Genesi.</p>
+        </header>
+
+        <div class="step">
+            <div class="step-num">1</div>
+            <h2>Accedi al tuo ID Apple</h2>
+            <p class="instruction">Vai sul sito ufficiale Apple dedicato alla gestione dell'account e inserisci le tue
+                credenziali:</p>
+            <div class="code-block" style="border-style: solid; color: #007AFF; border-color: #007AFF;">
+                appleid.apple.com
+            </div>
+            <p style="font-size: 0.9rem; opacity: 0.6;">(Immagine riferimento: Pagina principale "Accesso e sicurezza")
+            </p>
+        </div>
+
+        <div class="step">
+            <div class="step-num">2</div>
+            <h2>Sezione Password Specifiche</h2>
+            <p class="instruction">Nel menu a sinistra (o nel riquadro centrale se sei da mobile), seleziona
+                <strong>Accesso e sicurezza</strong>. Quindi clicca sul riquadro <strong>Password specifiche per le
+                    app</strong>.
+            </p>
+        </div>
+
+        <div class="step">
+            <div class="step-num">3</div>
+            <h2>Genera Nuova Password</h2>
+            <p class="instruction">Clicca sul tasto <strong>+</strong> (Più) o su <strong>Genera una password specifica
+                    per l'app</strong>. Inserisci un nome per ricordarti a cosa serve, ad esempio:</p>
+            <div class="code-block">Genesi Ai</div>
+        </div>
+
+        <div class="step">
+            <div class="step-num">4</div>
+            <h2>Conferma Identità</h2>
+            <p class="instruction">Il sistema ti chiederà di inserire la tua password principale dell'ID Apple per
+                confermare l'operazione. È un passaggio di sicurezza standard.</p>
+        </div>
+
+        <div class="step">
+            <div class="step-num">5</div>
+            <h2>Copia il Codice</h2>
+            <p class="instruction">Apple ti mostrerà un codice di 16 caratteri (es. <code>abcd-efgh-ijkl-mnop</code>).
+                Copialo e invialo a Genesi in chat in questo formato:</p>
+            <div class="code-block" style="font-size: 0.9rem; letter-spacing: 0;">
+                Collega la mia mail [email] con password [codice]
+            </div>
+        </div>
+
+        <div style="text-align: center;">
+            <a href="#" class="btn-print" onclick="window.print()">Salva come PDF / Stampa</a>
+        </div>
+
+        <footer>
+            Genesi - Faro nell'Oceano &copy; 2026
+        </footer>
+    </div>
+</body>
+
+</html>

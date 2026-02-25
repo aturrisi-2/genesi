@@ -277,6 +277,10 @@ async def serve_admin():
 async def serve_brochure():
     return FileResponse(BASE_DIR / "static" / "brochure.html")
 
+@app.get("/guida-icloud")
+async def serve_guida_icloud():
+    return FileResponse(BASE_DIR / "static" / "guida-icloud.html")
+
 @app.get("/sw.js")
 async def serve_sw():
     return FileResponse(BASE_DIR / "static" / "sw.js")
