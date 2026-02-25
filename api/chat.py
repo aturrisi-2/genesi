@@ -260,6 +260,15 @@ async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "version": "v2", "storage": "in-memory"}
 
+# Global flags for TTS status (if needed by frontend)
+is_speaking_global = False
+vad_active_global = True
+
+@router.post("/tts-state")
+async def tts_state():
+    """Endpoint per monitorare lo stato del TTS dal backend."""
+    return {"isSpeaking": is_speaking_global, "vadActive": vad_active_global}
+
 async def _generate_human_reminder_list(user_id: str, message: str, reminders: list) -> str:
     """Genera una risposta naturale e umana agli impegni trovati."""
     from core.llm_service import llm_service

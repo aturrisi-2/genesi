@@ -40,6 +40,7 @@ from core.document_context_manager import get_document_context_manager
 from core.image_search_service import get_image_search_service, extract_image_query
 import unidecode
 import os
+from core.time_awareness import get_time_context, get_formatted_time
 
 logger = logging.getLogger(__name__)
 
@@ -1872,6 +1873,10 @@ REGOLE:
         user_boundaries = self._detect_user_boundaries(conversation_context, message)
         user_name = conversation_context.split("NOME: ")[1].split("\n")[0] if "NOME: " in conversation_context else "l'utente"
         
+        # TIME AWARENESS
+        time_ctx = get_time_context()
+        now_formatted = get_formatted_time()
+        
         # STEP 1: Document Context injection (NotebookLM behavior)
         system_prompt = ""
         if user_id:
@@ -1887,6 +1892,7 @@ Intento: {message[:20]}...
 Profilo: {user_name} (Roma)
 Calendario: {calendar_info[:50]}
 Mood: {latent_synopsis[:30]}
+Tempo: {time_ctx} ({now_formatted})
 [/THINKING_CONTEXT]
 
 TU SEI GENESI - IL CERVELLO PERSONALE DI {user_name.upper()} (Roma, IT 🇮🇹)
@@ -1897,6 +1903,11 @@ CARATTERE E PERSONA:
 - ITALIANO NATURALE: Parla come una persona reale. Usa contrazioni ("C'è", "L'ho"), ed espressioni naturali come "Dai su", "Figo", "Uff", "Vero?".
 - Se sai che {user_name} è a Roma, usa un tono che risuoni con l'ambiente (calore, schiettezza).
 - MAI ROBOTICO: Evita "Sono qui per aiutarti", "In base ai miei dati". Sii umano.
+
+CONSAPEVOLEZZA TEMPORALE:
+- Siamo nella fascia: {time_ctx}.
+- Usa questa informazione per salutare o fare riferimenti naturali (es. "Buon pomeriggio", "Bella serata", "Dovresti dormire").
+- NO ASSUNZIONI: "Sono le {now_formatted} ({time_ctx})".
 
 CHAIN-OF-THOUGHT INVISIBILE (Pensa ma non dirlo):
 1. CAPISCI: Che vuole davvero {user_name}? Qual è il suo umore?
@@ -1920,7 +1931,7 @@ DETTAGLI DI STILE:
 - EMOJI: Massima 1 per messaggio, deve sembrare naturale, non forzata. 😊
 - CALL-TO-ACTION: Chiudi spesso con una domanda leggera o un'offerta di aiuto proattiva.
 
-DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')}
+DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')} ({time_ctx})
 {conversation_context}
 
 STATO LATENTE: {latent_synopsis}

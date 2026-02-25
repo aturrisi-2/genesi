@@ -1452,9 +1452,9 @@ async function startRecording() {
     console.log('[MIC] requesting permission...');
     const constraints = {
       audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
       }
     };
 
@@ -2799,8 +2799,13 @@ async function sendVoiceMessage(text) {
   voiceBlockedUntil = Date.now() + 12000;
   console.log('VOICE_BLOCKED_START timestamp=' + Date.now() + ' will unblock after 12s');
 
-  // NON fare voiceRecognition?.stop() e NON fare voiceRecognition = null
-  // Lascia che sia onend a gestire il ciclo
+  // PAUSA MIC DURANTE TTS - Fermiamo il riconoscimento per sicurezza
+  if (voiceRecognition && recognitionActive) {
+    try {
+      voiceRecognition.stop();
+      console.log('🎤 Mic PAUSED - Genesi sta per rispondere');
+    } catch (e) { }
+  }
 
   // Imposta il testo nel campo input corretto
   textInput.value = text;
