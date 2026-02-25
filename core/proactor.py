@@ -1098,16 +1098,11 @@ Messaggio: {message}"""
 
             if not email or not password:
                 return (
-                    "Certamente! Per collegare il tuo calendario iCloud in modo sicuro, ho bisogno che crei una **password specifica per l'app**. "
-                    "In questo modo non dovrò mai conoscere la tua password principale dell'ID Apple.\n\n"
-                    "Ecco come fare in un attimo:\n"
-                    "1. Accedi al tuo account su [appleid.apple.com](https://appleid.apple.com/account/manage).\n"
-                    "2. Nella sezione **Accesso e sicurezza**, clicca su **Password specifiche per le app**.\n"
-                    "3. Clicca su **Genera una password specifica per l'app** (puoi chiamarla 'Genesi').\n"
-                    "4. Una volta ottenuta (sarà un codice di 16 caratteri tipo `abcd-efgh-ijkl-mnop`), scrivimi un messaggio come questo:\n\n"
-                    "> Collega la mia mail *nome@email.com* con password *abcd-efgh-ijkl-mnop*\n\n"
-                    "👉 **[Consulta la Guida Illustrata Passo-Passo](/guida-icloud)**\n\n"
-                    "Penserò io a configurare tutto il resto! Preferisci iniziare adesso o hai bisogno di aiuto in qualche passaggio? ✨"
+                    "Certamente. Per collegare i tuoi promemoria iCloud in modo sicuro, dobbiamo creare una password specifica su Apple ID. "
+                    "È un'operazione veloce che protegge i tuoi dati personali.\n\n"
+                    "Ho preparato per te una **[Guida Illustrata con le tue immagini](/guida-icloud)** che puoi seguire passo dopo passo e salvare sul tuo telefono.\n\n"
+                    "Una volta ottenuta la password di 16 caratteri, scrivila qui sotto scrivendo:\n"
+                    "Collega la mia mail con password abcd-efgh-ijkl-mnop ✨"
                 )
             
             # Salva nel profilo
