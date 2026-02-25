@@ -364,6 +364,16 @@ class Proactor:
                 msg_lower = message.lower()
                 if any(kw in msg_lower for kw in ["calendario", "account", "collega", "configura", "setup", "calendari"]):
                     if "icloud" not in msg_lower and "google" not in msg_lower:
+                        # Intelligence: Check if something is already configured
+                        profile = await storage.load(f"profile:{user_id}", default={})
+                        has_icloud = profile.get("icloud_user")
+                        has_google = profile.get("google_token")
+                        
+                        if has_icloud and not has_google:
+                            return f"Ho visto che hai già collegato il tuo account iCloud ({has_icloud}). Desideri sincronizzare questo calendario o preferiresti aggiungere un account Google?", "tool"
+                        elif has_google and not has_icloud:
+                            return "Ho visto che il tuo Google Calendar è attivo. Desideri sincronizzare i tuoi impegni o preferiresti collegare anche un account iCloud?", "tool"
+                        
                         return "Vuoi configurare il tuo calendario? Posso aiutarti sia con Google che con iCloud. Quale dei due preferiresti collegare per iniziare?", "tool"
                 
                 return "Non sono sicuro di aver capito. Intendevi usare uno strumento specifico come un promemoria o il meteo? Puoi chiarire per favore?", "tool"
