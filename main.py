@@ -271,7 +271,7 @@ async def serve_reset_password():
 
 @app.get("/admin")
 async def serve_admin():
-    return FileResponse(BASE_DIR / "static" / "admin.html")
+    return FileResponse(BASE_DIR / "static" / "admin.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 @app.get("/brochure")
 async def serve_brochure():
