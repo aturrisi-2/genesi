@@ -47,3 +47,14 @@ class Visit(Base):
     user_agent = Column(String, nullable=True)
     path = Column(String, default="/")
     visited_at = Column(DateTime, default=datetime.utcnow)
+
+
+class UsageLog(Base):
+    __tablename__ = "usage_logs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, nullable=False, index=True)
+    model = Column(String, nullable=False)
+    prompt_tokens = Column(JSON, default=0) # Storing as total count for now
+    completion_tokens = Column(JSON, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -8,6 +8,8 @@ from typing import List, Dict, Any, Optional
 
 from openai import AsyncOpenAI, RateLimitError, APIError, APIConnectionError
 from core.log import log
+from auth.database import async_session
+from auth.models import UsageLog
 
 logger = logging.getLogger("genesi")
 
@@ -165,6 +167,14 @@ class LLMService:
             logger.info("%s_REQUEST model=%s", tag, model)
             response = await make_request(current_client, clean_model)
             llm_response = response.choices[0].message.content.strip()
+            
+            # Log usage asynchronously
+            try:
+                usage = response.usage
+                if usage and user_id:
+                    asyncio.create_task(self._log_usage(user_id, model, usage.prompt_tokens, usage.completion_tokens))
+            except Exception as e:
+                logger.error("LLM_USAGE_LOG_ERROR: %s", str(e))
 
             # Behavior Regulator
             try:
@@ -221,6 +231,21 @@ class LLMService:
         """Costruisce contesto utente formattato."""
         parts = [f"{k.capitalize()}: {v}" for k, v in user_profile.items() if v and k in ['name', 'profession', 'city', 'age']]
         return "\n".join(parts) if parts else "Nessun contesto utente disponibile."
+
+    async def _log_usage(self, user_id: str, model: str, prompt: int, completion: int):
+        """Salva l'utilizzo dei token nel database."""
+        try:
+            async with async_session() as session:
+                log_entry = UsageLog(
+                    user_id=user_id,
+                    model=model,
+                    prompt_tokens=prompt,
+                    completion_tokens=completion
+                )
+                session.add(log_entry)
+                await session.commit()
+        except Exception as e:
+            logger.error("LLM_USAGE_DB_ERROR: %s", str(e))
 
 # Istanza globale
 llm_service = LLMService()

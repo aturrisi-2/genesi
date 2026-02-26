@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin — Genesi</title>
     <link rel="stylesheet" href="/static/auth.css">
 </head>
+
 <body>
     <div class="auth-card" style="max-width:520px;">
         <h1>Pannello Admin</h1>
@@ -15,24 +17,37 @@
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="value" id="s-total">-</div>
-                    <div class="label">Utenti totali</div>
+                    <div class="label">Utenti</div>
                 </div>
                 <div class="stat-card">
-                    <div class="value" id="s-verified">-</div>
-                    <div class="label">Verificati</div>
-                </div>
-                <div class="stat-card">
-                    <div class="value" id="s-7d">-</div>
-                    <div class="label">Attivi 7g</div>
-                </div>
-                <div class="stat-card">
-                    <div class="value" id="s-30d">-</div>
-                    <div class="label">Attivi 30g</div>
-                </div>
-                <div class="stat-card" style="grid-column: 1 / -1;">
                     <div class="value" id="s-today">-</div>
-                    <div class="label">Registrazioni oggi</div>
+                    <div class="label">Nuovi oggi</div>
                 </div>
+                <div class="stat-card" id="or-card"
+                    style="grid-column: 1 / -1; background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.2);">
+                    <div class="value" id="or-usage" style="font-size: 1.2rem; color: #00e5ff;">Caricamento...</div>
+                    <div class="label">Consumo OpenRouter ($)</div>
+                </div>
+            </div>
+
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Dettaglio Utenti</h2>
+            <div class="user-table-container">
+                <table id="user-table">
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Registrazione</th>
+                            <th>Token Totali</th>
+                        </tr>
+                    </thead>
+                    <tbody id="user-tbody"></tbody>
+                </table>
+            </div>
+
+            <div style="margin-top:20px; text-align:center;">
+                <a href="https://openrouter.ai/activity" target="_blank" class="btn-external"
+                    style="display:inline-block; padding:8px 16px; background:rgba(255,255,255,0.05); border-radius:6px; color:#00e5ff; text-decoration:none; font-size:0.9rem;">Apri
+                    Grafici OpenRouter ↪</a>
             </div>
         </div>
 
@@ -45,61 +60,132 @@
         </div>
     </div>
 
-    <script>
-    const token = localStorage.getItem('genesi_access_token');
-    const isAdmin = localStorage.getItem('genesi_is_admin');
-    const msg = document.getElementById('msg');
-    const subtitle = document.getElementById('subtitle');
-
-    if (!token || isAdmin !== 'true') {
-        subtitle.textContent = '';
-        msg.textContent = 'Accesso negato. Devi essere admin per visualizzare questa pagina.';
-        msg.className = 'msg error';
-    } else {
-        loadStats();
-    }
-
-    async function loadStats() {
-        try {
-            const res = await fetch('/auth/admin/stats', {
-                headers: { 'Authorization': 'Bearer ' + token },
-            });
-
-            if (res.status === 401 || res.status === 403) {
-                subtitle.textContent = '';
-                msg.textContent = 'Sessione scaduta o accesso negato.';
-                msg.className = 'msg error';
-                return;
-            }
-
-            const data = await res.json();
-
-            if (res.ok) {
-                subtitle.textContent = 'Ultimo aggiornamento: ' + new Date(data.timestamp).toLocaleString('it-IT');
-                document.getElementById('s-total').textContent = data.total_users;
-                document.getElementById('s-verified').textContent = data.verified_users;
-                document.getElementById('s-7d').textContent = data.active_7d;
-                document.getElementById('s-30d').textContent = data.active_30d;
-                document.getElementById('s-today').textContent = data.registrations_today;
-                document.getElementById('stats').style.display = 'block';
-            } else {
-                msg.textContent = data.detail || 'Errore nel caricamento.';
-                msg.className = 'msg error';
-            }
-        } catch (err) {
-            msg.textContent = 'Errore di connessione.';
-            msg.className = 'msg error';
+    <style>
+        .user-table-container {
+            margin-top: 15px;
+            max-height: 280px;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.1);
         }
-    }
 
-    document.getElementById('logout-link').addEventListener('click', (e) => {
-        e.preventDefault();
-        localStorage.removeItem('genesi_access_token');
-        localStorage.removeItem('genesi_refresh_token');
-        localStorage.removeItem('genesi_user_id');
-        localStorage.removeItem('genesi_is_admin');
-        window.location.href = '/login';
-    });
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+            color: #ccc;
+        }
+
+        th {
+            text-align: left;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            position: sticky;
+            top: 0;
+            color: #888;
+            text-transform: uppercase;
+            font-size: 0.65rem;
+            letter-spacing: 1px;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .token-count {
+            font-weight: 700;
+            color: #00e5ff;
+            font-family: monospace;
+        }
+
+        .email-cell {
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    </style>
+
+    <script>
+        const token = localStorage.getItem('genesi_access_token');
+        const isAdmin = localStorage.getItem('genesi_is_admin');
+        const msg = document.getElementById('msg');
+        const subtitle = document.getElementById('subtitle');
+
+        if (!token || isAdmin !== 'true') {
+            subtitle.textContent = '';
+            msg.textContent = 'Accesso negato. Devi essere admin per visualizzare questa pagina.';
+            msg.className = 'msg error';
+        } else {
+            loadStats();
+        }
+
+        async function loadStats() {
+            try {
+                const res = await fetch('/auth/admin/stats', {
+                    headers: { 'Authorization': 'Bearer ' + token },
+                });
+
+                if (res.status === 401 || res.status === 403) {
+                    subtitle.textContent = '';
+                    msg.textContent = 'Sessione scaduta o accesso negato.';
+                    msg.className = 'msg error';
+                    return;
+                }
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    subtitle.textContent = 'Ultimo aggiornamento: ' + new Date(data.timestamp).toLocaleString('it-IT');
+                    document.getElementById('s-total').textContent = data.total_users;
+                    document.getElementById('s-today').textContent = data.registrations_today;
+
+                    // OpenRouter Usage
+                    const orEl = document.getElementById('or-usage');
+                    if (data.or_balance) {
+                        const spent = (data.or_balance.usage || 0).toFixed(4);
+                        orEl.textContent = `$ ${spent}`;
+                    } else {
+                        orEl.textContent = 'N/A';
+                    }
+
+                    // User Table
+                    const tbody = document.getElementById('user-tbody');
+                    tbody.innerHTML = '';
+                    if (data.user_list) {
+                        data.user_list.forEach(u => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td class="email-cell" title="${u.email}">${u.email}</td>
+                                <td style="color:#666;">${new Date(u.created_at).toLocaleDateString('it-IT')}</td>
+                                <td class="token-count" style="text-align:right;">${u.total_tokens.toLocaleString()}</td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+                    }
+
+                    document.getElementById('stats').style.display = 'block';
+                } else {
+                    msg.textContent = data.detail || 'Errore nel caricamento.';
+                    msg.className = 'msg error';
+                }
+            } catch (err) {
+                msg.textContent = 'Errore di connessione.';
+                msg.className = 'msg error';
+            }
+        }
+
+        document.getElementById('logout-link').addEventListener('click', (e) => {
+            e.preventDefault();
+            localStorage.removeItem('genesi_access_token');
+            localStorage.removeItem('genesi_refresh_token');
+            localStorage.removeItem('genesi_user_id');
+            localStorage.removeItem('genesi_is_admin');
+            window.location.href = '/login';
+        });
     </script>
 </body>
+
 </html>

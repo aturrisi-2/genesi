@@ -13,7 +13,7 @@ from auth.config import (
     ADMIN_EMAILS, VERIFY_TOKEN_EXPIRE_HOURS, RESET_TOKEN_EXPIRE_HOURS,
 )
 from auth.database import get_db
-from auth.models import AuthUser, AuthToken, Visit
+from auth.models import AuthUser, AuthToken, Visit, UsageLog
 from auth.security import (
     hash_password, verify_password,
     create_access_token, create_refresh_token,
@@ -497,23 +497,64 @@ async def admin_stats(http_request: Request, db: AsyncSession = Depends(get_db))
         select(func.count(AuthUser.id)).where(AuthUser.created_at >= today_start)
     )).scalar()
 
-    # Visit tracking stats
-    twenty_four_hours_ago = now - timedelta(hours=24)
-    visits_24h = (await db.execute(
-        select(func.count(Visit.id)).where(Visit.visited_at >= twenty_four_hours_ago)
-    )).scalar()
-
-    # Last 10 logins
-    recent_logins_result = await db.execute(
-        select(AuthUser.email, AuthUser.last_login)
-        .where(AuthUser.last_login.isnot(None))
-        .order_by(AuthUser.last_login.desc())
-        .limit(10)
+    # User List with Usage
+    # We join AuthUser with a subquery that sums UsageLog
+    from sqlalchemy import outerjoin
+    usage_sub = (
+        select(
+            UsageLog.user_id,
+            func.sum(UsageLog.prompt_tokens).label("p_sum"),
+            func.sum(UsageLog.completion_tokens).label("c_sum")
+        )
+        .group_by(UsageLog.user_id)
+        .subquery()
     )
-    recent_logins = [
-        {"email": row.email, "last_login": row.last_login.isoformat() if row.last_login else None}
-        for row in recent_logins_result
-    ]
+    
+    users_result = await db.execute(
+        select(
+            AuthUser.email,
+            AuthUser.created_at,
+            AuthUser.last_login,
+            usage_sub.c.p_sum,
+            usage_sub.c.c_sum
+        )
+        .outerjoin(usage_sub, AuthUser.id == usage_sub.c.user_id)
+        .order_by(AuthUser.created_at.desc())
+    )
+    
+    user_list = []
+    for row in users_result:
+        user_list.append({
+            "email": row.email,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "last_login": row.last_login.isoformat() if row.last_login else None,
+            "prompt_tokens": int(row.p_sum or 0),
+            "completion_tokens": int(row.c_sum or 0),
+            "total_tokens": int((row.p_sum or 0) + (row.c_sum or 0))
+        })
+
+    # OpenRouter Balance (Optional)
+    or_balance = None
+    import httpx
+    or_key = os.getenv("OPENROUTER_API_KEY")
+    if or_key:
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.get(
+                    "https://openrouter.ai/api/v1/auth/key",
+                    headers={"Authorization": f"Bearer {or_key}"}
+                )
+                if res.status_code == 200:
+                    or_balance = res.json().get("data", {}).get("usage", 0) # This is limit/usage info
+                    # Note: OpenRouter key info usually has 'usage' and 'limit'
+                    key_data = res.json().get("data", {})
+                    or_balance = {
+                        "usage": key_data.get("usage", 0),
+                        "limit": key_data.get("limit", 0),
+                        "is_free_tier": key_data.get("is_free_tier", False)
+                    }
+        except:
+            pass
 
     _log("ADMIN_STATS", admin_id=user.id)
 
@@ -525,6 +566,8 @@ async def admin_stats(http_request: Request, db: AsyncSession = Depends(get_db))
         "registrations_today": registrations_today,
         "visits_24h": visits_24h,
         "recent_logins": recent_logins,
+        "user_list": user_list,
+        "or_balance": or_balance,
         "timestamp": now.isoformat(),
     }
 
