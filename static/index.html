@@ -134,207 +134,220 @@
   </style>
 </head>
 
-<body>
-  <div id="app-layout">
-    <!-- SIDEBAR SINISTRA -->
-    <aside id="sidebar" class="sidebar sidebar-collapsed">
-      <div class="sidebar-header">
-        <button id="new-chat-btn" class="icon-btn" title="Nuova chat" style="color: #00e5ff;">
-          <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-        </button>
-        <button id="coding-mode-btn" class="icon-btn" title="Coding Mode">
-          <svg viewBox="0 0 24 24">
-            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-            <line x1="8" y1="21" x2="16" y2="21"></line>
-            <line x1="12" y1="17" x2="12" y2="21"></line>
-          </svg>
-        </button>
-        <button id="clear-all-btn" class="icon-btn action-danger" title="Svuota tutte le chat"
-          onclick="clearAllConvs()">
-          <svg viewBox="0 0 24 24">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
-        </button>
-      </div>
-      <div id="conv-list"></div>
-    </aside>
+<!-- DEBUG: MANUAL MIC RESET -->
+<button id="micTest"
+  style="position:fixed;top:40px;right:10px;z-index:9999;background:#ff0044;color:white;border:none;padding:5px 10px;border-radius:20px;font-size:12px;cursor:pointer;box-shadow:0 0 10px rgba(0,0,0,0.5)">
+  🔊 Reset Mic
+</button>
+<script>
+  document.getElementById('micTest').onclick = () => {
+    if (typeof stopVoiceMode === 'function') stopVoiceMode();
+    setTimeout(() => {
+      if (typeof startVoiceMode === 'function') startVoiceMode();
+      console.log('🧪 MANUAL MIC RESTART TRIGGERED');
+    }, 300);
+  };
+</script>
+
+<div id="app-layout">
+  <!-- SIDEBAR SINISTRA -->
+  <aside id="sidebar" class="sidebar sidebar-collapsed">
+    <div class="sidebar-header">
+      <button id="new-chat-btn" class="icon-btn" title="Nuova chat" style="color: #00e5ff;">
+        <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
+      <button id="coding-mode-btn" class="icon-btn" title="Coding Mode">
+        <svg viewBox="0 0 24 24">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+          <line x1="8" y1="21" x2="16" y2="21"></line>
+          <line x1="12" y1="17" x2="12" y2="21"></line>
+        </svg>
+      </button>
+      <button id="clear-all-btn" class="icon-btn action-danger" title="Svuota tutte le chat" onclick="clearAllConvs()">
+        <svg viewBox="0 0 24 24">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      </button>
+    </div>
+    <div id="conv-list"></div>
+  </aside>
 
 
 
-    <!-- CHAT PRINCIPALE (invariata) -->
-    <div id="main-chat">
+  <!-- CHAT PRINCIPALE (invariata) -->
+  <div id="main-chat">
 
-      <!-- HANDLE NEON (Dentro main chat ancorato a sx) -->
-      <div id="sidebar-open-btn" class="sidebar-handle-wrapper" title="Apri/Chiudi Menu">
-        <div id="sidebar-neon-handle"></div>
-      </div>
+    <!-- HANDLE NEON (Dentro main chat ancorato a sx) -->
+    <div id="sidebar-open-btn" class="sidebar-handle-wrapper" title="Apri/Chiudi Menu">
+      <div id="sidebar-neon-handle"></div>
+    </div>
 
-      <div id="genesi-app">
+    <div id="genesi-app">
 
-        <!-- User bar: sempre visibile -->
-        <div id="user-bar">
+      <!-- User bar: sempre visibile -->
+      <div id="user-bar">
 
-          <div id="user-bar-actions">
-            <a href="/brochure" id="brochure-link">Brochure</a>
-            <a href="/admin" id="admin-link" style="display:none;">Admin</a>
-            <button id="logout-btn" type="button" style="display:none;">Esci</button>
-          </div>
+        <div id="user-bar-actions">
+          <a href="/brochure" id="brochure-link">Brochure</a>
+          <a href="/admin" id="admin-link" style="display:none;">Admin</a>
+          <button id="logout-btn" type="button" style="display:none;">Esci</button>
         </div>
+      </div>
 
-        <!-- ═══════════════════════════════════════════════
+      <!-- ═══════════════════════════════════════════════
      WEATHER WIDGET & MARQUEE 
      ═══════════════════════════════════════════════ -->
-        <header id="presence">
-          <p>Ciò che conta davvero è come attraversi il fuoco.</p>
-        </header>
+      <header id="presence">
+        <p>Ciò che conta davvero è come attraversi il fuoco.</p>
+      </header>
 
-        <div id="weather-widget" class="weather-widget" aria-live="polite" aria-atomic="true">
-          <div class="weather-widget__inner">
+      <div id="weather-widget" class="weather-widget" aria-live="polite" aria-atomic="true">
+        <div class="weather-widget__inner">
 
-            <!-- Stato: loading -->
-            <div class="weather-widget__loading" id="ww-loading">
-              <span class="weather-widget__dot"></span>
-              <span class="weather-widget__dot"></span>
-              <span class="weather-widget__dot"></span>
-            </div>
-
-            <!-- Stato: dati -->
-            <div class="weather-widget__data" id="ww-data" hidden>
-              <div class="weather-widget__icon-wrap">
-                <span class="weather-widget__icon" id="ww-icon">☁️</span>
-              </div>
-              <div class="weather-widget__details">
-                <span class="weather-widget__city" id="ww-city">—</span>
-                <span class="weather-widget__temp" id="ww-temp">—°</span>
-                <span class="weather-widget__desc" id="ww-desc">—</span>
-                <span class="weather-widget__meta" id="ww-meta">—</span>
-                <span class="weather-widget__time" id="ww-time">—</span>
-              </div>
-            </div>
-
-            <!-- Stato: errore -->
-            <div class="weather-widget__error" id="ww-error" hidden>
-              <span class="weather-widget__error-text">
-                Meteo non disponibile
-              </span>
-            </div>
-
+          <!-- Stato: loading -->
+          <div class="weather-widget__loading" id="ww-loading">
+            <span class="weather-widget__dot"></span>
+            <span class="weather-widget__dot"></span>
+            <span class="weather-widget__dot"></span>
           </div>
-        </div>
-        <!-- /WEATHER WIDGET -->
 
-        <main id="dialogue">
-          <!-- messaggi -->
-        </main>
-
-        <div id="status" aria-live="polite"></div>
-
-        <div id="voice-mode-overlay" class="voice-overlay hidden">
-          <div class="voice-orb">
-            <div class="voice-ring ring-1"></div>
-            <div class="voice-ring ring-2"></div>
-            <div class="voice-ring ring-3"></div>
-            <div class="voice-orb-core"></div>
-            <div class="voice-status-text">In ascolto...</div>
+          <!-- Stato: dati -->
+          <div class="weather-widget__data" id="ww-data" hidden>
+            <div class="weather-widget__icon-wrap">
+              <span class="weather-widget__icon" id="ww-icon">☁️</span>
+            </div>
+            <div class="weather-widget__details">
+              <span class="weather-widget__city" id="ww-city">—</span>
+              <span class="weather-widget__temp" id="ww-temp">—°</span>
+              <span class="weather-widget__desc" id="ww-desc">—</span>
+              <span class="weather-widget__meta" id="ww-meta">—</span>
+              <span class="weather-widget__time" id="ww-time">—</span>
+            </div>
           </div>
-          <button id="voice-mode-stop-btn">✕ Esci</button>
+
+          <!-- Stato: errore -->
+          <div class="weather-widget__error" id="ww-error" hidden>
+            <span class="weather-widget__error-text">
+              Meteo non disponibile
+            </span>
+          </div>
+
         </div>
+      </div>
+      <!-- /WEATHER WIDGET -->
 
-        <form id="chat-form" autocomplete="off">
-          <div id="input-container">
+      <main id="dialogue">
+        <!-- messaggi -->
+      </main>
 
-            <button id="plus-button" type="button" aria-label="Aggiungi">
-              <svg viewBox="0 0 24 24">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-            </button>
+      <div id="status" aria-live="polite"></div>
 
-            <div class="input-wrapper">
-              <textarea id="text-input" placeholder="Scrivi un messaggio..." aria-label="Scrivi un messaggio"
-                autocomplete="off" enterkeyhint="send" rows="1"></textarea>
+      <div id="voice-mode-overlay" class="voice-overlay hidden">
+        <div class="voice-orb">
+          <div class="voice-ring ring-1"></div>
+          <div class="voice-ring ring-2"></div>
+          <div class="voice-ring ring-3"></div>
+          <div class="voice-orb-core"></div>
+          <div class="voice-status-text">In ascolto...</div>
+        </div>
+        <button id="voice-mode-stop-btn">✕ Esci</button>
+      </div>
 
-              <div id="inline-actions-container">
-                <button id="more-actions-btn" type="button" aria-label="Opzioni">
-                  <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                    <circle cx="12" cy="5" r="2"></circle>
-                    <circle cx="12" cy="12" r="2"></circle>
-                    <circle cx="12" cy="19" r="2"></circle>
+      <form id="chat-form" autocomplete="off">
+        <div id="input-container">
+
+          <button id="plus-button" type="button" aria-label="Aggiungi">
+            <svg viewBox="0 0 24 24">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+
+          <div class="input-wrapper">
+            <textarea id="text-input" placeholder="Scrivi un messaggio..." aria-label="Scrivi un messaggio"
+              autocomplete="off" enterkeyhint="send" rows="1"></textarea>
+
+            <div id="inline-actions-container">
+              <button id="more-actions-btn" type="button" aria-label="Opzioni">
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                  <circle cx="12" cy="5" r="2"></circle>
+                  <circle cx="12" cy="12" r="2"></circle>
+                  <circle cx="12" cy="19" r="2"></circle>
+                </svg>
+              </button>
+              <div id="inline-actions-menu" class="hidden">
+                <button id="mic-button" type="button" aria-label="Usa microfono">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
                   </svg>
                 </button>
-                <div id="inline-actions-menu" class="hidden">
-                  <button id="mic-button" type="button" aria-label="Usa microfono">
-                    <svg viewBox="0 0 24 24">
-                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                      <line x1="12" y1="19" x2="12" y2="23"></line>
-                      <line x1="8" y1="23" x2="16" y2="23"></line>
-                    </svg>
-                  </button>
-                  <button id="send-button" type="submit" aria-label="Invia messaggio">
-                    <svg viewBox="0 0 24 24">
-                      <line x1="22" y1="2" x2="11" y2="13"></line>
-                      <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                    </svg>
-                  </button>
-                </div>
+                <button id="send-button" type="submit" aria-label="Invia messaggio">
+                  <svg viewBox="0 0 24 24">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                  </svg>
+                </button>
               </div>
             </div>
-
-            <button id="voice-mode-btn" title="Conversazione vocale">
-              <svg width="22" height="18" viewBox="0 0 22 18" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round">
-                <line x1="1" y1="9" x2="1" y2="9" />
-                <line x1="5" y1="5" x2="5" y2="13" />
-                <line x1="9" y1="1" x2="9" y2="17" />
-                <line x1="13" y1="5" x2="13" y2="13" />
-                <line x1="17" y1="7" x2="17" y2="11" />
-                <line x1="21" y1="9" x2="21" y2="9" />
-              </svg>
-            </button>
-
           </div>
-        </form>
-      </div>
+
+          <button id="voice-mode-btn" title="Conversazione vocale">
+            <svg width="22" height="18" viewBox="0 0 22 18" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round">
+              <line x1="1" y1="9" x2="1" y2="9" />
+              <line x1="5" y1="5" x2="5" y2="13" />
+              <line x1="9" y1="1" x2="9" y2="17" />
+              <line x1="13" y1="5" x2="13" y2="13" />
+              <line x1="17" y1="7" x2="17" y2="11" />
+              <line x1="21" y1="9" x2="21" y2="9" />
+            </svg>
+          </button>
+
+        </div>
+      </form>
     </div>
   </div>
+</div>
 
-  <!-- ICloud Modal -->
-  <div id="icloud-modal" class="modal hidden">
-    <div class="modal-content icloud-card">
-      <div class="modal-header">
-        <h3>Integrazione iCloud</h3>
-        <button class="close-modal">&times;</button>
-      </div>
-      <div id="icloud-status-area">
-        <p>Caricamento stato...</p>
-      </div>
+<!-- ICloud Modal -->
+<div id="icloud-modal" class="modal hidden">
+  <div class="modal-content icloud-card">
+    <div class="modal-header">
+      <h3>Integrazione iCloud</h3>
+      <button class="close-modal">&times;</button>
+    </div>
+    <div id="icloud-status-area">
+      <p>Caricamento stato...</p>
+    </div>
 
-      <div id="icloud-setup-form" class="hidden">
-        <label>Email Apple ID</label>
-        <input type="email" id="icloud-email" placeholder="esempio@icloud.com">
-        <label>Password specifica per le app</label>
-        <input type="password" id="icloud-password" placeholder="xxxx-xxxx-xxxx-xxxx">
-        <p style="font-size:0.8rem; color:#888; margin-top:0.5rem;">
-          Per sicurezza, Apple richiede una password dedicata.
-          <a href="https://support.apple.com/it-it/102654" target="_blank" style="color:#00e5ff;">Scopri come
-            crearla</a>
-        </p>
-        <button id="save-icloud-btn">Collega con CalDAV</button>
-      </div>
+    <div id="icloud-setup-form" class="hidden">
+      <label>Email Apple ID</label>
+      <input type="email" id="icloud-email" placeholder="esempio@icloud.com">
+      <label>Password specifica per le app</label>
+      <input type="password" id="icloud-password" placeholder="xxxx-xxxx-xxxx-xxxx">
+      <p style="font-size:0.8rem; color:#888; margin-top:0.5rem;">
+        Per sicurezza, Apple richiede una password dedicata.
+        <a href="https://support.apple.com/it-it/102654" target="_blank" style="color:#00e5ff;">Scopri come
+          crearla</a>
+      </p>
+      <button id="save-icloud-btn">Collega con CalDAV</button>
+    </div>
 
-      <div id="icloud-active-actions" class="hidden">
-        <button id="manual-sync-btn" class="primary">Sincronizza Ora</button>
-        <button id="disconnect-icloud-btn" class="danger">Scollega Account</button>
-      </div>
+    <div id="icloud-active-actions" class="hidden">
+      <button id="manual-sync-btn" class="primary">Sincronizza Ora</button>
+      <button id="disconnect-icloud-btn" class="danger">Scollega Account</button>
     </div>
   </div>
+</div>
 
-  <script src="/static/app.v2.js?v={{ build_version }}"></script>
+<script src="/static/app.v2.js?v={{ build_version }}"></script>
 </body>
 
 </html>

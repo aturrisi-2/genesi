@@ -18,6 +18,8 @@ window.ttsSessionActive = false;
 window.ttsExpected = false;
 window.responseProcessed = false;
 window.isGenesiSpeaking = false;
+let restartAttempts = 0;
+const MAX_RESTARTS = 5;
 
 // ===============================
 // AUDIO PRIMING
@@ -1216,6 +1218,17 @@ async function sendMessage(voiceText = null) {
       if (voiceRecognition && recognitionActive) {
         try { voiceRecognition.stop(); } catch (e) { }
       }
+
+      // FAILSAFE: Force reset after 10s if TTS end signal lost
+      setTimeout(() => {
+        if (window.isGenesiSpeaking) {
+          window.isGenesiSpeaking = false;
+          console.log('⏰ TTS_FAILSAFE: Force releasing mic after 10s');
+          if (voiceModeActive && !recognitionActive) {
+            try { voiceRecognition?.start(); } catch (e) { }
+          }
+        }
+      }, 10000);
     }
 
     // Se ttsText è vuoto o solo spazi dopo il filtro, non chiamare TTS affatto
@@ -2728,6 +2741,7 @@ function buildVoiceRecognition() {
 
   rec.onstart = () => {
     recognitionActive = true;
+    restartAttempts = 0;
     console.log('VOICE_REC_STARTED');
   };
 
@@ -2766,23 +2780,25 @@ function buildVoiceRecognition() {
     recognitionActive = false;
     console.log('VOICE_REC_ENDED');
     if (!voiceModeActive || window.isGenesiSpeaking) {
-      console.log('VOICE_RESTART_ABORTED isGenesiSpeaking=' + window.isGenesiSpeaking);
+      console.log('VOICE_RESTART_ABORTED active=' + voiceModeActive + ' speaking=' + window.isGenesiSpeaking);
       return;
     }
 
-    // Safer restart for iOS Safari
-    const waitMs = Math.max(1000, voiceBlockedUntil - Date.now());
-    setTimeout(() => {
-      if (!voiceModeActive || recognitionActive) return;
-      if (Date.now() < voiceBlockedUntil) return;
+    if (restartAttempts >= MAX_RESTARTS) {
+      console.warn('VOICE_MAX_RESTARTS_REACHED');
+      return;
+    }
 
+    restartAttempts++;
+    const delay = 200 * restartAttempts;
+    console.log(`🔄 VOICE_RESTART_ATTEMPT #${restartAttempts} in ${delay}ms`);
+
+    setTimeout(() => {
+      if (!voiceModeActive || recognitionActive || window.isGenesiSpeaking) return;
       try {
-        console.log('VOICE_AUTO_RESTART_ONEND');
         voiceRecognition?.start();
-      } catch (e) {
-        // Safe skip if already running or interrupted
-      }
-    }, waitMs);
+      } catch (e) { }
+    }, delay);
   };
 
   rec.onerror = (e) => {
@@ -3342,6 +3358,17 @@ window.addEventListener('message', (event) => {
       try { voiceRecognition.stop(); } catch (e) { }
     }
     console.log('🔴 MIC HARD STOPPED - External signal');
+
+    // FAILSAFE: Force reset after 10s
+    setTimeout(() => {
+      if (window.isGenesiSpeaking) {
+        window.isGenesiSpeaking = false;
+        console.log('⏰ TTS_FAILSAFE_EXT: Force releasing mic');
+        if (typeof voiceModeActive !== 'undefined' && voiceModeActive && typeof recognitionActive !== 'undefined' && !recognitionActive) {
+          try { voiceRecognition?.start(); } catch (e) { }
+        }
+      }
+    }, 10000);
   }
   if (event.data.type === 'TTS_END') {
     window.isGenesiSpeaking = false;
