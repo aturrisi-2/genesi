@@ -985,6 +985,44 @@ function setState(newState) {
 }
 
 // ===============================
+// SETTINGS MODAL
+// ===============================
+const settingsModal = document.getElementById('settings-modal');
+const settingsBtn = document.getElementById('settings-btn');
+const closeSettingsBtn = document.getElementById('close-settings-btn');
+const resetMicBtn = document.getElementById('reset-mic-btn');
+
+if (settingsBtn) {
+  settingsBtn.onclick = () => settingsModal.classList.remove('hidden');
+}
+
+if (closeSettingsBtn) {
+  closeSettingsBtn.onclick = () => settingsModal.classList.add('hidden');
+}
+
+if (resetMicBtn) {
+  resetMicBtn.onclick = () => {
+    if (typeof stopVoiceMode === 'function') stopVoiceMode();
+    setTimeout(() => {
+      if (typeof startVoiceMode === 'function') startVoiceMode();
+      console.log('🧪 MANUAL MIC RESTART TRIGGERED');
+      settingsModal.classList.add('hidden');
+    }, 300);
+  };
+}
+
+// Combined background click for modals
+window.addEventListener('click', (e) => {
+  if (e.target === settingsModal) {
+    settingsModal.classList.add('hidden');
+  }
+  const icloudModal = document.getElementById('icloud-modal');
+  if (e.target === icloudModal) {
+    icloudModal.classList.add('hidden');
+  }
+});
+
+// ===============================
 // MESSAGES
 // ===============================
 // Neon hue palette — each message gets a different color

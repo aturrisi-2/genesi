@@ -995,6 +995,77 @@ body {
   transform: scale(0.97);
 }
 
+/* ===============================
+   SETTINGS PANEL
+   =============================== */
+.settings-card {
+  max-width: 440px !important;
+  background: linear-gradient(135deg, #111119, #0a0a12) !important;
+}
+
+.settings-section {
+  margin-bottom: 24px;
+}
+
+.settings-section h4 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #00e5ff;
+  margin-bottom: 12px;
+  opacity: 0.8;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.2s;
+}
+
+.settings-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.settings-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #fff;
+}
+
+.settings-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.settings-action-btn {
+  background: rgba(0, 229, 255, 0.1);
+  color: #00e5ff;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.settings-action-btn:hover {
+  background: #00e5ff;
+  color: #0c0c14;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+}
+
 @media (max-width: 600px) {
   .preview-img {
     max-height: 200px;
@@ -1428,6 +1499,13 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: 8px 0;
+}
+
+.sidebar-footer {
+  padding: 12px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  justify-content: flex-start;
 }
 
 .conv-item {

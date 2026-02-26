@@ -134,20 +134,6 @@
   </style>
 </head>
 
-<!-- DEBUG: MANUAL MIC RESET -->
-<button id="micTest"
-  style="position:fixed;top:40px;right:10px;z-index:9999;background:#ff0044;color:white;border:none;padding:5px 10px;border-radius:20px;font-size:12px;cursor:pointer;box-shadow:0 0 10px rgba(0,0,0,0.5)">
-  🔊 Reset Mic
-</button>
-<script>
-  document.getElementById('micTest').onclick = () => {
-    if (typeof stopVoiceMode === 'function') stopVoiceMode();
-    setTimeout(() => {
-      if (typeof startVoiceMode === 'function') startVoiceMode();
-      console.log('🧪 MANUAL MIC RESTART TRIGGERED');
-    }, 300);
-  };
-</script>
 
 <div id="app-layout">
   <!-- SIDEBAR SINISTRA -->
@@ -174,6 +160,17 @@
       </button>
     </div>
     <div id="conv-list"></div>
+    <div class="sidebar-footer">
+      <button id="settings-btn" class="icon-btn" title="Impostazioni Sistema">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+          </path>
+        </svg>
+      </button>
+    </div>
   </aside>
 
 
@@ -343,6 +340,39 @@
     <div id="icloud-active-actions" class="hidden">
       <button id="manual-sync-btn" class="primary">Sincronizza Ora</button>
       <button id="disconnect-icloud-btn" class="danger">Scollega Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="modal hidden">
+  <div class="modal-content settings-card">
+    <div class="modal-header">
+      <h3>Impostazioni Sistema</h3>
+      <button class="close-modal" id="close-settings-btn">&times;</button>
+    </div>
+
+    <div class="settings-section">
+      <h4>Strumenti di Diagnosi</h4>
+      <p style="font-size: 0.8rem; color: #888; margin-bottom: 1rem;">
+        Utilizza questi strumenti se riscontri problemi tecnici durante la sessione.
+      </p>
+
+      <div class="settings-row">
+        <div class="settings-info">
+          <span class="settings-label">Reset Microfono</span>
+          <span class="settings-desc">Riavvia forzatamente il motore di riconoscimento vocale se bloccato.</span>
+        </div>
+        <button id="reset-mic-btn" class="settings-action-btn">🔊 Reset</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h4>Informazioni Genesi</h4>
+      <p style="font-size: 0.8rem; color: #888;">
+        Versione: Gold Stable (Faro)<br>
+        Stato: Ottimizzato per prestazioni.
+      </p>
     </div>
   </div>
 </div>
