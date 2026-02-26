@@ -1382,16 +1382,16 @@ async function sendMessage(voiceText = null) {
         try { voiceRecognition.stop(); } catch (e) { }
       }
 
-      // FAILSAFE: Force reset after 10s if TTS end signal lost
+      // FAILSAFE: Proactive reset after 60s to prevent stuck mic on long errors
       setTimeout(() => {
         if (window.isGenesiSpeaking) {
           window.isGenesiSpeaking = false;
-          console.log('⏰ TTS_FAILSAFE: Force releasing mic after 10s');
+          console.log('⏰ TTS_FAILSAFE: Force releasing mic after 60s');
           if (voiceModeActive && !recognitionActive) {
             try { voiceRecognition?.start(); } catch (e) { }
           }
         }
-      }, 10000);
+      }, 60000);
     }
 
     // Se ttsText è vuoto o solo spazi dopo il filtro, non chiamare TTS affatto
@@ -3047,7 +3047,7 @@ async function sendVoiceMessage(text) {
 
     waitForTTSEnd(() => {
       if (!voiceModeActive) return;
-      voiceBlockedUntil = Date.now() + 1000; // Delay anti-echo 1s
+      voiceBlockedUntil = Date.now() + 2000; // Delay anti-echo 2s
       window.isGenesiSpeaking = false;
       console.log('VOICE_UNBLOCKED_AND_LOCK_RELEASED');
       setVoiceOrbState('listening');
@@ -3158,11 +3158,11 @@ function waitForTTSEnd(callback) {
     }
   }, 100);
 
-  // Fallback: se dopo 15s non è successo nulla, sblocca
+  // Fallback: se dopo 60s non è successo nulla, sblocca (copre risposte molto lunghe)
   voiceTTSPollTimeout = setTimeout(() => {
-    console.log('[VOICE_POLL] Fallback timeout triggered');
+    console.warn('[VOICE_POLL] Fallback timeout triggered (60s)');
     finish();
-  }, 15000);
+  }, 60000);
 }
 
 function stopVoiceMode() {
