@@ -17,6 +17,7 @@ window.ttsPlaying = false;
 window.ttsSessionActive = false;
 window.ttsExpected = false;
 window.responseProcessed = false;
+let voiceRestartLock = false;
 
 // ===============================
 // AUDIO PRIMING
@@ -1089,11 +1090,8 @@ async function sendMessage(voiceText = null) {
   const textToUse = (typeof voiceText === 'string') ? voiceText : textInput.value.trim();
 
   // Barge-in: increment generation + force-stop ALL TTS
-  // MA NON durante voice mode conversazionale!
   ttsGenerationId++;
-  if (!voiceModeActive) {
-    stopAllTTS();
-  }
+  stopAllTTS();
 
   // Warm AudioContext NOW (sync, during user gesture) — iOS requires this
   _warmTTSCtx();
@@ -2718,8 +2716,8 @@ function buildVoiceRecognition() {
   };
 
   rec.onresult = (event) => {
-    if (Date.now() < voiceBlockedUntil) {
-      console.log('VOICE_BLOCKED transcript ignored remaining=' + (voiceBlockedUntil - Date.now()) + 'ms');
+    if (Date.now() < voiceBlockedUntil || voiceRestartLock) {
+      console.log('VOICE_BLOCKED transcript ignored (lock=' + voiceRestartLock + ')');
       return;
     }
     if (!voiceModeActive) return;
@@ -2751,10 +2749,10 @@ function buildVoiceRecognition() {
   rec.onend = () => {
     recognitionActive = false;
     console.log('VOICE_REC_ENDED');
-    if (!voiceModeActive) return;
+    if (!voiceModeActive || voiceRestartLock) return;
 
     // Safer restart for iOS Safari
-    const waitMs = Math.max(2000, voiceBlockedUntil - Date.now());
+    const waitMs = Math.max(1000, voiceBlockedUntil - Date.now());
     setTimeout(() => {
       if (!voiceModeActive || recognitionActive) return;
       if (Date.now() < voiceBlockedUntil) return;
@@ -2813,9 +2811,10 @@ async function sendVoiceMessage(text) {
   clearTimeout(voiceSilenceTimer);
   voiceSilenceTimer = null;
 
-  // Blocco mic preventivo ragionevole per coprire generazione LLM (15s fallback)
-  voiceBlockedUntil = Date.now() + 15000;
-  console.log('VOICE_BLOCKED_START (generazione) timestamp=' + Date.now() + ' will unblock after 15s if no TTS detected');
+  // Blocco mic preventivo lungo per coprire generazione LLM (60s fallback)
+  voiceBlockedUntil = Date.now() + 60000;
+  voiceRestartLock = true;
+  console.log('VOICE_BLOCKED_START timestamp=' + Date.now());
 
   // PAUSA MIC DURANTE TTS - Fermiamo il riconoscimento per sicurezza
   if (voiceRecognition && recognitionActive) {
@@ -2839,8 +2838,9 @@ async function sendVoiceMessage(text) {
 
   waitForTTSEnd(() => {
     if (!voiceModeActive) return;
-    voiceBlockedUntil = Date.now() + 300;
-    console.log('VOICE_UNBLOCKED timestamp=' + Date.now() + ' riavvio ascolto fra 0.3s');
+    voiceBlockedUntil = Date.now() + 100;
+    voiceRestartLock = false;
+    console.log('VOICE_UNBLOCKED_AND_LOCK_RELEASED');
     setVoiceOrbState('listening');
     setVoiceStatusText('In ascolto...');
     setTimeout(() => {
@@ -2850,7 +2850,7 @@ async function sendVoiceMessage(text) {
         playVoiceModePing('start'); // Feedack audio quando apre il mic
         voiceRecognition?.start();
       } catch (e) { }
-    }, 300);
+    }, 100);
   });
 }
 
@@ -2950,6 +2950,7 @@ function waitForTTSEnd(callback) {
 function stopVoiceMode() {
   voiceModeActive = false;
   voiceBlockedUntil = 0;
+  voiceRestartLock = false;
   playVoiceModePing('stop');
   clearTimeout(voiceSilenceTimer);
   voiceSilenceTimer = null;
