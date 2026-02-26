@@ -356,7 +356,7 @@ function stopAudio() {
 // ===============================
 // BARGE-IN — immediate TTS interruption on user input
 // ===============================
-function stopAllTTS() {
+function stopAllTTS(isNewSession = false) {
   console.log('[TTS_FORCE_STOP] sources=' + activeTTSSources.length + ' playing=' + _isPlayingChunk);
 
   // 1. Abort all in-flight TTS fetch requests
@@ -391,8 +391,12 @@ function stopAllTTS() {
   _isPlayingChunk = false;
   _wasPlayingChunk = false;
   window.ttsPlaying = false;
-  window.ttsSessionActive = false;
-  window.ttsExpected = false;
+
+  // SE STIAMO INIZIANDO UNA NUOVA SESSIONE, NON resettiamo sessionActive/expected
+  if (!isNewSession) {
+    window.ttsSessionActive = false;
+    window.ttsExpected = false;
+  }
 
   console.log('[TTS_INTERRUPTED_BY_USER]');
 }
@@ -400,7 +404,7 @@ function stopAllTTS() {
 function _interruptTTS(reason) {
   if (_ttsSource || _isPlayingChunk || activeTTSSources.length > 0) {
     console.log('[BARGE-IN] interrupt reason=' + reason);
-    stopAllTTS();
+    stopAllTTS(false); // standard barge-in
   }
 }
 
@@ -1093,7 +1097,7 @@ async function sendMessage(voiceText = null) {
 
   // Barge-in: stop EVERYTHING and lock mic
   ttsGenerationId++;
-  stopAllTTS();
+  stopAllTTS(false); // Barge-in clear
   window.isGenesiSpeaking = true;
   if (voiceRecognition && recognitionActive) {
     try { voiceRecognition.stop(); } catch (e) { }
@@ -1270,7 +1274,9 @@ async function sendMessage(voiceText = null) {
 // ===============================
 function playTTSAsync(text, mode) {
   // Ferma qualsiasi TTS attualmente in corso per evitare sovrapposizioni
-  stopAllTTS();
+  // Segnala che stiamo per iniziare una nuova sessione
+  stopAllTTS(true);
+  window.ttsExpected = true;
   window.isGenesiSpeaking = true; // MIC KILLER START
   if (voiceRecognition && recognitionActive) {
     try { voiceRecognition.stop(); } catch (e) { }
@@ -2991,8 +2997,8 @@ function waitForTTSEnd(callback) {
     const hasStarted = ttsWasDetected || (window.lastTTSStart > startTime);
     if (hasStarted && !isPlaying) {
       const currentGap = Date.now() - window.lastTTSEnd;
-      // Guard di 1000ms per evitare gap tra chunk (specialmente in psychological mode che ha 800ms)
-      if (currentGap > 1000) {
+      // Guard di 2000ms per evitare gap tra chunk
+      if (currentGap > 2000) {
         console.log('[VOICE_POLL] TTS finished detected, gap=' + currentGap);
         finish();
       }
