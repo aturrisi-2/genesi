@@ -26,6 +26,10 @@ async def bootstrap_user(user: AuthUser = Depends(require_auth)):
     if not user_data:
         user_data = user_manager.create_user(user_id)
 
+    # Carica profilo persistente da storage per flag di sincronizzazione
+    from core.storage import storage
+    profile = await storage.load(f"profile:{user_id}", default={})
+
     # Aggiorna last_seen
     user_manager.update_user(user_id, {"last_seen": "now"})
 
@@ -33,6 +37,22 @@ async def bootstrap_user(user: AuthUser = Depends(require_auth)):
         "user_id": user_id,
         "profile": user_data.get("preferences", {}),
         "created_at": user_data["created_at"],
-        "last_seen": user_data["last_seen"]
+        "last_seen": user_data["last_seen"],
+        "sync_status": {
+            "google_synced": bool(profile.get("google_token")),
+            "icloud_synced": bool(profile.get("icloud_user") and profile.get("icloud_verified")),
+            "icloud_dismissed": bool(profile.get("icloud_sync_dismissed", False))
+        }
     }
+
+
+@router.post("/icloud/dismiss")
+async def dismiss_icloud_sync(user: AuthUser = Depends(require_auth)):
+    """Marca il popup iCloud come ignorato per questo utente."""
+    user_id = user.id
+    from core.storage import storage
+    profile = await storage.load(f"profile:{user_id}", default={})
+    profile["icloud_sync_dismissed"] = True
+    await storage.save(f"profile:{user_id}", profile)
+    return {"status": "ok"}
 

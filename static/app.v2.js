@@ -851,6 +851,11 @@ async function bootstrapUser() {
     if (res.ok) {
       const data = await res.json();
       userIdentity = data.identity || {};
+
+      // Handle Sync Popups
+      if (data.sync_status) {
+        handleSyncPopups(data.sync_status);
+      }
     } else if (res.status === 401) {
       // Token expired — try refresh
       const refreshed = await tryRefreshToken();
@@ -862,6 +867,93 @@ async function bootstrapUser() {
     }
   } catch (e) {
     console.error('Bootstrap error:', e);
+  }
+}
+
+function handleSyncPopups(status) {
+  // 1. Google Sync (Mandatory)
+  if (!status.google_synced) {
+    showSyncPopup({
+      type: 'google',
+      title: 'Configura Google',
+      text: 'Per iniziare a gestire i tuoi impegni, Genesi ha bisogno di accedere al tuo Google Calendar. È un passaggio obbligatorio per attivare le funzioni avanzate.',
+      primaryBtn: 'Collega Google Calendar',
+      onPrimary: () => {
+        window.location.href = '/api/calendar/google/login';
+      },
+      mandatory: true
+    });
+    return; // Don't show iCloud if Google is missing
+  }
+
+  // 2. iCloud Sync (Optional)
+  if (!status.icloud_synced && !status.icloud_dismissed) {
+    showSyncPopup({
+      type: 'icloud',
+      title: 'Sincronizza iCloud',
+      text: 'Vuoi sincronizzare anche i tuoi promemoria Apple? Puoi farlo ora o decidere di saltare questo passaggio per sempre.',
+      primaryBtn: 'Configura iCloud',
+      secondaryBtn: 'Forse più tardi',
+      onPrimary: () => {
+        // Redirect to iCloud guide or show inline setup
+        window.location.href = '/guida-icloud';
+      },
+      onSecondary: async () => {
+        await dismissICloudSync();
+        closeSyncPopup();
+      }
+    });
+  }
+}
+
+async function dismissICloudSync() {
+  try {
+    await fetch('/api/user/icloud/dismiss', {
+      method: 'POST',
+      headers: authHeaders()
+    });
+  } catch (e) { console.error("Dismiss fail", e); }
+}
+
+function showSyncPopup(config) {
+  // Remove existing if any
+  const existing = document.querySelector('.sync-modal-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'sync-modal-overlay';
+
+  const iconSvg = config.type === 'google'
+    ? `<svg viewBox="0 0 24 24"><path d="M21 12.2c0-.7-.1-1.4-.2-2H12v3.9h5c-.2 1-.8 2-1.7 2.6v2.1h2.7c1.6-1.5 2.5-3.8 2.5-6.6z" fill="#4285F4"/><path d="M12 21c2.4 0 4.5-.8 6-2.1l-2.7-2.1c-.8.5-1.8.8-3.3.8-2.5 0-4.6-1.7-5.4-4H3.9v2.1C5.4 18.7 8.5 21 12 21z" fill="#34A853"/><path d="M6.6 13.6c-.2-.5-.3-1-.3-1.6s.1-1.1.3-1.6V8.3H3.9c-.6 1.2-.9 2.5-.9 3.7s.3 2.5.9 3.7l2.7-2.1z" fill="#FBBC05"/><path d="M12 6.4c1.3 0 2.5.5 3.4 1.3l2.6-2.6C16.5 3.7 14.4 3 12 3 8.5 3 5.3 5.1 3.9 8.3l2.7 2.1c.8-2.4 2.9-4 5.4-4z" fill="#EA4335"/></svg>`
+    : `<svg viewBox="0 0 24 24"><path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" stroke="currentColor"/><path d="M12 6v6l4 2" stroke="currentColor" stroke-linecap="round"/></svg>`;
+
+  overlay.innerHTML = `
+    <div class="sync-modal">
+      <div class="sync-icon">${iconSvg}</div>
+      <h2 class="sync-title">${config.title}</h2>
+      <p class="sync-text">${config.text}</p>
+      <div class="sync-buttons">
+        <button class="sync-btn sync-btn-primary" id="sync-primary">${config.primaryBtn}</button>
+        ${config.secondaryBtn ? `<button class="sync-btn sync-btn-secondary" id="sync-secondary">${config.secondaryBtn}</button>` : ''}
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // Trigger animation
+  setTimeout(() => overlay.classList.add('visible'), 50);
+
+  document.getElementById('sync-primary').onclick = config.onPrimary;
+  const sec = document.getElementById('sync-secondary');
+  if (sec) sec.onclick = config.onSecondary;
+}
+
+function closeSyncPopup() {
+  const overlay = document.querySelector('.sync-modal-overlay');
+  if (overlay) {
+    overlay.classList.remove('visible');
+    setTimeout(() => overlay.remove(), 400);
   }
 }
 
