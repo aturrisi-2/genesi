@@ -497,6 +497,24 @@ async def admin_stats(http_request: Request, db: AsyncSession = Depends(get_db))
         select(func.count(AuthUser.id)).where(AuthUser.created_at >= today_start)
     )).scalar()
 
+    # Visit tracking stats
+    twenty_four_hours_ago = now - timedelta(hours=24)
+    visits_24h = (await db.execute(
+        select(func.count(Visit.id)).where(Visit.visited_at >= twenty_four_hours_ago)
+    )).scalar()
+
+    # Last 10 logins
+    recent_logins_result = await db.execute(
+        select(AuthUser.email, AuthUser.last_login)
+        .where(AuthUser.last_login.isnot(None))
+        .order_by(AuthUser.last_login.desc())
+        .limit(10)
+    )
+    recent_logins = [
+        {"email": row.email, "last_login": row.last_login.isoformat() if row.last_login else None}
+        for row in recent_logins_result
+    ]
+
     # User List with Usage
     # We join AuthUser with a subquery that sums UsageLog
     from sqlalchemy import outerjoin
