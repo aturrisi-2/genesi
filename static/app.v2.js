@@ -922,6 +922,7 @@ function showSyncPopup(config) {
 
   const overlay = document.createElement('div');
   overlay.className = 'sync-modal-overlay';
+  overlay.id = 'sync-modal-overlay';
 
   const iconSvg = config.type === 'google'
     ? `<svg viewBox="0 0 24 24"><path d="M21 12.2c0-.7-.1-1.4-.2-2H12v3.9h5c-.2 1-.8 2-1.7 2.6v2.1h2.7c1.6-1.5 2.5-3.8 2.5-6.6z" fill="#4285F4"/><path d="M12 21c2.4 0 4.5-.8 6-2.1l-2.7-2.1c-.8.5-1.8.8-3.3.8-2.5 0-4.6-1.7-5.4-4H3.9v2.1C5.4 18.7 8.5 21 12 21z" fill="#34A853"/><path d="M6.6 13.6c-.2-.5-.3-1-.3-1.6s.1-1.1.3-1.6V8.3H3.9c-.6 1.2-.9 2.5-.9 3.7s.3 2.5.9 3.7l2.7-2.1z" fill="#FBBC05"/><path d="M12 6.4c1.3 0 2.5.5 3.4 1.3l2.6-2.6C16.5 3.7 14.4 3 12 3 8.5 3 5.3 5.1 3.9 8.3l2.7 2.1c.8-2.4 2.9-4 5.4-4z" fill="#EA4335"/></svg>`
@@ -929,6 +930,11 @@ function showSyncPopup(config) {
 
   overlay.innerHTML = `
     <div class="sync-modal">
+      ${!config.mandatory ? `
+        <button class="sync-close-btn" id="sync-close-x">
+          <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      ` : ''}
       <div class="sync-icon">${iconSvg}</div>
       <h2 class="sync-title">${config.title}</h2>
       <p class="sync-text">${config.text}</p>
@@ -947,6 +953,16 @@ function showSyncPopup(config) {
   document.getElementById('sync-primary').onclick = config.onPrimary;
   const sec = document.getElementById('sync-secondary');
   if (sec) sec.onclick = config.onSecondary;
+
+  const closeX = document.getElementById('sync-close-x');
+  if (closeX) closeX.onclick = closeSyncPopup;
+
+  // Click on overlay to close (iCloud only)
+  if (!config.mandatory) {
+    overlay.onclick = (e) => {
+      if (e.target === overlay) closeSyncPopup();
+    };
+  }
 }
 
 function closeSyncPopup() {
