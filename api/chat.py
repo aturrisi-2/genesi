@@ -37,6 +37,7 @@ class ChatResponse(BaseModel):
     intent: Optional[str] = None
     user_id: Optional[str] = None
     tts_text: Optional[str] = None
+    mic_control: Optional[Dict] = None
 
 # Anti-bounce per evitare invii doppi
 LAST_MESSAGES = {}
@@ -186,7 +187,8 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             status="ok",
             intent=intent,
             user_id=user_id,
-            tts_text=tts_text
+            tts_text=tts_text,
+            mic_control={"type": "TTS_START", "status": "speaking"}
         )
 
     except Exception as e:

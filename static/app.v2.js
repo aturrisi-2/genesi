@@ -17,7 +17,7 @@ window.ttsPlaying = false;
 window.ttsSessionActive = false;
 window.ttsExpected = false;
 window.responseProcessed = false;
-let voiceRestartLock = false;
+window.isGenesiSpeaking = false;
 
 // ===============================
 // AUDIO PRIMING
@@ -1089,9 +1089,13 @@ async function sendMessage(voiceText = null) {
   // Fix: when called as event listener, voiceText is an Event object
   const textToUse = (typeof voiceText === 'string') ? voiceText : textInput.value.trim();
 
-  // Barge-in: increment generation + force-stop ALL TTS
+  // Barge-in: stop EVERYTHING and lock mic
   ttsGenerationId++;
   stopAllTTS();
+  window.isGenesiSpeaking = true;
+  if (voiceRecognition && recognitionActive) {
+    try { voiceRecognition.stop(); } catch (e) { }
+  }
 
   // Warm AudioContext NOW (sync, during user gesture) — iOS requires this
   _warmTTSCtx();
@@ -1206,6 +1210,14 @@ async function sendMessage(voiceText = null) {
     // Segnala che abbiamo finito di processare la risposta anche per il modulo Voice
     window.responseProcessed = true;
 
+    // Se la risposta contiene mic_control, forziamo lo stato (Surgical Fix)
+    if (data.mic_control && data.mic_control.type === 'TTS_START') {
+      window.isGenesiSpeaking = true;
+      if (voiceRecognition && recognitionActive) {
+        try { voiceRecognition.stop(); } catch (e) { }
+      }
+    }
+
     // Se ttsText è vuoto o solo spazi dopo il filtro, non chiamare TTS affatto
     if (!ttsText || ttsText.trim().length === 0) {
       console.log('[TTS_ASYNC] Skipped: empty after code filtering or no text');
@@ -1234,6 +1246,10 @@ async function sendMessage(voiceText = null) {
 function playTTSAsync(text, mode) {
   // Ferma qualsiasi TTS attualmente in corso per evitare sovrapposizioni
   stopAllTTS();
+  window.isGenesiSpeaking = true; // MIC KILLER START
+  if (voiceRecognition && recognitionActive) {
+    try { voiceRecognition.stop(); } catch (e) { }
+  }
 
   // Reset abort flag + create fresh AbortController for this generation
   _ttsAborted = false;
@@ -2716,8 +2732,8 @@ function buildVoiceRecognition() {
   };
 
   rec.onresult = (event) => {
-    if (Date.now() < voiceBlockedUntil || voiceRestartLock) {
-      console.log('VOICE_BLOCKED transcript ignored (lock=' + voiceRestartLock + ')');
+    if (Date.now() < voiceBlockedUntil || window.isGenesiSpeaking) {
+      console.log('VOICE_BLOCKED transcript ignored (speaking=' + window.isGenesiSpeaking + ')');
       return;
     }
     if (!voiceModeActive) return;
@@ -2749,7 +2765,10 @@ function buildVoiceRecognition() {
   rec.onend = () => {
     recognitionActive = false;
     console.log('VOICE_REC_ENDED');
-    if (!voiceModeActive || voiceRestartLock) return;
+    if (!voiceModeActive || window.isGenesiSpeaking) {
+      console.log('VOICE_RESTART_ABORTED isGenesiSpeaking=' + window.isGenesiSpeaking);
+      return;
+    }
 
     // Safer restart for iOS Safari
     const waitMs = Math.max(1000, voiceBlockedUntil - Date.now());
@@ -2813,8 +2832,8 @@ async function sendVoiceMessage(text) {
 
   // Blocco mic preventivo lungo per coprire generazione LLM (60s fallback)
   voiceBlockedUntil = Date.now() + 60000;
-  voiceRestartLock = true;
-  console.log('VOICE_BLOCKED_START timestamp=' + Date.now());
+  window.isGenesiSpeaking = true;
+  console.log('VOICE_BLOCKED_START (sendVoiceMessage) timestamp=' + Date.now());
 
   // PAUSA MIC DURANTE TTS - Fermiamo il riconoscimento per sicurezza
   if (voiceRecognition && recognitionActive) {
@@ -2838,8 +2857,8 @@ async function sendVoiceMessage(text) {
 
   waitForTTSEnd(() => {
     if (!voiceModeActive) return;
-    voiceBlockedUntil = Date.now() + 100;
-    voiceRestartLock = false;
+    voiceBlockedUntil = Date.now() + 1000; // Delay anti-echo 1s
+    window.isGenesiSpeaking = false;
     console.log('VOICE_UNBLOCKED_AND_LOCK_RELEASED');
     setVoiceOrbState('listening');
     setVoiceStatusText('In ascolto...');
@@ -2850,7 +2869,7 @@ async function sendVoiceMessage(text) {
         playVoiceModePing('start'); // Feedack audio quando apre il mic
         voiceRecognition?.start();
       } catch (e) { }
-    }, 100);
+    }, 1000); // 1s delay
   });
 }
 
@@ -2950,7 +2969,7 @@ function waitForTTSEnd(callback) {
 function stopVoiceMode() {
   voiceModeActive = false;
   voiceBlockedUntil = 0;
-  voiceRestartLock = false;
+  window.isGenesiSpeaking = false;
   playVoiceModePing('stop');
   clearTimeout(voiceSilenceTimer);
   voiceSilenceTimer = null;
@@ -3314,3 +3333,18 @@ if (manualSyncBtn) {
   }).catch(e => console.error('🔴🔴🔴 [PUSH] Errore in SW ready:', e));
 
 })();
+
+// SURGICAL MIC KILLER - Listen for emergency signals
+window.addEventListener('message', (event) => {
+  if (event.data.type === 'TTS_START') {
+    window.isGenesiSpeaking = true;
+    if (typeof voiceRecognition !== 'undefined' && voiceRecognition && typeof recognitionActive !== 'undefined' && recognitionActive) {
+      try { voiceRecognition.stop(); } catch (e) { }
+    }
+    console.log('🔴 MIC HARD STOPPED - External signal');
+  }
+  if (event.data.type === 'TTS_END') {
+    window.isGenesiSpeaking = false;
+    console.log('🟢 MIC HOT-RELEASE - External signal');
+  }
+});
