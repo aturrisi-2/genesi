@@ -365,6 +365,21 @@ class Proactor:
                 
             if not intents:
                 intents = ["chat_free"]
+            
+            # STEP 4.1: CONVERSATIONAL INTEGRATION FORCE
+            # Ensures tool/technical responses are wrapped in Genesi's voice via Relational synthesis
+            if intents and not any(i in ["chat_free", "relational", "emotional"] for i in intents):
+                # Intents that require a human "wrap" according to user preferences
+                integrate_intents = self.tool_intents + [
+                    "reminder_create", "reminder_list", "reminder_delete", "reminder_update",
+                    "tecnica", "debug", "spiegazione", "icloud_sync", "google_sync", "icloud_setup", "google_setup",
+                    "calendar_sync_all"
+                ]
+                if any(i in integrate_intents for i in intents):
+                    # Don't force relational for clarification prompts
+                    if intents[0] not in ["ambiguous_weather", "ambiguous_tool"]:
+                        intents.append("relational")
+                        logger.info("PROACTOR_FORCE_RELATIONAL_INTEGRATION user=%s intents=%s", user_id, intents)
 
             if len(intents) == 1 and intents[0] == "ambiguous_weather":
                 return "Dove vuoi sapere il meteo?", "tool"
