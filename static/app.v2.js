@@ -876,14 +876,18 @@ function handleSyncPopups(status) {
     showSyncPopup({
       type: 'google',
       title: 'Configura Google',
-      text: 'Per iniziare a gestire i tuoi impegni, Genesi ha bisogno di accedere al tuo Google Calendar. È un passaggio obbligatorio per attivare le funzioni avanzate.',
+      text: 'Per iniziare a gestire i tuoi impegni, Genesi ha bisogno di accedere al tuo Google Calendar. È un passaggio consigliato per attivare le funzioni avanzate.',
       primaryBtn: 'Collega Google Calendar',
+      secondaryBtn: 'Lo farò più tardi',
       onPrimary: () => {
         window.location.href = `/api/calendar/google/login?token=${getAuthToken()}`;
       },
-      mandatory: true
+      onSecondary: () => {
+        closeSyncPopup();
+      },
+      mandatory: false
     });
-    return; // Don't show iCloud if Google is missing
+    return;
   }
 
   // 2. iCloud Sync (Optional)
