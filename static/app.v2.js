@@ -879,7 +879,7 @@ function handleSyncPopups(status) {
       text: 'Per iniziare a gestire i tuoi impegni, Genesi ha bisogno di accedere al tuo Google Calendar. È un passaggio obbligatorio per attivare le funzioni avanzate.',
       primaryBtn: 'Collega Google Calendar',
       onPrimary: () => {
-        window.location.href = '/api/calendar/google/login';
+        window.location.href = `/api/calendar/google/login?token=${getAuthToken()}`;
       },
       mandatory: true
     });
