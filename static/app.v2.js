@@ -1104,7 +1104,10 @@ async function sendMessage(voiceText = null) {
 
   const text = textToUse;
   console.log('SEND_MSG_STATE state=' + currentState + ' text_len=' + text.length);
-  if (!text || currentState !== STATES.IDLE) return;
+  if (!text || currentState !== STATES.IDLE) {
+    window.isGenesiSpeaking = false; // RELEASE LOCK if msg skipped
+    return;
+  }
 
   textInput.value = '';
   textInput.style.height = '44px';
@@ -1209,6 +1212,14 @@ async function sendMessage(voiceText = null) {
     }
     const ttsText = (currentMode === 'coding') ? stripCodeForTTS(rawTtsText) : rawTtsText;
 
+    // RELEASE IF NO TTS EXPECTED
+    if (!ttsText || ttsText.trim().length === 0) {
+      console.log('[TTS_ASYNC] Skipped: empty tts text');
+      window.ttsExpected = false;
+      window.isGenesiSpeaking = false;
+      return;
+    }
+
     // Segnala che abbiamo finito di processare la risposta anche per il modulo Voice
     window.responseProcessed = true;
 
@@ -1244,6 +1255,7 @@ async function sendMessage(voiceText = null) {
 
   } catch (e) {
     console.error('Chat error:', e);
+    window.isGenesiSpeaking = false; // RELEASE LOCK on error
     // PARTE 4: Fallback in caso di errore
     hideThinking();
     addMessage("Qualcosa non ha funzionato. Riprova tra poco.", 'genesi');
@@ -2786,11 +2798,13 @@ function buildVoiceRecognition() {
 
     if (restartAttempts >= MAX_RESTARTS) {
       console.warn('VOICE_MAX_RESTARTS_REACHED');
+      // Reset attempts after 15s to allow future restarts
+      setTimeout(() => { restartAttempts = 0; }, 15000);
       return;
     }
 
     restartAttempts++;
-    const delay = 200 * restartAttempts;
+    const delay = 250 * restartAttempts;
     console.log(`🔄 VOICE_RESTART_ATTEMPT #${restartAttempts} in ${delay}ms`);
 
     setTimeout(() => {
