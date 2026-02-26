@@ -1220,8 +1220,6 @@ async function sendMessage(voiceText = null) {
       return;
     }
 
-    // Segnala che abbiamo finito di processare la risposta anche per il modulo Voice
-    window.responseProcessed = true;
 
     // Se la risposta contiene mic_control, forziamo lo stato (Surgical Fix)
     if (data.mic_control && data.mic_control.type === 'TTS_START') {
@@ -1251,12 +1249,14 @@ async function sendMessage(voiceText = null) {
 
     console.log('[TTS_ASYNC_START] tts_text_len=' + ttsText.length);
     window.ttsExpected = true;
+    window.responseProcessed = true; // ATOMIC: Only now the poller can proceed
     playTTSAsync(ttsText, data.tts_mode);
 
   } catch (e) {
     console.error('Chat error:', e);
     window.isGenesiSpeaking = false; // RELEASE LOCK on error
-    // PARTE 4: Fallback in caso di errore
+    window.responseProcessed = true;
+    window.ttsExpected = false;
     hideThinking();
     addMessage("Qualcosa non ha funzionato. Riprova tra poco.", 'genesi');
     console.log('TTS_ERROR_FALLBACK');
@@ -2854,53 +2854,63 @@ function startVoiceMode() {
   console.log('VOICE_MODE_STARTED');
 }
 
+let voiceMessageInProgress = false;
 async function sendVoiceMessage(text) {
   console.log('SEND_VOICE_MSG text="' + text + '" len=' + (text?.length || 0));
-  if (!text?.trim() || !voiceModeActive) return;
-  clearTimeout(voiceSilenceTimer);
-  voiceSilenceTimer = null;
+  if (!text?.trim() || !voiceModeActive || voiceMessageInProgress) return;
+  voiceMessageInProgress = true;
 
-  // Blocco mic preventivo lungo per coprire generazione LLM (60s fallback)
-  voiceBlockedUntil = Date.now() + 60000;
-  window.isGenesiSpeaking = true;
-  console.log('VOICE_BLOCKED_START (sendVoiceMessage) timestamp=' + Date.now());
+  try {
+    clearTimeout(voiceSilenceTimer);
+    voiceSilenceTimer = null;
 
-  // PAUSA MIC DURANTE TTS - Fermiamo il riconoscimento per sicurezza
-  if (voiceRecognition && recognitionActive) {
-    try {
-      voiceRecognition.stop();
-      console.log('🎤 Mic PAUSED - Genesi sta per rispondere');
-    } catch (e) { }
-  }
+    // Blocco mic preventivo lungo per coprire generazione LLM (60s fallback)
+    voiceBlockedUntil = Date.now() + 60000;
+    window.isGenesiSpeaking = true;
+    console.log('VOICE_BLOCKED_START (sendVoiceMessage) timestamp=' + Date.now());
 
-  // Imposta il testo nel campo input corretto
-  textInput.value = text;
-  textInput.style.height = 'auto';
-
-  // Forza stato IDLE prima di chiamare sendMessage() per evitare il blocco
-  setState(STATES.IDLE);
-
-  await sendMessage(text);
-
-  setVoiceOrbState('speaking');
-  setVoiceStatusText('Genesi risponde...');
-
-  waitForTTSEnd(() => {
-    if (!voiceModeActive) return;
-    voiceBlockedUntil = Date.now() + 1000; // Delay anti-echo 1s
-    window.isGenesiSpeaking = false;
-    console.log('VOICE_UNBLOCKED_AND_LOCK_RELEASED');
-    setVoiceOrbState('listening');
-    setVoiceStatusText('In ascolto...');
-    setTimeout(() => {
-      if (!voiceModeActive || recognitionActive) return;
+    // PAUSA MIC DURANTE TTS - Fermiamo il riconoscimento per sicurezza
+    if (voiceRecognition && recognitionActive) {
       try {
-        console.log('VOICE_RESTART_AFTER_TTS');
-        playVoiceModePing('start'); // Feedack audio quando apre il mic
-        voiceRecognition?.start();
+        voiceRecognition.stop();
+        console.log('🎤 Mic PAUSED - Genesi sta per rispondere');
       } catch (e) { }
-    }, 1000); // 1s delay
-  });
+    }
+
+    // Imposta il testo nel campo input corretto
+    textInput.value = text;
+    textInput.style.height = 'auto';
+
+    // Forza stato IDLE prima di chiamare sendMessage() per evitare il blocco
+    setState(STATES.IDLE);
+
+    await sendMessage(text);
+
+    setVoiceOrbState('speaking');
+    setVoiceStatusText('Genesi risponde...');
+
+    waitForTTSEnd(() => {
+      if (!voiceModeActive) return;
+      voiceBlockedUntil = Date.now() + 1000; // Delay anti-echo 1s
+      window.isGenesiSpeaking = false;
+      console.log('VOICE_UNBLOCKED_AND_LOCK_RELEASED');
+      setVoiceOrbState('listening');
+      setVoiceStatusText('In ascolto...');
+      setTimeout(() => {
+        if (!voiceModeActive || recognitionActive) return;
+        try {
+          console.log('VOICE_RESTART_AFTER_TTS');
+          playVoiceModePing('start'); // Feedack audio quando apre il mic
+          voiceRecognition?.start();
+        } catch (e) { }
+      }, 1000); // 1s delay
+    });
+
+    voiceMessageInProgress = false;
+  } catch (e) {
+    voiceMessageInProgress = false;
+    console.error("VOICE_MSG_FAIL", e);
+  }
 }
 
 /** 
