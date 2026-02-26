@@ -75,7 +75,7 @@ class PiperTTSProvider(TTSProvider):
             return None
         
         cleaned = text.strip()[:2000]
-        print(f"TTS_PROVIDER=piper text_len={len(cleaned)}")
+        logger.info("TTS_PROVIDER=piper text_len=%d", len(cleaned))
         
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -153,11 +153,11 @@ class EdgeTTSProvider(TTSProvider):
             if not result:
                 raise ValueError("Audio buffer vuoto")
                 
-            print(f"TTS_EDGE_OK voice={self.voice} bytes={len(result)}")
+            logger.info("TTS_EDGE_OK voice=%s bytes=%d", self.voice, len(result))
             return result
 
         except Exception as e:
-            print(f"TTS_EDGE_FALLBACK reason={e}")
+            logger.warning("TTS_EDGE_FALLBACK reason=%s", e)
             return None
     
     def name(self) -> str:
@@ -175,7 +175,7 @@ class OpenAITTSProvider(TTSProvider):
         self.api_key = os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY non trovata nelle variabili d'ambiente")
-        print(f"TTS_PROVIDER=openai voice={self.voice} model={self.model}")
+        logger.info("TTS_PROVIDER=openai voice=%s model=%s", self.voice, self.model)
 
     def _pad_tts_text(self, text: str) -> str:
         """
@@ -223,11 +223,11 @@ class OpenAITTSProvider(TTSProvider):
                 )
                 response.raise_for_status()
                 result = response.content
-                print(f"TTS_OPENAI_OK voice={self.voice} bytes={len(result)}")
+                logger.info("TTS_OPENAI_OK voice=%s bytes=%d", self.voice, len(result))
                 return result
 
         except Exception as e:
-            print(f"TTS_OPENAI_FALLBACK reason={e}")
+            logger.warning("TTS_OPENAI_FALLBACK reason=%s", e)
             return None
 
 
@@ -263,7 +263,7 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
             config = json.load(f)
         providers_cfg = config.get("providers", {})
     except Exception as e:
-        print(f"TTS_ROUTING_CONFIG_ERROR reason={e} fallback=piper")
+        logger.error("TTS_ROUTING_CONFIG_ERROR reason=%s fallback=piper", e)
         return _build_piper(providers_cfg={})
 
     # Determina categoria
@@ -293,7 +293,7 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
         primary = "openai"
         secondary = "edge_tts"
 
-    print(f"TTS_ROUTING intent={intent} route={route} category={category} provider={primary}")
+    logger.info("TTS_ROUTING intent=%s route=%s category=%s provider=%s", intent, route, category, primary)
 
     # Prova primary
     try:
@@ -313,7 +313,7 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
                 volume=cfg.get("volume", "+0%")
             )
     except Exception as e:
-        print(f"TTS_ROUTING_PRIMARY_FAIL provider={primary} reason={e}")
+        logger.warning("TTS_ROUTING_PRIMARY_FAIL provider=%s reason=%s", primary, e)
 
     # Prova secondary
     try:
@@ -333,10 +333,10 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
                 speed=float(os.getenv("ONYX_SPEED", str(cfg.get("speed", 1.0))))
             )
     except Exception as e:
-        print(f"TTS_ROUTING_SECONDARY_FAIL provider={secondary} reason={e}")
+        logger.warning("TTS_ROUTING_SECONDARY_FAIL provider=%s reason=%s", secondary, e)
 
     # Fallback finale: Piper (sempre offline)
-    print("TTS_ROUTING_FALLBACK_PIPER")
+    logger.warning("TTS_ROUTING_FALLBACK_PIPER")
     return _build_piper(providers_cfg)
 
 
@@ -349,7 +349,7 @@ def _build_piper(providers_cfg: dict) -> TTSProvider:
             speed=cfg.get("speed", 1.0)
         )
     except Exception as e:
-        print(f"TTS_PIPER_FALLBACK_ERROR reason={e}")
+        logger.error("TTS_PIPER_FALLBACK_ERROR reason=%s", e)
         return PiperTTSProvider()
 # TTS-ROUTING END
 
@@ -378,7 +378,7 @@ def get_tts_provider() -> TTSProvider:
             active_provider = config.get("active_provider", "piper")
             providers = config.get("providers", {})
             
-            print(f"TTS_PROVIDER_LOADED provider={active_provider}")
+            logger.info("TTS_PROVIDER_LOADED provider=%s", active_provider)
             
             # Istanzia il provider corretto
             if active_provider == "piper":

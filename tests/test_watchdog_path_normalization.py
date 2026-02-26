@@ -135,45 +135,47 @@ class TestWatchdogPathNormalization:
         
         print("✅ Test guard clause invalid path superato")
     
-    def test_path_logging(self, report_handler, evolution_engine):
+    def test_path_logging(self, report_handler, evolution_engine, caplog):
         """Test logging path normalization."""
+        import logging
+        import sys
+        from io import StringIO
+
         try:
             # Crea file temporaneo nella directory corrente
             current_dir = os.getcwd()
             temp_filename = "test_massive_training_auth_report_log.json"
             temp_path = os.path.join(current_dir, temp_filename)
-            
+
             with open(temp_path, 'w') as f:
                 json.dump({"test": "data"}, f)
-            
+
             # Mock evento watchdog
             event = Mock(spec=FileSystemEvent)
             event.is_directory = False
             event.src_path = temp_filename  # Path relativo
-            
-            # Cattura stdout
-            import sys
-            from io import StringIO
+
+            # Cattura stdout (log() custom) + caplog (logger.debug/info)
             captured_output = StringIO()
             old_stdout = sys.stdout
             sys.stdout = captured_output
-            
+
             try:
-                with patch('asyncio.run_coroutine_threadsafe') as mock_run_coroutine:
+                with caplog.at_level(logging.DEBUG), patch('asyncio.run_coroutine_threadsafe') as mock_run_coroutine:
                     mock_future = Mock()
                     mock_run_coroutine.return_value = mock_future
-                    
+
                     # Simula evento
                     report_handler.on_created(event)
-                    
-                    # Recupera output
-                    output = captured_output.getvalue()
-                    
+
+                    # Combina stdout + caplog
+                    output = captured_output.getvalue() + caplog.text
+
                     # Verifica log path
                     assert f"WATCHDOG_EVENT_RECEIVED path={temp_filename}" in output
                     assert f"NORMALIZED_PATH path={os.path.abspath(temp_path)}" in output
-                    assert f"REPORT_DETECTED {os.path.abspath(temp_path)}" in output
-            
+                    assert f"REPORT_DETECTED" in output and os.path.abspath(temp_path) in output
+
             finally:
                 sys.stdout = old_stdout
         

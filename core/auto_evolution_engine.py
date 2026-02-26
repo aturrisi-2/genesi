@@ -56,13 +56,12 @@ class ReportHandler(FileSystemEventHandler):
                 normalized_path = os.path.abspath(raw_path)
                 
                 # 🔵 LOG PATH NORMALIZZATI
-                print(f"WATCHDOG_EVENT_RECEIVED path={raw_path}")
-                print(f"NORMALIZED_PATH path={normalized_path}")
-                
+                logger.debug("WATCHDOG_EVENT_RECEIVED path=%s", raw_path)
+                logger.debug("NORMALIZED_PATH path=%s", normalized_path)
+
                 # 🔵 GUARD CLAUSE - verifica esistenza file
                 if not os.path.exists(normalized_path):
-                    print(f"ERROR_INVALID_PATH {normalized_path}")
-                    logger.error(f"❌ Invalid path - file does not exist: {normalized_path}")
+                    logger.error("ERROR_INVALID_PATH %s - file does not exist", normalized_path)
                     return
                 
                 # 🔵 DEDUPLICAZIONE - ignora file già processati (usa path normalizzato)
@@ -72,7 +71,7 @@ class ReportHandler(FileSystemEventHandler):
                 self._processed_files.add(normalized_path)
                 
                 # 🔵 DEBUG OBBLIGATORIO - report rilevato
-                print(f"REPORT_DETECTED {normalized_path}")
+                logger.info("REPORT_DETECTED %s", normalized_path)
                 
                 # 🔵 BLINDATURA THREAD + FUTURE - salva future e gestisci eccezioni
                 try:
@@ -85,17 +84,15 @@ class ReportHandler(FileSystemEventHandler):
                     future.add_done_callback(self._evolution_callback)
                     
                 except Exception as e:
-                    print(f"EVOLUTION_EXCEPTION {e}")
-                    logger.error(f"❌ Evolution exception: {e}")
-    
+                    logger.error("EVOLUTION_EXCEPTION %s", e)
+
     def _evolution_callback(self, future):
         """Callback per gestire risultato evolution."""
         try:
             result = future.result()
-            print(f"EVOLUTION_COMPLETED {result}")
+            logger.info("EVOLUTION_COMPLETED %s", result)
         except Exception as e:
-            print(f"EVOLUTION_EXCEPTION {e}")
-            logger.error(f"❌ Evolution callback exception: {e}")
+            logger.error("EVOLUTION_EXCEPTION (callback) %s", e)
 
 class AutoEvolutionEngine:
     """Motore di auto-evoluzione controllata per Genesi."""
@@ -119,7 +116,7 @@ class AutoEvolutionEngine:
         
         # META-GOVERNANCE EXTENSION START
         self._meta_governance = MetaGovernanceEngine()
-        print("AUTO_EVOLUTION_META_GOVERNANCE_ATTACHED")
+        logger.info("AUTO_EVOLUTION_META_GOVERNANCE_ATTACHED")
         # META-GOVERNANCE EXTENSION END
     
     def _apply_clamped_delta(self, param_name: str, current_value: float, proposed_value: float) -> float:
@@ -129,7 +126,7 @@ class AutoEvolutionEngine:
 
         if abs(delta) > max_delta:
             clamped_delta = max_delta if delta > 0 else -max_delta
-            print(f"EVOLUTION_DELTA_CLAMPED param={param_name} requested={delta:.4f} applied={clamped_delta:.4f}")
+            logger.info("EVOLUTION_DELTA_CLAMPED param=%s requested=%.4f applied=%.4f", param_name, delta, clamped_delta)
             result = current_value + clamped_delta
         else:
             result = proposed_value
@@ -193,8 +190,7 @@ class AutoEvolutionEngine:
         self.observer.schedule(event_handler, str(lab_path), recursive=False)
         self.observer.start()
         
-        print(f"WATCHDOG_ACTIVE path={lab_path}")
-        logger.info(f"🚀 Auto Evolution Engine started - monitoring {lab_path}")
+        logger.info("WATCHDOG_ACTIVE path=%s - Auto Evolution Engine started", lab_path)
         
     def stop_monitoring(self):
         """Ferma monitoraggio."""
@@ -202,17 +198,13 @@ class AutoEvolutionEngine:
             self.observer.stop()
             self.observer.join()
         self.is_running = False
-        logger.info("🛑 Auto Evolution Engine stopped")
-        print(f"EVOLUTION_STOPPED")
+        logger.info("EVOLUTION_STOPPED - Auto Evolution Engine stopped")
     
     async def process_report(self, report_path: str):
         """Processa un nuovo report di Massive Training con meta-governance EMA."""
         try:
             # 🔵 DEBUG OBBLIGATORIO - entrata process
-            print(f"EVOLUTION_ENTERED report={report_path}")
-            
-            # 🔵 DEBUG OBBLIGATORIO - report rilevato
-            print(f"REPORT_DETECTED {report_path}")
+            logger.info("EVOLUTION_ENTERED report=%s", report_path)
             
             # 🚨 PROTEZIONE ANTI-DEGENERAZIONE API
             if not await self._validate_report_safety(report_path):
@@ -221,7 +213,7 @@ class AutoEvolutionEngine:
                 return
             
             # 🔵 DEBUG OBBLIGATORIO - inizio processing
-            print(f"PROCESSING_REPORT {report_path}")
+            logger.info("PROCESSING_REPORT %s", report_path)
             
             # Analizza report
             analysis = self.auto_tuner.analyze_report(report_path)
@@ -230,7 +222,7 @@ class AutoEvolutionEngine:
                 return
             
             # 🔵 DEBUG OBBLIGATORIO - metrics parsed
-            print(f"EVOLUTION_METRICS {analysis}")
+            logger.info("EVOLUTION_METRICS %s", analysis)
             
             # META-GOVERNANCE EXTENSION START
             # Detect drift nei parametri correnti
@@ -239,7 +231,7 @@ class AutoEvolutionEngine:
             
             # Alert se drift significativo
             if drift_info["drift_detected"] and drift_info["drift_magnitude"] > 0.3:
-                print(f"META_GOVERNANCE_DRIFT_ALERT magnitude={drift_info['drift_magnitude']}")
+                logger.warning("META_GOVERNANCE_DRIFT_ALERT magnitude=%.3f", drift_info['drift_magnitude'])
                 # Aggiungi flag decisione senza sovrascrivere logica esistente
                 analysis["meta_drift_detected"] = True
                 analysis["meta_drift_magnitude"] = drift_info["drift_magnitude"]
@@ -249,7 +241,7 @@ class AutoEvolutionEngine:
             previous_params = self._get_previous_tuning_params()
             block, reason = self._meta_governance.should_block_evolution(current_params, previous_params)
             if block:
-                print(f"EVOLUTION_BLOCKED reason={reason}")
+                logger.warning("EVOLUTION_BLOCKED reason=%s", reason)
                 return  # ritorna parametri invariati
             
             # 🔵 META-GOVERNANCE - Calcola decision flags
@@ -285,8 +277,7 @@ class AutoEvolutionEngine:
             min_interval = 300  # 5 minuti minimo tra shift (fallback quando user_id non disponibile)
             
             if current_time - last_shift_time < min_interval:
-                print(f"EVOLUTION_THROTTLED time_since_last={current_time - last_shift_time:.0f}s min={min_interval}s")
-                return
+                logger.info("EVOLUTION_THROTTLED time_since_last=%.0fs min=%ds", current_time - last_shift_time, min_interval)
                 return
             
             # 🔵 MESSAGING THROTTLING - Verifica numero messaggi per utente system
@@ -296,11 +287,11 @@ class AutoEvolutionEngine:
                 system_message_count = chat_memory.get_message_count("system")
                 
                 if system_message_count < EVOLUTION_MIN_MESSAGES_BETWEEN_SHIFTS:
-                    print(f"EVOLUTION_THROTTLED_MESSAGES current={system_message_count} min={EVOLUTION_MIN_MESSAGES_BETWEEN_SHIFTS}")
+                    logger.info("EVOLUTION_THROTTLED_MESSAGES current=%d min=%d", system_message_count, EVOLUTION_MIN_MESSAGES_BETWEEN_SHIFTS)
                     return
             except Exception as e:
                 # Se fallisce il conteggio, continua con logica tempo
-                print(f"EVOLUTION_MESSAGE_COUNT_ERROR error={e}")
+                logger.warning("EVOLUTION_MESSAGE_COUNT_ERROR error=%s", e)
             
             # Esegui ciclo di auto-tuning
             result = self.auto_tuner.run_auto_tuning_cycle(report_path)
@@ -317,9 +308,9 @@ class AutoEvolutionEngine:
                     self.state_manager.create_snapshot()
                     self.state_manager.save_current_state(updated_state)
                     reload_tuning_state()
-                    print("STATE_APPLIED_SUPPORTIVE_ONLY")
+                    logger.info("STATE_APPLIED_SUPPORTIVE_ONLY")
                 else:
-                    print("NO_SUPPORTIVE_TUNING_NEEDED")
+                    logger.info("NO_SUPPORTIVE_TUNING_NEEDED")
                 return
             
             if result['status'] == 'adjusted':
@@ -332,8 +323,7 @@ class AutoEvolutionEngine:
                 await self._rollback_transaction()
                 
         except Exception as e:
-            print(f"EVOLUTION_EXCEPTION {e}")
-            logger.error(f"❌ Error processing report {report_path}: {e}")
+            logger.error("EVOLUTION_EXCEPTION report=%s error=%s", report_path, e)
     
     async def _validate_report_safety(self, report_path: str) -> bool:
         """Valida che il report non contenga degenerazione API."""
@@ -408,7 +398,7 @@ class AutoEvolutionEngine:
                 logger.critical(f"🚨 EMERGENCY ROLLBACK to snapshot: {snapshot_id}")
                 
                 # 🔵 DEBUG OBBLIGATORIO - rollback log
-                print(f"TUNING_ROLLBACK emergency_rollback")
+                logger.info("TUNING_ROLLBACK emergency_rollback")
                 
                 # 🔵 LOG OBBLIGATORIO rollback
                 result = {
@@ -417,17 +407,15 @@ class AutoEvolutionEngine:
                 }
                 await self._log_tuning_rollback(result)
             else:
-                logger.critical("🚨 No snapshots available for emergency rollback")
-                print(f"TUNING_ROLLBACK no_snapshots_available")
+                logger.critical("TUNING_ROLLBACK no_snapshots_available - emergency rollback impossible")
         except Exception as e:
-            logger.error(f"❌ Emergency rollback failed: {e}")
-            print(f"EVOLUTION_EXCEPTION {e}")
-        
+            logger.error("EVOLUTION_EXCEPTION emergency rollback failed: %s", e)
+
         # META-GOVERNANCE EXTENSION START
         # Invalida shift proposti con stato corrente dopo rollback
         current_params = self._get_current_tuning_params()
         await self._meta_governance.evaluate_pending_shifts(current_params)
-        print("META_GOVERNANCE_SHIFTS_CLEARED_ON_ROLLBACK")
+        logger.info("META_GOVERNANCE_SHIFTS_CLEARED_ON_ROLLBACK")
         # META-GOVERNANCE EXTENSION END
     
     async def _log_tuning_applied(self, result: Dict[str, Any]):
@@ -446,7 +434,7 @@ class AutoEvolutionEngine:
         
         # Dettaglio per ogni parametro
         for param, delta in adjustments.items():
-            print(f"  {param}: {delta}")
+            logger.info("  TUNING_PARAM %s: %s", param, delta)
     
     async def _log_tuning_rollback(self, result: Dict[str, Any]):
         """Log obbligatorio per tuning rollback."""
@@ -456,7 +444,7 @@ class AutoEvolutionEngine:
         # 🔵 DEBUG OBBLIGATORIO - rollback
         reason = result.get('reason', 'unknown')
         log("TUNING_ROLLBACK", reason=reason)
-        print("TUNING_ROLLBACK")  # Per test che cerca solo questa stringa
+        logger.info("TUNING_ROLLBACK")  # Per test che cerca solo questa stringa
     
     # 🔵 TUNING SUPPORTIVE ISOLATO - Metodo privato
     def _tune_supportive_only(self, metrics: dict, state: dict) -> bool:
@@ -483,7 +471,7 @@ class AutoEvolutionEngine:
                 # Applica max_delta clamp
                 new_value = self._apply_clamped_delta("supportive_intensity", current, proposed_value)
 
-                print(f"TUNING_SUPPORTIVE delta={delta:.6f} old={current:.6f} new={new_value:.6f}")
+                logger.info("TUNING_SUPPORTIVE delta=%.6f old=%.6f new=%.6f", delta, current, new_value)
 
                 state["parameters"]["supportive_intensity"] = new_value
                 return True

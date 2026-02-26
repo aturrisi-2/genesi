@@ -367,6 +367,20 @@ class ReminderEngine:
             log("REMINDER_DONE_ERROR", user_id=user_id, error=str(e))
             return False
 
+    def cancel_reminder(self, user_id: str, reminder_id: str) -> bool:
+        """Mark a reminder as cancelled (keeps it in storage with status='cancelled')."""
+        try:
+            reminders = self._load_reminders(user_id)
+            for reminder in reminders:
+                if reminder.get("id") == reminder_id:
+                    reminder["status"] = "cancelled"
+                    reminder["cancelled_at"] = datetime.now().isoformat()
+                    return self._save_reminders(user_id, reminders)
+            return False
+        except Exception as e:
+            log("REMINDER_CANCEL_ERROR", user_id=user_id, error=str(e))
+            return False
+
     def delete_reminder(self, user_id: str, reminder_id: str) -> bool:
         try:
             reminders = self._load_reminders(user_id)

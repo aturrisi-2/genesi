@@ -94,28 +94,29 @@ class TestForceEvolution:
                 fake_report_path.unlink()
     
     @pytest.mark.asyncio
-    async def test_evolution_debug_logs(self, engine, fake_report_path, extreme_report_data):
+    async def test_evolution_debug_logs(self, engine, fake_report_path, extreme_report_data, caplog):
         """Test che verifica tutti i log di debug obbligatori."""
-        
-        # Cattura stdout per verificare log
+        import logging
         import sys
         from io import StringIO
-        
+
+        # Cattura stdout (per log() custom) e logging (per logger.info())
         captured_output = StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured_output
-        
+
         try:
             # Scrivi report fake
             fake_report_path.parent.mkdir(exist_ok=True)
             with open(fake_report_path, 'w', encoding='utf-8') as f:
                 json.dump(extreme_report_data, f, indent=2)
-            
-            # Processa report
-            await engine.process_report(str(fake_report_path))
-            
-            # Recupera output
-            output = captured_output.getvalue()
+
+            with caplog.at_level(logging.INFO):
+                # Processa report
+                await engine.process_report(str(fake_report_path))
+
+            # Combina stdout + caplog per coprire entrambe le destinazioni
+            output = captured_output.getvalue() + caplog.text
             
             # Verifica sequenza log obbligatoria (accetta rollback invece di tuning)
             required_logs = [
@@ -152,31 +153,31 @@ class TestForceEvolution:
                 fake_report_path.unlink()
     
     @pytest.mark.asyncio
-    async def test_evolution_exception_handling(self, engine, fake_report_path):
+    async def test_evolution_exception_handling(self, engine, fake_report_path, caplog):
         """Test che verifica gestione eccezioni non silenziosa."""
-        
+        import logging
+        import sys
+        from io import StringIO
+
         # Crea report con valori tutti a zero per forzare rollback (non eccezione)
         corrupted_report = {"invalid": "data"}
-        
+
         fake_report_path.parent.mkdir(exist_ok=True)
         with open(fake_report_path, 'w', encoding='utf-8') as f:
             json.dump(corrupted_report, f, indent=2)
-        
+
         try:
-            # Cattura stdout per verificare gestione
-            import sys
-            from io import StringIO
-            
             captured_output = StringIO()
             old_stdout = sys.stdout
             sys.stdout = captured_output
-            
-            # Processa report corrotto
-            await engine.process_report(str(fake_report_path))
-            
-            # Recupera output
-            output = captured_output.getvalue()
-            
+
+            with caplog.at_level(logging.INFO):
+                # Processa report corrotto
+                await engine.process_report(str(fake_report_path))
+
+            # Combina stdout + caplog
+            output = captured_output.getvalue() + caplog.text
+
             # Verifica che ci sia una gestione appropriata
             # (i report con valori nulli triggerano rollback, non eccezione)
             has_entered = "EVOLUTION_ENTERED" in output
@@ -197,7 +198,7 @@ class TestForceEvolution:
                 fake_report_path.unlink()
     
     @pytest.mark.asyncio
-    async def test_evolution_rollback_on_constraints_violation(self, engine, fake_report_path):
+    async def test_evolution_rollback_on_constraints_violation(self, engine, fake_report_path, caplog):
         """Test rollback su violazione vincoli hard."""
         
         # Report con success_rate sotto minimo (trigger rollback)
@@ -222,22 +223,23 @@ class TestForceEvolution:
             json.dump(rollback_report, f, indent=2)
         
         try:
-            # Cattura stdout
+            import logging
             import sys
             from io import StringIO
-            
+
             captured_output = StringIO()
             old_stdout = sys.stdout
             sys.stdout = captured_output
-            
-            # Processa report
-            await engine.process_report(str(fake_report_path))
-            
-            # Recupera output
-            output = captured_output.getvalue()
-            
+
+            with caplog.at_level(logging.INFO):
+                # Processa report
+                await engine.process_report(str(fake_report_path))
+
+            # Combina stdout + caplog
+            output = captured_output.getvalue() + caplog.text
+
             # Verifica rollback (accetta entrambi i tipi di rollback log)
-            has_decision_rollback = "EVOLUTION_DECISION rollback" in output
+            has_decision_rollback = "EVOLUTION_DECISION status=rollback" in output or "EVOLUTION_DECISION rollback" in output
             has_tuning_rollback = "TUNING_ROLLBACK" in output
             
             assert has_decision_rollback or has_tuning_rollback, "Nessun rollback eseguito!"

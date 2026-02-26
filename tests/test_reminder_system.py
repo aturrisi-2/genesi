@@ -61,7 +61,7 @@ class TestReminderEngine:
         assert len(reminder_id) > 0  # Should be a UUID
         
         # Verify it was saved
-        reminders = engine.list_reminders(test_user)
+        reminders = asyncio.run(engine.list_reminders(test_user, include_icloud=False))
         assert len(reminders) == 1
         assert reminders[0]["text"] == text
         assert reminders[0]["id"] == reminder_id
@@ -76,8 +76,8 @@ class TestReminderEngine:
         r2_id = engine.create_reminder(test_user, "task 2", now + timedelta(hours=1))
         r3_id = engine.create_reminder(test_user, "task 3", now + timedelta(hours=2))
         
-        reminders = engine.list_reminders(test_user)
-        
+        reminders = asyncio.run(engine.list_reminders(test_user, include_icloud=False))
+
         # Should be in chronological order
         assert len(reminders) == 3
         assert reminders[0]["text"] == "task 2"  # 1 hour from now
@@ -109,7 +109,7 @@ class TestReminderEngine:
         assert success is True
         
         # Verify status changed
-        reminders = engine.list_reminders(test_user)
+        reminders = asyncio.run(engine.list_reminders(test_user, include_icloud=False))
         assert len(reminders) == 1
         assert reminders[0]["status"] == "done"
         assert "done_at" in reminders[0]
@@ -124,7 +124,7 @@ class TestReminderEngine:
         assert success is True
         
         # Verify status changed
-        reminders = engine.list_reminders(test_user)
+        reminders = asyncio.run(engine.list_reminders(test_user, include_icloud=False))
         assert len(reminders) == 1
         assert reminders[0]["status"] == "cancelled"
         assert "cancelled_at" in reminders[0]
@@ -139,7 +139,7 @@ class TestReminderEngine:
         assert success is True
         
         # Verify it's gone
-        reminders = engine.list_reminders(test_user)
+        reminders = asyncio.run(engine.list_reminders(test_user, include_icloud=False))
         assert len(reminders) == 0
     
     def test_format_reminders_list(self, engine, test_user):
@@ -148,7 +148,7 @@ class TestReminderEngine:
         engine.create_reminder(test_user, "task 1", now + timedelta(hours=1))
         engine.create_reminder(test_user, "task 2", now + timedelta(hours=2))
         
-        reminders = engine.list_reminders(test_user)
+        reminders = asyncio.run(engine.list_reminders(test_user, include_icloud=False))
         formatted = engine.format_reminders_list(reminders)
         
         assert "I tuoi promemoria:" in formatted
@@ -172,8 +172,8 @@ class TestReminderEngine:
         engine.create_reminder(user2, "user2 task", now + timedelta(hours=1))
         
         # Each user should only see their own reminders
-        user1_reminders = engine.list_reminders(user1)
-        user2_reminders = engine.list_reminders(user2)
+        user1_reminders = asyncio.run(engine.list_reminders(user1, include_icloud=False))
+        user2_reminders = asyncio.run(engine.list_reminders(user2, include_icloud=False))
         
         assert len(user1_reminders) == 1
         assert user1_reminders[0]["text"] == "user1 task"
@@ -368,7 +368,7 @@ class TestProactorIntegration:
         assert source == "reminder"
         
         # Verify reminder was created
-        reminders = reminder_engine.list_reminders(test_user)
+        reminders = await reminder_engine.list_reminders(test_user, include_icloud=False)
         assert len(reminders) == 1
         assert reminders[0]["text"] == "chiamare il medico"
     

@@ -121,12 +121,15 @@ def is_memory_reference(message: str) -> bool:
     memory_triggers = [
         "cosa abbiamo detto", "cosa dicevamo", "di cosa abbiamo parlato",
         "ci siamo detti", "avevamo detto", "riferimento a prima",
-        "parlato l'altra volta", "discusso ieri"
+        "parlato l'altra volta", "discusso ieri",
+        "abbiamo parlato", "avevamo parlato", "l'altra volta",
+        "discusso", "di cosa", "come mi chiamo",
+        "sai cosa", "ricordi cosa", "prima", "ieri",
     ]
     
     # Se contiene "ricordi" ma NON contiene parole chiave di promemoria/impegni
     data_keywords = ["promemoria", "impegni", "appuntamenti", "cosa ho", "da fare", "calendario"]
-    if any(m in msg_lower for m in ["ricordi", "ti ricordi", "mi ricordi"]):
+    if any(m in msg_lower for m in ["ricordi", "ti ricordi", "mi ricordi", "ricordarmi"]):
         if not any(d in msg_lower for d in data_keywords):
             return True
             

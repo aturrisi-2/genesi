@@ -247,5 +247,36 @@ class LLMService:
         except Exception as e:
             logger.error("LLM_USAGE_DB_ERROR: %s", str(e))
 
+
+_TUNING_STATE: dict = {}
+
+
+def load_tuning_state() -> dict:
+    """Carica i parametri di tuning dall'evolution state (data/evolution/current_state.json)."""
+    try:
+        state_file = Path("data/evolution/current_state.json")
+        if state_file.exists():
+            with open(state_file, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+            # Restituisce i parametri piatti (supportive_intensity, ecc.)
+            return state.get("parameters", state)
+    except Exception as e:
+        logger.error("LOAD_TUNING_STATE_ERROR: %s", str(e))
+    return {}
+
+
+def reload_tuning_state() -> dict:
+    """Ricarica i parametri di tuning nell'istanza LLM globale. Chiamata dopo ogni evoluzione."""
+    global _TUNING_STATE
+    try:
+        state = load_tuning_state()
+        _TUNING_STATE.update(state)
+        logger.info("RELOAD_TUNING_STATE: state reloaded, keys=%s", list(state.keys()))
+        return state
+    except Exception as e:
+        logger.error("RELOAD_TUNING_STATE_ERROR: %s", str(e))
+        return {}
+
+
 # Istanza globale
 llm_service = LLMService()

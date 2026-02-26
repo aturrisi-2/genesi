@@ -43,14 +43,14 @@ async def _ocr_with_retry(file_path: str, max_retries: int = 3) -> str:
         try:
             result = await extract_text_from_image(file_path)
             if result and len(result.strip()) > 0:
-                print(f"OCR_SUCCESS attempt={attempt+1} chars={len(result)}")
+                log("OCR_SUCCESS", attempt=attempt+1, chars=len(result))
                 return result
-            print(f"OCR_EMPTY attempt={attempt+1}")
+            log("OCR_EMPTY", attempt=attempt+1)
         except Exception as e:
-            print(f"OCR_ERROR attempt={attempt+1} error={e}")
+            log("OCR_ERROR", attempt=attempt+1, error=str(e))
             if attempt < max_retries - 1:
                 await asyncio.sleep(1)
-    print(f"OCR_FAILED all_attempts_exhausted")
+    log("OCR_FAILED", reason="all_attempts_exhausted")
     return ""
 
 
@@ -66,7 +66,7 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
         if not is_valid:
             raise HTTPException(status_code=400, detail=error_msg)
         
-        print(f"UPLOAD_VALIDATED filename={file.filename} size_mb={file.size/(1024*1024):.1f}")
+        log("UPLOAD_VALIDATED", filename=file.filename, size_mb=round((file.size or 0)/(1024*1024), 1))
         
         user_id = user.id
         result = await analyze_file(file)
@@ -95,9 +95,9 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
                     content=result.get("content", ""), 
                     file_type=result.get("type", "unknown")
                 )
-                print(f"DOCUMENT_CONTEXT_REGISTERED user={user_id} filename={file.filename}")
+                log("DOCUMENT_CONTEXT_REGISTERED", user_id=user_id, filename=file.filename)
             except Exception as doc_err:
-                print(f"DOCUMENT_CONTEXT_REGISTER_ERROR user={user_id} error={doc_err}")
+                log("DOCUMENT_CONTEXT_REGISTER_ERROR", user_id=user_id, error=str(doc_err))
 
             # Add to active_documents list on user profile (max 5)
             try:
