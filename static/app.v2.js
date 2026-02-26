@@ -12,8 +12,11 @@ let currentMode = "chat"; // "chat" | "coding"
 // TTS TIMING STATE
 // ===============================
 window.lastTTSStart = 0;
+window.lastTTSEnd = 0;
 window.ttsPlaying = false;
 window.ttsSessionActive = false;
+window.ttsExpected = false;
+window.responseProcessed = false;
 
 // ===============================
 // AUDIO PRIMING
@@ -1125,6 +1128,7 @@ async function sendMessage(voiceText = null) {
   // PARTE 1: Mostra animazione thinking come messaggio reale
   setState(STATES.THINKING);
   window.ttsExpected = false; // Reset per ogni nuovo messaggio
+  window.responseProcessed = false;
 
   // Determina se è una query per l'archivio della memoria
   const memoryTriggers = [
@@ -1193,6 +1197,7 @@ async function sendMessage(voiceText = null) {
     // TTS ASINCRONO — completamente scollegato dal render
     const rawTtsText = (typeof data.tts_text !== 'undefined') ? data.tts_text : data.response;
     function stripCodeForTTS(text) {
+      if (!text) return "";
       return text
         .replace(/```[\s\S]*?```/g, '. ')
         .replace(/`[^`]+`/g, '')
@@ -1200,9 +1205,13 @@ async function sendMessage(voiceText = null) {
     }
     const ttsText = (currentMode === 'coding') ? stripCodeForTTS(rawTtsText) : rawTtsText;
 
+    // Segnala che abbiamo finito di processare la risposta anche per il modulo Voice
+    window.responseProcessed = true;
+
     // Se ttsText è vuoto o solo spazi dopo il filtro, non chiamare TTS affatto
     if (!ttsText || ttsText.trim().length === 0) {
-      console.log('[TTS_ASYNC] Skipped: empty after code filtering in coding mode');
+      console.log('[TTS_ASYNC] Skipped: empty after code filtering or no text');
+      window.ttsExpected = false;
       return;
     }
 
@@ -2310,6 +2319,7 @@ async function playSimpleAudio(blob) {
         if (_ttsSource === source) _ttsSource = null;
         _isPlayingChunk = false;
         window.ttsPlaying = false;
+        window.lastTTSEnd = Date.now();
         resolve(); // Sblocca l'attesa
       };
 
@@ -2679,7 +2689,7 @@ let voiceModeActive = false;
 let voiceRecognition = null;
 let voiceSilenceTimer = null;
 let voiceBlockedUntil = 0;
-const VOICE_SILENCE_MS = 1500;
+const VOICE_SILENCE_MS = 1000;
 
 // Singleton per waitForTTSEnd - previene chiamate parallele
 let voiceTTSPollInterval = null;
@@ -2779,6 +2789,7 @@ function startVoiceMode() {
   if (!SpeechRecognition) { alert('Browser non supporta il riconoscimento vocale.'); return; }
   voiceModeActive = true;
   voiceBlockedUntil = 0;
+  playVoiceModePing('start');
   document.getElementById('voice-mode-btn')?.classList.add('active');
   document.getElementById('voice-mode-overlay')?.classList.replace('hidden', 'visible');
   setVoiceOrbState('listening');
@@ -2802,9 +2813,9 @@ async function sendVoiceMessage(text) {
   clearTimeout(voiceSilenceTimer);
   voiceSilenceTimer = null;
 
-  // Blocco mic preventivo lungo per coprire generazione LLM lenta (429 retries etc)
-  voiceBlockedUntil = Date.now() + 45000;
-  console.log('VOICE_BLOCKED_START (generazione) timestamp=' + Date.now() + ' will unblock after 45s if no TTS detected');
+  // Blocco mic preventivo ragionevole per coprire generazione LLM (15s fallback)
+  voiceBlockedUntil = Date.now() + 15000;
+  console.log('VOICE_BLOCKED_START (generazione) timestamp=' + Date.now() + ' will unblock after 15s if no TTS detected');
 
   // PAUSA MIC DURANTE TTS - Fermiamo il riconoscimento per sicurezza
   if (voiceRecognition && recognitionActive) {
@@ -2828,70 +2839,118 @@ async function sendVoiceMessage(text) {
 
   waitForTTSEnd(() => {
     if (!voiceModeActive) return;
-    voiceBlockedUntil = Date.now() + 1500;
-    console.log('VOICE_UNBLOCKED timestamp=' + Date.now() + ' riavvio ascolto fra 1.5s');
+    voiceBlockedUntil = Date.now() + 300;
+    console.log('VOICE_UNBLOCKED timestamp=' + Date.now() + ' riavvio ascolto fra 0.3s');
     setVoiceOrbState('listening');
     setVoiceStatusText('In ascolto...');
     setTimeout(() => {
       if (!voiceModeActive || recognitionActive) return;
-      // Riutilizza l'istanza esistente invece di ricrearla
       try {
         console.log('VOICE_RESTART_AFTER_TTS');
+        playVoiceModePing('start'); // Feedack audio quando apre il mic
         voiceRecognition?.start();
       } catch (e) { }
-    }, 1500);
+    }, 300);
   });
 }
 
+/** 
+ * Segnale acustico sottile per indicare stato microfono
+ */
+function playVoiceModePing(type = 'start') {
+  try {
+    const ctx = window.audioContext || (window.AudioContext && new window.AudioContext());
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (type === 'start') {
+      // "Ding" verso l'alto
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1100, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.04, ctx.currentTime + 0.02);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.2);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.2);
+    } else {
+      // "Dong" verso il basso
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(330, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.04, ctx.currentTime + 0.02);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.2);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.2);
+    }
+  } catch (e) { console.warn("PING_SFX_FAIL", e); }
+}
+
 function waitForTTSEnd(callback) {
-  // Cancella poll precedenti per evitare chiamate parallele
-  if (voiceTTSPollInterval) {
-    clearInterval(voiceTTSPollInterval);
-    voiceTTSPollInterval = null;
-  }
-  if (voiceTTSPollTimeout) {
-    clearTimeout(voiceTTSPollTimeout);
-    voiceTTSPollTimeout = null;
-  }
+  if (voiceTTSPollInterval) clearInterval(voiceTTSPollInterval);
+  if (voiceTTSPollTimeout) clearTimeout(voiceTTSPollTimeout);
 
   const startTime = Date.now();
-  voiceTTSPollInterval = setInterval(() => {
-    // Se la sessione o un chunk sono attivi, sposta in avanti il blocco voce
-    if (window.ttsSessionActive || window.ttsPlaying) {
-      voiceBlockedUntil = Date.now() + 5000;
-    }
+  let ttsWasDetected = false;
 
-    const ttsStarted = (window.lastTTSStart > startTime) || window.ttsSessionActive || (typeof window.ttsExpected !== 'undefined' && !window.ttsExpected);
-    const ttsEnded = ttsStarted && !window.ttsSessionActive && !window.ttsPlaying;
-    const safeDelay = (Date.now() - window.lastTTSStart) > 500;
-
-    if (ttsEnded && safeDelay) {
-      console.log('[VOICE] TTS session ended detected');
-      clearInterval(voiceTTSPollInterval);
-      voiceTTSPollInterval = null;
-      clearTimeout(voiceTTSPollTimeout);
-      voiceTTSPollTimeout = null;
-      setTimeout(callback, 800);
-    }
-  }, 150);
-
-  // Fallback: se TTS non parte entro 10s, sblocca subito
-  voiceTTSPollTimeout = setTimeout(() => {
-    clearInterval(voiceTTSPollInterval);
+  const finish = () => {
+    if (voiceTTSPollInterval) clearInterval(voiceTTSPollInterval);
     voiceTTSPollInterval = null;
-    clearTimeout(voiceTTSPollTimeout);
+    if (voiceTTSPollTimeout) clearTimeout(voiceTTSPollTimeout);
     voiceTTSPollTimeout = null;
-    const ttsStarted = window.lastTTSStart > startTime;
-    if (voiceModeActive) {
-      console.log('VOICE_FALLBACK_TIMEOUT triggered');
-      callback();
+    callback();
+  };
+
+  voiceTTSPollInterval = setInterval(() => {
+    // 1. Aspetta che il backend risponda e decidiamo se c'è TTS
+    if (!window.responseProcessed) return;
+
+    // 2. Se sappiamo che non c'è TTS, finisci subito
+    if (window.responseProcessed && !window.ttsExpected) {
+      console.log('[VOICE_POLL] No TTS expected, bypassing wait');
+      finish();
+      return;
     }
-  }, 45000);
+
+    // 3. Monitora attività TTS
+    const isPlaying = window.ttsSessionActive || window.ttsPlaying;
+    if (isPlaying) {
+      ttsWasDetected = true;
+      // Trascina il blocco voce in avanti mentre suona
+      voiceBlockedUntil = Date.now() + 2000;
+      return;
+    }
+
+    // 4. Se ha suonato (o abbiamo aspettato abbastanza) e ora è fermo
+    const hasStarted = ttsWasDetected || (window.lastTTSStart > startTime);
+    if (hasStarted && !isPlaying) {
+      const currentGap = Date.now() - window.lastTTSEnd;
+      // Guard di 1000ms per evitare gap tra chunk (specialmente in psychological mode che ha 800ms)
+      if (currentGap > 1000) {
+        console.log('[VOICE_POLL] TTS finished detected, gap=' + currentGap);
+        finish();
+      }
+    }
+  }, 100);
+
+  // Fallback: se dopo 15s non è successo nulla, sblocca
+  voiceTTSPollTimeout = setTimeout(() => {
+    console.log('[VOICE_POLL] Fallback timeout triggered');
+    finish();
+  }, 15000);
 }
 
 function stopVoiceMode() {
   voiceModeActive = false;
   voiceBlockedUntil = 0;
+  playVoiceModePing('stop');
   clearTimeout(voiceSilenceTimer);
   voiceSilenceTimer = null;
   try { voiceRecognition?.stop(); } catch (e) { }
