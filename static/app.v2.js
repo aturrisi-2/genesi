@@ -3135,11 +3135,14 @@ function waitForTTSEnd(callback) {
     }
 
     // 3. Monitora attività TTS
-    const isPlaying = window.ttsSessionActive || window.ttsPlaying;
+    const isPlaying = window.ttsSessionActive || window.ttsPlaying || (window._isPlayingChunk === true);
     if (isPlaying) {
+      if (!ttsWasDetected) {
+        console.log('[VOICE_POLL] TTS activity detected - locking mic');
+      }
       ttsWasDetected = true;
-      // Trascina il blocco voce in avanti mentre suona
-      voiceBlockedUntil = Date.now() + 2000;
+      // Trascina il blocco voce in avanti mentre suona (buffer di sicurezza 3s)
+      voiceBlockedUntil = Date.now() + 3000;
       return;
     }
 
@@ -3307,13 +3310,20 @@ function setVoiceStatusText(text) {
   }
 
   // ── Entry point ──────────────────────────────────────────────
-  showState('loading');
-  refreshMeteoData();
+  function initWS() {
+    showState('loading');
+    refreshMeteoData();
+    // Aggiorna orologio ogni minuto
+    setInterval(updateClock, 60_000);
+    // Aggiorna i dati meteo ogni 15 minuti (900.000 ms)
+    setInterval(refreshMeteoData, 900_000);
+  }
 
-  // Aggiorna orologio ogni minuto
-  setInterval(updateClock, 60_000);
-  // Aggiorna i dati meteo ogni 15 minuti (900.000 ms)
-  setInterval(refreshMeteoData, 900_000);
+  if (document.readyState === 'complete') {
+    initWS();
+  } else {
+    window.addEventListener('load', initWS);
+  }
 
 })();
 
