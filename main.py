@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from pathlib import Path
 import uvicorn
@@ -78,6 +79,20 @@ async def lifespan(app: FastAPI):
     log("CALENDAR_CHECKER_STOPPED", status="ok")
 
 app = FastAPI(title="Genesi Core v2 - Proactor Architecture", redirect_slashes=False, lifespan=lifespan)
+
+# CORS — origini configurabili via CORS_ORIGINS env var
+_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000").split(",")
+    if o.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 # Static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -223,7 +238,7 @@ async def evolution_scheduler():
         try:
             supervisor.run()
         except Exception as e:
-            print(f"EVOLUTION_SCHEDULER_ERROR {e}")
+            log("EVOLUTION_SCHEDULER_ERROR", error=str(e))
 
 
 # ===============================

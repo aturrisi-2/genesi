@@ -27,6 +27,8 @@ from datetime import datetime
 
 router = APIRouter(prefix="/chat")
 
+MAX_MESSAGE_LENGTH = 4000  # caratteri massimi per messaggio
+
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
@@ -47,7 +49,13 @@ LAST_MESSAGES = {}
 async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_auth)):
     try:
         user_id = user.id
-        
+
+        if len(request.message) > MAX_MESSAGE_LENGTH:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Messaggio troppo lungo. Massimo {MAX_MESSAGE_LENGTH} caratteri."
+            )
+
         # 1. Anti-bounce: blocca messaggi identici < 2 secondi
         import time
         now = time.time()

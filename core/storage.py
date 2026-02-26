@@ -6,6 +6,7 @@ API unificata per tutti i moduli neurali
 
 import json
 import os
+from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
 from core.log import log
@@ -36,8 +37,12 @@ class MemoryStorage:
             os.makedirs(directory, exist_ok=True)
     
     def _get_file_path(self, category: str, key: str) -> str:
-        """Ottieni percorso file per categoria e chiave"""
-        return f"{self.base_path}/{category}/{key}.json"
+        """Ottieni percorso file per categoria e chiave, con protezione path traversal."""
+        base = Path(self.base_path).resolve()
+        target = (base / category / key).with_suffix(".json").resolve()
+        if not str(target).startswith(str(base)):
+            raise ValueError(f"Path traversal bloccato per chiave: {category}:{key}")
+        return str(target)
     
     async def load(self, key: str, default: Any = None) -> Any:
         """

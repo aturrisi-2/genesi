@@ -69,7 +69,7 @@ class ICloudService:
                 if not self._connect(): return False
             principal = self.client.principal()
             return principal is not None
-        except:
+        except Exception:
             return False
 
     def get_events(self, days: int = 7, force_sync: bool = False) -> List[Dict[str, Any]]:
@@ -101,9 +101,9 @@ class ICloudService:
                     events = []
                     try:
                         events = calendar.date_search(start=start_dt, end=end_dt)
-                    except:
+                    except Exception:
                         try: events = calendar.events()
-                        except: continue
+                        except Exception: continue
 
                     for event in events:
                         try:
@@ -135,12 +135,12 @@ class ICloudService:
                                 "source": "icloud",
                                 "type": "event"
                             })
-                        except: continue
-                except: continue
+                        except Exception: continue
+                except Exception: continue
             self._cache_events = all_events
             self._last_sync_events = time.time()
             return all_events
-        except:
+        except Exception:
             return []
 
     def get_vtodo(self, days: int = 7, force_sync: bool = False) -> List[Dict[str, Any]]:
@@ -189,7 +189,7 @@ class ICloudService:
                         if supported and 'VTODO' not in supported:
                             log("ICLOUD_SKIP_CAL", name=name, reason="metadata_no_vtodo")
                             continue
-                    except: 
+                    except Exception:
                         log("ICLOUD_SCANNING_LIST", name=name, url=str(calendar.url), supports="unknown")
 
                     todos = []
@@ -221,7 +221,8 @@ class ICloudService:
                             if not hasattr(t, 'data') or not t.data:
                                 t.load()
                             return t
-                        except: return None
+                        except Exception:
+                            return None
 
                     if to_load:
                         log("ICLOUD_DELTA_LOAD", name=name, count=len(to_load))
@@ -351,8 +352,8 @@ class ICloudService:
                             if not best_match:
                                 best_match = cal
                                 target_name = name
-                    except: pass
-                
+                    except Exception: pass
+
                 log("ICLOUD_AVAILABLE_CALENDARS", count=len(calendars), lists=all_cals_info)
                 
                 target_cal = best_match

@@ -1,7 +1,10 @@
+import logging
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy import select
 from auth.config import DATABASE_URL
 from auth.models import Base, AuthUser
+
+_log = logging.getLogger(__name__)
 
 engine = create_async_engine(
     DATABASE_URL, 
@@ -24,7 +27,7 @@ async def init_db():
             return
         except Exception as e:
             if "locked" in str(e).lower() and retries > 1:
-                print(f"[DB] Database locked, waiting for release... ({retries-1} left)")
+                _log.warning("Database locked, waiting for release... (%d left)", retries - 1)
                 await asyncio.sleep(3)
                 retries -= 1
             else:
@@ -33,7 +36,6 @@ async def init_db():
 
 async def get_db() -> AsyncSession:
     async with async_session() as session:
-        print(f"[DEBUG AUTH] DB URL: {engine.url}")  # DEBUG TEMPORANEO
         yield session
 
 
