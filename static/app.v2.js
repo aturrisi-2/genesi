@@ -2995,6 +2995,7 @@ function startVoiceMode() {
   playVoiceModePing('start');
   document.getElementById('voice-mode-btn')?.classList.add('active');
   document.getElementById('voice-mode-overlay')?.classList.replace('hidden', 'visible');
+  document.querySelector('.input-wrapper')?.classList.add('nebula-listening');
   setVoiceOrbState('listening');
   setVoiceStatusText('In ascolto...');
 
@@ -3176,14 +3177,24 @@ function stopVoiceMode() {
   voiceRecognition = null;
   document.getElementById('voice-mode-btn')?.classList.remove('active');
   document.getElementById('voice-mode-overlay')?.classList.replace('visible', 'hidden');
+  const iw = document.querySelector('.input-wrapper');
+  iw?.classList.remove('nebula-listening', 'nebula-speaking');
   console.log('VOICE_MODE_STOPPED');
 }
 
 function setVoiceOrbState(state) {
   const orb = document.querySelector('.voice-orb');
-  if (!orb) return;
-  orb.classList.remove('listening', 'speaking', 'idle');
-  orb.classList.add(state);
+  if (orb) {
+    orb.classList.remove('listening', 'speaking', 'idle');
+    orb.classList.add(state);
+  }
+  // Nebulosa input box: blu=ascolto, ambra=parla
+  const iw = document.querySelector('.input-wrapper');
+  if (iw && (iw.classList.contains('nebula-listening') || iw.classList.contains('nebula-speaking'))) {
+    iw.classList.remove('nebula-listening', 'nebula-speaking');
+    if (state === 'speaking') iw.classList.add('nebula-speaking');
+    else if (state === 'listening') iw.classList.add('nebula-listening');
+  }
 }
 
 function setVoiceStatusText(text) {
