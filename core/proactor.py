@@ -989,64 +989,69 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 # Salva in sessione per follow-up (es. "Aggiungilo a Google")
                 self.last_reminder_per_user[user_id] = {"text": reminder_text, "dt": reminder_datetime}
                 
-                # 3. CREAZIONE CLOUD (Automatica se configurata o richiesta)
-                sync_keywords = ["sincronizza", "tutti", "account", "cloud", "online"]
-                force_sync = any(kw in message.lower() for kw in sync_keywords)
-                
-                # Check for Admin status
+                # 3. CREAZIONE CLOUD — scrive VEVENT su Calendario (non VTODO su Promemoria)
+                msg_low = message.lower()
+
+                # Rileva destinazione esplicita
+                wants_google = "google" in msg_low or "calendario google" in msg_low
+                wants_icloud = "icloud" in msg_low or "apple" in msg_low
+                force_both = any(kw in msg_low for kw in ["tutti", "entrambi", "tutti e due"])
+
+                # Account disponibili
                 from auth.config import ADMIN_EMAILS
                 profile = await storage.load(f"profile:{user_id}", default={})
                 user_email = profile.get("email", "")
                 is_admin = user_email in ADMIN_EMAILS
-                
-                # Creazione ICLOUD
-                has_own_icloud = bool(profile.get("icloud_user") and profile.get("icloud_password"))
-                use_global_icloud = is_admin and bool(os.environ.get("ICLOUD_USER"))
-                
-                cloud_success = False
-                if force_sync or "icloud" in message.lower() or "apple" in message.lower() or has_own_icloud or use_global_icloud:
-                    success = await reminder_engine.create_icloud_reminder(user_id, reminder_text, reminder_datetime)
-                    if success:
-                        cloud_success = True
-                        if pref_source != "icloud":
-                            # Aggiorna source in locale
-                            reminders = reminder_engine._load_reminders(user_id)
-                            for r in reminders:
-                                if r["id"] == reminder_id: r["source"] = "icloud"
-                            reminder_engine._save_reminders(user_id, reminders)
 
-                        if "Perfetto." in response:
-                            response = response.replace("Perfetto.", "Perfetto, sincronizzato anche su iCloud.")
-                        else:
-                            response += " (Sincronizzato su iCloud)."
-                    else:
-                        if "icloud" in message.lower() or "apple" in message.lower() or "tutti" in message.lower():
-                            response += " (Nota: non sono riuscito a scriverlo su iCloud)."
-                
-                # Creazione GOOGLE (se richiesto o se disponibile)
                 from calendar_manager import calendar_manager
                 has_own_google = bool(profile.get("google_token"))
                 use_global_google = is_admin and calendar_manager._admin_google_service is not None
-                
-                if not cloud_success and (force_sync or "google" in message.lower() or ("calendario" in message.lower() and (has_own_google or use_global_google)) or has_own_google or use_global_google):
-                    if use_global_google or has_own_google:
-                        success = calendar_manager.add_event(user_id, reminder_text, reminder_datetime, provider='google')
-                        if success:
-                            # Aggiorna source in locale se necessario
-                            if pref_source != "google":
-                                reminders = reminder_engine._load_reminders(user_id)
-                                for r in reminders:
-                                    if r["id"] == reminder_id: r["source"] = "google"
-                                reminder_engine._save_reminders(user_id, reminders)
-                                
-                            if "Perfetto." in response:
-                                response = response.replace("Perfetto.", "Perfetto, aggiunto al tuo Google Calendar.")
-                            else:
-                                response += " (Aggiunto a Google Calendar)."
+                can_use_google = has_own_google or use_global_google
+
+                has_own_icloud = bool(profile.get("icloud_user") and profile.get("icloud_password"))
+                use_global_icloud = is_admin and bool(os.environ.get("ICLOUD_USER"))
+                can_use_icloud = has_own_icloud or use_global_icloud
+
+                # Auto-detect se nessuna destinazione esplicita: preferisce Google
+                if not wants_google and not wants_icloud:
+                    if can_use_google:
+                        wants_google = True
+                    # iCloud solo se esplicitamente richiesto — no auto per evitare scritture indesiderate su Promemoria
+
+                # force_both: scrivi su entrambi i calendari
+                if force_both:
+                    wants_google = wants_google or can_use_google
+                    wants_icloud = wants_icloud or can_use_icloud
+
+                cloud_success = False
+
+                # Google Calendar (VEVENT)
+                if wants_google and can_use_google:
+                    success = calendar_manager.add_event(user_id, reminder_text, reminder_datetime, provider='google')
+                    if success:
+                        cloud_success = True
+                        if "Perfetto." in response:
+                            response = response.replace("Perfetto.", "Perfetto, aggiunto al tuo Google Calendar.")
                         else:
-                            if "google" in message.lower() or "tutti" in message.lower():
-                                response += " (Nota: errore durante il salvataggio su Google Calendar)."
-                
+                            response += " (Aggiunto a Google Calendar)."
+                    elif not force_both:
+                        response += " (Nota: errore durante il salvataggio su Google Calendar)."
+
+                # iCloud Calendario (VEVENT — non Promemoria VTODO)
+                if wants_icloud and can_use_icloud and (not cloud_success or force_both):
+                    success = calendar_manager.add_event(user_id, reminder_text, reminder_datetime, provider='apple')
+                    if success:
+                        cloud_success = True
+                        google_already = "Google Calendar" in response
+                        if force_both and google_already:
+                            response = response.rstrip(".") + " e iCloud Calendario."
+                        elif "Perfetto." in response:
+                            response = response.replace("Perfetto.", "Perfetto, aggiunto al tuo iCloud Calendario.")
+                        elif not google_already:
+                            response += " (Aggiunto a iCloud Calendario)."
+                    elif not force_both:
+                        response += " (Nota: non sono riuscito a scriverlo su iCloud)."
+
                 return response, "reminder"
             
             return "Cosa vuoi che ti ricordi?", "reminder"
