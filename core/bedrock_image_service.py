@@ -46,7 +46,9 @@ class BedrockImageService:
         "height": 512,
         "steps": 30,
         "guidance_scale": 7.5,
-        "sampler": "K_DPMPP_2M"
+        "sampler": "K_DPMPP_2M",
+        "signed_url_ttl_seconds": 3600,
+        "cache_ttl_minutes": 50,
     }
     
     def __init__(self):
@@ -321,8 +323,16 @@ class BedrockImageService:
                 filename
             )
             
-            # Genera URL pubblico
-            s3_url = f"https://{self.bucket}.s3.{self.region}.amazonaws.com/{filename}"
+            # Genera URL accessibile (preferibilmente presigned per bucket privati)
+            try:
+                s3_url = self.s3.generate_presigned_url(
+                    ClientMethod="get_object",
+                    Params={"Bucket": self.bucket, "Key": filename},
+                    ExpiresIn=self.DEFAULT_CONFIG["signed_url_ttl_seconds"],
+                )
+            except Exception:
+                # Fallback URL diretto (funziona solo se oggetto pubblico)
+                s3_url = f"https://{self.bucket}.s3.{self.region}.amazonaws.com/{filename}"
             
             logger.info(f"✅ Image saved to S3: {filename}")
             log("IMAGE_SAVED_S3", url=s3_url, size_bytes=len(image_bytes))
@@ -419,11 +429,11 @@ class BedrockImageService:
             cached = await storage.load(cache_key, default=None)
             
             if cached:
-                # Verifica scadenza (7 giorni)
+                # Verifica scadenza cache: breve per evitare URL presigned scaduti
                 cached_time = datetime.fromisoformat(cached.get("timestamp", ""))
                 age = datetime.utcnow() - cached_time
-                
-                if age < timedelta(days=7):
+
+                if age < timedelta(minutes=self.DEFAULT_CONFIG["cache_ttl_minutes"]):
                     logger.info(f"Cache hit: {prompt_hash}")
                     return cached.get("url")
             
