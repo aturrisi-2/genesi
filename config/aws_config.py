@@ -26,7 +26,7 @@ class AWSBedrockConfig:
     
     # Model IDs disponibili su AWS Bedrock
     AVAILABLE_MODELS = {
-        "stable-diffusion-xl": "stability.stable-diffusion-xl-v0",
+        "stable-diffusion-xl": "stability.stable-diffusion-xl-v1",
         "titan-image-generator": "amazon.titan-image-generator-v1",
     }
     
@@ -34,7 +34,7 @@ class AWSBedrockConfig:
     DEFAULT_CONFIG = {
         "region": "eu-west-1",
         "s3_bucket": "genesi-generated-images",
-        "default_model": "stability.stable-diffusion-xl-v0",
+        "default_model": "stability.stable-diffusion-xl-v1",
         "default_width": 512,
         "default_height": 512,
         "default_steps": 30,
