@@ -220,7 +220,7 @@ class Proactor:
                 # 2. No cloud user (for admin, check env too)
                 has_icloud = profile.get("icloud_user") or (is_admin and os.environ.get("ICLOUD_USER"))
                 from calendar_manager import calendar_manager
-                has_google = profile.get("google_token") or (is_admin and calendar_manager._google_service is not None)
+                has_google = profile.get("google_token") or (is_admin and calendar_manager._admin_google_service is not None)
                 
                 if total_msgs < 1 and not has_icloud and not has_google:
                     if not any(kw in response.lower() for kw in ["cloud", "icloud", "google", "calendar", "sincronizza", "collega"]):
@@ -377,7 +377,7 @@ class Proactor:
                 # Intents that require a human "wrap" according to user preferences
                 integrate_intents = self.tool_intents + [
                     "reminder_create", "reminder_list", "reminder_delete", "reminder_update",
-                    "tecnica", "debug", "spiegazione", "icloud_sync", "google_sync", "icloud_setup", "google_setup",
+                    "tecnica", "debug", "spiegazione", "icloud_sync", "google_sync",
                     "calendar_sync_all"
                 ]
                 if any(i in integrate_intents for i in intents):
@@ -616,6 +616,41 @@ class Proactor:
                 asyncio.create_task(storage.save(f"profile:{user_id}", profile))
             except: pass
 
+        # AUTO-CLEAN DUPLICATED CHILDREN/PETS (one-time repair for old data)
+        _profile_dirty = False
+        raw_children = profile.get("children", [])
+        if isinstance(raw_children, list) and len(raw_children) > 1:
+            seen_cn = set()
+            deduped_children = []
+            for c in raw_children:
+                k = (c.get("name", "") if isinstance(c, dict) else str(c)).lower().strip()
+                if k and k not in seen_cn:
+                    seen_cn.add(k)
+                    deduped_children.append(c)
+            if len(deduped_children) != len(raw_children):
+                logger.info("IDENTITY_AUTO_CLEAN children_dedup old=%d new=%d", len(raw_children), len(deduped_children))
+                profile["children"] = deduped_children
+                _profile_dirty = True
+
+        raw_pets = profile.get("pets", [])
+        if isinstance(raw_pets, list) and len(raw_pets) > 1:
+            seen_pn = set()
+            deduped_pets = []
+            for p in raw_pets:
+                k = (p.get("name", "") if isinstance(p, dict) else str(p)).lower().strip()
+                if k and k not in seen_pn:
+                    seen_pn.add(k)
+                    deduped_pets.append(p)
+            if len(deduped_pets) != len(raw_pets):
+                logger.info("IDENTITY_AUTO_CLEAN pets_dedup old=%d new=%d", len(raw_pets), len(deduped_pets))
+                profile["pets"] = deduped_pets
+                _profile_dirty = True
+
+        if _profile_dirty:
+            try:
+                asyncio.create_task(storage.save(f"profile:{user_id}", profile))
+            except Exception: pass
+
         logger.info("IDENTITY_ROUTER user=%s profile=%s", user_id,
                      {k: v for k, v in profile.items() if k != "entities" and v})
         logger.info("MEMORY_DIRECT_RESPONSE user=%s route=identity", user_id)
@@ -634,7 +669,7 @@ class Proactor:
                 linked.append("iCloud (Admin)")
 
             from calendar_manager import calendar_manager
-            if profile.get("google_token") or (is_admin and calendar_manager._google_service):
+            if profile.get("google_token") or (is_admin and calendar_manager._admin_google_service):
                 linked.append("Google Calendar")
 
             if not linked:
@@ -662,20 +697,35 @@ class Proactor:
         """Raccoglie fatti del profilo in modo deterministico per il prompt LLM."""
         children_raw = profile.get("children")  # None se campo mancante, [] se vuoto
         children_names = []
+        _seen_children = set()
         if isinstance(children_raw, list):
             for c in children_raw:
                 if isinstance(c, dict):
-                    children_names.append(c.get("name", str(c)))
+                    name = c.get("name", "")
                 elif c:
-                    children_names.append(str(c))
+                    name = str(c)
+                else:
+                    continue
+                key = name.lower().strip()
+                if key and key not in _seen_children:
+                    _seen_children.add(key)
+                    children_names.append(name)
 
         pets_raw = profile.get("pets", [])
         pet_descs = []
+        _seen_pets = set()
         for pet in (pets_raw if isinstance(pets_raw, list) else []):
             if isinstance(pet, dict):
-                pet_descs.append(f"{pet.get('name', '?')} ({pet.get('type', '?')})")
+                pet_name = pet.get('name', '')
+                key = pet_name.lower().strip()
+                if key and key not in _seen_pets:
+                    _seen_pets.add(key)
+                    pet_descs.append(f"{pet_name} ({pet.get('type', '?')})")
             elif pet:
-                pet_descs.append(str(pet))
+                key = str(pet).lower().strip()
+                if key and key not in _seen_pets:
+                    _seen_pets.add(key)
+                    pet_descs.append(str(pet))
 
         return {
             "name": profile.get("name"),
@@ -2467,8 +2517,8 @@ Messaggio utente: {message}"""
         from auth.config import ADMIN_EMAILS
         is_admin = profile.get("email") in ADMIN_EMAILS
         
-        has_google = (is_admin and calendar_manager._google_service) or profile.get("google_token")
-        
+        has_google = (is_admin and calendar_manager._admin_google_service) or profile.get("google_token")
+
         if has_google:
             results.append("Google (sincronizzato)")
         else:
@@ -2541,8 +2591,21 @@ Messaggio utente: {message}"""
         has_google = (is_admin and calendar_manager._admin_google_service) or profile.get("google_token")
 
         if has_google:
-            calendar_manager.list_reminders(user_id, force_sync=True)
-            return "Sincronizzazione Google Calendar completata. I tuoi impegni sono aggiornati."
+            events = calendar_manager.list_reminders(user_id, force_sync=True)
+            google_events = [e for e in (events or []) if e.get("provider") == "google"]
+            if google_events:
+                lines = []
+                for e in google_events[:5]:
+                    due = e.get("due", "")
+                    try:
+                        from datetime import datetime as _dt
+                        due_str = _dt.fromisoformat(due.replace("Z","")).strftime("%-d %b %H:%M") if due else ""
+                    except Exception:
+                        due_str = due[:16] if due else ""
+                    lines.append(f"• {e.get('summary', '?')}" + (f" — {due_str}" if due_str else ""))
+                events_list = "\n".join(lines)
+                return f"Google Calendar sincronizzato. Prossimi {len(google_events)} eventi:\n{events_list}"
+            return "Google Calendar sincronizzato. Nessun evento nei prossimi 7 giorni."
         
         if is_admin:
             return "Sembra che ci sia un problema con il token Google nel sistema. Verifica il file token.json."
