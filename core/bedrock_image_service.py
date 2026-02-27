@@ -187,18 +187,18 @@ class BedrockImageService:
             if height not in valid_widths:
                 height = 512
             
-            # Check rate limiting
-            if user_id:
-                if not await self._check_rate_limit(user_id):
-                    logger.warning(f"Rate limit exceeded for user {user_id}")
-                    return None
-            
             # Check cache per prompt identico
             cache_url = await self._check_cache(prompt)
             if cache_url:
                 logger.info(f"Cache hit for prompt: {prompt[:50]}...")
                 log("BEDROCK_CACHE_HIT", prompt_len=len(prompt))
                 return cache_url
+
+            # Check rate limiting (conta solo le generazioni reali, non i cache hit)
+            if user_id:
+                if not await self._check_rate_limit(user_id):
+                    logger.warning(f"Rate limit exceeded for user {user_id}")
+                    return None
             
             log("BEDROCK_IMAGE_START", 
                 prompt_len=len(prompt), 
@@ -252,6 +252,7 @@ class BedrockImageService:
             
             # Track generazione
             if user_id:
+                await self._increment_rate_limit(user_id)
                 await self._track_generation(user_id, prompt, success=True)
             
             log("BEDROCK_IMAGE_SUCCESS", 
@@ -405,16 +406,30 @@ class BedrockImageService:
                 log("BEDROCK_HOURLY_LIMIT", user_id=user_id, count=hourly_count)
                 return False
             
-            # Incrementa counter
-            await storage.save(daily_key, daily_count + 1)
-            await storage.save(hourly_key, hourly_count + 1)
-            
             return True
         
         except Exception as e:
             logger.error(f"Rate limit check failed: {e}")
             # Default: allow on error (fail open)
             return True
+
+    async def _increment_rate_limit(self, user_id: str) -> None:
+        """Incrementa i contatori solo dopo una generazione riuscita."""
+        try:
+            now = datetime.utcnow()
+            today = now.strftime("%Y-%m-%d")
+            this_hour = now.strftime("%Y-%m-%d-%H")
+
+            daily_key = f"bedrock:limit:daily:{user_id}:{today}"
+            hourly_key = f"bedrock:limit:hourly:{user_id}:{this_hour}"
+
+            daily_count = await storage.load(daily_key, default=0)
+            hourly_count = await storage.load(hourly_key, default=0)
+
+            await storage.save(daily_key, daily_count + 1)
+            await storage.save(hourly_key, hourly_count + 1)
+        except Exception as e:
+            logger.error(f"Rate limit increment failed: {e}")
     
     async def _check_cache(self, prompt: str) -> Optional[str]:
         """

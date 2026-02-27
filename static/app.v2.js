@@ -1054,14 +1054,14 @@ function renderImages(images) {
   images.forEach(img => {
     const thumb = img.thumbnail || img.url;
     html += `
-            <div style="width:160px;text-align:center;">
+            <div style="width:240px;max-width:100%;text-align:center;">
                 <img src="${thumb}" 
                      alt="${img.title}"
                      loading="lazy"
                      onerror="this.parentElement.style.display='none'"
                      onclick="window.open('${img.url}', '_blank')"
-                     style="width:100%;height:110px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,0.15);">
-                <div style="font-size:10px;color:#888;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${img.source}</div>
+                     style="width:100%;height:170px;object-fit:cover;border-radius:10px;cursor:pointer;border:1px solid rgba(255,255,255,0.15);">
+                <div style="font-size:11px;color:#888;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${img.source}</div>
             </div>`;
   });
   html += '</div>';
@@ -1335,14 +1335,14 @@ async function sendMessage(voiceText = null) {
       if (lastMsg) {
         let grid = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
         parsed.images.forEach(img => {
-          grid += `<div style="width:150px;text-align:center;">
+          grid += `<div style="width:240px;max-width:100%;text-align:center;">
                     <img src="${img.thumbnail || img.url}" 
                          alt="${img.title}"
                          loading="lazy"
                          onerror="this.parentElement.style.display='none'"
                          onclick="window.open('${img.url}','_blank')"
-                         style="width:100%;height:100px;object-fit:cover;border-radius:8px;cursor:pointer;">
-                    <div style="font-size:10px;color:#888;margin-top:2px;">${img.source}</div>
+                style="width:100%;height:170px;object-fit:cover;border-radius:10px;cursor:pointer;">
+              <div style="font-size:11px;color:#888;margin-top:4px;">${img.source}</div>
                 </div>`;
         });
         grid += '</div>';
