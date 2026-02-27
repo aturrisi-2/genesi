@@ -372,11 +372,20 @@ textarea#text-input:focus {
   70%  { box-shadow: 0 0 0 1px rgba(160,100,240,0.04), 0 0 14px rgba(130,120,255,0.12), 0 0 30px rgba(160,100,240,0.06); border-color: rgba(160,100,240,0.35); }
   100% { box-shadow: 0 0 0 0 rgba(74,180,240,0), 0 0 10px rgba(74,180,240,0.10), 0 0 22px rgba(74,180,240,0.05); border-color: rgba(74,180,240,0.30); }
 }
+/* ─── BOCCA — labbra che si aprono/chiudono mentre Genesi parla ─── */
+/* shadow direzionale: negativo Y = labbro sup, positivo Y = labbro inf  */
+/* border-radius asimmetrico (più rotondo in basso) = bocca aperta       */
 @keyframes nebulaSpeaking {
-  0%   { box-shadow: 0 0 0 0 rgba(240,160,50,0), 0 0 10px rgba(240,160,50,0.12), 0 0 22px rgba(200,120,20,0.06); border-color: rgba(220,140,40,0.35); }
-  40%  { box-shadow: 0 0 0 3px rgba(240,160,50,0.07), 0 0 18px rgba(255,190,80,0.20), 0 0 38px rgba(240,160,50,0.09); border-color: rgba(255,190,80,0.55); }
-  70%  { box-shadow: 0 0 0 1px rgba(200,100,240,0.04), 0 0 14px rgba(230,140,60,0.14), 0 0 30px rgba(200,100,240,0.06); border-color: rgba(200,100,240,0.32); }
-  100% { box-shadow: 0 0 0 0 rgba(240,160,50,0), 0 0 10px rgba(240,160,50,0.12), 0 0 22px rgba(200,120,20,0.06); border-color: rgba(220,140,40,0.35); }
+  0%   { border-radius: 20px;                box-shadow: 0 0 8px rgba(255,160,80,0.28),  0 0 0 1px rgba(220,140,40,0.38);                                                     border-color: rgba(220,140,40,0.48); }
+  10%  { border-radius: 20px 20px 28px 28px; box-shadow: 0 -7px 14px rgba(255,180,100,0.55), 0 9px 16px rgba(255,130,60,0.65),  0 0 28px rgba(240,160,50,0.20); border-color: rgba(255,180,80,0.75); }
+  22%  { border-radius: 20px;                box-shadow: 0 0 6px rgba(255,160,80,0.22),  0 0 0 1px rgba(220,140,40,0.32);                                                     border-color: rgba(220,140,40,0.42); }
+  35%  { border-radius: 20px 20px 32px 32px; box-shadow: 0 -11px 20px rgba(255,190,100,0.68), 0 14px 24px rgba(255,140,60,0.78), 0 0 38px rgba(240,160,50,0.26); border-color: rgba(255,200,100,0.88); }
+  48%  { border-radius: 20px;                box-shadow: 0 0 5px rgba(255,160,80,0.18),  0 0 0 1px rgba(220,140,40,0.28);                                                     border-color: rgba(220,140,40,0.38); }
+  58%  { border-radius: 20px 20px 24px 24px; box-shadow: 0 -5px 10px rgba(255,170,80,0.45),  0 7px 12px rgba(255,140,60,0.50),  0 0 22px rgba(240,160,50,0.15); border-color: rgba(255,165,70,0.60); }
+  68%  { border-radius: 20px;                box-shadow: 0 0 7px rgba(255,160,80,0.26),  0 0 0 1px rgba(220,140,40,0.36);                                                     border-color: rgba(220,140,40,0.46); }
+  80%  { border-radius: 20px 20px 30px 30px; box-shadow: 0 -9px 17px rgba(255,185,95,0.62),  0 12px 20px rgba(255,135,60,0.72), 0 0 34px rgba(240,160,50,0.23); border-color: rgba(255,190,90,0.82); }
+  92%  { border-radius: 20px;                box-shadow: 0 0 6px rgba(255,160,80,0.20),  0 0 0 1px rgba(220,140,40,0.30);                                                     border-color: rgba(220,140,40,0.40); }
+  100% { border-radius: 20px;                box-shadow: 0 0 8px rgba(255,160,80,0.28),  0 0 0 1px rgba(220,140,40,0.38);                                                     border-color: rgba(220,140,40,0.48); }
 }
 
 .input-wrapper.nebula-listening #text-input,
@@ -387,8 +396,7 @@ textarea#text-input:focus {
 }
 .input-wrapper.nebula-speaking #text-input,
 .input-wrapper.nebula-speaking textarea#text-input {
-  animation: nebulaSpeaking 2.2s ease-in-out infinite;
-  border-color: rgba(220,140,40,0.35);
+  animation: nebulaSpeaking 1.8s linear infinite;
   transition: none;
 }
 
