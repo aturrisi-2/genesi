@@ -1033,8 +1033,8 @@ function ensureImageLightbox() {
 
   imageLightbox = document.createElement('div');
   imageLightbox.id = 'image-lightbox';
-  imageLightbox.className = 'hidden';
-  imageLightbox.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  imageLightbox.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;align-items:center;justify-content:center;padding:20px;';
+  imageLightbox.style.display = 'none';
   imageLightbox.innerHTML = `
     <button type="button" aria-label="Chiudi anteprima" data-lightbox-close="1" style="position:absolute;top:14px;right:14px;border:0;background:rgba(255,255,255,0.12);color:#fff;font-size:28px;line-height:1;cursor:pointer;border-radius:10px;width:42px;height:42px;">×</button>
     <img alt="Anteprima immagine" style="max-width:min(95vw,1400px);max-height:90vh;width:auto;height:auto;object-fit:contain;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.45);">
@@ -1056,7 +1056,7 @@ function openImageLightbox(url, title) {
   const img = lb.querySelector('img');
   img.src = url;
   img.alt = title || 'Anteprima immagine';
-  lb.classList.remove('hidden');
+  lb.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 }
 
@@ -1064,12 +1064,12 @@ function closeImageLightbox() {
   if (!imageLightbox) return;
   const img = imageLightbox.querySelector('img');
   if (img) img.removeAttribute('src');
-  imageLightbox.classList.add('hidden');
+  imageLightbox.style.display = 'none';
   document.body.style.overflow = '';
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && imageLightbox && !imageLightbox.classList.contains('hidden')) {
+  if (e.key === 'Escape' && imageLightbox && imageLightbox.style.display !== 'none') {
     closeImageLightbox();
   }
 });
