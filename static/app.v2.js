@@ -1026,6 +1026,63 @@ window.addEventListener('click', (e) => {
   }
 });
 
+let imageLightbox = null;
+
+function ensureImageLightbox() {
+  if (imageLightbox) return imageLightbox;
+
+  imageLightbox = document.createElement('div');
+  imageLightbox.id = 'image-lightbox';
+  imageLightbox.className = 'hidden';
+  imageLightbox.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  imageLightbox.innerHTML = `
+    <button type="button" aria-label="Chiudi anteprima" data-lightbox-close="1" style="position:absolute;top:14px;right:14px;border:0;background:rgba(255,255,255,0.12);color:#fff;font-size:28px;line-height:1;cursor:pointer;border-radius:10px;width:42px;height:42px;">×</button>
+    <img alt="Anteprima immagine" style="max-width:min(95vw,1400px);max-height:90vh;width:auto;height:auto;object-fit:contain;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.45);">
+  `;
+
+  imageLightbox.addEventListener('click', (e) => {
+    if (e.target === imageLightbox || e.target.closest('[data-lightbox-close]')) {
+      closeImageLightbox();
+    }
+  });
+
+  document.body.appendChild(imageLightbox);
+  return imageLightbox;
+}
+
+function openImageLightbox(url, title) {
+  if (!url) return;
+  const lb = ensureImageLightbox();
+  const img = lb.querySelector('img');
+  img.src = url;
+  img.alt = title || 'Anteprima immagine';
+  lb.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeImageLightbox() {
+  if (!imageLightbox) return;
+  const img = imageLightbox.querySelector('img');
+  if (img) img.removeAttribute('src');
+  imageLightbox.classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && imageLightbox && !imageLightbox.classList.contains('hidden')) {
+    closeImageLightbox();
+  }
+});
+
+dialogue.addEventListener('click', (e) => {
+  const image = e.target.closest('.chat-image-preview');
+  if (!image) return;
+  e.preventDefault();
+  const fullUrl = image.dataset.fullUrl;
+  const title = image.dataset.title;
+  openImageLightbox(fullUrl, title);
+});
+
 // ===============================
 // MESSAGES
 // ===============================
@@ -1050,18 +1107,29 @@ function parseResponse(rawResponse) {
 function renderImages(images) {
   if (!images || images.length === 0) return '';
 
+  const escapeAttr = (value) => String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
   let html = '<div class="image-grid" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
   images.forEach(img => {
     const thumb = img.thumbnail || img.url;
+    const fullUrl = img.url || thumb;
+    const title = img.title || 'Immagine generata';
+    const source = img.source || '';
     html += `
             <div style="width:240px;max-width:100%;text-align:center;">
                 <img src="${thumb}" 
-                     alt="${img.title}"
+                     alt="${escapeAttr(title)}"
+                     data-full-url="${escapeAttr(fullUrl)}"
+                     data-title="${escapeAttr(title)}"
+                     class="chat-image-preview"
                      loading="lazy"
                      onerror="this.parentElement.style.display='none'"
-                     onclick="window.open('${img.url}', '_blank')"
                      style="width:100%;height:170px;object-fit:cover;border-radius:10px;cursor:pointer;border:1px solid rgba(255,255,255,0.15);">
-                <div style="font-size:11px;color:#888;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${img.source}</div>
+                <div style="font-size:11px;color:#888;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeAttr(source)}</div>
             </div>`;
   });
   html += '</div>';
@@ -1333,20 +1401,7 @@ async function sendMessage(voiceText = null) {
       // Aggiungi griglia immagini
       const lastMsg = document.querySelector('.message.genesi:last-child');
       if (lastMsg) {
-        let grid = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
-        parsed.images.forEach(img => {
-          grid += `<div style="width:240px;max-width:100%;text-align:center;">
-                    <img src="${img.thumbnail || img.url}" 
-                         alt="${img.title}"
-                         loading="lazy"
-                         onerror="this.parentElement.style.display='none'"
-                         onclick="window.open('${img.url}','_blank')"
-                style="width:100%;height:170px;object-fit:cover;border-radius:10px;cursor:pointer;">
-              <div style="font-size:11px;color:#888;margin-top:4px;">${img.source}</div>
-                </div>`;
-        });
-        grid += '</div>';
-        lastMsg.insertAdjacentHTML('beforeend', grid);
+        lastMsg.insertAdjacentHTML('beforeend', renderImages(parsed.images));
       }
     } else {
       addMessage(parsed.text, 'genesi');
