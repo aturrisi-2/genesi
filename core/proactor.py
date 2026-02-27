@@ -583,9 +583,9 @@ class Proactor:
 
     async def _handle_identity(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
         """
-        Risponde a domande sull'identita' dell'utente usando SOLO long_term_profile.
-        Zero GPT. Zero emotional engine. Zero relational pipeline.
-        Returns: (response_text: str, source: str)
+        Risponde a domande sull'identita' dell'utente in modo naturale tramite LLM.
+        I dati del profilo vengono raccolti deterministicamente — zero hallucination.
+        L'LLM produce solo la fraseggiatura, non inventa fatti.
         """
         profile = brain_state.get("profile", {})
         msg_lower = message.lower().strip()
@@ -604,7 +604,6 @@ class Proactor:
         ):
             logger.info("IDENTITY_AUTO_CLEAN corrupted_profession=%s", prof)
             profile["profession"] = None
-            # Update storage asynchronously to fix it permanently
             try:
                 import asyncio
                 asyncio.create_task(storage.save(f"profile:{user_id}", profile))
@@ -614,43 +613,9 @@ class Proactor:
                      {k: v for k, v in profile.items() if k != "entities" and v})
         logger.info("MEMORY_DIRECT_RESPONSE user=%s route=identity", user_id)
 
-        # Domanda specifica: nome
-        name_kw = ["come mi chiamo", "il mio nome", "ricordi il mio nome",
-                    "sai come mi chiamo", "qual è il mio nome", "qual e' il mio nome"]
-        if any(kw in msg_lower for kw in name_kw):
-            name = profile.get("name")
-            if name:
-                return f"Certo, ti chiami {name.strip().title()}."
-            return "Non me l'hai ancora detto, in realtà."
-
-        # Domanda specifica: dove vivo
-        city_kw = ["dove vivo", "dove abito", "sai dove vivo", "sai dove abito"]
-        if any(kw in msg_lower for kw in city_kw):
-            city = profile.get("city")
-            if city:
-                return f"Vivi a {city.strip().title()}."
-            return "Non me l'hai ancora detto."
-
-        # Domanda specifica: lavoro
-        job_kw = ["che lavoro faccio", "che lavoro svolgo", "cosa faccio"]
-        if any(kw in msg_lower for kw in job_kw):
-            profession = profile.get("profession")
-            if profession:
-                return f"Lavori come {profession.strip().lower()}."
-            return "Non me l'hai ancora detto."
-
-        # Domanda specifica: eta'
-        age_kw = ["quanti anni ho", "sai quanti anni ho"]
-        if any(kw in msg_lower for kw in age_kw):
-            age = profile.get("age")
-            if age:
-                return f"Hai {age} anni."
-            return "Non me l'hai ancora detto."
-
-        # Domanda specifica: account collegati
+        # Domanda account collegati — resta deterministica (sicurezza, no LLM)
         if any(kw in msg_lower for kw in ["account collegati", "miei account", "quali account ho", "icloud", "google", "apple"]):
             linked = []
-            # Check for Admin status
             from auth.config import ADMIN_EMAILS
             user_email = profile.get("email", "")
             is_admin = user_email in ADMIN_EMAILS
@@ -660,35 +625,130 @@ class Proactor:
                 linked.append(f"iCloud ({email})")
             elif is_admin and os.environ.get("ICLOUD_USER"):
                 linked.append("iCloud (Admin)")
-            
+
             from calendar_manager import calendar_manager
-            # Only show global service to Admin. Others must have their own token.
             if profile.get("google_token") or (is_admin and calendar_manager._google_service):
                 linked.append("Google Calendar")
-            
+
             if not linked:
                 return "Non hai ancora collegato alcun account. Puoi dirmi 'collega iCloud' o 'usa Google' per iniziare."
             return "Hai collegato i seguenti account: " + ", ".join(linked) + "."
 
-        # Domanda generica: "chi sono"
-        if "chi sono" in msg_lower:
-            return self._build_identity_response(profile)
+        # Raccoglie fatti deterministici e genera risposta naturale via LLM
+        profile_facts = self._collect_profile_facts(profile)
+        try:
+            system_prompt = self._build_identity_system_prompt(profile_facts)
+            response = await llm_service._call_with_protection(
+                "gpt-4o-mini", system_prompt, message, user_id=user_id, route="identity"
+            )
+            if response and response.strip():
+                logger.info("IDENTITY_LLM_RESPONSE user=%s", user_id)
+                return response.strip()
+        except Exception as e:
+            logger.warning("IDENTITY_LLM_FALLBACK error=%s", e)
 
-        # Fallback identity
+        # Fallback deterministico
         return self._build_identity_response(profile)
 
     @staticmethod
-    def _build_identity_response(profile: dict) -> str:
-        """Build complete identity response including all available fields."""
-        parts = []
+    def _collect_profile_facts(profile: dict) -> dict:
+        """Raccoglie fatti del profilo in modo deterministico per il prompt LLM."""
+        children_raw = profile.get("children")  # None se campo mancante, [] se vuoto
+        children_names = []
+        if isinstance(children_raw, list):
+            for c in children_raw:
+                if isinstance(c, dict):
+                    children_names.append(c.get("name", str(c)))
+                elif c:
+                    children_names.append(str(c))
 
+        pets_raw = profile.get("pets", [])
+        pet_descs = []
+        for pet in (pets_raw if isinstance(pets_raw, list) else []):
+            if isinstance(pet, dict):
+                pet_descs.append(f"{pet.get('name', '?')} ({pet.get('type', '?')})")
+            elif pet:
+                pet_descs.append(str(pet))
+
+        return {
+            "name": profile.get("name"),
+            "city": profile.get("city"),
+            "profession": profile.get("profession"),
+            "age": profile.get("age"),
+            "spouse": profile.get("spouse"),
+            "children_names": children_names,
+            "children_field_exists": children_raw is not None,
+            "pets": pet_descs,
+            "interests": profile.get("interests", []),
+            "preferences": profile.get("preferences", []),
+            "traits": profile.get("traits", []),
+        }
+
+    @staticmethod
+    def _build_identity_system_prompt(facts: dict) -> str:
+        """Costruisce il system prompt per risposta identità naturale via LLM."""
+        lines = [
+            "Sei Genesi, un'assistente personale intelligente, calda e curiosa.",
+            "Stai rispondendo a una domanda dell'utente su se stesso o su informazioni che lo riguardano.",
+            "Usa SOLO i dati elencati qui sotto — non inventare, non presumere, non aggiungere nulla.",
+            "",
+        ]
+        known = []
+        if facts.get("name"):
+            known.append(f"Nome: {facts['name']}")
+        if facts.get("city"):
+            known.append(f"Città: {facts['city']}")
+        if facts.get("profession"):
+            known.append(f"Professione: {facts['profession']}")
+        if facts.get("age"):
+            known.append(f"Età: {facts['age']} anni")
+        if facts.get("spouse"):
+            known.append(f"Coniuge/partner: {facts['spouse']}")
+        children = facts.get("children_names", [])
+        if children:
+            known.append(f"Figli: {', '.join(children)}")
+        elif facts.get("children_field_exists"):
+            known.append("Figli: nessuno registrato nel profilo")
+        pets = facts.get("pets", [])
+        if pets:
+            known.append(f"Animali domestici: {', '.join(pets)}")
+        interests = facts.get("interests", [])
+        if interests:
+            known.append(f"Interessi: {', '.join(interests)}")
+        preferences = facts.get("preferences", [])
+        if preferences:
+            known.append(f"Preferenze: {', '.join(preferences)}")
+        traits = facts.get("traits", [])
+        if traits:
+            known.append(f"Tratti: {', '.join(traits)}")
+
+        if known:
+            lines.append("Dati disponibili:")
+            lines.extend(f"  - {k}" for k in known)
+        else:
+            lines.append("Non ci sono ancora dati su questa persona.")
+
+        lines += [
+            "",
+            "Regole:",
+            "- Rispondi in italiano con 1-2 frasi brevi, naturali e calde.",
+            "- NON usare formule robotiche come 'Ecco cosa so di te:' o 'Le informazioni che ho sono:'.",
+            "- Se l'informazione richiesta non è nei dati, dillo con naturalezza (es: 'Non me lo hai ancora detto.').",
+            "- Rispondi SOLO alla domanda specifica dell'utente — non fare il resoconto dell'intero profilo.",
+            "- Varia il tuo stile — non rispondere sempre nello stesso modo.",
+        ]
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_identity_response(profile: dict) -> str:
+        """Fallback deterministico per risposta identità."""
+        parts = []
         name = profile.get("name")
         city = profile.get("city")
         profession = profile.get("profession")
         spouse = profile.get("spouse")
         pets = profile.get("pets", [])
-        
-        # Convert pets to string if needed
+
         if pets and isinstance(pets, list):
             pet_descs = []
             for pet in pets:
@@ -701,20 +761,16 @@ class Proactor:
 
         if name:
             parts.append(f"ti chiami {name}")
-
         if city:
             parts.append(f"vivi a {city}")
-
         if profession:
             parts.append(f"lavori come {profession}")
-            
         if spouse:
             parts.append(f"il tuo coniuge si chiama {spouse}")
 
         if not parts:
             return "Non mi hai ancora detto molto di te."
-
-        return "Quello che so di te: " + ", ".join(parts) + "."
+        return "So che " + ", ".join(parts) + "."
 
     # ═══════════════════════════════════════════════════════════════
     # TOOL ROUTER — 100% deterministico, zero GPT su errore

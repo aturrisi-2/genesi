@@ -167,6 +167,9 @@ class EdgeTTSProvider(TTSProvider):
 class OpenAITTSProvider(TTSProvider):
     """Provider TTS usando OpenAI API — voce onyx profonda e naturale."""
 
+    # Classe-level: salta OpenAI se quota esaurita fino a questo timestamp
+    _quota_exceeded_until: float = 0.0
+
     def __init__(self, voice: str = "nova", model: str = "tts-1", speed: float = 1.0):
         import os
         self.voice = voice
@@ -200,12 +203,19 @@ class OpenAITTSProvider(TTSProvider):
     async def synthesize(self, text: str) -> bytes:
         """Sintetizza con OpenAI TTS e ritorna MP3 bytes."""
         import httpx
+        import time
+
+        # Skip OpenAI se quota esaurita di recente (evita attesa inutile)
+        if time.time() < OpenAITTSProvider._quota_exceeded_until:
+            logger.info("TTS_OPENAI_SKIP quota_exceeded remaining=%.0fs",
+                        OpenAITTSProvider._quota_exceeded_until - time.time())
+            return None
 
         try:
             # Applica padding per limitare i tagli
             if self.voice in ["onyx", "nova"]:
                 text = self._pad_tts_text(text)
-            
+
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(
                     "https://api.openai.com/v1/audio/speech",
@@ -221,6 +231,10 @@ class OpenAITTSProvider(TTSProvider):
                         "response_format": "mp3"
                     }
                 )
+                if response.status_code == 429:
+                    OpenAITTSProvider._quota_exceeded_until = time.time() + 3600
+                    logger.warning("TTS_OPENAI_429 quota_exceeded will_skip_for=3600s")
+                    return None
                 response.raise_for_status()
                 result = response.content
                 logger.info("TTS_OPENAI_OK voice=%s bytes=%d", self.voice, len(result))

@@ -3048,7 +3048,7 @@ async function sendVoiceMessage(text) {
 
     waitForTTSEnd(() => {
       if (!voiceModeActive) return;
-      voiceBlockedUntil = Date.now() + 2000; // Delay anti-echo 2s
+      voiceBlockedUntil = Date.now() + 800; // Delay anti-echo 0.8s
       window.isGenesiSpeaking = false;
       console.log('VOICE_UNBLOCKED_AND_LOCK_RELEASED');
       setVoiceOrbState('listening');
@@ -3142,8 +3142,8 @@ function waitForTTSEnd(callback) {
         console.log('[VOICE_POLL] TTS activity detected - locking mic');
       }
       ttsWasDetected = true;
-      // Trascina il blocco voce in avanti mentre suona (buffer di sicurezza 3s)
-      voiceBlockedUntil = Date.now() + 3000;
+      // Trascina il blocco voce in avanti mentre suona (buffer di sicurezza 1.5s)
+      voiceBlockedUntil = Date.now() + 1500;
       return;
     }
 
