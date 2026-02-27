@@ -542,6 +542,14 @@ class IntentClassifier:
         Classificazione tramite LLM con valutazione score e contesto.
         Sostituisce le keyword statiche come logica primaria.
         """
+        message_lower = (message or "").lower().strip()
+
+        # PRIORITÀ ASSOLUTA: image generation deterministico (evita false chat_free dal classificatore LLM)
+        image_keywords = self.gpt_patterns.get("image_generation", [])
+        if any(keyword in message_lower for keyword in image_keywords):
+            log("INTENT_CLASSIFIED", intent="image_generation", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["image_generation"]
+
         from core.chat_memory import chat_memory
         from core.llm_service import llm_service
         import json
