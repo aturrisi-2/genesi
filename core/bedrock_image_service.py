@@ -62,6 +62,64 @@ class BedrockImageService:
             self.model_id = bedrock_config.get_model_id()
             self.region = bedrock_config.get_region()
             logger.info(f"✅ Bedrock Image Service initialized - model={self.model_id}")
+
+    def _build_payload(self, prompt: str, width: int, height: int, steps: int, guidance_scale: float, seed: Optional[int]) -> Dict[str, Any]:
+        """
+        Costruisce il payload Bedrock in base al modello configurato.
+        Supporta:
+        - SDXL legacy (stability.stable-diffusion-xl-*)
+        - Stability Image Core/Ultra (stability.stable-image-*)
+        """
+        model = (self.model_id or "").lower()
+
+        # Nuovi modelli Stability Image (Core/Ultra)
+        if "stable-image" in model:
+            payload = {
+                "prompt": prompt,
+                "output_format": "png",
+            }
+            if seed is not None:
+                payload["seed"] = int(seed)
+            return payload
+
+        # SDXL legacy
+        return {
+            "text_prompts": [
+                {
+                    "text": prompt,
+                    "weight": 1.0
+                }
+            ],
+            "cfg_scale": guidance_scale,
+            "seed": seed if seed is not None else 0,
+            "steps": min(max(steps, 20), 150),
+            "height": height,
+            "width": width,
+            "sampler": self.DEFAULT_CONFIG["sampler"]
+        }
+
+    def _extract_image_base64(self, response: Dict[str, Any]) -> Optional[str]:
+        """Estrae l'immagine base64 dai formati risposta Stability legacy e moderni."""
+        if not isinstance(response, dict):
+            return None
+
+        # Stability Image Core/Ultra format
+        images = response.get("images")
+        if isinstance(images, list) and images:
+            img = images[0]
+            if isinstance(img, str) and img.strip():
+                return img
+
+        # SDXL legacy format
+        artifacts = response.get("artifacts")
+        if isinstance(artifacts, list) and artifacts:
+            first = artifacts[0] or {}
+            if isinstance(first, dict):
+                img = first.get("base64")
+                if isinstance(img, str) and img.strip():
+                    return img
+
+        return None
     
     async def generate_image(
         self,
@@ -131,21 +189,15 @@ class BedrockImageService:
                 log("BEDROCK_DISABLED")
                 return None
             
-            # Prepara payload per Bedrock
-            payload = {
-                "text_prompts": [
-                    {
-                        "text": prompt,
-                        "weight": 1.0
-                    }
-                ],
-                "cfg_scale": guidance_scale,
-                "seed": seed if seed is not None else 0,
-                "steps": min(max(steps, 20), 150),  # Clamp 20-150
-                "height": height,
-                "width": width,
-                "sampler": self.DEFAULT_CONFIG["sampler"]
-            }
+            # Prepara payload per Bedrock (model-aware)
+            payload = self._build_payload(
+                prompt=prompt,
+                width=width,
+                height=height,
+                steps=steps,
+                guidance_scale=guidance_scale,
+                seed=seed,
+            )
             
             # Chiama Bedrock (async wrapper intorno a sync boto3)
             loop = asyncio.get_event_loop()
@@ -159,8 +211,8 @@ class BedrockImageService:
                 log("BEDROCK_RESPONSE_EMPTY")
                 return None
             
-            # Estrai immagine dal response
-            image_base64 = response.get("artifacts", [{}])[0].get("base64")
+            # Estrai immagine dal response (legacy + new Stability formats)
+            image_base64 = self._extract_image_base64(response)
             if not image_base64:
                 logger.error("No image in Bedrock response")
                 log("BEDROCK_NO_ARTIFACTS")
