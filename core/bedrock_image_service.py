@@ -12,6 +12,7 @@ import hashlib
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from pathlib import Path
+from botocore.exceptions import ClientError
 
 from config.aws_config import bedrock_config
 from core.log import log
@@ -337,17 +338,31 @@ class BedrockImageService:
         """
         Upload sync a S3 - eseguito in executor
         """
+        base_params = {
+            "Bucket": self.bucket,
+            "Key": filename,
+            "Body": image_bytes,
+            "ContentType": "image/png",
+            "ServerSideEncryption": "AES256",
+            "CacheControl": "max-age=31536000",
+        }
+
         try:
+            # Primo tentativo: compatibilità con bucket che supportano ACL
             self.s3.put_object(
-                Bucket=self.bucket,
-                Key=filename,
-                Body=image_bytes,
-                ContentType="image/png",
-                ACL="public-read",  # Rendi pubblico per accesso diretto
-                ServerSideEncryption="AES256",  # Crypto
-                CacheControl="max-age=31536000"  # Cache 1 anno
+                ACL="public-read",
+                **base_params,
             )
             logger.info(f"S3 upload success: {filename}")
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code == "AccessControlListNotSupported":
+                logger.warning("S3 bucket ACL disabled, retrying upload without ACL: %s", filename)
+                self.s3.put_object(**base_params)
+                logger.info(f"S3 upload success (no ACL): {filename}")
+                return
+            logger.error(f"S3 put_object failed: {e}")
+            raise
         except Exception as e:
             logger.error(f"S3 put_object failed: {e}")
             raise
