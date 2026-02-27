@@ -247,22 +247,29 @@ class ToolService:
             except LocationNotFoundError as e:
                 # Se geocoding fallisce, controlla se è una richiesta locale (qui, fuori, da me)
                 msg_low = message.lower()
-                is_local = any(kw in msg_low for kw in ["qui", "fuori", "da me", "vicino a me"])
-                
+                is_local = any(kw in msg_low for kw in ["qui", "fuori", "da me", "vicino a me", "qui da me"])
+
                 if is_local and user_id:
                     try:
-                        from core.memory_brain import memory_brain
-                        brain = await memory_brain.get_brain(user_id)
-                        profile = brain.get("profile", {})
-                        profile_city = profile.get("city")
-                        
-                        if profile_city:
-                            log("WEATHER_LOCAL_FALLBACK", city=profile_city)
+                        # Legge direttamente da storage (fresco, non cached) per avere GPS aggiornati
+                        from core.storage import storage as _storage
+                        raw_profile = await _storage.load(f"profile:{user_id}", default={}) or {}
+                        gps_lat = raw_profile.get("gps_lat")
+                        gps_lon = raw_profile.get("gps_lon")
+                        profile_city = raw_profile.get("city")
+
+                        if gps_lat and gps_lon:
+                            # Usa coordinate GPS dirette — nessun geocoding necessario
+                            geo = {"lat": gps_lat, "lon": gps_lon,
+                                   "name": profile_city or "la tua posizione", "country": "IT"}
+                            log("WEATHER_GPS_DIRECT", city=profile_city)
+                        elif profile_city:
                             geo = await resolve_location(profile_city, http_client=client)
+                            log("WEATHER_LOCAL_FALLBACK", city=profile_city)
                         else:
-                            return str(e)
+                            return "Apri l'app e abilita la posizione per ricevere il meteo locale."
                     except Exception as ex:
-                        logger.error(f"WEATHER_LOCAL_FALLBACK_ERROR: {ex}")
+                        logger.error("WEATHER_LOCAL_ERROR: %s", ex)
                         return str(e)
                 elif user_id:
                     # Se la città estratta non è valida, prova dal tool context
@@ -270,7 +277,6 @@ class ToolService:
                         from core.tool_context import get_tool_context
                         ctx = get_tool_context(user_id)
                         if ctx and ctx.get('intent') == 'weather' and ctx.get('city'):
-                            # Riprova con la città dal context
                             city_from_ctx = ctx['city']
                             geo = await resolve_location(city_from_ctx, http_client=client)
                             log("WEATHER_CITY_FROM_CONTEXT", city=city_from_ctx)
@@ -360,23 +366,45 @@ class ToolService:
         return self._format_forecast_it(data, display_name, message)
 
     def _format_weather_it(self, data: dict, city: str) -> str:
-        """Formatta risposta OpenWeather in italiano naturale."""
+        """Formatta risposta OpenWeather in italiano narrativo e naturale."""
         try:
-            desc_it = data.get("weather", [{}])[0].get("description", "")
-            if not desc_it:
-                desc_en = data.get("weather", [{}])[0].get("description", "")
-                desc_it = WEATHER_DESC_IT.get(desc_en, desc_en)
+            desc_en = data.get("weather", [{}])[0].get("description", "")
+            desc_it = WEATHER_DESC_IT.get(desc_en, desc_en) or desc_en
 
             temp = round(data.get("main", {}).get("temp", 0))
             humidity = data.get("main", {}).get("humidity", 0)
             wind_ms = data.get("wind", {}).get("speed", 0)
             wind_kmh = round(wind_ms * 3.6)
 
-            # Strict format: "A {City}: {descrizione}, {temp}°C, umidità {hum}%, vento {wind} km/h."
-            weather_info = f"A {city}: {desc_it}, {temp}°C, umidità {humidity}%, vento {wind_kmh} km/h."
+            # Frase temperatura contestuale
+            if temp >= 32:
+                temp_phrase = f"fa caldo — {temp}°C"
+            elif temp >= 27:
+                temp_phrase = f"ci sono {temp}°C, è una bella giornata calda"
+            elif temp >= 20:
+                temp_phrase = f"ci sono {temp}°C, temperatura piacevole"
+            elif temp >= 13:
+                temp_phrase = f"ci sono {temp}°C, un po' fresco"
+            elif temp >= 5:
+                temp_phrase = f"ci sono {temp}°C, fa abbastanza freddo"
+            else:
+                temp_phrase = f"ci sono {temp}°C, fa davvero freddo"
 
+            # Nota vento (solo se significativo)
+            wind_note = ""
+            if wind_kmh >= 45:
+                wind_note = " con vento forte"
+            elif wind_kmh >= 22:
+                wind_note = " e un po' di vento"
+
+            # Nota umidità (solo se molto alta)
+            hum_note = ""
+            if humidity >= 80:
+                hum_note = ", aria piuttosto umida"
+
+            city_prefix = f"A {city}" if city and city != "la tua posizione" else "Fuori"
             log("TOOL_WEATHER_RESPONSE", city=city, temp=temp, desc=desc_it)
-            return weather_info
+            return f"{city_prefix} {temp_phrase}{wind_note}. {desc_it.capitalize()}{hum_note}."
 
         except Exception as e:
             logger.error("TOOL_WEATHER_FORMAT_ERROR error=%s", str(e))

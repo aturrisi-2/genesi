@@ -95,7 +95,14 @@ async def get_weather_widget(
                     if raw_profile.get("city") != city_name:
                         raw_profile["city"] = city_name
                         profile_updated = True
-                    
+
+                    # Salva coordinate GPS per meteo locale ("che tempo fa fuori?")
+                    if lat is not None and lon is not None:
+                        if raw_profile.get("gps_lat") != lat or raw_profile.get("gps_lon") != lon:
+                            raw_profile["gps_lat"] = lat
+                            raw_profile["gps_lon"] = lon
+                            profile_updated = True
+
                     # Se abbiamo una timezone (da IP), salviamola
                     current_tz = raw_profile.get("timezone", "Europe/Rome")
                     new_tz = timezone if 'timezone' in locals() else current_tz

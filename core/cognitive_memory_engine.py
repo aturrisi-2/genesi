@@ -72,7 +72,8 @@ class CognitiveMemoryEngine:
 
         # Semantic classification using regex
         name_match = re.search(r"mi chiamo (\w+)", message, re.IGNORECASE)
-        profession_match = re.search(r"(?:faccio|sono|lavoro come)\s+(?:il\s+|la\s+|l\s+)?([^.\s]+(?:\s+[^.\s]+)*)", message, re.IGNORECASE)
+        # Limita la cattura a max 3 parole per evitare di salvare frasi di contesto come professione
+        profession_match = re.search(r"(?:faccio|sono|lavoro come)\s+(?:il\s+|la\s+|l\s+)?(\w+(?:\s+\w+){0,2})", message, re.IGNORECASE)
         city_match = re.search(r"vivo a (\w+)", message, re.IGNORECASE)
         spouse_match = re.search(r"(?:mia moglie|mio marito) si chiama (\w+)", message, re.IGNORECASE)
         children_match = re.search(r"i miei figli si chiamano (\w+) e (\w+)", message, re.IGNORECASE)
@@ -119,12 +120,29 @@ class CognitiveMemoryEngine:
             value = city_match.group(1)
             logger.info("COGNITIVE_CITY_EXTRACT value=%s", value)
             
+        # Parole/frasi che indicano situazioni o attività — NON professioni
+        _PROFESSION_STOPWORDS = {
+            "account", "collega", "miei", "quali", "appuntamento", "promemoria",
+            "a cena", "a casa", "a lavoro", "in giro", "in vacanza", "in viaggio",
+            "tempo", "fuori", "qui", "bene", "male", "stanco", "stanca",
+            "andato", "andata", "tornato", "pronto", "pronta", "sveglio", "sveglia",
+        }
+        # Preposizioni/articoli che non possono aprire una professione
+        _PROFESSION_BAD_STARTERS = {
+            "a", "da", "con", "per", "di", "in", "su", "tra", "fra",
+            "un", "una", "dello", "della", "delle", "degli",
+        }
+
         if profession_match:
             new_profession = profession_match.group(1).strip().lower()  # lowercase come richiesto
-            
-            # GUARD: Evita di estrarre domande sugli account come professione
-            if any(kw in new_profession for kw in ["account", "collega", "miei", "quali", "appuntamento", "promemoria"]):
-                logger.info("COGNITIVE_PROFESSION_SKIP value=%s", new_profession)
+
+            # GUARD: evita di salvare situazioni/attività come professione
+            if any(kw in new_profession for kw in _PROFESSION_STOPWORDS):
+                logger.info("COGNITIVE_PROFESSION_SKIP value=%s reason=stopword", new_profession)
+            elif new_profession.split()[0].lower() in _PROFESSION_BAD_STARTERS:
+                logger.info("COGNITIVE_PROFESSION_SKIP value=%s reason=bad_starter", new_profession)
+            elif len(new_profession.split()) > 3:
+                logger.info("COGNITIVE_PROFESSION_SKIP value=%s reason=too_long", new_profession)
             else:
                 old_profession = extracted_profile_data.get("profession")
                 

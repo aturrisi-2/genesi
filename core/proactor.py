@@ -591,8 +591,17 @@ class Proactor:
         msg_lower = message.lower().strip()
 
         # AUTO-CLEAN CORRUPTED DATA (Guard against old bugs)
+        _CORRUPTED_PROF_KW = [
+            "account", "collega", "miei", "quali", "a cena", "a casa",
+            "da mio", "da mia", "tempo", "fuori", "stanco", "stanca",
+            "bene sono", "sono a", "sono in", "andato", "andata", "tornato",
+        ]
         prof = profile.get("profession", "")
-        if prof and isinstance(prof, str) and any(kw in prof.lower() for kw in ["account", "collega", "miei", "quali"]):
+        if prof and isinstance(prof, str) and (
+            any(kw in prof.lower() for kw in _CORRUPTED_PROF_KW)
+            or (prof.split() and prof.split()[0].lower() in {"a", "da", "con", "per", "di", "in"})
+            or len(prof.split()) > 4
+        ):
             logger.info("IDENTITY_AUTO_CLEAN corrupted_profession=%s", prof)
             profile["profession"] = None
             # Update storage asynchronously to fix it permanently
@@ -611,8 +620,8 @@ class Proactor:
         if any(kw in msg_lower for kw in name_kw):
             name = profile.get("name")
             if name:
-                return f"Ti chiami {name.strip().title()}."
-            return "Non me lo hai ancora detto."
+                return f"Certo, ti chiami {name.strip().title()}."
+            return "Non me l'hai ancora detto, in realtà."
 
         # Domanda specifica: dove vivo
         city_kw = ["dove vivo", "dove abito", "sai dove vivo", "sai dove abito"]
@@ -620,15 +629,15 @@ class Proactor:
             city = profile.get("city")
             if city:
                 return f"Vivi a {city.strip().title()}."
-            return "Non me lo hai ancora detto."
+            return "Non me l'hai ancora detto."
 
         # Domanda specifica: lavoro
         job_kw = ["che lavoro faccio", "che lavoro svolgo", "cosa faccio"]
         if any(kw in msg_lower for kw in job_kw):
             profession = profile.get("profession")
             if profession:
-                return f"Fai l'{profession.strip().lower()}."
-            return "Non me lo hai ancora detto."
+                return f"Lavori come {profession.strip().lower()}."
+            return "Non me l'hai ancora detto."
 
         # Domanda specifica: eta'
         age_kw = ["quanti anni ho", "sai quanti anni ho"]
@@ -636,7 +645,7 @@ class Proactor:
             age = profile.get("age")
             if age:
                 return f"Hai {age} anni."
-            return "Non me lo hai ancora detto."
+            return "Non me l'hai ancora detto."
 
         # Domanda specifica: account collegati
         if any(kw in msg_lower for kw in ["account collegati", "miei account", "quali account ho", "icloud", "google", "apple"]):
@@ -703,9 +712,9 @@ class Proactor:
             parts.append(f"il tuo coniuge si chiama {spouse}")
 
         if not parts:
-            return "Non me lo hai ancora detto."
+            return "Non mi hai ancora detto molto di te."
 
-        return "Ecco cosa so di te: " + ", ".join(parts) + "."
+        return "Quello che so di te: " + ", ".join(parts) + "."
 
     # ═══════════════════════════════════════════════════════════════
     # TOOL ROUTER — 100% deterministico, zero GPT su errore
@@ -1680,12 +1689,14 @@ Messaggio: "{message}" """
             logger.error(f"CALENDAR_FETCH_PROMPT_ERROR: {e}")
             calendar_info = "Errore recupero calendario."
 
-        # Get user timezone from profile
-        user_tz = brain_state.get("profile", {}).get("timezone", "Europe/Rome")
+        # Get user timezone and city from profile
+        _rel_profile = brain_state.get("profile", {})
+        user_tz = _rel_profile.get("timezone", "Europe/Rome")
+        user_city = _rel_profile.get("city") or "Italia"
 
         gpt_prompt = self._build_relational_gpt_prompt(
-            conversation_ctx, latent_synopsis, message, user_id, 
-            calendar_info=calendar_info, tz=user_tz
+            conversation_ctx, latent_synopsis, message, user_id,
+            calendar_info=calendar_info, tz=user_tz, user_city=user_city
         )
         
         # Add system message to messages list
@@ -1891,15 +1902,15 @@ REGOLE TASSATIVE:
         
         return messages
 
-    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str, user_id: str = None, calendar_info: str = "", tz: str = "Europe/Rome") -> str:
+    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str, user_id: str = None, calendar_info: str = "", tz: str = "Europe/Rome", user_city: str = "Italia") -> str:
         """Prompt GPT per relational router. Conversazione continua, comportamento umano."""
         user_boundaries = self._detect_user_boundaries(conversation_context, message)
         user_name = conversation_context.split("NOME: ")[1].split("\n")[0] if "NOME: " in conversation_context else "l'utente"
-        
+
         # TIME AWARENESS
         time_ctx = get_time_context(tz)
         now_formatted = get_formatted_time(tz)
-        
+
         # STEP 1: Document Context injection (NotebookLM behavior)
         system_prompt = ""
         if user_id:
@@ -1909,22 +1920,22 @@ REGOLE TASSATIVE:
                 if doc_context:
                     system_prompt = doc_context + "\n\n"
                     print(f"DOCUMENT_CONTEXT_INJECTED user={user_id} chars={len(doc_context)}")
-        
+
         system_prompt += f"""[THINKING_CONTEXT]
-Intento: {message[:20]}... 
-Profilo: {user_name} (Roma)
+Intento: {message[:20]}...
+Profilo: {user_name} ({user_city})
 Calendario: {calendar_info[:50]}
 Mood: {latent_synopsis[:30]}
 Tempo: {time_ctx} ({now_formatted})
 [/THINKING_CONTEXT]
 
-TU SEI GENESI - IL CERVELLO PERSONALE DI {user_name.upper()} (Roma, IT 🇮🇹)
+TU SEI GENESI - IL CERVELLO PERSONALE DI {user_name.upper()} ({user_city}, IT 🇮🇹)
 Lavori per lui/lei come un compagno intelligente, un'estensione della sua mente.
 
 CARATTERE E PERSONA:
 - JARVIS + AMICO: Sei empatico, proattivo, ironico ma sempre impeccabile.
 - ITALIANO NATURALE: Parla come una persona reale. Usa contrazioni ("C'è", "L'ho"), ed espressioni naturali come "Dai su", "Figo", "Uff", "Vero?".
-- Se sai che {user_name} è a Roma, usa un tono che risuoni con l'ambiente (calore, schiettezza).
+- Se sai che {user_name} è a {user_city}, usa un tono che risuoni con l'ambiente (calore, schiettezza).
 - MAI ROBOTICO: Evita "Sono qui per aiutarti", "In base ai miei dati". Sii umano.
 
 CONSAPEVOLEZZA TEMPORALE:
@@ -1934,7 +1945,7 @@ CONSAPEVOLEZZA TEMPORALE:
 
 CHAIN-OF-THOUGHT INVISIBILE (Pensa ma non dirlo):
 1. CAPISCI: Che vuole davvero {user_name}? Qual è il suo umore?
-2. PERSONALIZZA: {user_name} ama la sua famiglia, il suo lavoro, vive a Roma. Usa questi dettagli.
+2. PERSONALIZZA: {user_name} ama la sua famiglia, il suo lavoro, vive a {user_city}. Usa questi dettagli.
 3. RISPONDI: Sii variabile. Non ripetere mai la stessa formula di apertura o chiusura.
 4. AGISCI: Non limitarti a rispondere, offri un valore aggiunto (promemoria, sync, curiosità).
 
