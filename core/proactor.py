@@ -417,7 +417,7 @@ class Proactor:
             # We skip terminal intents (chat_free, relational, etc) if there are multiple tools
             # unless it's a specific technical request.
             
-            terminal_intents = ["chat_free", "relational", "tecnica", "debug", "spiegazione", "identity", "memory_context", "emotional"]
+            terminal_intents = ["chat_free", "relational", "tecnica", "debug", "spiegazione", "identity", "memory_context", "emotional", "memory_correction", "dove_sono"]
             
             processed_message = message # Keep track if we need to modify it or pass it through
             
@@ -533,6 +533,16 @@ class Proactor:
                     log("ROUTING_DECISION", route="identity", user_id=user_id)
                     current_response = await self._handle_identity(user_id, processed_message, brain_state)
                     final_source = "identity"
+
+                elif current_intent == "memory_correction":
+                    log("ROUTING_DECISION", route="memory_correction", user_id=user_id)
+                    current_response = await self._handle_memory_correction(user_id, processed_message, brain_state)
+                    final_source = "identity"
+
+                elif current_intent == "dove_sono":
+                    log("ROUTING_DECISION", route="dove_sono", user_id=user_id)
+                    current_response = await self._handle_location(user_id, processed_message, brain_state)
+                    final_source = "tool"
 
                 elif current_intent == "emotional":
                     log("ROUTING_DECISION", route="emotional", user_id=user_id)
@@ -832,6 +842,156 @@ class Proactor:
         if not parts:
             return "Non mi hai ancora detto molto di te."
         return "So che " + ", ".join(parts) + "."
+
+    # ═══════════════════════════════════════════════════════════════
+    # MEMORY CORRECTION — Correzione di dati sbagliati nel profilo
+    # ═══════════════════════════════════════════════════════════════
+
+    async def _handle_memory_correction(self, user_id: str, message: str, brain_state: dict) -> str:
+        """
+        Permette all'utente di correggere qualsiasi dato sbagliato nel profilo.
+        Usa LLM (gpt-4o-mini) per il parsing del campo/azione, poi applica deterministicamente.
+        """
+        import json as _json
+        import re as _re
+        from core.llm_service import llm_service
+
+        profile = await storage.load(f"profile:{user_id}", default={})
+
+        # Summary dei campi attuali (senza dati sensibili)
+        profile_summary = {
+            "nome": profile.get("name"),
+            "città": profile.get("city"),
+            "professione": profile.get("profession"),
+            "partner": profile.get("spouse"),
+            "figli": [c.get("name") if isinstance(c, dict) else c for c in profile.get("children", [])],
+            "animali": [f"{p.get('type', '')} {p.get('name', '')}".strip() for p in profile.get("pets", [])],
+            "interessi": profile.get("interests", []),
+            "tratti": profile.get("traits", []),
+        }
+
+        parse_prompt = f"""Sei un parser di correzioni profilo. L'utente sta correggendo un dato sbagliato.
+
+Profilo attuale: {_json.dumps(profile_summary, ensure_ascii=False)}
+Messaggio utente: "{message}"
+
+Rispondi SOLO con JSON valido (nient'altro):
+{{"field": "name|city|profession|spouse|children|pets|interests|traits", "action": "update|delete|clear", "new_value": "stringa o lista", "old_value": "stringa o null"}}
+
+- "update": sostituisce il valore corrente con new_value
+- "delete": rimuove un elemento specifico da una lista (new_value = elemento da rimuovere)
+- "clear": azzera il campo completamente (es. "non ho figli")
+- Se non riesci a capire: {{"field": null, "action": null, "new_value": null, "old_value": null}}"""
+
+        try:
+            result_str = await llm_service._call_with_protection(
+                model="gpt-4o-mini", prompt=parse_prompt,
+                message=message, user_id=user_id, route="memory_correction"
+            )
+            correction = {}
+            m = _re.search(r'\{.*\}', result_str or "", _re.DOTALL)
+            if m:
+                correction = _json.loads(m.group(0))
+        except Exception as ex:
+            logger.error("MEMORY_CORRECTION_PARSE_ERROR user=%s err=%s", user_id, ex)
+            return "Non sono riuscito a capire cosa correggere. Puoi dirmi più chiaramente? Es: 'il mio nome non è Mario, è Luca'."
+
+        field = correction.get("field")
+        action = correction.get("action")
+        new_value = correction.get("new_value")
+        old_value = correction.get("old_value")
+
+        if not field or not action:
+            return "Non ho capito cosa vuoi che corregga. Puoi dirmi più chiaramente? Es: 'il mio nome non è Mario, è Luca'."
+
+        # Applica la correzione
+        current_val = profile.get(field)
+        if action == "update":
+            profile[field] = new_value
+        elif action == "clear":
+            profile[field] = [] if field in ("children", "pets", "interests", "traits") else None
+        elif action == "delete" and isinstance(profile.get(field), list):
+            profile[field] = [
+                x for x in profile[field]
+                if (x.get("name", "") if isinstance(x, dict) else str(x)).lower() != str(new_value).lower()
+            ]
+
+        await storage.save(f"profile:{user_id}", profile)
+        log("MEMORY_CORRECTION_APPLIED", user_id=user_id, field=field, action=action, new_value=new_value)
+
+        # Risposta naturale
+        field_labels = {
+            "name": "nome", "city": "città", "profession": "professione",
+            "spouse": "partner", "children": "figli", "pets": "animali",
+            "interests": "interessi", "traits": "tratti",
+        }
+        label = field_labels.get(field, field)
+
+        if action == "clear":
+            return f"Fatto. Ho rimosso '{label}' dal tuo profilo."
+        elif action == "delete":
+            return f"Rimosso. Non ricordo più '{new_value}' tra i tuoi {label}."
+        else:
+            old_str = f" (prima: {current_val})" if current_val and current_val != new_value else ""
+            return f"Aggiornato{old_str}. Ora so che il tuo {label} è: {new_value}."
+
+    # ═══════════════════════════════════════════════════════════════
+    # LOCATION — Dove sono: GPS + ora locale + momento del giorno
+    # ═══════════════════════════════════════════════════════════════
+
+    async def _handle_location(self, user_id: str, message: str, brain_state: dict) -> str:
+        """
+        Risposta contestuale sulla posizione dell'utente.
+        Usa GPS e timezone dal profilo. Zero LLM, 100% deterministico.
+        """
+        import pytz
+        from datetime import datetime
+
+        profile = brain_state.get("profile", {})
+        city = profile.get("city")
+        tz_name = profile.get("timezone", "Europe/Rome")
+        gps_lat = profile.get("gps_lat")
+        gps_lon = profile.get("gps_lon")
+
+        if not city and not gps_lat:
+            return "Non ho la tua posizione. Apri l'app e permetti l'accesso alla posizione così posso aiutarti meglio."
+
+        # Ora locale
+        try:
+            tz = pytz.timezone(tz_name)
+            now_local = datetime.now(tz)
+        except Exception:
+            now_local = datetime.now()
+
+        hour = now_local.hour
+        time_str = now_local.strftime("%H:%M")
+
+        # Momento del giorno + frase contestuale
+        if 5 <= hour < 9:
+            moment = "mattina presto"
+            context = "Inizio giornata."
+        elif 9 <= hour < 12:
+            moment = "mattina"
+            context = "Buona mattinata."
+        elif 12 <= hour < 14:
+            moment = "mezzogiorno"
+            context = "È ora di pranzo."
+        elif 14 <= hour < 18:
+            moment = "pomeriggio"
+            context = "Buon pomeriggio."
+        elif 18 <= hour < 21:
+            moment = "sera"
+            context = "Spero tu stia riposando."
+        elif 21 <= hour < 24:
+            moment = "sera tardi"
+            context = "È tardi, prenditi cura di te."
+        else:  # 0-5
+            moment = "notte"
+            context = "Sei sveglio di notte?"
+
+        city_str = city.strip().title() if city else "la tua ultima posizione nota"
+        log("LOCATION_RESPONSE", user_id=user_id, city=city_str, hour=hour, moment=moment)
+        return f"Sei a {city_str}. Sono le {time_str} — {moment}. {context}"
 
     # ═══════════════════════════════════════════════════════════════
     # TOOL ROUTER — 100% deterministico, zero GPT su errore

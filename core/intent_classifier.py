@@ -550,6 +550,28 @@ class IntentClassifier:
             log("INTENT_CLASSIFIED", intent="image_generation", user_id=user_id, engine="regex_priority", message=message[:50])
             return ["image_generation"]
 
+        # PRIORITÀ ALTA: dove_sono — "dove sono", "dove mi trovo", ecc.
+        _location_self_kw = [
+            "dove sono", "dove mi trovo", "dove siamo",
+            "in che zona sono", "in che posto sono",
+            "la mia posizione", "dove sono adesso",
+        ]
+        if any(kw in message_lower for kw in _location_self_kw):
+            log("INTENT_CLASSIFIED", intent="dove_sono", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["dove_sono"]
+
+        # PRIORITÀ ALTA: memory_correction — patterns inequivocabili di correzione profilo
+        _correction_kw = [
+            "non mi chiamo", "hai sbagliato il mio nome", "correggiti",
+            "dimentica che", "aggiorna il mio", "cambia quello che sai",
+            "in realtà mi chiamo", "in realtà sono", "non vivo a",
+            "non lavoro come", "non ho figli", "non ho un cane", "non ho una gatta",
+            "il mio nome non è", "la mia città non è", "la mia professione non è",
+        ]
+        if any(kw in message_lower for kw in _correction_kw):
+            log("INTENT_CLASSIFIED", intent="memory_correction", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["memory_correction"]
+
         from core.chat_memory import chat_memory
         from core.llm_service import llm_service
         import json
@@ -575,6 +597,8 @@ INTENT POSSIBILI:
 - debug: errori codice, malfunzionamenti software
 - spiegazione: richiesta di spiegazione "perchè", "come mai", o correzione/frustrazione (es: "perchè non hai risposto?", "hai sbagliato")
 - identity: chi sono io, che lavoro faccio, i miei account, i miei dati
+- memory_correction: l'utente corregge un dato sbagliato nel profilo (nome, città, professione, figli, animali, partner)
+- dove_sono: l'utente chiede dove si trova o la sua posizione attuale
 - icloud_setup: collegare o impostare account iCloud
 - icloud_sync: sincronizzare dati da iCloud
 - google_setup: collegare Google Calendar
