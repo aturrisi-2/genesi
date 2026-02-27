@@ -296,6 +296,13 @@ class Proactor:
 
             logger.info("PROACTOR_HANDLE_ENTRY user=%s intent=%s", user_id, intent)
 
+            # STEP 0.5: IMAGE SEARCH ROUTE (web images) — priorità su richieste esplicite "cerca/mostra immagini"
+            image_query = extract_image_query(message)
+            if image_query:
+                log("ROUTING_DECISION", route="image_search", user_id=user_id)
+                response = await self._handle_image_search(user_id, image_query)
+                return response, "tool"
+
             # STEP 1: IDENTITY ROUTE (PRIMA DI TUTTO - MASSIMA PRIORITÀ)
             if is_identity_question(message):
                 log("ROUTING_DECISION", route="identity", user_id=user_id)
@@ -1421,6 +1428,32 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
     # IMAGE GENERATION ROUTER — Bedrock integration
     # ═══════════════════════════════════════════════════════════════
 
+    async def _handle_image_search(self, user_id: str, query: str) -> str:
+        """Search web images and return frontend-compatible JSON payload."""
+        try:
+            service = get_image_search_service()
+            results = await service.search(query, max_results=4)
+            if not results:
+                return "Non ho trovato immagini rilevanti. Prova con una descrizione più specifica.", "tool"
+
+            payload = {
+                "text": f"Ho trovato alcune immagini per: {query}",
+                "images": [
+                    {
+                        "url": r.url,
+                        "thumbnail": r.thumbnail or r.url,
+                        "title": r.title or query,
+                        "source": r.source,
+                    }
+                    for r in results
+                ],
+                "tts_text": f"Ho trovato alcune immagini per {query}."
+            }
+            return json.dumps(payload, ensure_ascii=False), "tool"
+        except Exception as e:
+            logger.error("IMAGE_SEARCH_ROUTE_ERROR user=%s query=%s err=%s", user_id, query, e, exc_info=True)
+            return "Ho avuto un problema durante la ricerca immagini sul web. Riprova tra poco.", "tool"
+
     async def _handle_image_generation(self, user_id: str, message: str) -> str:
         """
         Handle image generation requests via AWS Bedrock.
@@ -1430,7 +1463,11 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
         try:
             if not bedrock_image_service.enabled:
                 logger.warning("IMAGE_GENERATION_DISABLED user=%s bedrock_not_configured", user_id)
-                return "Mi dispiace, il servizio di generazione immagini non è disponibile al momento. Riprova più tardi.", "tool"
+                fallback_prompt = message.strip()
+                fallback = await self._handle_image_search(user_id, fallback_prompt)
+                if isinstance(fallback, tuple) and fallback and isinstance(fallback[0], str) and fallback[0].startswith("{"):
+                    return fallback
+                return "La generazione immagini non è disponibile al momento. Posso però cercare immagini sul web se me lo chiedi con 'cerca immagini di ...'.", "tool"
             
             # Extract the prompt from the message
             # Remove common trigger phrases: "genera un'immagine di", "disegna", "crea una foto di", etc.
@@ -1472,6 +1509,9 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
             
             if image_url is None:
                 logger.error("IMAGE_GENERATION_FAILED user=%s prompt=%s", user_id, prompt[:50])
+                fallback = await self._handle_image_search(user_id, prompt)
+                if isinstance(fallback, tuple) and fallback and isinstance(fallback[0], str) and fallback[0].startswith("{"):
+                    return fallback
                 return "Ho avuto un problema nella generazione dell'immagine. Riprova con una descrizione diversa o più semplice.", "tool"
             
             # Get user stats (for feedback)

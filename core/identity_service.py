@@ -18,11 +18,22 @@ def normalize_profile_dict(data: dict) -> dict:
 
     # Normalize children
     children = data.get("children", [])
-    if isinstance(children, list) and all(isinstance(c, str) for c in children):
-        children = [{"name": c} for c in children]
-    elif not isinstance(children, list):
-        children = []
-    data["children"] = children
+    normalized_children = []
+    seen = set()
+    if isinstance(children, list):
+        for child in children:
+            if isinstance(child, dict):
+                name = str(child.get("name", "")).strip()
+            else:
+                name = str(child).strip()
+            if not name:
+                continue
+            key = name.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized_children.append({"name": name})
+    data["children"] = normalized_children
 
     return data
 

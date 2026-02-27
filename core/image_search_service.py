@@ -1,15 +1,20 @@
 """
 Ricerca immagini web per Genesi via DuckDuckGo (gratuito, no API key).
 """
+import asyncio
 import httpx
-import re
+import logging
 from typing import List, Optional
 from dataclasses import dataclass
+from ddgs import DDGS
+
+logger = logging.getLogger(__name__)
 
 IMAGE_SEARCH_TRIGGERS = [
     "mostrami immagini", "cerca foto", "immagini di",
     "foto di", "mostrami foto", "cerca immagini",
-    "visualizza immagini", "show me images", "pictures of"
+    "visualizza immagini", "show me images", "pictures of",
+    "cercami immagini", "trova immagini", "cerca su web immagini"
 ]
 
 @dataclass
@@ -29,17 +34,23 @@ class ImageSearchService:
     async def search(self, query: str, max_results: int = 4) -> List[ImageResult]:
         try:
             results = await self._pixabay_search(query, max_results)
-            print(f"IMAGE_SEARCH_OK query={query!r} results={len(results)}")
+            if results:
+                logger.info("IMAGE_SEARCH_OK backend=pixabay query=%r results=%d", query, len(results))
+                return results
+
+            # Fallback: no API key / empty Pixabay response
+            results = await self._duckduckgo_search(query, max_results)
+            logger.info("IMAGE_SEARCH_OK backend=duckduckgo query=%r results=%d", query, len(results))
             return results
         except Exception as e:
-            print(f"IMAGE_SEARCH_ERROR query={query!r} error={e}")
+            logger.warning("IMAGE_SEARCH_ERROR query=%r error=%s", query, e)
             return []
 
     async def _pixabay_search(self, query: str, max_results: int) -> List[ImageResult]:
         import os
         api_key = os.environ.get("PIXABAY_API_KEY", "")
         if not api_key:
-            raise ValueError("PIXABAY_API_KEY non configurata")
+            return []
         
         async with httpx.AsyncClient(timeout=self.TIMEOUT) as client:
             params = {
@@ -65,6 +76,32 @@ class ImageSearchService:
                 ))
             return results
 
+    async def _duckduckgo_search(self, query: str, max_results: int) -> List[ImageResult]:
+        def _do_search() -> List[dict]:
+            with DDGS() as ddgs:
+                return list(ddgs.images(
+                    query,
+                    max_results=max_results,
+                    region="wt-wt",
+                    safesearch="moderate"
+                ))
+
+        raw_results = await asyncio.to_thread(_do_search)
+        results: List[ImageResult] = []
+        for item in raw_results[:max_results]:
+            image_url = item.get("image") or item.get("url") or item.get("thumbnail")
+            if not image_url:
+                continue
+            results.append(ImageResult(
+                url=image_url,
+                title=item.get("title") or query,
+                source=item.get("source") or "duckduckgo",
+                thumbnail=item.get("thumbnail") or image_url,
+                width=int(item.get("width", 0) or 0),
+                height=int(item.get("height", 0) or 0),
+            ))
+        return results
+
 def extract_image_query(message: str) -> Optional[str]:
     msg_lower = message.lower()
     for trigger in IMAGE_SEARCH_TRIGGERS:
@@ -72,7 +109,7 @@ def extract_image_query(message: str) -> Optional[str]:
             idx = msg_lower.index(trigger) + len(trigger)
             query = message[idx:].strip().strip('?!.,')
             import re as _re
-            query = _re.sub(r"^(di|del|della|degli|delle|dello|d') ", '', query, flags=_re.IGNORECASE).strip()
+            query = _re.sub(r"^(di|del|della|degli|delle|dello|d'|su|sul|sulla) ", '', query, flags=_re.IGNORECASE).strip()
             if query:
                 return query
     return None
