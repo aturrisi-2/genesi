@@ -1327,11 +1327,16 @@ Messaggio: {message}"""
 
             if not email or not password:
                 return (
-                    "Certamente. Per collegare i tuoi promemoria iCloud in modo sicuro, dobbiamo creare una password specifica su Apple ID. "
-                    "È un'operazione veloce che protegge i tuoi dati personali.\n\n"
-                    "Ho preparato per te una **[Guida Illustrata con le tue immagini](/guida-icloud)** che puoi seguire passo dopo passo e salvare sul tuo telefono.\n\n"
-                    "Una volta ottenuta la password di 16 caratteri, scrivila qui sotto scrivendo:\n"
-                    "Collega la mia mail con password abcd-efgh-ijkl-mnop ✨"
+                    "Ti guido io, passo dopo passo — ci vogliono 2 minuti.\n\n"
+                    "**Passo 1** → Vai su [appleid.apple.com](https://appleid.apple.com) e fai il login con il tuo Apple ID.\n\n"
+                    "**Passo 2** → Clicca su **\"Accedi e sicurezza\"** (o \"Sicurezza dell'account\") "
+                    "→ poi **\"Password specifiche per le app\"**.\n\n"
+                    "**Passo 3** → Premi il **+** in fondo alla lista, scrivi `Genesi` come nome "
+                    "e premi **Crea**. Apple ti darà una password di 16 caratteri nel formato:\n"
+                    "`xxxx-xxxx-xxxx-xxxx`\n\n"
+                    "**Passo 4** → Copia quella password e torna qui. Poi scrivimi così:\n"
+                    "> Collega **tuaemail@icloud.com** con password **xxxx-xxxx-xxxx-xxxx**\n\n"
+                    "Sono qui quando sei pronto! 🍎"
                 )
             
             # Salva nel profilo
@@ -2482,22 +2487,38 @@ Messaggio utente: {message}"""
         return f"Ho aggiornato tutti i tuoi calendari e promemoria: {summary}.{tips}"
 
     async def _handle_google_setup(self, user_id, message):
-        """Inizia il setup di Google Calendar."""
+        """Avvia o rinnova il setup di Google Calendar con guida conversazionale."""
         profile = await storage.load(f"profile:{user_id}", default={})
         from auth.config import ADMIN_EMAILS
         is_admin = profile.get("email") in ADMIN_EMAILS
-        
-        # Generiamo il link con il placeholder {{token}} che il client sostituirà
-        base_url = os.getenv('BASE_URL', '')
-        login_url = f"{base_url}/api/calendar/google/login?token=%7B%7Btoken%7D%7D"
-        
-        if profile.get("google_token"):
-             return "Il tuo account Google è già collegato! Posso leggere e scrivere i tuoi impegni sul tuo calendario personale."
+        msg_lower = message.lower()
 
-        if is_admin:
-            return f"Il tuo account è configurato come Admin (usi il calendario globale). Se preferisci usare il tuo account Google personale, clicca qui: [Collega Google Personale]({login_url})"
-        
-        return f"L'integrazione con Google Calendar è pronta! Per autorizzarmi a gestire i tuoi impegni, clicca sul link qui sotto e segui la procedura guidata di Google: [Accedi con Google]({login_url})"
+        # Link con placeholder {{token}} — il client JS lo sostituisce con il JWT reale
+        base_url = os.getenv('BASE_URL', '')
+        login_url = f"{base_url}/api/calendar/google/login?token={{{{token}}}}"
+
+        already_connected = bool(profile.get("google_token"))
+        wants_reauth = any(kw in msg_lower for kw in [
+            "ricollega", "rinnova", "riconnetti", "non funziona", "non sincronizza",
+            "problema", "errore", "aggiorna", "reauth"
+        ])
+
+        if already_connected and not wants_reauth:
+            return (
+                f"Google Calendar è già collegato al tuo account.\n\n"
+                f"Se noti problemi di sincronizzazione, puoi rinnovare l'autorizzazione: "
+                f"[Rinnova accesso Google]({login_url})"
+            )
+
+        # Guida conversazionale con link diretto
+        intro = "Perfetto, colleghiamo Google Calendar." if not already_connected else "Rinnoviamo l'autorizzazione Google Calendar."
+        return (
+            f"{intro}\n\n"
+            f"**Passo 1** → Clicca qui per autorizzare: [Accedi con Google]({login_url})\n\n"
+            f"**Passo 2** → Google ti mostrerà una schermata di consenso. Clicca su **Consenti** per dare accesso al calendario.\n\n"
+            f"**Passo 3** → Dopo l'autorizzazione tornerai automaticamente qui. Tutto pronto!\n\n"
+            f"Il processo richiede circa 30 secondi."
+        )
 
     async def _handle_google_sync(self, user_id, message):
         """Sincronizza manualmente Google Calendar o aggiunge l'ultimo incarico."""

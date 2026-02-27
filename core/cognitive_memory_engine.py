@@ -243,13 +243,28 @@ class CognitiveMemoryEngine:
                 logger.info("COGNITIVE_DECISION persist=true")
                 logger.info("COGNITIVE_MEMORY_UPDATE field=%s value=%s", field, value)
             
-            # Handle list types
-            if field == "children" or field == "pets":
-                existing_value = extracted_profile_data.get(field, [])
-                if isinstance(existing_value, list):
-                    existing_value.extend(value)
-                else:
-                    extracted_profile_data[field] = value
+            # Handle list types — deduplication by name
+            if field == "children":
+                existing = extracted_profile_data.get("children", [])
+                if not isinstance(existing, list):
+                    existing = []
+                existing_names = {c.get("name", "").lower() for c in existing if isinstance(c, dict)}
+                new_items = value if isinstance(value, list) else [value]
+                for item in new_items:
+                    if isinstance(item, dict) and item.get("name", "").lower() not in existing_names:
+                        existing.append(item)
+                        existing_names.add(item.get("name", "").lower())
+                extracted_profile_data["children"] = existing
+            elif field == "pets":
+                existing = extracted_profile_data.get("pets", [])
+                if not isinstance(existing, list):
+                    existing = []
+                new_item = value if isinstance(value, dict) else (value[0] if isinstance(value, list) and value else None)
+                if new_item:
+                    existing_names = {p.get("name", "").lower() for p in existing if isinstance(p, dict)}
+                    if new_item.get("name", "").lower() not in existing_names:
+                        existing.append(new_item)
+                extracted_profile_data["pets"] = existing
             else:
                 extracted_profile_data[field] = value
             

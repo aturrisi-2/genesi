@@ -899,8 +899,13 @@ function handleSyncPopups(status) {
       primaryBtn: 'Configura iCloud',
       secondaryBtn: 'Forse più tardi',
       onPrimary: () => {
-        // Redirect to iCloud guide or show inline setup
-        window.location.href = '/guida-icloud';
+        // Avvia il wizard iCloud direttamente in chat
+        closeSyncPopup();
+        const textInput = document.getElementById('text-input');
+        if (textInput) {
+          textInput.value = 'collega iCloud';
+          sendMessage();
+        }
       },
       onSecondary: async () => {
         await dismissICloudSync();
@@ -1150,9 +1155,10 @@ function renderMessageContent(text) {
     return `<pre class="code-block"><code class="${lang ? 'lang-' + lang : ''}">${escape(code.trim())}</code></pre>`;
   });
 
-  // 3. Markdown Links [Label](URL)
+  // 3. Markdown Links [Label](URL) — sostituisce {{token}} con il JWT reale
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
-    return `<a href="${url}" target="_blank" class="chat-link">${escape(label)}</a>`;
+    const resolvedUrl = url.replace(/\{\{token\}\}|%7B%7Btoken%7D%7D/gi, getAuthToken() || '');
+    return `<a href="${resolvedUrl}" target="_blank" class="chat-link">${escape(label)}</a>`;
   });
 
   // 4. Inline code (`code`)

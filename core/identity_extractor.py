@@ -2,14 +2,13 @@
 IDENTITY EXTRACTOR - Genesi Core
 Extracts stable identity traits from user messages using LLM classification.
 Only saves declarative, stable, non-situational identity data.
+Routing: uses llm_service (OpenRouter) — never calls OpenAI directly.
 """
 
 import json
 import logging
 from typing import List, Dict, Optional
 from pydantic import BaseModel, Field
-from openai import AsyncOpenAI
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -49,25 +48,21 @@ async def extract_identity_updates(message: str, history_text: str = "") -> Iden
     Extract stable identity updates from a user message and history context using LLM.
     Returns empty IdentityUpdate if extraction fails or nothing stable found.
     Never interrupts chat flow.
+    Uses llm_service (OpenRouter) — no direct OpenAI calls.
     """
-    api_key = os.environ.get("OPENAI_API_KEY", "")
-    if not api_key or api_key.startswith("sk-test"):
-        logger.debug("IDENTITY_EXTRACTOR_SKIP reason=no_api_key")
-        return IdentityUpdate()
-
     try:
-        client = AsyncOpenAI()
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": EXTRACTION_PROMPT},
-                {"role": "user", "content": f"Contesto recente: {history_text}\nMessaggio utente: {message}" if history_text else message}
-            ],
-            temperature=0.0,
-            max_tokens=200
+        from core.llm_service import llm_service
+        user_content = (
+            f"Contesto recente: {history_text}\nMessaggio utente: {message}"
+            if history_text else message
         )
+        raw = await llm_service._call_with_protection(
+            "gpt-4o-mini", EXTRACTION_PROMPT, user_content,
+            user_id=None, route="identity_extractor"
+        )
+        if not raw:
+            return IdentityUpdate()
 
-        raw = response.choices[0].message.content.strip()
         logger.info("IDENTITY_EXTRACTOR_RAW response=%s", raw)
 
         parsed = json.loads(raw)
@@ -112,7 +107,7 @@ def merge_identity_update(profile, update: IdentityUpdate):
 
     if update.spouse:
         profile.spouse = update.spouse
-    
+
     if update.pets:
         from core.models.profile_model import Pet
         existing_pets_names = [p.name.lower() for p in profile.pets]
@@ -126,5 +121,5 @@ def merge_identity_update(profile, update: IdentityUpdate):
         for c in update.children:
             if "name" in c and c["name"].lower() not in existing_children_names:
                 profile.children.append(Child(name=c["name"]))
-    
+
     return profile
