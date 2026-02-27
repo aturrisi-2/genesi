@@ -468,7 +468,11 @@ class Proactor:
 
                 elif current_intent == "reminder_create":
                     log("ROUTING_DECISION", route="reminder_create", user_id=user_id)
-                    current_response = await self._handle_reminder_creation(user_id, processed_message)
+                    reminder_result = await self._handle_reminder_creation(user_id, processed_message)
+                    # 3-tuple (text, "reminder", True) = domanda chiarificatrice → return immediato, senza synthesis
+                    if isinstance(reminder_result, tuple) and len(reminder_result) >= 3 and reminder_result[2]:
+                        return reminder_result[0], "reminder"
+                    current_response = reminder_result[0] if isinstance(reminder_result, tuple) else reminder_result
                     final_source = "tool"
                 
                 elif current_intent == "reminder_list":
@@ -962,6 +966,14 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         "ricordami", "promemoria", "memorizza", "segna", "appuntamento",
         "evento", "reminder", "ricorda", "nota", "annota",
     }
+    # Frasi multi-parola che sono comandi/trigger, non contenuto dell'evento
+    _REMINDER_TRIGGER_PHRASES = [
+        "imposta una sveglia", "imposta sveglia", "metti sveglia", "metti una sveglia",
+        "aggiungi un promemoria", "crea un promemoria", "aggiungi promemoria",
+        "segna un appuntamento", "crea un appuntamento", "metti un appuntamento",
+        "aggiungi un appuntamento", "metti nel calendario", "aggiungi al calendario",
+        "segna nel calendario", "metti in agenda", "aggiungi in agenda",
+    ]
 
     async def _handle_reminder_creation(self, user_id: str, message: str) -> str:
         """
@@ -978,17 +990,20 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 logger.info("FALLBACK_NATURAL_PARSING message=%s", message)
                 reminder_text, reminder_datetime = await self._parse_reminder_natural(message, user_id)
 
-            # 3. Se il testo è solo una parola-trigger (es. "ricordami"), azzeralo
-            if reminder_text and reminder_text.lower().strip() in self._REMINDER_TRIGGER_ONLY:
-                reminder_text = None
+            # 3. Se il testo è solo una parola-trigger o frase-trigger, azzeralo
+            if reminder_text:
+                _text_low = reminder_text.lower().strip()
+                if (_text_low in self._REMINDER_TRIGGER_ONLY or
+                        any(phrase in _text_low for phrase in self._REMINDER_TRIGGER_PHRASES)):
+                    reminder_text = None
 
             # 4. Se manca il CONTENUTO → chiedi prima cosa ricordare
             if not reminder_text:
-                return "Certo! Cosa devo ricordarti?", "reminder"
+                return "Certo! Cosa devo ricordarti?", "reminder", True  # is_ask=True → salta synthesis
 
             # 5. Se manca solo il QUANDO → chiedi l'ora/data
             if not reminder_datetime:
-                return "Quando vuoi che te lo ricordi? Dimmi l'ora o il giorno.", "reminder"
+                return "Quando vuoi che te lo ricordi? Dimmi l'ora o il giorno.", "reminder", True  # is_ask=True
 
             if reminder_text and reminder_datetime:
                 # 3. DETERMINA SOURCE INIZIALE (con priorità)
