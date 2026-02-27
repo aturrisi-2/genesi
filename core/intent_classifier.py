@@ -148,6 +148,11 @@ class IntentClassifier:
             "icloud_setup": [
                 "collega icloud", "configura icloud", "imposta icloud", "password icloud",
                 "accesso icloud", "account icloud", "attiva icloud", "usa icloud"
+            ],
+            "image_generation": [
+                "genera un'immagine", "crea un'immagine", "disegna", "mostra una foto",
+                "crea un'illustrazione", "immagina che", "voglio vedere", "genera una foto",
+                "illustra", "crea una picture", "genera grafica", "dipingi", "disegni"
             ]
         }
     
@@ -189,14 +194,16 @@ class IntentClassifier:
                     log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="regex", message=message[:50])
                     return intent
 
-        # 1️⃣ PRIORITA' ALTA: reminder patterns (tutti)
+        # 1️⃣ PRIORITA' ALTA: reminder patterns (tutti) + image generation
         for intent, keywords in self.gpt_patterns.items():
-            if intent.startswith('reminder_'):
+            if intent.startswith('reminder_') or intent == 'image_generation':
                 if any(keyword in message_lower for keyword in keywords):
                     log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="regex", message=message[:50])
-                    # APPLICA REMINDER GUARD LAYER
-                    normalized_intent = self.normalize_reminder_intent(message, intent)
-                    return normalized_intent
+                    # APPLICA REMINDER GUARD LAYER solo per reminder intents
+                    if intent.startswith('reminder_'):
+                        normalized_intent = self.normalize_reminder_intent(message, intent)
+                        return normalized_intent
+                    return intent
         
         # 0.1️⃣ PRIORITA' ALTA: pattern memoria/ricordo
         if any(pattern in message_lower for pattern in self.memory_patterns):

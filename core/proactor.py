@@ -38,6 +38,7 @@ from core.intent_classifier import intent_classifier
 from core.reminder_engine import reminder_engine
 from core.document_context_manager import get_document_context_manager
 from core.image_search_service import get_image_search_service, extract_image_query
+from core.bedrock_image_service import bedrock_image_service
 import unidecode
 import os
 from core.time_awareness import get_time_context, get_formatted_time
@@ -482,6 +483,11 @@ class Proactor:
                 elif current_intent == "reminder_update":
                     log("ROUTING_DECISION", route="reminder_update", user_id=user_id)
                     current_response = await self._handle_reminder_update(user_id, processed_message)
+                    final_source = "tool"
+
+                elif current_intent == "image_generation":
+                    log("ROUTING_DECISION", route="image_generation", user_id=user_id)
+                    current_response = await self._handle_image_generation(user_id, processed_message)
                     final_source = "tool"
 
                 elif current_intent == "spiegazione":
@@ -1188,6 +1194,94 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
         except Exception as e:
             logger.error("REMINDER_UPDATE_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
             return "Mi dispiace, ho avuto un problema con l'aggiornamento. Riprova.", "reminder"
+
+    # ═══════════════════════════════════════════════════════════════
+    # IMAGE GENERATION ROUTER — Bedrock integration
+    # ═══════════════════════════════════════════════════════════════
+
+    async def _handle_image_generation(self, user_id: str, message: str) -> str:
+        """
+        Handle image generation requests via AWS Bedrock.
+        Extracts prompt from message and generates image.
+        Returns: (response_text: str, source: str) → but we return only str here
+        """
+        try:
+            if not bedrock_image_service.enabled:
+                logger.warning("IMAGE_GENERATION_DISABLED user=%s bedrock_not_configured", user_id)
+                return "Mi dispiace, il servizio di generazione immagini non è disponibile al momento. Riprova più tardi.", "tool"
+            
+            # Extract the prompt from the message
+            # Remove common trigger phrases: "genera un'immagine di", "disegna", "crea una foto di", etc.
+            msg_clean = message.lower().strip()
+            
+            # Remove trigger keywords to get the actual prompt
+            trigger_words = [
+                "genera un'immagine", "genera un'immagine di", "genera una foto", "genera una foto di",
+                "crea un'immagine", "crea un'immagine di", "crea una foto", "crea una foto di",
+                "disegna", "disegna una foto", "disegna un'immagine", "disegna di",
+                "mostra una foto", "mostra un'immagine", "mostra una foto di", "mostra un'immagine di",
+                "crea un'illustrazione", "crea un'illustrazione di", "illustra", "illustra",
+                "crea una picture", "crea una picture di", "genera grafica", "dipingi",
+                "voglio vedere", "immagina che", "come appare", "come sarebbe",
+                "genera", "crea", "disegni", "fa una foto",
+            ]
+            
+            prompt = message
+            for trigger in trigger_words:
+                if msg_clean.startswith(trigger):
+                    prompt = message[len(trigger):].strip()
+                    break
+            
+            # Final cleanup: remove artifacts and ensure it's a proper prompt
+            prompt = prompt.strip()
+            if not prompt:
+                return "Dimmi cosa vuoi che disegni! Ad esempio: 'una montagna con le nuvole' o 'un unicorno che vola'.", "tool"
+            
+            # Call Bedrock service
+            logger.info("IMAGE_GENERATION_REQUEST user=%s prompt_len=%d", user_id, len(prompt))
+            image_url = await bedrock_image_service.generate_image(
+                prompt=prompt,
+                user_id=user_id,
+                width=512,
+                height=512,
+                steps=50,
+                guidance_scale=7.5
+            )
+            
+            if image_url is None:
+                logger.error("IMAGE_GENERATION_FAILED user=%s prompt=%s", user_id, prompt[:50])
+                return "Ho avuto un problema nella generazione dell'immagine. Riprova con una descrizione diversa o più semplice.", "tool"
+            
+            # Get user stats (for feedback)
+            stats = await bedrock_image_service.get_user_stats(user_id)
+            
+            # Build response with image URL
+            response_text = f"Ecco l'immagine che ho creato per te! ({stats.get('total_images_generated', 1)} generate fino ad ora)"
+            
+            # Prepare image response in the format frontend expects
+            image_response = {
+                "response": response_text,
+                "images": [
+                    {
+                        "url": image_url,
+                        "source": "AWS Bedrock - Stable Diffusion XL",
+                        "title": prompt,
+                        "cost": f"${stats.get('total_cost_usd', 0):.4f}"
+                    }
+                ],
+                "tts_text": response_text
+            }
+            
+            # For now, return just the text response
+            # Frontend will handle image_response separately if needed
+            logger.info("IMAGE_GENERATION_SUCCESS user=%s url_len=%d total_cost=$%.4f",
+                       user_id, len(image_url) if image_url else 0, stats.get('total_cost_usd', 0))
+            
+            return response_text, "tool"
+            
+        except Exception as e:
+            logger.error("IMAGE_GENERATION_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
+            return "Mi dispiace, ho avuto un errore nella generazione dell'immagine. Riprova tra poco.", "tool"
 
     async def _handle_icloud_setup(self, user_id: str, message: str) -> str:
         """

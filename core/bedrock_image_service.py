@@ -1,0 +1,425 @@
+"""
+AWS BEDROCK IMAGE SERVICE
+Servizio per generazione immagini via AWS Bedrock Stable Diffusion
+Supporta: generazione, salvamento S3, caching, cost tracking, rate limiting
+"""
+
+import asyncio
+import json
+import base64
+import logging
+import hashlib
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any
+from pathlib import Path
+
+from config.aws_config import bedrock_config
+from core.log import log
+from core.storage import storage
+
+logger = logging.getLogger(__name__)
+
+
+class BedrockImageService:
+    """
+    Servizio image generation via AWS Bedrock
+    
+    Features:
+    - Generazione immagini Stable Diffusion XL
+    - Salvamento automatico su S3
+    - Caching risultati per prompt identici
+    - Cost tracking per utente
+    - Rate limiting per sicurezza
+    """
+    
+    # Cost tracking
+    COST_PER_IMAGE_USD = 0.002  # AWS Bedrock Stable Diffusion pricing
+    
+    # Rate limiting
+    IMAGES_PER_USER_PER_DAY = 10
+    IMAGES_PER_USER_PER_HOUR = 3
+    
+    # Configurazione generazione
+    DEFAULT_CONFIG = {
+        "width": 512,
+        "height": 512,
+        "steps": 30,
+        "guidance_scale": 7.5,
+        "sampler": "K_DPMPP_2M"
+    }
+    
+    def __init__(self):
+        """Inizializza il servizio"""
+        
+        if not bedrock_config or not bedrock_config.is_configured():
+            logger.warning("❌ AWS Bedrock non configurato - servizio in fallback mode")
+            self.enabled = False
+        else:
+            self.enabled = True
+            self.runtime = bedrock_config.get_runtime_client()
+            self.s3 = bedrock_config.get_s3_client()
+            self.bucket = bedrock_config.get_bucket_name()
+            self.model_id = bedrock_config.get_model_id()
+            self.region = bedrock_config.get_region()
+            logger.info(f"✅ Bedrock Image Service initialized - model={self.model_id}")
+    
+    async def generate_image(
+        self,
+        prompt: str,
+        user_id: Optional[str] = None,
+        width: int = 512,
+        height: int = 512,
+        steps: int = 30,
+        guidance_scale: float = 7.5,
+        seed: Optional[int] = None
+    ) -> Optional[str]:
+        """
+        Genera immagine usando AWS Bedrock Stable Diffusion
+        
+        Args:
+            prompt: Descrizione immagine da generare
+            user_id: ID utente (per rate limiting e tracking)
+            width: Larghezza immagine (512, 768, 1024)
+            height: Altezza immagine
+            steps: Passi generazione (20-150, default 30)
+            guidance_scale: Fedeltà al prompt (default 7.5)
+            seed: Seed per riproducibilità (opzionale)
+        
+        Returns:
+            URL S3 immagine pubblica o None se fallisce
+        """
+        
+        try:
+            # Validazioni input
+            if not prompt or len(prompt.strip()) < 2:
+                logger.warning("BEDROCK_ERROR: Prompt troppo corto")
+                return None
+            
+            if len(prompt) > 1000:
+                logger.warning("BEDROCK_ERROR: Prompt troppo lungo")
+                prompt = prompt[:1000]
+            
+            # Validazione dimensioni
+            valid_widths = [512, 768, 1024]
+            if width not in valid_widths:
+                logger.warning(f"Invalid width {width}, defaulting to 512")
+                width = 512
+            if height not in valid_widths:
+                height = 512
+            
+            # Check rate limiting
+            if user_id:
+                if not await self._check_rate_limit(user_id):
+                    logger.warning(f"Rate limit exceeded for user {user_id}")
+                    return None
+            
+            # Check cache per prompt identico
+            cache_url = await self._check_cache(prompt)
+            if cache_url:
+                logger.info(f"Cache hit for prompt: {prompt[:50]}...")
+                log("BEDROCK_CACHE_HIT", prompt_len=len(prompt))
+                return cache_url
+            
+            log("BEDROCK_IMAGE_START", 
+                prompt_len=len(prompt), 
+                width=width, 
+                height=height,
+                steps=steps)
+            
+            if not self.enabled:
+                logger.error("Bedrock non abilitato")
+                log("BEDROCK_DISABLED")
+                return None
+            
+            # Prepara payload per Bedrock
+            payload = {
+                "text_prompts": [
+                    {
+                        "text": prompt,
+                        "weight": 1.0
+                    }
+                ],
+                "cfg_scale": guidance_scale,
+                "seed": seed if seed is not None else 0,
+                "steps": min(max(steps, 20), 150),  # Clamp 20-150
+                "height": height,
+                "width": width,
+                "sampler": self.DEFAULT_CONFIG["sampler"]
+            }
+            
+            # Chiama Bedrock (async wrapper intorno a sync boto3)
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                self._invoke_bedrock,
+                payload
+            )
+            
+            if not response:
+                log("BEDROCK_RESPONSE_EMPTY")
+                return None
+            
+            # Estrai immagine dal response
+            image_base64 = response.get("artifacts", [{}])[0].get("base64")
+            if not image_base64:
+                logger.error("No image in Bedrock response")
+                log("BEDROCK_NO_ARTIFACTS")
+                return None
+            
+            # Salva su S3
+            s3_url = await self._save_to_s3(image_base64, prompt)
+            
+            if not s3_url:
+                log("BEDROCK_S3_SAVE_FAILED")
+                return None
+            
+            # Cache il risultato
+            await self._cache_result(prompt, s3_url)
+            
+            # Track generazione
+            if user_id:
+                await self._track_generation(user_id, prompt, success=True)
+            
+            log("BEDROCK_IMAGE_SUCCESS", 
+                s3_url=s3_url,
+                prompt_len=len(prompt),
+                cost_usd=self.COST_PER_IMAGE_USD)
+            
+            return s3_url
+        
+        except Exception as e:
+            logger.error(f"Image generation failed: {e}", exc_info=True)
+            log("BEDROCK_IMAGE_ERROR", error=str(e)[:200])
+            
+            if user_id:
+                await self._track_generation(user_id, prompt, success=False)
+            
+            return None
+    
+    def _invoke_bedrock(self, payload: Dict[str, Any]) -> Optional[Dict]:
+        """
+        Chiama Bedrock API (sync).
+        Eseguito in executor per non bloccare event loop.
+        """
+        try:
+            response = self.runtime.invoke_model(
+                modelId=self.model_id,
+                body=json.dumps(payload),
+                contentType="application/json",
+                accept="application/json"
+            )
+            
+            response_body = json.loads(response["body"].read())
+            logger.info("✅ Bedrock invoked successfully")
+            return response_body
+        
+        except Exception as e:
+            logger.error(f"❌ Bedrock API error: {e}")
+            return None
+    
+    async def _save_to_s3(self, image_base64: str, prompt: str) -> Optional[str]:
+        """
+        Salva immagine decodificata da base64 su S3
+        Ritorna URL pubblico della risorsa
+        """
+        try:
+            # Decoda base64
+            try:
+                image_bytes = base64.b64decode(image_base64)
+            except Exception as e:
+                logger.error(f"Base64 decode failed: {e}")
+                return None
+            
+            if len(image_bytes) == 0:
+                logger.error("Image bytes is empty")
+                return None
+            
+            # Genera nome file sicuro
+            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            prompt_slug = prompt[:30].replace(" ", "_").lower()
+            prompt_slug = "".join(c for c in prompt_slug if c.isalnum() or c == "_")
+            filename = f"bedrock/{timestamp}_{prompt_slug}.png"
+            
+            # Upload su S3 (async wrapper)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                self._upload_s3_sync,
+                image_bytes,
+                filename
+            )
+            
+            # Genera URL pubblico
+            s3_url = f"https://{self.bucket}.s3.{self.region}.amazonaws.com/{filename}"
+            
+            logger.info(f"✅ Image saved to S3: {filename}")
+            log("IMAGE_SAVED_S3", url=s3_url, size_bytes=len(image_bytes))
+            
+            return s3_url
+        
+        except Exception as e:
+            logger.error(f"S3 save failed: {e}", exc_info=True)
+            log("BEDROCK_S3_ERROR", error=str(e)[:200])
+            return None
+    
+    def _upload_s3_sync(self, image_bytes: bytes, filename: str):
+        """
+        Upload sync a S3 - eseguito in executor
+        """
+        try:
+            self.s3.put_object(
+                Bucket=self.bucket,
+                Key=filename,
+                Body=image_bytes,
+                ContentType="image/png",
+                ACL="public-read",  # Rendi pubblico per accesso diretto
+                ServerSideEncryption="AES256",  # Crypto
+                CacheControl="max-age=31536000"  # Cache 1 anno
+            )
+            logger.info(f"S3 upload success: {filename}")
+        except Exception as e:
+            logger.error(f"S3 put_object failed: {e}")
+            raise
+    
+    async def _check_rate_limit(self, user_id: str) -> bool:
+        """
+        Verifica rate limiting per utente
+        Limiti: 3/ora, 10/giorno
+        """
+        try:
+            now = datetime.utcnow()
+            today = now.strftime("%Y-%m-%d")
+            this_hour = now.strftime("%Y-%m-%d-%H")
+            
+            # Check daily limit
+            daily_key = f"bedrock:limit:daily:{user_id}:{today}"
+            daily_count = await storage.load(daily_key, default=0)
+            
+            if daily_count >= self.IMAGES_PER_USER_PER_DAY:
+                logger.warning(f"Daily limit reached for {user_id}: {daily_count}/{self.IMAGES_PER_USER_PER_DAY}")
+                log("BEDROCK_DAILY_LIMIT", user_id=user_id, count=daily_count)
+                return False
+            
+            # Check hourly limit
+            hourly_key = f"bedrock:limit:hourly:{user_id}:{this_hour}"
+            hourly_count = await storage.load(hourly_key, default=0)
+            
+            if hourly_count >= self.IMAGES_PER_USER_PER_HOUR:
+                logger.warning(f"Hourly limit reached for {user_id}: {hourly_count}/{self.IMAGES_PER_USER_PER_HOUR}")
+                log("BEDROCK_HOURLY_LIMIT", user_id=user_id, count=hourly_count)
+                return False
+            
+            # Incrementa counter
+            await storage.save(daily_key, daily_count + 1)
+            await storage.save(hourly_key, hourly_count + 1)
+            
+            return True
+        
+        except Exception as e:
+            logger.error(f"Rate limit check failed: {e}")
+            # Default: allow on error (fail open)
+            return True
+    
+    async def _check_cache(self, prompt: str) -> Optional[str]:
+        """
+        Verifica cache per prompt identico (non rigenera stessa immagine)
+        Cache durata: 7 giorni
+        """
+        try:
+            # Hash il prompt come chiave
+            prompt_hash = hashlib.sha256(prompt.lower().encode()).hexdigest()[:16]
+            cache_key = f"bedrock:cache:{prompt_hash}"
+            
+            cached = await storage.load(cache_key, default=None)
+            
+            if cached:
+                # Verifica scadenza (7 giorni)
+                cached_time = datetime.fromisoformat(cached.get("timestamp", ""))
+                age = datetime.utcnow() - cached_time
+                
+                if age < timedelta(days=7):
+                    logger.info(f"Cache hit: {prompt_hash}")
+                    return cached.get("url")
+            
+            return None
+        
+        except Exception as e:
+            logger.debug(f"Cache check failed: {e}")
+            return None
+    
+    async def _cache_result(self, prompt: str, url: str):
+        """Salva risultato in cache"""
+        try:
+            prompt_hash = hashlib.sha256(prompt.lower().encode()).hexdigest()[:16]
+            cache_key = f"bedrock:cache:{prompt_hash}"
+            
+            await storage.save(cache_key, {
+                "url": url,
+                "prompt": prompt[:100],
+                "timestamp": datetime.utcnow().isoformat()
+            })
+        
+        except Exception as e:
+            logger.debug(f"Cache save failed: {e}")
+    
+    async def _track_generation(self, user_id: str, prompt: str, success: bool):
+        """
+        Traccia generazioni per cost tracking e analytics
+        """
+        try:
+            timestamp = datetime.utcnow().isoformat()
+            cost = self.COST_PER_IMAGE_USD if success else 0
+            
+            # Salva record
+            track_key = f"bedrock:tracking:{user_id}:{timestamp}"
+            await storage.save(track_key, {
+                "prompt": prompt[:100],
+                "success": success,
+                "cost_usd": cost,
+                "timestamp": timestamp
+            })
+            
+            # Aggiorna totale costo utente
+            total_cost_key = f"bedrock:cost:total:{user_id}"
+            current = await storage.load(total_cost_key, default=0)
+            await storage.save(total_cost_key, current + cost)
+            
+            log("BEDROCK_TRACKED", 
+                user_id=user_id, 
+                success=success, 
+                cost=cost)
+        
+        except Exception as e:
+            logger.debug(f"Tracking failed: {e}")
+    
+    async def get_user_stats(self, user_id: str) -> Dict[str, Any]:
+        """
+        Ritorna statistiche utente per image generation
+        """
+        try:
+            total_cost_key = f"bedrock:cost:total:{user_id}"
+            total_cost = await storage.load(total_cost_key, default=0)
+            
+            today = datetime.utcnow().strftime("%Y-%m-%d")
+            daily_key = f"bedrock:limit:daily:{user_id}:{today}"
+            daily_count = await storage.load(daily_key, default=0)
+            
+            return {
+                "total_images_generated": int(total_cost / self.COST_PER_IMAGE_USD) if self.COST_PER_IMAGE_USD > 0 else 0,
+                "total_cost_usd": round(total_cost, 4),
+                "images_today": daily_count,
+                "daily_limit": self.IMAGES_PER_USER_PER_DAY,
+                "remaining_today": max(0, self.IMAGES_PER_USER_PER_DAY - daily_count)
+            }
+        
+        except Exception as e:
+            logger.error(f"Stats retrieval failed: {e}")
+            return {}
+
+
+# Singleton globale
+try:
+    bedrock_image_service = BedrockImageService()
+except Exception as e:
+    logger.error(f"Failed to initialize Bedrock Image Service: {e}")
+    bedrock_image_service = None
