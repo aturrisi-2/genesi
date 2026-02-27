@@ -14,6 +14,7 @@ GPT chiamato SOLO da Relational Router o Knowledge Router.
 
 import logging
 import re
+import json
 from typing import Dict, Any, Optional, List, Tuple, Union
 from datetime import datetime, timedelta
 from core.log import log
@@ -1260,7 +1261,7 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
             
             # Prepare image response in the format frontend expects
             image_response = {
-                "response": response_text,
+                "text": response_text,
                 "images": [
                     {
                         "url": image_url,
@@ -1272,12 +1273,11 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
                 "tts_text": response_text
             }
             
-            # For now, return just the text response
-            # Frontend will handle image_response separately if needed
+            # Return JSON string with images so frontend can render gallery
             logger.info("IMAGE_GENERATION_SUCCESS user=%s url_len=%d total_cost=$%.4f",
                        user_id, len(image_url) if image_url else 0, stats.get('total_cost_usd', 0))
-            
-            return response_text, "tool"
+
+            return json.dumps(image_response, ensure_ascii=False), "tool"
             
         except Exception as e:
             logger.error("IMAGE_GENERATION_ERROR user=%s error=%s", user_id, str(e), exc_info=True)

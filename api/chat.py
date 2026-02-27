@@ -24,6 +24,7 @@ from core.intent_classifier import intent_classifier
 from auth.router import require_auth
 from auth.models import AuthUser
 from datetime import datetime
+import json
 
 router = APIRouter(prefix="/chat")
 
@@ -189,6 +190,16 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         if response.startswith("[NO_TTS]"):
             response = response.replace("[NO_TTS]", "").strip()
             tts_text = ""
+
+        # If backend returned structured payload with images, keep JSON for frontend
+        # and set tts_text to plain human text.
+        if isinstance(response, str) and response.strip().startswith('{"text"'):
+            try:
+                parsed = json.loads(response)
+                if isinstance(parsed, dict) and parsed.get("text"):
+                    tts_text = parsed.get("tts_text") or parsed.get("text")
+            except Exception:
+                pass
 
         return ChatResponse(
             response=response,
