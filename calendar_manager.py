@@ -215,7 +215,8 @@ class UnifiedCalendar:
             from auth.config import ADMIN_EMAILS
             is_admin = profile.get("email") in ADMIN_EMAILS
             has_apple = bool(profile.get("icloud_user") or (is_admin and self._icloud_user))
-            provider = 'apple' if has_apple else 'google' if g_service else 'local'
+            # Prefer Google if connected (explicit OAuth), fall back to iCloud, then local
+            provider = 'google' if g_service else 'apple' if has_apple else 'local'
 
         if provider == 'google':
             return self._add_google(user_id, title, dt)
@@ -223,14 +224,14 @@ class UnifiedCalendar:
             profile = storage.load_sync(f"profile:{user_id}", default={})
             from auth.config import ADMIN_EMAILS
             is_admin = profile.get("email") in ADMIN_EMAILS
-            
+
             icloud_user = profile.get("icloud_user") or (self._icloud_user if is_admin else None)
             icloud_pass = profile.get("icloud_password") or (self._icloud_pass if is_admin else None)
-            
+
             if icloud_user and icloud_pass:
                 from core.icloud_service import ICloudService
                 user_icloud = ICloudService(username=icloud_user, password=icloud_pass)
-                return user_icloud.create_event(title, dt, is_todo=True)
+                return user_icloud.create_event(title, dt, is_todo=False)  # VEVENT → Calendario
             return False
         else:
             return False

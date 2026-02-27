@@ -73,7 +73,7 @@ class ICloudService:
             return False
 
     def get_events(self, days: int = 7, force_sync: bool = False) -> List[Dict[str, Any]]:
-        """Recupera gli eventi (VEVENT) da tutte le liste di iCloud con Cache."""
+        """Recupera gli eventi (VEVENT) dai calendari iCloud. Salta i calendari VTODO-only (Promemoria)."""
         if not self.client:
             if not self._connect(): return []
 
@@ -86,17 +86,26 @@ class ICloudService:
         try:
             principal = self.client.principal()
             calendars = principal.calendars()
-            
+
             now = datetime.datetime.now()
             start_dt = now - datetime.timedelta(hours=1)
             end_dt = now + datetime.timedelta(days=days)
-            
+
             log("ICLOUD_EVENTS_SYNC_START")
             for calendar in calendars:
                 try:
                     name = getattr(calendar, 'name', 'Senza nome')
                     url = str(calendar.url).lower()
                     if any(x in url for x in ["inbox", "outbox", "notification"]): continue
+
+                    # Skip calendari che supportano solo VTODO (Promemoria/Reminders)
+                    try:
+                        supported = calendar.get_supported_components()
+                        if supported and 'VEVENT' not in supported:
+                            log("ICLOUD_EVENTS_SKIP_CAL", name=name, reason="vtodo_only")
+                            continue
+                    except Exception:
+                        pass  # Se non riesce a leggere i componenti, prova comunque
 
                     events = []
                     try:
@@ -139,6 +148,7 @@ class ICloudService:
                 except Exception: continue
             self._cache_events = all_events
             self._last_sync_events = time.time()
+            log("ICLOUD_EVENTS_SYNC_DONE", count=len(all_events))
             return all_events
         except Exception:
             return []
@@ -315,10 +325,10 @@ class ICloudService:
             return []
 
     def get_all_items(self, days: int = 7, force_sync: bool = False) -> List[Dict[str, Any]]:
-        """Cerca tutto: Eventi + Promemoria."""
-        return self.get_vtodo(days, force_sync) + self.get_events(days, force_sync)
+        """Ritorna solo eventi del Calendario (VEVENT). I Promemoria (VTODO) non vengono più sincronizzati."""
+        return self.get_events(days, force_sync)
 
-    def create_event(self, text: str, dt: datetime.datetime, is_todo: bool = True) -> bool:
+    def create_event(self, text: str, dt: datetime.datetime, is_todo: bool = False) -> bool:
         """Crea un nuovo elemento iCloud con Auto-Reconnect (v4.3)."""
         for attempt in range(2):
             try:
