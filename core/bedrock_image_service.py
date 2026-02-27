@@ -82,6 +82,25 @@ class BedrockImageService:
                 payload["seed"] = int(seed)
             return payload
 
+        # Modelli Amazon Titan/Nova (text-to-image)
+        if model.startswith("amazon.titan-image-generator") or model.startswith("amazon.nova-canvas"):
+            image_cfg: Dict[str, Any] = {
+                "numberOfImages": 1,
+                "height": height,
+                "width": width,
+                "cfgScale": guidance_scale,
+            }
+            if seed is not None:
+                image_cfg["seed"] = int(seed)
+
+            return {
+                "taskType": "TEXT_IMAGE",
+                "textToImageParams": {
+                    "text": prompt,
+                },
+                "imageGenerationConfig": image_cfg,
+            }
+
         # SDXL legacy
         return {
             "text_prompts": [

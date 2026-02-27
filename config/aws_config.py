@@ -30,13 +30,15 @@ class AWSBedrockConfig:
         "stable-image-core": "stability.stable-image-core-v1:0",
         "stable-image-ultra": "stability.stable-image-ultra-v1:0",
         "titan-image-generator": "amazon.titan-image-generator-v1",
+        "titan-image-generator-v2": "amazon.titan-image-generator-v2:0",
+        "nova-canvas": "amazon.nova-canvas-v1:0",
     }
     
     # Configurazione di default
     DEFAULT_CONFIG = {
         "region": "eu-west-1",
         "s3_bucket": "genesi-generated-images",
-        "default_model": "stability.stable-image-core-v1:0",
+        "default_model": "amazon.titan-image-generator-v2:0",
         "default_width": 512,
         "default_height": 512,
         "default_steps": 30,
