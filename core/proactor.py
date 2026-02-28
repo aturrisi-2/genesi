@@ -1600,26 +1600,51 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
             
             # Remove trigger keywords to get the actual prompt
             trigger_words = [
-                "genera un'immagine", "genera un'immagine di", "genera una foto", "genera una foto di",
-                "crea un'immagine", "crea un'immagine di", "crea una foto", "crea una foto di",
-                "disegna", "disegna una foto", "disegna un'immagine", "disegna di",
-                "mostra una foto", "mostra un'immagine", "mostra una foto di", "mostra un'immagine di",
-                "crea un'illustrazione", "crea un'illustrazione di", "illustra", "illustra",
-                "crea una picture", "crea una picture di", "genera grafica", "dipingi",
+                "genera un'immagine di", "genera un'immagine",
+                "genera una immagine di", "genera una immagine",
+                "genera un immagine di", "genera un immagine",
+                "genera una foto di", "genera una foto", "genera foto di", "genera foto",
+                "crea un'immagine di", "crea un'immagine",
+                "crea una immagine di", "crea una immagine",
+                "crea una foto di", "crea una foto",
+                "disegna una foto", "disegna un'immagine", "disegna di", "disegna",
+                "mostra una foto di", "mostra un'immagine di", "mostra una foto", "mostra un'immagine",
+                "crea un'illustrazione di", "crea un'illustrazione",
+                "illustra", "crea una picture di", "crea una picture",
+                "genera grafica", "dipingi", "disegni",
                 "voglio vedere", "immagina che", "come appare", "come sarebbe",
-                "genera", "crea", "disegni", "fa una foto",
+                "genera", "crea", "fa una foto",
             ]
-            
+
             prompt = message
             for trigger in trigger_words:
                 if msg_clean.startswith(trigger):
                     prompt = message[len(trigger):].strip()
                     break
-            
-            # Final cleanup: remove artifacts and ensure it's a proper prompt
+
+            # Final cleanup
             prompt = prompt.strip()
             if not prompt:
                 return "Dimmi cosa vuoi che disegni! Ad esempio: 'una montagna con le nuvole' o 'un unicorno che vola'.", "tool"
+
+            # Se il prompt è troppo lungo per Bedrock (max 512 chars), condensalo via LLM
+            if len(prompt) > 450:
+                try:
+                    condense_sys = (
+                        "Sei un prompt engineer per generatori di immagini. "
+                        "Ricevi una descrizione lunga e la condensi in una descrizione visiva chiara, "
+                        "entro 400 caratteri, mantenendo i dettagli più importanti. "
+                        "Rispondi SOLO con il prompt condensato, niente altro."
+                    )
+                    condensed = await llm_service._call_with_protection(
+                        "gpt-4o-mini", condense_sys, prompt, user_id=user_id, route="image_condensing"
+                    )
+                    if condensed and condensed.strip() and len(condensed.strip()) <= 500:
+                        logger.info("IMAGE_PROMPT_CONDENSED original=%d condensed=%d", len(prompt), len(condensed.strip()))
+                        prompt = condensed.strip()
+                except Exception as _ce:
+                    logger.warning("IMAGE_PROMPT_CONDENSE_FAILED error=%s — truncating", _ce)
+                    prompt = prompt[:500]
             
             # Call Bedrock service
             logger.info("IMAGE_GENERATION_REQUEST user=%s prompt_len=%d", user_id, len(prompt))

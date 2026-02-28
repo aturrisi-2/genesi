@@ -150,10 +150,11 @@ class IntentClassifier:
                 "accesso icloud", "account icloud", "attiva icloud", "usa icloud"
             ],
             "image_generation": [
-                "genera un'immagine", "crea un'immagine", "disegna",
-                "crea un'illustrazione", "immagina che", "genera una foto",
+                "genera un'immagine", "genera una immagine", "genera un immagine",
+                "crea un'immagine", "crea una immagine",
+                "disegna", "crea un'illustrazione", "genera una foto", "crea una foto",
                 "illustra", "crea una picture", "genera grafica", "dipingi", "disegni",
-                "genera immagine", "crea immagine"
+                "genera immagine", "crea immagine", "genera foto",
             ]
         }
     

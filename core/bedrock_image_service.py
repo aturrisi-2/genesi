@@ -175,9 +175,10 @@ class BedrockImageService:
                 logger.warning("BEDROCK_ERROR: Prompt troppo corto")
                 return None
             
-            if len(prompt) > 1000:
-                logger.warning("BEDROCK_ERROR: Prompt troppo lungo")
-                prompt = prompt[:1000]
+            # Bedrock textToImageParams.text ha limite di 512 caratteri
+            if len(prompt) > 512:
+                logger.warning("BEDROCK_PROMPT_TRUNCATED original_len=%d", len(prompt))
+                prompt = prompt[:512]
             
             # Validazione dimensioni
             valid_widths = [512, 768, 1024]
