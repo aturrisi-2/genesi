@@ -568,6 +568,16 @@ class IntentClassifier:
             "in realtà mi chiamo", "in realtà sono", "non vivo a",
             "non lavoro come", "non ho figli", "non ho un cane", "non ho una gatta",
             "il mio nome non è", "la mia città non è", "la mia professione non è",
+            # Correzioni professione ("hai sbagliato, non sono un ingegnere")
+            "hai sbagliato",
+            "non sono un ", "non sono una ",
+            # Varianti "in realtà"
+            "in realtà vivo", "in realtà lavoro", "in realtà ho",
+            # Cambiamenti di stato
+            "non lavoro più", "non abito più", "non vivo più a",
+            "non sono più", "non ho più",
+            # Negazioni partner/famiglia
+            "non sono sposato", "non sono sposata", "non ho animali",
         ]
         if any(kw in message_lower for kw in _correction_kw):
             log("INTENT_CLASSIFIED", intent="memory_correction", user_id=user_id, engine="regex_priority", message=message[:50])
@@ -614,6 +624,7 @@ Devi restituire esclusivamente un payload JSON valido in questa forma:
 REGOLE SPECIALI:
 - Se l'utente chiede "impegni", "agenda" o "programma", usa SEMPRE "reminder_list".
 - Se l'utente chiede "perchè" su un comportamento passato o manifesta insoddisfazione, usa "spiegazione".
+- Se il messaggio contiene "cosa pensi", "cosa ne pensi", "ti piace", "ti sembra", "sei d'accordo" riguardo al meteo/temperatura/freddo/caldo, usa "relational" o "chat_free" — NON "weather".
 - Se l'intenzione non è chiara, usa uno score basso.
 """
 

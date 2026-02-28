@@ -71,8 +71,11 @@ IDENTITY_TRIGGERS = [
     "come si chiamano i miei figli",
     "cosa mi piace", "che musica mi piace", "quali sono i miei interessi",
     "quali sono le mie preferenze", "come sono", "che tipo di persona sono",
-    "quale frutto mi piace", "cosa sai di me", "account collegati", 
-    "miei account", "quali account ho", "i miei account", "e icloud", "e google"
+    "quale frutto mi piace", "cosa sai di me", "account collegati",
+    "miei account", "quali account ho", "i miei account", "e icloud", "e google",
+    # Domande su Genesi stessa
+    "chi sei", "cosa sei", "descriviti", "presentati",
+    "come ti chiami", "qual è il tuo nome", "chi è genesi",
 ]
 
 RELATIONAL_TRIGGERS = [
@@ -683,6 +686,17 @@ class Proactor:
         logger.info("IDENTITY_ROUTER user=%s profile=%s", user_id,
                      {k: v for k, v in profile.items() if k != "entities" and v})
         logger.info("MEMORY_DIRECT_RESPONSE user=%s route=identity", user_id)
+
+        # Domanda su Genesi stessa (chi sei, cosa sei, presentati) — risposta deterministica
+        _genesi_self_kw = ["chi sei", "cosa sei", "descriviti", "presentati", "come ti chiami", "chi è genesi"]
+        if any(kw in msg_lower for kw in _genesi_self_kw):
+            _name_str = profile.get("name", "")
+            _name_part = f"di {_name_str}" if _name_str else "personale"
+            return (
+                f"Sono Genesi, la tua assistente {_name_part}. "
+                "Ti aiuto con promemoria, calendario, meteo, notizie, ricerca immagini e molto altro. "
+                "Sono qui quando hai bisogno."
+            )
 
         # Domanda account collegati — resta deterministica (sicurezza, no LLM)
         if any(kw in msg_lower for kw in ["account collegati", "miei account", "quali account ho", "icloud", "google", "apple"]):
