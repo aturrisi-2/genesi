@@ -381,28 +381,86 @@ class ReminderEngine:
             log("REMINDER_CANCEL_ERROR", user_id=user_id, error=str(e))
             return False
 
-    def delete_reminder(self, user_id: str, reminder_id: str) -> bool:
+    def update_reminder_cloud_ids(self, user_id: str, reminder_id: str,
+                                   icloud_uid: str = None, google_event_id: str = None) -> bool:
+        """Aggiorna un reminder locale con gli ID cloud (icloud_uid, google_event_id)."""
         try:
             reminders = self._load_reminders(user_id)
-            updated = [r for r in reminders if r.get("id") != reminder_id]
-            if len(updated) != len(reminders):
-                return self._save_reminders(user_id, updated)
+            for r in reminders:
+                if r.get("id") == reminder_id:
+                    if icloud_uid:
+                        r["icloud_uid"] = icloud_uid
+                    if google_event_id:
+                        r["google_event_id"] = google_event_id
+                    return self._save_reminders(user_id, reminders)
             return False
         except Exception as e:
-            log("REMINDER_DELETE_ERROR", user_id=user_id, error=str(e))
+            log("REMINDER_UPDATE_CLOUD_IDS_ERROR", user_id=user_id, error=str(e))
             return False
 
-    def delete_all_pending(self, user_id: str) -> int:
+    def delete_reminder(self, user_id: str, reminder_id: str) -> Optional[dict]:
+        """
+        Cancella reminder dal JSON locale.
+        Ritorna il reminder cancellato (con icloud_uid/google_event_id) per la cancellazione cloud.
+        Per retrocompatibilità: truthy se trovato.
+        """
         try:
             reminders = self._load_reminders(user_id)
+            deleted = next((r for r in reminders if r.get("id") == reminder_id), None)
+            if deleted:
+                updated = [r for r in reminders if r.get("id") != reminder_id]
+                if self._save_reminders(user_id, updated):
+                    return deleted
+            return None
+        except Exception as e:
+            log("REMINDER_DELETE_ERROR", user_id=user_id, error=str(e))
+            return None
+
+    def delete_all_pending(self, user_id: str) -> list:
+        """
+        Cancella tutti i pending dal JSON locale.
+        Ritorna lista dei reminder cancellati (con cloud IDs).
+        Per retrocompatibilità: len() dà il conteggio.
+        """
+        try:
+            reminders = self._load_reminders(user_id)
+            pending = [r for r in reminders if r.get("status") == "pending"]
             updated = [r for r in reminders if r.get("status") != "pending"]
-            deleted_count = len(reminders) - len(updated)
-            if deleted_count > 0:
+            if pending:
                 self._save_reminders(user_id, updated)
-            return deleted_count
+            return pending
         except Exception as e:
             log("REMINDER_DELETE_ALL_ERROR", user_id=user_id, error=str(e))
-            return 0
+            return []
+
+    async def delete_cloud_events(self, user_id: str, deleted_reminders: list) -> dict:
+        """
+        Cancella su iCloud/Google gli eventi associati ai reminder cancellati.
+        Ritorna conteggio per provider.
+        """
+        if not deleted_reminders:
+            return {}
+        counts = {"icloud": 0, "google": 0}
+        try:
+            from calendar_manager import calendar_manager
+            for r in deleted_reminders:
+                icloud_uid = r.get("icloud_uid")
+                google_event_id = r.get("google_event_id")
+                if icloud_uid:
+                    ok = await asyncio.to_thread(
+                        calendar_manager.delete_event, user_id, "apple", icloud_uid
+                    )
+                    if ok:
+                        counts["icloud"] += 1
+                if google_event_id:
+                    ok = await asyncio.to_thread(
+                        calendar_manager.delete_event, user_id, "google", None, google_event_id
+                    )
+                    if ok:
+                        counts["google"] += 1
+        except Exception as e:
+            log("CLOUD_DELETE_EVENTS_ERROR", user_id=user_id, error=str(e))
+        return counts
 
     def get_latest_pending(self, user_id: str) -> Optional[Dict[str, Any]]:
         try:

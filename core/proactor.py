@@ -1338,8 +1338,14 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 if _cal_tasks:
                     _cal_results = await asyncio.gather(*_cal_tasks, return_exceptions=True)
                     for _name, _key, _result in zip(_cal_names, _cal_keys, _cal_results):
-                        if _result is True:
+                        if _result and not isinstance(_result, Exception):
                             cloud_destinations.append(_name)
+                            # Salva UID cloud nel reminder locale per la cancellazione futura
+                            if reminder_id and isinstance(_result, str):
+                                if _key == "apple":
+                                    reminder_engine.update_reminder_cloud_ids(user_id, reminder_id, icloud_uid=_result)
+                                elif _key == "google":
+                                    reminder_engine.update_reminder_cloud_ids(user_id, reminder_id, google_event_id=_result)
                         else:
                             logger.warning("CALENDAR_WRITE_FAIL provider=%s user=%s", _key, user_id)
 
@@ -1427,11 +1433,12 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
             msg_lower = message.lower()
             
             # 1️⃣ "tutti" → elimina tutti
-            if "tutti" in msg_lower:
-                deleted_count = reminder_engine.delete_all_pending(user_id)
-                
-                if deleted_count > 0:
-                    return f"Fatto! Ho rimosso tutti i {deleted_count} promemoria dall'agenda.", "reminder"
+            if "tutti" in msg_lower or any(kw in msg_lower for kw in ["passati", "vecchi", "scaduti"]):
+                deleted = reminder_engine.delete_all_pending(user_id)
+
+                if deleted:
+                    asyncio.create_task(reminder_engine.delete_cloud_events(user_id, deleted))
+                    return f"Fatto! Ho rimosso tutti i {len(deleted)} promemoria dall'agenda e dai calendari collegati.", "reminder"
                 else:
                     return "Non ho trovato promemoria attivi da cancellare, l'agenda è già pulita.", "reminder"
             
@@ -1445,9 +1452,10 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
                 
                 if 0 <= index < len(reminders):
                     reminder_id = reminders[index]["id"]
-                    success = reminder_engine.delete_reminder(user_id, reminder_id)
-                    
-                    if success:
+                    deleted = reminder_engine.delete_reminder(user_id, reminder_id)
+
+                    if deleted:
+                        asyncio.create_task(reminder_engine.delete_cloud_events(user_id, [deleted]))
                         return f"Ho cancellato il promemoria {index + 1}.", "reminder"
                     else:
                         return "Mi dispiace, non sono riuscito a cancellare il promemoria.", "reminder"
@@ -1473,9 +1481,10 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
                 # Fuzzy match semplice: cerca testo parziale
                 for reminder in reminders:
                     if search_text in reminder["text"].lower():
-                        success = reminder_engine.delete_reminder(user_id, reminder["id"])
-                        
-                        if success:
+                        deleted = reminder_engine.delete_reminder(user_id, reminder["id"])
+
+                        if deleted:
+                            asyncio.create_task(reminder_engine.delete_cloud_events(user_id, [deleted]))
                             return f"Ho cancellato il promemoria: {reminder['text']}", "reminder"
                         else:
                             return "Mi dispiace, non sono riuscito a cancellare il promemoria.", "reminder"
@@ -1484,11 +1493,12 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
             
             # 4️⃣ Default → elimina il più recente
             latest_reminder = reminder_engine.get_latest_pending(user_id)
-            
+
             if latest_reminder:
-                success = reminder_engine.delete_reminder(user_id, latest_reminder["id"])
-                
-                if success:
+                deleted = reminder_engine.delete_reminder(user_id, latest_reminder["id"])
+
+                if deleted:
+                    asyncio.create_task(reminder_engine.delete_cloud_events(user_id, [deleted]))
                     return "Ho cancellato l'ultimo promemoria.", "reminder"
                 else:
                     return "Mi dispiace, non sono riuscito a cancellare il promemoria.", "reminder"

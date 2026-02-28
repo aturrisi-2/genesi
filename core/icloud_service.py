@@ -450,13 +450,41 @@ class ICloudService:
                 calendar_history.save()
 
                 log("ICLOUD_ITEM_CREATED", type="todo" if is_todo else "event", text=text, uid=uid)
-                return True
+                return uid  # ritorna UID (stringa) — retrocompatibile con bool check
             except Exception as e:
                 log("ICLOUD_CREATE_RETRY", attempt=attempt+1, error=str(e))
                 if attempt == 1:
                     log("ICLOUD_CREATE_ERROR", error=str(e), level="ERROR")
-                    return False
-        return False
+                    return None
+        return None
+
+    def delete_item_by_uid(self, uid: str, is_todo: bool = False) -> bool:
+        """
+        Elimina un evento/VTODO da iCloud CalDAV per UID.
+        Itera tutti i calendari finché non trova e cancella l'oggetto.
+        """
+        try:
+            self._connect()
+            principal = self.client.principal()
+            for calendar in principal.calendars():
+                try:
+                    if is_todo:
+                        obj = calendar.todo_by_uid(uid)
+                    else:
+                        obj = calendar.event_by_uid(uid)
+                    obj.delete()
+                    # Rimuovi dalla cache
+                    self._cache_vtodo = [x for x in self._cache_vtodo if x.get("guid") != uid]
+                    self._cache_events = [x for x in self._cache_events if x.get("guid") != uid]
+                    log("ICLOUD_ITEM_DELETED", uid=uid, type="todo" if is_todo else "event")
+                    return True
+                except Exception:
+                    continue
+            log("ICLOUD_ITEM_DELETE_NOT_FOUND", uid=uid)
+            return False
+        except Exception as e:
+            log("ICLOUD_DELETE_ERROR", uid=uid, error=str(e))
+            return False
 
     def get_reminders(self, days: int = 7): return self.get_all_items(days)
     def create_reminder(self, text, dt): return self.create_event(text, dt, is_todo=True)

@@ -238,23 +238,50 @@ class UnifiedCalendar:
 
     def _add_google(self, user_id, title, dt):
         g_service = self._get_google_service(user_id)
-        if not g_service or not dt: 
-            return False
-            
+        if not g_service or not dt:
+            return None
+
         iso_str = dt.isoformat()
         event_body = {
             'summary': title,
             'start': {'dateTime': iso_str, 'timeZone': 'Europe/Rome'},
             'end': {'dateTime': (dt + timedelta(hours=1)).isoformat(), 'timeZone': 'Europe/Rome'},
         }
-        
+
         try:
-            g_service.events().insert(calendarId='primary', body=event_body).execute()
-            log("GOOGLE_EVENT_CREATED", user_id=user_id, title=title)
-            return True
+            result = g_service.events().insert(calendarId='primary', body=event_body).execute()
+            event_id = result.get('id')
+            log("GOOGLE_EVENT_CREATED", user_id=user_id, title=title, event_id=event_id)
+            return event_id  # stringa — retrocompatibile con bool check
         except Exception as e:
             log("GOOGLE_EVENT_ERROR", user_id=user_id, error=str(e))
-            return False
+            return None
+
+    def delete_event(self, user_id: str, provider: str,
+                     uid: str = None, event_id: str = None) -> bool:
+        """
+        Elimina un evento da iCloud (per UID CalDAV) o Google (per event_id).
+        """
+        try:
+            if provider in ('apple', 'icloud') and uid:
+                profile = storage.load_sync(f"profile:{user_id}", default={})
+                from auth.config import ADMIN_EMAILS
+                is_admin = profile.get("email") in ADMIN_EMAILS
+                icloud_user = profile.get("icloud_user") or (self._icloud_user if is_admin else None)
+                icloud_pass = profile.get("icloud_password") or (self._icloud_pass if is_admin else None)
+                if icloud_user and icloud_pass:
+                    from core.icloud_service import ICloudService
+                    svc = ICloudService(username=icloud_user, password=icloud_pass)
+                    return svc.delete_item_by_uid(uid, is_todo=False)
+            elif provider == 'google' and event_id:
+                g_service = self._get_google_service(user_id)
+                if g_service:
+                    g_service.events().delete(calendarId='primary', eventId=event_id).execute()
+                    log("GOOGLE_EVENT_DELETED", user_id=user_id, event_id=event_id)
+                    return True
+        except Exception as e:
+            log("CALENDAR_DELETE_ERROR", user_id=user_id, provider=provider, error=str(e))
+        return False
 
     async def check_async(self) -> List[Dict[str, Any]]:
         """Deprecated global check."""
