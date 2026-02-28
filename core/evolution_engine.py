@@ -9,7 +9,7 @@ import os
 import logging
 import random
 from typing import Dict, Any, Optional, List
-from openai import AsyncOpenAI, RateLimitError, APIError, APIConnectionError
+from openai import RateLimitError, APIError, APIConnectionError
 from core.memory_brain import memory_brain
 from core.identity_filter import contains_forbidden_patterns, contains_generic_patterns
 from core.context_assembler import build_conversation_context
@@ -20,12 +20,7 @@ logger = logging.getLogger(__name__)
 LLM_MODEL = "gpt-4o-mini"
 LLM_FALLBACK_MODEL = "gpt-4o-mini"
 
-_api_key = os.environ.get("OPENAI_API_KEY", "")
-if not _api_key or _api_key.startswith("sk-test"):
-    logger.warning("OPENAI_API_KEY missing or test-only — LLM calls will fail. No QWEN fallback.")
-
-client = AsyncOpenAI()
-logger.info("LLM_ENGINE=%s", LLM_MODEL)
+logger.info("LLM_ENGINE=%s via llm_service (OpenRouter primary)", LLM_MODEL)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -397,12 +392,11 @@ async def _call_llm_model(user_id: str, prompt: str, model: str, is_primary: boo
     tag_prefix = "LLM_PRIMARY" if is_primary else "LLM_FALLBACK"
     try:
         logger.info("%s_REQUEST user=%s model=%s", tag_prefix, user_id, model)
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[{"role": "system", "content": prompt}],
-            temperature=0.7
+        from core.llm_service import llm_service
+        generated = await llm_service._call_with_protection(
+            model, prompt, "", user_id=user_id, route="evolution"
         )
-        generated = response.choices[0].message.content.strip()
+        generated = (generated or "").strip()
 
         # Identity filter — check for forbidden patterns
         if contains_forbidden_patterns(generated):

@@ -6,7 +6,6 @@ Motore principale per generazione risposte evolutive con memoria persistente
 import logging
 import random
 from typing import Optional, Dict, Any, List
-from openai import AsyncOpenAI, RateLimitError, APIError, APIConnectionError
 from core.emotion_analyzer import analyze_emotion
 from core.relational_state import relational_state
 from core.semantic_memory import semantic_memory
@@ -14,8 +13,6 @@ from core.identity_filter import filter_response_identity, build_identity_safe_p
 from core.episodic_memory import episodic_memory
 
 logger = logging.getLogger(__name__)
-
-client = AsyncOpenAI()
 
 async def generate_relational_response(user_id: str, user_profile: dict, message: str, 
                                       emotion: Optional[Dict[str, Any]] = None, 
@@ -69,16 +66,17 @@ async def generate_relational_response(user_id: str, user_profile: dict, message
         # 7️⃣ Costruzione prompt con memoria completa
         prompt = build_identity_safe_prompt(full_profile, state, emotion, message)
         
-        # 8️⃣ Generazione risposta con GPT-4 (con fallback neurale)
+        # 8️⃣ Generazione risposta via llm_service (OpenRouter primary, OpenAI fallback)
         try:
-            response = await client.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "system", "content": prompt}],
-                temperature=0.7
+            from core.llm_service import llm_service
+            generated_response = await llm_service._call_with_protection(
+                "gpt-4o", prompt, "", user_id=user_id, route="relational"
             )
-            generated_response = response.choices[0].message.content.strip()
-        except (RateLimitError, APIError, APIConnectionError) as llm_error:
-            logger.warning(f"LLM_FALLBACK_ACTIVATED user_id={user_id} error_type={type(llm_error).__name__} error={str(llm_error)[:100]}")
+            generated_response = (generated_response or "").strip()
+            if not generated_response:
+                raise ValueError("empty response")
+        except Exception as llm_error:
+            logger.warning(f"LLM_FALLBACK_ACTIVATED user_id={user_id} error={str(llm_error)[:100]}")
             generated_response = await _generate_neural_fallback(user_id, full_profile, message, emotion, state)
         
         # 9️⃣ FILTRO IDENTITÀ - controllo post-processing
