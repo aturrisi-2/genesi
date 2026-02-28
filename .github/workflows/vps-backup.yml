@@ -17,8 +17,6 @@ jobs:
     steps:
       - name: Create backup over SSH
         uses: appleboy/ssh-action@v1.2.0
-        env:
-          REF_INPUT: ${{ inputs.ref || github.ref_name }}
         with:
           host: ${{ secrets.VPS_HOST || secrets.SSH_HOST || secrets.SERVER_IP }}
           username: ${{ secrets.VPS_USER || secrets.SSH_USER }}
@@ -31,6 +29,7 @@ jobs:
             set -euo pipefail
             APP_DIR=/opt/genesi
             BACKUP_ROOT=/opt/genesi/backups
+            REF_INPUT="${{ github.event.inputs.ref || github.ref_name }}"
             REF_SAFE="$(echo "$REF_INPUT" | tr '/ ' '__')"
             TS="$(date -u +%Y%m%dT%H%M%SZ)"
             DEST_DIR="$BACKUP_ROOT/$TS-$REF_SAFE"
