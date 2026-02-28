@@ -1142,33 +1142,49 @@ function renderImages(images) {
 }
 
 function renderMessageContent(text) {
+  if (!text) return "";
+
   // 1. Placeholder replacement (e.g., token for auth links)
   const token = getAuthToken() || "";
-  let processed = text.replace(/{{token}}/g, token);
-  processed = processed.replace(/%7B%7Btoken%7D%7D/g, token); // URL-encoded version
+  let html = text.replace(/{{token}}/g, token);
+  html = html.replace(/%7B%7Btoken%7D%7D/g, token); // URL-encoded version
 
-  // Escape HTML base
+  // Escape HTML helper
   const escape = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   // 2. Code blocks (```lang ... ```)
-  let html = processed.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+  html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
     return `<pre class="code-block"><code class="${lang ? 'lang-' + lang : ''}">${escape(code.trim())}</code></pre>`;
   });
 
-  // 3. Markdown Links [Label](URL) — sostituisce {{token}} con il JWT reale
+  // 3. Markdown Links [Label](URL)
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
-    const resolvedUrl = url.replace(/\{\{token\}\}|%7B%7Btoken%7D%7D/gi, getAuthToken() || '');
+    const resolvedUrl = url.replace(/\{\{token\}\}|%7B%7Btoken%7D%7D/gi, token);
     return `<a href="${resolvedUrl}" target="_blank" class="chat-link">${escape(label)}</a>`;
   });
 
-  // 4. Inline code (`code`)
+  // 4. Bold and Italic
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+  // 5. Inline code (`code`)
   html = html.replace(/`([^`]+)`/g, (_, code) => `<code class="inline-code">${escape(code)}</code>`);
 
-  // 5. Newline -> <br> (only outside pre blocks)
-  html = html.replace(/(?<!<\/pre>)\n(?!<pre)/g, '<br>');
+  // 6. Lists
+  // Simplified: lines starting with "- " or "* " become list items
+  html = html.split('\n').map(line => {
+    if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+      return `<li style="margin-left: 20px; margin-bottom: 4px; list-style-type: none;">✦ ${line.trim().substring(2)}</li>`;
+    }
+    return line;
+  }).join('\n');
+
+  // 7. Newline -> <br> (only outside pre and li blocks)
+  html = html.replace(/(?<!<\/pre>|<\/li>)\n(?!<pre|<li)/g, '<br>');
 
   return html;
 }
+
 
 function addMessage(text, sender) {
   const el = document.createElement('div');

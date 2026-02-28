@@ -58,7 +58,8 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: -1; /* Spostato dietro */
+  z-index: -1;
+  /* Spostato dietro */
   background:
     radial-gradient(ellipse 50% 40% at 50% 30%,
       rgba(10, 10, 20, 0.4) 0%,
@@ -78,7 +79,8 @@ body::after {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 0; /* Portato sopra lo sfondo ma sotto il contenuto */
+  z-index: 0;
+  /* Portato sopra lo sfondo ma sotto il contenuto */
   opacity: 0.035;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.8'/%3E%3C/svg%3E");
   background-repeat: repeat;
@@ -175,59 +177,117 @@ body::after {
    =============================== */
 /* ─── BUBBLE MESSAGES ──────────────────────────────────── */
 .message {
-  border-radius: 18px;
-  /* meno pill, più adattivo al contenuto */
-  padding: 12px 18px;
-  max-width: 72%;
+  position: relative;
+  border-radius: 20px;
+  padding: 14px 22px;
+  max-width: 82%;
   width: fit-content;
-  font-size: 14px;
-  line-height: 1.5;
-  border: none;
-  display: inline-block;
-  animation: msgAppear 0.3s ease-out forwards;
+  font-size: 15.5px;
+  line-height: 1.65;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: block;
+  margin-bottom: 24px;
+  animation: msgAppear 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   word-break: break-word;
   white-space: normal;
   will-change: transform, opacity;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  letter-spacing: 0.2px;
+}
+
+.message:hover {
+  transform: translateY(-2px);
+}
+
+/* ── Assistant Icon (Sparkle) ── */
+.message.genesi::before {
+  content: '✦';
+  position: absolute;
+  left: -32px;
+  top: 10px;
+  font-size: 20px;
+  color: #fbd38d;
+  text-shadow: 0 0 12px rgba(251, 211, 141, 0.5);
+  animation: sparkleRotate 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes sparkleRotate {
+  0% {
+    transform: scale(1) rotate(0deg);
+    opacity: 0.8;
+  }
+
+  50% {
+    transform: scale(1.2) rotate(180deg);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1) rotate(360deg);
+    opacity: 0.8;
+  }
 }
 
 /* ── CODE BLOCK dentro le bubble ── */
 .message pre.code-block {
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(100, 180, 255, 0.2);
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin: 8px 0;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 12px 0;
   overflow-x: auto;
-  font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
-  font-size: 0.82rem;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 0.85rem;
   line-height: 1.5;
-  white-space: pre;
-  width: 100%;
-  box-sizing: border-box;
+  color: #e2e8f0;
 }
 
 .message code.inline-code {
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
-  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 3px 7px;
   font-family: 'Fira Code', 'Consolas', monospace;
-  font-size: 0.85em;
+  font-size: 0.9em;
   color: #7dd3fc;
+  border: 1px solid rgba(125, 211, 252, 0.2);
+}
+
+/* ── Typography and lists ── */
+.message strong {
+  color: #fff;
+  font-weight: 700;
+}
+
+.message em {
+  color: rgba(255, 255, 255, 0.9);
+  font-style: italic;
 }
 
 .message.user {
-  background: linear-gradient(135deg, #1a3a5c, #0e6494);
-  color: #cce4ff;
+  background: linear-gradient(135deg, rgba(20, 60, 100, 0.82), rgba(10, 80, 130, 0.82));
+  color: #f0f9ff;
   align-self: flex-end;
-  box-shadow: 0 0 18px rgba(30, 140, 220, 0.35), 0 0 6px rgba(30, 140, 220, 0.2);
+  border-color: rgba(56, 189, 248, 0.25);
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.35),
+    0 0 15px rgba(56, 189, 248, 0.12);
+  margin-right: 12px;
 }
 
 .message.genesi {
-  background: linear-gradient(135deg, #2a1e0a, #3d2800);
-  color: #f0d090;
+  background: linear-gradient(135deg, rgba(40, 32, 20, 0.88), rgba(55, 45, 10, 0.88));
+  color: #fef3c7;
   align-self: flex-start;
-  box-shadow: 0 0 18px rgba(200, 130, 20, 0.3), 0 0 6px rgba(200, 130, 20, 0.15);
+  border-color: rgba(251, 211, 141, 0.2);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    0 0 15px rgba(251, 211, 141, 0.08);
+  margin-left: 40px;
+  /* Space for the icon */
 }
+
 
 @keyframes msgAppear {
   from {
@@ -371,37 +431,132 @@ textarea#text-input:focus {
 
 /* ─── NEBULOSA ASCOLTO — Mic continuo ──────────────────────── */
 @keyframes nebulaListening {
-  0%   { box-shadow: 0 0 0 0 rgba(74,180,240,0), 0 0 10px rgba(74,180,240,0.10), 0 0 22px rgba(74,180,240,0.05); border-color: rgba(74,180,240,0.30); }
-  40%  { box-shadow: 0 0 0 3px rgba(74,180,240,0.06), 0 0 18px rgba(100,160,255,0.18), 0 0 38px rgba(74,180,240,0.08); border-color: rgba(100,160,255,0.50); }
-  70%  { box-shadow: 0 0 0 1px rgba(160,100,240,0.04), 0 0 14px rgba(130,120,255,0.12), 0 0 30px rgba(160,100,240,0.06); border-color: rgba(160,100,240,0.35); }
-  100% { box-shadow: 0 0 0 0 rgba(74,180,240,0), 0 0 10px rgba(74,180,240,0.10), 0 0 22px rgba(74,180,240,0.05); border-color: rgba(74,180,240,0.30); }
+  0% {
+    box-shadow: 0 0 0 0 rgba(74, 180, 240, 0), 0 0 10px rgba(74, 180, 240, 0.10), 0 0 22px rgba(74, 180, 240, 0.05);
+    border-color: rgba(74, 180, 240, 0.30);
+  }
+
+  40% {
+    box-shadow: 0 0 0 3px rgba(74, 180, 240, 0.06), 0 0 18px rgba(100, 160, 255, 0.18), 0 0 38px rgba(74, 180, 240, 0.08);
+    border-color: rgba(100, 160, 255, 0.50);
+  }
+
+  70% {
+    box-shadow: 0 0 0 1px rgba(160, 100, 240, 0.04), 0 0 14px rgba(130, 120, 255, 0.12), 0 0 30px rgba(160, 100, 240, 0.06);
+    border-color: rgba(160, 100, 240, 0.35);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(74, 180, 240, 0), 0 0 10px rgba(74, 180, 240, 0.10), 0 0 22px rgba(74, 180, 240, 0.05);
+    border-color: rgba(74, 180, 240, 0.30);
+  }
 }
+
 /* ─── BOCCA — labbra che si aprono/chiudono mentre Genesi parla ─── */
 /* Ritmo parlato irregolare: chiusa→aperta con ampiezza variabile       */
 @keyframes nebulaSpeaking {
-  0%   { border-radius: 20px;                box-shadow: 0 0 6px rgba(255,150,70,0.20),  0 0 0 1px rgba(210,130,30,0.30); border-color: rgba(210,130,30,0.35); }
-  8%   { border-radius: 20px 20px 34px 34px; box-shadow: 0 -8px 16px rgba(255,185,90,0.60), 0 10px 18px rgba(255,130,50,0.70),  0 0 30px rgba(240,155,45,0.25); border-color: rgba(255,185,75,0.80); }
-  17%  { border-radius: 20px;                box-shadow: 0 0 4px rgba(255,150,70,0.14);                                                                                         border-color: rgba(210,130,30,0.25); }
-  25%  { border-radius: 20px 20px 42px 42px; box-shadow: 0 -13px 24px rgba(255,195,95,0.78), 0 16px 28px rgba(255,145,55,0.88), 0 0 44px rgba(240,160,48,0.32); border-color: rgba(255,205,95,0.98); }
-  34%  { border-radius: 20px;                box-shadow: 0 0 4px rgba(255,150,70,0.14);                                                                                         border-color: rgba(210,130,30,0.25); }
-  42%  { border-radius: 20px 20px 28px 28px; box-shadow: 0 -6px 12px rgba(255,175,85,0.48), 0 8px 14px rgba(255,125,50,0.54),  0 0 24px rgba(240,152,44,0.18); border-color: rgba(255,170,68,0.65); }
-  50%  { border-radius: 20px;                box-shadow: 0 0 5px rgba(255,150,70,0.16);                                                                                         border-color: rgba(210,130,30,0.28); }
-  58%  { border-radius: 20px 20px 38px 38px; box-shadow: 0 -11px 20px rgba(255,190,92,0.70), 0 14px 23px rgba(255,140,54,0.80), 0 0 40px rgba(240,158,47,0.28); border-color: rgba(255,200,92,0.90); }
-  66%  { border-radius: 20px;                box-shadow: 0 0 4px rgba(255,150,70,0.13);                                                                                         border-color: rgba(210,130,30,0.23); }
-  75%  { border-radius: 20px 20px 30px 30px; box-shadow: 0 -7px 14px rgba(255,178,87,0.52), 0 9px 16px rgba(255,128,51,0.60),  0 0 26px rgba(240,154,45,0.20); border-color: rgba(255,172,70,0.70); }
-  83%  { border-radius: 20px;                box-shadow: 0 0 5px rgba(255,150,70,0.16);                                                                                         border-color: rgba(210,130,30,0.28); }
-  92%  { border-radius: 20px 20px 40px 40px; box-shadow: 0 -12px 22px rgba(255,193,94,0.74), 0 15px 26px rgba(255,142,55,0.84), 0 0 42px rgba(240,159,47,0.30); border-color: rgba(255,202,93,0.94); }
-  100% { border-radius: 20px;                box-shadow: 0 0 6px rgba(255,150,70,0.20),  0 0 0 1px rgba(210,130,30,0.30); border-color: rgba(210,130,30,0.35); }
+  0% {
+    border-radius: 20px;
+    box-shadow: 0 0 6px rgba(255, 150, 70, 0.20), 0 0 0 1px rgba(210, 130, 30, 0.30);
+    border-color: rgba(210, 130, 30, 0.35);
+  }
+
+  8% {
+    border-radius: 20px 20px 34px 34px;
+    box-shadow: 0 -8px 16px rgba(255, 185, 90, 0.60), 0 10px 18px rgba(255, 130, 50, 0.70), 0 0 30px rgba(240, 155, 45, 0.25);
+    border-color: rgba(255, 185, 75, 0.80);
+  }
+
+  17% {
+    border-radius: 20px;
+    box-shadow: 0 0 4px rgba(255, 150, 70, 0.14);
+    border-color: rgba(210, 130, 30, 0.25);
+  }
+
+  25% {
+    border-radius: 20px 20px 42px 42px;
+    box-shadow: 0 -13px 24px rgba(255, 195, 95, 0.78), 0 16px 28px rgba(255, 145, 55, 0.88), 0 0 44px rgba(240, 160, 48, 0.32);
+    border-color: rgba(255, 205, 95, 0.98);
+  }
+
+  34% {
+    border-radius: 20px;
+    box-shadow: 0 0 4px rgba(255, 150, 70, 0.14);
+    border-color: rgba(210, 130, 30, 0.25);
+  }
+
+  42% {
+    border-radius: 20px 20px 28px 28px;
+    box-shadow: 0 -6px 12px rgba(255, 175, 85, 0.48), 0 8px 14px rgba(255, 125, 50, 0.54), 0 0 24px rgba(240, 152, 44, 0.18);
+    border-color: rgba(255, 170, 68, 0.65);
+  }
+
+  50% {
+    border-radius: 20px;
+    box-shadow: 0 0 5px rgba(255, 150, 70, 0.16);
+    border-color: rgba(210, 130, 30, 0.28);
+  }
+
+  58% {
+    border-radius: 20px 20px 38px 38px;
+    box-shadow: 0 -11px 20px rgba(255, 190, 92, 0.70), 0 14px 23px rgba(255, 140, 54, 0.80), 0 0 40px rgba(240, 158, 47, 0.28);
+    border-color: rgba(255, 200, 92, 0.90);
+  }
+
+  66% {
+    border-radius: 20px;
+    box-shadow: 0 0 4px rgba(255, 150, 70, 0.13);
+    border-color: rgba(210, 130, 30, 0.23);
+  }
+
+  75% {
+    border-radius: 20px 20px 30px 30px;
+    box-shadow: 0 -7px 14px rgba(255, 178, 87, 0.52), 0 9px 16px rgba(255, 128, 51, 0.60), 0 0 26px rgba(240, 154, 45, 0.20);
+    border-color: rgba(255, 172, 70, 0.70);
+  }
+
+  83% {
+    border-radius: 20px;
+    box-shadow: 0 0 5px rgba(255, 150, 70, 0.16);
+    border-color: rgba(210, 130, 30, 0.28);
+  }
+
+  92% {
+    border-radius: 20px 20px 40px 40px;
+    box-shadow: 0 -12px 22px rgba(255, 193, 94, 0.74), 0 15px 26px rgba(255, 142, 55, 0.84), 0 0 42px rgba(240, 159, 47, 0.30);
+    border-color: rgba(255, 202, 93, 0.94);
+  }
+
+  100% {
+    border-radius: 20px;
+    box-shadow: 0 0 6px rgba(255, 150, 70, 0.20), 0 0 0 1px rgba(210, 130, 30, 0.30);
+    border-color: rgba(210, 130, 30, 0.35);
+  }
 }
 
 /* ─── LABBRA pseudo-elementi ─────────────────────────────────────── */
 @keyframes upperLipAnim {
-  0%   { transform: scaleX(0.82) translateY(2px);  opacity: 0.35; }
-  100% { transform: scaleX(1.00) translateY(-2px); opacity: 0.88; }
+  0% {
+    transform: scaleX(0.82) translateY(2px);
+    opacity: 0.35;
+  }
+
+  100% {
+    transform: scaleX(1.00) translateY(-2px);
+    opacity: 0.88;
+  }
 }
+
 @keyframes lowerLipAnim {
-  0%   { transform: scaleX(0.82) translateY(-2px); opacity: 0.40; }
-  100% { transform: scaleX(1.00) translateY(3px);  opacity: 0.98; }
+  0% {
+    transform: scaleX(0.82) translateY(-2px);
+    opacity: 0.40;
+  }
+
+  100% {
+    transform: scaleX(1.00) translateY(3px);
+    opacity: 0.98;
+  }
 }
 
 /* Labbro superiore */
@@ -412,7 +567,7 @@ textarea#text-input:focus {
   right: 14%;
   top: -8px;
   height: 4px;
-  background: linear-gradient(90deg, transparent, rgba(255,170,80,0.55), rgba(255,215,120,0.78), rgba(255,170,80,0.55), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 170, 80, 0.55), rgba(255, 215, 120, 0.78), rgba(255, 170, 80, 0.55), transparent);
   border-radius: 50%;
   pointer-events: none;
   z-index: 3;
@@ -427,7 +582,7 @@ textarea#text-input:focus {
   right: 11%;
   bottom: -10px;
   height: 6px;
-  background: linear-gradient(90deg, transparent, rgba(255,135,55,0.62), rgba(255,185,85,0.84), rgba(255,135,55,0.62), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 135, 55, 0.62), rgba(255, 185, 85, 0.84), rgba(255, 135, 55, 0.62), transparent);
   border-radius: 50%;
   pointer-events: none;
   z-index: 3;
@@ -438,9 +593,10 @@ textarea#text-input:focus {
 .input-wrapper.nebula-listening #text-input,
 .input-wrapper.nebula-listening textarea#text-input {
   animation: nebulaListening 2.8s ease-in-out infinite;
-  border-color: rgba(74,180,240,0.30);
+  border-color: rgba(74, 180, 240, 0.30);
   transition: none;
 }
+
 .input-wrapper.nebula-speaking #text-input,
 .input-wrapper.nebula-speaking textarea#text-input {
   animation: nebulaSpeaking 1.4s linear infinite;
