@@ -3315,9 +3315,24 @@ function setVoiceStatusText(text) {
     if (els.time) els.time.textContent = time;
   }
 
+  function getDayPhaseEmoji(condition, hour) {
+    const isNight = hour < 6 || hour >= 20;
+    const cond = String(condition || '').toLowerCase();
+
+    if (cond.includes('thunder')) return '⛈️';
+    if (cond.includes('snow')) return '❄️';
+    if (cond.includes('mist') || cond.includes('fog') || cond.includes('haze')) return '🌫️';
+    if (cond.includes('rain') || cond.includes('drizzle')) return isNight ? '🌧️' : '🌦️';
+    if (cond.includes('cloud')) return isNight ? '☁️' : '⛅';
+    if (cond.includes('clear')) return isNight ? '🌙' : '☀️';
+
+    return isNight ? '🌙' : '☀️';
+  }
+
   function renderWeather(payload) {
-    // Usa l'icon_code di OpenWeatherMap per discriminare giorno/notte
-    const icon = WEATHER_ICONS_MAP[payload.icon_code] || '🌡️';
+    // Usa fase giorno/notte locale per coerenza visiva; fallback su icon_code OpenWeather
+    const currentHour = new Date().getHours();
+    const icon = getDayPhaseEmoji(payload.condition, currentHour) || WEATHER_ICONS_MAP[payload.icon_code] || '🌡️';
     els.icon.textContent = icon;
     els.city.textContent = payload.city;
     els.temp.textContent = `${payload.temp}°`;
