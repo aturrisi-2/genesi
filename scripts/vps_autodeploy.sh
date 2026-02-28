@@ -31,9 +31,8 @@ if [[ -f requirements.txt ]]; then
 fi
 
 log "Restarting service: $SERVICE_NAME"
-if sudo -n true 2>/dev/null; then
-  sudo systemctl restart "$SERVICE_NAME"
-  sudo systemctl is-active --quiet "$SERVICE_NAME"
+if sudo -n systemctl restart "$SERVICE_NAME" 2>/dev/null; then
+  sudo -n systemctl is-active --quiet "$SERVICE_NAME"
 else
   systemctl restart "$SERVICE_NAME"
   systemctl is-active --quiet "$SERVICE_NAME"
