@@ -2661,12 +2661,35 @@ Messaggio utente: {message}"""
         profile = await storage.load(f"profile:{user_id}", default={})
         conversation_ctx = build_conversation_context(user_id, message, profile, conversation_id)
 
+        # ── LIVE SEARCH: solo per domande che richiedono dati aggiornati ──
+        live_context_block = ""
+        live_source_instruction = ""
+        try:
+            from core.live_search_service import needs_live_data, search_for_answer
+            if needs_live_data(message):
+                logger.info("LIVE_SEARCH_TRIGGERED user=%s query=%s", user_id, message[:60])
+                live_result = await search_for_answer(message)
+                if live_result:
+                    live_context_block = (
+                        f"\n[DATI AGGIORNATI DAL WEB]\n"
+                        f"{live_result['context_block']}\n"
+                        f"[FINE DATI WEB]\n"
+                    )
+                    live_source_instruction = (
+                        f"\nISTRUZIONE FONTE: inizia con "
+                        f'"Secondo {live_result["source_name"]} ({live_result["source_url"]}), ..." '
+                        f"poi continua in modo naturale e narrativo, come se raccontassi a voce. "
+                        f"NON elencare punti. NON fare il Wikipedia. Narra. Max 4-5 frasi.\n"
+                    )
+        except Exception as _lse:
+            logger.debug("LIVE_SEARCH_SKIP user=%s reason=%s", user_id, str(_lse)[:80])
+
         knowledge_prompt = f"""Sei Genesi.
 Rispondi in italiano, in modo chiaro, preciso, conciso.
 Massimo 3 frasi.
 
 {conversation_ctx}
-
+{live_context_block}
 REGOLE:
 - DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')}
 - Rispondi SOLO con informazione concreta.
@@ -2679,7 +2702,7 @@ REGOLE:
 - NON dire MAI "non ho informazioni sufficienti" o "puoi fornire piu' contesto".
 - NON menzionare MAI di essere AI, modello, sistema, programma.
 - Se non sai la risposta, dillo in modo naturale e breve.
-
+{live_source_instruction}
 Domanda: {message}"""
 
         logger.info("PROACTOR_LLM_CALL user=%s route=knowledge msg_len=%d", user_id, len(message))
