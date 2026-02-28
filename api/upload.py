@@ -13,7 +13,7 @@ import asyncio
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Depends
 from core.file_analyzer import analyze_file
-from core.document_memory import save_document
+from core.document_memory import save_document, decay_and_forget
 from core.storage import storage
 from core.log import log
 from auth.router import require_auth
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/upload")
 
 # Upload validation constants
 UPLOAD_MAX_SIZE_MB = 20
-UPLOAD_ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.webp', '.txt', '.md'}
+UPLOAD_ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.webp', '.txt', '.md', '.heic', '.heif'}
 
 def _validate_upload(filename: str, file_size_bytes: int) -> tuple[bool, str]:
     """Valida dimensione e estensione file."""
@@ -73,9 +73,10 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
 
         # Always persist document for authenticated user
         doc_id = None
+        saved_doc = None
         if user_id:
             doc_id = f"{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
-            await save_document(
+            saved_doc = await save_document(
                 doc_id=doc_id,
                 user_id=user_id,
                 filename=result.get("meta", {}).get("filename", file.filename or "unknown"),
@@ -83,6 +84,8 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
                 content=result.get("content", ""),
                 meta=result.get("meta", {}),
             )
+            # Fire-and-forget: decay documenti non usati (non blocca l'upload)
+            asyncio.create_task(asyncio.to_thread(decay_and_forget, user_id))
             
             # STEP 2: Register in Document Context Manager (NotebookLM behavior)
             try:
@@ -119,18 +122,20 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
             except Exception as profile_err:
                 log("ACTIVE_DOCUMENTS_UPDATE_ERROR", user_id=user_id, error=str(profile_err))
 
-        # Build response for frontend
-        filename = result.get("meta", {}).get("filename", file.filename or "file")
+        # Build response for frontend — usa title LLM-generato se disponibile
+        raw_filename = result.get("meta", {}).get("filename", file.filename or "file")
+        display_name = (saved_doc.get("title") if saved_doc else None) or raw_filename
         file_type = result.get("type", "unknown")
         if file_type == "image":
-            # Per le immagini, l'utente vuole la descrizione completa
-            response_text = f"Ho analizzato l'immagine '{filename}'. {result.get('content', '')}"
+            # Per le immagini restituisce la descrizione completa (vision + OCR)
+            description = result.get("content", "")
+            response_text = f"Ho analizzato l'immagine '{display_name}'. {description}"
         elif file_type == "pdf":
             pages = result.get("meta", {}).get("pages", "?")
-            response_text = f"Ho letto il PDF '{filename}' ({pages} pagine). Puoi chiedermi qualsiasi cosa su di esso."
+            response_text = f"Ho letto il PDF '{display_name}' ({pages} pagine). Puoi chiedermi qualsiasi cosa su di esso."
         else:
             lines = result.get("meta", {}).get("lines", "?")
-            response_text = f"Ho letto il file '{filename}' ({lines} righe). Puoi chiedermi qualsiasi cosa su di esso."
+            response_text = f"Ho letto il file '{display_name}' ({lines} righe). Puoi chiedermi qualsiasi cosa su di esso."
 
         # List active documents for frontend
         active_docs_info = []

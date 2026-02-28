@@ -196,13 +196,19 @@ async def _handle_image(path: str, filename: str) -> dict:
     except Exception as e:
         logger.warning("IMAGE_VISION_FAILED error=%s", str(e))
 
-    # Combine: prefer OCR text if substantial, otherwise use vision description
-    if ocr_text and len(ocr_text.strip()) > 20:
-        content = ocr_text
-    elif description:
-        content = description
-    elif ocr_text:
-        content = ocr_text
+    # Combina OCR + vision: entrambi nel contenuto per massima ricchezza
+    ocr_clean = ocr_text.strip() if ocr_text else ""
+    desc_clean = description.strip() if description else ""
+
+    if ocr_clean and len(ocr_clean) > 20 and desc_clean:
+        # Immagine con testo E descrizione visiva — massima qualità
+        content = f"TESTO ESTRATTO DALL'IMMAGINE:\n{ocr_clean}\n\nDESCRIZIONE VISIVA:\n{desc_clean}"
+    elif desc_clean:
+        # Immagine pura — solo descrizione visiva
+        content = desc_clean
+    elif ocr_clean:
+        # Solo OCR (vision fallita)
+        content = ocr_clean
     else:
         content = ""
 
@@ -211,8 +217,8 @@ async def _handle_image(path: str, filename: str) -> dict:
         "content": content,
         "meta": {
             "filename": filename,
-            "ocr_text": ocr_text[:500] if ocr_text else "",
-            "description": description[:500] if description else "",
+            "ocr_text": ocr_clean[:500],
+            "description": desc_clean[:500],
             "chars": len(content),
         }
     }
