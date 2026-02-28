@@ -9,7 +9,7 @@ from core.proactor import proactor
 from core.user_manager import user_manager
 from core.chat_memory import chat_memory
 from core.log import log
-
+from core.fallback_engine import fallback_engine
 
 async def simple_chat_handler(user_id: str, message: str, conversation_id: str = None) -> str:
     """
@@ -54,4 +54,14 @@ async def simple_chat_handler(user_id: str, message: str, conversation_id: str =
 
     except Exception as e:
         log("CHAT_ERROR", error=str(e), user_id=user_id)
-        return "Mi dispiace, ho avuto un problema. Riprova più tardi."
+        msg_error = "Mi dispiace, ho avuto un problema. Riprova più tardi."
+        import asyncio
+        asyncio.create_task(fallback_engine.log_event(
+            user_id=user_id,
+            message=message,
+            fallback_type="simple_chat_fatal",
+            response_given=msg_error,
+            reason=str(e)
+        ))
+        return msg_error
+

@@ -18,6 +18,7 @@ import json
 from typing import Dict, Any, Optional, List, Tuple, Union
 from datetime import datetime, timedelta
 from core.log import log
+from core.fallback_engine import fallback_engine
 from core.memory_brain import memory_brain
 from core.latent_state import latent_state_engine
 from core.drift_modulator import drift_modulator
@@ -446,6 +447,7 @@ class Proactor:
                             "Vuoi Google Calendar o iCloud? Dimmi tu.",
                         ]), "tool"
 
+                asyncio.create_task(fallback_engine.log_event(user_id, message, "ambiguous_tool", "Non ho capito bene...", "Low confidence in intent classification"))
                 return random.choice([
                     "Non ho capito bene. Stai pensando a un promemoria, al meteo, o qualcos'altro?",
                     "Puoi essere più preciso? Non sono sicuro di cosa vuoi fare.",
@@ -644,7 +646,15 @@ class Proactor:
             except Exception:
                 name = ""
             prefix = f"{name}, " if name else ""
-            return f"{prefix}Mi dispiace, ho avuto un problema. Riprova tra poco.", "error"
+            msg_error = f"{prefix}Mi dispiace, ho avuto un problema. Riprova tra poco."
+            asyncio.create_task(fallback_engine.log_event(
+                user_id=user_id,
+                message=message,
+                fallback_type="proactor_fatal_error",
+                response_given=msg_error,
+                reason=str(e)
+            ))
+            return msg_error, "error"
 
     # ═══════════════════════════════════════════════════════════════
     # IDENTITY ROUTER — 100% deterministico, zero GPT
@@ -2720,7 +2730,13 @@ Domanda: {message}"""
                 logger.info("FALLBACK_KNOWLEDGE_USED keyword=%s", normalized_message)
                 logger.info("KNOWLEDGE_FALLBACK_HIT topic=%s", normalized_message)
                 return fb, "knowledge"
-            return "Mi dispiace, non riesco a fornire una risposta precisa in questo momento.", "knowledge"
+            
+            # No LLM result and no static knowledge match
+            msg_err = "Mi dispiace, non riesco a fornire una risposta precisa in questo momento."
+            import asyncio
+            from core.fallback_engine import fallback_engine
+            asyncio.create_task(fallback_engine.log_event(user_id, message, "knowledge_fallback", msg_err, "LLM fail + No static knowledge match"))
+            return msg_err, "knowledge"
 
         # Post-generation filter
         result = filter_response(result, user_id)

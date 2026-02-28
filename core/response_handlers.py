@@ -8,10 +8,14 @@ from datetime import datetime
 from typing import Dict, Optional
 from core.proactor import proactor
 from core.log import log
+from core.fallback_engine import fallback_engine
+import asyncio
 
 async def handle_greeting(message: str) -> str:
     """Handler per saluti - Qwen2.5-7B-Instruct"""
     response = proactor.generate_response("greeting", message)
+    if not response:
+        asyncio.create_task(fallback_engine.log_event("system", message, "hardcoded_fallback", "Ciao! Come posso aiutarti?", "Handler: greeting"))
     return response or "Ciao! Come posso aiutarti?"
 
 async def handle_how_are_you(message: str) -> str:
@@ -56,6 +60,8 @@ async def handle_chat_free(message: str) -> str:
     Chat libera, presenza umana, relazione
     """
     response = proactor.generate_response("chat_free", message)
+    if not response:
+        asyncio.create_task(fallback_engine.log_event("user_id_needed", message, "hardcoded_fallback", "Mi dispiace, ho avuto un problema. Riprova più tardi.", "Handler: chat_free"))
     return response or "Mi dispiace, ho avuto un problema. Riprova più tardi."
 
 async def handle_technical(message: str) -> str:

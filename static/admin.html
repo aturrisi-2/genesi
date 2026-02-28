@@ -30,6 +30,28 @@
                 </div>
             </div>
 
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Monitoraggio Fallback</h2>
+            <div id="fb-summary"
+                style="background: rgba(255, 171, 0, 0.05); border: 1px solid rgba(255, 171, 0, 0.2); border-radius: 8px; padding: 15px; margin-top: 15px;">
+                <div id="fb-loading">Caricamento fallbacks...</div>
+                <div id="fb-stats" style="display:none;">
+                    <p style="font-size: 0.9rem; color: #ffab00; margin-bottom: 10px;">
+                        Trovati <strong id="fb-count">0</strong> gruppi di eventi simili.
+                    </p>
+                    <div id="fb-list"
+                        style="font-size: 0.8rem; color: #ccc; max-height: 200px; overflow-y: auto; margin-bottom: 15px;">
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="downloadFallbacks()" class="btn-external"
+                            style="background: #ffab00; color: #000; border: none; cursor: pointer;">Download
+                            CSV</button>
+                        <button onclick="clearFallbacks()" class="btn-external"
+                            style="background: rgba(255,0,0,0.1); color: #ff4444; border: 1px solid #ff4444; cursor: pointer;">Pulisci
+                            Log</button>
+                    </div>
+                </div>
+            </div>
+
             <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Dettaglio Utenti</h2>
             <div class="user-table-container">
                 <table id="user-table">
@@ -151,6 +173,9 @@
                         orEl.textContent = 'N/A';
                     }
 
+                    // Fallbacks
+                    loadFallbacks();
+
                     // User Table
                     const tbody = document.getElementById('user-tbody');
                     tbody.innerHTML = '';
@@ -176,6 +201,71 @@
                 msg.className = 'msg error';
             }
         }
+
+        async function loadFallbacks() {
+            try {
+                const res = await fetch('/api/admin/fallbacks/summary', {
+                    headers: { 'Authorization': 'Bearer ' + token },
+                });
+                const data = await res.json();
+
+                document.getElementById('fb-loading').style.display = 'none';
+                document.getElementById('fb-stats').style.display = 'block';
+
+                if (data.groups) {
+                    document.getElementById('fb-count').textContent = data.groups.length;
+                    const list = document.getElementById('fb-list');
+                    list.innerHTML = '';
+                    data.groups.forEach(g => {
+                        const div = document.createElement('div');
+                        div.style.padding = '8px';
+                        div.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                        div.innerHTML = `
+                            <div style="color:#ffab00; font-weight:bold;">${g.count}x — ${g.type}</div>
+                            <div style="font-style:italic;">"${g.examples[0]}"</div>
+                            <div style="color:#00e5ff; margin-top:4px;">Soluzione: ${g.possible_solution}</div>
+                        `;
+                        list.appendChild(div);
+                    });
+                }
+            } catch (err) {
+                console.error("FB_LOAD_FAIL", err);
+            }
+        }
+
+        async function downloadFallbacks() {
+            try {
+                const response = await fetch('/api/admin/fallbacks/download', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `fallbacks_${new Date().toISOString().slice(0, 10)}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                }
+            } catch (err) {
+                alert("Errore nel download");
+            }
+        }
+
+        async function clearFallbacks() {
+            if (!confirm("Sei sicuro di voler pulire tutti i log dei fallback?")) return;
+            try {
+                await fetch('/api/admin/fallbacks/clear', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                loadFallbacks();
+            } catch (err) {
+                alert("Errore nella pulizia");
+            }
+        }
+
 
         document.getElementById('logout-link').addEventListener('click', (e) => {
             e.preventDefault();
