@@ -43,6 +43,7 @@ from core.bedrock_image_service import bedrock_image_service
 import unidecode
 import os
 import asyncio
+import random
 import pytz
 from core.time_awareness import get_time_context, get_formatted_time
 from core.weight_tracker import weight_tracker
@@ -401,8 +402,13 @@ class Proactor:
                         logger.info("PROACTOR_FORCE_RELATIONAL_INTEGRATION user=%s intents=%s", user_id, intents)
 
             if len(intents) == 1 and intents[0] == "ambiguous_weather":
-                return "Dove vuoi sapere il meteo?", "tool"
-                
+                return random.choice([
+                    "Di quale città vuoi il meteo?",
+                    "Per quale posto ti serve la previsione?",
+                    "Dove vuoi sapere il meteo?",
+                    "Dimmi la città e ti dico subito il tempo.",
+                ]), "tool"
+
             if len(intents) == 1 and intents[0] == "ambiguous_tool":
                 # Se il messaggio parla di caricamento/configurazione/calendario, sii specifico
                 msg_lower = message.lower()
@@ -412,15 +418,28 @@ class Proactor:
                         profile = await storage.load(f"profile:{user_id}", default={})
                         has_icloud = profile.get("icloud_user")
                         has_google = profile.get("google_token")
-                        
+
                         if has_icloud and not has_google:
-                            return f"Ho visto che hai già collegato il tuo account iCloud ({has_icloud}). Desideri sincronizzare questo calendario o preferiresti aggiungere un account Google?", "tool"
+                            return random.choice([
+                                f"Hai già iCloud collegato ({has_icloud}). Vuoi sincronizzare quello o aggiungere anche Google?",
+                                f"Il tuo iCloud ({has_icloud}) è già attivo. Aggiungi anche Google Calendar?",
+                            ]), "tool"
                         elif has_google and not has_icloud:
-                            return "Ho visto che il tuo Google Calendar è attivo. Desideri sincronizzare i tuoi impegni o preferiresti collegare anche un account iCloud?", "tool"
-                        
-                        return "Vuoi configurare il tuo calendario? Posso aiutarti sia con Google che con iCloud. Quale dei due preferiresti collegare per iniziare?", "tool"
-                
-                return "Non sono sicuro di aver capito. Intendevi usare uno strumento specifico come un promemoria o il meteo? Puoi chiarire per favore?", "tool"
+                            return random.choice([
+                                "Google Calendar è attivo. Vuoi aggiungere anche iCloud?",
+                                "Hai già Google Calendar. Collego anche iCloud?",
+                            ]), "tool"
+
+                        return random.choice([
+                            "Configuro il calendario? Posso usare Google o iCloud — quale preferisci?",
+                            "Vuoi Google Calendar o iCloud? Dimmi tu.",
+                        ]), "tool"
+
+                return random.choice([
+                    "Non ho capito bene. Stai pensando a un promemoria, al meteo, o qualcos'altro?",
+                    "Puoi essere più preciso? Non sono sicuro di cosa vuoi fare.",
+                    "Dimmi di più — cosa hai in mente?",
+                ]), "tool"
 
             # Multi-intent execution state
             final_responses = []
@@ -679,6 +698,26 @@ class Proactor:
             if len(deduped_pets) != len(raw_pets):
                 logger.info("IDENTITY_AUTO_CLEAN pets_dedup old=%d new=%d", len(raw_pets), len(deduped_pets))
                 profile["pets"] = deduped_pets
+                _profile_dirty = True
+
+        # AUTO-CLEAN TRAITS: rimuove valori professione finiti erroneamente in traits
+        _PROF_KW_TRAITS = [
+            "manager", "medico", "architetto", "ingegnere", "avvocato", "dottore",
+            "comandante", "direttore", "tecnico", "analista", "developer", "programmer",
+            "designer", "consulente", "construction", "project", "responsabile",
+        ]
+        raw_traits = profile.get("traits", [])
+        if isinstance(raw_traits, list) and raw_traits:
+            _current_prof = (profile.get("profession") or "").lower().strip()
+            cleaned_traits = [
+                t for t in raw_traits
+                if isinstance(t, str)
+                and not any(kw in t.lower() for kw in _PROF_KW_TRAITS)
+                and t.lower().strip() != _current_prof
+            ]
+            if len(cleaned_traits) != len(raw_traits):
+                logger.info("IDENTITY_AUTO_CLEAN traits old=%s new=%s", raw_traits, cleaned_traits)
+                profile["traits"] = cleaned_traits
                 _profile_dirty = True
 
         if _profile_dirty:
@@ -998,6 +1037,16 @@ ESEMPI:
                 if (x.get("name", "") if isinstance(x, dict) else str(x)).lower() != str(new_value or "").lower()
             ]
 
+        # Se abbiamo aggiornato la professione, rimuovila da traits se c'era finita per bug
+        if field == "profession" and action in ("update", "clear"):
+            raw_traits = profile.get("traits", [])
+            if raw_traits:
+                _pv = str(new_value or "").lower().strip()
+                cleaned = [t for t in raw_traits if not _pv or t.lower().strip() != _pv]
+                if len(cleaned) != len(raw_traits):
+                    profile["traits"] = cleaned
+                    logger.info("MEMORY_CORRECTION_TRAITS_CLEAN removed=%s from traits", new_value)
+
         await storage.save(f"profile:{user_id}", profile)
         log("MEMORY_CORRECTION_APPLIED", user_id=user_id, field=field, action=action, new_value=new_value)
 
@@ -1034,29 +1083,33 @@ ESEMPI:
         hour = now_local.hour
         time_str = now_local.strftime("%H:%M")
 
-        # Momento del giorno + frase contestuale
+        # Momento del giorno + pool di frasi contestuali variate
+        _ctx_pool = {
+            "mattina presto": ["Inizio giornata!", "Già sveglio a quest'ora?", "Buona partenza.", "Si parte!"],
+            "mattina": ["Buona mattinata!", "Come inizia la giornata?", "Bella mattina.", "In piena forma?"],
+            "mezzogiorno": ["Quasi l'ora di pranzo.", "Hai già mangiato?", "Pausa pranzo?", "È mezzogiorno."],
+            "pomeriggio": ["Buon pomeriggio!", "Come va il pomeriggio?", "Stai lavorando?", "Pomeriggio in pieno."],
+            "sera": ["Bella serata!", "Come è andata oggi?", "Stai riposando?", "Serata tranquilla?"],
+            "sera tardi": ["È tardi — prenditi cura di te.", "Non andare a letto troppo tardi.", "Già così tardi?", "Domani si ricomincia."],
+            "notte": ["Sei sveglio di notte?", "Non dormi?", "Tutto ok a quest'ora?", "Nottambulo!"],
+        }
+
         if 5 <= hour < 9:
             moment = "mattina presto"
-            context = "Inizio giornata."
         elif 9 <= hour < 12:
             moment = "mattina"
-            context = "Buona mattinata."
         elif 12 <= hour < 14:
             moment = "mezzogiorno"
-            context = "È ora di pranzo."
         elif 14 <= hour < 18:
             moment = "pomeriggio"
-            context = "Buon pomeriggio."
         elif 18 <= hour < 21:
             moment = "sera"
-            context = "Spero tu stia riposando."
         elif 21 <= hour < 24:
             moment = "sera tardi"
-            context = "È tardi, prenditi cura di te."
-        else:  # 0-5
+        else:
             moment = "notte"
-            context = "Sei sveglio di notte?"
 
+        context = random.choice(_ctx_pool[moment])
         city_str = city.strip().title() if city else "la tua ultima posizione nota"
         log("LOCATION_RESPONSE", user_id=user_id, city=city_str, hour=hour, moment=moment)
         return f"Sei a {city_str}. Sono le {time_str} — {moment}. {context}"
@@ -2713,9 +2766,9 @@ Messaggio utente: {message}"""
             # Pattern per città: "vivo a Milano", "abito a Roma"
             city_patterns = [
                 r"vivo\s+a\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
-                r"abito\s+a\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)"
+                r"abito\s+a\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
+                r"sono\s+di\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
             ]
-            
             for pattern in city_patterns:
                 city_match = re.search(pattern, message, re.IGNORECASE)
                 if city_match:
@@ -2724,8 +2777,41 @@ Messaggio utente: {message}"""
                         profile["city"] = city
                         updated = True
                         logger.info("PROFILE_AUTO_UPDATE user=%s field=city value=%s", user_id, city)
-                    break  # Basta il primo match
-            
+                    break
+
+            # Pattern per professione: solo frasi esplicite ad alta certezza
+            profession_patterns = [
+                r"(?:lavoro\s+come\s+)([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{2,40}?)(?:\s*[.,;!?]|$)",
+                r"(?:di\s+professione\s+(?:sono|faccio)\s+(?:il\s+|la\s+|l'|un[a]?\s+)?)([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{2,40}?)(?:\s*[.,;!?]|$)",
+            ]
+            for pattern in profession_patterns:
+                prof_match = re.search(pattern, message, re.IGNORECASE)
+                if prof_match:
+                    prof = prof_match.group(1).strip().lower()
+                    # Sanity check: non più di 4 parole, non troppo corto
+                    if 2 <= len(prof) <= 40 and len(prof.split()) <= 4:
+                        if profile.get("profession") != prof:
+                            profile["profession"] = prof
+                            updated = True
+                            logger.info("PROFILE_AUTO_UPDATE user=%s field=profession value=%s", user_id, prof)
+                    break
+
+            # Pattern per interessi: "mi piace/mi piacciono X", "sono appassionato di X"
+            interest_patterns = [
+                r"(?:mi\s+piace\s+(?:molto\s+)?)([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ]{3,25})(?:\s*[.,;!?]|$)",
+                r"(?:sono\s+appassionato\s+di\s+)([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{2,30}?)(?:\s*[.,;!?]|$)",
+                r"(?:la\s+mia\s+passione\s+(?:è|e')\s+)([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{2,30}?)(?:\s*[.,;!?]|$)",
+            ]
+            existing_interests = [i.lower() for i in profile.get("interests", [])]
+            for pattern in interest_patterns:
+                for m in re.finditer(pattern, message, re.IGNORECASE):
+                    interest = m.group(1).strip().lower()
+                    if 3 <= len(interest) <= 30 and interest not in existing_interests:
+                        profile.setdefault("interests", []).append(interest)
+                        existing_interests.append(interest)
+                        updated = True
+                        logger.info("PROFILE_AUTO_UPDATE user=%s field=interests added=%s", user_id, interest)
+
             # Salva solo se ci sono aggiornamenti
             if updated:
                 profile["updated_at"] = datetime.now().isoformat()

@@ -52,6 +52,32 @@ def normalize_profile_dict(data: dict) -> dict:
             normalized_children.append({"name": name})
     data["children"] = normalized_children
 
+    # Normalize traits: rimuove valori che sembrano professioni (finiti lì per bug LLM)
+    traits = data.get("traits", [])
+    if isinstance(traits, list) and traits:
+        _PROF_KW_IN_TRAITS = [
+            "manager", "medico", "architetto", "ingegnere", "avvocato", "dottore",
+            "comandante", "direttore", "tecnico", "analista", "developer", "programmer",
+            "designer", "consulente", "construction", "project", "responsabile",
+            "chirurgo", "infermiere", "infermiera", "farmacista", "fisioterapista",
+        ]
+        current_profession = (data.get("profession") or "").lower().strip()
+        cleaned_traits = []
+        for t in traits:
+            if not isinstance(t, str):
+                continue
+            t_low = t.lower().strip()
+            # Salta se contiene keyword di professione
+            if any(kw in t_low for kw in _PROF_KW_IN_TRAITS):
+                logger.info("NORMALIZE_TRAITS_CLEANUP removed_profession_value=%s", t)
+                continue
+            # Salta se coincide con la professione attuale
+            if current_profession and t_low == current_profession:
+                logger.info("NORMALIZE_TRAITS_CLEANUP removed_duplicate_profession=%s", t)
+                continue
+            cleaned_traits.append(t)
+        data["traits"] = cleaned_traits
+
     return data
 
 async def handle_identity_question(user_id: str, message: str) -> str:
