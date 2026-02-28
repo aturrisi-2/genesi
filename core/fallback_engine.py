@@ -29,9 +29,14 @@ class FallbackEngine:
     
     def __init__(self):
         self.events: List[Dict[str, Any]] = []
-        self._load_local()
-        # Assicura directory
-        os.makedirs(os.path.dirname(FALLBACK_LOG_PATH), exist_ok=True)
+        # Assicura directory in modo sicuro
+        try:
+            os.makedirs(os.path.dirname(FALLBACK_LOG_PATH), exist_ok=True)
+            self._load_local()
+        except PermissionError:
+            logger.error("PERMISSION_ERROR: Cannot create fallback directory at %s", FALLBACK_LOG_PATH)
+        except Exception as e:
+            logger.error("INIT_ERROR in FallbackEngine: %s", e)
 
     def _load_local(self):
         """Carica log esistenti"""
