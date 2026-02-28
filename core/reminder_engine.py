@@ -76,27 +76,43 @@ class ReminderEngine:
         try:
             reminder_id = str(uuid.uuid4())
             now = datetime.now()
-            
+
             from core.tts_sanitizer import strip_emojis
             clean_text = strip_emojis(text)
-            
+            dt_iso = reminder_datetime.isoformat() if reminder_datetime else None
+
+            # Deduplicazione: se stesso testo+datetime creato negli ultimi 60s, ritorna ID esistente
+            existing = self._load_reminders(user_id)
+            for r in existing:
+                if (r.get("status") == "pending"
+                        and r.get("text", "").strip().lower() == clean_text.strip().lower()
+                        and r.get("datetime") == dt_iso):
+                    try:
+                        created_at = datetime.fromisoformat(r["created_at"])
+                        if (now - created_at).total_seconds() < 60:
+                            log("REMINDER_DUPLICATE_SKIPPED", user_id=user_id,
+                                existing_id=r["id"], text=clean_text[:50])
+                            return r["id"]
+                    except Exception:
+                        pass
+
             reminder = {
                 "id": reminder_id,
                 "text": clean_text,
-                "datetime": reminder_datetime.isoformat() if reminder_datetime else None,
+                "datetime": dt_iso,
                 "status": "pending",
                 "source": source,
                 "created_at": now.isoformat()
             }
-            
-            reminders = self._load_reminders(user_id)
+
+            reminders = existing
             reminders.append(reminder)
             # Handle None datetimes by putting them at the end
             reminders.sort(key=lambda r: (r.get("datetime") is None, r.get("datetime")))
             
             if self._save_reminders(user_id, reminders):
-                log("REMINDER_CREATE", user_id=user_id, reminder_id=reminder_id, 
-                    text=clean_text[:50], datetime=reminder_datetime.isoformat() if reminder_datetime else None)
+                log("REMINDER_CREATE", user_id=user_id, reminder_id=reminder_id,
+                    text=clean_text[:50], datetime=dt_iso)
                 return reminder_id
             
             return None

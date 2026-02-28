@@ -330,11 +330,14 @@ class ICloudService:
 
     def create_event(self, text: str, dt: datetime.datetime, is_todo: bool = False) -> bool:
         """Crea un nuovo elemento iCloud con Auto-Reconnect (v4.3)."""
+        # UID generato UNA VOLTA fuori dal loop: se il server crea l'evento ma la risposta
+        # va in timeout, il retry usa lo stesso UID evitando duplicati su iCloud.
+        stable_uid = str(uuid.uuid4()).lower()
         for attempt in range(2):
             try:
                 if not self.client or attempt > 0:
                     if not self._connect(): continue
-                
+
                 principal = self.client.principal()
                 calendars = principal.calendars()
                 target_cal = None
@@ -418,8 +421,8 @@ class ICloudService:
                     item.add('transp').value = 'OPAQUE'
                     item.add('priority').value = '5'
                     
-                # Generazione ID unico per Apple
-                uid = str(uuid.uuid4()).lower()
+                # UID stabile (generato fuori dal loop per evitare duplicati su retry)
+                uid = stable_uid
                 item.add('uid').value = uid
                 item.add('dtstamp').value = datetime.datetime.utcnow()
                 if not hasattr(cal_v, 'prodid'):
