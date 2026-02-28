@@ -2483,10 +2483,11 @@ body::before {
 
 .message {
   position: relative;
-  background: transparent !important;
+  background: rgba(2, 6, 23, 0.38) !important;
   border: 0 !important;
-  box-shadow: none !important;
-  border-radius: 0 !important;
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.14) inset,
+    0 0 22px rgba(2, 6, 23, 0.5) !important;
+  border-radius: 12px !important;
   width: auto;
   max-width: 82%;
   padding: 0 0 0 30px;
@@ -2494,11 +2495,16 @@ body::before {
   line-height: 1.75;
   font-family: 'Inter', 'Roboto', sans-serif;
   font-size: 0.94rem;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.65), 0 0 10px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(1.6px);
+  -webkit-backdrop-filter: blur(1.6px);
 }
 
 .message.genesi {
   color: #ffffff !important;
   align-self: flex-start;
+  box-shadow: 0 0 0 1px rgba(226, 232, 240, 0.12) inset,
+    0 0 24px rgba(148, 163, 184, 0.24) !important;
 }
 
 .message.user {
@@ -2506,6 +2512,8 @@ body::before {
   align-self: flex-end;
   text-align: right;
   padding: 0 30px 0 0;
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.12) inset,
+    0 0 24px rgba(71, 85, 105, 0.28) !important;
 }
 
 .message.genesi::before {
@@ -2575,14 +2583,14 @@ body::before {
 textarea#text-input {
   font-family: 'Inter', 'Roboto', sans-serif;
   font-size: 0.92rem;
-  background: rgba(2, 6, 23, 0.86);
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(51, 58, 68, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.34);
   color: #f8fafc;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) inset, 0 0 18px rgba(147, 197, 253, 0.11);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset, 0 0 14px rgba(148, 163, 184, 0.18);
 }
 
 #text-input:focus,
 textarea#text-input:focus {
-  border-color: rgba(191, 219, 254, 0.55);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05) inset, 0 0 28px rgba(147, 197, 253, 0.26), 0 0 8px rgba(255, 255, 255, 0.1);
+  border-color: rgba(203, 213, 225, 0.58);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07) inset, 0 0 18px rgba(148, 163, 184, 0.24), 0 0 6px rgba(255, 255, 255, 0.08);
 }
