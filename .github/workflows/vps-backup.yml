@@ -52,6 +52,7 @@ jobs:
               cp -a "$APP_DIR/config" "$DEST_DIR/"
             fi
 
-            sh -c 'cd "$1" && tar -czf "$1.tar.gz" "$(basename "$1")" && rm -rf "$1"' _ "$DEST_DIR"
+            tar -czf "$DEST_DIR.tar.gz" -C "$(dirname "$DEST_DIR")" "$(basename "$DEST_DIR")"
+            rm -rf "$DEST_DIR"
             echo "Backup creato: $DEST_DIR.tar.gz"
             ls -lh "$DEST_DIR.tar.gz"
