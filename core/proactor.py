@@ -1624,8 +1624,9 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
         Returns: (response_text: str, source: str) → but we return only str here
         """
         try:
-            if not bedrock_image_service.enabled:
-                logger.warning("IMAGE_GENERATION_DISABLED user=%s bedrock_not_configured", user_id)
+            from core.openrouter_image_service import openrouter_image_service as _or_img_svc
+            if not bedrock_image_service.enabled and not _or_img_svc.enabled:
+                logger.warning("IMAGE_GENERATION_DISABLED user=%s no_providers_configured", user_id)
                 fallback_prompt = message.strip()
                 fallback = await self._handle_image_search(user_id, fallback_prompt)
                 if isinstance(fallback, tuple) and fallback and isinstance(fallback[0], str) and fallback[0].startswith("{"):
@@ -1684,47 +1685,73 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
                     logger.warning("IMAGE_PROMPT_CONDENSE_FAILED error=%s — truncating", _ce)
                     prompt = prompt[:500]
             
-            # Call Bedrock service
-            logger.info("IMAGE_GENERATION_REQUEST user=%s prompt_len=%d", user_id, len(prompt))
-            image_url = await bedrock_image_service.generate_image(
-                prompt=prompt,
-                user_id=user_id,
-                width=512,
-                height=512,
-                steps=50,
-                guidance_scale=7.5
-            )
-            
+            # Generazione immagine: OpenRouter (Nano Banana 2) → Bedrock fallback
+            openrouter_image_service = _or_img_svc  # già importato sopra
+
+            image_url: Optional[str] = None
+            image_source = "Genesi AI"
+
+            # 1️⃣ Prova OpenRouter — Gemini 3.1 Flash Image Preview (Nano Banana 2)
+            if openrouter_image_service.enabled:
+                logger.info("IMAGE_GENERATION_TRY provider=openrouter user=%s prompt_len=%d", user_id, len(prompt))
+                image_url = await openrouter_image_service.generate_image(prompt=prompt, user_id=user_id)
+                if image_url:
+                    image_source = "Gemini 3.1 Flash Image"
+                    logger.info("IMAGE_GENERATION_OK provider=openrouter user=%s", user_id)
+                else:
+                    logger.warning("IMAGE_GENERATION_MISS provider=openrouter user=%s — trying Bedrock", user_id)
+
+            # 2️⃣ Fallback: AWS Bedrock
+            if image_url is None and bedrock_image_service.enabled:
+                logger.info("IMAGE_GENERATION_TRY provider=bedrock user=%s prompt_len=%d", user_id, len(prompt))
+                image_url = await bedrock_image_service.generate_image(
+                    prompt=prompt,
+                    user_id=user_id,
+                    width=512,
+                    height=512,
+                    steps=50,
+                    guidance_scale=7.5,
+                )
+                if image_url:
+                    image_source = "AWS Bedrock"
+                    logger.info("IMAGE_GENERATION_OK provider=bedrock user=%s", user_id)
+
             if image_url is None:
-                logger.error("IMAGE_GENERATION_FAILED user=%s prompt=%s", user_id, prompt[:50])
+                logger.error("IMAGE_GENERATION_FAILED_ALL_PROVIDERS user=%s prompt=%s", user_id, prompt[:50])
                 fallback = await self._handle_image_search(user_id, prompt)
                 if isinstance(fallback, tuple) and fallback and isinstance(fallback[0], str) and fallback[0].startswith("{"):
                     return fallback
                 return "Ho avuto un problema nella generazione dell'immagine. Riprova con una descrizione diversa o più semplice.", "tool"
-            
-            # Get user stats (for feedback)
-            stats = await bedrock_image_service.get_user_stats(user_id)
-            
-            # Build response with image URL
-            response_text = f"Ecco l'immagine che ho creato per te! ({stats.get('total_images_generated', 1)} generate fino ad ora)"
-            
+
+            # Stats Bedrock (solo se usato)
+            stats = {}
+            if image_source == "AWS Bedrock":
+                try:
+                    stats = await bedrock_image_service.get_user_stats(user_id)
+                except Exception:
+                    pass
+
+            response_text = "Ecco l'immagine che ho creato per te!"
+
             # Prepare image response in the format frontend expects
             image_response = {
                 "text": response_text,
                 "images": [
                     {
                         "url": image_url,
-                        "source": "AWS Bedrock - Stable Diffusion XL",
+                        "source": image_source,
                         "title": prompt,
-                        "cost": f"${stats.get('total_cost_usd', 0):.4f}"
+                        "cost": f"${stats.get('total_cost_usd', 0):.4f}" if stats else "",
                     }
                 ],
-                "tts_text": response_text
+                "tts_text": response_text,
             }
-            
+
             # Return JSON string with images so frontend can render gallery
-            logger.info("IMAGE_GENERATION_SUCCESS user=%s url_len=%d total_cost=$%.4f",
-                       user_id, len(image_url) if image_url else 0, stats.get('total_cost_usd', 0))
+            logger.info(
+                "IMAGE_GENERATION_SUCCESS user=%s provider=%s url_len=%d",
+                user_id, image_source, len(image_url),
+            )
 
             return json.dumps(image_response, ensure_ascii=False), "tool"
             
