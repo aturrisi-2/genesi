@@ -1,0 +1,54 @@
+name: VPS Backup Snapshot
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref da annotare nel nome backup (es. tag o branch)"
+        required: true
+        default: "stable-nanobanana2-websearch-2026-02-28"
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create backup over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST || secrets.SSH_HOST || secrets.SERVER_IP }}
+          username: ${{ secrets.VPS_USER || secrets.SSH_USER }}
+          key: ${{ secrets.VPS_SSH_KEY || secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script_stop: true
+          request_pty: true
+          command_timeout: 30m
+          script: |
+            set -euo pipefail
+            APP_DIR=/opt/genesi
+            BACKUP_ROOT=/opt/genesi/backups
+            REF_INPUT="${{ inputs.ref }}"
+            REF_SAFE="$(echo "$REF_INPUT" | tr '/ ' '__')"
+            TS="$(date -u +%Y%m%dT%H%M%SZ)"
+            DEST_DIR="$BACKUP_ROOT/$TS-$REF_SAFE"
+
+            mkdir -p "$DEST_DIR"
+
+            if [ -d "$APP_DIR/data" ]; then
+              cp -a "$APP_DIR/data" "$DEST_DIR/"
+            fi
+
+            if [ -d "$APP_DIR/logs" ]; then
+              cp -a "$APP_DIR/logs" "$DEST_DIR/"
+            fi
+
+            if [ -f "$APP_DIR/.env" ]; then
+              cp -a "$APP_DIR/.env" "$DEST_DIR/.env"
+            fi
+
+            if [ -d "$APP_DIR/config" ]; then
+              cp -a "$APP_DIR/config" "$DEST_DIR/"
+            fi
+
+            sh -c 'cd "$1" && tar -czf "$1.tar.gz" "$(basename "$1")" && rm -rf "$1"' _ "$DEST_DIR"
+            echo "Backup creato: $DEST_DIR.tar.gz"
+            ls -lh "$DEST_DIR.tar.gz"
