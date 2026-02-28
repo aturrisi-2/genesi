@@ -2436,3 +2436,127 @@ body {
   border-radius: 8px;
   margin-bottom: 15px;
 }
+
+/* ==================================================
+   CHAT UI OVERRIDE — Dark Minimal (mandato esclusivo)
+   ================================================== */
+body {
+  font-family: 'Roboto', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #020617;
+}
+
+body::before {
+  background: linear-gradient(180deg, #020617 0%, #010409 65%, #000000 100%);
+}
+
+#genesi-app {
+  background: transparent;
+}
+
+#dialogue {
+  padding: 1.15rem 20px;
+  gap: 20px;
+}
+
+.message {
+  position: relative;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  width: auto;
+  max-width: 82%;
+  padding: 0 0 0 30px;
+  margin: 0;
+  line-height: 1.75;
+  font-size: 0.95rem;
+}
+
+.message.genesi {
+  color: #ffffff !important;
+  align-self: flex-start;
+}
+
+.message.user {
+  color: #94a3b8 !important;
+  align-self: flex-end;
+  text-align: right;
+  padding: 0 30px 0 0;
+}
+
+.message.genesi::before {
+  content: '✦';
+  position: absolute;
+  left: 0;
+  top: 0.08rem;
+  color: #e2e8f0;
+  font-size: 0.88rem;
+  opacity: 0.9;
+}
+
+.message.user::after {
+  content: '◉';
+  position: absolute;
+  right: 0;
+  top: 0.08rem;
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  opacity: 0.9;
+}
+
+.message pre.code-block {
+  background: rgba(2, 6, 23, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+#dialogue .message img {
+  border: 1px solid rgba(186, 230, 253, 0.22) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) inset, 0 0 22px rgba(125, 211, 252, 0.14) !important;
+}
+
+#user-bar {
+  justify-content: flex-end;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  background: transparent;
+}
+
+#user-bar-actions {
+  gap: 0.45rem;
+}
+
+#user-bar-actions a,
+#logout-btn {
+  color: #94a3b8 !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  border-radius: 10px;
+  padding: 0.34rem 0.58rem;
+  text-decoration: none;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+#user-bar-actions a:hover,
+#logout-btn:hover {
+  color: #e2e8f0 !important;
+  border-color: rgba(148, 163, 184, 0.28) !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+#chat-form {
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+#text-input,
+textarea#text-input {
+  background: rgba(2, 6, 23, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  color: #f8fafc;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) inset, 0 0 18px rgba(147, 197, 253, 0.11);
+}
+
+#text-input:focus,
+textarea#text-input:focus {
+  border-color: rgba(191, 219, 254, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05) inset, 0 0 28px rgba(147, 197, 253, 0.26), 0 0 8px rgba(255, 255, 255, 0.1);
+}
