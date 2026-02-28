@@ -7,14 +7,31 @@ logger = logging.getLogger(__name__)
 def normalize_profile_dict(data: dict) -> dict:
     """
     Normalize legacy profile data to match the Pydantic model schema.
+    Also repairs data corruption introduced by memory_correction bugs.
     """
-    # Normalize pets
+    # Rimuove chiave italiana 'professione' (bug storico del parser LLM)
+    data.pop("professione", None)
+
+    # Normalize pets — converte stringhe "type name" → {'type':..., 'name':...}
     pets = data.get("pets", [])
     if isinstance(pets, dict):
         pets = [pets]
     elif not isinstance(pets, list):
         pets = []
-    data["pets"] = pets
+    normalized_pets = []
+    for pet in pets:
+        if isinstance(pet, dict):
+            # Assicura che 'type' e 'name' esistano
+            if "name" in pet:
+                normalized_pets.append({"type": pet.get("type", "?"), "name": pet["name"]})
+        elif isinstance(pet, str) and pet.strip():
+            # Formato "type name" generato da bug LLM (es. "cat Prof", "dog Rio")
+            parts = pet.strip().split(" ", 1)
+            if len(parts) == 2:
+                normalized_pets.append({"type": parts[0], "name": parts[1]})
+            else:
+                normalized_pets.append({"type": "?", "name": pet.strip()})
+    data["pets"] = normalized_pets
 
     # Normalize children
     children = data.get("children", [])

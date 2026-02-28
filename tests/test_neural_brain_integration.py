@@ -699,7 +699,8 @@ class TestMemoryCorrectionHandler:
         profile = {"name": "Mario", "city": "Roma"}
         llm_json = json.dumps({
             "field": "name", "action": "update",
-            "new_value": "Luca", "old_value": "Mario"
+            "new_value": "Luca", "old_value": "Mario",
+            "reply": "Ok, Luca. Aggiornato!"
         })
         with patch("core.storage.storage.load", new_callable=AsyncMock, return_value=profile), \
              patch("core.storage.storage.save", new_callable=AsyncMock, return_value=True), \
@@ -717,7 +718,8 @@ class TestMemoryCorrectionHandler:
         profile = {"name": "Mario"}
         llm_json = json.dumps({
             "field": "name", "action": "update",
-            "new_value": "Luca", "old_value": "Mario"
+            "new_value": "Luca", "old_value": "Mario",
+            "reply": "Ok, da Mario a Luca. Aggiornato!"
         })
         with patch("core.storage.storage.load", new_callable=AsyncMock, return_value=profile), \
              patch("core.storage.storage.save", new_callable=AsyncMock, return_value=True), \
@@ -726,7 +728,7 @@ class TestMemoryCorrectionHandler:
             resp = await self.p._handle_memory_correction(
                 TEST_USER_ID, "non mi chiamo Mario, mi chiamo Luca", {"profile": profile}
             )
-        assert "Mario" in resp  # "prima: Mario"
+        assert resp  # La risposta LLM viene restituita direttamente
 
     @pytest.mark.asyncio
     async def test_children_clear_empties_list(self):
@@ -756,7 +758,8 @@ class TestMemoryCorrectionHandler:
         profile = {"name": "Marco", "profession": "Ingegnere"}
         llm_json = json.dumps({
             "field": "profession", "action": "update",
-            "new_value": "Medico", "old_value": "Ingegnere"
+            "new_value": "Medico", "old_value": "Ingegnere",
+            "reply": "Ok, Medico. Aggiornato!"
         })
         with patch("core.storage.storage.load", new_callable=AsyncMock, return_value=profile), \
              patch("core.storage.storage.save", new_callable=AsyncMock, return_value=True), \
@@ -1490,7 +1493,8 @@ class TestProactorHandleIntegration:
         brain_state = {"profile": profile, "relational": {}, "episodes": []}
         llm_correction = json.dumps({
             "field": "name", "action": "update",
-            "new_value": "Luca", "old_value": "Mario"
+            "new_value": "Luca", "old_value": "Mario",
+            "reply": "Ok, Luca. Aggiornato!"
         })
         with patch("core.storage.storage.load", new_callable=AsyncMock, return_value=profile), \
              patch("core.storage.storage.save", new_callable=AsyncMock, return_value=True), \

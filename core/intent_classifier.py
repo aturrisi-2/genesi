@@ -607,8 +607,8 @@ INTENT POSSIBILI:
 - tecnica: questioni tecniche, programmazione, architettura
 - debug: errori codice, malfunzionamenti software
 - spiegazione: richiesta di spiegazione "perchè", "come mai", o correzione/frustrazione (es: "perchè non hai risposto?", "hai sbagliato")
-- identity: chi sono io, che lavoro faccio, i miei account, i miei dati
-- memory_correction: l'utente corregge un dato sbagliato nel profilo (nome, città, professione, figli, animali, partner)
+- identity: chi sono io, che lavoro faccio, i miei account, i miei dati, ho figli?, sono sposato?, ho animali? (domande su sé stessi)
+- memory_correction: l'utente AFFERMA ESPLICITAMENTE che un dato è sbagliato o da aggiornare (nome, città, professione, figli, animali, partner). NON usare per semplici domande come "ho figli?", "sono sposato?", "ho un cane?" — quelle sono "identity"
 - dove_sono: l'utente chiede dove si trova o la sua posizione attuale
 - icloud_setup: collegare o impostare account iCloud
 - icloud_sync: sincronizzare dati da iCloud

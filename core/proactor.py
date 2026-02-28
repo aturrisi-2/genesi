@@ -634,6 +634,9 @@ class Proactor:
             "account", "collega", "miei", "quali", "a cena", "a casa",
             "da mio", "da mia", "tempo", "fuori", "stanco", "stanca",
             "bene sono", "sono a", "sono in", "andato", "andata", "tornato",
+            # Stato civile finito erroneamente in profession (bug parser LLM)
+            "sposato", "sposata", "single", "celibe", "nubile", "divorziato", "divorziata",
+            "vedovo", "vedova",
         ]
         prof = profile.get("profession", "")
         if prof and isinstance(prof, str) and (
@@ -688,7 +691,8 @@ class Proactor:
         logger.info("MEMORY_DIRECT_RESPONSE user=%s route=identity", user_id)
 
         # Domanda su Genesi stessa (chi sei, cosa sei, presentati) — risposta deterministica
-        _genesi_self_kw = ["chi sei", "cosa sei", "descriviti", "presentati", "come ti chiami", "chi è genesi"]
+        _genesi_self_kw = ["chi sei", "cosa sei", "descriviti", "presentati", "come ti chiami", "chi è genesi",
+                           "il tuo nome", "qual è il tuo", "come ti chiami"]
         if any(kw in msg_lower for kw in _genesi_self_kw):
             _name_str = profile.get("name", "")
             _name_part = f"di {_name_str}" if _name_str else "personale"
@@ -831,10 +835,12 @@ class Proactor:
         lines += [
             "",
             "Regole:",
-            "- Rispondi in italiano con 1-2 frasi brevi, naturali e calde.",
+            "- Rispondi in italiano in modo naturale, caldo e conciso.",
             "- NON usare formule robotiche come 'Ecco cosa so di te:' o 'Le informazioni che ho sono:'.",
             "- Se l'informazione richiesta non è nei dati, dillo con naturalezza (es: 'Non me lo hai ancora detto.').",
-            "- Rispondi SOLO alla domanda specifica dell'utente — non fare il resoconto dell'intero profilo.",
+            "- Eccezione: se l'utente chiede 'cosa sai di me', 'dimmi tutto quello che sai', 'raccontami di me' "
+            "→ dai un riassunto COMPLETO e fluente di TUTTI i dati disponibili sopra, in tono caldo.",
+            "- In tutti gli altri casi, rispondi solo a quello che è stato chiesto, senza elencare tutto il profilo.",
             "- Varia il tuo stile — non rispondere sempre nello stesso modo.",
         ]
         return "\n".join(lines)
@@ -878,8 +884,8 @@ class Proactor:
 
     async def _handle_memory_correction(self, user_id: str, message: str, brain_state: dict) -> str:
         """
-        Permette all'utente di correggere qualsiasi dato sbagliato nel profilo.
-        Usa LLM (gpt-4o-mini) per il parsing del campo/azione, poi applica deterministicamente.
+        Aggiorna il profilo utente in base a quanto comunicato.
+        Un solo LLM call: parsifica il campo E genera risposta umana.
         """
         import json as _json
         import re as _re
@@ -887,54 +893,87 @@ class Proactor:
 
         profile = await storage.load(f"profile:{user_id}", default={})
 
-        # Summary dei campi attuali (senza dati sensibili)
         profile_summary = {
             "nome": profile.get("name"),
             "città": profile.get("city"),
             "professione": profile.get("profession"),
             "partner": profile.get("spouse"),
-            "figli": [c.get("name") if isinstance(c, dict) else c for c in profile.get("children", [])],
-            "animali": [f"{p.get('type', '')} {p.get('name', '')}".strip() for p in profile.get("pets", [])],
+            "figli": [c.get("name") if isinstance(c, dict) else str(c) for c in profile.get("children", [])],
+            "animali": [f"{p.get('type','?')} {p.get('name','?')}" for p in profile.get("pets", []) if isinstance(p, dict)],
             "interessi": profile.get("interests", []),
             "tratti": profile.get("traits", []),
         }
 
-        parse_prompt = f"""Sei un parser di correzioni profilo. L'utente sta correggendo un dato sbagliato.
+        parse_prompt = f"""Sei Genesi. L'utente ti sta comunicando qualcosa su di sé — aggiorna il profilo.
 
 Profilo attuale: {_json.dumps(profile_summary, ensure_ascii=False)}
-Messaggio utente: "{message}"
+Messaggio: "{message}"
 
-Rispondi SOLO con JSON valido (nient'altro):
-{{"field": "name|city|profession|spouse|children|pets|interests|traits", "action": "update|delete|clear", "new_value": "stringa o lista", "old_value": "stringa o null"}}
+Rispondi SOLO con JSON valido su una riga:
+{{"field":"...","action":"...","new_value":...,"old_value":...,"reply":"..."}}
 
-- "update": sostituisce il valore corrente con new_value
-- "delete": rimuove un elemento specifico da una lista (new_value = elemento da rimuovere)
-- "clear": azzera il campo completamente (es. "non ho figli")
-- Se non riesci a capire: {{"field": null, "action": null, "new_value": null, "old_value": null}}"""
+CAMPI:
+- name: nome dell'utente
+- city: città di residenza
+- profession: lavoro/professione attuale (NON lo stato civile)
+- spouse: partner o coniuge ("non sono sposato" → clear spouse, non profession!)
+- children: figli → new_value = lista di {{"name":"..."}}
+- pets: animali → new_value = lista di {{"type":"cat|dog|bird|altro","name":"..."}}
+- interests: hobby e interessi → lista di stringhe
+- traits: caratteristiche personali → lista di stringhe
 
+AZIONI: "update" (sostituisce), "delete" (rimuove elemento da lista), "clear" (svuota campo)
+
+REPLY: Una sola frase breve e naturale — come un amico. Nessun dato tecnico, nessun dizionario.
+Esempi: "Ok!", "Capito.", "Fatto!", "Aggiornato.", "Lo tengo a mente.", "Certo, lo cambio."
+
+ESEMPI:
+- "non sono un architetto, sono un medico" → {{"field":"profession","action":"update","new_value":"medico","old_value":"architetto","reply":"Ok, medico. Aggiornato!"}}
+- "non sono sposato" → {{"field":"spouse","action":"clear","new_value":null,"old_value":null,"reply":"Ok, capito."}}
+- "ho due figli, Ennio e Zoe" → {{"field":"children","action":"update","new_value":[{{"name":"Ennio"}},{{"name":"Zoe"}}],"old_value":null,"reply":"Ok!"}}
+- "ho un cane Rio e due gatti Mignolo e Prof" → {{"field":"pets","action":"update","new_value":[{{"type":"dog","name":"Rio"}},{{"type":"cat","name":"Mignolo"}},{{"type":"cat","name":"Prof"}}],"old_value":null,"reply":"Carino! Salvato."}}
+- Se non capisci → {{"field":null,"action":null,"new_value":null,"old_value":null,"reply":"Non ho capito — puoi dirmi meglio cosa cambiare?"}}"""
+
+        correction = {}
+        reply_fallback = "Non ho capito — puoi dirmi più chiaramente cosa cambiare?"
         try:
             result_str = await llm_service._call_with_protection(
                 model="gpt-4o-mini", prompt=parse_prompt,
                 message=message, user_id=user_id, route="memory_correction"
             )
-            correction = {}
             m = _re.search(r'\{.*\}', result_str or "", _re.DOTALL)
             if m:
                 correction = _json.loads(m.group(0))
         except Exception as ex:
             logger.error("MEMORY_CORRECTION_PARSE_ERROR user=%s err=%s", user_id, ex)
-            return "Non sono riuscito a capire cosa correggere. Puoi dirmi più chiaramente? Es: 'il mio nome non è Mario, è Luca'."
+            return reply_fallback
 
         field = correction.get("field")
         action = correction.get("action")
         new_value = correction.get("new_value")
-        old_value = correction.get("old_value")
+        natural_reply = (correction.get("reply") or reply_fallback).strip()
 
         if not field or not action:
-            return "Non ho capito cosa vuoi che corregga. Puoi dirmi più chiaramente? Es: 'il mio nome non è Mario, è Luca'."
+            return natural_reply
+
+        # Sanitizza: pets e children devono essere lista di dict (sicurezza contro LLM che restituisce stringhe)
+        if field == "pets" and action == "update" and isinstance(new_value, list):
+            sanitized = []
+            for item in new_value:
+                if isinstance(item, dict) and "name" in item:
+                    sanitized.append({"type": item.get("type", "?"), "name": item["name"]})
+                elif isinstance(item, str) and item.strip():
+                    parts = item.strip().split(" ", 1)
+                    sanitized.append({"type": parts[0], "name": parts[1]} if len(parts) == 2 else {"type": "?", "name": item})
+            new_value = sanitized
+
+        if field == "children" and action == "update" and isinstance(new_value, list):
+            new_value = [
+                item if isinstance(item, dict) and "name" in item else {"name": str(item)}
+                for item in new_value if item
+            ]
 
         # Applica la correzione
-        current_val = profile.get(field)
         if action == "update":
             profile[field] = new_value
         elif action == "clear":
@@ -942,27 +981,13 @@ Rispondi SOLO con JSON valido (nient'altro):
         elif action == "delete" and isinstance(profile.get(field), list):
             profile[field] = [
                 x for x in profile[field]
-                if (x.get("name", "") if isinstance(x, dict) else str(x)).lower() != str(new_value).lower()
+                if (x.get("name", "") if isinstance(x, dict) else str(x)).lower() != str(new_value or "").lower()
             ]
 
         await storage.save(f"profile:{user_id}", profile)
         log("MEMORY_CORRECTION_APPLIED", user_id=user_id, field=field, action=action, new_value=new_value)
 
-        # Risposta naturale
-        field_labels = {
-            "name": "nome", "city": "città", "profession": "professione",
-            "spouse": "partner", "children": "figli", "pets": "animali",
-            "interests": "interessi", "traits": "tratti",
-        }
-        label = field_labels.get(field, field)
-
-        if action == "clear":
-            return f"Fatto. Ho rimosso '{label}' dal tuo profilo."
-        elif action == "delete":
-            return f"Rimosso. Non ricordo più '{new_value}' tra i tuoi {label}."
-        else:
-            old_str = f" (prima: {current_val})" if current_val and current_val != new_value else ""
-            return f"Aggiornato{old_str}. Ora so che il tuo {label} è: {new_value}."
+        return natural_reply
 
     # ═══════════════════════════════════════════════════════════════
     # LOCATION — Dove sono: GPS + ora locale + momento del giorno
