@@ -436,6 +436,7 @@ class ReminderEngine:
     async def delete_cloud_events(self, user_id: str, deleted_reminders: list) -> dict:
         """
         Cancella su iCloud/Google gli eventi associati ai reminder cancellati.
+        Se manca l'UID/event_id, usa fallback per testo (per retrocompatibilità).
         Ritorna conteggio per provider.
         """
         if not deleted_reminders:
@@ -446,20 +447,37 @@ class ReminderEngine:
             for r in deleted_reminders:
                 icloud_uid = r.get("icloud_uid")
                 google_event_id = r.get("google_event_id")
+                reminder_text = r.get("text", "")
+
+                # iCloud: UID priorità, poi fallback testo
                 if icloud_uid:
                     ok = await asyncio.to_thread(
                         calendar_manager.delete_event, user_id, "apple", icloud_uid
                     )
                     if ok:
                         counts["icloud"] += 1
+                elif reminder_text:
+                    n = await asyncio.to_thread(
+                        calendar_manager.delete_event_by_text, user_id, "apple", reminder_text
+                    )
+                    counts["icloud"] += n
+
+                # Google: event_id priorità, poi fallback testo
                 if google_event_id:
                     ok = await asyncio.to_thread(
                         calendar_manager.delete_event, user_id, "google", None, google_event_id
                     )
                     if ok:
                         counts["google"] += 1
+                elif reminder_text:
+                    n = await asyncio.to_thread(
+                        calendar_manager.delete_event_by_text, user_id, "google", reminder_text
+                    )
+                    counts["google"] += n
+
         except Exception as e:
             log("CLOUD_DELETE_EVENTS_ERROR", user_id=user_id, error=str(e))
+        log("CLOUD_DELETE_EVENTS_DONE", user_id=user_id, icloud=counts["icloud"], google=counts["google"])
         return counts
 
     def get_latest_pending(self, user_id: str) -> Optional[Dict[str, Any]]:

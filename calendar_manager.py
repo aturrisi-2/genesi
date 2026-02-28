@@ -283,6 +283,47 @@ class UnifiedCalendar:
             log("CALENDAR_DELETE_ERROR", user_id=user_id, provider=provider, error=str(e))
         return False
 
+    def delete_event_by_text(self, user_id: str, provider: str, title: str) -> int:
+        """
+        Cerca e cancella eventi/todo per titolo (testo parziale).
+        Ritorna il numero di elementi cancellati.
+        """
+        try:
+            if provider in ('apple', 'icloud'):
+                profile = storage.load_sync(f"profile:{user_id}", default={})
+                from auth.config import ADMIN_EMAILS
+                is_admin = profile.get("email") in ADMIN_EMAILS
+                icloud_user = profile.get("icloud_user") or (self._icloud_user if is_admin else None)
+                icloud_pass = profile.get("icloud_password") or (self._icloud_pass if is_admin else None)
+                if icloud_user and icloud_pass:
+                    from core.icloud_service import ICloudService
+                    svc = ICloudService(username=icloud_user, password=icloud_pass)
+                    count = svc.delete_items_by_text(title, is_todo=True)
+                    count += svc.delete_items_by_text(title, is_todo=False)
+                    log("ICLOUD_DELETE_BY_TEXT_DONE", user_id=user_id, title=title, count=count)
+                    return count
+            elif provider == 'google':
+                g_service = self._get_google_service(user_id)
+                if g_service:
+                    past = (datetime.utcnow() - timedelta(days=730)).isoformat() + 'Z'
+                    result = g_service.events().list(
+                        calendarId='primary',
+                        q=title,
+                        timeMin=past,
+                        singleEvents=True,
+                        maxResults=10
+                    ).execute()
+                    count = 0
+                    for item in result.get('items', []):
+                        if title.lower() in item.get('summary', '').lower():
+                            g_service.events().delete(calendarId='primary', eventId=item['id']).execute()
+                            log("GOOGLE_EVENT_DELETED_BY_TEXT", user_id=user_id, title=title, event_id=item['id'])
+                            count += 1
+                    return count
+        except Exception as e:
+            log("CALENDAR_DELETE_BY_TEXT_ERROR", user_id=user_id, provider=provider, error=str(e))
+        return 0
+
     async def check_async(self) -> List[Dict[str, Any]]:
         """Deprecated global check."""
         return []

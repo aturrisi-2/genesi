@@ -1432,15 +1432,43 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
         try:
             msg_lower = message.lower()
             
-            # 1️⃣ "tutti" → elimina tutti
-            if "tutti" in msg_lower or any(kw in msg_lower for kw in ["passati", "vecchi", "scaduti"]):
+            # 1️⃣ "tutti" → elimina tutti i pending
+            if "tutti" in msg_lower:
                 deleted = reminder_engine.delete_all_pending(user_id)
-
                 if deleted:
                     asyncio.create_task(reminder_engine.delete_cloud_events(user_id, deleted))
                     return f"Fatto! Ho rimosso tutti i {len(deleted)} promemoria dall'agenda e dai calendari collegati.", "reminder"
                 else:
                     return "Non ho trovato promemoria attivi da cancellare, l'agenda è già pulita.", "reminder"
+
+            # 1b️⃣ "passati"/"vecchi"/"scaduti" → elimina solo quelli con data nel passato
+            if any(kw in msg_lower for kw in ["passati", "vecchi", "scaduti"]):
+                from datetime import datetime as _dt
+                all_pending = await reminder_engine.list_reminders(user_id, status_filter="pending")
+                now = _dt.now()
+                to_delete_ids = []
+                for r in all_pending:
+                    dt_str = r.get("datetime")
+                    if not dt_str:
+                        continue
+                    try:
+                        rdt = _dt.fromisoformat(dt_str.rstrip("Z"))
+                        if rdt < now:
+                            to_delete_ids.append(r["id"])
+                    except Exception:
+                        continue
+                if to_delete_ids:
+                    deleted = []
+                    for rid in to_delete_ids:
+                        d = reminder_engine.delete_reminder(user_id, rid)
+                        if d:
+                            deleted.append(d)
+                    if deleted:
+                        asyncio.create_task(reminder_engine.delete_cloud_events(user_id, deleted))
+                        n = len(deleted)
+                        label = "promemoria scaduto" if n == 1 else "promemoria scaduti"
+                        return f"Ho rimosso {n} {label} dall'agenda e dai calendari collegati.", "reminder"
+                return "Non ho trovato promemoria scaduti da cancellare.", "reminder"
             
             # 2️⃣ Numero → elimina per indice
             import re

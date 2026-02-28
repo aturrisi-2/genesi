@@ -486,6 +486,43 @@ class ICloudService:
             log("ICLOUD_DELETE_ERROR", uid=uid, error=str(e))
             return False
 
+    def delete_items_by_text(self, text: str, is_todo: bool = True) -> int:
+        """
+        Cerca e cancella VTODO/VEVENT il cui SUMMARY contiene `text`.
+        Ritorna il numero di elementi cancellati.
+        """
+        if not text or not text.strip():
+            return 0
+        search = text.strip().lower()
+        deleted_count = 0
+        try:
+            self._connect()
+            principal = self.client.principal()
+            for calendar in principal.calendars():
+                try:
+                    objs = calendar.todos() if is_todo else calendar.events()
+                    for obj in objs:
+                        try:
+                            summary = ""
+                            try:
+                                vc = readOne(obj.data)
+                                comp = vc.vtodo if is_todo else vc.vevent
+                                summary = str(comp.summary.value)
+                            except Exception:
+                                pass
+                            if search in summary.lower():
+                                obj.delete()
+                                deleted_count += 1
+                                log("ICLOUD_ITEM_DELETED_BY_TEXT", text=text, summary=summary, type="todo" if is_todo else "event")
+                        except Exception:
+                            continue
+                except Exception:
+                    continue
+            return deleted_count
+        except Exception as e:
+            log("ICLOUD_DELETE_BY_TEXT_ERROR", text=text, error=str(e))
+            return 0
+
     def get_reminders(self, days: int = 7): return self.get_all_items(days)
     def create_reminder(self, text, dt): return self.create_event(text, dt, is_todo=True)
 
