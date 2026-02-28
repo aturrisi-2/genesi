@@ -18,7 +18,7 @@ git fetch origin
 
 git checkout "$BRANCH"
 git reset --hard "origin/$BRANCH"
-git clean -fd -e .venv/
+git clean -fd -e .venv/ -e data/ -e logs/
 
 if [[ -f requirements.txt ]]; then
   log "Syncing Python dependencies"
