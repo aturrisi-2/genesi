@@ -64,4 +64,5 @@ sudo journalctl -u genesi -n 100 -o cat
 ## Note
 
 - Lo script di deploy usato dal workflow è: `scripts/vps_autodeploy.sh`.
-- Lo script installa dipendenze da `requirements.txt` e riavvia `genesi`.
+- Lo script installa dipendenze da `requirements.txt` dentro `/opt/genesi/.venv` (evita l'errore PEP 668 su Ubuntu 24+).
+- Verifica che il servizio `genesi` usi il Python del virtualenv (es. `ExecStart=/opt/genesi/.venv/bin/python /opt/genesi/main.py`).

@@ -4,6 +4,7 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/opt/genesi}"
 BRANCH="${BRANCH:-gold-faro-stable}"
 SERVICE_NAME="${SERVICE_NAME:-genesi}"
+VENV_DIR="${VENV_DIR:-$APP_DIR/.venv}"
 
 log() {
   printf "[%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -20,8 +21,13 @@ git reset --hard "origin/$BRANCH"
 
 if [[ -f requirements.txt ]]; then
   log "Syncing Python dependencies"
-  python3 -m pip install --upgrade pip
-  python3 -m pip install -r requirements.txt
+  if [[ ! -d "$VENV_DIR" ]]; then
+    log "Creating virtualenv at $VENV_DIR"
+    python3 -m venv "$VENV_DIR"
+  fi
+
+  "$VENV_DIR/bin/python" -m pip install --upgrade pip
+  "$VENV_DIR/bin/pip" install -r requirements.txt
 fi
 
 log "Restarting service: $SERVICE_NAME"
