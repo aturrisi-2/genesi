@@ -2452,9 +2452,9 @@ body {
 }
 
 #presence p {
-  font-family: 'Orbitron', 'Inter', sans-serif;
-  font-size: 0.92rem;
-  letter-spacing: 1.25px;
+  font-family: 'Inter', 'Roboto', sans-serif;
+  font-size: 0.88rem;
+  letter-spacing: 0.55px;
   color: #cbd5e1;
   text-transform: none;
   opacity: 0.88;
@@ -2484,8 +2484,8 @@ body::before {
   padding: 0 0 0 30px;
   margin: 0;
   line-height: 1.75;
-  font-family: 'Orbitron', 'Inter', sans-serif;
-  font-size: 1.03rem;
+  font-family: 'Inter', 'Roboto', sans-serif;
+  font-size: 0.94rem;
 }
 
 .message.genesi {
@@ -2506,7 +2506,7 @@ body::before {
   left: 0;
   top: 0.08rem;
   color: #e2e8f0;
-  font-size: 0.88rem;
+  font-size: 1.18rem;
   opacity: 0.9;
 }
 
@@ -2516,7 +2516,7 @@ body::before {
   right: 0;
   top: 0.08rem;
   color: #cbd5e1;
-  font-size: 0.78rem;
+  font-size: 1.08rem;
   opacity: 0.9;
 }
 
@@ -2565,8 +2565,8 @@ body::before {
 
 #text-input,
 textarea#text-input {
-  font-family: 'Orbitron', 'Inter', sans-serif;
-  font-size: 0.96rem;
+  font-family: 'Inter', 'Roboto', sans-serif;
+  font-size: 0.92rem;
   background: rgba(2, 6, 23, 0.86);
   border: 1px solid rgba(148, 163, 184, 0.28);
   color: #f8fafc;
