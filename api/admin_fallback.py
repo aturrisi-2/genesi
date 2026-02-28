@@ -11,8 +11,8 @@ import csv
 from datetime import datetime
 
 from core.fallback_engine import fallback_engine
-from auth.router import get_current_user
-from auth.models import User
+from auth.router import require_admin
+from auth.models import AuthUser
 
 router = APIRouter(prefix="/admin/fallbacks", tags=["admin"])
 
@@ -20,20 +20,20 @@ router = APIRouter(prefix="/admin/fallbacks", tags=["admin"])
 # Per semplicità in questa fase, chiunque sia loggato può vedere i fallback (se ha token).
 
 @router.get("/summary")
-async def get_fallback_summary(user: User = Depends(get_current_user)):
+async def get_fallback_summary(user: AuthUser = Depends(require_admin)):
     """Raggruppa fallbacks per eventi simili."""
     summary = fallback_engine.get_summary()
     return {"total_groups": len(summary), "groups": summary}
 
 @router.get("/raw")
-async def get_raw_fallbacks(user: User = Depends(get_current_user), limit: int = 100):
+async def get_raw_fallbacks(user: AuthUser = Depends(require_admin), limit: int = 100):
     """Lista completa degli ultimi eventi registrati."""
     events = fallback_engine.get_all_raw()
     # Ritorna gli ultimi 'limit' eventi
     return {"total": len(events), "events": sorted(events, key=lambda x: x["timestamp"], reverse=True)[:limit]}
 
 @router.get("/download")
-async def download_fallbacks_csv(user: User = Depends(get_current_user)):
+async def download_fallbacks_csv(user: AuthUser = Depends(require_admin)):
     """Esporta tutti i fallback in formato CSV per analisi esterna."""
     events = fallback_engine.get_all_raw()
     
@@ -57,7 +57,7 @@ async def download_fallbacks_csv(user: User = Depends(get_current_user)):
     )
 
 @router.post("/clear")
-async def clear_all_logs(user: User = Depends(get_current_user)):
+async def clear_all_logs(user: AuthUser = Depends(require_admin)):
     """Pulisce la cronologia dei fallback."""
     fallback_engine.clear_logs()
     return {"status": "success", "message": "Log dei fallback eliminati."}
