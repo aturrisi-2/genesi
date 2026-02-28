@@ -50,6 +50,8 @@ In `Settings > Secrets and variables > Actions`, crea:
 
 File: `.github/workflows/deploy-vps.yml`
 
+Nota: il vecchio workflow `.github/workflows/deploy.yml` è stato rimosso per evitare doppio deploy e conflitti.
+
 Trigger:
 - push su `gold-faro-stable`
 - esecuzione manuale (`workflow_dispatch`)
@@ -65,6 +67,7 @@ sudo journalctl -u genesi -n 100 -o cat
 ## Note
 
 - Lo script di deploy usato dal workflow è: `scripts/vps_autodeploy.sh`.
+- Il workflow supporta sia i secrets nuovi (`VPS_HOST`, `VPS_PORT`, `VPS_USER`, `VPS_SSH_KEY`) sia i legacy (`SSH_HOST`/`SERVER_IP`, `SSH_USER`, `SSH_PRIVATE_KEY`).
 - Il deploy è in modalità receiver puro: ad ogni run fa `git fetch`, `git reset --hard origin/gold-faro-stable` e `git clean -fd`.
 - Il VPS non deve mantenere modifiche locali: eventuali file/patch locali vengono scartati automaticamente.
 - Lo script installa dipendenze da `requirements.txt` dentro `/opt/genesi/.venv` (evita l'errore PEP 668 su Ubuntu 24+).
