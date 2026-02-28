@@ -363,7 +363,18 @@ class Proactor:
             # Backward compat: migrate old active_document_id
             if not active_docs and profile.get("active_document_id"):
                 active_docs = [profile["active_document_id"]]
-            if active_docs and is_document_reference(message):
+
+            # NON intercettare se è una richiesta di image generation:
+            # "immagine"/"foto" sono in _DOCUMENT_TRIGGERS ma in questo contesto
+            # significano "genera", non "analizza il documento caricato".
+            _IMAGE_GEN_PREFIXES = (
+                "genera", "crea", "disegna", "dipingi", "illustra",
+                "genera un", "genera una", "crea un", "crea una",
+                "fa una foto", "voglio vedere",
+            )
+            _is_image_gen_request = any(msg_lower.startswith(p) for p in _IMAGE_GEN_PREFIXES)
+
+            if active_docs and is_document_reference(message) and not _is_image_gen_request:
                 logger.info("DOCUMENT_MODE_TRIGGERED user=%s doc_count=%d", user_id, len(active_docs))
                 response = await self._handle_document_query(user_id, message, profile, brain_state, conversation_id)
                 return response, "tool"
