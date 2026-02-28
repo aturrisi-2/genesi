@@ -42,7 +42,10 @@ from core.image_search_service import get_image_search_service, extract_image_qu
 from core.bedrock_image_service import bedrock_image_service
 import unidecode
 import os
+import asyncio
+import pytz
 from core.time_awareness import get_time_context, get_formatted_time
+from core.weight_tracker import weight_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +177,7 @@ class Proactor:
         self.tool_intents = ["weather", "news", "time", "date"]
         self.context_assembler = ContextAssembler(memory_brain, latent_state_engine)
         self.last_reminder_per_user = {} # {user_id: {"text": str, "dt": datetime}}
+        self._last_route_per_user: Dict[str, str] = {}  # {user_id: last_route}
         logger.info("PROACTOR_V4_ACTIVE routers=identity,tool,relational,knowledge default_model=%s", LLM_DEFAULT_MODEL)
 
     # ═══════════════════════════════════════════════════════════════
@@ -571,10 +575,14 @@ class Proactor:
                     # Clean response if it's a tuple (source leaked from inner handlers)
                     if isinstance(current_response, tuple):
                         current_response = current_response[0]
-                    
+
                     if current_response not in final_responses:
                         final_responses.append(current_response)
-                
+
+                    # Fire-and-forget: aggiorna peso sinaptico per questa route
+                    self._last_route_per_user[user_id] = current_intent
+                    asyncio.create_task(weight_tracker.record_success_async(user_id, current_intent))
+
                 # If we have multiple hits, we stop at the first generic terminal intent
                 # We allow multiple tools and technical intents to chain.
                 if current_intent in ["chat_free", "relational"] and len(final_responses) > 0:
@@ -1204,19 +1212,30 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
                 cloud_destinations = []
 
-                # Google Calendar (VEVENT)
+                # Google + iCloud in parallelo (non bloccante)
+                _cal_tasks = []
+                _cal_names = []
+                _cal_keys = []
                 if can_use_google:
-                    if calendar_manager.add_event(user_id, reminder_text, reminder_datetime, provider='google'):
-                        cloud_destinations.append("Google Calendar")
-                    else:
-                        logger.warning("CALENDAR_WRITE_FAIL provider=google user=%s", user_id)
-
-                # iCloud Calendario (VEVENT — non Promemoria VTODO)
+                    _cal_tasks.append(asyncio.get_event_loop().run_in_executor(
+                        None, calendar_manager.add_event, user_id, reminder_text, reminder_datetime, 'google'
+                    ))
+                    _cal_names.append("Google Calendar")
+                    _cal_keys.append("google")
                 if can_use_icloud:
-                    if calendar_manager.add_event(user_id, reminder_text, reminder_datetime, provider='apple'):
-                        cloud_destinations.append("iCloud Calendario")
-                    else:
-                        logger.warning("CALENDAR_WRITE_FAIL provider=apple user=%s", user_id)
+                    _cal_tasks.append(asyncio.get_event_loop().run_in_executor(
+                        None, calendar_manager.add_event, user_id, reminder_text, reminder_datetime, 'apple'
+                    ))
+                    _cal_names.append("iCloud Calendario")
+                    _cal_keys.append("apple")
+
+                if _cal_tasks:
+                    _cal_results = await asyncio.gather(*_cal_tasks, return_exceptions=True)
+                    for _name, _key, _result in zip(_cal_names, _cal_keys, _cal_results):
+                        if _result is True:
+                            cloud_destinations.append(_name)
+                        else:
+                            logger.warning("CALENDAR_WRITE_FAIL provider=%s user=%s", _key, user_id)
 
                 if cloud_destinations:
                     dest_str = " e ".join(cloud_destinations)
@@ -2318,6 +2337,24 @@ REGOLE TASSATIVE:
         
         return messages
 
+    @staticmethod
+    def _build_style_directives(hour: int) -> str:
+        """Genera direttive di stile contestuali basate sull'ora locale."""
+        if 0 <= hour < 5:
+            return "È notte fonda — sii brevissimo e diretto. Zero domande proattive."
+        elif 5 <= hour < 9:
+            return "Prima mattina — risposte pratiche, orientate alla giornata. Energia sobria."
+        elif 9 <= hour < 12:
+            return "Mattina attiva — puoi essere proattivo e propositivo."
+        elif 12 <= hour < 14:
+            return "Pausa pranzo — risposte concise, l'utente è probabilmente di fretta."
+        elif 14 <= hour < 18:
+            return "Pomeriggio — tono normale, collaborativo."
+        elif 18 <= hour < 21:
+            return "Sera — tono caldo e rilassato. Evita sovraccarico di informazioni."
+        else:
+            return "Sera tardi — sii breve e caldo. Zero domande proattive, l'utente vuole staccare."
+
     def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str, user_id: str = None, calendar_info: str = "", tz: str = "Europe/Rome", user_city: str = "Italia") -> str:
         """Prompt GPT per relational router. Conversazione continua, comportamento umano."""
         user_boundaries = self._detect_user_boundaries(conversation_context, message)
@@ -2326,6 +2363,12 @@ REGOLE TASSATIVE:
         # TIME AWARENESS
         time_ctx = get_time_context(tz)
         now_formatted = get_formatted_time(tz)
+        try:
+            _tz_obj = pytz.timezone(tz)
+            _local_hour = datetime.now(_tz_obj).hour
+        except Exception:
+            _local_hour = datetime.now().hour
+        style_directives = Proactor._build_style_directives(_local_hour)
 
         # STEP 1: Document Context injection (NotebookLM behavior)
         system_prompt = ""
@@ -2358,6 +2401,9 @@ CONSAPEVOLEZZA TEMPORALE:
 - Siamo nella fascia: {time_ctx}.
 - Usa questa informazione per salutare o fare riferimenti naturali (es. "Buon pomeriggio", "Bella serata", "Dovresti dormire").
 - NO ASSUNZIONI: "Sono le {now_formatted} ({time_ctx})".
+
+STILE CONTESTUALE (ora locale):
+- {style_directives}
 
 CHAIN-OF-THOUGHT INVISIBILE (Pensa ma non dirlo):
 1. CAPISCI: Che vuole davvero {user_name}? Qual è il suo umore?
