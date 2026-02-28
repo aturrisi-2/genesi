@@ -72,3 +72,5 @@ sudo journalctl -u genesi -n 100 -o cat
 - Il VPS non deve mantenere modifiche locali: eventuali file/patch locali vengono scartati automaticamente.
 - Lo script installa dipendenze da `requirements.txt` dentro `/opt/genesi/.venv` (evita l'errore PEP 668 su Ubuntu 24+).
 - Verifica che il servizio `genesi` usi il Python del virtualenv (es. `ExecStart=/opt/genesi/.venv/bin/python /opt/genesi/main.py`).
+
+- test branch protection/deploy: 2026-02-28T21:49:25Z
