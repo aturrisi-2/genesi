@@ -18,12 +18,13 @@ git fetch origin
 
 git checkout "$BRANCH"
 git reset --hard "origin/$BRANCH"
-git clean -fd
+git clean -fd -e .venv/
 
 if [[ -f requirements.txt ]]; then
   log "Syncing Python dependencies"
-  if [[ ! -d "$VENV_DIR" ]]; then
+  if [[ ! -x "$VENV_DIR/bin/python" ]]; then
     log "Creating virtualenv at $VENV_DIR"
+    rm -rf "$VENV_DIR"
     python3 -m venv "$VENV_DIR"
   fi
 
