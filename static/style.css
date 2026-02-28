@@ -2646,7 +2646,7 @@ body::before {
   border-radius: 12px !important;
   width: auto;
   max-width: 82%;
-  padding: 0 0 0 30px;
+  padding: 0.58rem 1.08rem 0.7rem 2.15rem;
   margin: 0;
   line-height: 1.75;
   font-family: 'Inter', 'Roboto', sans-serif;
@@ -2667,7 +2667,7 @@ body::before {
   color: #94a3b8 !important;
   align-self: flex-end;
   text-align: right;
-  padding: 0 30px 0 0;
+  padding: 0.58rem 2.15rem 0.7rem 1.08rem;
   box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.12) inset,
     0 0 24px rgba(71, 85, 105, 0.28) !important;
 }
@@ -2675,20 +2675,20 @@ body::before {
 .message.genesi::before {
   content: '✦';
   position: absolute;
-  left: 0;
-  top: 0.08rem;
+  left: 0.72rem;
+  top: 0.52rem;
   color: #e2e8f0;
   font-size: 1.18rem;
   opacity: 0.9;
 }
 
 .message.user::after {
-  content: '◉';
+  content: '✧';
   position: absolute;
-  right: 0;
-  top: 0.08rem;
+  right: 0.72rem;
+  top: 0.52rem;
   color: #cbd5e1;
-  font-size: 1.08rem;
+  font-size: 1.18rem;
   opacity: 0.9;
 }
 
