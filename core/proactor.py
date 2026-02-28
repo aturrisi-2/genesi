@@ -690,17 +690,30 @@ class Proactor:
                      {k: v for k, v in profile.items() if k != "entities" and v})
         logger.info("MEMORY_DIRECT_RESPONSE user=%s route=identity", user_id)
 
-        # Domanda su Genesi stessa (chi sei, cosa sei, presentati) — risposta deterministica
+        # Domanda su Genesi stessa (chi sei, cosa sei, presentati) — risposta LLM varia ogni volta
         _genesi_self_kw = ["chi sei", "cosa sei", "descriviti", "presentati", "come ti chiami", "chi è genesi",
                            "il tuo nome", "qual è il tuo", "come ti chiami"]
         if any(kw in msg_lower for kw in _genesi_self_kw):
             _name_str = profile.get("name", "")
-            _name_part = f"di {_name_str}" if _name_str else "personale"
-            return (
-                f"Sono Genesi, la tua assistente {_name_part}. "
-                "Ti aiuto con promemoria, calendario, meteo, notizie, ricerca immagini e molto altro. "
-                "Sono qui quando hai bisogno."
+            _ctx = f"L'utente si chiama {_name_str}. " if _name_str else ""
+            _genesi_intro_prompt = (
+                "Sei Genesi, un'assistente personale intelligente, calda, curiosa e con personalità. "
+                f"{_ctx}"
+                "L'utente ti ha chiesto chi sei o come ti chiami. "
+                "Rispondi in modo naturale e VARIO — mai la stessa frase. "
+                "Puoi essere ironica, calda, diretta o elaborare un po'. "
+                "Non elencare le tue funzionalità come una lista. Parla come una persona. "
+                "Rispondi in italiano, 1-3 frasi al massimo."
             )
+            try:
+                _intro_resp = await llm_service._call_with_protection(
+                    "gpt-4o-mini", _genesi_intro_prompt, message, user_id=user_id, route="identity"
+                )
+                if _intro_resp and _intro_resp.strip():
+                    return _intro_resp.strip()
+            except Exception as _e:
+                logger.warning("IDENTITY_INTRO_LLM_FALLBACK error=%s", _e)
+            return "Sono Genesi — la tua assistente personale."
 
         # Domanda account collegati — resta deterministica (sicurezza, no LLM)
         if any(kw in msg_lower for kw in ["account collegati", "miei account", "quali account ho", "icloud", "google", "apple"]):
@@ -924,14 +937,15 @@ CAMPI:
 
 AZIONI: "update" (sostituisce), "delete" (rimuove elemento da lista), "clear" (svuota campo)
 
-REPLY: Una sola frase breve e naturale — come un amico. Nessun dato tecnico, nessun dizionario.
-Esempi: "Ok!", "Capito.", "Fatto!", "Aggiornato.", "Lo tengo a mente.", "Certo, lo cambio."
+REPLY: Una sola frase breve e naturale — come direbbe un amico che ti conosce bene.
+Varia ogni volta, non ripetere sempre la stessa. NON usare mai parole come "salvato", "cancellato", "aggiornato", "rimosso", "registrato".
+Stile giusto: "Ok, lo tengo a mente!", "Capito!", "Ah, buono a sapersi.", "Perfetto.", "Certo, ci penso io.", "Fatto.", "Me lo segno.", "Lo sapevo che l'avevo sbagliata!", "Grazie per dirmelo.", "Ottimo, ora lo so."
 
 ESEMPI:
-- "non sono un architetto, sono un medico" → {{"field":"profession","action":"update","new_value":"medico","old_value":"architetto","reply":"Ok, medico. Aggiornato!"}}
-- "non sono sposato" → {{"field":"spouse","action":"clear","new_value":null,"old_value":null,"reply":"Ok, capito."}}
-- "ho due figli, Ennio e Zoe" → {{"field":"children","action":"update","new_value":[{{"name":"Ennio"}},{{"name":"Zoe"}}],"old_value":null,"reply":"Ok!"}}
-- "ho un cane Rio e due gatti Mignolo e Prof" → {{"field":"pets","action":"update","new_value":[{{"type":"dog","name":"Rio"}},{{"type":"cat","name":"Mignolo"}},{{"type":"cat","name":"Prof"}}],"old_value":null,"reply":"Carino! Salvato."}}
+- "non sono un architetto, sono un medico" → {{"field":"profession","action":"update","new_value":"medico","old_value":"architetto","reply":"Ah, medico! Lo tengo a mente."}}
+- "non sono sposato" → {{"field":"spouse","action":"clear","new_value":null,"old_value":null,"reply":"Capito, me lo segno."}}
+- "ho due figli, Ennio e Zoe" → {{"field":"children","action":"update","new_value":[{{"name":"Ennio"}},{{"name":"Zoe"}}],"old_value":null,"reply":"Ennio e Zoe, bello!"}}
+- "ho un cane Rio e due gatti Mignolo e Prof" → {{"field":"pets","action":"update","new_value":[{{"type":"dog","name":"Rio"}},{{"type":"cat","name":"Mignolo"}},{{"type":"cat","name":"Prof"}}],"old_value":null,"reply":"Rio, Mignolo e Prof — che bella famiglia!"}}
 - Se non capisci → {{"field":null,"action":null,"new_value":null,"old_value":null,"reply":"Non ho capito — puoi dirmi meglio cosa cambiare?"}}"""
 
         correction = {}
