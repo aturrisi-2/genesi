@@ -22,8 +22,9 @@ sudo -u deploy -H bash -lc 'cd /opt/genesi && git checkout gold-faro-stable'
 Permetti restart del servizio senza password (sudoers):
 
 ```bash
-echo 'deploy ALL=NOPASSWD:/bin/systemctl restart genesi,/bin/systemctl is-active genesi' | sudo tee /etc/sudoers.d/genesi-deploy
+echo 'deploy ALL=(root) NOPASSWD: /bin/systemctl restart genesi, /bin/systemctl restart genesi.service, /bin/systemctl is-active genesi, /bin/systemctl is-active genesi.service, /usr/bin/systemctl restart genesi, /usr/bin/systemctl restart genesi.service, /usr/bin/systemctl is-active genesi, /usr/bin/systemctl is-active genesi.service' | sudo tee /etc/sudoers.d/genesi-deploy
 sudo chmod 440 /etc/sudoers.d/genesi-deploy
+sudo visudo -cf /etc/sudoers.d/genesi-deploy
 ```
 
 ## 2) Chiave SSH per GitHub Actions
@@ -64,5 +65,7 @@ sudo journalctl -u genesi -n 100 -o cat
 ## Note
 
 - Lo script di deploy usato dal workflow è: `scripts/vps_autodeploy.sh`.
+- Il deploy è in modalità receiver puro: ad ogni run fa `git fetch`, `git reset --hard origin/gold-faro-stable` e `git clean -fd`.
+- Il VPS non deve mantenere modifiche locali: eventuali file/patch locali vengono scartati automaticamente.
 - Lo script installa dipendenze da `requirements.txt` dentro `/opt/genesi/.venv` (evita l'errore PEP 668 su Ubuntu 24+).
 - Verifica che il servizio `genesi` usi il Python del virtualenv (es. `ExecStart=/opt/genesi/.venv/bin/python /opt/genesi/main.py`).
