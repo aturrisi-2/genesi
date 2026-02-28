@@ -1,0 +1,25 @@
+name: Deploy Genesi
+
+on:
+  push:
+    branches:
+      - gold-faro-stable
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/genesi
+            git fetch origin
+            git checkout gold-faro-stable
+            git pull origin gold-faro-stable
+            echo "Restarting service..."
+            sudo systemctl restart genesi
+            sudo systemctl status genesi --no-pager
