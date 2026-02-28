@@ -127,15 +127,15 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
         display_name = (saved_doc.get("title") if saved_doc else None) or raw_filename
         file_type = result.get("type", "unknown")
         if file_type == "image":
-            # Per le immagini restituisce la descrizione completa (vision + OCR)
+            # Per le immagini: descrizione immediata completa (vision + OCR)
             description = result.get("content", "")
             response_text = f"Ho analizzato l'immagine '{display_name}'. {description}"
         elif file_type == "pdf":
             pages = result.get("meta", {}).get("pages", "?")
-            response_text = f"Ho letto il PDF '{display_name}' ({pages} pagine). Puoi chiedermi qualsiasi cosa su di esso."
+            response_text = f"Ho caricato il documento '{display_name}' ({pages} pagine). Cosa vuoi sapere?"
         else:
             lines = result.get("meta", {}).get("lines", "?")
-            response_text = f"Ho letto il file '{display_name}' ({lines} righe). Puoi chiedermi qualsiasi cosa su di esso."
+            response_text = f"Ho caricato il file '{display_name}' ({lines} righe). Cosa vuoi sapere?"
 
         # List active documents for frontend
         active_docs_info = []
@@ -147,7 +147,8 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
                 if d:
                     active_docs_info.append({"doc_id": did, "filename": d.get("filename", "?"), "type": d.get("type", "?")})
 
-        if len(active_docs_info) >= 2:
+        # Solo per le immagini suggerisce il confronto (gli altri doc aspettano la domanda)
+        if file_type == "image" and len(active_docs_info) >= 2:
             names = [d["filename"] for d in active_docs_info[-2:]]
             response_text += f"\n\nPuoi chiedere: confronta '{names[0]}' e '{names[1]}'"
 
