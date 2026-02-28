@@ -32,7 +32,7 @@ fi
 
 log "Restarting service: $SERVICE_NAME"
 if sudo -n systemctl restart "$SERVICE_NAME" 2>/dev/null; then
-  sudo -n systemctl is-active --quiet "$SERVICE_NAME"
+  sudo -n systemctl is-active "$SERVICE_NAME" >/dev/null
 else
   systemctl restart "$SERVICE_NAME"
   systemctl is-active --quiet "$SERVICE_NAME"
