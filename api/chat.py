@@ -171,6 +171,20 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         import asyncio as _asyncio
         _asyncio.create_task(_extract_and_save_identity())
 
+        # Episode extractor: estrae eventi personali temporali in BACKGROUND
+        async def _extract_and_save_episode():
+            try:
+                from core.episode_extractor import extract_episodes
+                from core.episode_memory import episode_memory as _em
+                episodes = await extract_episodes(request.message, user_id)
+                for ep in episodes:
+                    await _em.add(user_id, ep)
+                    log("EPISODE_SAVED", user_id=user_id, text=ep['text'][:60])
+            except Exception as _ep_e:
+                log("EPISODE_SAVE_ERROR", user_id=user_id, error=str(_ep_e))
+
+        _asyncio.create_task(_extract_and_save_episode())
+
         # 2. Pipeline Relazionale / Tecnico (Orchestrata dal Proactor)
         response = await simple_chat_handler(user_id, request.message, request.conversation_id)
 

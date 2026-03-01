@@ -44,7 +44,7 @@ class ContextAssembler:
             # For now, use direct storage access for compatibility
             profile = storage._storage.get(f"profile:{user_id}", {})
             relational_state = storage._storage.get(f"relational_state:{user_id}", {})
-            recent_episodes = storage._storage.get(f"episodes/{user_id}", [])
+            recent_episodes = storage._storage.get(f"episodes:{user_id}", [])
             # For latent_state, create a new event loop
             try:
                 import concurrent.futures
@@ -58,7 +58,7 @@ class ContextAssembler:
             # No event loop, safe to use asyncio.run
             profile = asyncio.run(storage.load(f"profile:{user_id}", default={}))
             relational_state = asyncio.run(storage.load(f"relational_state:{user_id}", default={}))
-            recent_episodes = asyncio.run(storage.load(f"episodes/{user_id}", default=[]))
+            recent_episodes = asyncio.run(storage.load(f"episodes:{user_id}", default=[]))
             latent_state = asyncio.run(self.latent_state_engine.load(user_id))
 
         logger.info("CONTEXT_ASSEMBLER_LOADED user=%s", user_id)
@@ -136,6 +136,35 @@ class ContextAssembler:
                 insights_block = "\n".join(f"• {i}" for i in insights)
                 context["global_insights"] = insights_block
                 summary += f"\n[PATTERN OSSERVATI NEL TEMPO]\n{insights_block}"
+        except Exception:
+            pass
+
+        # Episodic memory: eventi personali specifici (fail-silent)
+        try:
+            from core.episode_memory import episode_memory as _em
+            relevant_episodes = await _em.get_relevant(user_id, user_message, limit=3)
+            if relevant_episodes:
+                ep_lines = []
+                for ep in relevant_episodes:
+                    line = f"• {ep['text']}"
+                    if ep.get('event_date'):
+                        line += f" ({ep['event_date']})"
+                    # Evento futuro con data passata → suggerisci follow-up
+                    if ep.get('is_future') and ep.get('event_date'):
+                        try:
+                            from datetime import date as _date
+                            if _date.fromisoformat(ep['event_date']) <= _date.today():
+                                line += " [puoi chiedere com'è andata]"
+                        except Exception:
+                            pass
+                    ep_lines.append(line)
+                episodes_block = "\n".join(ep_lines)
+                context["personal_episodes"] = episodes_block
+                summary += f"\n[EPISODI PERSONALI RICORDATI]\n{episodes_block}"
+                # Marca episodi usati in background
+                import asyncio as _aio_ep
+                for ep in relevant_episodes:
+                    _aio_ep.create_task(_em.mark_used(user_id, ep['id']))
         except Exception:
             pass
 
