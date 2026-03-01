@@ -73,7 +73,7 @@ class CognitiveMemoryEngine:
         # Semantic classification using regex
         name_match = re.search(r"mi chiamo (\w+)", message, re.IGNORECASE)
         # Limita la cattura a max 3 parole per evitare di salvare frasi di contesto come professione
-        profession_match = re.search(r"(?:faccio|sono|lavoro come)\s+(?:il\s+|la\s+|l\s+)?(\w+(?:\s+\w+){0,2})", message, re.IGNORECASE)
+        profession_match = re.search(r"(?:faccio|sono|lavoro come)\s+(?:il\s+|la\s+|lo\s+|l'|l\s+|un\s+|una\s+|uno\s+|un'\s+)?(\w+(?:\s+\w+){0,2})", message, re.IGNORECASE)
         city_match = re.search(r"vivo a (\w+)", message, re.IGNORECASE)
         spouse_match = re.search(r"(?:mia moglie|mio marito) si chiama (\w+)", message, re.IGNORECASE)
         children_match = re.search(r"i miei figli si chiamano (\w+) e (\w+)", message, re.IGNORECASE)
@@ -126,18 +126,22 @@ class CognitiveMemoryEngine:
             "a cena", "a casa", "a lavoro", "in giro", "in vacanza", "in viaggio",
             "tempo", "fuori", "qui", "bene", "male", "stanco", "stanca",
             "andato", "andata", "tornato", "pronto", "pronta", "sveglio", "sveglia",
+            "adesso", "ora", "oggi", "ieri", "domani", "io", "tu", "lui", "lei",
+            "noi", "voi", "loro", "qui", "lì", "qua", "là", "dove"
         }
         # Preposizioni/articoli che non possono aprire una professione
         _PROFESSION_BAD_STARTERS = {
             "a", "da", "con", "per", "di", "in", "su", "tra", "fra",
             "un", "una", "dello", "della", "delle", "degli",
+            "il", "lo", "la", "i", "gli", "le", "io", "tu", "lui", "lei",
+            "noi", "voi", "loro", "qui", "lì", "qua", "là", "dove", "adesso", "ora"
         }
 
         if profession_match:
             new_profession = profession_match.group(1).strip().lower()  # lowercase come richiesto
 
             # GUARD: evita di salvare situazioni/attività come professione
-            if any(kw in new_profession for kw in _PROFESSION_STOPWORDS):
+            if any(kw in new_profession.split() for kw in _PROFESSION_STOPWORDS) or any(new_profession == kw for kw in _PROFESSION_STOPWORDS):
                 logger.info("COGNITIVE_PROFESSION_SKIP value=%s reason=stopword", new_profession)
             elif new_profession.split()[0].lower() in _PROFESSION_BAD_STARTERS:
                 logger.info("COGNITIVE_PROFESSION_SKIP value=%s reason=bad_starter", new_profession)
