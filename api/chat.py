@@ -313,6 +313,16 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                     if full.startswith("[NO_TTS]"):
                         full = full.replace("[NO_TTS]", "").strip()
                         tts = ""
+                        
+                    # Fix: If backend returned structured JSON payload, extract internal tts_text
+                    if isinstance(full, str) and full.strip().startswith('{"text"'):
+                        try:
+                            parsed = json.loads(full)
+                            if isinstance(parsed, dict) and parsed.get("text"):
+                                tts = parsed.get("tts_text") or parsed.get("text")
+                        except Exception:
+                            pass
+                            
                     yield f"data: {json.dumps({'done': True, 'tts_text': tts})}\n\n"
                     break
                 elif "error" in item:
