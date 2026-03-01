@@ -1324,11 +1324,12 @@ async function sendChatMessageStream(message, { onChunk, onFirstChunk } = {}) {
         if (onChunk) onChunk(''); // empty → bubble shows just cursor ▋ while synthesis runs
       } else if (evt.done) {
         ttsText = evt.tts_text || fullText;
-        // ttsText = final synthesis result (weather/news actual data).
-        // fullText = streaming relational chunks (may say "Mi dispiace..." for tool intents).
+        // Se il backend fornisce 'response' (es: payload JSON per le immagini), usa quello!
+        const finalResponse = typeof evt.response !== 'undefined' ? evt.response : (ttsText || fullText);
+
         // Prioritize ttsText (synthesis) so tool results are displayed correctly.
         // Fall back to fullText for pure-streaming routes where ttsText is empty.
-        return { response: ttsText || fullText, tts_text: ttsText };
+        return { response: finalResponse, tts_text: ttsText };
       } else if (evt.error) {
         throw new Error(evt.error);
       }

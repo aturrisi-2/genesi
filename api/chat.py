@@ -323,7 +323,7 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                         except Exception:
                             pass
                             
-                    yield f"data: {json.dumps({'done': True, 'tts_text': tts})}\n\n"
+                    yield f"data: {json.dumps({'done': True, 'tts_text': tts, 'response': full})}\n\n"
                     break
                 elif "error" in item:
                     yield f"data: {json.dumps({'error': item['error']})}\n\n"
