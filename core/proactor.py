@@ -411,6 +411,14 @@ class Proactor:
             if (chat_count > 0 or conversation_id) and is_memory_reference(message):
                 logger.info("MEMORY_ROUTING_OVERRIDE user=%s chat_count=%d msg=%s", user_id, chat_count, message[:40])
                 intent = "memory_context"
+                
+                # Fix: se è un override della memoria e c'era un falso positivo di identità ("io adesso", "ti ricordi cosa..."), 
+                # rimuovi temporaneamente l'errore per salvare l'intent corretto.
+                if brain_state and "profile" in brain_state:
+                    _prof_bug = brain_state["profile"].get("profession", "")
+                    if _prof_bug and ("adesso" in _prof_bug.lower() or "prima" in _prof_bug.lower()):
+                        brain_state["profile"]["profession"] = None
+                        asyncio.create_task(storage.save(f"profile:{user_id}", brain_state["profile"]))
 
             # STEP 3.9: REMINDER ROUTING STRICT — SOLO per intent espliciti
             # RIMOSSO: routing basato su testo, ora SOLO intent classificati
