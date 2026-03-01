@@ -1318,7 +1318,9 @@ async function sendChatMessageStream(message, { onChunk, onFirstChunk } = {}) {
         if (onChunk) onChunk(fullText);
       } else if (evt.done) {
         ttsText = evt.tts_text || fullText;
-        return { response: fullText, tts_text: ttsText };
+        // For non-streaming routes (e.g. memory_context), fullText is empty.
+        // Fall back to ttsText so the caller receives a non-empty response.
+        return { response: fullText || ttsText, tts_text: ttsText };
       } else if (evt.error) {
         throw new Error(evt.error);
       }

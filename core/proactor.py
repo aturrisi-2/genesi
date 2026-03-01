@@ -1258,8 +1258,9 @@ Non aggiungere frasi fatte o conferme robotiche all'inizio o alla fine, la conve
 Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
             # Use LLM for natural response
+            # _call_model preserves memory_prompt (not replaced by adaptive Genesi prompt)
             model = model_selector(message, route="memory")
-            response = await llm_service._call_with_protection(
+            response = await llm_service._call_model(
                 model, memory_prompt, message, user_id=user_id, route="memory"
             )
             

@@ -66,10 +66,16 @@ class GlobalMemoryService:
             if not recent_chats or len(recent_chats) < 5:
                 return  # Troppo pochi messaggi per estrarre pattern
 
-            chat_text = "\n".join(
-                f"{m.get('role', 'user')}: {str(m.get('content', ''))[:250]}"
-                for m in recent_chats
-            )
+            # chat_memory.get_messages returns {"user_message":..., "system_response":...} format
+            lines = []
+            for m in recent_chats:
+                u = str(m.get("user_message", m.get("content", ""))).strip()
+                r = str(m.get("system_response", "")).strip()
+                if u:
+                    lines.append(f"utente: {u[:200]}")
+                if r:
+                    lines.append(f"assistente: {r[:200]}")
+            chat_text = "\n".join(lines)
 
             # Usa _call_model direttamente per evitare che _call_with_protection
             # sostituisca _CONSOLIDATION_PROMPT con il system prompt adattivo di Genesi
