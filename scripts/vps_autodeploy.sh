@@ -115,16 +115,21 @@ if [[ "$(id -u)" -eq 0 ]]; then
   systemctl restart "$SERVICE_NAME"
   systemctl is-active --quiet "$SERVICE_NAME"
 else
-  SUDO_N_OK=0
-  sudo -n true >/dev/null 2>&1 && SUDO_N_OK=1 || true
+  SYSTEMCTL_BIN="$(command -v systemctl || echo /bin/systemctl)"
+  RESTART_RC=0
+  sudo -n "$SYSTEMCTL_BIN" restart "$SERVICE_NAME" >/dev/null 2>&1 || RESTART_RC=$?
 
-  if [[ "$SUDO_N_OK" -eq 1 ]]; then
-    sudo -n systemctl restart "$SERVICE_NAME"
-    sudo -n systemctl is-active "$SERVICE_NAME" >/dev/null
+  if [[ "$RESTART_RC" -eq 0 ]]; then
+    ACTIVE_RC=0
+    sudo -n "$SYSTEMCTL_BIN" is-active "$SERVICE_NAME" >/dev/null 2>&1 || ACTIVE_RC=$?
+    if [[ "$ACTIVE_RC" -ne 0 ]]; then
+      log "ERROR: service $SERVICE_NAME is not active after restart"
+      exit 1
+    fi
   else
     log "ERROR: passwordless sudo is required to restart $SERVICE_NAME"
     log "Add a sudoers rule for the deploy user, for example:"
-    log "  <deploy-user> ALL=NOPASSWD: /bin/systemctl restart $SERVICE_NAME, /bin/systemctl is-active $SERVICE_NAME"
+    log "  <deploy-user> ALL=(root) NOPASSWD: /bin/systemctl restart $SERVICE_NAME, /bin/systemctl is-active $SERVICE_NAME, /usr/bin/systemctl restart $SERVICE_NAME, /usr/bin/systemctl is-active $SERVICE_NAME"
     exit 1
   fi
 fi
