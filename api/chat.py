@@ -275,6 +275,18 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                 _aio.create_task(global_memory_service.consolidate_if_needed(user_id))
             except Exception:
                 pass
+            # Episode extractor in background (eventi personali temporali)
+            async def _stream_extract_episode():
+                try:
+                    from core.episode_extractor import extract_episodes
+                    from core.episode_memory import episode_memory as _em
+                    episodes = await extract_episodes(request.message, user_id)
+                    for ep in episodes:
+                        await _em.add(user_id, ep)
+                        log("EPISODE_SAVED", user_id=user_id, text=ep['text'][:60])
+                except Exception as _ep_e:
+                    log("EPISODE_SAVE_ERROR", user_id=user_id, error=str(_ep_e))
+            _aio.create_task(_stream_extract_episode())
             await queue.put({"done": True, "response": resp})
         except Exception as _e:
             log("CHAT_STREAM_PIPELINE_ERROR", user_id=user_id, error=str(_e))
