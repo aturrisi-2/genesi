@@ -27,10 +27,17 @@ jobs:
           script: |
             set -euo pipefail
             cd /opt/genesi
+            SUDO_OK=0
+            if sudo -n true 2>/dev/null; then
+              SUDO_OK=1
+            fi
+
             if [ ! -w .git ] || { [ -e .git/FETCH_HEAD ] && [ ! -w .git/FETCH_HEAD ]; }; then
               echo "INFO: fixing git permissions before deploy"
-              if sudo -n true 2>/dev/null; then
-                sudo -n chown -R "$(id -un):$(id -gn)" /opt/genesi/.git
+              if [ "$SUDO_OK" -eq 1 ]; then
+                if ! sudo -n chown -R "$(id -un):$(id -gn)" /opt/genesi/.git; then
+                  echo "WARN: unable to chown /opt/genesi/.git, will try sudo deploy fallback"
+                fi
               else
                 echo "ERROR: cannot write /opt/genesi/.git and sudo -n not available"
                 ls -ld /opt/genesi /opt/genesi/.git /opt/genesi/.git/FETCH_HEAD || true
@@ -42,4 +49,14 @@ jobs:
               ls -l scripts/vps_autodeploy.sh || true
               exit 1
             fi
-            APP_DIR=/opt/genesi BRANCH=gold-faro-stable SERVICE_NAME=genesi VENV_DIR=/opt/genesi/.venv AUTO_FIX_OWNERSHIP=1 bash scripts/vps_autodeploy.sh
+
+            if [ -w .git ] && { [ ! -e .git/FETCH_HEAD ] || [ -w .git/FETCH_HEAD ]; }; then
+              APP_DIR=/opt/genesi BRANCH=gold-faro-stable SERVICE_NAME=genesi VENV_DIR=/opt/genesi/.venv AUTO_FIX_OWNERSHIP=1 bash scripts/vps_autodeploy.sh
+            elif [ "$SUDO_OK" -eq 1 ]; then
+              echo "WARN: running deploy with sudo due to git permission constraints"
+              sudo -n env APP_DIR=/opt/genesi BRANCH=gold-faro-stable SERVICE_NAME=genesi VENV_DIR=/opt/genesi/.venv AUTO_FIX_OWNERSHIP=1 bash scripts/vps_autodeploy.sh
+            else
+              echo "ERROR: git metadata is not writable and sudo fallback is unavailable"
+              ls -ld /opt/genesi /opt/genesi/.git /opt/genesi/.git/FETCH_HEAD || true
+              exit 1
+            fi
