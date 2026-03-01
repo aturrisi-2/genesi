@@ -143,22 +143,33 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
 
                 profile_changed = True
 
-        # Identity extractor: stable interests, preferences, traits, pets, children, spouse
-        history = chat_memory.get_messages(user_id, limit=3) if user_id else []
-        history_text = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in history])
-        identity_update = await extract_identity_updates(request.message, history_text)
-        
-        if identity_update.interests or identity_update.preferences or \
-           identity_update.traits or identity_update.pets or \
-           identity_update.children or identity_update.spouse:
-            merge_identity_update(profile, identity_update)
-            profile_changed = True
-
-        # Save profile if any update occurred
+        # Save profile if cognitive memory update occurred (no identity yet)
         if profile_changed:
             profile.updated_at = datetime.utcnow()
             await storage.save(f"profile:{user_id}", profile.model_dump(mode="json"))
             log("STORAGE_SAVE", key=f"profile:{user_id}")
+
+        # Identity extractor: runs in BACKGROUND while proactor generates response.
+        # Saves ~1-2s per message (avoids blocking on gpt-4o-mini call).
+        async def _extract_and_save_identity():
+            try:
+                history = chat_memory.get_messages(user_id, limit=3) if user_id else []
+                history_text = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in history])
+                identity_update = await extract_identity_updates(request.message, history_text)
+                if identity_update.interests or identity_update.preferences or \
+                   identity_update.traits or identity_update.pets or \
+                   identity_update.children or identity_update.spouse:
+                    fresh_raw = await storage.load(f"profile:{user_id}", default={})
+                    fresh_profile = UserProfile(**normalize_profile_dict(fresh_raw))
+                    merge_identity_update(fresh_profile, identity_update)
+                    fresh_profile.updated_at = datetime.utcnow()
+                    await storage.save(f"profile:{user_id}", fresh_profile.model_dump(mode="json"))
+                    log("IDENTITY_SAVE_BACKGROUND", user_id=user_id)
+            except Exception as _e:
+                log("IDENTITY_SAVE_BACKGROUND_ERROR", user_id=user_id, error=str(_e))
+
+        import asyncio as _asyncio
+        _asyncio.create_task(_extract_and_save_identity())
 
         # 2. Pipeline Relazionale / Tecnico (Orchestrata dal Proactor)
         response = await simple_chat_handler(user_id, request.message, request.conversation_id)
@@ -213,6 +224,69 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
     except Exception as e:
         log("API_CHAT_ERROR", error=str(e), user_id=user.id if user else "unknown")
         raise HTTPException(status_code=500, detail="Chat error")
+
+@router.post("/stream")
+@router.post("/stream/")
+async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(require_auth)):
+    """
+    SSE streaming endpoint — testo LLM arriva in tempo reale.
+    Usa ContextVar per iniettare la queue nel llm_service senza modificare il proactor.
+    """
+    import asyncio as _aio
+    from fastapi.responses import StreamingResponse as _SR
+    from core.llm_service import _STREAM_QUEUE
+    from core.simple_chat import simple_chat_handler as _sch
+
+    user_id = user.id
+    queue: _aio.Queue = _aio.Queue()
+
+    async def _run_pipeline():
+        try:
+            resp = await _sch(user_id, request.message, request.conversation_id)
+            if isinstance(resp, tuple):
+                resp = resp[0]
+            if not isinstance(resp, str):
+                resp = str(resp)
+            await queue.put({"done": True, "response": resp})
+        except Exception as _e:
+            log("CHAT_STREAM_PIPELINE_ERROR", user_id=user_id, error=str(_e))
+            await queue.put({"error": str(_e)})
+
+    # Set the ContextVar BEFORE creating the task (task copies current context)
+    _STREAM_QUEUE.set(queue)
+    pipeline_task = _aio.create_task(_run_pipeline())
+
+    async def _event_generator():
+        try:
+            while True:
+                try:
+                    item = await _aio.wait_for(queue.get(), timeout=45.0)
+                except _aio.TimeoutError:
+                    yield f"data: {json.dumps({'error': 'timeout'})}\n\n"
+                    break
+
+                if "chunk" in item:
+                    yield f"data: {json.dumps({'chunk': item['chunk']})}\n\n"
+                elif "done" in item:
+                    full = item["response"]
+                    tts = full
+                    if full.startswith("[NO_TTS]"):
+                        full = full.replace("[NO_TTS]", "").strip()
+                        tts = ""
+                    yield f"data: {json.dumps({'done': True, 'tts_text': tts})}\n\n"
+                    break
+                elif "error" in item:
+                    yield f"data: {json.dumps({'error': item['error']})}\n\n"
+                    break
+        finally:
+            if not pipeline_task.done():
+                pipeline_task.cancel()
+
+    return _SR(_event_generator(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",   # disabilita buffering nginx
+    })
+
 
 @router.get("/user/info")
 async def get_user_info(user: AuthUser = Depends(require_auth)):

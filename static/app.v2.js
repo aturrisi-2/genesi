@@ -1262,6 +1262,73 @@ function addMessage(text, sender) {
 function addUserMessage(text) { return addMessage(text, 'user'); }
 
 // ===============================
+// CHAT API — STREAMING (SSE)
+// ===============================
+/**
+ * Streaming version of sendChatMessage.
+ * Returns { response, tts_text } when done, or throws on error.
+ * Calls onChunk(text) for each incremental chunk, onFirstChunk() when streaming starts.
+ */
+async function sendChatMessageStream(message, { onChunk, onFirstChunk } = {}) {
+  if (currentMode === 'coding') throw new Error('streaming not supported in coding mode');
+
+  const res = await fetch('/api/chat/stream', {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Accept': 'text/event-stream' },
+    body: JSON.stringify({
+      message,
+      conversation_id: typeof currentConvId !== 'undefined' ? currentConvId : null
+    })
+  });
+
+  if (res.status === 401) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) return sendChatMessageStream(message, { onChunk, onFirstChunk });
+    doLogout();
+    throw new Error('Session expired');
+  }
+  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+  let ttsText = '';
+  let firstChunkFired = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop(); // keep incomplete line
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      let evt;
+      try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+
+      if (evt.chunk) {
+        fullText += evt.chunk;
+        if (!firstChunkFired) {
+          firstChunkFired = true;
+          if (onFirstChunk) onFirstChunk();
+        }
+        if (onChunk) onChunk(fullText);
+      } else if (evt.done) {
+        ttsText = evt.tts_text || fullText;
+        return { response: fullText, tts_text: ttsText };
+      } else if (evt.error) {
+        throw new Error(evt.error);
+      }
+    }
+  }
+  // Stream ended without explicit done event
+  return { response: fullText, tts_text: fullText };
+}
+
+// ===============================
 // CHAT API
 // ===============================
 async function sendChatMessage(message) {
@@ -1401,36 +1468,73 @@ async function sendMessage(voiceText = null) {
   console.log('FRONTEND_THINKING_START');
 
   try {
-    // PARTE 1: Chiama /api/chat
-    const data = await sendChatMessage(text);
-    console.log('[FRONTEND] response received');
+    let data;
+    let alreadyRendered = false;
 
-    // USA SEMPRE response - CONTRATTO API BACKEND
-    const botMessage = data.response;
+    // ── STREAMING PATH (non in coding mode) ─────────────────────────────────
+    if (currentMode !== 'coding') {
+      let streamBubble = null;
+      try {
+        data = await sendChatMessageStream(text, {
+          onFirstChunk: () => {
+            hideThinking();
+            streamBubble = document.createElement('div');
+            streamBubble.className = 'message genesi streaming';
+            const hue = _neonHues[_neonIdx % _neonHues.length];
+            streamBubble.style.setProperty('--neon-hue', hue + 'deg');
+            _neonIdx++;
+            dialogue.appendChild(streamBubble);
+            scrollToBottom();
+          },
+          onChunk: (fullText) => {
+            if (streamBubble) {
+              streamBubble.innerHTML = renderMessageContent(fullText) + '<span class="stream-cursor">▋</span>';
+              scrollToBottom();
+            }
+          }
+        });
 
-    if (!botMessage || botMessage.trim().length === 0) return;
-
-    console.log(`LLM_RESPONSE_LENGTH: ${botMessage.length} chars`);
-
-    // RENDER IMMEDIATO — il testo appare SUBITO, senza attendere TTS
-    hideThinking();
-    const parsed = handleChatResponse(botMessage);
-    if (parsed.images && parsed.images.length > 0) {
-      // Aggiungi messaggio testo
-      addMessage(parsed.text, 'genesi');
-      // Salva risposta assistente nella conversazione corrente
-      saveMessageToConversation('assistant', parsed.text);
-      // Aggiungi griglia immagini
-      const lastMsg = document.querySelector('.message.genesi:last-child');
-      if (lastMsg) {
-        lastMsg.insertAdjacentHTML('beforeend', renderImages(parsed.images));
+        if (data && data.response && streamBubble) {
+          const parsed = handleChatResponse(data.response);
+          streamBubble.classList.remove('streaming');
+          streamBubble.innerHTML = renderMessageContent(parsed.text) + renderImages(parsed.images);
+          saveMessageToConversation('assistant', parsed.text);
+          scrollToBottom();
+          alreadyRendered = true;
+        } else if (!data?.response) {
+          if (streamBubble) { streamBubble.remove(); streamBubble = null; }
+          return;
+        }
+      } catch (streamErr) {
+        console.warn('[STREAM_FALLBACK] errore streaming, uso endpoint normale:', streamErr.message);
+        if (streamBubble) { streamBubble.remove(); streamBubble = null; }
+        data = await sendChatMessage(text);
       }
     } else {
-      addMessage(parsed.text, 'genesi');
-      // Salva risposta assistente nella conversazione corrente
-      saveMessageToConversation('assistant', parsed.text);
+      // Coding mode: endpoint normale
+      data = await sendChatMessage(text);
     }
-    console.log('[TEXT_RENDERED] text_len=' + parsed.text.length);
+
+    console.log('[FRONTEND] response received');
+
+    // ── RENDER NORMALE (fallback o coding mode) ──────────────────────────────
+    if (!alreadyRendered) {
+      const botMessage = data.response;
+      if (!botMessage || botMessage.trim().length === 0) return;
+      console.log(`LLM_RESPONSE_LENGTH: ${botMessage.length} chars`);
+      hideThinking();
+      const parsed = handleChatResponse(botMessage);
+      if (parsed.images && parsed.images.length > 0) {
+        addMessage(parsed.text, 'genesi');
+        saveMessageToConversation('assistant', parsed.text);
+        const lastMsg = document.querySelector('.message.genesi:last-child');
+        if (lastMsg) lastMsg.insertAdjacentHTML('beforeend', renderImages(parsed.images));
+      } else {
+        addMessage(parsed.text, 'genesi');
+        saveMessageToConversation('assistant', parsed.text);
+      }
+    }
+    console.log('[TEXT_RENDERED] text_len=' + (data?.response?.length || 0));
 
     // TTS ASINCRONO — completamente scollegato dal render
     const rawTtsText = (typeof data.tts_text !== 'undefined') ? data.tts_text : data.response;

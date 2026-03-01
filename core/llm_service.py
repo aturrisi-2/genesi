@@ -2,6 +2,7 @@ import os
 import asyncio
 import logging
 import json
+import contextvars
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -12,6 +13,18 @@ from auth.database import async_session
 from auth.models import UsageLog
 
 logger = logging.getLogger("genesi")
+
+# ── SSE Streaming support ────────────────────────────────────────────────────
+# Set this ContextVar to an asyncio.Queue before calling any LLM method.
+# _call_model() will put text chunks into the queue for streaming routes.
+# Sentinel: None → stream finished; dict with 'error' key → error.
+_STREAM_QUEUE: contextvars.ContextVar = contextvars.ContextVar('genesi_stream_q', default=None)
+
+# Routes whose final LLM response is streamed (not tool/JSON routes)
+_STREAMING_ROUTES = frozenset({
+    'relational', 'knowledge', 'general', 'general_llm',
+    'tecnica', 'spiegazione', 'emotional', 'debug',
+})
 
 # ═══════════════════════════════════════════════════════════
 # LLM CONFIGURATION
@@ -154,14 +167,40 @@ class LLMService:
             clean_model = model.split('/')[-1] if '/' in model else model
             if "claude-3-opus" in clean_model: clean_model = "gpt-4o"
         
+        msg_list = messages if messages else [{"role": "system", "content": prompt}, {"role": "user", "content": message}]
+        extra_headers = {"HTTP-Referer": "https://genesi.app", "X-Title": "Genesi"} if "openrouter" in str(current_client.base_url) else None
+
         async def make_request(client, model_name):
-            headers = {"HTTP-Referer": "https://genesi.app", "X-Title": "Genesi"} if "openrouter" in str(client.base_url) else None
             return await client.chat.completions.create(
                 model=model_name,
-                messages=messages if messages else [{"role": "system", "content": prompt}, {"role": "user", "content": message}],
+                messages=msg_list,
                 temperature=0.7,
-                extra_headers=headers
+                extra_headers=extra_headers
             )
+
+        # ── SSE streaming path ───────────────────────────────────────────────
+        stream_queue = _STREAM_QUEUE.get()
+        if stream_queue is not None and route in _STREAMING_ROUTES:
+            try:
+                logger.info("%s_STREAM_REQUEST model=%s route=%s", tag, model, route)
+                api_stream = await current_client.chat.completions.create(
+                    model=clean_model,
+                    messages=msg_list,
+                    temperature=0.7,
+                    stream=True,
+                    extra_headers=extra_headers
+                )
+                llm_response = ""
+                async for chunk in api_stream:
+                    delta = chunk.choices[0].delta.content if chunk.choices else None
+                    if delta:
+                        llm_response += delta
+                        await stream_queue.put({"chunk": delta})
+                logger.info("%s_STREAM_OK model=%s len=%d", tag, model, len(llm_response))
+                return llm_response if llm_response else None
+            except Exception as se:
+                logger.warning("%s_STREAM_ERROR: %s — falling back to normal", tag, se)
+                # Fall through to normal (non-streaming) path below
 
         try:
             logger.info("%s_REQUEST model=%s", tag, model)
