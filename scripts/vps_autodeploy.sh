@@ -111,19 +111,43 @@ if [[ -f requirements.txt ]]; then
 fi
 
 log "Restarting service: $SERVICE_NAME"
+SERVICE_CHECK_INTERVAL_SECONDS="${SERVICE_CHECK_INTERVAL_SECONDS:-2}"
+SERVICE_CHECK_MAX_ATTEMPTS="${SERVICE_CHECK_MAX_ATTEMPTS:-15}"
+
 if [[ "$(id -u)" -eq 0 ]]; then
   systemctl restart "$SERVICE_NAME"
-  systemctl is-active --quiet "$SERVICE_NAME"
+  ACTIVE_RC=1
+  for ((attempt = 1; attempt <= SERVICE_CHECK_MAX_ATTEMPTS; attempt++)); do
+    if systemctl is-active "$SERVICE_NAME" >/dev/null 2>&1; then
+      ACTIVE_RC=0
+      break
+    fi
+    sleep "$SERVICE_CHECK_INTERVAL_SECONDS"
+  done
+
+  if [[ "$ACTIVE_RC" -ne 0 ]]; then
+    log "ERROR: service $SERVICE_NAME is not active after restart"
+    systemctl is-active "$SERVICE_NAME" || true
+    exit 1
+  fi
 else
   SYSTEMCTL_BIN="$(command -v systemctl || echo /bin/systemctl)"
   RESTART_RC=0
   sudo -n "$SYSTEMCTL_BIN" restart "$SERVICE_NAME" >/dev/null 2>&1 || RESTART_RC=$?
 
   if [[ "$RESTART_RC" -eq 0 ]]; then
-    ACTIVE_RC=0
-    sudo -n "$SYSTEMCTL_BIN" is-active "$SERVICE_NAME" >/dev/null 2>&1 || ACTIVE_RC=$?
+    ACTIVE_RC=1
+    for ((attempt = 1; attempt <= SERVICE_CHECK_MAX_ATTEMPTS; attempt++)); do
+      if sudo -n "$SYSTEMCTL_BIN" is-active "$SERVICE_NAME" >/dev/null 2>&1; then
+        ACTIVE_RC=0
+        break
+      fi
+      sleep "$SERVICE_CHECK_INTERVAL_SECONDS"
+    done
+
     if [[ "$ACTIVE_RC" -ne 0 ]]; then
       log "ERROR: service $SERVICE_NAME is not active after restart"
+      sudo -n "$SYSTEMCTL_BIN" is-active "$SERVICE_NAME" || true
       exit 1
     fi
   else
