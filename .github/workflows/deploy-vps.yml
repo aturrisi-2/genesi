@@ -25,8 +25,14 @@ jobs:
           request_pty: true
           command_timeout: 30m
           script: |
-            set -euo pipefail
+            set -euxo pipefail
+            echo "INFO: starting deploy on host=$(hostname) user=$(id -un)"
+            pwd
+            ls -ld /opt /opt/genesi || true
             cd /opt/genesi
+            pwd
+            ls -ld . .git || true
+            ls -l scripts/vps_autodeploy.sh || true
             if [ ! -r scripts/vps_autodeploy.sh ]; then
               echo "ERROR: scripts/vps_autodeploy.sh not readable"
               ls -l scripts/vps_autodeploy.sh || true
