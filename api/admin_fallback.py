@@ -126,3 +126,20 @@ async def delete_suggestion(suggestion_id: str, user: AuthUser = Depends(require
         raise HTTPException(status_code=404, detail="Suggerimento non trovato.")
     _save_suggestions(new_items)
     return {"status": "ok"}
+
+
+# ─── LAB FEEDBACK CYCLE ───────────────────────────────────────────────────────
+
+@router.get("/lab-cycle/status")
+async def get_lab_cycle_status(user: AuthUser = Depends(require_admin)):
+    """Stato dell'ultimo ciclo di auto-miglioramento (feedback → prompt)."""
+    from core.lab_feedback_cycle import lab_feedback_cycle
+    return lab_feedback_cycle.get_status()
+
+
+@router.post("/lab-cycle/run")
+async def run_lab_cycle_now(user: AuthUser = Depends(require_admin)):
+    """Avvia manualmente il ciclo di auto-miglioramento indipendentemente dalla soglia."""
+    from core.lab_feedback_cycle import lab_feedback_cycle
+    result = await lab_feedback_cycle.run(force=True)
+    return result

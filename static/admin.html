@@ -73,6 +73,25 @@
                 <div id="sug-list" style="margin-top:14px; font-size:0.8rem; color:#ccc; max-height:180px; overflow-y:auto;"></div>
             </div>
 
+            <!-- ─── SEZIONE AUTO-MIGLIORAMENTO ──────────────────────── -->
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Auto-Miglioramento Prompt</h2>
+            <div id="lab-cycle-box" style="background:rgba(98,0,234,0.06); border:1px solid rgba(98,0,234,0.3); border-radius:8px; padding:15px; margin-top:15px;">
+                <p style="font-size:0.85rem; color:#aaa; margin-bottom:12px;">
+                    Genesi analizza automaticamente i fallback e i suggerimenti per aggiornare il suo system prompt interno.
+                    Il ciclo si avvia da solo ogni volta che ci sono almeno <strong style="color:#b388ff;">5 eventi non processati</strong>.
+                </p>
+                <div id="lab-cycle-status" style="font-size:0.82rem; color:#ccc; margin-bottom:12px; min-height:40px;">
+                    Caricamento stato...
+                </div>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <button onclick="runLabCycle()" id="lab-run-btn" style="padding:7px 16px; background:#7c4dff; color:#fff; border:none; border-radius:5px; cursor:pointer; font-size:0.85rem; font-weight:600;">
+                        Avvia Ciclo Ora
+                    </button>
+                    <span id="lab-cycle-msg" style="font-size:0.8rem; color:#b388ff;"></span>
+                </div>
+                <div id="lab-rules-list" style="margin-top:14px; font-size:0.8rem; color:#ccc;"></div>
+            </div>
+
             <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Dettaglio Utenti</h2>
             <div class="user-table-container">
                 <table id="user-table">
@@ -164,6 +183,7 @@
         } else {
             loadStats();
             loadSuggestions();
+            loadLabCycleStatus();
         }
 
         async function loadStats() {
@@ -350,6 +370,80 @@
                 });
                 loadSuggestions();
             } catch(e) {}
+        }
+
+        async function loadLabCycleStatus() {
+            try {
+                const res = await fetch('/api/admin/fallbacks/lab-cycle/status', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) return;
+                const d = await res.json();
+                const el = document.getElementById('lab-cycle-status');
+                const pending = d.pending_events || 0;
+                const threshold = d.min_events_to_trigger || 5;
+                const isRunning = d.is_running || false;
+
+                let html = '';
+                if (isRunning) {
+                    html = '<span style="color:#b388ff;">Ciclo in esecuzione...</span>';
+                } else if (d.last_run) {
+                    const dt = new Date(d.last_run).toLocaleString('it-IT');
+                    html = `Ultimo ciclo: <strong style="color:#b388ff;">${dt}</strong> — `;
+                    html += `${d.events_processed || 0} eventi processati, ${d.rules_generated || 0} regole generate.<br>`;
+                    html += `<span style="color:${pending >= threshold ? '#ffab00' : '#555'};">`;
+                    html += `${pending} eventi pending (soglia: ${threshold})</span>`;
+                } else {
+                    html = `<span style="color:#555;">Nessun ciclo eseguito ancora.</span> `;
+                    html += `<span style="color:${pending >= threshold ? '#ffab00' : '#555'};">${pending} eventi pending (soglia: ${threshold})</span>`;
+                }
+                el.innerHTML = html;
+
+                // Mostra regole attive se ci sono
+                const rulesEl = document.getElementById('lab-rules-list');
+                if (d.rules && d.rules.length > 0) {
+                    rulesEl.innerHTML = '<div style="color:#7c4dff; margin-bottom:6px; font-weight:600;">Regole attive nel prompt:</div>'
+                        + d.rules.map(r => `<div style="padding:4px 0; border-top:1px solid rgba(124,77,255,0.15);">• ${r}</div>`).join('');
+                } else {
+                    rulesEl.innerHTML = '';
+                }
+            } catch(e) {}
+        }
+
+        async function runLabCycle() {
+            const btn = document.getElementById('lab-run-btn');
+            const msgEl = document.getElementById('lab-cycle-msg');
+            btn.disabled = true;
+            btn.textContent = 'Esecuzione...';
+            msgEl.textContent = '';
+            try {
+                const res = await fetch('/api/admin/fallbacks/lab-cycle/run', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const d = await res.json();
+                if (d.status === 'success') {
+                    msgEl.style.color = '#b388ff';
+                    msgEl.textContent = `✓ ${d.rules_generated} regole generate da ${d.events_processed} eventi.`;
+                } else if (d.status === 'nothing_to_process') {
+                    msgEl.style.color = '#888';
+                    msgEl.textContent = 'Nessun dato da processare.';
+                } else if (d.status === 'already_running') {
+                    msgEl.style.color = '#ffab00';
+                    msgEl.textContent = 'Ciclo già in corso.';
+                } else {
+                    msgEl.style.color = '#ff4444';
+                    msgEl.textContent = d.error || 'Errore durante il ciclo.';
+                }
+                setTimeout(() => { msgEl.textContent = ''; }, 6000);
+                loadLabCycleStatus();
+            } catch(e) {
+                msgEl.style.color = '#ff4444';
+                msgEl.textContent = 'Errore di rete.';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Avvia Ciclo Ora';
+            }
         }
 
         document.getElementById('logout-link').addEventListener('click', (e) => {

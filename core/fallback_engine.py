@@ -99,11 +99,18 @@ class FallbackEngine:
         
         self.events.append(event)
         self._save_local()
-        
+
         log("FALLBACK_LOGGED", type=fallback_type, user_id=user_id)
-        
+
         # Avvia suggerimento soluzione in background (non bloccante)
         asyncio.create_task(self._suggest_solution(event["id"], message, fallback_type, reason))
+
+        # Verifica se è il momento di avviare il ciclo di auto-miglioramento
+        try:
+            from core.lab_feedback_cycle import lab_feedback_cycle
+            lab_feedback_cycle.trigger_if_needed()
+        except Exception:
+            pass
 
     async def _suggest_solution(self, event_id: str, message: str, f_type: str, reason: str):
         """Usa una chiamata minima a LLM per suggerire come risolvere il problema."""
