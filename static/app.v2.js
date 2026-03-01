@@ -1318,9 +1318,11 @@ async function sendChatMessageStream(message, { onChunk, onFirstChunk } = {}) {
         if (onChunk) onChunk(fullText);
       } else if (evt.done) {
         ttsText = evt.tts_text || fullText;
-        // For non-streaming routes (e.g. memory_context), fullText is empty.
-        // Fall back to ttsText so the caller receives a non-empty response.
-        return { response: fullText || ttsText, tts_text: ttsText };
+        // ttsText = final synthesis result (weather/news actual data).
+        // fullText = streaming relational chunks (may say "Mi dispiace..." for tool intents).
+        // Prioritize ttsText (synthesis) so tool results are displayed correctly.
+        // Fall back to fullText for pure-streaming routes where ttsText is empty.
+        return { response: ttsText || fullText, tts_text: ttsText };
       } else if (evt.error) {
         throw new Error(evt.error);
       }
