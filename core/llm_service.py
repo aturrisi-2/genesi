@@ -131,9 +131,17 @@ class LLMService:
 
     async def _call_with_protection(self, model: str, prompt: str, message: str, user_id: str = None, route: str = "general", messages: Optional[List[Dict[str, str]]] = None) -> str:
         """Metodo di interfaccia protetto (compatibile con Proactor)."""
-        # Sostituisce system prompt con quello adattivo se disponibile
-        adaptive_prompt = self._load_adaptive_prompt()
-        final_prompt = adaptive_prompt if adaptive_prompt else prompt
+        final_prompt = prompt
+        
+        # Applica l'adaptive prompt SOLO alle route conversazionali,
+        # per evitare di rompere i prompt JSON (classificazione, estrazione).
+        if route in ["relational", "general", "general_llm", "emotional"]:
+            adaptive_prompt = self._load_adaptive_prompt()
+            if adaptive_prompt:
+                final_prompt = prompt + "\n\n[ADAPTIVE PERSONA]\n" + adaptive_prompt
+                # Se proactor ha passato i messaggi, inietta lì l'adaptive prompt
+                if messages and len(messages) > 0 and messages[0].get("role") == "system":
+                    messages[0]["content"] += "\n\n[ADAPTIVE PERSONA]\n" + adaptive_prompt
 
         try:
             # Primo tentativo
