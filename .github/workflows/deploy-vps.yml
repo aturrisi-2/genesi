@@ -27,5 +27,9 @@ jobs:
           script: |
             set -euo pipefail
             cd /opt/genesi
-            chmod +x scripts/vps_autodeploy.sh
+            if [ ! -r scripts/vps_autodeploy.sh ]; then
+              echo "ERROR: scripts/vps_autodeploy.sh not readable"
+              ls -l scripts/vps_autodeploy.sh || true
+              exit 1
+            fi
             APP_DIR=/opt/genesi BRANCH=gold-faro-stable SERVICE_NAME=genesi VENV_DIR=/opt/genesi/.venv AUTO_FIX_OWNERSHIP=1 bash scripts/vps_autodeploy.sh
