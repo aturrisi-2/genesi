@@ -38,7 +38,13 @@ class ImageSearchService:
                 logger.info("IMAGE_SEARCH_OK backend=pixabay query=%r results=%d", query, len(results))
                 return results
 
-            # Fallback: no API key / empty Pixabay response
+            # Fallback 1: Wikipedia (affidabile e non banna IP)
+            results = await self._wikipedia_search(query, max_results)
+            if results:
+                logger.info("IMAGE_SEARCH_OK backend=wikipedia query=%r results=%d", query, len(results))
+                return results
+
+            # Fallback 2: DDG (spesso banna le VPS con 403 Forbidden)
             results = await self._duckduckgo_search(query, max_results)
             logger.info("IMAGE_SEARCH_OK backend=duckduckgo query=%r results=%d", query, len(results))
             return results
@@ -75,6 +81,40 @@ class ImageSearchService:
                     height=item.get("imageHeight", 0)
                 ))
             return results
+
+    async def _wikipedia_search(self, query: str, max_results: int) -> List[ImageResult]:
+        try:
+            url = "https://it.wikipedia.org/w/api.php"
+            params = {
+                "action": "query",
+                "generator": "search",
+                "gsrsearch": query,
+                "gsrlimit": max_results * 3,
+                "prop": "pageimages",
+                "pithumbsize": 800,
+                "format": "json"
+            }
+            async with httpx.AsyncClient(timeout=self.TIMEOUT, headers={"User-Agent": "GenesiAI/2.0"}) as client:
+                resp = await client.get(url, params=params)
+                data = resp.json()
+                
+                results = []
+                pages = data.get("query", {}).get("pages", {})
+                for page_id, page in pages.items():
+                    if "thumbnail" in page:
+                        image_url = page["thumbnail"]["source"]
+                        results.append(ImageResult(
+                            url=image_url,
+                            title=page.get("title", query),
+                            source="wikipedia.org",
+                            thumbnail=image_url,
+                            width=page["thumbnail"].get("width", 800),
+                            height=page["thumbnail"].get("height", 800)
+                        ))
+                return results[:max_results]
+        except Exception as e:
+            logger.warning("WIKIPEDIA_SEARCH_ERROR query=%r error=%s", query, e)
+            return []
 
     async def _duckduckgo_search(self, query: str, max_results: int) -> List[ImageResult]:
         def _do_search() -> List[dict]:
