@@ -37,8 +37,9 @@ async def list_conversations(current_user: AuthUser = Depends(require_auth)):
             c = json.loads(f.read_text())
             messages = c.get("messages", [])
             convs.append({
-                "id": c["id"], 
-                "title": c.get("title", "Nuova chat"), 
+                "id": c["id"],
+                "title": c.get("title", "Nuova chat"),
+                "conv_type": c.get("conv_type", "chat"),
                 "pinned": c.get("pinned", False),
                 "updated_at": c.get("updated_at"),
                 "message_count": len(messages),
@@ -48,11 +49,14 @@ async def list_conversations(current_user: AuthUser = Depends(require_auth)):
     return {"conversations": convs}
 
 @router.post("/conversations")
-async def create_conversation(current_user: AuthUser = Depends(require_auth)):
+async def create_conversation(body: dict = None, current_user: AuthUser = Depends(require_auth)):
     user_id = str(current_user.id)
-    conv = {"id": str(uuid.uuid4()), "title": "Nuova chat", "messages": [], "pinned": False, "created_at": datetime.now().isoformat(), "updated_at": datetime.now().isoformat()}
+    conv_type = (body or {}).get("conv_type", "chat")
+    if conv_type not in ("chat", "coding"):
+        conv_type = "chat"
+    conv = {"id": str(uuid.uuid4()), "title": "Nuova chat", "conv_type": conv_type, "messages": [], "pinned": False, "created_at": datetime.now().isoformat(), "updated_at": datetime.now().isoformat()}
     _save_conv(user_id, conv)
-    log("CONVERSATION_CREATE", user_id=user_id, conv_id=conv["id"])
+    log("CONVERSATION_CREATE", user_id=user_id, conv_id=conv["id"], conv_type=conv_type)
     return conv
 
 @router.delete("/conversations/empty")
@@ -85,6 +89,8 @@ async def rename_conversation(conv_id: str, body: dict, current_user: AuthUser =
     conv = _load_conv(user_id, conv_id)
     if not conv: return {"error": "not found"}
     conv["title"] = body.get("title", conv["title"])[:60]
+    if "conv_type" in body and body["conv_type"] in ("chat", "coding"):
+        conv["conv_type"] = body["conv_type"]
     conv["updated_at"] = datetime.now().isoformat()
     _save_conv(user_id, conv)
     log("CONVERSATION_RENAME", user_id=user_id, conv_id=conv_id)

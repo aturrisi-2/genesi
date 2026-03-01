@@ -7,6 +7,7 @@ let currentConvId = null;
 // APPLICATION MODE STATE
 // ===============================
 let currentMode = "chat"; // "chat" | "coding"
+let currentConvFilter = "chat"; // mirrors currentMode for sidebar tab filter
 
 // ===============================
 // TTS TIMING STATE
@@ -2769,6 +2770,15 @@ function clearChat() {
   }
 }
 
+// ── CONV TAB FILTER ──
+window.switchConvTab = function (filter) {
+  currentConvFilter = filter;
+  document.querySelectorAll('.conv-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === filter);
+  });
+  loadConversations();
+};
+
 async function loadConversations() {
   try {
     const res = await fetch('/api/conversations', {
@@ -2784,13 +2794,16 @@ function renderConvList(convs) {
   if (!list) return;
   list.innerHTML = '';
 
+  // Filter by active mode tab
+  const filtered = convs.filter(c => (c.conv_type || 'chat') === currentConvFilter);
+
   // Sort conversations: pinned first, then by the original backend date sorting
-  convs.sort((a, b) => {
+  filtered.sort((a, b) => {
     if (a.pinned === b.pinned) return 0;
     return a.pinned ? -1 : 1;
   });
 
-  convs.forEach(c => {
+  filtered.forEach(c => {
     const item = document.createElement('div');
     item.className = 'conv-item' + (c.id === currentConvId ? ' active' : '') + (c.pinned ? ' pinned' : '');
     item.dataset.id = c.id;
@@ -2893,17 +2906,28 @@ function toggleCodingMode() {
   // Toggle mode
   if (currentMode === "chat") {
     currentMode = "coding";
+    currentConvFilter = "coding";
     codingBtn.classList.add('active');
     codingBtn.style.backgroundColor = '#00ff88';
     codingBtn.style.color = '#000';
+    document.body.classList.add('coding-active');
+    startMatrixAnimation();
     console.log('CODING_MODE_ACTIVATED');
   } else {
     currentMode = "chat";
+    currentConvFilter = "chat";
     codingBtn.classList.remove('active');
     codingBtn.style.backgroundColor = '';
     codingBtn.style.color = '';
+    document.body.classList.remove('coding-active');
+    stopMatrixAnimation();
     console.log('CODING_MODE_DEACTIVATED');
   }
+
+  // Update tab UI active state
+  document.querySelectorAll('.conv-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === currentConvFilter);
+  });
 
   // Clear chat when switching modes
   clearChat();
@@ -2953,7 +2977,8 @@ async function startNewSession() {
 
     const existingEmpty = convs.find(c =>
       (!c.messages || c.messages.length === 0) &&
-      (c.title === 'Nuova chat' || !c.title)
+      (c.title === 'Nuova chat' || !c.title) &&
+      (c.conv_type || 'chat') === currentMode
     );
 
     console.log('EXISTING_EMPTY:', existingEmpty ? existingEmpty.id : 'none');
@@ -2966,7 +2991,8 @@ async function startNewSession() {
       // Crea nuova solo se non esiste una vuota
       const res = await fetch('/api/conversations', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+        headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conv_type: currentMode })
       });
       const conv = await res.json();
       console.log('CONV_CREATED_RAW:', JSON.stringify(conv));
@@ -3068,6 +3094,70 @@ async function startNewSession() {
 
 // Esponi activeTTSSources globalmente per Voice Mode
 window.activeTTSSources = activeTTSSources;
+
+// ════════════════════════════════════════════════════════════
+// MATRIX ANIMATION — coding mode background
+// ════════════════════════════════════════════════════════════
+let _matrixAnimFrame = null;
+let _matrixCanvas = null;
+let _matrixCtx = null;
+const _MATRIX_CHARS = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ';
+
+function startMatrixAnimation() {
+  if (_matrixCanvas) return; // already running
+  const canvas = document.createElement('canvas');
+  canvas.id = 'matrix-canvas';
+  document.body.appendChild(canvas);
+  _matrixCanvas = canvas;
+  _matrixCtx = canvas.getContext('2d');
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  canvas._matrixResize = resize;
+  window.addEventListener('resize', resize);
+
+  const fontSize = 14;
+  let cols = Math.floor(canvas.width / fontSize);
+  let drops = new Array(cols).fill(1);
+
+  function draw() {
+    // Recalculate cols in case of resize
+    cols = Math.floor(canvas.width / fontSize);
+    if (drops.length !== cols) {
+      drops = new Array(cols).fill(1);
+    }
+    _matrixCtx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+    _matrixCtx.fillRect(0, 0, canvas.width, canvas.height);
+    _matrixCtx.fillStyle = '#00ff41';
+    _matrixCtx.font = fontSize + 'px monospace';
+    for (let i = 0; i < drops.length; i++) {
+      const c = _MATRIX_CHARS[Math.floor(Math.random() * _MATRIX_CHARS.length)];
+      _matrixCtx.fillText(c, i * fontSize, drops[i] * fontSize);
+      if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+        drops[i] = 0;
+      }
+      drops[i]++;
+    }
+    _matrixAnimFrame = requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+function stopMatrixAnimation() {
+  if (_matrixAnimFrame) {
+    cancelAnimationFrame(_matrixAnimFrame);
+    _matrixAnimFrame = null;
+  }
+  if (_matrixCanvas) {
+    window.removeEventListener('resize', _matrixCanvas._matrixResize);
+    _matrixCanvas.remove();
+    _matrixCanvas = null;
+    _matrixCtx = null;
+  }
+}
 
 // ════════════════════════════════════════════════════════════
 // VOICE MODE — Conversazione continua
