@@ -27,6 +27,16 @@ jobs:
           script: |
             set -euo pipefail
             cd /opt/genesi
+            if [ ! -w .git ] || { [ -e .git/FETCH_HEAD ] && [ ! -w .git/FETCH_HEAD ]; }; then
+              echo "INFO: fixing git permissions before deploy"
+              if sudo -n true 2>/dev/null; then
+                sudo -n chown -R "$(id -un):$(id -gn)" /opt/genesi/.git
+              else
+                echo "ERROR: cannot write /opt/genesi/.git and sudo -n not available"
+                ls -ld /opt/genesi /opt/genesi/.git /opt/genesi/.git/FETCH_HEAD || true
+                exit 1
+              fi
+            fi
             if [ ! -r scripts/vps_autodeploy.sh ]; then
               echo "ERROR: scripts/vps_autodeploy.sh not readable"
               ls -l scripts/vps_autodeploy.sh || true
