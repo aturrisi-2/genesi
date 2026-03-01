@@ -49,16 +49,45 @@ ensure_repo_writable() {
   fi
 }
 
+ensure_fetch_head_writable() {
+  if [[ ! -e "$APP_DIR/.git/FETCH_HEAD" || -w "$APP_DIR/.git/FETCH_HEAD" ]]; then
+    return 0
+  fi
+
+  log "Detected non-writable .git/FETCH_HEAD; attempting cleanup"
+  rm -f "$APP_DIR/.git/FETCH_HEAD" 2>/dev/null || true
+
+  if [[ ! -e "$APP_DIR/.git/FETCH_HEAD" || -w "$APP_DIR/.git/FETCH_HEAD" ]]; then
+    return 0
+  fi
+
+  log "FETCH_HEAD still not writable; attempting ownership repair"
+  repair_repo_ownership || true
+}
+
 log "Starting VPS deploy"
 cd "$APP_DIR"
 
 ensure_repo_writable
+ensure_fetch_head_writable
 
 log "Fetching latest code from origin/$BRANCH"
 if ! git fetch origin; then
-  log "git fetch failed; attempting ownership repair and retry"
+  log "git fetch failed; retrying without FETCH_HEAD write"
+  if git fetch --no-write-fetch-head origin; then
+    :
+  else
+    log "fallback fetch failed; attempting ownership repair and retry"
+    repair_repo_ownership || true
+    ensure_fetch_head_writable
+    git fetch --no-write-fetch-head origin
+  fi
+fi
+
+if ! git rev-parse --verify "origin/$BRANCH" >/dev/null 2>&1; then
+  log "ERROR: remote ref origin/$BRANCH not available after fetch"
   repair_repo_ownership || true
-  git fetch origin
+  exit 1
 fi
 
 git checkout "$BRANCH"
