@@ -155,7 +155,9 @@ class LabFeedbackCycle:
         analysis_text = "\n".join(lines)
 
         # 3. Chiama LLM per generare regole
-        raw = await llm_service._call_with_protection(
+        # Usa _call_model direttamente per evitare che _call_with_protection
+        # sostituisca _ANALYSIS_PROMPT con il system prompt adattivo di Genesi
+        raw = await llm_service._call_model(
             "openai/gpt-4o-mini",
             _ANALYSIS_PROMPT,
             analysis_text,
