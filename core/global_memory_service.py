@@ -67,8 +67,31 @@ class GlobalMemoryService:
             from core.llm_service import llm_service  # import locale per evitare circular
 
             recent_chats = chat_memory.get_messages(user_id, limit=40)
-            if not recent_chats or len(recent_chats) < 5:
-                return  # Troppo pochi messaggi per estrarre pattern
+
+            # Build profile summary to seed insights even when chat history is short
+            # (chat_memory resets on restart, profile persists to disk)
+            profile = await storage.load(f"profile:{user_id}", default={})
+            profile_parts = []
+            if profile.get("name"):
+                profile_parts.append(f"Nome: {profile['name']}")
+            if profile.get("city"):
+                profile_parts.append(f"Città: {profile['city']}")
+            if profile.get("profession"):
+                profile_parts.append(f"Professione: {profile['profession']}")
+            if profile.get("spouse"):
+                profile_parts.append(f"Partner: {profile['spouse']}")
+            children = profile.get("children", [])
+            if children:
+                names = [c.get("name", "") if isinstance(c, dict) else str(c) for c in children]
+                profile_parts.append(f"Figli: {', '.join(n for n in names if n)}")
+            pets = profile.get("pets", [])
+            if pets:
+                desc = [f"{p.get('name','')} ({p.get('type','')})" if isinstance(p, dict) else str(p) for p in pets]
+                profile_parts.append(f"Animali: {', '.join(desc)}")
+            interests = profile.get("interests", [])
+            if interests:
+                profile_parts.append(f"Interessi: {', '.join(interests)}")
+            profile_text = "\n".join(profile_parts)
 
             # chat_memory.get_messages returns {"user_message":..., "system_response":...} format
             lines = []
@@ -81,12 +104,22 @@ class GlobalMemoryService:
                     lines.append(f"assistente: {r[:200]}")
             chat_text = "\n".join(lines)
 
+            # Need at least profile data or enough chat to be useful
+            if not profile_text and len(recent_chats) < 3:
+                return
+
+            input_text = ""
+            if profile_text:
+                input_text += f"[PROFILO UTENTE]\n{profile_text}\n\n"
+            if chat_text:
+                input_text += f"[CHAT RECENTE]\n{chat_text}"
+
             # Usa _call_model direttamente per evitare che _call_with_protection
             # sostituisca _CONSOLIDATION_PROMPT con il system prompt adattivo di Genesi
             raw = await llm_service._call_model(
                 "openai/gpt-4o-mini",
                 _CONSOLIDATION_PROMPT,
-                chat_text,
+                input_text,
                 user_id=user_id,
                 route="memory"
             )
