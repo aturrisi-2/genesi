@@ -111,11 +111,22 @@ if [[ -f requirements.txt ]]; then
 fi
 
 log "Restarting service: $SERVICE_NAME"
-if sudo -n systemctl restart "$SERVICE_NAME" 2>/dev/null; then
-  sudo -n systemctl is-active "$SERVICE_NAME" >/dev/null
-else
+if [[ "$(id -u)" -eq 0 ]]; then
   systemctl restart "$SERVICE_NAME"
   systemctl is-active --quiet "$SERVICE_NAME"
+else
+  SUDO_N_OK=0
+  sudo -n true >/dev/null 2>&1 && SUDO_N_OK=1 || true
+
+  if [[ "$SUDO_N_OK" -eq 1 ]]; then
+    sudo -n systemctl restart "$SERVICE_NAME"
+    sudo -n systemctl is-active "$SERVICE_NAME" >/dev/null
+  else
+    log "ERROR: passwordless sudo is required to restart $SERVICE_NAME"
+    log "Add a sudoers rule for the deploy user, for example:"
+    log "  <deploy-user> ALL=NOPASSWD: /bin/systemctl restart $SERVICE_NAME, /bin/systemctl is-active $SERVICE_NAME"
+    exit 1
+  fi
 fi
 
 log "Deploy completed successfully"
