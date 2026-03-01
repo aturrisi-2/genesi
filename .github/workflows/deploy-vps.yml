@@ -27,11 +27,5 @@ jobs:
           script: |
             set -euo pipefail
             cd /opt/genesi
-            if [ ! -w .git ]; then
-              echo "ERROR: current SSH user cannot write /opt/genesi/.git"
-              echo "Set VPS_USER secret to deploy (recommended) or fix ownership/permissions."
-              ls -ld /opt/genesi /opt/genesi/.git || true
-              exit 1
-            fi
             chmod +x scripts/vps_autodeploy.sh
-            APP_DIR=/opt/genesi BRANCH=gold-faro-stable SERVICE_NAME=genesi VENV_DIR=/opt/genesi/.venv bash scripts/vps_autodeploy.sh
+            APP_DIR=/opt/genesi BRANCH=gold-faro-stable SERVICE_NAME=genesi VENV_DIR=/opt/genesi/.venv AUTO_FIX_OWNERSHIP=1 bash scripts/vps_autodeploy.sh
