@@ -2551,8 +2551,8 @@ REGOLE TASSATIVE:
         """
         messages = []
         
-        # Get chat history (last 10 turns to keep context manageable)
-        history = chat_memory.get_messages(user_id, limit=10)
+        # Get chat history (last 20 turns to keep context manageable)
+        history = chat_memory.get_messages(user_id, limit=20)
         
         # Add conversation history as separate messages
         for entry in history:

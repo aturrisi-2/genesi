@@ -255,6 +255,12 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                 resp = resp[0]
             if not isinstance(resp, str):
                 resp = str(resp)
+            # Consolidazione memoria globale in background (max 1/24h per utente)
+            try:
+                from core.global_memory_service import global_memory_service
+                _aio.create_task(global_memory_service.consolidate_if_needed(user_id))
+            except Exception:
+                pass
             await queue.put({"done": True, "response": resp})
         except Exception as _e:
             log("CHAT_STREAM_PIPELINE_ERROR", user_id=user_id, error=str(_e))
