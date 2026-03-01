@@ -138,7 +138,7 @@ else
   if [[ "$RESTART_RC" -eq 0 ]]; then
     ACTIVE_RC=1
     for ((attempt = 1; attempt <= SERVICE_CHECK_MAX_ATTEMPTS; attempt++)); do
-      if sudo -n "$SYSTEMCTL_BIN" is-active "$SERVICE_NAME" >/dev/null 2>&1; then
+      if "$SYSTEMCTL_BIN" is-active "$SERVICE_NAME" >/dev/null 2>&1; then
         ACTIVE_RC=0
         break
       fi
@@ -147,7 +147,7 @@ else
 
     if [[ "$ACTIVE_RC" -ne 0 ]]; then
       log "ERROR: service $SERVICE_NAME is not active after restart"
-      sudo -n "$SYSTEMCTL_BIN" is-active "$SERVICE_NAME" || true
+      "$SYSTEMCTL_BIN" is-active "$SERVICE_NAME" || true
       exit 1
     fi
   else
