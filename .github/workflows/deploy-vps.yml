@@ -39,10 +39,5 @@ jobs:
               exit 1
             fi
 
-            if sudo -n true 2>/dev/null; then
-              echo "INFO: running deploy with sudo -n"
-              sudo -n env APP_DIR=/opt/genesi BRANCH=gold-faro-stable SERVICE_NAME=genesi VENV_DIR=/opt/genesi/.venv AUTO_FIX_OWNERSHIP=1 bash scripts/vps_autodeploy.sh
-            else
-              echo "INFO: running deploy without sudo"
-              APP_DIR=/opt/genesi BRANCH=gold-faro-stable SERVICE_NAME=genesi VENV_DIR=/opt/genesi/.venv AUTO_FIX_OWNERSHIP=1 bash scripts/vps_autodeploy.sh
-            fi
+            echo "INFO: running deploy script"
+            APP_DIR=/opt/genesi BRANCH=gold-faro-stable SERVICE_NAME=genesi VENV_DIR=/opt/genesi/.venv AUTO_FIX_OWNERSHIP=1 bash scripts/vps_autodeploy.sh
