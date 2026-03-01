@@ -111,7 +111,10 @@ class LLMService:
             if prompt_file.exists():
                 with open(prompt_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    return data.get("system_prompt", "") or data.get("prompt", "")
+                    p = data.get("system_prompt", "") or data.get("prompt", "")
+                    if p:
+                        logger.info("LLM_ADAPTIVE_PROMPT_LOADED len=%d", len(p))
+                    return p
         except Exception as e:
             logger.error("LLM_SERVICE: Error loading prompt: %s", str(e))
         return ""
