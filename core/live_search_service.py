@@ -43,6 +43,10 @@ _SCIENTIFIC = {
     "pubblicazione", "trial clinico", "sperimentazione",
     "evidence based", "meta-analisi", "revisione sistematic",
     "studi dimostrano", "studi mostrano", "secondo la ricerca",
+    # Pattern generici per "nuovi studi su X", "ricerche recenti su Y"
+    "studi su", "studi sull", "studi sul", "studi sui",
+    "nuovi studi", "ultimi studi", "ricerche recenti", "ricerche su",
+    "cosa dicono gli studi", "ricerca recente",
 }
 
 # Ambito normativo / legale / statistico

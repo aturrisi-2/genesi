@@ -460,15 +460,15 @@ class Proactor:
 
             # STEP 4.4: LIVE SEARCH INTENT OVERRIDE
             # Medical/scientific queries (e.g. "ultimi studi melatonina") are often
-            # misclassified as 'news'. Redirect to 'tecnica' so _handle_knowledge
-            # runs with live web context instead of the news tool.
+            # misclassified as 'news' or 'chat_free'. Redirect to 'tecnica' so
+            # _handle_knowledge runs with live web context instead of the news tool.
             try:
                 from core.live_search_service import needs_live_data as _needs_live
                 _actual_news_kw = ("ultime notizie", "cosa succede", "novità di", "notizie su", "aggiornamento politico")
-                if (intents and intents[0] == "news"
+                if (intents and intents[0] in ("news", "chat_free")
                         and _needs_live(message)
                         and not any(kw in msg_lower for kw in _actual_news_kw)):
-                    logger.info("LIVE_SEARCH_INTENT_OVERRIDE user=%s from=news to=tecnica", user_id)
+                    logger.info("LIVE_SEARCH_INTENT_OVERRIDE user=%s from=%s to=tecnica", user_id, intents[0])
                     intents = ["tecnica"]
             except Exception:
                 pass
