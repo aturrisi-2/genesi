@@ -1316,6 +1316,12 @@ async function sendChatMessageStream(message, { onChunk, onFirstChunk } = {}) {
           if (onFirstChunk) onFirstChunk();
         }
         if (onChunk) onChunk(fullText);
+      } else if (evt.synthesis_pending) {
+        // Backend is about to synthesize tool results into a final answer.
+        // The relational streaming chunks shown so far may be wrong (e.g. "Mi dispiace...").
+        // Reset fullText and signal the caller to show a loading state instead.
+        fullText = '';
+        if (onChunk) onChunk(''); // empty → bubble shows just cursor ▋ while synthesis runs
       } else if (evt.done) {
         ttsText = evt.tts_text || fullText;
         // ttsText = final synthesis result (weather/news actual data).

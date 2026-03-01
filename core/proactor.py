@@ -668,6 +668,16 @@ class Proactor:
             # STEP 5: SYNTHESIS
             if len(final_responses) > 1:
                 log("PROACTOR_SYNTHESIS_START", count=len(final_responses))
+                # Signal frontend to clear relational streaming chunks before synthesis arrives.
+                # Without this, the bubble shows "Mi dispiace non ho accesso..." (relational LLM)
+                # and then jumps to the correct synthesis result — a jarring visual transition.
+                try:
+                    from core.llm_service import _STREAM_QUEUE as _SQ
+                    _q = _SQ.get(None)
+                    if _q:
+                        _q.put_nowait({"synthesis_pending": True})
+                except Exception:
+                    pass
                 synthesized = await self._synthesize_responses(user_id, message, final_responses)
                 return synthesized, final_source
 
