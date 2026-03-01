@@ -173,13 +173,21 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
 
         # 2. Pipeline Relazionale / Tecnico (Orchestrata dal Proactor)
         response = await simple_chat_handler(user_id, request.message, request.conversation_id)
-        
+
         # Defensive normalization: ensure response is always a string
         if isinstance(response, tuple):
             response = response[0]
         if not isinstance(response, str):
             response = str(response)
-        
+
+        # Consolidazione memoria globale in background (max 1 volta/24h per utente)
+        try:
+            from core.global_memory_service import global_memory_service
+            import asyncio as _aio_mem
+            _aio_mem.create_task(global_memory_service.consolidate_if_needed(user_id))
+        except Exception:
+            pass
+
         # Use 'multi' for general emoji enrichment as we now support multiple intents
         intent = "multi"
         

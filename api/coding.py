@@ -93,7 +93,7 @@ async def coding_endpoint(request: Request, body: CodingRequest):
                 await shadow_orchestrator.stop()
         else:
             # Direct call if AI Engineer OS is disabled
-            result = await proactor.handle(user_id, message)
+            result = await proactor.handle(user_id, message, skip_document_mode=True)
         
         processing_time = time.time() - start_time
         
@@ -170,7 +170,7 @@ async def _call_proactor_with_shadow(
             # Logga che la ricerca è avvenuta
             await _log_web_search(observation_id, query, True)
 
-    result = await proactor.handle(user_id, enriched_message)
+    result = await proactor.handle(user_id, enriched_message, skip_document_mode=True)
 
     # Shadow processing in background
     await shadow_orchestrator.submit_background_task(

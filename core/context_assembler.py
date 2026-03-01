@@ -128,6 +128,17 @@ class ContextAssembler:
         if not summary or not summary.strip():
             summary = "No relevant memory found."
 
+        # Global cross-conversation insights (fail-silent)
+        try:
+            from core.global_memory_service import global_memory_service
+            insights = await global_memory_service.get_insights(user_id)
+            if insights:
+                insights_block = "\n".join(f"• {i}" for i in insights)
+                context["global_insights"] = insights_block
+                summary += f"\n[PATTERN OSSERVATI NEL TEMPO]\n{insights_block}"
+        except Exception:
+            pass
+
         context["summary"] = summary
         context["current_message"] = user_message
 

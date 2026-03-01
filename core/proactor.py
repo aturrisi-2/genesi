@@ -189,7 +189,7 @@ class Proactor:
     # HANDLE — Entry point, routing obbligatorio
     # ═══════════════════════════════════════════════════════════════
 
-    async def handle(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None) -> str:
+    async def handle(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None, skip_document_mode: bool = False) -> str:
         """
         Orchestrazione centrale v4.
         Returns: response_text (SOLO stringa - nessuna tupla, nessun dict)
@@ -201,7 +201,7 @@ class Proactor:
         
         NOTE: user_id validation for empty values is handled in _handle_internal
         """
-        result = await self._handle_internal(user_id, message, intent, conversation_id)
+        result = await self._handle_internal(user_id, message, intent, conversation_id, skip_document_mode=skip_document_mode)
         # Handle nested tuples: ((response, source), source) -> response
         if isinstance(result, tuple):
             if len(result) == 2 and isinstance(result[0], tuple):
@@ -261,7 +261,7 @@ class Proactor:
             response, _ = asyncio.run(self.handle(user_id, message, intent, conversation_id))
             return response
     
-    async def _handle_internal(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None) -> tuple[str, str]:
+    async def _handle_internal(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None, skip_document_mode: bool = False) -> tuple[str, str]:
         try:
             # STEP 0.4: Unified Calendar Command (/cal)
             if message.startswith("/cal"):
@@ -375,7 +375,7 @@ class Proactor:
             )
             _is_image_gen_request = any(msg_lower.startswith(p) for p in _IMAGE_GEN_PREFIXES)
 
-            if active_docs and is_document_reference(message) and not _is_image_gen_request:
+            if active_docs and is_document_reference(message) and not _is_image_gen_request and not skip_document_mode:
                 logger.info("DOCUMENT_MODE_TRIGGERED user=%s doc_count=%d", user_id, len(active_docs))
                 response = await self._handle_document_query(user_id, message, profile, brain_state, conversation_id)
                 return response, "tool"
