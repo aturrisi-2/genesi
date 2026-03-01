@@ -307,6 +307,10 @@ class Proactor:
 
             # STEP 0.5: IMAGE SEARCH ROUTE (web images) — priorità su richieste esplicite "cerca/mostra immagini"
             image_query = extract_image_query(message)
+            if not image_query:
+                from core.tool_context import resolve_elliptical_image
+                image_query = resolve_elliptical_image(user_id, message)
+                
             if image_query:
                 log("ROUTING_DECISION", route="image_search", user_id=user_id)
                 response = await self._handle_image_search(user_id, image_query)
@@ -1685,6 +1689,8 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
                 ],
                 "tts_text": f"Ho trovato alcune immagini per {query}."
             }
+            from core.tool_context import save_tool_context
+            save_tool_context(user_id, "image_search", query=query)
             return json.dumps(payload, ensure_ascii=False), "tool"
         except Exception as e:
             logger.error("IMAGE_SEARCH_ROUTE_ERROR user=%s query=%s err=%s", user_id, query, e, exc_info=True)
