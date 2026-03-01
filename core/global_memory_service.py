@@ -71,7 +71,9 @@ class GlobalMemoryService:
                 for m in recent_chats
             )
 
-            raw = await llm_service._call_with_protection(
+            # Usa _call_model direttamente per evitare che _call_with_protection
+            # sostituisca _CONSOLIDATION_PROMPT con il system prompt adattivo di Genesi
+            raw = await llm_service._call_model(
                 "openai/gpt-4o-mini",
                 _CONSOLIDATION_PROMPT,
                 chat_text,
@@ -107,7 +109,7 @@ class GlobalMemoryService:
             log("GLOBAL_MEMORY_CONSOLIDATION_DONE", user_id=user_id, insight_count=len(insights))
 
         except Exception as e:
-            logger.debug("GLOBAL_MEMORY_CONSOLIDATION_ERROR user=%s err=%s", user_id, e)
+            logger.warning("GLOBAL_MEMORY_CONSOLIDATION_ERROR user=%s err=%s", user_id, e)
 
     async def get_insights(self, user_id: str) -> List[str]:
         """Restituisce gli insight consolidati. Lista vuota se non disponibili."""
