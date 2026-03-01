@@ -50,7 +50,11 @@ class GlobalMemoryService:
             if last_str:
                 last_dt = datetime.fromisoformat(last_str)
                 diff = (datetime.utcnow() - last_dt).total_seconds()
-                if diff < _CONSOLIDATION_INTERVAL_HOURS * 3600:
+                # If previous run had 0 insights (insufficient data), retry after 1h.
+                # Otherwise use the standard 24h interval to avoid LLM overhead.
+                prev_had_insights = bool(existing.get("insights"))
+                interval = _CONSOLIDATION_INTERVAL_HOURS * 3600 if prev_had_insights else 3600
+                if diff < interval:
                     return  # Troppo recente, salta
             # Lancia consolidazione senza bloccare
             asyncio.create_task(self._do_consolidate(user_id))

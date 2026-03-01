@@ -324,6 +324,28 @@ class Proactor:
             # Load profile for other routing (non-identity)
             profile = await storage.load(f"profile:{user_id}", default={})
 
+            # Sanitize corrupted profession (articles, prepositions, >4 words)
+            _ARTICLE_FIRST_WORDS = {
+                "a", "da", "con", "per", "di", "in",
+                "il", "lo", "la", "i", "gli", "le",
+                "un", "uno", "una",
+            }
+            _CORRUPTED_PROF_KW_GLOBAL = [
+                "account", "collega", "miei", "quali", "a cena", "a casa",
+                "da mio", "da mia", "tempo", "fuori", "stanco", "stanca",
+                "sposato", "sposata", "single", "celibe", "nubile",
+                "divorziato", "divorziata", "vedovo", "vedova",
+            ]
+            _prof = profile.get("profession", "")
+            if _prof and isinstance(_prof, str):
+                _words = _prof.split()
+                if (any(kw in _prof.lower() for kw in _CORRUPTED_PROF_KW_GLOBAL)
+                        or (_words and _words[0].lower() in _ARTICLE_FIRST_WORDS)
+                        or len(_words) > 4):
+                    logger.info("PROACTOR_PROFILE_SANITIZE corrupted_profession=%s", _prof)
+                    profile["profession"] = None
+                    asyncio.create_task(storage.save(f"profile:{user_id}", profile))
+
             # STEP 3: MEMORY UPDATE
             brain_state = await memory_brain.update_brain(user_id, message)
             if brain_state is None:
@@ -696,7 +718,11 @@ class Proactor:
         prof = profile.get("profession", "")
         if prof and isinstance(prof, str) and (
             any(kw in prof.lower() for kw in _CORRUPTED_PROF_KW)
-            or (prof.split() and prof.split()[0].lower() in {"a", "da", "con", "per", "di", "in"})
+            or (prof.split() and prof.split()[0].lower() in {
+                "a", "da", "con", "per", "di", "in",
+                "il", "lo", "la", "i", "gli", "le",  # articoli determinativi
+                "un", "uno", "una",                   # articoli indeterminativi
+            })
             or len(prof.split()) > 4
         ):
             logger.info("IDENTITY_AUTO_CLEAN corrupted_profession=%s", prof)
@@ -2468,11 +2494,13 @@ REGOLE TASSATIVE:
 7. ITALIANO: Rispondi esclusivamente in italiano naturale.
 """
         try:
-            # We use gpt-4o-mini for speed and cost as this is a formatting task
-            synthesized = await llm_service._call_with_protection(
-                model="gpt-4o-mini",
-                prompt=prompt,
-                message=message,
+            # Use _call_model to preserve the synthesis prompt containing the actual tool data.
+            # _call_with_protection would replace 'prompt' with the adaptive Genesi system prompt,
+            # which doesn't include weather/news data → LLM would refuse to provide real-time info.
+            synthesized = await llm_service._call_model(
+                "gpt-4o-mini",
+                prompt,
+                message,
                 user_id=user_id,
                 route="synthesis"
             )
