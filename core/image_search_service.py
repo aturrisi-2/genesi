@@ -94,8 +94,11 @@ class ImageSearchService:
                 "pithumbsize": 800,
                 "format": "json"
             }
-            async with httpx.AsyncClient(timeout=self.TIMEOUT, headers={"User-Agent": "GenesiAI/2.0"}) as client:
+            async with httpx.AsyncClient(timeout=self.TIMEOUT, headers={"User-Agent": "GenesiAI/2.0 (https://genesi.app)"}) as client:
                 resp = await client.get(url, params=params)
+                if resp.status_code != 200:
+                    logger.warning("WIKIPEDIA_API_ERROR status=%s text=%s", resp.status_code, resp.text)
+                    return []
                 data = resp.json()
                 
                 results = []
