@@ -457,7 +457,22 @@ class Proactor:
             # Multi-intent execution state
             final_responses = []
             final_source = "relational" # Default to relational if no tools hit
-            
+
+            # STEP 4.4: LIVE SEARCH INTENT OVERRIDE
+            # Medical/scientific queries (e.g. "ultimi studi melatonina") are often
+            # misclassified as 'news'. Redirect to 'tecnica' so _handle_knowledge
+            # runs with live web context instead of the news tool.
+            try:
+                from core.live_search_service import needs_live_data as _needs_live
+                _actual_news_kw = ("ultime notizie", "cosa succede", "novità di", "notizie su", "aggiornamento politico")
+                if (intents and intents[0] == "news"
+                        and _needs_live(message)
+                        and not any(kw in msg_lower for kw in _actual_news_kw)):
+                    logger.info("LIVE_SEARCH_INTENT_OVERRIDE user=%s from=news to=tecnica", user_id)
+                    intents = ["tecnica"]
+            except Exception:
+                pass
+
             # STEP 4.5: LOOP THROUGH INTENTS
             # Grouping: process tools first, then one final terminal response if present
             # We skip terminal intents (chat_free, relational, etc) if there are multiple tools
