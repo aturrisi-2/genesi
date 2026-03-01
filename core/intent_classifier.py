@@ -584,6 +584,14 @@ class IntentClassifier:
             log("INTENT_CLASSIFIED", intent="memory_correction", user_id=user_id, engine="regex_priority", message=message[:50])
             return ["memory_correction"]
 
+        # ⚡ FAST-TRACK: Per messaggi corti e intent comuni, usa il classificatore regex istantaneo
+        # Evita un roundtrip LLM per "Ciao", "Come stai", "Che ore sono", ecc.
+        if len(message_lower.split()) <= 4:
+            fast_intent = self.classify(message, user_id)
+            if fast_intent in ["greeting", "how_are_you", "time", "date", "weather"]:
+                log("INTENT_CLASSIFIED", intent=fast_intent, user_id=user_id, engine="regex_fast_track", message=message[:50])
+                return [fast_intent]
+
         from core.chat_memory import chat_memory
         from core.llm_service import llm_service
         import json

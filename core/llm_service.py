@@ -58,6 +58,11 @@ def model_selector(message: str, route: str = "general") -> str:
     if any(trigger in message.lower() for trigger in DEEP_ANALYSIS_TRIGGERS):
         selected_model = LLM_DEEP_MODEL
         reason = "deep analysis trigger"
+    
+    # ⚡ FAST-TRACK: Per risposte brevi e semplici in route relazionale, usa il modello mini (più veloce)
+    elif route == "relational" and len(message.strip().split()) <= 4:
+        selected_model = LLM_FALLBACK_MODEL
+        reason = "relational_fast_track"
 
     # Forza Opus per route relazionali con domande sul senso o sul "perché"
     if route == "relational" and ("perché" in message.lower() or "senso" in message.lower()):
@@ -178,7 +183,8 @@ class LLMService:
                 model=model_name,
                 messages=msg_list,
                 temperature=0.7,
-                extra_headers=extra_headers
+                extra_headers=extra_headers,
+                timeout=15.0
             )
 
         # ── SSE streaming path ───────────────────────────────────────────────
@@ -191,7 +197,8 @@ class LLMService:
                     messages=msg_list,
                     temperature=0.7,
                     stream=True,
-                    extra_headers=extra_headers
+                    extra_headers=extra_headers,
+                    timeout=15.0
                 )
                 llm_response = ""
                 async for chunk in api_stream:
