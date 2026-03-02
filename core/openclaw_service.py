@@ -32,7 +32,8 @@ class OpenClawService:
                 OPENCLAW_BIN, "agent", 
                 "--message", prompt, 
                 "--agent", "main",
-                "--session", session_id,
+                "--session-id", session_id,
+                "--no-color",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
