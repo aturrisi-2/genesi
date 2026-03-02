@@ -122,8 +122,9 @@ class PersonalFactsService:
 
     async def _save_facts(self, user_id: str, new_facts: List[Dict]) -> None:
         """
-        Salva i fatti aggiornando quelli esistenti per key.
-        Se key già esiste → aggiorna testo e data (evita duplicati).
+        Salva i fatti aggiornando quelli esistenti.
+        Priorità: 1) match esatto per key, 2) match semantico (stessa entità+attributo),
+        3) nuovo fatto.
         """
         existing_data = await storage.load(f"personal_facts:{user_id}", default={"facts": []})
         existing_facts = existing_data.get("facts", [])
@@ -134,12 +135,23 @@ class PersonalFactsService:
         for new_f in new_facts:
             key = new_f["key"]
             if key in fact_index:
+                # Aggiornamento diretto per key identica
                 existing_facts[fact_index[key]]["text"] = new_f["text"]
                 existing_facts[fact_index[key]]["saved_at"] = new_f["saved_at"]
                 logger.info("PERSONAL_FACT_UPDATED key=%s user=%s", key, user_id)
             else:
-                existing_facts.append(new_f)
-                logger.info("PERSONAL_FACT_SAVED key=%s user=%s text=%s", key, user_id, new_f["text"][:60])
+                # Cerca conflitto semantico (stessa entità+attributo, valore diverso)
+                conflict_idx = self._find_semantic_conflict(new_f, existing_facts)
+                if conflict_idx >= 0:
+                    old_key = existing_facts[conflict_idx]["key"]
+                    existing_facts[conflict_idx] = new_f
+                    # Aggiorna indice
+                    fact_index = {f["key"]: i for i, f in enumerate(existing_facts)}
+                    logger.info("PERSONAL_FACT_REPLACED old_key=%s new_key=%s user=%s", old_key, key, user_id)
+                else:
+                    existing_facts.append(new_f)
+                    fact_index[key] = len(existing_facts) - 1
+                    logger.info("PERSONAL_FACT_SAVED key=%s user=%s text=%s", key, user_id, new_f["text"][:60])
 
         # Limite massimo FIFO
         if len(existing_facts) > self.MAX_FACTS:
@@ -149,6 +161,42 @@ class PersonalFactsService:
             "facts": existing_facts,
             "updated_at": datetime.utcnow().isoformat()
         })
+
+    @staticmethod
+    def _find_semantic_conflict(new_fact: Dict, existing_facts: List[Dict]) -> int:
+        """
+        Cerca un fatto esistente che descrive la stessa entità+attributo del nuovo fatto.
+        Heuristica: ≥2 parole significative in comune + stessa categoria → stesso concetto.
+        Restituisce l'indice del conflitto o -1 se nessuno trovato.
+        """
+        _STOP_WORDS = {
+            "l'utente", "utente", "la", "il", "di", "a", "e", "è", "ha", "che",
+            "si", "per", "con", "non", "un", "una", "lo", "le", "i", "in",
+            "gli", "del", "della", "dei", "delle", "dal", "dalla", "al", "alla",
+            "suo", "sua", "suoi", "sue", "anche", "già", "sempre", "mai", "più"
+        }
+
+        def sig_words(text: str) -> set:
+            return {
+                w.lower().strip(".,!?'\"") for w in text.split()
+                if len(w) > 3 and w.lower().strip(".,!?'\"") not in _STOP_WORDS
+            }
+
+        new_words = sig_words(new_fact["text"])
+        new_cat = new_fact.get("category", "")
+
+        for idx, existing in enumerate(existing_facts):
+            if existing.get("category") != new_cat:
+                continue
+            ex_words = sig_words(existing["text"])
+            if not new_words or not ex_words:
+                continue
+            overlap = new_words & ex_words
+            # Conflitto: ≥2 parole significative in comune E overlap > 40% del minore dei due insiemi
+            if len(overlap) >= 2 and len(overlap) / max(min(len(new_words), len(ex_words)), 1) > 0.4:
+                return idx
+
+        return -1
 
     async def get_all(self, user_id: str) -> List[Dict]:
         """Restituisce tutti i fatti personali salvati."""
