@@ -3046,8 +3046,37 @@ textarea#text-input:focus {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07) inset, 0 0 18px rgba(148, 163, 184, 0.24), 0 0 6px rgba(255, 255, 255, 0.08);
 }
 
-/* Nascondi il pulsante widget flottante "Preferenze" di Iubenda (evita sovrapposizioni) */
+/* 7. Legal Footer */
+#legal-footer {
+  text-align: center;
+  font-size: 0.68rem;
+  color: rgba(148, 163, 184, 0.7);
+  padding-top: 8px;
+  font-family: 'Inter', 'Roboto', sans-serif;
+  letter-spacing: 0.02em;
+}
+
+#legal-footer a,
+#legal-footer a:visited {
+  color: rgba(148, 163, 184, 0.9);
+  text-decoration: underline;
+  text-decoration-color: rgba(148, 163, 184, 0.4);
+  margin: 0 4px;
+  transition: color 0.2s;
+}
+
+#legal-footer a:hover {
+  color: #fff;
+  text-decoration-color: #fff;
+}
+
+/* Nascondi i badge widget flottanti di Iubenda o iframe vari che coprono la view */
 button.iubenda-tp-btn,
-.iubenda-cs-preferences-link {
+.iubenda-cs-preferences-link,
+iframe[name^="iubenda-iframe"],
+div#iubenda-cs-badge,
+div.iubenda-cs-brand-badge-outer {
   display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
