@@ -128,7 +128,8 @@ class CognitiveMemoryEngine:
             "andato", "andata", "tornato", "pronto", "pronta", "sveglio", "sveglia",
             "adesso", "ora", "oggi", "ieri", "domani", "io", "tu", "lui", "lei",
             "noi", "voi", "loro", "qui", "lì", "qua", "là", "dove",
-            "nato", "nata",  # "sono nato a..." non è una professione
+            "nato", "nata",   # "sono nato a..." non è una professione
+            "razza",           # "sono di razza X" = razza animale, non professione
         }
         # Preposizioni/articoli che non possono aprire una professione
         _PROFESSION_BAD_STARTERS = {
@@ -143,10 +144,14 @@ class CognitiveMemoryEngine:
         if profession_match:
             _profession_raw = profession_match.group(1).strip()  # Case originale per check nomi propri
             new_profession = _profession_raw.lower()  # lowercase per storage
-
-            # GUARD: lista di nomi propri ("Leclerc e Hamilton") — tutte le parole alfa significative sono maiuscole
             _alpha_sig = [w for w in _profession_raw.split() if w.isalpha() and w.lower() not in _CONNECTORS]
-            if len(_alpha_sig) >= 2 and all(w[0].isupper() for w in _alpha_sig):
+            _text_before_match = message[:profession_match.start()].lower().rstrip()
+
+            # GUARD: negazione ("non sono X" → non è una professione)
+            if _text_before_match.endswith("non"):
+                logger.info("COGNITIVE_PROFESSION_SKIP value=%s reason=negation", new_profession)
+            # GUARD: lista di nomi propri ("Leclerc e Hamilton") — tutte le parole alfa significative sono maiuscole
+            elif len(_alpha_sig) >= 2 and all(w[0].isupper() for w in _alpha_sig):
                 logger.info("COGNITIVE_PROFESSION_SKIP value=%s reason=proper_names_list", new_profession)
             # GUARD: evita di salvare situazioni/attività come professione
             elif any(kw in new_profession.split() for kw in _PROFESSION_STOPWORDS) or any(new_profession == kw for kw in _PROFESSION_STOPWORDS):

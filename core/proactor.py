@@ -1066,14 +1066,19 @@ Rispondi SOLO con JSON valido su una riga:
 CAMPI:
 - name: nome dell'utente
 - city: città di residenza
-- profession: lavoro/professione attuale (NON lo stato civile)
+- profession: lavoro/professione attuale (NON lo stato civile, NON la razza di animali)
 - spouse: partner o coniuge ("non sono sposato" → clear spouse, non profession!)
 - children: figli → new_value = lista di {{"name":"..."}}
-- pets: animali → new_value = lista di {{"type":"cat|dog|bird|altro","name":"..."}}
+- pets: animali → new_value = lista COMPLETA di TUTTI gli animali (inclusi quelli già nel profilo!) → {{"type":"cat|dog|bird|altro","name":"..."}}
 - interests: hobby e interessi → lista di stringhe
 - traits: caratteristiche personali → lista di stringhe
 
 AZIONI: "update" (sostituisce), "delete" (rimuove elemento da lista), "clear" (svuota campo)
+
+ATTENZIONE pets/children: se l'utente aggiunge un animale/figlio senza menzionare gli altri,
+includi comunque TUTTI quelli già nel profilo nel new_value per non perderli.
+Esempio: profilo ha gatti [Mignolo, Prof], utente dice "ho anche un cane Rio" →
+new_value: [{{"type":"dog","name":"Rio"}},{{"type":"cat","name":"Mignolo"}},{{"type":"cat","name":"Prof"}}]
 
 REPLY: Una sola frase breve e naturale — come direbbe un amico che ti conosce bene.
 Varia ogni volta, non ripetere sempre la stessa. NON usare mai parole come "salvato", "cancellato", "aggiornato", "rimosso", "registrato".
@@ -1084,14 +1089,16 @@ ESEMPI:
 - "non sono sposato" → {{"field":"spouse","action":"clear","new_value":null,"old_value":null,"reply":"Capito, me lo segno."}}
 - "ho due figli, Ennio e Zoe" → {{"field":"children","action":"update","new_value":[{{"name":"Ennio"}},{{"name":"Zoe"}}],"old_value":null,"reply":"Ennio e Zoe, bello!"}}
 - "ho un cane Rio e due gatti Mignolo e Prof" → {{"field":"pets","action":"update","new_value":[{{"type":"dog","name":"Rio"}},{{"type":"cat","name":"Mignolo"}},{{"type":"cat","name":"Prof"}}],"old_value":null,"reply":"Rio, Mignolo e Prof — che bella famiglia!"}}
-- Se non capisci → {{"field":null,"action":null,"new_value":null,"old_value":null,"reply":"Non ho capito — puoi dirmi meglio cosa cambiare?"}}"""
+- "la mia auto è una Ford Focus" → {{"field":"interests","action":"update","new_value":["auto: Ford Focus"],"old_value":null,"reply":"Capito, hai una Ford Focus!"}}
+- Se proprio non capisci → {{"field":null,"action":null,"new_value":null,"old_value":null,"reply":"Capito, me lo segno!"}}"""
 
         correction = {}
-        reply_fallback = "Non ho capito — puoi dirmi più chiaramente cosa cambiare?"
+        reply_fallback = "Capito, me lo segno!"
         try:
-            result_str = await llm_service._call_with_protection(
-                model="gpt-4o-mini", prompt=parse_prompt,
-                message=message, user_id=user_id, route="memory_correction"
+            # USA _call_model per preservare parse_prompt — _call_with_protection lo sovrascrive con l'adattivo
+            result_str = await llm_service._call_model(
+                "openai/gpt-4o-mini", parse_prompt,
+                message, user_id=user_id, route="memory_correction"
             )
             m = _re.search(r'\{.*\}', result_str or "", _re.DOTALL)
             if m:
@@ -1127,7 +1134,31 @@ ESEMPI:
 
         # Applica la correzione
         if action == "update":
-            profile[field] = new_value
+            # Sicurezza per pets/children: se il LLM restituisce solo i nuovi elementi
+            # (dimenticando quelli esistenti), merge invece di sovrascrivere
+            if field in ("pets", "children") and isinstance(new_value, list):
+                existing = profile.get(field, [])
+                existing_names = {
+                    (x.get("name", "") if isinstance(x, dict) else str(x)).lower()
+                    for x in existing if x
+                }
+                new_names = {
+                    (x.get("name", "") if isinstance(x, dict) else str(x)).lower()
+                    for x in new_value if x
+                }
+                # Se non c'è sovrapposizione con gli esistenti → merge (il LLM ha omesso quelli esistenti)
+                if existing_names and not (existing_names & new_names):
+                    merged = list(existing)
+                    for item in new_value:
+                        n = (item.get("name", "") if isinstance(item, dict) else str(item)).lower()
+                        if n and n not in existing_names:
+                            merged.append(item)
+                    profile[field] = merged
+                    logger.info("MEMORY_CORRECTION_MERGE field=%s added=%s kept=%s", field, list(new_names), list(existing_names))
+                else:
+                    profile[field] = new_value
+            else:
+                profile[field] = new_value
         elif action == "clear":
             profile[field] = [] if field in ("children", "pets", "interests", "traits") else None
         elif action == "delete" and isinstance(profile.get(field), list):
