@@ -38,6 +38,7 @@ from core.tool_context import (save_tool_context, resolve_elliptical_city,
 from core.chat_memory import chat_memory
 from core.intent_classifier import intent_classifier
 from core.reminder_engine import reminder_engine
+from core.openclaw_service import openclaw_service
 from core.document_context_manager import get_document_context_manager
 from core.image_search_service import get_image_search_service, extract_image_query
 from core.bedrock_image_service import bedrock_image_service
@@ -1393,14 +1394,14 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
     async def _handle_openclaw(self, user_id: str, message: str) -> str:
         """
         Handle OpenClaw integration requests.
-        Currently a placeholder that informs the user the integration is ready to be hooked up.
         """
         try:
             logger.info("OPENCLAW_REQUEST user=%s message=%s", user_id, message[:50])
-            return "L'integrazione con OpenClaw è predisposta nel mio cervello, ma il servizio 'braccio' non è ancora connesso al server. Non appena lo collegherai, potrò eseguire questi comandi sul sistema per te!", "tool"
+            response = await openclaw_service.execute_task(user_id, message)
+            return response
         except Exception as e:
             logger.error("OPENCLAW_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
-            return "Errore nell'integrazione con OpenClaw.", "tool"
+            return "Errore nell'integrazione con OpenClaw: non riesco a raggiungere il servizio braccio robotico."
 
     # ═══════════════════════════════════════════════════════════
     # REMINDER HANDLERS — deterministic reminder management
