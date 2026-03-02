@@ -617,7 +617,7 @@ INTENT POSSIBILI:
 - debug: errori codice, malfunzionamenti software
 - spiegazione: richiesta di spiegazione "perchè", "come mai", o correzione/frustrazione (es: "perchè non hai risposto?", "hai sbagliato")
 - identity: chi sono io, che lavoro faccio, i miei account, i miei dati, ho figli?, sono sposato?, ho animali? (domande su sé stessi)
-- memory_correction: l'utente AFFERMA ESPLICITAMENTE che un dato preesistente è sbagliato o da aggiornare (nome, città, professione, figli, animali, partner). NON usare per dare semplicemente nuove informazioni come "la mia auto è una Ford Focus" (che andrebbe in chat_free). NON usare per semplici domande come "ho figli?".
+- memory_correction: l'utente AFFERMA ESPLICITAMENTE che un dato del proprio profilo è sbagliato, da rimuovere o da aggiornare (nome, città, professione, animali, età, stato civile). USA QUESTO INTENT anche se l'utente fornisce nuove informazioni su questi SPECIFICI campi (es: "ho un nuovo cane", "è morta la gatta", "ho cambiato lavoro", "Tina è una gallina", "Lina non c'è più"). NON usare per mere preferenze (es: "amo la musica", che va in chat_free).
 - dove_sono: l'utente chiede dove LUI/LEI si trova o la PROPRIA posizione attuale (ATTENZIONE: NON USARE se si cerca la posizione geografica di una città, un luogo o un oggetto come "dove si trova Sofia" o "dov'è il Messico")
 - icloud_setup: collegare o impostare account iCloud
 - icloud_sync: sincronizzare dati da iCloud

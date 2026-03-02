@@ -276,7 +276,8 @@ def detect_topic(message: str, history: List[Dict] = None) -> str:
 
 
 def build_conversation_context(user_id: str, current_message: str,
-                                profile: Dict[str, Any], conversation_id: str = None) -> str:
+                                profile: Dict[str, Any], conversation_id: str = None,
+                                assembled_summary: str = None) -> str:
     """
     Builds structured conversation context for LLM:
     A) Last 15 messages (user/assistant alternating)
@@ -322,10 +323,13 @@ def build_conversation_context(user_id: str, current_message: str,
         sections.append("CONVERSAZIONE RECENTE:\n" + "\n".join(thread_lines))
 
     # --- B) Stable identity summary ---
-    assembler = ContextAssembler(None, None)
-    profile_summary = assembler._summarize_profile(profile)
-    if profile_summary:
-        sections.append("INFORMAZIONI STABILI SULL'UTENTE:\n" + profile_summary)
+    if assembled_summary:
+        sections.append("MEMORIA E PROFILO DELL'UTENTE:\n" + assembled_summary)
+    else:
+        assembler = ContextAssembler(None, None)
+        profile_summary = assembler._summarize_profile(profile)
+        if profile_summary:
+            sections.append("INFORMAZIONI STABILI SULL'UTENTE:\n" + profile_summary)
 
     # --- C) Topic detection ---
     topic = detect_topic(current_message, history)

@@ -2439,7 +2439,7 @@ Messaggio: "{message}" """
         # 🔥 NEW: Build separate messages for LLM conversation thread
         messages = self._build_conversation_messages(user_id, message, profile)
         
-        conversation_ctx = build_conversation_context(user_id, message, profile, conversation_id)
+        conversation_ctx = build_conversation_context(user_id, message, profile, conversation_id, context.get("summary"))
         logger.info("CONVERSATION_CONTEXT_BUILT user=%s len=%d", user_id, len(conversation_ctx))
 
         latent = brain_state.get("latent", {})
