@@ -3018,15 +3018,32 @@ Messaggio utente: {message}"""
                     logger.info("PROFILE_AUTO_UPDATE user=%s field=name value=%s", user_id, name)
             
             # Pattern per città: "vivo a Milano", "abito a Roma"
+            # NOTA: "sono di X" rimosso — troppo ambiguo in italiano
+            # ("sono di razza X", "sono di professione X" causavano corruzione city)
+            _CITY_STOPWORDS = {
+                "razza", "professione", "tipo", "opinione", "origine", "natura",
+                "carattere", "cultura", "parere", "nazione", "cuoco", "medico"
+            }
             city_patterns = [
-                r"vivo\s+a\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
-                r"abito\s+a\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
-                r"sono\s+di\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
+                r"vivo\s+a\s+([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)",
+                r"abito\s+a\s+([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)",
             ]
+            _msg_lower = message.lower()
             for pattern in city_patterns:
                 city_match = re.search(pattern, message, re.IGNORECASE)
                 if city_match:
                     city = city_match.group(1).strip().title()
+                    city_lower = city.lower()
+                    # Guard: non salvare stopwords come città
+                    if any(sw in city_lower for sw in _CITY_STOPWORDS):
+                        logger.info("PROFILE_AUTO_UPDATE_SKIP field=city value=%s reason=stopword", city)
+                        break
+                    # Guard: negazione ("non vivo a X")
+                    match_start = city_match.start()
+                    _before = _msg_lower[:match_start].rstrip()
+                    if _before.endswith("non"):
+                        logger.info("PROFILE_AUTO_UPDATE_SKIP field=city value=%s reason=negation", city)
+                        break
                     if profile.get("city") != city:
                         profile["city"] = city
                         updated = True

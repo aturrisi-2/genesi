@@ -92,9 +92,15 @@ async def get_weather_widget(
                 raw_profile = await storage.load(f"profile:{user_id}", default={})
                 if raw_profile:
                     profile_updated = False
-                    if raw_profile.get("city") != city_name:
+                    # Aggiorna city SOLO se non è già stata impostata dall'utente.
+                    # Il widget meteo usa GPS/IP che può puntare a una città diversa
+                    # rispetto a quella dichiarata dall'utente (es. Roma vs Imola).
+                    if not raw_profile.get("city"):
                         raw_profile["city"] = city_name
                         profile_updated = True
+                        logger.info(f"PROFILE_CITY_SET_FROM_GPS user={user_id} city={city_name}")
+                    elif raw_profile.get("city") != city_name:
+                        logger.info(f"PROFILE_CITY_GPS_SKIP user={user_id} existing={raw_profile.get('city')} gps={city_name}")
 
                     # Salva coordinate GPS per meteo locale ("che tempo fa fuori?")
                     if lat is not None and lon is not None:
