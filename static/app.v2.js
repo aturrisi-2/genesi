@@ -603,8 +603,15 @@ async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
 
   if (ttsCtx.state === 'suspended' || ttsCtx.state === 'interrupted') {
     console.log('[TTS] Resuming AudioContext before blob playback');
-    await ttsCtx.resume();
-    console.log('[TTS] AudioContext resumed (blob) - state=' + ttsCtx.state);
+    try {
+      await Promise.race([
+        ttsCtx.resume(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000))
+      ]);
+      console.log('[TTS] AudioContext resumed (blob) - state=' + ttsCtx.state);
+    } catch (e) {
+      console.warn('[TTS] Timeout/Errore nel resume() (blob)', e);
+    }
   }
 
   try {
@@ -666,8 +673,15 @@ async function _playTTSChunk(text) {
 
   if (ttsCtx.state === 'suspended' || ttsCtx.state === 'interrupted') {
     console.log('[TTS] Resuming AudioContext before playback');
-    await ttsCtx.resume();
-    console.log('[TTS] AudioContext resumed - state=' + ttsCtx.state);
+    try {
+      await Promise.race([
+        ttsCtx.resume(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000))
+      ]);
+      console.log('[TTS] AudioContext resumed - state=' + ttsCtx.state);
+    } catch (e) {
+      console.warn('[TTS] Timeout/Errore nel resume()', e);
+    }
   }
 
   try {
@@ -2700,8 +2714,14 @@ async function playSimpleAudio(blob) {
       // Track in activeTTSSources
       activeTTSSources.push(source);
 
+      let forceCleanupTimeout = null;
+
       // Cleanup helper
       const cleanup = () => {
+        if (forceCleanupTimeout) {
+          clearTimeout(forceCleanupTimeout);
+          forceCleanupTimeout = null;
+        }
         const idx = activeTTSSources.indexOf(source);
         if (idx > -1) activeTTSSources.splice(idx, 1);
         if (_ttsSource === source) _ttsSource = null;
@@ -2728,6 +2748,17 @@ async function playSimpleAudio(blob) {
       // Avvia playback
       console.log('[TTS] Avvio playback genId=' + myGenId);
       source.start(0);
+
+      // Timeout di sicurezza per evitare blocchi infiniti su iOS
+      // Safari (se la Context è rimasta suspendata l'onended non scatta mai)
+      const durationMs = (audioBuffer.duration || 0) * 1000;
+      const safetyDelay = durationMs > 0 ? durationMs + 2000 : 5000; // Margine di 2 secondi (o 5s se duration sconosciuta)
+
+      forceCleanupTimeout = setTimeout(() => {
+        console.warn(`[TTS] Safety timeout (${safetyDelay}ms) triggerato per genId=${myGenId}. Forziamo il cleanup!`);
+        try { source.stop(); } catch (e) { }
+        cleanup();
+      }, safetyDelay);
     });
 
   } catch (error) {
