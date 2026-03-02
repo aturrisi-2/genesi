@@ -3046,8 +3046,8 @@ textarea#text-input:focus {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07) inset, 0 0 18px rgba(148, 163, 184, 0.24), 0 0 6px rgba(255, 255, 255, 0.08);
 }
 
-/* Nascondi il pulsante flottante di Iubenda (evita sovrapposizioni) */
-div#iubenda-cs-badge,
-div.iubenda-cs-badge {
+/* Nascondi il pulsante widget flottante "Preferenze" di Iubenda (evita sovrapposizioni) */
+button.iubenda-tp-btn,
+.iubenda-cs-preferences-link {
   display: none !important;
 }
