@@ -638,6 +638,11 @@ class Proactor:
                     log("ROUTING_DECISION", route="dove_sono", user_id=user_id)
                     current_response = await self._handle_location(user_id, processed_message, brain_state)
                     final_source = "tool"
+                    
+                elif current_intent == "openclaw":
+                    log("ROUTING_DECISION", route="openclaw", user_id=user_id)
+                    current_response = await self._handle_openclaw(user_id, processed_message)
+                    final_source = "tool"
 
                 elif current_intent == "emotional":
                     log("ROUTING_DECISION", route="emotional", user_id=user_id)
@@ -1384,6 +1389,18 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         except Exception as e:
             logger.error("MEMORY_CONTEXT_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
             return "Mi dispiace, ho avuto un problema nel recuperare i nostri ricordi. Riprova.", "memory_context"
+
+    async def _handle_openclaw(self, user_id: str, message: str) -> str:
+        """
+        Handle OpenClaw integration requests.
+        Currently a placeholder that informs the user the integration is ready to be hooked up.
+        """
+        try:
+            logger.info("OPENCLAW_REQUEST user=%s message=%s", user_id, message[:50])
+            return "L'integrazione con OpenClaw è predisposta nel mio cervello, ma il servizio 'braccio' non è ancora connesso al server. Non appena lo collegherai, potrò eseguire questi comandi sul sistema per te!", "tool"
+        except Exception as e:
+            logger.error("OPENCLAW_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
+            return "Errore nell'integrazione con OpenClaw.", "tool"
 
     # ═══════════════════════════════════════════════════════════
     # REMINDER HANDLERS — deterministic reminder management

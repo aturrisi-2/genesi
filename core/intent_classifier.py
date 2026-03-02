@@ -625,6 +625,7 @@ INTENT POSSIBILI:
 - google_sync: sincronizzare appuntamenti da Google
 - emotional: stato d'animo utente
 - memory_context: riferimento ESPLICITO a messaggi passati (es: "cosa ho detto prima?")
+- openclaw: comandi informatici complessi, form filling, inviare email o messaggi whatsapp a terzi, navigare su siti specifici (eccetto meteo e notizie), compiere azioni sul sistema operativo. (es. "vai su ryanair", "scrivi a Rita", "leggi la mia mail").
 - chat_free: salutare, ringraziare, generico
 
 Devi restituire esclusivamente un payload JSON valido in questa forma:
