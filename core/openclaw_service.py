@@ -28,12 +28,16 @@ class OpenClawService:
             # We use a session ID based on the user_id to maintain continuity in OpenClaw
             session_id = f"genesi_{user_id.replace('-', '_')}"
             
+            # Ensure env is passed down (including the API Keys loaded from .env)
+            env = os.environ.copy()
+            
             process = await asyncio.create_subprocess_exec(
                 OPENCLAW_BIN, "agent", 
                 "--message", prompt, 
                 "--agent", "main",
                 "--session-id", session_id,
                 "--no-color",
+                env=env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
