@@ -7,8 +7,15 @@
     <title>Admin — Genesi</title>
     <link rel="stylesheet" href="/static/auth.css">
     <style>
-        body { align-items: flex-start; padding-top: 40px; padding-bottom: 40px; }
+        body {
+            align-items: flex-start;
+            padding-top: 40px;
+            padding-bottom: 40px;
+        }
     </style>
+    <!-- Iubenda Widget -->
+    <script type="text/javascript"
+        src="https://embeds.iubenda.com/widgets/c29c96b8-4972-4418-b50c-83741eaa22d4.js"></script>
 </head>
 
 <body>
@@ -57,37 +64,48 @@
 
             <!-- ─── SEZIONE SUGGERIMENTI ──────────────────────────── -->
             <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Suggerimenti per Genesi</h2>
-            <div style="background:rgba(0,229,255,0.04); border:1px solid rgba(0,229,255,0.2); border-radius:8px; padding:15px; margin-top:15px;">
+            <div
+                style="background:rgba(0,229,255,0.04); border:1px solid rgba(0,229,255,0.2); border-radius:8px; padding:15px; margin-top:15px;">
                 <p style="font-size:0.85rem; color:#aaa; margin-bottom:12px;">
                     Inserisci un suggerimento di miglioramento. Viene salvato e può essere
                     usato per affinare il comportamento di Genesi.
                 </p>
-                <select id="sug-cat" style="width:100%; padding:7px; background:#1a1a2e; color:#ccc; border:1px solid rgba(0,229,255,0.3); border-radius:5px; margin-bottom:8px; font-size:0.85rem;">
+                <select id="sug-cat"
+                    style="width:100%; padding:7px; background:#1a1a2e; color:#ccc; border:1px solid rgba(0,229,255,0.3); border-radius:5px; margin-bottom:8px; font-size:0.85rem;">
                     <option value="generale">Generale</option>
                     <option value="prompt">Prompt / Risposta</option>
                     <option value="memoria">Memoria</option>
                     <option value="tool">Tool / Calendario / Reminder</option>
                 </select>
-                <textarea id="sug-text" rows="3" placeholder="Es: Genesi dovrebbe ricordare le preferenze musicali anche dopo giorni..." style="width:100%; padding:8px; background:#1a1a2e; color:#fff; border:1px solid rgba(0,229,255,0.3); border-radius:5px; font-size:0.85rem; resize:vertical; box-sizing:border-box;"></textarea>
+                <textarea id="sug-text" rows="3"
+                    placeholder="Es: Genesi dovrebbe ricordare le preferenze musicali anche dopo giorni..."
+                    style="width:100%; padding:8px; background:#1a1a2e; color:#fff; border:1px solid rgba(0,229,255,0.3); border-radius:5px; font-size:0.85rem; resize:vertical; box-sizing:border-box;"></textarea>
                 <div style="display:flex; gap:10px; margin-top:8px; align-items:center;">
-                    <button onclick="submitSuggestion()" style="padding:7px 16px; background:#00e5ff; color:#000; border:none; border-radius:5px; cursor:pointer; font-size:0.85rem; font-weight:600;">Invia Suggerimento</button>
+                    <button onclick="submitSuggestion()"
+                        style="padding:7px 16px; background:#00e5ff; color:#000; border:none; border-radius:5px; cursor:pointer; font-size:0.85rem; font-weight:600;">Invia
+                        Suggerimento</button>
                     <span id="sug-msg" style="font-size:0.8rem; color:#00e5ff;"></span>
                 </div>
-                <div id="sug-list" style="margin-top:14px; font-size:0.8rem; color:#ccc; max-height:180px; overflow-y:auto;"></div>
+                <div id="sug-list"
+                    style="margin-top:14px; font-size:0.8rem; color:#ccc; max-height:180px; overflow-y:auto;"></div>
             </div>
 
             <!-- ─── SEZIONE AUTO-MIGLIORAMENTO ──────────────────────── -->
             <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Auto-Miglioramento Prompt</h2>
-            <div id="lab-cycle-box" style="background:rgba(98,0,234,0.06); border:1px solid rgba(98,0,234,0.3); border-radius:8px; padding:15px; margin-top:15px;">
+            <div id="lab-cycle-box"
+                style="background:rgba(98,0,234,0.06); border:1px solid rgba(98,0,234,0.3); border-radius:8px; padding:15px; margin-top:15px;">
                 <p style="font-size:0.85rem; color:#aaa; margin-bottom:12px;">
-                    Genesi analizza automaticamente i fallback e i suggerimenti per aggiornare il suo system prompt interno.
-                    Il ciclo si avvia da solo ogni volta che ci sono almeno <strong style="color:#b388ff;">5 eventi non processati</strong>.
+                    Genesi analizza automaticamente i fallback e i suggerimenti per aggiornare il suo system prompt
+                    interno.
+                    Il ciclo si avvia da solo ogni volta che ci sono almeno <strong style="color:#b388ff;">5 eventi non
+                        processati</strong>.
                 </p>
                 <div id="lab-cycle-status" style="font-size:0.82rem; color:#ccc; margin-bottom:12px; min-height:40px;">
                     Caricamento stato...
                 </div>
                 <div style="display:flex; gap:10px; align-items:center;">
-                    <button onclick="runLabCycle()" id="lab-run-btn" style="padding:7px 16px; background:#7c4dff; color:#fff; border:none; border-radius:5px; cursor:pointer; font-size:0.85rem; font-weight:600;">
+                    <button onclick="runLabCycle()" id="lab-run-btn"
+                        style="padding:7px 16px; background:#7c4dff; color:#fff; border:none; border-radius:5px; cursor:pointer; font-size:0.85rem; font-weight:600;">
                         Avvia Ciclo Ora
                     </button>
                     <span id="lab-cycle-msg" style="font-size:0.8rem; color:#b388ff;"></span>
@@ -316,7 +334,7 @@
             const content = document.getElementById('sug-text').value.trim();
             const category = document.getElementById('sug-cat').value;
             const msgEl = document.getElementById('sug-msg');
-            if (!content) { msgEl.style.color='#ff4444'; msgEl.textContent = 'Testo vuoto.'; return; }
+            if (!content) { msgEl.style.color = '#ff4444'; msgEl.textContent = 'Testo vuoto.'; return; }
             try {
                 const res = await fetch('/api/admin/fallbacks/suggestions', {
                     method: 'POST',
@@ -330,9 +348,9 @@
                     setTimeout(() => { msgEl.textContent = ''; }, 3000);
                     loadSuggestions();
                 } else {
-                    msgEl.style.color='#ff4444'; msgEl.textContent = 'Errore invio.';
+                    msgEl.style.color = '#ff4444'; msgEl.textContent = 'Errore invio.';
                 }
-            } catch (e) { msgEl.style.color='#ff4444'; msgEl.textContent = 'Errore di rete.'; }
+            } catch (e) { msgEl.style.color = '#ff4444'; msgEl.textContent = 'Errore di rete.'; }
         }
 
         async function loadSuggestions() {
@@ -351,18 +369,18 @@
                 data.suggestions.forEach(s => {
                     const div = document.createElement('div');
                     div.style.cssText = 'border-top:1px solid rgba(255,255,255,0.07); padding:8px 0; display:flex; justify-content:space-between; gap:8px;';
-                    const catColor = {prompt:'#00e5ff', memoria:'#b388ff', tool:'#ffab00', generale:'#aaa'}[s.category] || '#aaa';
+                    const catColor = { prompt: '#00e5ff', memoria: '#b388ff', tool: '#ffab00', generale: '#aaa' }[s.category] || '#aaa';
                     div.innerHTML = `
                         <div style="flex:1;">
                             <span style="font-size:0.7rem; color:${catColor}; text-transform:uppercase; margin-right:6px;">${s.category}</span>
                             <span>${s.content}</span>
-                            <div style="color:#555; font-size:0.72rem; margin-top:2px;">${s.timestamp.slice(0,16).replace('T',' ')}</div>
+                            <div style="color:#555; font-size:0.72rem; margin-top:2px;">${s.timestamp.slice(0, 16).replace('T', ' ')}</div>
                         </div>
                         <button onclick="deleteSuggestion('${s.id}')" style="background:none; border:none; color:#ff4444; cursor:pointer; font-size:0.8rem; padding:0 4px;">✕</button>
                     `;
                     list.appendChild(div);
                 });
-            } catch(e) {}
+            } catch (e) { }
         }
 
         async function deleteSuggestion(id) {
@@ -372,7 +390,7 @@
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
                 loadSuggestions();
-            } catch(e) {}
+            } catch (e) { }
         }
 
         async function loadLabCycleStatus() {
@@ -410,7 +428,7 @@
                 } else {
                     rulesEl.innerHTML = '';
                 }
-            } catch(e) {}
+            } catch (e) { }
         }
 
         async function runLabCycle() {
@@ -440,7 +458,7 @@
                 }
                 setTimeout(() => { msgEl.textContent = ''; }, 6000);
                 loadLabCycleStatus();
-            } catch(e) {
+            } catch (e) {
                 msgEl.style.color = '#ff4444';
                 msgEl.textContent = 'Errore di rete.';
             } finally {
