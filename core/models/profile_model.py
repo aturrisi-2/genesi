@@ -5,6 +5,7 @@ from datetime import datetime
 class Pet(BaseModel):
     type: str
     name: str
+    breed: Optional[str] = None
 
 class Child(BaseModel):
     name: str

@@ -34,6 +34,7 @@ ESTRAI SOLO fatti duraturi che l'utente ha rivelato su se stesso o la sua famigl
 - Abitudini e routine ("di solito ceno alle 20:00", "mi sveglio alle 7")
 - Hobby e passioni specifiche ("colleziono vinili", "gioco a padel il sabato")
 - Fatti sulla famiglia o amici ("mio figlio studia medicina", "mia moglie lavora in ospedale")
+- Argomenti o temi di cui abbiamo parlato ("Abbiamo parlato di Formula 1", "Mi ha raccontato del suo lavoro come medico")
 
 NON ESTRARRE:
 - Dati strutturati già nel profilo: nome, città di residenza, nome del coniuge, nomi dei figli, animali domestici
@@ -42,8 +43,8 @@ NON ESTRARRE:
 - Frasi di saluto o conversazione generica
 
 Per ogni fatto estratto:
-- "text": il fatto in terza persona ("L'utente cena di solito alle 20:00" / "La figlia Zoe è stata a Cork, Irlanda")
-- "category": una di: ["famiglia", "interessi", "abitudini", "luoghi", "altro"]
+- "text": il fatto in terza persona ("L'utente cena di solito alle 20:00" / "Oggi abbiamo parlato di Formula 1")
+- "category": una di: ["famiglia", "interessi", "abitudini", "luoghi", "conversazione", "altro"]
 - "key": stringa breve univoca snake_case (es. "cena_ore_20", "f1_piloti_preferiti", "zoe_cork_irlanda")
 
 Rispondi SOLO con JSON valido:
@@ -192,8 +193,8 @@ class PersonalFactsService:
             if not new_words or not ex_words:
                 continue
             overlap = new_words & ex_words
-            # Conflitto: ≥2 parole significative in comune E overlap > 40% del minore dei due insiemi
-            if len(overlap) >= 2 and len(overlap) / max(min(len(new_words), len(ex_words)), 1) > 0.4:
+            # Conflitto: ≥2 parole significative in comune E overlap > 30% del minore dei due insiemi
+            if len(overlap) >= 2 and len(overlap) / max(min(len(new_words), len(ex_words)), 1) > 0.3:
                 return idx
 
         return -1
@@ -224,13 +225,9 @@ class PersonalFactsService:
 
         scored.sort(key=lambda x: x[0], reverse=True)
 
-        # Se ci sono match diretti, restituiscili
+        # Restituisce solo se ci sono match diretti con score > 0
         matches = [f for score, f in scored if score > 0]
-        if matches:
-            return matches[:limit]
-
-        # Altrimenti restituisci i più recenti (fino a limit)
-        return facts[-limit:]
+        return matches[:limit]
 
 
 personal_facts_service = PersonalFactsService()

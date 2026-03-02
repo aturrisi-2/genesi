@@ -1069,7 +1069,7 @@ CAMPI:
 - profession: lavoro/professione attuale (NON lo stato civile, NON la razza di animali)
 - spouse: partner o coniuge ("non sono sposato" → clear spouse, non profession!)
 - children: figli → new_value = lista di {{"name":"..."}}
-- pets: animali → new_value = lista COMPLETA di TUTTI gli animali (inclusi quelli già nel profilo!) → {{"type":"cat|dog|bird|altro","name":"..."}}
+- pets: animali → new_value = lista COMPLETA di TUTTI gli animali (inclusi quelli già nel profilo!) → {{"type":"cat|dog|bird|altro","name":"...","breed":"..."}}
 - interests: hobby e interessi → lista di stringhe
 - traits: caratteristiche personali → lista di stringhe
 
@@ -1120,7 +1120,10 @@ ESEMPI:
             sanitized = []
             for item in new_value:
                 if isinstance(item, dict) and "name" in item:
-                    sanitized.append({"type": item.get("type", "?"), "name": item["name"]})
+                    pet_dict = {"type": item.get("type", "?"), "name": item["name"]}
+                    if "breed" in item and item["breed"]:
+                        pet_dict["breed"] = item["breed"]
+                    sanitized.append(pet_dict)
                 elif isinstance(item, str) and item.strip():
                     parts = item.strip().split(" ", 1)
                     sanitized.append({"type": parts[0], "name": parts[1]} if len(parts) == 2 else {"type": "?", "name": item})
