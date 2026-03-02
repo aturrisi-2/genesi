@@ -123,8 +123,9 @@ class CognitiveMemoryEngine:
         # Parole/frasi che indicano situazioni o attività — NON professioni
         _PROFESSION_STOPWORDS = {
             "account", "collega", "miei", "quali", "appuntamento", "promemoria",
-            "a cena", "a casa", "a lavoro", "in giro", "in vacanza", "in viaggio",
-            "tempo", "fuori", "qui", "bene", "male", "stanco", "stanca",
+            "a cena", "a casa", "a lavoro", "in giro", "in vacanza", "in viaggio", "in ritardo",
+            "tempo", "fuori", "qui", "bene", "male", "stanco", "stanca", "innervosito", "innervosita",
+            "arrabbiato", "arrabbiata", "triste", "felice", "contento", "contenta", "nervoso", "nervosa",
             "andato", "andata", "tornato", "pronto", "pronta", "sveglio", "sveglia",
             "adesso", "ora", "oggi", "ieri", "domani", "io", "tu", "lui", "lei",
             "noi", "voi", "loro", "qui", "lì", "qua", "là", "dove",

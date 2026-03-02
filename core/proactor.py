@@ -1073,12 +1073,14 @@ CAMPI:
 - interests: hobby e interessi → lista di stringhe
 - traits: caratteristiche personali → lista di stringhe
 
-AZIONI: "update" (sostituisce), "delete" (rimuove elemento da lista), "clear" (svuota campo)
+AZIONI: "update" (sostituisce), "delete" (rimuove elemento da lista, new_value deve indicare SOLO la stringa del nome da rimuovere), "clear" (svuota campo)
 
 ATTENZIONE pets/children: se l'utente aggiunge un animale/figlio senza menzionare gli altri,
 includi comunque TUTTI quelli già nel profilo nel new_value per non perderli.
 Esempio: profilo ha gatti [Mignolo, Prof], utente dice "ho anche un cane Rio" →
 new_value: [{{"type":"dog","name":"Rio"}},{{"type":"cat","name":"Mignolo"}},{{"type":"cat","name":"Prof"}}]
+Esempio cancellazione: utente dice "Lina non c'è più" →
+{{"field":"pets","action":"delete","new_value":"Lina","old_value":null,"reply":"Capito, mi dispiace per Lina."}}
 
 REPLY: Una sola frase breve e naturale — come direbbe un amico che ti conosce bene.
 Varia ogni volta, non ripetere sempre la stessa. NON usare mai parole come "salvato", "cancellato", "aggiornato", "rimosso", "registrato".
