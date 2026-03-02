@@ -859,10 +859,18 @@ class Proactor:
                 return "Non hai ancora collegato alcun account. Puoi dirmi 'collega iCloud' o 'usa Google' per iniziare."
             return "Hai collegato i seguenti account: " + ", ".join(linked) + "."
 
+        # Carica fatti personali appresi dalla conversazione (fail-silent)
+        personal_facts_list = []
+        try:
+            from core.personal_facts_service import personal_facts_service as _pfs
+            personal_facts_list = await _pfs.get_relevant(user_id, message, limit=10)
+        except Exception:
+            pass
+
         # Raccoglie fatti deterministici e genera risposta naturale via LLM
         profile_facts = self._collect_profile_facts(profile)
         try:
-            system_prompt = self._build_identity_system_prompt(profile_facts)
+            system_prompt = self._build_identity_system_prompt(profile_facts, personal_facts_list)
             response = await llm_service._call_with_protection(
                 "gpt-4o-mini", system_prompt, message, user_id=user_id, route="identity"
             )
@@ -925,7 +933,7 @@ class Proactor:
         }
 
     @staticmethod
-    def _build_identity_system_prompt(facts: dict) -> str:
+    def _build_identity_system_prompt(facts: dict, personal_facts_list: list = None) -> str:
         """Costruisce il system prompt per risposta identità naturale via LLM."""
         lines = [
             "Sei Genesi, un'assistente personale intelligente, calda e curiosa.",
@@ -967,6 +975,13 @@ class Proactor:
             lines.extend(f"  - {k}" for k in known)
         else:
             lines.append("Non ci sono ancora dati su questa persona.")
+
+        # Fatti appresi dalla conversazione (preferenze specifiche, familiari, abitudini...)
+        if personal_facts_list:
+            lines.append("")
+            lines.append("Fatti appresi dalla conversazione:")
+            for pf in personal_facts_list:
+                lines.append(f"  - {pf['text']}")
 
         lines += [
             "",

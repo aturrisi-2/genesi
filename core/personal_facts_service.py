@@ -1,0 +1,188 @@
+"""
+PERSONAL FACTS SERVICE — Genesi Memory System
+
+Estrae e persiste fatti personali appresi dalla conversazione:
+- Dove sono stati i familiari ("Zoe è stata a Cork")
+- Preferenze specifiche ("piloti F1 preferiti: Leclerc e Hamilton")
+- Abitudini e routine ("di solito cena alle 20:00", "tifo per la Ferrari")
+- Fatti recenti sulla famiglia non catturati dal profilo strutturato
+
+Complementare a:
+- episode_memory: eventi temporali con data e follow-up
+- global_memory_service: pattern comportamentali astratti
+- profile: dati strutturati (nome, città, coniuge, figli, animali)
+
+Fail-silent: errori non interrompono il flusso chat.
+"""
+
+import json
+import logging
+import uuid
+from datetime import datetime
+from typing import List, Dict
+
+from core.storage import storage
+
+logger = logging.getLogger("genesi")
+
+_EXTRACTION_PROMPT = """\
+Sei un assistente che estrae fatti personali appresi durante la conversazione.
+
+ESTRAI SOLO fatti duraturi che l'utente ha rivelato su se stesso o la sua famiglia:
+- Dove sono stati o stanno i familiari ("mia figlia è stata a Cork in Irlanda")
+- Preferenze specifiche non ancora nel profilo ("i miei piloti F1 preferiti sono Leclerc e Hamilton", "tifo per la Ferrari")
+- Abitudini e routine ("di solito ceno alle 20:00", "mi sveglio alle 7")
+- Hobby e passioni specifiche ("colleziono vinili", "gioco a padel il sabato")
+- Fatti sulla famiglia o amici ("mio figlio studia medicina", "mia moglie lavora in ospedale")
+
+NON ESTRARRE:
+- Dati strutturati già nel profilo: nome, città di residenza, nome del coniuge, nomi dei figli, animali domestici
+- Appuntamenti o eventi temporali (quelli vanno agli episodi)
+- Domande generiche su meteo, notizie, calcoli, orari pubblici
+- Frasi di saluto o conversazione generica
+
+Per ogni fatto estratto:
+- "text": il fatto in terza persona ("L'utente cena di solito alle 20:00" / "La figlia Zoe è stata a Cork, Irlanda")
+- "category": una di: ["famiglia", "interessi", "abitudini", "luoghi", "altro"]
+- "key": stringa breve univoca snake_case (es. "cena_ore_20", "f1_piloti_preferiti", "zoe_cork_irlanda")
+
+Rispondi SOLO con JSON valido:
+{{"facts": [{{"text":"...","category":"...","key":"..."}}]}}
+Se nessun fatto significativo: {{"facts": []}}
+"""
+
+
+class PersonalFactsService:
+    """
+    Estrae e persiste fatti personali dalla conversazione.
+    Usare extract_and_save() dal background task dopo ogni risposta.
+    """
+
+    MAX_FACTS = 100
+
+    async def extract_and_save(self, user_message: str, assistant_response: str, user_id: str) -> None:
+        """
+        Estrae fatti da user_message + assistant_response e li salva.
+        Fail-silent — chiamare da asyncio background task.
+        """
+        try:
+            combined = f"UTENTE: {user_message}\nGENESI: {assistant_response}"
+            new_facts = await self._extract(combined, user_id)
+            if new_facts:
+                await self._save_facts(user_id, new_facts)
+        except Exception as e:
+            logger.debug("PERSONAL_FACTS_EXTRACT_ERROR err=%s", e)
+
+    async def _extract(self, text: str, user_id: str) -> List[Dict]:
+        """Chiama LLM per estrarre fatti personali. Fail-silent."""
+        try:
+            from core.llm_service import llm_service
+
+            raw = await llm_service._call_model(
+                "openai/gpt-4o-mini",
+                _EXTRACTION_PROMPT,
+                text,
+                user_id=user_id,
+                route="memory"
+            )
+            if not raw:
+                return []
+
+            clean = raw.strip()
+            if clean.startswith("```"):
+                clean = clean.split("```")[1]
+                if clean.startswith("json"):
+                    clean = clean[4:]
+            clean = clean.strip()
+
+            parsed = json.loads(clean)
+            raw_facts = parsed.get("facts", [])
+            if not isinstance(raw_facts, list):
+                return []
+
+            result = []
+            for f in raw_facts:
+                if not isinstance(f, dict) or not f.get("text"):
+                    continue
+                result.append({
+                    "id": str(uuid.uuid4())[:8],
+                    "text": str(f["text"]).strip(),
+                    "category": str(f.get("category", "altro")),
+                    "key": str(f.get("key", str(uuid.uuid4())[:8])).lower().replace(" ", "_"),
+                    "saved_at": datetime.utcnow().isoformat(),
+                })
+            return result
+
+        except json.JSONDecodeError as e:
+            logger.debug("PERSONAL_FACTS_JSON_ERROR err=%s", e)
+            return []
+        except Exception as e:
+            logger.debug("PERSONAL_FACTS_LLM_ERROR err=%s", e)
+            return []
+
+    async def _save_facts(self, user_id: str, new_facts: List[Dict]) -> None:
+        """
+        Salva i fatti aggiornando quelli esistenti per key.
+        Se key già esiste → aggiorna testo e data (evita duplicati).
+        """
+        existing_data = await storage.load(f"personal_facts:{user_id}", default={"facts": []})
+        existing_facts = existing_data.get("facts", [])
+
+        # Indice key → posizione per aggiornamento rapido
+        fact_index = {f["key"]: i for i, f in enumerate(existing_facts)}
+
+        for new_f in new_facts:
+            key = new_f["key"]
+            if key in fact_index:
+                existing_facts[fact_index[key]]["text"] = new_f["text"]
+                existing_facts[fact_index[key]]["saved_at"] = new_f["saved_at"]
+                logger.info("PERSONAL_FACT_UPDATED key=%s user=%s", key, user_id)
+            else:
+                existing_facts.append(new_f)
+                logger.info("PERSONAL_FACT_SAVED key=%s user=%s text=%s", key, user_id, new_f["text"][:60])
+
+        # Limite massimo FIFO
+        if len(existing_facts) > self.MAX_FACTS:
+            existing_facts = existing_facts[-self.MAX_FACTS:]
+
+        await storage.save(f"personal_facts:{user_id}", {
+            "facts": existing_facts,
+            "updated_at": datetime.utcnow().isoformat()
+        })
+
+    async def get_all(self, user_id: str) -> List[Dict]:
+        """Restituisce tutti i fatti personali salvati."""
+        data = await storage.load(f"personal_facts:{user_id}", default={"facts": []})
+        return data.get("facts", [])
+
+    async def get_relevant(self, user_id: str, query: str, limit: int = 8) -> List[Dict]:
+        """
+        Restituisce i fatti più rilevanti per la query.
+        Se nessun match diretto, restituisce i più recenti.
+        """
+        facts = await self.get_all(user_id)
+        if not facts:
+            return []
+
+        query_lower = query.lower()
+        query_words = set(w for w in query_lower.split() if len(w) > 2)
+
+        scored = []
+        for f in facts:
+            text_lower = f["text"].lower()
+            key_lower = f.get("key", "").lower()
+            score = sum(1 for w in query_words if w in text_lower or w in key_lower)
+            scored.append((score, f))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        # Se ci sono match diretti, restituiscili
+        matches = [f for score, f in scored if score > 0]
+        if matches:
+            return matches[:limit]
+
+        # Altrimenti restituisci i più recenti (fino a limit)
+        return facts[-limit:]
+
+
+personal_facts_service = PersonalFactsService()

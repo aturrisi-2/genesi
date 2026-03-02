@@ -168,6 +168,18 @@ class ContextAssembler:
         except Exception:
             pass
 
+        # Personal facts: fatti appresi dalla conversazione (abitudini, preferenze, familiari...)
+        try:
+            from core.personal_facts_service import personal_facts_service as _pfs
+            relevant_pf = await _pfs.get_relevant(user_id, user_message, limit=8)
+            if relevant_pf:
+                pf_lines = [f"• {pf['text']}" for pf in relevant_pf]
+                pf_block = "\n".join(pf_lines)
+                context["personal_facts"] = pf_block
+                summary += f"\n[FATTI PERSONALI APPRESI]\n{pf_block}"
+        except Exception:
+            pass
+
         context["summary"] = summary
         context["current_message"] = user_message
 
