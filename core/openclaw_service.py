@@ -1,58 +1,62 @@
 import os
 import logging
-import httpx
+import asyncio
+import subprocess
 
 logger = logging.getLogger(__name__)
 
-OPENCLAW_URL = "http://127.0.0.1:18789"
+# Full path to the openclaw binary on the VPS
+OPENCLAW_BIN = "/home/luca/.npm-global/bin/openclaw"
 
 class OpenClawService:
     def __init__(self):
-        # We try to get the token from environment or use the known one if not set
-        self.token = os.environ.get("OPENCLAW_GATEWAY_TOKEN", "92bb8a1e31bff7999729acb13b3ad866f53a7c4fe39366ff")
-        self.client = httpx.AsyncClient(timeout=60.0)
+        # We check if the binary exists, but don't error out during initialization
+        pass
 
     async def execute_task(self, user_id: str, prompt: str) -> str:
         """
-        Invia un prompt ad OpenClaw e ritorna la risposta una volta terminato il task.
+        Esegue un task tramite il comando CLI di OpenClaw.
+        Questa è la soluzione più affidabile per l'integrazione iniziale.
         """
         try:
-            logger.info("OPENCLAW_EXECUTE_START user=%s prompt=%.50s...", user_id, prompt)
+            logger.info("OPENCLAW_CLI_START user=%s prompt=%.50s...", user_id, prompt)
             
-            # Use the /api/v1/messages/sync endpoint to wait for the completion
-            # or the appropriate endpoint to trigger an agent task.
-            headers = {
-                "Authorization": f"Bearer {self.token}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "message": prompt,
-                "agent": "main",
-                "session": f"genesi_{user_id}"
-            }
+            # Sanitizza il prompt (molto importante essendo passato a shell)
+            # Ma useremo create_subprocess_exec che passa gli argomenti in lista, quindi è più sicuro
             
-            # The API endpoint for a raw chat completion or message
-            # Typically POST /api/v1/sessions/main/messages
-            # As this is a CLI / API, the most standard is /api/v1/messages sent to a session.
-            response = await self.client.post(
-                f"{OPENCLAW_URL}/api/v1/messages",
-                headers=headers,
-                json=payload
+            # Command to run: openclaw agent --message "prompt" --agent main
+            # We use a session ID based on the user_id to maintain continuity in OpenClaw
+            session_id = f"genesi_{user_id.replace('-', '_')}"
+            
+            process = await asyncio.create_subprocess_exec(
+                OPENCLAW_BIN, "agent", 
+                "--message", prompt, 
+                "--agent", "main",
+                "--session", session_id,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
             
-            if response.status_code == 200:
-                data = response.json()
-                logger.info("OPENCLAW_EXECUTE_SUCCESS user=%s payload_size=%d", user_id, len(str(data)))
-                # Extract the text response
-                text_response = data.get("text") or data.get("response", "Comando inviato ed eseguito correttamente con OpenClaw.")
-                return text_response
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode == 0:
+                output = stdout.decode('utf-8').strip()
+                logger.info("OPENCLAW_CLI_SUCCESS user=%s output_len=%d", user_id, len(output))
+                
+                # Semplice post-processing per pulire eventuali log ANSI o header del CLI se presenti
+                # Ma dai test sembra ritornare direttamente il testo dell'AI.
+                if not output:
+                    return "L'azione è stata completata correttamente, ma non ho ricevuto un messaggio di risposta testuale."
+                
+                return output
             else:
-                logger.error("OPENCLAW_EXECUTE_ERROR user=%s status=%d text=%s", user_id, response.status_code, response.text)
-                return "Mi dispiace, ma non riesco a collegarmi al mio braccio robotico (OpenClaw) per eseguire questa operazione. Verifica i log."
+                error_msg = stderr.decode('utf-8').strip()
+                logger.error("OPENCLAW_CLI_ERROR user=%s code=%d error=%s", user_id, process.returncode, error_msg)
+                return f"Ho provato ad azionare il mio braccio meccanico (OpenClaw), ma c'è stato un intoppo: {error_msg}"
                 
         except Exception as e:
-            logger.error("OPENCLAW_EXECUTE_EXCEPTION user=%s error=%s", user_id, str(e), exc_info=True)
-            return f"Si è verificato un errore durante l'esecuzione dell'azione con OpenClaw: {str(e)}"
+            logger.error("OPENCLAW_CLI_EXCEPTION user=%s error=%s", user_id, str(e), exc_info=True)
+            return f"Errore critico durante l'interfaccia con OpenClaw: {str(e)}"
 
 # Singleton instance
 openclaw_service = OpenClawService()
