@@ -398,6 +398,44 @@ async def resolve_location(message: str, http_client: Optional[httpx.AsyncClient
         if close_after:
             await client.aclose()
 
+async def reverse_geocode(lat: float, lon: float, http_client: Optional[httpx.AsyncClient] = None) -> Optional[str]:
+    """
+    Risoluzione inversa di coordinate in nome città (preferenza IT).
+    Nessuna eccezione sollevata, fail-silent.
+    """
+    if not OPENWEATHER_API_KEY:
+        return None
+
+    client = http_client
+    close_after = False
+    if client is None:
+        client = httpx.AsyncClient(timeout=10.0)
+        close_after = True
+
+    try:
+        url = "https://api.openweathermap.org/geo/1.0/reverse"
+        params = {"lat": lat, "lon": lon, "limit": 1, "appid": OPENWEATHER_API_KEY}
+        resp = await client.get(url, params=params)
+
+        if resp.status_code != 200:
+            logger.error("LOCATION_REVERSE_GEOCODE_HTTP_ERROR status=%d lat=%s lon=%s", resp.status_code, lat, lon)
+            return None
+
+        results = resp.json()
+        if not results:
+            return None
+
+        r = results[0]
+        name = r.get("local_names", {}).get("it", r.get("name", ""))
+        log("LOCATION_REVERSE_GEOCODE_RESULT", lat=lat, lon=lon, city=name)
+        return name
+    except Exception as e:
+        logger.error("LOCATION_REVERSE_GEOCODE_ERROR error=%s", str(e))
+        return None
+    finally:
+        if close_after:
+            await client.aclose()
+
 
 def _disambiguate(city: str, results: list, message: str) -> dict:
     """

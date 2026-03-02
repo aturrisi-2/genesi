@@ -1208,6 +1208,17 @@ ESEMPI:
         if not city and not gps_lat:
             return "Non ho la tua posizione. Apri l'app e permetti l'accesso alla posizione così posso aiutarti meglio."
 
+        # Cerca di identificare la città reale dalle coordinate attuali se presenti
+        current_city = city
+        if gps_lat and gps_lon:
+            try:
+                from core.location_resolver import reverse_geocode
+                real_city = await reverse_geocode(gps_lat, gps_lon)
+                if real_city:
+                    current_city = real_city
+            except Exception:
+                pass
+
         # Ora locale
         try:
             tz = pytz.timezone(tz_name)
@@ -1245,7 +1256,7 @@ ESEMPI:
             moment = "notte"
 
         context = random.choice(_ctx_pool[moment])
-        city_str = city.strip().title() if city else "la tua ultima posizione nota"
+        city_str = current_city.strip().title() if current_city else "la tua posizione attuale"
         log("LOCATION_RESPONSE", user_id=user_id, city=city_str, hour=hour, moment=moment)
         return f"Sei a {city_str}. Sono le {time_str} — {moment}. {context}"
 
