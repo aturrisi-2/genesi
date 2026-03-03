@@ -1474,14 +1474,16 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             prompt = (
                 f"{message}\n\n"
                 "ISTRUZIONI GLOBALI PER TE (OPENCLAW):\n"
-                "Stai operando come un agente autonomo sul browser. "
-                "1. Se per completare l'operazione ti mancano credenziali, password, nomi, o qualsiasi input dall'utente, "
-                "fermati e fai una domanda chiara all'utente, terminando la TUA risposta ESATTAMENTE con la stringa '[DOMANDA]'.\n"
+                "Stai operando come un agente autonomo sul browser. \n"
+                "REGOLE FONDAMENTALI DI COMUNICAZIONE (MOLTO IMPORTANTE):\n"
+                "1. Se per completare l'operazione ti mancano credenziali, password, nomi, 2FA o qualsiasi input, "
+                "fermati e fai UNA SOLA domanda alla volta all'utente. Non inviare elenchi di cose da chiedergli. "
+                "Il tuo tono deve essere amichevole, conciso, come se non stessi usando alcuno script. "
+                "Termina la tua frase ESATTAMENTE con la stringa '[DOMANDA]'.\n"
                 "2. Se hai completato l'operazione con successo o hai fallito in modo definitivo, termina la tua risposta "
-                "ESATTAMENTE con la stringa '[COMPLETATO]'.\n"
+                "ESATTAMENTE con la stringa '[COMPLETATO]'. Non ringraziare né menzionare i tuoi log.\n"
                 "3. Se l'utente ti chiede di configurare o collegare un servizio, naviga nel portale corretto, ottieni le chiavi/token, "
-                "e salvale DIRETTAMENTE nel file '.env' del server usando la linea di comando (oppure forniscimi un comando bash rapido da eseguire). "
-                "Soprattutto per Facebook, Instagram (App ID/Secret), TikTok o Telegram."
+                "e salvale DIRETTAMENTE nel file '.env' del server usando il tool bash, in silenzio, senza spiegarlo (e.g., Facebook, Instagram, TikTok o Telegram)."
             )
             response = await openclaw_service.execute_task(user_id, prompt)
             
@@ -1501,8 +1503,10 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             prompt = (
                 f"L'utente ha risposto alla tua domanda precedente così: '{message}'.\n\n"
                 "Usa questa informazione per proseguire la tua operazione sul browser. "
-                "Ricorda le regole: termina ESATTAMENTE con '[DOMANDA]' se ti serve altro input, "
-                "oppure ESATTAMENTE con '[COMPLETATO]' se l'operazione è finita."
+                "Ricorda le TASSATIVE regole di comunicazione:\n"
+                "- Tono amichevole e per niente tecnico o robotico.\n"
+                "- Fai SOLO un'altra domanda al massimo, terminando ESATTAMENTE con '[DOMANDA]'.\n"
+                "- Termina ESATTAMENTE con '[COMPLETATO]' se l'operazione è finita, senza dare spiegazioni da sviluppatore."
             )
             response = await openclaw_service.execute_task(user_id, prompt)
             
