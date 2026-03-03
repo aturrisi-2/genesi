@@ -528,6 +528,15 @@ class Proactor:
                     current_intent = inherited
 
                 # DISPATCHER
+                # ── Pre-check: flusso gmail compose multi-turno (priorità su tutto) ──
+                _gmail_compose = await storage.load(f"gmail_compose:{user_id}", default=None)
+                if _gmail_compose:
+                    log("ROUTING_DECISION", route="gmail_compose_step", user_id=user_id)
+                    _compose_resp = await self._handle_gmail_compose_step(
+                        user_id, processed_message, _gmail_compose
+                    )
+                    return _compose_resp, "tool"
+
                 if current_intent in self.tool_intents:
                     log("ROUTING_DECISION", route="tool", user_id=user_id, intent=current_intent)
                     current_response = await self._handle_tool(current_intent, processed_message, user_id)
@@ -1488,8 +1497,10 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
     async def _handle_gmail_send(self, user_id: str, message: str) -> str:
         """
-        Invia un'email via Gmail API.
-        Estrae destinatario con regex (affidabile), poi subject/body con pattern o LLM.
+        Avvia il flusso conversazionale di composizione email (step 1/3).
+        Estrae il destinatario dal messaggio, salva lo stato pending e
+        chiede l'oggetto. I passi successivi sono gestiti da
+        _handle_gmail_compose_step() tramite il pre-check nel dispatcher.
         """
         import re
         from core.integrations.gmail_integration import gmail_integration
@@ -1501,7 +1512,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 "Scrivi **'configurare gmail'** e clicca il link OAuth per autorizzarmi."
             )
 
-        # ── 1. Estrai email destinatario con regex (priorità assoluta) ─────────
+        # Estrai email destinatario con regex
         email_match = re.search(
             r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b',
             message,
@@ -1510,43 +1521,79 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
         if not to:
             return (
-                "📧 Non ho trovato un indirizzo email nel messaggio.\n"
-                "Specifica così: **'invia email a nome@esempio.com oggetto: Titolo testo: ...'**"
+                "📧 A chi vuoi inviare l'email?\n"
+                "Specifica l'indirizzo: **'invia email a nome@esempio.com'**"
             )
 
-        # ── 2. Testo residuo dopo aver rimosso email e prefisso ────────────────
-        residual = message
-        if email_match:
-            residual = residual[:email_match.start()] + residual[email_match.end():]
-        residual = re.sub(
-            r'^\s*(invia|manda|scrivi)?\s*(un[a\']?\s*)?(email|mail|messaggio)\s*(a\s+)?',
-            '', residual, flags=re.IGNORECASE,
-        ).strip(" :,")
+        # Salva stato pending e chiedi l'oggetto
+        await storage.save(f"gmail_compose:{user_id}", {
+            "to": to,
+            "step": "ask_subject",
+        })
+        log("GMAIL_COMPOSE_START", user_id=user_id, to=to)
+        return f"✉️ Email a **{to}**.\n\nQual è l'**oggetto** dell'email?"
 
-        # ── 3. Estrai oggetto e corpo con pattern ──────────────────────────────
-        subject_match = re.search(
-            r'oggetto\s*[:\-]\s*(.+?)(?=\s+(?:testo|corpo|contenuto)\s*[:\-]|$)',
-            residual, re.IGNORECASE | re.DOTALL,
-        )
-        body_match = re.search(
-            r'(?:testo|corpo|contenuto)\s*[:\-]\s*(.+)',
-            residual, re.IGNORECASE | re.DOTALL,
-        )
+    async def _handle_gmail_compose_step(
+        self, user_id: str, message: str, pending: dict
+    ) -> str:
+        """
+        Gestisce i passi successivi del flusso conversazionale di composizione email.
+        Passi: ask_subject → ask_body → confirm → (invia o annulla)
+        """
+        from core.integrations.gmail_integration import gmail_integration
 
-        subject = subject_match.group(1).strip() if subject_match else "(nessun oggetto)"
-        body = body_match.group(1).strip() if body_match else residual.strip()
+        step = pending.get("step", "")
+        to = pending.get("to", "")
+        subject = pending.get("subject", "")
+        body = pending.get("body", "")
+        msg = message.strip()
 
-        # Se non c'è corpo (solo indirizzo), manda testo vuoto con nota
-        if not body:
-            body = "(nessun testo)"
+        if step == "ask_subject":
+            # L'utente ha risposto con l'oggetto → chiedi il testo
+            await storage.save(f"gmail_compose:{user_id}", {
+                "to": to,
+                "subject": msg,
+                "step": "ask_body",
+            })
+            return "📝 Qual è il **testo** dell'email?"
 
-        log("ROUTING_DECISION", route="gmail_api_send", user_id=user_id)
-        try:
-            await gmail_integration.send_message(user_id, to=to, text=body, subject=subject)
-            return f"✅ Email inviata a **{to}**\nOggetto: _{subject}_"
-        except Exception as e:
-            log("GMAIL_API_SEND_ERROR", user_id=user_id, error=str(e))
-            return f"❌ Errore invio email: {e}"
+        if step == "ask_body":
+            # L'utente ha risposto con il corpo → mostra preview e chiedi conferma
+            await storage.save(f"gmail_compose:{user_id}", {
+                "to": to,
+                "subject": subject,
+                "body": msg,
+                "step": "confirm",
+            })
+            return (
+                f"📧 **Anteprima email:**\n\n"
+                f"**A:** {to}\n"
+                f"**Oggetto:** {subject}\n\n"
+                f"{msg}\n\n"
+                f"---\nVuoi **inviare** questa email? _(sì / no)_"
+            )
+
+        if step == "confirm":
+            # Controlla la risposta dell'utente
+            await storage.delete(f"gmail_compose:{user_id}")
+            if any(w in msg.lower() for w in ["sì", "si", "yes", "ok", "invia", "manda", "conferma"]):
+                log("ROUTING_DECISION", route="gmail_api_send", user_id=user_id)
+                try:
+                    await gmail_integration.send_message(
+                        user_id, to=to, text=body, subject=subject
+                    )
+                    log("GMAIL_SEND_OK", user_id=user_id, to=to, subject=subject)
+                    return f"✅ Email inviata a **{to}**!\nOggetto: _{subject}_"
+                except Exception as e:
+                    log("GMAIL_API_SEND_ERROR", user_id=user_id, error=str(e))
+                    return f"❌ Errore invio email: {e}"
+            else:
+                log("GMAIL_COMPOSE_CANCELLED", user_id=user_id)
+                return "❌ Invio annullato. L'email non è stata inviata."
+
+        # Stato sconosciuto — reset
+        await storage.delete(f"gmail_compose:{user_id}")
+        return "📧 Flusso email reimpostato. Dimmi di nuovo a chi vuoi scrivere."
 
     async def _handle_telegram_send(self, user_id: str, message: str) -> str:
         """
