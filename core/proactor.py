@@ -39,6 +39,7 @@ from core.chat_memory import chat_memory
 from core.intent_classifier import intent_classifier
 from core.reminder_engine import reminder_engine
 from core.openclaw_service import openclaw_service
+from core.integrations import integrations_registry
 from core.document_context_manager import get_document_context_manager
 from core.image_search_service import get_image_search_service, extract_image_query
 from core.bedrock_image_service import bedrock_image_service
@@ -643,6 +644,41 @@ class Proactor:
                 elif current_intent == "openclaw":
                     log("ROUTING_DECISION", route="openclaw", user_id=user_id)
                     current_response = await self._handle_openclaw(user_id, processed_message)
+                    final_source = "tool"
+
+                elif current_intent == "gmail_read":
+                    log("ROUTING_DECISION", route="gmail_read", user_id=user_id)
+                    current_response = await self._handle_gmail_read(user_id, processed_message)
+                    final_source = "tool"
+
+                elif current_intent == "gmail_send":
+                    log("ROUTING_DECISION", route="gmail_send", user_id=user_id)
+                    current_response = await self._handle_gmail_send(user_id, processed_message)
+                    final_source = "tool"
+
+                elif current_intent == "gmail_setup":
+                    log("ROUTING_DECISION", route="gmail_setup", user_id=user_id)
+                    current_response = await self._handle_integration_setup(user_id, "gmail")
+                    final_source = "tool"
+
+                elif current_intent == "telegram_send":
+                    log("ROUTING_DECISION", route="telegram_send", user_id=user_id)
+                    current_response = await self._handle_telegram_send(user_id, processed_message)
+                    final_source = "tool"
+
+                elif current_intent == "telegram_setup":
+                    log("ROUTING_DECISION", route="telegram_setup", user_id=user_id)
+                    current_response = await self._handle_integration_setup(user_id, "telegram")
+                    final_source = "tool"
+
+                elif current_intent == "social_read":
+                    log("ROUTING_DECISION", route="social_read", user_id=user_id)
+                    current_response = await self._handle_social_read(user_id, processed_message)
+                    final_source = "tool"
+
+                elif current_intent == "social_setup":
+                    log("ROUTING_DECISION", route="social_setup", user_id=user_id)
+                    current_response = await self._handle_social_setup(user_id, processed_message)
                     final_source = "tool"
 
                 elif current_intent == "emotional":
@@ -1402,6 +1438,85 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         except Exception as e:
             logger.error("OPENCLAW_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
             return "Errore nell'integrazione con OpenClaw: non riesco a raggiungere il servizio braccio robotico."
+
+    # ═══════════════════════════════════════════════════════════
+    # INTEGRATION HANDLERS — Gmail, Telegram, Social
+    # ═══════════════════════════════════════════════════════════
+
+    async def _handle_gmail_read(self, user_id: str, message: str) -> str:
+        """
+        Legge le email tramite OpenClaw (browser automation).
+        Il messaggio originale viene passato intatto; se generico viene arricchito.
+        """
+        prompt = message.strip()
+        if not prompt or prompt.lower() in ("leggi le mail", "leggi le email", "controlla email",
+                                             "controlla le email", "nuove email", "ho mail",
+                                             "le mie email", "leggi la posta", "controlla la posta"):
+            prompt = "Apri Gmail e mostrami le ultime email ricevute: mittente, oggetto e anteprima del testo."
+        log("ROUTING_DECISION", route="openclaw_gmail_read", user_id=user_id)
+        return await self._handle_openclaw(user_id, prompt)
+
+    async def _handle_gmail_send(self, user_id: str, message: str) -> str:
+        """Invia un'email tramite OpenClaw (browser automation / Gmail API)."""
+        log("ROUTING_DECISION", route="openclaw_gmail_send", user_id=user_id)
+        return await self._handle_openclaw(user_id, message)
+
+    async def _handle_telegram_send(self, user_id: str, message: str) -> str:
+        """Invia un messaggio Telegram tramite OpenClaw."""
+        log("ROUTING_DECISION", route="openclaw_telegram_send", user_id=user_id)
+        return await self._handle_openclaw(user_id, message)
+
+    async def _handle_integration_setup(self, user_id: str, platform: str) -> str:
+        """Gestisce la richiesta di collegamento di una nuova integrazione."""
+        integration = integrations_registry.get(platform)
+        if not integration:
+            return f"La piattaforma '{platform}' non è ancora supportata."
+        if await integration.is_connected(user_id):
+            return f"{integration.icon} {integration.display_name} è già collegato al tuo account."
+
+        # Telegram: flusso a token one-shot (no OAuth, no URL fisso)
+        if platform == "telegram":
+            from core.integrations.telegram_integration import telegram_integration
+            if not telegram_integration._bot_token():
+                return "✈️ Il bot Telegram non è ancora configurato sul server."
+            token = await telegram_integration.generate_link_token(user_id)
+            bot_status = await telegram_integration.get_status(user_id)
+            bot_username = bot_status.get("bot_username", "GenesiBot")
+            return (
+                f"✈️ Per collegare Telegram, apri il bot e invia questo comando:\n\n"
+                f"`/start {token}`\n\n"
+                f"Oppure clicca: [Apri @{bot_username}](https://t.me/{bot_username}?start={token})\n\n"
+                f"_(Il link è personale e scade dopo l'uso)_"
+            )
+
+        base_url = os.getenv("BASE_URL", "http://localhost:8000")
+        auth_url = await integration.get_auth_url(user_id, base_url)
+        if auth_url:
+            return (
+                f"{integration.icon} Per collegare {integration.display_name}, "
+                f"clicca qui: [{integration.display_name} → Autorizza]({auth_url})"
+            )
+        return (
+            f"{integration.icon} Per attivare {integration.display_name}, "
+            f"configura le variabili d'ambiente necessarie nel file .env del server."
+        )
+
+    async def _handle_social_read(self, user_id: str, message: str) -> str:
+        """Legge aggiornamenti da Facebook, Instagram o TikTok tramite OpenClaw."""
+        log("ROUTING_DECISION", route="openclaw_social_read", user_id=user_id)
+        return await self._handle_openclaw(user_id, message)
+
+    async def _handle_social_setup(self, user_id: str, message: str) -> str:
+        """Gestisce il collegamento di un social network."""
+        msg_lower = message.lower()
+        if "instagram" in msg_lower:
+            platform = "instagram"
+        elif "tiktok" in msg_lower:
+            platform = "tiktok"
+        else:
+            platform = "facebook"
+
+        return await self._handle_integration_setup(user_id, platform)
 
     # ═══════════════════════════════════════════════════════════
     # REMINDER HANDLERS — deterministic reminder management

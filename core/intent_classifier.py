@@ -155,7 +155,42 @@ class IntentClassifier:
                 "disegna", "crea un'illustrazione", "genera una foto", "crea una foto",
                 "illustra", "crea una picture", "genera grafica", "dipingi", "disegni",
                 "genera immagine", "crea immagine", "genera foto",
-            ]
+            ],
+            # ── Integrazioni esterne ──────────────────────────────────────────
+            "gmail_setup": [
+                "collega gmail", "configura gmail", "accedi a gmail", "connetti gmail",
+                "imposta gmail", "attiva gmail", "usa gmail",
+            ],
+            "gmail_read": [
+                "leggi le mail", "leggi le email", "controlla email", "controlla le email",
+                "nuove email", "ho mail", "le mie email", "nuove mail", "leggi la posta",
+                "controlla la posta", "ho messaggi email", "nuovi messaggi email",
+            ],
+            "gmail_send": [
+                "invia mail", "invia email", "manda email", "manda una mail",
+                "scrivi email", "scrivi una mail", "invia un'email", "invia un email",
+                "spedisci email", "spedisci una mail",
+            ],
+            "telegram_send": [
+                "manda su telegram", "scrivi su telegram", "invia su telegram",
+                "manda un messaggio su telegram", "scrivi a telegram",
+                "invia telegram", "messaggio telegram",
+            ],
+            "telegram_setup": [
+                "collega telegram", "configura telegram", "attiva telegram",
+                "imposta telegram", "connetti telegram",
+            ],
+            "social_read": [
+                "controlla facebook", "vedi facebook", "leggi facebook",
+                "vedi instagram", "controlla instagram", "leggi instagram",
+                "vedi tiktok", "controlla tiktok", "leggi i social",
+                "aggiornamenti social", "novità sui social",
+            ],
+            "social_setup": [
+                "collega facebook", "configura facebook", "connetti facebook",
+                "collega instagram", "configura instagram", "connetti instagram",
+                "collega tiktok", "configura tiktok", "connetti tiktok",
+            ],
         }
     
     def classify(self, message: str, user_id: str = None) -> str:
@@ -187,6 +222,38 @@ class IntentClassifier:
             if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login", "usa", "account", "user", "email"]):
                 log("INTENT_CLASSIFIED", intent="icloud_setup", user_id=user_id, engine="regex_robust", message=message[:50])
                 return "icloud_setup"
+
+        # ── Integrazioni esterne: Gmail ──────────────────────────────────────
+        if "gmail" in message_lower:
+            if any(kw in message_lower for kw in ["leggi", "controlla", "apri", "nuove", "posta"]):
+                log("INTENT_CLASSIFIED", intent="gmail_read", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "gmail_read"
+            if any(kw in message_lower for kw in ["invia", "manda", "scrivi", "spedisci"]):
+                log("INTENT_CLASSIFIED", intent="gmail_send", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "gmail_send"
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "connetti", "accedi", "usa", "attiva"]):
+                log("INTENT_CLASSIFIED", intent="gmail_setup", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "gmail_setup"
+
+        # ── Integrazioni esterne: Telegram ───────────────────────────────────
+        if "telegram" in message_lower:
+            if any(kw in message_lower for kw in ["manda", "invia", "scrivi", "messaggio"]):
+                log("INTENT_CLASSIFIED", intent="telegram_send", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "telegram_send"
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "connetti", "attiva"]):
+                log("INTENT_CLASSIFIED", intent="telegram_setup", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "telegram_setup"
+
+        # ── Integrazioni esterne: Social (Facebook, Instagram, TikTok) ───────
+        _social_platforms = ["facebook", "instagram", "tiktok"]
+        for _sp in _social_platforms:
+            if _sp in message_lower:
+                if any(kw in message_lower for kw in ["collega", "configura", "connetti", "attiva", "imposta"]):
+                    log("INTENT_CLASSIFIED", intent="social_setup", user_id=user_id, engine="regex_robust", message=message[:50], platform=_sp)
+                    return "social_setup"
+                if any(kw in message_lower for kw in ["controlla", "vedi", "leggi", "apri", "aggiornamenti"]):
+                    log("INTENT_CLASSIFIED", intent="social_read", user_id=user_id, engine="regex_robust", message=message[:50], platform=_sp)
+                    return "social_read"
 
         # 0.5️⃣ PRIORITA' ALTA: Cloud patterns (Exact)
         for intent in ["icloud_setup", "icloud_sync", "google_setup", "google_sync"]:
@@ -478,7 +545,8 @@ class IntentClassifier:
             # e non ha data/orario chiara → downgrade a chat_free
             # MA solo se non è già un intent tecnico o esplicito (weather, news, tecnica, etc.)
             if not intent.startswith('reminder_') and not self._has_datetime_reference(message_lower):
-                protected_intents = ["weather", "news", "tecnica", "debug", "spiegazione", "icloud_sync", "google_sync", "identity"]
+                protected_intents = ["weather", "news", "tecnica", "debug", "spiegazione", "icloud_sync", "google_sync", "identity",
+                                     "gmail_setup", "gmail_read", "gmail_send", "telegram_send", "telegram_setup", "social_read", "social_setup"]
                 if intent in protected_intents:
                     return intent
                 
@@ -626,6 +694,13 @@ INTENT POSSIBILI:
 - emotional: stato d'animo utente
 - memory_context: riferimento ESPLICITO a messaggi passati (es: "cosa ho detto prima?")
 - openclaw: comandi informatici complessi, form filling, inviare email o messaggi whatsapp a terzi, navigare su siti specifici (eccetto meteo e notizie), compiere azioni sul sistema operativo. (es. "vai su ryanair", "scrivi a Rita", "leggi la mia mail").
+- gmail_setup: collegare o configurare Gmail (es. "collega gmail", "accedi a gmail")
+- gmail_read: leggere email Gmail (es. "leggi le mail", "controlla la posta", "ho nuove email")
+- gmail_send: inviare email tramite Gmail (es. "invia mail a X", "scrivi un'email a Y")
+- telegram_send: inviare un messaggio Telegram (es. "manda su telegram a X", "scrivi su telegram")
+- telegram_setup: collegare o configurare il bot Telegram
+- social_read: leggere aggiornamenti da Facebook, Instagram o TikTok
+- social_setup: collegare Facebook, Instagram o TikTok
 - chat_free: salutare, ringraziare, generico
 
 Devi restituire esclusivamente un payload JSON valido in questa forma:
