@@ -44,7 +44,6 @@ class GmailIntegration(BaseIntegration):
             auth_url, _ = flow.authorization_url(
                 access_type="offline",
                 prompt="consent",
-                include_granted_scopes="true",
                 # Encode platform in state so calendar callback knows what to save
                 state=f"{user_id}|gmail",
             )

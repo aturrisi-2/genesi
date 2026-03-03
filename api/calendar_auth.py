@@ -93,6 +93,10 @@ async def google_callback(state: str, code: str, request: Request):
     )
 
     try:
+        import os as _os
+        # Allow Google to return extra scopes (e.g. calendar appended to gmail)
+        # without oauthlib raising "Scope has changed" error
+        _os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
         flow.fetch_token(code=code)
         credentials = flow.credentials
 
