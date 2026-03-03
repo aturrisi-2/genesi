@@ -1460,9 +1460,11 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
         tokens = await gmail_integration.load_tokens(user_id)
         if not tokens or not tokens.get("access_token"):
+            _base = os.getenv("BASE_URL", "http://localhost:8000")
             return (
-                "📧 Gmail non ancora collegato.\n\n"
-                "Scrivi **'configurare gmail'** e clicca il link OAuth per autorizzarmi."
+                "📧 Gmail non è ancora collegato.\n\n"
+                f"[🔗 Collega Gmail ora]({_base}/api/integrations/gmail/connect?token={{{{token}}}})\n\n"
+                "Clicca il pulsante, autorizza l'accesso in 30 secondi e torna qui."
             )
 
         # Determina filtro query
@@ -1507,9 +1509,11 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
         tokens = await gmail_integration.load_tokens(user_id)
         if not tokens or not tokens.get("access_token"):
+            _base = os.getenv("BASE_URL", "http://localhost:8000")
             return (
-                "📧 Gmail non ancora collegato.\n\n"
-                "Scrivi **'configurare gmail'** e clicca il link OAuth per autorizzarmi."
+                "📧 Gmail non è ancora collegato.\n\n"
+                f"[🔗 Collega Gmail ora]({_base}/api/integrations/gmail/connect?token={{{{token}}}})\n\n"
+                "Clicca il pulsante, autorizza l'accesso in 30 secondi e torna qui."
             )
 
         # Estrai email destinatario con regex

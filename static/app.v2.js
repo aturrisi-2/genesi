@@ -1017,7 +1017,10 @@ const closeSettingsBtn = document.getElementById('close-settings-btn');
 const resetMicBtn = document.getElementById('reset-mic-btn');
 
 if (settingsBtn) {
-  settingsBtn.onclick = () => settingsModal.classList.remove('hidden');
+  settingsBtn.onclick = () => {
+    settingsModal.classList.remove('hidden');
+    loadIntegrationsStatus();
+  };
 }
 
 if (closeSettingsBtn) {
@@ -1045,6 +1048,107 @@ window.addEventListener('click', (e) => {
     icloudModal.classList.add('hidden');
   }
 });
+
+// ===============================
+// INTEGRATIONS PANEL
+// ===============================
+
+async function loadIntegrationsStatus() {
+  const list = document.getElementById('integrations-list');
+  if (!list) return;
+  list.innerHTML = '<div class="intg-loading">Caricamento...</div>';
+
+  try {
+    const res = await fetch('/api/integrations/status', {
+      headers: { 'Authorization': 'Bearer ' + getAuthToken() },
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    renderIntegrationsList(data.integrations || []);
+  } catch (e) {
+    list.innerHTML = '<div class="intg-loading">Errore caricamento integrazioni.</div>';
+  }
+}
+
+function renderIntegrationsList(integrations) {
+  const list = document.getElementById('integrations-list');
+  if (!list) return;
+
+  if (!integrations.length) {
+    list.innerHTML = '<div class="intg-loading">Nessuna integrazione disponibile.</div>';
+    return;
+  }
+
+  list.innerHTML = integrations.map(intg => {
+    const isConnected = intg.connected && (intg.linked !== false);
+    const statusLabel = isConnected ? '● Connesso' : '○ Non collegato';
+    const statusClass = isConnected ? 'connected' : 'disconnected';
+
+    const btnHtml = isConnected
+      ? `<button class="intg-btn disconnect" onclick="disconnectIntegration('${intg.platform}')">Disconnetti</button>`
+      : `<button class="intg-btn connect" onclick="connectIntegration('${intg.platform}')">Collega</button>`;
+
+    return `
+      <div class="intg-item" id="intg-item-${intg.platform}">
+        <span class="intg-icon">${intg.icon || '🔗'}</span>
+        <div class="intg-info">
+          <span class="intg-name">${intg.display_name}</span>
+          <span class="intg-status ${statusClass}">${statusLabel}</span>
+        </div>
+        ${btnHtml}
+      </div>`;
+  }).join('');
+}
+
+async function connectIntegration(platform) {
+  const token = getAuthToken();
+  const connectUrl = `/api/integrations/${platform}/connect?token=${encodeURIComponent(token)}`;
+
+  if (platform === 'telegram') {
+    // Telegram: fetch link token and show instructions
+    try {
+      const res = await fetch('/api/integrations/telegram/link-token', {
+        headers: { 'Authorization': 'Bearer ' + token },
+      });
+      const data = await res.json();
+      if (data.command) {
+        alert(`Per collegare Telegram:\n\n1. Apri Telegram\n2. Invia questo messaggio al bot @${data.bot_username || 'GenesiBot'}:\n\n${data.command}\n\nOppure clicca: ${data.deep_link}`);
+      }
+    } catch (e) {
+      alert('Telegram: configura TELEGRAM_BOT_TOKEN sul server prima.');
+    }
+    return;
+  }
+
+  // OAuth platforms: open popup
+  const popup = window.open(
+    connectUrl,
+    'genesi_connect_' + platform,
+    'width=560,height=660,scrollbars=yes,resizable=yes'
+  );
+
+  // Poll for popup close to refresh status
+  const checkClosed = setInterval(() => {
+    if (!popup || popup.closed) {
+      clearInterval(checkClosed);
+      setTimeout(() => loadIntegrationsStatus(), 1000);
+    }
+  }, 800);
+}
+
+async function disconnectIntegration(platform) {
+  if (!confirm(`Vuoi davvero disconnettere ${platform}?`)) return;
+
+  try {
+    await fetch(`/api/integrations/${platform}/disconnect`, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + getAuthToken() },
+    });
+    await loadIntegrationsStatus();
+  } catch (e) {
+    alert('Errore durante la disconnessione.');
+  }
+}
 
 let imageLightbox = null;
 
@@ -1175,7 +1279,11 @@ function renderMessageContent(text) {
   // 3. Markdown Links [Label](URL)
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
     const resolvedUrl = url.replace(/\{\{token\}\}|%7B%7Btoken%7D%7D/gi, token);
-    return `<a href="${resolvedUrl}" target="_blank" class="chat-link">${escape(label)}</a>`;
+    // Links that start with /api/integrations/.../connect get a button style
+    const isConnectLink = /\/api\/integrations\/[^/]+\/connect/.test(resolvedUrl)
+      || /\/api\/integrations\/telegram\/link-token/.test(resolvedUrl);
+    const cls = isConnectLink ? 'chat-connect-btn' : 'chat-link';
+    return `<a href="${resolvedUrl}" target="_blank" class="${cls}">${escape(label)}</a>`;
   });
 
   // 4. Bold and Italic
