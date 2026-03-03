@@ -1506,6 +1506,9 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 "Ricorda le TASSATIVE regole di comunicazione:\n"
                 "- Tono amichevole e per niente tecnico o robotico.\n"
                 "- Fai SOLO un'altra domanda al massimo, terminando ESATTAMENTE con '[DOMANDA]'.\n"
+                "- SE LA TUA DOMANDA RIGUARDA UN DATO TECNICO (es. ti serve il nome per creare un'app nel portale, o un URL di redirect), "
+                "SPIEGALO BREVEMENTE in modo molto colloquiale, affinché l'utente capisca a cosa serve quell'informazione "
+                "(es. 'Come chiamo la connessione che sto creando?', 'A che indirizzo devo dire a Facebook di tornare a fine login?').\n"
                 "- Termina ESATTAMENTE con '[COMPLETATO]' se l'operazione è finita, senza dare spiegazioni da sviluppatore."
             )
             response = await openclaw_service.execute_task(user_id, prompt)
