@@ -1489,8 +1489,9 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
     async def _handle_gmail_send(self, user_id: str, message: str) -> str:
         """
         Invia un'email via Gmail API.
-        Usa un LLM call veloce per estrarre destinatario, oggetto e corpo dal messaggio.
+        Estrae destinatario con regex (affidabile), poi subject/body con pattern o LLM.
         """
+        import re
         from core.integrations.gmail_integration import gmail_integration
 
         tokens = await gmail_integration.load_tokens(user_id)
@@ -1500,35 +1501,44 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 "Scrivi **'configurare gmail'** e clicca il link OAuth per autorizzarmi."
             )
 
-        # Estrai parametri email con LLM
-        extract_prompt = (
-            f"Estrai i parametri per inviare un'email dal seguente messaggio utente.\n"
-            f"Messaggio: \"{message.strip()}\"\n\n"
-            f"Rispondi SOLO con JSON valido, nessun altro testo:\n"
-            f"{{\"to\": \"<indirizzo email>\", \"subject\": \"<oggetto>\", \"body\": \"<testo email>\"}}\n"
-            f"Se manca l'indirizzo o non è chiaro, metti to=null."
+        # ── 1. Estrai email destinatario con regex (priorità assoluta) ─────────
+        email_match = re.search(
+            r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b',
+            message,
         )
-        try:
-            raw = await self._call_model(
-                [{"role": "user", "content": extract_prompt}],
-                system="Sei un parser JSON. Rispondi solo con JSON valido.",
-                route="memory",
-                model="gpt-4o-mini",
-            )
-            import json as _json
-            params = _json.loads(raw.strip())
-        except Exception:
-            params = {}
+        to = email_match.group(0) if email_match else ""
 
-        to = params.get("to") or ""
-        subject = params.get("subject") or "(nessun oggetto)"
-        body = params.get("body") or message.strip()
-
-        if not to or "@" not in to:
+        if not to:
             return (
-                "📧 Non sono riuscito a capire il destinatario.\n"
-                "Specifica così: **'invia email a nome@esempio.com oggetto: ... testo: ...'**"
+                "📧 Non ho trovato un indirizzo email nel messaggio.\n"
+                "Specifica così: **'invia email a nome@esempio.com oggetto: Titolo testo: ...'**"
             )
+
+        # ── 2. Testo residuo dopo aver rimosso email e prefisso ────────────────
+        residual = message
+        if email_match:
+            residual = residual[:email_match.start()] + residual[email_match.end():]
+        residual = re.sub(
+            r'^\s*(invia|manda|scrivi)?\s*(un[a\']?\s*)?(email|mail|messaggio)\s*(a\s+)?',
+            '', residual, flags=re.IGNORECASE,
+        ).strip(" :,")
+
+        # ── 3. Estrai oggetto e corpo con pattern ──────────────────────────────
+        subject_match = re.search(
+            r'oggetto\s*[:\-]\s*(.+?)(?=\s+(?:testo|corpo|contenuto)\s*[:\-]|$)',
+            residual, re.IGNORECASE | re.DOTALL,
+        )
+        body_match = re.search(
+            r'(?:testo|corpo|contenuto)\s*[:\-]\s*(.+)',
+            residual, re.IGNORECASE | re.DOTALL,
+        )
+
+        subject = subject_match.group(1).strip() if subject_match else "(nessun oggetto)"
+        body = body_match.group(1).strip() if body_match else residual.strip()
+
+        # Se non c'è corpo (solo indirizzo), manda testo vuoto con nota
+        if not body:
+            body = "(nessun testo)"
 
         log("ROUTING_DECISION", route="gmail_api_send", user_id=user_id)
         try:
