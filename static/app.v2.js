@@ -3221,6 +3221,17 @@ async function startNewSession() {
   document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
   document.getElementById('sidebar-open-btn')?.addEventListener('click', toggleSidebar);
 
+  // Chiudi sidebar cliccando fuori (su main-chat)
+  document.getElementById('main-chat')?.addEventListener('click', (e) => {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar && !sidebar.classList.contains('sidebar-collapsed')) {
+      // Se il click NON è sull'handle neon (che serve per aprire/chiudere volutamente)
+      if (!e.target.closest('.sidebar-handle-wrapper')) {
+        sidebar.classList.add('sidebar-collapsed');
+      }
+    }
+  });
+
   // Init Voice Mode
   initVoiceMode();
 

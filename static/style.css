@@ -155,7 +155,7 @@ body::after {
   flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0.6rem 20px;
+  padding: 0.6rem 16px;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }
@@ -181,13 +181,13 @@ body::after {
   position: relative;
   border-radius: 20px;
   padding: 14px 22px;
-  max-width: 82%;
+  max-width: 85%;
   width: fit-content;
   font-size: 15.5px;
   line-height: 1.65;
   border: 1px solid rgba(255, 255, 255, 0.08);
   display: block;
-  margin-bottom: 24px;
+  margin: 0 auto 24px auto;
   animation: msgAppear 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   word-break: break-word;
   white-space: normal;
@@ -269,24 +269,19 @@ body::after {
 .message.user {
   background: linear-gradient(135deg, rgba(20, 60, 100, 0.82), rgba(10, 80, 130, 0.82));
   color: #f0f9ff;
-  align-self: flex-end;
   border-color: rgba(56, 189, 248, 0.25);
   box-shadow:
     0 12px 36px rgba(0, 0, 0, 0.35),
     0 0 15px rgba(56, 189, 248, 0.12);
-  margin-right: 12px;
 }
 
 .message.genesi {
   background: linear-gradient(135deg, rgba(40, 32, 20, 0.88), rgba(55, 45, 10, 0.88));
   color: #fef3c7;
-  align-self: flex-start;
   border-color: rgba(251, 211, 141, 0.2);
   box-shadow:
     0 12px 40px rgba(0, 0, 0, 0.45),
     0 0 15px rgba(251, 211, 141, 0.08);
-  margin-left: 40px;
-  /* Space for the icon */
 }
 
 
@@ -992,7 +987,7 @@ body {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   padding: 0.5rem 1rem;
   font-size: 0.82rem;
   color: var(--text-muted);
@@ -1410,9 +1405,17 @@ body {
   letter-spacing: 0.5px;
 }
 
-.intg-status.connected { color: #50ff50; }
-.intg-status.disconnected { color: #888; }
-.intg-status.automation { color: #00b8cc; }
+.intg-status.connected {
+  color: #50ff50;
+}
+
+.intg-status.disconnected {
+  color: #888;
+}
+
+.intg-status.automation {
+  color: #00b8cc;
+}
 
 .intg-badge-auto {
   font-size: 0.7rem;
@@ -2416,12 +2419,21 @@ body.coding-active {
 }
 
 @keyframes taskSpin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes taskFadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
