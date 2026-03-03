@@ -634,13 +634,17 @@ textarea#text-input:focus {
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
+  margin: 0;
+  /* Reset margins to ensure flex centering works */
 }
 
 #plus-button svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  /* Slightly larger */
+  height: 18px;
   stroke: #888;
-  stroke-width: 2;
+  stroke-width: 2.5;
+  /* Slightly thicker */
   fill: none;
 }
 
@@ -659,7 +663,8 @@ textarea#text-input:focus {
 #inline-actions-container {
   position: absolute;
   right: 6px;
-  bottom: 7px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
