@@ -171,6 +171,16 @@ class IntentClassifier:
                 "scrivi email", "scrivi una mail", "invia un'email", "invia un email",
                 "spedisci email", "spedisci una mail",
             ],
+            "whatsapp_send": [
+                "manda su whatsapp", "scrivi su whatsapp", "invia su whatsapp",
+                "manda un messaggio su whatsapp", "manda un messaggio whatsapp",
+                "scrivi a whatsapp", "invia whatsapp", "messaggio whatsapp",
+                "manda whatsapp", "invia un messaggio su whatsapp",
+            ],
+            "whatsapp_setup": [
+                "collega whatsapp", "configura whatsapp", "attiva whatsapp",
+                "imposta whatsapp", "connetti whatsapp",
+            ],
             "telegram_send": [
                 "manda su telegram", "scrivi su telegram", "invia su telegram",
                 "manda un messaggio su telegram", "scrivi a telegram",
@@ -234,6 +244,15 @@ class IntentClassifier:
             if any(kw in message_lower for kw in ["collega", "configura", "imposta", "connetti", "accedi", "usa", "attiva"]):
                 log("INTENT_CLASSIFIED", intent="gmail_setup", user_id=user_id, engine="regex_robust", message=message[:50])
                 return "gmail_setup"
+
+        # ── Integrazioni esterne: WhatsApp ───────────────────────────────────
+        if "whatsapp" in message_lower:
+            if any(kw in message_lower for kw in ["manda", "invia", "scrivi", "messaggio"]):
+                log("INTENT_CLASSIFIED", intent="whatsapp_send", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "whatsapp_send"
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "connetti", "attiva"]):
+                log("INTENT_CLASSIFIED", intent="whatsapp_setup", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "whatsapp_setup"
 
         # ── Integrazioni esterne: Telegram ───────────────────────────────────
         if "telegram" in message_lower:
@@ -546,7 +565,8 @@ class IntentClassifier:
             # MA solo se non è già un intent tecnico o esplicito (weather, news, tecnica, etc.)
             if not intent.startswith('reminder_') and not self._has_datetime_reference(message_lower):
                 protected_intents = ["weather", "news", "tecnica", "debug", "spiegazione", "icloud_sync", "google_sync", "identity",
-                                     "gmail_setup", "gmail_read", "gmail_send", "telegram_send", "telegram_setup", "social_read", "social_setup"]
+                                     "gmail_setup", "gmail_read", "gmail_send", "whatsapp_send", "whatsapp_setup",
+                                     "telegram_send", "telegram_setup", "social_read", "social_setup"]
                 if intent in protected_intents:
                     return intent
                 
@@ -697,6 +717,8 @@ INTENT POSSIBILI:
 - gmail_setup: collegare o configurare Gmail (es. "collega gmail", "accedi a gmail")
 - gmail_read: leggere email Gmail (es. "leggi le mail", "controlla la posta", "ho nuove email")
 - gmail_send: inviare email tramite Gmail (es. "invia mail a X", "scrivi un'email a Y")
+- whatsapp_send: inviare un messaggio WhatsApp (es. "manda su whatsapp a X", "scrivi su whatsapp a Y")
+- whatsapp_setup: collegare o configurare WhatsApp
 - telegram_send: inviare un messaggio Telegram (es. "manda su telegram a X", "scrivi su telegram")
 - telegram_setup: collegare o configurare il bot Telegram
 - social_read: leggere aggiornamenti da Facebook, Instagram o TikTok

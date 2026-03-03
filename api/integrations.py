@@ -81,6 +81,30 @@ def _error_page(msg: str) -> str:
 </html>"""
 
 
+def _info_page(title: str, msg: str) -> str:
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+  <title>{title} - Genesi</title>
+  <style>
+    body {{ font-family: -apple-system, sans-serif; background: #0c0c14; color: #fff;
+           display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }}
+    .card {{ background: #161625; padding: 40px; border-radius: 20px; text-align: center;
+             max-width: 420px; border: 1px solid #232335; }}
+    h1 {{ color: #00e5ff; margin-bottom: 16px; font-size: 1.4rem; }}
+    p {{ color: #b4b4c3; line-height: 1.6; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>ℹ️ {title}</h1>
+    <p>{msg}</p>
+    <p style="margin-top:20px;font-size:0.85rem;color:#6b6b7e;">Puoi chiudere questa scheda.</p>
+  </div>
+</body>
+</html>"""
+
+
 # ─── GET /api/integrations/status ───────────────────────────────────────────
 
 @router.get("/status")
@@ -142,12 +166,23 @@ async def integration_connect(platform: str, user: AuthUser = Depends(require_au
 
     auth_url = await integration.get_auth_url(user.id, BASE_URL)
     if not auth_url:
-        # Telegram e WhatsApp non hanno OAuth URL — usa /telegram/link-token
-        return JSONResponse(content={
-            "message": f"{integration.display_name}: usa l'endpoint specifico per il collegamento.",
-            "platform": platform,
-            "connected": await integration.is_connected(user.id),
-        })
+        # Piattaforme senza OAuth standard: mostra pagina HTML con istruzioni
+        if platform == "telegram":
+            msg = (
+                "Per collegare Telegram, vai in <strong>Impostazioni → Integrazioni → Telegram</strong> "
+                "e segui le istruzioni per il bot."
+            )
+        elif platform == "whatsapp":
+            msg = (
+                "WhatsApp è gestito automaticamente tramite <strong>OpenClaw</strong>.<br>"
+                "Assicurati che OpenClaw sia in esecuzione sul tuo PC."
+            )
+        else:
+            msg = (
+                f"Il collegamento a <strong>{integration.display_name}</strong> non è ancora configurato sul server.<br>"
+                "Contatta l'amministratore per aggiungere le credenziali necessarie nel file .env."
+            )
+        return HTMLResponse(_info_page(integration.display_name, msg))
 
     log("INTEGRATION_CONNECT_START", platform=platform, user_id=user.id)
     return RedirectResponse(auth_url)

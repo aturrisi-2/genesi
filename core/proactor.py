@@ -537,6 +537,15 @@ class Proactor:
                     )
                     return _compose_resp, "tool"
 
+                # ── Pre-check: flusso whatsapp compose multi-turno ────────────────
+                _wa_compose = await storage.load(f"whatsapp_compose:{user_id}", default=None)
+                if _wa_compose:
+                    log("ROUTING_DECISION", route="whatsapp_compose_step", user_id=user_id)
+                    _wa_resp = await self._handle_whatsapp_compose_step(
+                        user_id, processed_message, _wa_compose
+                    )
+                    return _wa_resp, "tool"
+
                 if current_intent in self.tool_intents:
                     log("ROUTING_DECISION", route="tool", user_id=user_id, intent=current_intent)
                     current_response = await self._handle_tool(current_intent, processed_message, user_id)
@@ -668,6 +677,16 @@ class Proactor:
                 elif current_intent == "gmail_setup":
                     log("ROUTING_DECISION", route="gmail_setup", user_id=user_id)
                     current_response = await self._handle_integration_setup(user_id, "gmail")
+                    final_source = "tool"
+
+                elif current_intent == "whatsapp_send":
+                    log("ROUTING_DECISION", route="whatsapp_send", user_id=user_id)
+                    current_response = await self._handle_whatsapp_send(user_id, processed_message)
+                    final_source = "tool"
+
+                elif current_intent == "whatsapp_setup":
+                    log("ROUTING_DECISION", route="whatsapp_setup", user_id=user_id)
+                    current_response = await self._handle_integration_setup(user_id, "whatsapp")
                     final_source = "tool"
 
                 elif current_intent == "telegram_send":
@@ -1598,6 +1617,102 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         # Stato sconosciuto — reset
         await storage.delete(f"gmail_compose:{user_id}")
         return "📧 Flusso email reimpostato. Dimmi di nuovo a chi vuoi scrivere."
+
+    async def _handle_whatsapp_send(self, user_id: str, message: str) -> str:
+        """
+        Avvia il flusso conversazionale per inviare un messaggio WhatsApp (step 1/2).
+        Estrae il nome/numero del contatto dal messaggio, poi chiede il testo.
+        L'invio avviene tramite whatsapp_integration (OpenClaw).
+        """
+        import re
+        from core.integrations.whatsapp_integration import whatsapp_integration
+
+        connected = await whatsapp_integration.is_connected(user_id)
+        if not connected:
+            return (
+                "💬 WhatsApp non è disponibile — OpenClaw non è attivo sul tuo PC.\n\n"
+                "Assicurati che OpenClaw sia in esecuzione, poi riprova."
+            )
+
+        # Prova a estrarre il nome contatto: "manda a X", "scrivi a X su whatsapp"
+        to = ""
+        # Pattern "a [nome]" — esclude le parole chiave
+        contact_match = re.search(
+            r'\b(?:a|al|alla|agli)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,40}?)(?:\s+(?:su\s+)?whatsapp|:|\s*$)',
+            message, re.IGNORECASE
+        )
+        if contact_match:
+            to = contact_match.group(1).strip()
+
+        # Prova a estrarre un numero telefonico
+        if not to:
+            num_match = re.search(r'\+?[\d\s\-]{7,15}', message)
+            if num_match:
+                to = num_match.group(0).strip()
+
+        if not to:
+            return (
+                "💬 A chi vuoi mandare il messaggio su WhatsApp?\n"
+                "Esempio: **'manda su WhatsApp a Mario Rossi'**"
+            )
+
+        # Salva stato pending e chiedi il testo
+        await storage.save(f"whatsapp_compose:{user_id}", {
+            "to": to,
+            "step": "ask_body",
+        })
+        log("WHATSAPP_COMPOSE_START", user_id=user_id, to=to)
+        return f"💬 Messaggio WhatsApp a **{to}**.\n\nChe cosa vuoi scrivere?"
+
+    async def _handle_whatsapp_compose_step(
+        self, user_id: str, message: str, pending: dict
+    ) -> str:
+        """
+        Gestisce i passi successivi del flusso WhatsApp.
+        Passi: ask_body → confirm → (invia o annulla)
+        """
+        from core.integrations.whatsapp_integration import whatsapp_integration
+
+        step = pending.get("step", "")
+        to = pending.get("to", "")
+        body = pending.get("body", "")
+        msg = message.strip()
+
+        if step == "ask_body":
+            # L'utente ha scritto il testo → mostra preview e chiedi conferma
+            await storage.save(f"whatsapp_compose:{user_id}", {
+                "to": to,
+                "body": msg,
+                "step": "confirm",
+            })
+            return (
+                f"💬 **Anteprima messaggio WhatsApp:**\n\n"
+                f"**A:** {to}\n\n"
+                f"_{msg}_\n\n"
+                f"---\nVuoi **inviare** questo messaggio? _(sì / no)_"
+            )
+
+        if step == "confirm":
+            await storage.delete(f"whatsapp_compose:{user_id}")
+            if any(w in msg.lower() for w in ["sì", "si", "yes", "ok", "invia", "manda", "conferma"]):
+                log("ROUTING_DECISION", route="whatsapp_api_send", user_id=user_id)
+                try:
+                    ok = await whatsapp_integration.send_message(user_id, to=to, text=body)
+                    if ok:
+                        log("WHATSAPP_SEND_OK", user_id=user_id, to=to)
+                        return f"✅ Messaggio inviato a **{to}** su WhatsApp!"
+                    else:
+                        return f"❌ Invio fallito. Verifica che WhatsApp Web sia aperto e OpenClaw sia attivo."
+                except Exception as e:
+                    log("WHATSAPP_SEND_ERROR", user_id=user_id, error=str(e))
+                    return f"❌ Errore invio WhatsApp: {e}"
+            else:
+                log("WHATSAPP_COMPOSE_CANCELLED", user_id=user_id)
+                return "❌ Invio annullato."
+
+        # Stato sconosciuto — reset
+        await storage.delete(f"whatsapp_compose:{user_id}")
+        return "💬 Flusso reimpostato. Dimmi di nuovo a chi vuoi scrivere su WhatsApp."
 
     async def _handle_telegram_send(self, user_id: str, message: str) -> str:
         """

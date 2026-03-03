@@ -1111,12 +1111,23 @@ async function connectIntegration(platform) {
         headers: { 'Authorization': 'Bearer ' + token },
       });
       const data = await res.json();
+      if (res.status === 503 || data.error) {
+        alert('⚙️ Telegram non è ancora configurato sul server.\n\nPer abilitarlo, aggiungi la variabile TELEGRAM_BOT_TOKEN nel file .env e riavvia il server.');
+        return;
+      }
       if (data.command) {
-        alert(`Per collegare Telegram:\n\n1. Apri Telegram\n2. Invia questo messaggio al bot @${data.bot_username || 'GenesiBot'}:\n\n${data.command}\n\nOppure clicca: ${data.deep_link}`);
+        const botName = data.deep_link ? data.deep_link.split('t.me/')[1]?.split('?')[0] : 'GenesiBot';
+        const msg = `Per collegare Telegram:\n\n1. Apri Telegram\n2. Cerca il bot @${botName}\n3. Invia il comando:\n\n${data.command}\n\n(Oppure clicca il link: ${data.deep_link})`;
+        alert(msg);
       }
     } catch (e) {
-      alert('Telegram: configura TELEGRAM_BOT_TOKEN sul server prima.');
+      alert('⚙️ Telegram non configurato sul server. Aggiungi TELEGRAM_BOT_TOKEN nel .env.');
     }
+    return;
+  }
+
+  if (platform === 'whatsapp') {
+    alert('💬 WhatsApp è gestito tramite OpenClaw.\n\nAssicurati che OpenClaw sia in esecuzione sul tuo PC, poi di\' a Genesi:\n"manda un messaggio su WhatsApp a [nome contatto]"');
     return;
   }
 
