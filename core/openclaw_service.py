@@ -30,6 +30,8 @@ class OpenClawService:
             
             # Ensure env is passed down (including the API Keys loaded from .env)
             env = os.environ.copy()
+            # Adding Playwright browser path for headless mode on VPS
+            env["PLAYWRIGHT_BROWSERS_PATH"] = "/home/luca/.cache/ms-playwright"
             
             process = await asyncio.create_subprocess_exec(
                 OPENCLAW_BIN, "agent", 
