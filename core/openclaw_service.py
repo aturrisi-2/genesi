@@ -1,6 +1,9 @@
 import os
 import logging
 import asyncio
+import base64
+from datetime import datetime
+import glob
 import subprocess
 
 logger = logging.getLogger(__name__)
@@ -56,13 +59,11 @@ class OpenClawService:
             )
 
             # Task per monitorare gli screenshot durante l'esecuzione
-            import base64
-            from datetime import datetime
+            start_time = datetime.now()
             last_screenshot_path = None
             
             async def screenshot_watcher():
                 nonlocal last_screenshot_path
-                import glob
                 while process.returncode is None:
                     try:
                         # Cerchiamo il file più recente nella cartella media locale (sul VPS)
@@ -73,6 +74,11 @@ class OpenClawService:
                             
                         # Prendi il file più recente per data di modifica
                         latest_file = max(png_files, key=os.path.getmtime)
+                        
+                        # IGNORA screenshot vecchi (antecedenti all'inizio del task)
+                        if os.path.getmtime(latest_file) < start_time.timestamp():
+                            await asyncio.sleep(4)
+                            continue
                         
                         if latest_file != last_screenshot_path:
                             last_screenshot_path = latest_file
