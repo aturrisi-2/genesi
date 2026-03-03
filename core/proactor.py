@@ -1486,7 +1486,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             import asyncio
             stream_q = _STREAM_QUEUE.get()
             if stream_q is not None:
-                asyncio.create_task(stream_q.put({"chunk": "[Apertura del browser in background, per favore attendi circa 20-30 secondi...]\n\n"}))
+                asyncio.create_task(stream_q.put({"status": "Apertura del browser in background, per favore attendi circa 20-30 secondi..."}))
                 
             response = await openclaw_service.execute_task(user_id, prompt)
             
@@ -1516,7 +1516,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             import asyncio
             stream_q = _STREAM_QUEUE.get()
             if stream_q is not None:
-                asyncio.create_task(stream_q.put({"chunk": "[Ripresa navigazione nel browser, attendi...]\n\n"}))
+                asyncio.create_task(stream_q.put({"status": "Ripresa navigazione nel browser, attendi..."}))
                 
             response = await openclaw_service.execute_task(user_id, prompt)
             

@@ -19,6 +19,7 @@ window.ttsSessionActive = false;
 window.ttsExpected = false;
 window.responseProcessed = false;
 window.isGenesiSpeaking = false;
+let currentStatusRow = null;
 let restartAttempts = 0;
 const MAX_RESTARTS = 5;
 
@@ -1410,6 +1411,30 @@ function addMessage(text, sender) {
 
 function addUserMessage(text) { return addMessage(text, 'user'); }
 
+function updateAgentStatus(text) {
+  if (!text) {
+    if (currentStatusRow) {
+      currentStatusRow.remove();
+      currentStatusRow = null;
+    }
+    return;
+  }
+
+  if (!currentStatusRow) {
+    currentStatusRow = document.createElement('div');
+    currentStatusRow.className = 'agent-task-row';
+    currentStatusRow.innerHTML = `
+      <div class="agent-task-spinner"></div>
+      <div class="agent-task-text"></div>
+    `;
+    dialogue.appendChild(currentStatusRow);
+  }
+
+  const textEl = currentStatusRow.querySelector('.agent-task-text');
+  if (textEl) textEl.textContent = text;
+  scrollToBottom();
+}
+
 // ===============================
 // CHAT API — STREAMING (SSE)
 // ===============================
@@ -1459,20 +1484,22 @@ async function sendChatMessageStream(message, { onChunk, onFirstChunk } = {}) {
       try { evt = JSON.parse(line.slice(6)); } catch { continue; }
 
       if (evt.chunk) {
+        updateAgentStatus(null); // Hide status when typing starts
         fullText += evt.chunk;
         if (!firstChunkFired) {
           firstChunkFired = true;
           if (onFirstChunk) onFirstChunk();
         }
         if (onChunk) onChunk(fullText);
+      } else if (evt.status) {
+        updateAgentStatus(evt.status);
       } else if (evt.synthesis_pending) {
-        // Backend is about to synthesize tool results into a final answer.
-        // The relational streaming chunks shown so far may be wrong (e.g. "Mi dispiace...").
-        // Reset fullText and signal the caller to show a loading state instead.
+        updateAgentStatus('Sintetizzando risposta finale...');
         fullText = '';
         if (onChunk) onChunk(''); // empty → bubble shows just cursor ▋ while synthesis runs
       } else if (evt.done) {
-        ttsText = evt.tts_text || fullText;
+        updateAgentStatus(null);
+        ttsText = evt.done_tts || evt.tts_text || fullText;
         // Se il backend fornisce 'response' (es: payload JSON per le immagini), usa quello!
         const finalResponse = typeof evt.response !== 'undefined' ? evt.response : (ttsText || fullText);
 

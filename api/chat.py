@@ -326,6 +326,8 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
 
                 if "chunk" in item:
                     yield f"data: {json.dumps({'chunk': item['chunk']})}\n\n"
+                elif "status" in item:
+                    yield f"data: {json.dumps({'status': item['status']})}\n\n"
                 elif "done" in item:
                     full = item["response"]
                     tts = full
