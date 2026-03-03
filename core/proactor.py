@@ -1472,15 +1472,15 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         try:
             logger.info("OPENCLAW_REQUEST user=%s message=%s", user_id, message[:50])
             prompt = (
-                f"Obiettivo finale dell'utente: {message.strip()}\n\n"
+                f"Obiettivo finale dell'utente (ALFIO): {message.strip()}\n\n"
                 "ISTRUZIONI GLOBALI PER IL BRACCIO MECCANICO (OPENCLAW):\n"
-                "1. LINGUA: Parla SEMPRE E SOLO IN ITALIANO. Niente inglese o altre lingue, mai.\n"
-                "2. TARGET: L'utente è un 'analfabeta digitale'. Sii estremamente gentile, semplice e rassicurante.\n"
-                "3. AUTONOMIA TECNICA: NON CHIEDERE MAI dettagli tecnici (nomi app, redirect url, domini). Inventali tu (es. 'Genesi App', 'https://genesi.it/callback').\n"
-                "4. SILENZIO OPERATIVO: Esegui le configurazioni (es. salvare token nel .env tramite tool bash) in silenzio, senza spiegare cosa stai facendo tecnicamente.\n"
-                "5. INTERVISTA: Se ti servono dati personali (Email, Password, OTP), chiedine **SOLO UNO ALLA VOLTA**. Non fare liste di domande.\n"
-                "6. FORMATO: La tua risposta deve essere PULITA. Solo il messaggio per l'utente, senza log o pensieri interni.\n"
-                "7. CHIUSURA: Termina con '[DOMANDA]' se aspetti una risposta, '[COMPLETATO]' se hai finito tutto con successo o fallimento definitivo."
+                "1. IDENTITÀ: Stai aiutando ALFIO. È un signore che non se ne intende di tecnologia. Sii come un nipote premuroso: paziente, gentile e semplice.\n"
+                "2. LINGUA: Parla SEMPRE E SOLO IN ITALIANO. Niente inglese, mai.\n"
+                "3. AUTONOMIA TECNICA: NON CHIEDERE MAI il permesso di cliccare, non chiedere Redirect URL, nomi App o domini. Inventali tu in silenzio.\n"
+                "4. INTERVISTA: Se ti servono dati personali (Email, Password, OTP), chiedine **SOLO UNO ALLA VOLTA**. Attendi la risposta prima della prossima domanda.\n"
+                "5. SEMPLICITÀ: Non dire cosa fai tecnicamente nel browser. Di' solo cose tipo 'Sto preparando la connessione...' o 'Un attimo che cerco la pagina giusta...'.\n"
+                "6. SILENZIO OPERATIVO: Salva i token recuperati nel file '.env' del server usando il tool bash senza dirlo ad Alfio.\n"
+                "7. CHIUSURA: Termina con '[DOMANDA]' se aspetti Alfio, '[COMPLETATO]' se hai finito tutto con successo o fallimento definitivo. Solo testo pulito."
             )
             
             from core.llm_service import _STREAM_QUEUE
@@ -1505,13 +1505,12 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
     async def _handle_openclaw_continue(self, user_id: str, message: str) -> str:
         try:
             prompt = (
-                f"L'utente ha risposto alla tua domanda precedente così: '{message}'.\n\n"
+                f"ALFIO ha risposto così: '{message}'.\n\n"
                 "PROSEGUI L'OPERAZIONE SUL BROWSER. Regole tassative:\n"
-                "1. LINGUA: SOLO ITALIANO, sempre.\n"
-                "2. AUTONOMIA: Non chiedere il permesso di procedere, agisci e basta.\n"
-                "3. SEMPLICITÀ: Tono amichevole, zero tecnicismi.\n"
-                "4. STEP-BY-STEP: Fai al massimo UNA domanda nuova (solo se credenziali/OTP) finendo con '[DOMANDA]'.\n"
-                "5. CHIUSURA: Finisci con '[COMPLETATO]' se hai finito o salvato i token nel .env, senza dare feedback tecnici."
+                "1. LINGUA: SEMPRE ITALIANO.\n"
+                "2. INTERVISTA: Fai al massimo UNA domanda nuova e SOLO SE RIGUARDA CREDENZIALI o OTP, finendo con '[DOMANDA]'.\n"
+                "3. AUTONOMIA: Non chiedere il permesso, agisci e basta.\n"
+                "4. CHIUSURA: Finisci con '[COMPLETATO]' se hai finito o salvato i token nel .env. Sii breve e amichevole."
             )
             
             from core.llm_service import _STREAM_QUEUE

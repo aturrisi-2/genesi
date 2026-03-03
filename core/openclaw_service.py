@@ -48,10 +48,10 @@ class OpenClawService:
             
             if process.returncode == 0:
                 output = stdout.decode('utf-8').strip()
-                logger.info("OPENCLAW_CLI_SUCCESS user=%s output_len=%d", user_id, len(output))
+                # Log raw output for debugging (first 200 chars to avoid log bloat)
+                logger.debug("OPENCLAW_RAW_OUTPUT user=%s sample=%.200s", user_id, output.replace('\n', ' '))
                 
                 # Semplice post-processing per pulire eventuali log ANSI o pensieri (Thinking blocks)
-                # Spesso modelli come GPT-4o-mini o DeepSeek/OpenRouter includono pensieri o note di sistema.
                 import re
                 
                 # Rimuove blocchi <thought>...</thought>
@@ -61,6 +61,20 @@ class OpenClawService:
                 # Rimuove blocchi [System note: ...]
                 output = re.sub(r'\[System note:.*?\]', '', output, flags=re.DOTALL | re.IGNORECASE)
                 
+                # Se l'output sembra codice Javascript puro o dump di file (inizia con bracket o parole chiave JS)
+                # e non contiene punteggiatura o parole italiane comuni, potrebbe essere un errore del modello.
+                js_indicators = ['const ', 'let ', 'var ', 'function', 'expect(', ').toEqual', '});', '].forEach']
+                if any(ind in output for ind in js_indicators) and len(output) > 200:
+                    # Se c'è molto codice, proviamo a estrarre solo la parte finale se sembra umana,
+                    # altrimenti riportiamo un errore pulito.
+                    lines = output.split('\n')
+                    human_lines = [l for l in lines if not any(ind in l for ind in js_indicators) and len(l.strip()) > 3]
+                    if human_lines:
+                        output = " ".join(human_lines)
+                    else:
+                        logger.warning("OPENCLAW_CODE_OUTPUT_DETECTED user=%s", user_id)
+                        return "Scusami Alfio, ho avuto un piccolo corto circuito tecnico. Puoi ripetermi cosa volevi fare? [DOMANDA]"
+
                 output = output.strip()
                 
                 if not output:
