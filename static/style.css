@@ -2393,16 +2393,27 @@ body.coding-active {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 10px 20px 0;
-  padding: 8px 16px;
-  background: rgba(2, 6, 23, 0.4);
-  border: 1px solid rgba(0, 229, 255, 0.15);
-  border-radius: 10px;
-  max-width: fit-content;
-  align-self: flex-start;
-  animation: taskFadeIn 0.3s ease forwards;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px 14px;
+  border-radius: 12px;
+  margin: 10px 0;
+  width: fit-content;
+  max-width: 90%;
+  animation: taskFadeIn 0.3s ease-out;
+  flex-wrap: wrap;
+  /* Allow wrapping if screenshot is large */
+}
+
+.agent-task-preview {
+  display: block;
+  max-width: 140px;
+  max-height: 80px;
+  border-radius: 6px;
+  object-fit: contain;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  margin-right: 4px;
 }
 
 .agent-task-spinner {

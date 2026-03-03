@@ -1411,14 +1411,18 @@ function addMessage(text, sender) {
 
 function addUserMessage(text) { return addMessage(text, 'user'); }
 
-function updateAgentStatus(text) {
-  if (!text) {
+function updateAgentStatus(statusData) {
+  if (!statusData) {
     if (currentStatusRow) {
       currentStatusRow.remove();
       currentStatusRow = null;
     }
     return;
   }
+
+  // Handle both string and object { text, screenshot }
+  const text = typeof statusData === 'string' ? statusData : statusData.text;
+  const screenshot = statusData.screenshot;
 
   if (!currentStatusRow) {
     currentStatusRow = document.createElement('div');
@@ -1432,6 +1436,21 @@ function updateAgentStatus(text) {
 
   const textEl = currentStatusRow.querySelector('.agent-task-text');
   if (textEl) textEl.textContent = text;
+
+  if (screenshot) {
+    let img = currentStatusRow.querySelector('.agent-task-preview');
+    if (!img) {
+      img = document.createElement('img');
+      img.className = 'agent-task-preview';
+      // Fade in effect
+      img.style.opacity = '0';
+      img.style.transition = 'opacity 0.3s ease';
+      currentStatusRow.prepend(img);
+      setTimeout(() => img.style.opacity = '1', 10);
+    }
+    img.src = screenshot.startsWith('data:') ? screenshot : `data:image/png;base64,${screenshot}`;
+  }
+
   scrollToBottom();
 }
 

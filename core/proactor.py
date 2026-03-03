@@ -38,7 +38,7 @@ from core.tool_context import (save_tool_context, resolve_elliptical_city,
 from core.chat_memory import chat_memory
 from core.intent_classifier import intent_classifier
 from core.reminder_engine import reminder_engine
-from core.openclaw_service import openclaw_service
+from core.openclaw_service import openclaw_service, OpenClawService # Import OpenClawService class
 from core.integrations import integrations_registry
 from core.document_context_manager import get_document_context_manager
 from core.image_search_service import get_image_search_service, extract_image_query
@@ -1485,10 +1485,15 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             from core.llm_service import _STREAM_QUEUE
             import asyncio
             stream_q = _STREAM_QUEUE.get()
-            if stream_q is not None:
-                asyncio.create_task(stream_q.put({"status": "Apertura del browser in background, per favore attendi circa 20-30 secondi..."}))
-                
-            response = await openclaw_service.execute_task(user_id, prompt)
+            
+            async def status_callback(msg, screenshot=None):
+                if stream_q is not None:
+                    payload = {"text": msg}
+                    if screenshot:
+                        payload["screenshot"] = screenshot
+                    await stream_q.put({"status": payload})
+            
+            response = await openclaw_service.execute_task(user_id, prompt, status_callback=status_callback)
             
             if "[DOMANDA]" in response:
                 await storage.save(f"openclaw_session:{user_id}", {"active": True})
