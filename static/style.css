@@ -1412,6 +1412,17 @@ body {
 
 .intg-status.connected { color: #50ff50; }
 .intg-status.disconnected { color: #888; }
+.intg-status.automation { color: #00b8cc; }
+
+.intg-badge-auto {
+  font-size: 0.7rem;
+  color: #00b8cc;
+  border: 1px solid rgba(0, 184, 204, 0.35);
+  border-radius: 6px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  opacity: 0.85;
+}
 
 .intg-btn {
   border: none;

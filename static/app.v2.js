@@ -1080,13 +1080,24 @@ function renderIntegrationsList(integrations) {
   }
 
   list.innerHTML = integrations.map(intg => {
-    const isConnected = intg.connected && (intg.linked !== false);
-    const statusLabel = isConnected ? '● Connesso' : '○ Non collegato';
-    const statusClass = isConnected ? 'connected' : 'disconnected';
+    const isAutomation = intg.type === 'automation';
+    const isConnected = !isAutomation && intg.connected && (intg.linked !== false);
 
-    const btnHtml = isConnected
-      ? `<button class="intg-btn disconnect" onclick="disconnectIntegration('${intg.platform}')">Disconnetti</button>`
-      : `<button class="intg-btn connect" onclick="connectIntegration('${intg.platform}')">Collega</button>`;
+    let statusLabel, statusClass, btnHtml;
+
+    if (isAutomation) {
+      statusLabel = '◈ Via OpenClaw';
+      statusClass = 'automation';
+      btnHtml = `<span class="intg-badge-auto">PC automation</span>`;
+    } else if (isConnected) {
+      statusLabel = '● Connesso';
+      statusClass = 'connected';
+      btnHtml = `<button class="intg-btn disconnect" onclick="disconnectIntegration('${intg.platform}')">Disconnetti</button>`;
+    } else {
+      statusLabel = '○ Non collegato';
+      statusClass = 'disconnected';
+      btnHtml = `<button class="intg-btn connect" onclick="connectIntegration('${intg.platform}')">Collega</button>`;
+    }
 
     return `
       <div class="intg-item" id="intg-item-${intg.platform}">

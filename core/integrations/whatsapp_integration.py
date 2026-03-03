@@ -30,14 +30,14 @@ class WhatsAppIntegration(BaseIntegration):
         return True
 
     async def get_status(self, user_id: str) -> Dict[str, Any]:
-        connected = await self.is_connected(user_id)
         return {
             "platform": self.platform,
             "display_name": self.display_name,
             "icon": self.icon,
-            "connected": connected,
+            "connected": False,   # non è un'integrazione OAuth — nessuno stato da configurare
+            "type": "automation", # indica che è gestito da PC automation (OpenClaw)
             "provider": "openclaw",
-            "note": "Invio messaggi delegato a OpenClaw (PC automation)",
+            "note": "Invia messaggi via OpenClaw (PC automation). Richiede WhatsApp Web aperto.",
         }
 
     async def disconnect(self, user_id: str) -> bool:
