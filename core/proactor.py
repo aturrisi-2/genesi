@@ -393,17 +393,24 @@ class Proactor:
             if not active_docs and profile.get("active_document_id"):
                 active_docs = [profile["active_document_id"]]
 
-            # NON intercettare se è una richiesta di image generation:
+            # NON intercettare se è una richiesta di image generation o OpenClaw:
             # "immagine"/"foto" sono in _DOCUMENT_TRIGGERS ma in questo contesto
-            # significano "genera", non "analizza il documento caricato".
-            _IMAGE_GEN_PREFIXES = (
+            # significano "genera" o "fai un'azione web", non "analizza il documento caricato".
+            _IMAGE_GEN_KEYWORDS = [
                 "genera", "crea", "disegna", "dipingi", "illustra",
-                "genera un", "genera una", "crea un", "crea una",
-                "fa una foto", "voglio vedere",
-            )
-            _is_image_gen_request = any(msg_lower.startswith(p) for p in _IMAGE_GEN_PREFIXES)
+                "fa una foto", "voglio vedere", "fai un'immagine", "fammi un'immagine"
+            ]
+            _is_image_gen_request = any(p in msg_lower for p in _IMAGE_GEN_KEYWORDS)
+            
+            _OPENCLAW_KEYWORDS = [
+                "openclaw", "vai su", "naviga", "clicca", "cerca su google",
+                "cerca su amazon", "scattami una foto", "fammi un'istantanea",
+                "controlla il prezzo", "compra su", "prenota su", "entra nel sito",
+                "collegati a", "apri il sito", "registrati su", "accedi a"
+            ]
+            _is_openclaw_request = any(p in msg_lower for p in _OPENCLAW_KEYWORDS)
 
-            if active_docs and is_document_reference(message) and not _is_image_gen_request and not skip_document_mode:
+            if active_docs and is_document_reference(message) and not _is_image_gen_request and not _is_openclaw_request and not skip_document_mode:
                 logger.info("DOCUMENT_MODE_TRIGGERED user=%s doc_count=%d", user_id, len(active_docs))
                 response = await self._handle_document_query(user_id, message, profile, brain_state, conversation_id)
                 return response, "tool"

@@ -62,33 +62,30 @@ class OpenClawService:
             
             async def screenshot_watcher():
                 nonlocal last_screenshot_path
+                import glob
                 while process.returncode is None:
                     try:
-                        # Cerchiamo il file più recente nella cartella media
-                        # Usiamo ls -Art per avere i più recenti alla fine
-                        cmd = f"ls -Art {screenshot_dir}/*.png | tail -n 1"
-                        check = await asyncio.create_subprocess_shell(
-                            f"ssh luca@87.106.30.193 \"{cmd}\"",
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.PIPE
-                        )
-                        out, _ = await check.communicate()
-                        path = out.decode().strip()
+                        # Cerchiamo il file più recente nella cartella media locale (sul VPS)
+                        png_files = glob.glob(f"{screenshot_dir}/*.png")
+                        if not png_files:
+                            await asyncio.sleep(4)
+                            continue
+                            
+                        # Prendi il file più recente per data di modifica
+                        latest_file = max(png_files, key=os.path.getmtime)
                         
-                        if path and path.endswith(".png") and path != last_screenshot_path:
-                            last_screenshot_path = path
-                            # Scarichiamo e convertiamo in base64
-                            download = await asyncio.create_subprocess_shell(
-                                f"ssh luca@87.106.30.193 \"cat {path} | base64 -w 0\"",
-                                stdout=asyncio.subprocess.PIPE,
-                                stderr=asyncio.subprocess.PIPE
-                            )
-                            b64_out, _ = download.communicate()
-                            b64_str = b64_out.decode().strip()
-                            if b64_str:
-                                await send_status("Ho una prima visuale della pagina...", b64_str)
-                    except:
-                        pass
+                        if latest_file != last_screenshot_path:
+                            last_screenshot_path = latest_file
+                            # Leggiamo il file e convertiamo in base64
+                            try:
+                                with open(latest_file, "rb") as f:
+                                    b64_str = base64.b64encode(f.read()).decode('utf-8')
+                                if b64_str:
+                                    await send_status("Ho una prima visuale della pagina...", b64_str)
+                            except Exception as read_err:
+                                logger.error("SCREENSHOT_READ_ERROR: %s", str(read_err))
+                    except Exception as watch_err:
+                        logger.debug("WATCHER_TICK_ERROR: %s", str(watch_err))
                     await asyncio.sleep(4) # Check ogni 4 secondi
 
             # Avviamo il watcher in background per le anteprime live
@@ -120,8 +117,12 @@ class OpenClawService:
                             await send_status("Attendo un attimo che la pagina si carichi...")
                         elif "extracted" in low or "found" in low:
                             await send_status("Ho trovato dei risultati interessanti, li sto analizzando...")
-                        elif "login" in low or "auth" in low:
+                        elif "login" in low or "auth" in low or "password" in low:
                             await send_status("Controllo le credenziali di accesso...")
+                        elif "screenshot" in low or "snapshot" in low or "taking" in low:
+                            await send_status("Sto scattando una foto della pagina...")
+                        elif "action" in low or "perform" in low:
+                            await send_status("Eseguo l'operazione sulla pagina...")
                         elif "thinking" in low or "<thought>" in low:
                             await send_status("Sto riflettendo su come procedere...")
                 except Exception as stream_err:
