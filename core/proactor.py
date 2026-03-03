@@ -528,6 +528,14 @@ class Proactor:
                     current_intent = inherited
 
                 # DISPATCHER
+                # ── Pre-check: setup wizard integrazioni (priorità massima) ──────────
+                from core.setup_wizard import load_wizard, handle_wizard_step
+                _wizard_state = await load_wizard(user_id)
+                if _wizard_state:
+                    log("ROUTING_DECISION", route="setup_wizard_step", platform=_wizard_state.get("platform"), user_id=user_id)
+                    _wizard_resp = await handle_wizard_step(user_id, processed_message, _wizard_state)
+                    return _wizard_resp, "tool"
+
                 # ── Pre-check: flusso gmail compose multi-turno (priorità su tutto) ──
                 _gmail_compose = await storage.load(f"gmail_compose:{user_id}", default=None)
                 if _gmail_compose:
@@ -1716,17 +1724,48 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
     async def _handle_telegram_send(self, user_id: str, message: str) -> str:
         """
-        Invia un messaggio Telegram tramite OpenClaw — Telegram Desktop o web.telegram.org.
+        Invia un messaggio Telegram.
+        Se il bot non è configurato, avvia il wizard prima di procedere.
+        Se è configurato ma l'utente non ha collegato il suo chat_id, usa OpenClaw come fallback.
         """
-        prompt = (
-            "Apri Telegram Desktop oppure https://web.telegram.org — l'utente è già loggato. "
-            f"Poi esegui questa azione: {message.strip()}"
-        )
-        log("ROUTING_DECISION", route="openclaw_telegram_send", user_id=user_id)
-        return await self._handle_openclaw(user_id, prompt)
+        from core.integrations.telegram_integration import telegram_integration
+        from core.setup_wizard import WIZARD_PLATFORMS, start_wizard
+
+        # Bot token mancante → wizard di configurazione
+        if not telegram_integration._bot_token():
+            if "telegram" in WIZARD_PLATFORMS:
+                return await start_wizard(user_id, "telegram")
+            return "✈️ Telegram non è ancora configurato sul server."
+
+        # Bot configurato ma account non collegato → istruzioni di collegamento
+        chat_id = await telegram_integration.get_chat_id_for_user(user_id)
+        if not chat_id:
+            token = await telegram_integration.generate_link_token(user_id)
+            bot_status = await telegram_integration.get_status(user_id)
+            bot_username = bot_status.get("bot_username", "GenesiBot")
+            return (
+                f"✈️ Per inviare messaggi Telegram, prima collega il tuo account.\n\n"
+                f"Apri Telegram e invia al bot:\n`/start {token}`\n\n"
+                f"[Apri @{bot_username}](https://t.me/{bot_username}?start={token})"
+            )
+
+        # Bot configurato e account collegato → invia direttamente
+        try:
+            ok = await telegram_integration.send_message(user_id=user_id, to=chat_id, text=message.strip())
+            if ok:
+                return "✅ Messaggio inviato su Telegram!"
+            return "❌ Invio Telegram fallito. Verifica che il bot sia attivo."
+        except Exception as e:
+            log("TELEGRAM_SEND_ERROR", user_id=user_id, error=str(e))
+            return f"❌ Errore invio Telegram: {e}"
 
     async def _handle_integration_setup(self, user_id: str, platform: str) -> str:
-        """Gestisce la richiesta di collegamento di una nuova integrazione."""
+        """
+        Gestisce la richiesta di collegamento di una nuova integrazione.
+        Se le credenziali server mancano, avvia il wizard di configurazione guidata.
+        """
+        from core.setup_wizard import WIZARD_PLATFORMS, start_wizard
+
         integration = integrations_registry.get(platform)
         if not integration:
             return f"La piattaforma '{platform}' non è ancora supportata."
@@ -1737,6 +1776,9 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         if platform == "telegram":
             from core.integrations.telegram_integration import telegram_integration
             if not telegram_integration._bot_token():
+                # Avvia wizard per configurare TELEGRAM_BOT_TOKEN
+                if platform in WIZARD_PLATFORMS:
+                    return await start_wizard(user_id, platform)
                 return "✈️ Il bot Telegram non è ancora configurato sul server."
             token = await telegram_integration.generate_link_token(user_id)
             bot_status = await telegram_integration.get_status(user_id)
@@ -1755,6 +1797,11 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 f"{integration.icon} Per collegare {integration.display_name}, "
                 f"clicca qui: [{integration.display_name} → Autorizza]({auth_url})"
             )
+
+        # Credenziali server mancanti → avvia wizard guidato
+        if platform in WIZARD_PLATFORMS:
+            return await start_wizard(user_id, platform)
+
         return (
             f"{integration.icon} Per attivare {integration.display_name}, "
             f"configura le variabili d'ambiente necessarie nel file .env del server."
