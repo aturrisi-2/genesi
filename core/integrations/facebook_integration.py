@@ -40,7 +40,7 @@ class FacebookIntegration(BaseIntegration):
         app_id = self._app_id()
         # Facebook App IDs are strictly numeric (usually 15-16 digits).
         # Any text like "your_app_id" will fail this check and trigger OpenClaw.
-        if not app_id or not app_id.strip().isdigit():
+        if not app_id or not app_id.strip().isdigit() or len(app_id.strip()) < 12 or app_id.strip() == "123456789":
             log("FACEBOOK_OAUTH_ERROR", error=f"FACEBOOK_APP_ID mancante o fittizio: {app_id}")
             return None
         params = {
