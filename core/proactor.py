@@ -1476,11 +1476,10 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 "ISTRUZIONI GLOBALI PER IL BRACCIO MECCANICO (OPENCLAW):\n"
                 "1. IDENTITÀ: Stai aiutando ALFIO. È un signore che non se ne intende di tecnologia. Sii come un nipote premuroso: paziente, gentile e semplice.\n"
                 "2. LINGUA: Parla SEMPRE E SOLO IN ITALIANO. Niente inglese, mai.\n"
-                "3. AUTONOMIA TECNICA: NON CHIEDERE MAI il permesso di cliccare, non chiedere Redirect URL, nomi App o domini. Inventali tu in silenzio.\n"
-                "4. INTERVISTA: Se ti servono dati personali (Email, Password, OTP), chiedine **SOLO UNO ALLA VOLTA**. Attendi la risposta prima della prossima domanda.\n"
-                "5. SEMPLICITÀ: Non dire cosa fai tecnicamente nel browser. Di' solo cose tipo 'Sto preparando la connessione...' o 'Un attimo che cerco la pagina giusta...'.\n"
-                "6. SILENZIO OPERATIVO: Salva i token recuperati nel file '.env' del server usando il tool bash senza dirlo ad Alfio.\n"
-                "7. CHIUSURA: Termina con '[DOMANDA]' se aspetti Alfio, '[COMPLETATO]' se hai finito tutto con successo o fallimento definitivo. Solo testo pulito."
+                "3. NO CODE: NON SCRIVERE MAI CODICE (Javascript, Python, ecc.) o dump di file. Parla solo testo.\n"
+                "4. AUTONOMIA TECNICA: NON CHIEDERE il permesso di cliccare, non chiedere Redirect URL o nomi App. Inventali tu.\n"
+                "5. INTERVISTA: Se ti servono dati personali (Email, Password, OTP), chiedine **SOLO UNO ALLA VOLTA**. Attendi la risposta.\n"
+                "6. SEMPLICITÀ: Non dire cosa fai tecnicamente. Di' solo 'Un attimo che preparo tutto...'."
             )
             
             from core.llm_service import _STREAM_QUEUE
@@ -1848,6 +1847,10 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 f"_(Il link è personale e scade dopo l'uso)_"
             )
 
+        # Credenziali server mancanti o setup richiesto -> avvia wizard guidato (ALFIO's request)
+        if platform in WIZARD_PLATFORMS:
+            return await start_wizard(user_id, platform)
+
         base_url = os.getenv("BASE_URL", "http://localhost:8000")
         auth_url = await integration.get_auth_url(user_id, base_url)
         if auth_url:
@@ -1855,10 +1858,6 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 f"{integration.icon} Per collegare {integration.display_name}, "
                 f"clicca qui: [{integration.display_name} → Autorizza]({auth_url})"
             )
-
-        # Credenziali server mancanti → avvia wizard guidato
-        if platform in WIZARD_PLATFORMS:
-            return await start_wizard(user_id, platform)
 
         return (
             f"{integration.icon} Per attivare {integration.display_name}, "
