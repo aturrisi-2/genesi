@@ -37,11 +37,12 @@ class FacebookIntegration(BaseIntegration):
         return f"{base_url}/api/integrations/facebook/callback"
 
     async def get_auth_url(self, user_id: str, base_url: str = "") -> Optional[str]:
-        if not self._app_id():
-            log("FACEBOOK_OAUTH_ERROR", error="FACEBOOK_APP_ID mancante")
+        app_id = self._app_id()
+        if not app_id or app_id == "IL_TUO_APP_ID" or app_id == "your_app_id_here":
+            log("FACEBOOK_OAUTH_ERROR", error="FACEBOOK_APP_ID mancante o fittizio")
             return None
         params = {
-            "client_id": self._app_id(),
+            "client_id": app_id,
             "redirect_uri": self._redirect_uri(base_url),
             "scope": ",".join(self.SCOPES),
             "state": user_id,

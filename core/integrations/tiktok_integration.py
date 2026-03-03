@@ -37,13 +37,14 @@ class TikTokIntegration(BaseIntegration):
         return f"{base_url}/api/integrations/tiktok/callback"
 
     async def get_auth_url(self, user_id: str, base_url: str = "") -> Optional[str]:
-        if not self._client_key():
-            log("TIKTOK_OAUTH_ERROR", error="TIKTOK_CLIENT_KEY mancante")
+        client_key = self._client_key()
+        if not client_key or client_key == "IL_TUO_CLIENT_KEY" or client_key == "your_client_key":
+            log("TIKTOK_OAUTH_ERROR", error="TIKTOK_CLIENT_KEY mancante o fittizio")
             return None
         import secrets
         csrf_state = f"{user_id}:{secrets.token_hex(8)}"
         params = {
-            "client_key": self._client_key(),
+            "client_key": client_key,
             "scope": ",".join(self.SCOPES),
             "response_type": "code",
             "redirect_uri": self._redirect_uri(base_url),

@@ -1840,7 +1840,8 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         # Telegram: flusso a token one-shot (no OAuth, no URL fisso)
         if platform == "telegram":
             from core.integrations.telegram_integration import telegram_integration
-            if not telegram_integration._bot_token():
+            token_env = telegram_integration._bot_token()
+            if not token_env or token_env == "IL_TUO_BOT_TOKEN" or token_env.startswith("your_bot"):
                 # Avvia wizard per configurare TELEGRAM_BOT_TOKEN
                 if platform in WIZARD_PLATFORMS:
                     return await start_wizard(user_id, platform)
