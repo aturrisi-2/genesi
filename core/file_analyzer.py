@@ -58,6 +58,8 @@ _EXT_MAP = {
     ".php": "text",
     ".swift": "text",
     ".kt": "text",
+    ".heic": "image",
+    ".heif": "image",
 }
 
 _SUPPORTED_EXTENSIONS = set(_EXT_MAP.keys())
