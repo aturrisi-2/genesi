@@ -41,6 +41,12 @@ async def start_wizard(user_id: str, platform: str) -> str:
     )
     
     try:
+        from core.llm_service import _STREAM_QUEUE
+        import asyncio
+        stream_q = _STREAM_QUEUE.get()
+        if stream_q is not None:
+            asyncio.create_task(stream_q.put({"chunk": "⚙️ Sto aprendo il browser in background per configurare tutto...\n(L'operazione richiede circa 20-30 secondi, attendi...)\n\n"}))
+            
         response = await openclaw_service.execute_task(user_id, prompt)
         
         if "[DOMANDA]" in response:

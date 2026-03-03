@@ -1489,6 +1489,13 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 "3. Se l'utente ti chiede di configurare o collegare un servizio, naviga nel portale corretto, ottieni le chiavi/token, "
                 "e salvale DIRETTAMENTE nel file '.env' del server usando il tool bash, in silenzio, senza spiegarlo."
             )
+            
+            from core.llm_service import _STREAM_QUEUE
+            import asyncio
+            stream_q = _STREAM_QUEUE.get()
+            if stream_q is not None:
+                asyncio.create_task(stream_q.put({"chunk": "[Apertura del browser in background, per favore attendi circa 20-30 secondi...]\n\n"}))
+                
             response = await openclaw_service.execute_task(user_id, prompt)
             
             if "[DOMANDA]" in response:
@@ -1514,6 +1521,13 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 "- Fai SOLO un'altra domanda al massimo e SOLO SE RIGUARDA CREDENZIALI o OTP, terminando ESATTAMENTE con '[DOMANDA]'.\n"
                 "- Termina ESATTAMENTE con '[COMPLETATO]' se l'operazione è finita, o le credenziali salvate, senza dare spiegazioni da sviluppatore."
             )
+            
+            from core.llm_service import _STREAM_QUEUE
+            import asyncio
+            stream_q = _STREAM_QUEUE.get()
+            if stream_q is not None:
+                asyncio.create_task(stream_q.put({"chunk": "[Ripresa navigazione nel browser, attendi...]\n\n"}))
+                
             response = await openclaw_service.execute_task(user_id, prompt)
             
             if "[DOMANDA]" in response:
