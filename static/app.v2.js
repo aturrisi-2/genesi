@@ -3013,7 +3013,9 @@ function renderConvList(convs) {
       // Nascondi sidebar su mobile (larghezza <= 768px di solito, ma chiudiamo la sidebar)
       if (window.innerWidth <= 768) {
         document.getElementById('sidebar').classList.add('sidebar-collapsed');
-        document.getElementById('sidebar-open-btn').style.setProperty('display', 'flex', 'important');
+        if (document.getElementById('sidebar-toggle-clean')) {
+          document.getElementById('sidebar-toggle-clean').style.setProperty('display', 'flex', 'important');
+        }
       }
     });
     list.appendChild(item);
@@ -3219,14 +3221,14 @@ async function startNewSession() {
   document.getElementById('new-chat-btn')?.addEventListener('click', startNewSession);
   document.getElementById('coding-mode-btn')?.addEventListener('click', toggleCodingMode);
   document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
-  document.getElementById('sidebar-open-btn')?.addEventListener('click', toggleSidebar);
+  document.getElementById('sidebar-toggle-clean')?.addEventListener('click', toggleSidebar);
 
   // Chiudi sidebar cliccando fuori (su main-chat)
   document.getElementById('main-chat')?.addEventListener('click', (e) => {
     const sidebar = document.getElementById('sidebar');
     if (sidebar && !sidebar.classList.contains('sidebar-collapsed')) {
-      // Se il click NON è sull'handle neon (che serve per aprire/chiudere volutamente)
-      if (!e.target.closest('.sidebar-handle-wrapper')) {
+      // Se il click NON è sull'handle neon o il nuovo bottone clean
+      if (!e.target.closest('.sidebar-toggle-clean')) {
         sidebar.classList.add('sidebar-collapsed');
       }
     }
