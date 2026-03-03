@@ -282,6 +282,8 @@ body::after {
   box-shadow:
     0 12px 40px rgba(0, 0, 0, 0.45),
     0 0 15px rgba(251, 211, 141, 0.08);
+  /* Visual compensation for the icon at left: -32px */
+  transform: translateX(16px);
 }
 
 
@@ -622,8 +624,8 @@ textarea#text-input:focus {
    =============================== */
 #plus-button {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   background: #1a1a1a;
   border: 1px solid #2a2a2a;
   border-radius: 50%;
@@ -3230,10 +3232,14 @@ textarea#text-input:focus {
 
 /* 7. Legal Footer */
 #legal-footer {
-  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 0;
   font-size: 0.68rem;
   color: rgba(148, 163, 184, 0.7);
-  padding-top: 8px;
   font-family: 'Inter', 'Roboto', sans-serif;
   letter-spacing: 0.02em;
 }
