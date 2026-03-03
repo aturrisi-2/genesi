@@ -1111,38 +1111,42 @@ function renderIntegrationsList(integrations) {
   }).join('');
 }
 
+function _startWizardInChat(platform) {
+  if (settingsModal) settingsModal.classList.add('hidden');
+  const textInput = document.getElementById('text-input');
+  if (textInput && typeof sendMessage === 'function') {
+    textInput.value = `configura ${platform}`;
+    setTimeout(() => {
+      sendMessage();
+    }, 100);
+  }
+}
+
+const WIZARD_PLATFORMS = new Set(['facebook', 'instagram', 'tiktok', 'telegram']);
+
 async function connectIntegration(platform) {
   const token = getAuthToken();
-  const connectUrl = `/api/integrations/${platform}/connect?token=${encodeURIComponent(token)}`;
 
-  if (platform === 'telegram') {
-    // Telegram: fetch link token and show instructions
-    try {
-      const res = await fetch('/api/integrations/telegram/link-token', {
-        headers: { 'Authorization': 'Bearer ' + token },
-      });
-      const data = await res.json();
-      if (res.status === 503 || data.error) {
-        alert('⚙️ Telegram non è ancora configurato sul server.\n\nPer abilitarlo, aggiungi la variabile TELEGRAM_BOT_TOKEN nel file .env e riavvia il server.');
-        return;
-      }
-      if (data.command) {
-        const botName = data.deep_link ? data.deep_link.split('t.me/')[1]?.split('?')[0] : 'GenesiBot';
-        const msg = `Per collegare Telegram:\n\n1. Apri Telegram\n2. Cerca il bot @${botName}\n3. Invia il comando:\n\n${data.command}\n\n(Oppure clicca il link: ${data.deep_link})`;
-        alert(msg);
-      }
-    } catch (e) {
-      alert('⚙️ Telegram non configurato sul server. Aggiungi TELEGRAM_BOT_TOKEN nel .env.');
+  if (platform === 'whatsapp') {
+    if (settingsModal) settingsModal.classList.add('hidden');
+    const textInput = document.getElementById('text-input');
+    if (textInput && typeof sendMessage === 'function') {
+      textInput.value = 'manda un messaggio su WhatsApp';
+      setTimeout(() => {
+        sendMessage();
+      }, 100);
     }
     return;
   }
 
-  if (platform === 'whatsapp') {
-    alert('💬 WhatsApp è gestito tramite OpenClaw.\n\nAssicurati che OpenClaw sia in esecuzione sul tuo PC, poi di\' a Genesi:\n"manda un messaggio su WhatsApp a [nome contatto]"');
+  // Piattaforme gestite da OpenClaw via chat
+  if (WIZARD_PLATFORMS.has(platform)) {
+    _startWizardInChat(platform);
     return;
   }
 
   // OAuth platforms: open popup
+  const connectUrl = `/api/integrations/${platform}/connect?token=${encodeURIComponent(token)}`;
   const popup = window.open(
     connectUrl,
     'genesi_connect_' + platform,

@@ -528,13 +528,15 @@ class Proactor:
                     current_intent = inherited
 
                 # DISPATCHER
-                # ── Pre-check: setup wizard integrazioni (priorità massima) ──────────
-                from core.setup_wizard import load_wizard, handle_wizard_step
-                _wizard_state = await load_wizard(user_id)
-                if _wizard_state:
-                    log("ROUTING_DECISION", route="setup_wizard_step", platform=_wizard_state.get("platform"), user_id=user_id)
-                    _wizard_resp = await handle_wizard_step(user_id, processed_message, _wizard_state)
-                    return _wizard_resp, "tool"
+                # ── Pre-check: flusso OpenClaw multi-turno globale (priorità massima) ──────────
+                _openclaw_state = await storage.load(f"openclaw_session:{user_id}", default=None)
+                if _openclaw_state:
+                    if processed_message.lower() in ("annulla", "stop", "esci", "cancel", "no", "interrompi"):
+                        await storage.delete(f"openclaw_session:{user_id}")
+                        return "⚙️ Operazione OpenClaw interrotta.", "tool"
+                    log("ROUTING_DECISION", route="openclaw_session_step", user_id=user_id)
+                    _oc_resp = await self._handle_openclaw_continue(user_id, processed_message)
+                    return _oc_resp, "tool"
 
                 # ── Pre-check: flusso gmail compose multi-turno (priorità su tutto) ──
                 _gmail_compose = await storage.load(f"gmail_compose:{user_id}", default=None)
@@ -1465,15 +1467,54 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
     async def _handle_openclaw(self, user_id: str, message: str) -> str:
         """
-        Handle OpenClaw integration requests.
+        Handle OpenClaw integration requests (multi-turn).
         """
         try:
             logger.info("OPENCLAW_REQUEST user=%s message=%s", user_id, message[:50])
-            response = await openclaw_service.execute_task(user_id, message)
-            return response
+            prompt = (
+                f"{message}\n\n"
+                "ISTRUZIONI GLOBALI PER TE (OPENCLAW):\n"
+                "Stai operando come un agente autonomo sul browser. "
+                "1. Se per completare l'operazione ti mancano credenziali, password, nomi, o qualsiasi input dall'utente, "
+                "fermati e fai una domanda chiara all'utente, terminando la TUA risposta ESATTAMENTE con la stringa '[DOMANDA]'.\n"
+                "2. Se hai completato l'operazione con successo o hai fallito in modo definitivo, termina la tua risposta "
+                "ESATTAMENTE con la stringa '[COMPLETATO]'.\n"
+                "3. Se l'utente ti chiede di configurare o collegare un servizio, naviga nel portale corretto, ottieni le chiavi/token, "
+                "e salvale DIRETTAMENTE nel file '.env' del server usando la linea di comando (oppure forniscimi un comando bash rapido da eseguire). "
+                "Soprattutto per Facebook, Instagram (App ID/Secret), TikTok o Telegram."
+            )
+            response = await openclaw_service.execute_task(user_id, prompt)
+            
+            if "[DOMANDA]" in response:
+                await storage.save(f"openclaw_session:{user_id}", {"active": True})
+                return response.replace("[DOMANDA]", "").strip()
+            else:
+                await storage.delete(f"openclaw_session:{user_id}")
+                return response.replace("[COMPLETATO]", "").strip()
+                
         except Exception as e:
             logger.error("OPENCLAW_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
             return "Errore nell'integrazione con OpenClaw: non riesco a raggiungere il servizio braccio robotico."
+
+    async def _handle_openclaw_continue(self, user_id: str, message: str) -> str:
+        try:
+            prompt = (
+                f"L'utente ha risposto alla tua domanda precedente così: '{message}'.\n\n"
+                "Usa questa informazione per proseguire la tua operazione sul browser. "
+                "Ricorda le regole: termina ESATTAMENTE con '[DOMANDA]' se ti serve altro input, "
+                "oppure ESATTAMENTE con '[COMPLETATO]' se l'operazione è finita."
+            )
+            response = await openclaw_service.execute_task(user_id, prompt)
+            
+            if "[DOMANDA]" in response:
+                return response.replace("[DOMANDA]", "").strip()
+            else:
+                await storage.delete(f"openclaw_session:{user_id}")
+                return response.replace("[COMPLETATO]", "").strip()
+        except Exception as e:
+            await storage.delete(f"openclaw_session:{user_id}")
+            logger.error("OPENCLAW_CONTINUE_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
+            return "❌ Operazione automatica interrotta a causa di un errore di sistema."
 
     # ═══════════════════════════════════════════════════════════
     # INTEGRATION HANDLERS — Gmail, Telegram, Social
