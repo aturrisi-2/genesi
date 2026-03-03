@@ -25,7 +25,8 @@ class GmailIntegration(BaseIntegration):
         return os.getenv("GOOGLE_CREDENTIALS_PATH", "data/calendar/credentials.json")
 
     def _get_redirect_uri(self, base_url: str) -> str:
-        return f"{base_url}/api/integrations/gmail/callback"
+        # Riusa il redirect URI del Calendar (già registrato in Google Cloud Console)
+        return f"{base_url}/api/calendar/google/callback"
 
     async def get_auth_url(self, user_id: str, base_url: str = "") -> Optional[str]:
         credentials_path = self._get_credentials_path()
@@ -44,7 +45,8 @@ class GmailIntegration(BaseIntegration):
                 access_type="offline",
                 prompt="consent",
                 include_granted_scopes="true",
-                state=user_id,
+                # Encode platform in state so calendar callback knows what to save
+                state=f"{user_id}|gmail",
             )
             return auth_url
         except Exception as e:
@@ -52,11 +54,12 @@ class GmailIntegration(BaseIntegration):
             return None
 
     async def handle_callback(self, user_id: str, code: str, state: str = "") -> bool:
+        # Gestito direttamente da api/calendar_auth.py (stesso redirect URI)
+        # Questo metodo non viene invocato nel flusso Gmail normale
         credentials_path = self._get_credentials_path()
         base_url = os.getenv("BASE_URL", "http://localhost:8000")
         try:
             from google_auth_oauthlib.flow import Flow
-            import json
 
             flow = Flow.from_client_secrets_file(
                 credentials_path,
