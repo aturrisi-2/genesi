@@ -1445,38 +1445,98 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
     async def _handle_gmail_read(self, user_id: str, message: str) -> str:
         """
-        Legge le email tramite OpenClaw — browser automation su mail.google.com.
-        L'utente è già autenticato nel browser: non servono credenziali API.
+        Legge le email tramite Gmail API diretta (se token disponibili).
         """
-        # Estrai eventuale filtro specifico dal messaggio originale
-        original = message.strip().lower()
-        extra = ""
-        if any(w in original for w in ["non lette", "non letti", "unread"]):
-            extra = " Solo le email non lette."
-        elif any(w in original for w in ["importanti", "starred", "urgenti"]):
-            extra = " Solo le email importanti o con stella."
+        from core.integrations.gmail_integration import gmail_integration
 
-        prompt = (
-            "Apri il browser web e vai su https://mail.google.com — l'utente è già loggato, "
-            "non devi inserire credenziali. "
-            "Una volta caricata la pagina, elenca le ultime 5 email presenti nell'inbox con: "
-            "mittente, oggetto, data e una breve anteprima del testo (prima riga)."
-            + extra
-        )
-        log("ROUTING_DECISION", route="openclaw_gmail_read", user_id=user_id)
-        return await self._handle_openclaw(user_id, prompt)
+        tokens = await gmail_integration.load_tokens(user_id)
+        if not tokens or not tokens.get("access_token"):
+            return (
+                "📧 Gmail non ancora collegato.\n\n"
+                "Scrivi **'configurare gmail'** e clicca il link OAuth per autorizzarmi."
+            )
+
+        # Determina filtro query
+        original = message.strip().lower()
+        query = ""
+        if any(w in original for w in ["non lette", "non letti", "unread"]):
+            query = "is:unread"
+        elif any(w in original for w in ["importanti", "starred", "urgenti"]):
+            query = "is:starred"
+
+        log("ROUTING_DECISION", route="gmail_api_read", user_id=user_id)
+        try:
+            emails = await gmail_integration.get_messages(user_id, limit=5, query=query)
+        except Exception as e:
+            log("GMAIL_API_READ_ERROR", user_id=user_id, error=str(e))
+            return f"❌ Errore lettura Gmail: {e}"
+
+        if not emails:
+            label = "non lette" if query == "is:unread" else "in arrivo"
+            return f"📭 Nessuna email {label} al momento."
+
+        lines = [f"📧 **Ultime {len(emails)} email{' non lette' if query == 'is:unread' else ''}:**\n"]
+        for i, e in enumerate(emails, 1):
+            unread_mark = "🔵 " if e.get("unread") else ""
+            lines.append(
+                f"**{i}. {unread_mark}{e['subject']}**\n"
+                f"   Da: {e['from']}\n"
+                f"   Data: {e['date']}\n"
+                f"   Anteprima: _{e['snippet']}_\n"
+            )
+        return "\n".join(lines)
 
     async def _handle_gmail_send(self, user_id: str, message: str) -> str:
         """
-        Invia un'email tramite OpenClaw — browser automation su mail.google.com.
-        Passa il messaggio originale dell'utente arricchito con istruzioni browser.
+        Invia un'email via Gmail API.
+        Usa un LLM call veloce per estrarre destinatario, oggetto e corpo dal messaggio.
         """
-        prompt = (
-            "Apri il browser web e vai su https://mail.google.com — l'utente è già loggato. "
-            f"Poi esegui questa azione: {message.strip()}"
+        from core.integrations.gmail_integration import gmail_integration
+
+        tokens = await gmail_integration.load_tokens(user_id)
+        if not tokens or not tokens.get("access_token"):
+            return (
+                "📧 Gmail non ancora collegato.\n\n"
+                "Scrivi **'configurare gmail'** e clicca il link OAuth per autorizzarmi."
+            )
+
+        # Estrai parametri email con LLM
+        extract_prompt = (
+            f"Estrai i parametri per inviare un'email dal seguente messaggio utente.\n"
+            f"Messaggio: \"{message.strip()}\"\n\n"
+            f"Rispondi SOLO con JSON valido, nessun altro testo:\n"
+            f"{{\"to\": \"<indirizzo email>\", \"subject\": \"<oggetto>\", \"body\": \"<testo email>\"}}\n"
+            f"Se manca l'indirizzo o non è chiaro, metti to=null."
         )
-        log("ROUTING_DECISION", route="openclaw_gmail_send", user_id=user_id)
-        return await self._handle_openclaw(user_id, prompt)
+        try:
+            raw = await self._call_model(
+                [{"role": "user", "content": extract_prompt}],
+                system="Sei un parser JSON. Rispondi solo con JSON valido.",
+                route="memory",
+                model="gpt-4o-mini",
+            )
+            import json as _json
+            params = _json.loads(raw.strip())
+        except Exception:
+            params = {}
+
+        to = params.get("to") or ""
+        subject = params.get("subject") or "(nessun oggetto)"
+        body = params.get("body") or message.strip()
+
+        if not to or "@" not in to:
+            return (
+                "📧 Non sono riuscito a capire il destinatario.\n"
+                "Specifica così: **'invia email a nome@esempio.com oggetto: ... testo: ...'**"
+            )
+
+        log("ROUTING_DECISION", route="gmail_api_send", user_id=user_id)
+        try:
+            await gmail_integration.send_message(user_id, to=to, text=body, subject=subject)
+            return f"✅ Email inviata a **{to}**\nOggetto: _{subject}_"
+        except Exception as e:
+            log("GMAIL_API_SEND_ERROR", user_id=user_id, error=str(e))
+            return f"❌ Errore invio email: {e}"
 
     async def _handle_telegram_send(self, user_id: str, message: str) -> str:
         """
