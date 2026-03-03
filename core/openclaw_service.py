@@ -33,6 +33,15 @@ class OpenClawService:
             # Adding Playwright browser path for headless mode on VPS
             env["PLAYWRIGHT_BROWSERS_PATH"] = "/home/luca/.cache/ms-playwright"
             
+            # Crucial: standard browser skills often look for CHROME_PATH or CHROME_BIN
+            chrome_exe = "/home/luca/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome"
+            env["CHROME_PATH"] = chrome_exe
+            env["CHROME_BIN"] = chrome_exe
+            
+            # Prepend our npm bin directory to PATH just in case it looks there
+            npm_bin = "/home/luca/.npm-global/bin"
+            env["PATH"] = f"{npm_bin}:{env.get('PATH', '')}"
+            
             process = await asyncio.create_subprocess_exec(
                 OPENCLAW_BIN, "agent", 
                 "--message", prompt, 
