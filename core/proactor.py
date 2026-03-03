@@ -1445,26 +1445,49 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
     async def _handle_gmail_read(self, user_id: str, message: str) -> str:
         """
-        Legge le email tramite OpenClaw (browser automation).
-        Il messaggio originale viene passato intatto; se generico viene arricchito.
+        Legge le email tramite OpenClaw — browser automation su mail.google.com.
+        L'utente è già autenticato nel browser: non servono credenziali API.
         """
-        prompt = message.strip()
-        if not prompt or prompt.lower() in ("leggi le mail", "leggi le email", "controlla email",
-                                             "controlla le email", "nuove email", "ho mail",
-                                             "le mie email", "leggi la posta", "controlla la posta"):
-            prompt = "Apri Gmail e mostrami le ultime email ricevute: mittente, oggetto e anteprima del testo."
+        # Estrai eventuale filtro specifico dal messaggio originale
+        original = message.strip().lower()
+        extra = ""
+        if any(w in original for w in ["non lette", "non letti", "unread"]):
+            extra = " Solo le email non lette."
+        elif any(w in original for w in ["importanti", "starred", "urgenti"]):
+            extra = " Solo le email importanti o con stella."
+
+        prompt = (
+            "Apri il browser web e vai su https://mail.google.com — l'utente è già loggato, "
+            "non devi inserire credenziali. "
+            "Una volta caricata la pagina, elenca le ultime 5 email presenti nell'inbox con: "
+            "mittente, oggetto, data e una breve anteprima del testo (prima riga)."
+            + extra
+        )
         log("ROUTING_DECISION", route="openclaw_gmail_read", user_id=user_id)
         return await self._handle_openclaw(user_id, prompt)
 
     async def _handle_gmail_send(self, user_id: str, message: str) -> str:
-        """Invia un'email tramite OpenClaw (browser automation / Gmail API)."""
+        """
+        Invia un'email tramite OpenClaw — browser automation su mail.google.com.
+        Passa il messaggio originale dell'utente arricchito con istruzioni browser.
+        """
+        prompt = (
+            "Apri il browser web e vai su https://mail.google.com — l'utente è già loggato. "
+            f"Poi esegui questa azione: {message.strip()}"
+        )
         log("ROUTING_DECISION", route="openclaw_gmail_send", user_id=user_id)
-        return await self._handle_openclaw(user_id, message)
+        return await self._handle_openclaw(user_id, prompt)
 
     async def _handle_telegram_send(self, user_id: str, message: str) -> str:
-        """Invia un messaggio Telegram tramite OpenClaw."""
+        """
+        Invia un messaggio Telegram tramite OpenClaw — Telegram Desktop o web.telegram.org.
+        """
+        prompt = (
+            "Apri Telegram Desktop oppure https://web.telegram.org — l'utente è già loggato. "
+            f"Poi esegui questa azione: {message.strip()}"
+        )
         log("ROUTING_DECISION", route="openclaw_telegram_send", user_id=user_id)
-        return await self._handle_openclaw(user_id, message)
+        return await self._handle_openclaw(user_id, prompt)
 
     async def _handle_integration_setup(self, user_id: str, platform: str) -> str:
         """Gestisce la richiesta di collegamento di una nuova integrazione."""
@@ -1502,9 +1525,31 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         )
 
     async def _handle_social_read(self, user_id: str, message: str) -> str:
-        """Legge aggiornamenti da Facebook, Instagram o TikTok tramite OpenClaw."""
+        """
+        Legge aggiornamenti social tramite OpenClaw — browser automation.
+        Individua la piattaforma dal messaggio e costruisce un prompt browser specifico.
+        """
+        msg_lower = message.lower()
+        if "instagram" in msg_lower:
+            url = "https://www.instagram.com"
+            platform_name = "Instagram"
+        elif "tiktok" in msg_lower:
+            url = "https://www.tiktok.com"
+            platform_name = "TikTok"
+        elif "facebook" in msg_lower:
+            url = "https://www.facebook.com"
+            platform_name = "Facebook"
+        else:
+            url = "https://www.facebook.com"
+            platform_name = "Facebook"
+
+        prompt = (
+            f"Apri il browser web e vai su {url} — l'utente è già loggato, non inserire credenziali. "
+            f"Una volta caricata la pagina di {platform_name}, "
+            f"esegui questa azione: {message.strip()}"
+        )
         log("ROUTING_DECISION", route="openclaw_social_read", user_id=user_id)
-        return await self._handle_openclaw(user_id, message)
+        return await self._handle_openclaw(user_id, prompt)
 
     async def _handle_social_setup(self, user_id: str, message: str) -> str:
         """Gestisce il collegamento di un social network."""
