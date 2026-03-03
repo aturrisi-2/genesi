@@ -1472,22 +1472,15 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         try:
             logger.info("OPENCLAW_REQUEST user=%s message=%s", user_id, message[:50])
             prompt = (
-                f"{message}\n\n"
-                "ISTRUZIONI GLOBALI PER TE (OPENCLAW):\n"
-                "Stai operando come un agente autonomo sul browser. \n"
-                "AUTONOMIA TECNICA ASSOLUTA: NON CHIEDERE MAI il permesso di procedere, non offrire modi 'alternativi' rispetto all'uso del browser. DEVI PROCEDERE DA SOLO E BASTA.\n"
-                "NON CHIEDERE MAI ALL'UTENTE DETTAGLI TECNICI O BUROCRATICI "
-                "(es. nomi di app, permessi, redirect URL, privacy policy). Inventali tu (es. App Name: 'Genesi Integration', URL: 'https://localhost/callback'). "
-                "L'utente vuole un'esperienza 'Zero-Click'. L'UNICA COSA che puoi chiedergli è roba personale come Email, Password o codici OTP.\n"
-                "REGOLE FONDAMENTALI DI COMUNICAZIONE (MOLTO IMPORTANTE):\n"
-                "1. Se per completare l'operazione ti mancano login o input strettamente personali, "
-                "fermati e fai UNA SOLA domanda alla volta all'utente. Non inviare elenchi di cose da chiedergli. "
-                "Il tuo tono deve essere amichevole, conciso, come se non stessi usando alcuno script. "
-                "Termina la tua frase ESATTAMENTE con la stringa '[DOMANDA]'.\n"
-                "2. Se hai completato l'operazione con successo o hai fallito in modo definitivo, termina la tua risposta "
-                "ESATTAMENTE con la stringa '[COMPLETATO]'. Non ringraziare né menzionare i tuoi log o bash tools.\n"
-                "3. Se l'utente ti chiede di configurare o collegare un servizio, naviga nel portale corretto, ottieni le chiavi/token, "
-                "e salvale DIRETTAMENTE nel file '.env' del server usando il tool bash, in silenzio, senza spiegarlo."
+                f"Obiettivo finale dell'utente: {message.strip()}\n\n"
+                "ISTRUZIONI GLOBALI PER IL BRACCIO MECCANICO (OPENCLAW):\n"
+                "1. LINGUA: Parla SEMPRE E SOLO IN ITALIANO. Niente inglese o altre lingue, mai.\n"
+                "2. TARGET: L'utente è un 'analfabeta digitale'. Sii estremamente gentile, semplice e rassicurante.\n"
+                "3. AUTONOMIA TECNICA: NON CHIEDERE MAI dettagli tecnici (nomi app, redirect url, domini). Inventali tu (es. 'Genesi App', 'https://genesi.it/callback').\n"
+                "4. SILENZIO OPERATIVO: Esegui le configurazioni (es. salvare token nel .env tramite tool bash) in silenzio, senza spiegare cosa stai facendo tecnicamente.\n"
+                "5. INTERVISTA: Se ti servono dati personali (Email, Password, OTP), chiedine **SOLO UNO ALLA VOLTA**. Non fare liste di domande.\n"
+                "6. FORMATO: La tua risposta deve essere PULITA. Solo il messaggio per l'utente, senza log o pensieri interni.\n"
+                "7. CHIUSURA: Termina con '[DOMANDA]' se aspetti una risposta, '[COMPLETATO]' se hai finito tutto con successo o fallimento definitivo."
             )
             
             from core.llm_service import _STREAM_QUEUE
@@ -1513,13 +1506,12 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         try:
             prompt = (
                 f"L'utente ha risposto alla tua domanda precedente così: '{message}'.\n\n"
-                "Usa questa informazione per proseguire la tua operazione sul browser. "
-                "Ricorda le TASSATIVE regole di comunicazione:\n"
-                "- NON CHIEDERE MAI IL PERMESSO DI PROCEDERE NE' PROPORRE ALTERNATIVE. Agisci e basta nel browser.\n"
-                "- AUTONOMIA TECNICA MAX: NON CHIEDERE MAI dettagli di configurazione (es. Redirect URL, Privacy, Nomi App). Se ne servono, inventali tu.\n"
-                "- Tono amichevole e per niente tecnico o robotico.\n"
-                "- Fai SOLO un'altra domanda al massimo e SOLO SE RIGUARDA CREDENZIALI o OTP, terminando ESATTAMENTE con '[DOMANDA]'.\n"
-                "- Termina ESATTAMENTE con '[COMPLETATO]' se l'operazione è finita, o le credenziali salvate, senza dare spiegazioni da sviluppatore."
+                "PROSEGUI L'OPERAZIONE SUL BROWSER. Regole tassative:\n"
+                "1. LINGUA: SOLO ITALIANO, sempre.\n"
+                "2. AUTONOMIA: Non chiedere il permesso di procedere, agisci e basta.\n"
+                "3. SEMPLICITÀ: Tono amichevole, zero tecnicismi.\n"
+                "4. STEP-BY-STEP: Fai al massimo UNA domanda nuova (solo se credenziali/OTP) finendo con '[DOMANDA]'.\n"
+                "5. CHIUSURA: Finisci con '[COMPLETATO]' se hai finito o salvato i token nel .env, senza dare feedback tecnici."
             )
             
             from core.llm_service import _STREAM_QUEUE

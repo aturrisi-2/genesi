@@ -50,8 +50,19 @@ class OpenClawService:
                 output = stdout.decode('utf-8').strip()
                 logger.info("OPENCLAW_CLI_SUCCESS user=%s output_len=%d", user_id, len(output))
                 
-                # Semplice post-processing per pulire eventuali log ANSI o header del CLI se presenti
-                # Ma dai test sembra ritornare direttamente il testo dell'AI.
+                # Semplice post-processing per pulire eventuali log ANSI o pensieri (Thinking blocks)
+                # Spesso modelli come GPT-4o-mini o DeepSeek/OpenRouter includono pensieri o note di sistema.
+                import re
+                
+                # Rimuove blocchi <thought>...</thought>
+                output = re.sub(r'<thought>.*?</thought>', '', output, flags=re.DOTALL | re.IGNORECASE)
+                # Rimuove blocchi [Thought: ...] o similar
+                output = re.sub(r'\[Thought:.*?\]', '', output, flags=re.DOTALL | re.IGNORECASE)
+                # Rimuove blocchi [System note: ...]
+                output = re.sub(r'\[System note:.*?\]', '', output, flags=re.DOTALL | re.IGNORECASE)
+                
+                output = output.strip()
+                
                 if not output:
                     return "L'azione è stata completata correttamente, ma non ho ricevuto un messaggio di risposta testuale."
                 
