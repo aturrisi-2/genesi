@@ -3110,6 +3110,10 @@ REGOLE TASSATIVE:
 7. ITALIANO: Rispondi esclusivamente in italiano naturale.
 """
         try:
+            # Trim for extreme cases to prevent provider-side overflow
+            if len(fragments) > 20000:
+                fragments = fragments[:10000] + "\n[...]\n" + fragments[-10000:]
+
             # Use _call_model to preserve the synthesis prompt containing the actual tool data.
             # _call_with_protection would replace 'prompt' with the adaptive Genesi system prompt,
             # which doesn't include weather/news data → LLM would refuse to provide real-time info.
@@ -3120,6 +3124,12 @@ REGOLE TASSATIVE:
                 user_id=user_id,
                 route="synthesis"
             )
+            
+            # Se l'LLM risponde con un errore di overflow (comune in OpenRouter/OpenAI se superi limti)
+            if synthesized and "context overflow" in synthesized.lower():
+                logger.warning("PROACTOR_SYNTHESIS_OVERFLOW_DETECTED user=%s", user_id)
+                return "\n\n".join(responses)
+
             if synthesized:
                 log("PROACTOR_SYNTHESIS_OK", len=len(synthesized))
                 return synthesized

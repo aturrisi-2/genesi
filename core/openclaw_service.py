@@ -159,6 +159,18 @@ class OpenClawService:
                 
                 # Pulizia finale dell'output [COMPLETATO] o [DOMANDA]
                 output = output.strip()
+                
+                # Riduci rumore dei log tecnici se l'output è molto lungo
+                if len(output) > 4000:
+                    lines = output.split('\n')
+                    # Filtra via i log di navigazione/interazione se siamo oltre il limite
+                    filtered = [l for l in lines if not any(kw in l.lower() for kw in ["navigated", "goto", "clicking", "waiting", "found", "extracted"])]
+                    output = "\n".join(filtered).strip()
+                
+                # Hard limit finale per sicurezza (Synthesis context window)
+                if len(output) > 6000:
+                    output = "[... Parte dell'output rimossa per brevità ...]\n" + output[-6000:]
+
                 if not output:
                     return "Azione completata, Alfio. Tutto sotto controllo."
                 
