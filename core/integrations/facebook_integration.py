@@ -38,8 +38,10 @@ class FacebookIntegration(BaseIntegration):
 
     async def get_auth_url(self, user_id: str, base_url: str = "") -> Optional[str]:
         app_id = self._app_id()
-        if not app_id or app_id == "IL_TUO_APP_ID" or app_id == "your_app_id_here":
-            log("FACEBOOK_OAUTH_ERROR", error="FACEBOOK_APP_ID mancante o fittizio")
+        # Facebook App IDs are strictly numeric (usually 15-16 digits).
+        # Any text like "your_app_id" will fail this check and trigger OpenClaw.
+        if not app_id or not app_id.strip().isdigit():
+            log("FACEBOOK_OAUTH_ERROR", error=f"FACEBOOK_APP_ID mancante o fittizio: {app_id}")
             return None
         params = {
             "client_id": app_id,

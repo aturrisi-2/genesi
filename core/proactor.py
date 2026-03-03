@@ -1841,7 +1841,8 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         if platform == "telegram":
             from core.integrations.telegram_integration import telegram_integration
             token_env = telegram_integration._bot_token()
-            if not token_env or token_env == "IL_TUO_BOT_TOKEN" or token_env.startswith("your_bot"):
+            # Bot token validation: valid tokens contain a colon and a long alphanumeric string
+            if not token_env or ":" not in token_env or any(w in token_env.lower() for w in ("tuo", "your", "token", "inserisci")):
                 # Avvia wizard per configurare TELEGRAM_BOT_TOKEN
                 if platform in WIZARD_PLATFORMS:
                     return await start_wizard(user_id, platform)

@@ -38,8 +38,9 @@ class TikTokIntegration(BaseIntegration):
 
     async def get_auth_url(self, user_id: str, base_url: str = "") -> Optional[str]:
         client_key = self._client_key()
-        if not client_key or client_key == "IL_TUO_CLIENT_KEY" or client_key == "your_client_key":
-            log("TIKTOK_OAUTH_ERROR", error="TIKTOK_CLIENT_KEY mancante o fittizio")
+        # Any text like "your_client_key", "inserisci...", etc.
+        if not client_key or any(w in (client_key or "").lower() for w in ("tuo", "your", "key", "client", "inserisci")):
+            log("TIKTOK_OAUTH_ERROR", error=f"TIKTOK_CLIENT_KEY mancante o fittizio: {client_key}")
             return None
         import secrets
         csrf_state = f"{user_id}:{secrets.token_hex(8)}"
