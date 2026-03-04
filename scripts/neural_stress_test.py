@@ -31,6 +31,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BASE_URL      = "http://localhost:8000"
 TEST_EMAIL    = "neural_test@genesi.local"
 TEST_PASSWORD = "neural_stress_2026"
+
+# Override da env vars (utile per CI/produzione)
+TEST_EMAIL    = os.getenv("GENESI_TEST_EMAIL", TEST_EMAIL)
+TEST_PASSWORD = os.getenv("GENESI_TEST_PASSWORD", TEST_PASSWORD)
 LOG_FILE      = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "genesi.log")
 REPORT_FILE   = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NEURAL_TEST_REPORT.md")
 PAUSE_BETWEEN = 2.0  # secondi tra un test e l'altro
@@ -70,9 +74,11 @@ def info(s): return f"{CYAN}   {s}{RESET}"
 # ─── Tester ───────────────────────────────────────────────────────────────────
 class NeuralTester:
 
-    def __init__(self, base_url: str, pause: float):
+    def __init__(self, base_url: str, pause: float, email: str = None, password: str = None):
         self.base_url = base_url
         self.pause = pause
+        self.email = email or TEST_EMAIL
+        self.password = password or TEST_PASSWORD
         self.session: Optional[aiohttp.ClientSession] = None
         self.token: Optional[str] = None
         self._log_cursor = 0  # posizione nel log file all'inizio del test
@@ -86,20 +92,22 @@ class NeuralTester:
         print(f"{BOLD}[Neural Tester] Pronto. Log cursor: riga {self._log_cursor}{RESET}")
 
     async def _ensure_user(self):
-        """Crea l'utente di test se non esiste."""
+        """Crea l'utente di test se non esiste (solo se non è un utente esterno)."""
+        if self.email != TEST_EMAIL:
+            return  # utente esterno già verificato, skip registrazione
         try:
             async with self.session.post(
                 f"{self.base_url}/auth/register",
-                json={"email": TEST_EMAIL, "password": TEST_PASSWORD}
+                json={"email": self.email, "password": self.password}
             ) as r:
-                pass  # 200 = creato, 400 = già esiste — entrambi ok
+                pass  # 200 = creato, 409 = già esiste — entrambi ok
         except Exception:
             pass
 
     async def _login(self):
         async with self.session.post(
             f"{self.base_url}/auth/login",
-            json={"email": TEST_EMAIL, "password": TEST_PASSWORD}
+            json={"email": self.email, "password": self.password}
         ) as r:
             if r.status != 200:
                 print(fail(f"Login fallito: HTTP {r.status}"))
@@ -580,7 +588,7 @@ async def main(args):
     print(f"  Pausa tra test: {PAUSE_BETWEEN}s")
     print(f"{'═'*55}{RESET}\n")
 
-    t = NeuralTester(BASE_URL, PAUSE_BETWEEN)
+    t = NeuralTester(BASE_URL, PAUSE_BETWEEN, email=args.email, password=args.password)
     await t.setup()
 
     try:
@@ -624,7 +632,14 @@ async def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Genesi Neural Stress Test")
-    parser.add_argument("--url",   default="http://localhost:8000", help="URL base di Genesi")
-    parser.add_argument("--pause", type=float, default=2.0, help="Pausa tra test in secondi")
+    parser.add_argument("--url",      default="http://localhost:8000", help="URL base di Genesi")
+    parser.add_argument("--pause",    type=float, default=2.0, help="Pausa tra test in secondi")
+    parser.add_argument("--email",    default=None, help="Email utente verificato (bypassa registrazione)")
+    parser.add_argument("--password", default=None, help="Password utente")
     args = parser.parse_args()
+
+    if args.email:
+        TEST_EMAIL = args.email
+    if args.password:
+        TEST_PASSWORD = args.password
     asyncio.run(main(args))
