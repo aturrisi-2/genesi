@@ -243,7 +243,46 @@ class Proactor:
                         response += tip
             except Exception as e:
                 logger.error(f"ONBOARDING_ERROR: {e}")
-            
+
+        # Post-processing deterministico: applica regole critiche indipendentemente dall'handler
+        if response and message:
+            response = self._post_process_response(response, message)
+        return response
+
+    def _post_process_response(self, response: str, user_message: str) -> str:
+        """
+        Applica regole critiche deterministicamente sull'output finale.
+        Copre tutti gli handler (relational, emotional, identity, ecc.).
+        """
+        import re as _re_pp
+
+        # 1. IDENTITÀ INVARIABILE: rimuovi "Ahoy" e "Arrr" dall'inizio della risposta
+        response = _re_pp.sub(r'^(ahoy[,!]?\s*|arrr[,!]?\s*)', '', response, flags=_re_pp.IGNORECASE)
+
+        # 2. VIETATO "capisco": sostituisci con "immagino" — ma non dopo "non" (grammaticalmente corretto)
+        response = _re_pp.sub(
+            r'(?<![Nn]on )\b([Cc])apisco\b',
+            lambda m: 'Immagino' if m.group(1).isupper() else 'immagino',
+            response
+        )
+
+        # 3. CRISI FAMILIARE: se il messaggio contiene emergenza + familiare,
+        #    assicura che "coraggio" e il nome del familiare siano nella risposta
+        _EMERGENCY = {"ricoverata", "ricoverato", "urgenza", "ospedale", "incidente", "operata", "operato"}
+        _FAMILY = {"madre", "padre", "figlio", "figlia", "fratello", "sorella", "nonno", "nonna", "mamma", "papà"}
+        msg_lower = user_message.lower()
+        if any(w in msg_lower for w in _EMERGENCY) and any(w in msg_lower for w in _FAMILY):
+            mentioned = next((w for w in _FAMILY if w in msg_lower), None)
+            resp_lower = response.lower()
+            needs_coraggio = "coraggio" not in resp_lower
+            needs_family = mentioned and mentioned not in resp_lower
+            if needs_coraggio and needs_family:
+                response = response.rstrip("!., ") + f" Coraggio per tua {mentioned}!"
+            elif needs_coraggio:
+                response = response.rstrip("!., ") + " Coraggio!"
+            elif needs_family:
+                response = response.rstrip("!., ") + f" Pensa a tua {mentioned}."
+
         return response
 
     def handle_response_only(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None) -> str:
