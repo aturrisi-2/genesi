@@ -230,6 +230,39 @@ class PersonalFactsService:
 
         return -1
 
+    async def remove_profession_facts(self, user_id: str) -> None:
+        """
+        Rimuove i fatti personali relativi alla professione/lavoro dell'utente.
+        Chiamare quando _handle_memory_correction aggiorna il campo 'profession'.
+        """
+        _PROFESSION_KEYWORDS = {
+            "lavora", "lavoro", "professione", "manager", "direttore", "ingegnere",
+            "medico", "dottore", "chirurgo", "cardiologo", "avvocato", "architetto",
+            "infermiere", "psicologo", "geometra", "ragioniere", "imprenditore",
+            "insegnante", "professore", "sviluppatore", "programmatore", "operaio",
+            "construction", "neurochirurg", "cardio",
+        }
+        try:
+            data = await storage.load(f"personal_facts:{user_id}", default={"facts": []})
+            existing = data.get("facts", [])
+            cleaned = []
+            removed = []
+            for f in existing:
+                text_lower = f.get("text", "").lower()
+                key_lower = f.get("key", "").lower()
+                combined = text_lower + " " + key_lower
+                if any(kw in combined for kw in _PROFESSION_KEYWORDS):
+                    removed.append(f.get("key"))
+                else:
+                    cleaned.append(f)
+            if removed:
+                data["facts"] = cleaned
+                data["updated_at"] = __import__("datetime").datetime.utcnow().isoformat()
+                await storage.save(f"personal_facts:{user_id}", data)
+                logger.info("PERSONAL_FACTS_PROFESSION_REMOVED user=%s keys=%s", user_id, removed)
+        except Exception as e:
+            logger.debug("PERSONAL_FACTS_PROFESSION_REMOVE_ERROR err=%s", e)
+
     async def get_all(self, user_id: str) -> List[Dict]:
         """Restituisce tutti i fatti personali salvati."""
         data = await storage.load(f"personal_facts:{user_id}", default={"facts": []})
