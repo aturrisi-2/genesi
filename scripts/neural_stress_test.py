@@ -89,7 +89,7 @@ class NeuralTester:
         """Crea l'utente di test se non esiste."""
         try:
             async with self.session.post(
-                f"{self.base_url}/api/auth/register",
+                f"{self.base_url}/auth/register",
                 json={"email": TEST_EMAIL, "password": TEST_PASSWORD}
             ) as r:
                 pass  # 200 = creato, 400 = già esiste — entrambi ok
@@ -98,7 +98,7 @@ class NeuralTester:
 
     async def _login(self):
         async with self.session.post(
-            f"{self.base_url}/api/auth/login",
+            f"{self.base_url}/auth/login",
             json={"email": TEST_EMAIL, "password": TEST_PASSWORD}
         ) as r:
             if r.status != 200:
