@@ -1299,6 +1299,9 @@ ESEMPI:
 
         await storage.save(f"profile:{user_id}", profile)
         log("MEMORY_CORRECTION_APPLIED", user_id=user_id, field=field, action=action, new_value=new_value)
+        # DEBUG: verifica immediata che il valore sia effettivamente salvato nel file
+        _verify = await storage.load(f"profile:{user_id}", default={})
+        log("MEMORY_CORRECTION_VERIFY", user_id=user_id, profession_after_save=_verify.get("profession"), field=field)
 
         return natural_reply
 
