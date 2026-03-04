@@ -129,20 +129,19 @@ def is_knowledge_question(message: str) -> bool:
 def is_memory_reference(message: str) -> bool:
     """Rileva riferimenti alla memoria conversazionale precedente."""
     msg_lower = message.lower().strip()
-    # Triggers più specifici per evitare collisioni con 'mi ricordi' (reminders)
+    # Triggers più specifici per evitare collisioni con interrogazioni fattuali ("ti ricordi chi è...")
     memory_triggers = [
         "cosa abbiamo detto", "cosa dicevamo", "di cosa abbiamo parlato",
         "ci siamo detti", "avevamo detto", "riferimento a prima",
         "parlato l'altra volta", "discusso ieri",
         "abbiamo parlato", "avevamo parlato", "l'altra volta",
-        "discusso", "di cosa", "come mi chiamo",
-        "sai cosa", "ricordi cosa", "prima", "ieri",
+        "discusso", "di cosa parlavamo", "dicevi prima",
+        "ricordi di cosa abbiamo parlato", "ricordi cosa ci siamo detti"
     ]
     
-    # Se contiene "ricordi" ma NON contiene parole chiave di promemoria/impegni
-    data_keywords = ["promemoria", "impegni", "appuntamenti", "cosa ho", "da fare", "calendario"]
-    if any(m in msg_lower for m in ["ricordi", "ti ricordi", "mi ricordi", "ricordarmi"]):
-        if not any(d in msg_lower for d in data_keywords):
+    # Se contiene "ricordi" ma accoppiato esplicitamente a discussioni/contesti precedenti
+    if any(m in msg_lower for m in ["ricordi", "ti ricordi"]):
+        if any(t in msg_lower for t in ["prima", "ieri", "l'altra volta", "avevamo", "dicevamo", "siamo detti", "scorso"]):
             return True
             
     return any(trigger in msg_lower for trigger in memory_triggers)
