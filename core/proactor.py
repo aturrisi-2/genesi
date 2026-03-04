@@ -1127,6 +1127,7 @@ class Proactor:
         import json as _json
         import re as _re
         from core.llm_service import llm_service
+        from core.chat_memory import chat_memory
 
         profile = await storage.load(f"profile:{user_id}", default={})
 
@@ -1140,11 +1141,18 @@ class Proactor:
             "interessi": profile.get("interests", []),
             "tratti": profile.get("traits", []),
         }
+        
+        history = chat_memory.get_messages(user_id, limit=3) if user_id else []
+        history_text = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in history])
 
-        parse_prompt = f"""Sei Genesi. L'utente ti sta comunicando qualcosa su di sé — aggiorna il profilo.
+        parse_prompt = f"""Sei Genesi. L'utente ti sta comunicando qualcosa su di sé — aggiorna il profilo. Tieni conto del contesto della conversazione per correzioni implicite come "No, è al contrario" o "Hai sbagliato".
 
 Profilo attuale: {_json.dumps(profile_summary, ensure_ascii=False)}
-Messaggio: "{message}"
+
+Contesto recente della conversazione:
+{history_text}
+
+Messaggio dell'utente da analizzare: "{message}"
 
 Rispondi SOLO con JSON valido su una riga:
 {{"field":"...","action":"...","new_value":...,"old_value":...,"reply":"..."}}

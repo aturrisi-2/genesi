@@ -75,7 +75,10 @@ class PersonalFactsService:
             logger.debug("PERSONAL_FACTS_EXTRACT_ERROR err=%s", e)
 
     async def _extract(self, text: str, user_id: str) -> List[Dict]:
-        """Chiama LLM per estrarre fatti personali. Fail-silent."""
+        """Chiama LLM per estrarre fatti personali + Fallback Regex."""
+        # Regex baseline first (zero cost, 100% reliability)
+        facts = self._extract_regex(text)
+        
         try:
             from core.llm_service import llm_service
 
@@ -86,40 +89,66 @@ class PersonalFactsService:
                 user_id=user_id,
                 route="memory"
             )
-            if not raw:
-                return []
+            if raw:
+                clean = raw.strip()
+                if clean.startswith("```"):
+                    clean = clean.split("```")[1]
+                    if clean.startswith("json"):
+                        clean = clean[4:]
+                clean = clean.strip()
 
-            clean = raw.strip()
-            if clean.startswith("```"):
-                clean = clean.split("```")[1]
-                if clean.startswith("json"):
-                    clean = clean[4:]
-            clean = clean.strip()
-
-            parsed = json.loads(clean)
-            raw_facts = parsed.get("facts", [])
-            if not isinstance(raw_facts, list):
-                return []
-
-            result = []
-            for f in raw_facts:
-                if not isinstance(f, dict) or not f.get("text"):
-                    continue
-                result.append({
-                    "id": str(uuid.uuid4())[:8],
-                    "text": str(f["text"]).strip(),
-                    "category": str(f.get("category", "altro")),
-                    "key": str(f.get("key", str(uuid.uuid4())[:8])).lower().replace(" ", "_"),
-                    "saved_at": datetime.utcnow().isoformat(),
-                })
-            return result
-
-        except json.JSONDecodeError as e:
-            logger.debug("PERSONAL_FACTS_JSON_ERROR err=%s", e)
-            return []
+                parsed = json.loads(clean)
+                raw_facts = parsed.get("facts", [])
+                if isinstance(raw_facts, list):
+                    for f in raw_facts:
+                        if not isinstance(f, dict) or not f.get("text"):
+                            continue
+                        # Avoid duplicates from regex
+                        is_duplicate = any(f.get("key") == rf.get("key") for rf in facts)
+                        if not is_duplicate:
+                            facts.append({
+                                "id": str(uuid.uuid4())[:8],
+                                "text": str(f["text"]).strip(),
+                                "category": str(f.get("category", "altro")),
+                                "key": str(f.get("key", str(uuid.uuid4())[:8])).lower().replace(" ", "_"),
+                                "saved_at": datetime.utcnow().isoformat(),
+                            })
         except Exception as e:
             logger.debug("PERSONAL_FACTS_LLM_ERROR err=%s", e)
-            return []
+            
+        return facts
+
+    def _extract_regex(self, text: str) -> List[Dict]:
+        """Estrae fatti semplici via regex (fail-safe per quota LLM)."""
+        import re
+        results = []
+        
+        # 1. Dove sono/vivono i familiari ("mia figlia è a Cork")
+        family_loc = re.search(r"(mia figlia|mio figlio|mio marito|mia moglie|mio padre|mia madre) (?:è|si trova|abita|vive) a ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", text, re.IGNORECASE)
+        if family_loc:
+            role = family_loc.group(1).lower().strip()
+            loc = family_loc.group(2).strip().title()
+            results.append({
+                "id": str(uuid.uuid4())[:8],
+                "text": f"{role.capitalize()} è a {loc}.",
+                "category": "famiglia",
+                "key": f"{role.replace(' ', '_')}_a_{loc.lower().replace(' ', '_')}",
+                "saved_at": datetime.utcnow().isoformat(),
+            })
+
+        # 2. Orario cena/abitudini ("cena alle 20")
+        habit_loc = re.search(r"(?:di solito|solitamente|sempre)? (?:ceno|mangio) (?:alle|verso le) (\d{1,2}(?::\d{2})?)", text, re.IGNORECASE)
+        if habit_loc:
+            time = habit_loc.group(1)
+            results.append({
+                "id": str(uuid.uuid4())[:8],
+                "text": f"L'utente cena di solito alle {time}.",
+                "category": "abitudini",
+                "key": f"cena_ore_{time.replace(':', '_')}",
+                "saved_at": datetime.utcnow().isoformat(),
+            })
+
+        return results
 
     async def _save_facts(self, user_id: str, new_facts: List[Dict]) -> None:
         """

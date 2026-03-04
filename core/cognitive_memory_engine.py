@@ -71,14 +71,16 @@ class CognitiveMemoryEngine:
             }
 
         # Semantic classification using regex
-        name_match = re.search(r"mi chiamo (\w+)", message, re.IGNORECASE)
+        name_match = re.search(r"mi chiamo (?:un |il )?([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
         # Limita la cattura a max 3 parole per evitare di salvare frasi di contesto come professione
         profession_match = re.search(r"(?:faccio|sono|lavoro come)\s+(?:il\s+|la\s+|lo\s+|l'|l\s+|un\s+|una\s+|uno\s+|un'\s+)?(\w+(?:\s+\w+){0,2})", message, re.IGNORECASE)
-        city_match = re.search(r"vivo a (\w+)", message, re.IGNORECASE)
-        spouse_match = re.search(r"(?:mia moglie|mio marito) si chiama (\w+)", message, re.IGNORECASE)
-        children_match = re.search(r"i miei figli si chiamano (\w+) e (\w+)", message, re.IGNORECASE)
-        dog_match = re.search(r"il mio cane si chiama (\w+)", message, re.IGNORECASE)
-        cat_match = re.search(r"la mia gatta si chiama (\w+)", message, re.IGNORECASE)
+        city_match = re.search(r"(?:vivo|abito|mi trovo) a ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
+        spouse_match = re.search(r"(?:mia moglie|mio marito|il mio partner|la mia compagna) si chiama ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
+        children_match = re.search(r"i miei figli si chiamano ([A-Z][a-zÀ-ÿ]+) e ([A-Z][a-zÀ-ÿ]+)", message, re.IGNORECASE)
+        son_match = re.search(r"mio figlio si chiama ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
+        daughter_match = re.search(r"mia figlia si chiama ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
+        dog_match = re.search(r"il mio cane si chiama ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
+        cat_match = re.search(r"(?:la mia gatta|il mio gatto) si chiama ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
 
         # Preference extraction — categorized
         pref_result = self._extract_preference(message)
@@ -211,6 +213,22 @@ class CognitiveMemoryEngine:
             field = "children"
             value = [{"name": children_match.group(1)}, {"name": children_match.group(2)}]
             logger.info("COGNITIVE_CHILDREN_EXTRACT value=%s", value)
+
+        if son_match:
+            name = son_match.group(1).strip().title()
+            persist = True
+            memory_type = "profile"
+            field = "children"
+            value = {"name": name}
+            logger.info("COGNITIVE_CHILDREN_EXTRACT son_name=%s", name)
+
+        if daughter_match:
+            name = daughter_match.group(1).strip().title()
+            persist = True
+            memory_type = "profile"
+            field = "children"
+            value = {"name": name}
+            logger.info("COGNITIVE_CHILDREN_EXTRACT daughter_name=%s", name)
 
         if dog_match:
             extracted_profile_data["pets"] = {"type": "dog", "name": dog_match.group(1)}

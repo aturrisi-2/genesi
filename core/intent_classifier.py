@@ -703,9 +703,9 @@ INTENT POSSIBILI:
 - reminder_update: modificare promemoria
 - tecnica: questioni tecniche, programmazione, architettura
 - debug: errori codice, malfunzionamenti software
-- spiegazione: richiesta di spiegazione "perchè", "come mai", "che c'entra", o correzione/frustrazione (es: "perchè non hai risposto?", "hai sbagliato", "cosa c'entra google calendar")
+- spiegazione: richiesta di spiegazione "perchè", "come mai", "che c'entra", o espressione di frustrazione generica. NON USARE se l'utente ti sta correggendo su un suo dato personale (es: "no, è al contrario", "hai sbagliato il mio nome"), in quel caso DEVI usare "memory_correction".
 - identity: chi sono io, che lavoro faccio, i miei account, i miei dati, ho figli?, sono sposato?, ho animali? (domande ESCLUSIVAMENTE sulle informazioni dirette dell'utente. Se l'utente chiede di qualcun altro "che lavoro fa mia moglie" o "da dove viene mia figlia", usa "chat_free")
-- memory_correction: l'utente AFFERMA ESPLICITAMENTE che un dato del proprio profilo è sbagliato, da rimuovere o da aggiornare (nome, città, professione, animali, età, stato civile). USA QUESTO INTENT anche se l'utente fornisce nuove informazioni su questi SPECIFICI campi (es: "ho un nuovo cane", "è morta la gatta", "ho cambiato lavoro", "Tina è una gallina", "Lina non c'è più"). NON usare per mere preferenze (es: "amo la musica", che va in chat_free).
+- memory_correction: l'utente ti CORREGGE esplicitamente o implicitamente su un dato del suo profilo che hai capito o memorizzato male ("hai sbagliato", "no, è al contrario", "in realtà", "quella è mia figlia"). DA USARE SEMPRE per aggiornare nome, città, professione, animali, età, stato civile, o per eliminare vecchi dati ("Lina non c'è più").
 - dove_sono: l'utente chiede dove LUI/LEI si trova o la PROPRIA posizione attuale (ATTENZIONE: NON USARE se si cerca la posizione geografica di altre persone o luoghi come "dove si trova Sofia" o "dove è stata mia figlia")
 - icloud_setup: collegare o impostare account iCloud
 - icloud_sync: sincronizzare dati da iCloud
@@ -730,7 +730,8 @@ Devi restituire esclusivamente un payload JSON valido in questa forma:
 
 REGOLE SPECIALI:
 - Se l'utente chiede "impegni", "agenda" o "programma", usa SEMPRE "reminder_list".
-- Se l'utente chiede "perchè" su un comportamento passato o manifesta insoddisfazione, usa "spiegazione".
+- Se l'utente chiede "perchè" su un comportamento passato o manifesta insoddisfazione, usa "spiegazione" (tranne per correzioni di memoria utente).
+- Se l'utente ti dice "No, è al contrario" dopo che gli hai detto un suo dato (es: dove vive e dov'è nato), è ASSOLUTAMENTE "memory_correction".
 - Se il messaggio contiene "cosa pensi", "cosa ne pensi", "ti piace", "ti sembra", "sei d'accordo" riguardo al meteo/temperatura/freddo/caldo, usa "relational" o "chat_free" — NON "weather".
 - Se l'utente chiede dove si trova un'altra città, luogo o persona (es. "dove si trova Sofia", "dove è mia figlia"), usa "chat_free" — NON "dove_sono".
 - Se l'intenzione non è chiara, usa uno score basso.
