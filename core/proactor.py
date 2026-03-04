@@ -1503,10 +1503,12 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             response = await openclaw_service.execute_task(user_id, prompt, status_callback=status_callback)
             
             if "[DOMANDA]" in response:
-                await storage.save(f"openclaw_session:{user_id}", {"active": True})
+                await storage.save(f"openclaw_session:{user_id}", {"active": True, "prompt": prompt})
                 return response.replace("[DOMANDA]", "").strip()
             else:
                 await storage.delete(f"openclaw_session:{user_id}")
+                from core.openclaw_memory_adapter import openclaw_adapter
+                asyncio.create_task(openclaw_adapter.extract_and_store(user_id, response, prompt))
                 return response.replace("[COMPLETATO]", "").strip()
                 
         except Exception as e:
@@ -1535,7 +1537,11 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             if "[DOMANDA]" in response:
                 return response.replace("[DOMANDA]", "").strip()
             else:
+                session = await storage.load(f"openclaw_session:{user_id}", default={})
+                orig_prompt = session.get("prompt", prompt)
                 await storage.delete(f"openclaw_session:{user_id}")
+                from core.openclaw_memory_adapter import openclaw_adapter
+                asyncio.create_task(openclaw_adapter.extract_and_store(user_id, response, orig_prompt))
                 return response.replace("[COMPLETATO]", "").strip()
         except Exception as e:
             await storage.delete(f"openclaw_session:{user_id}")
