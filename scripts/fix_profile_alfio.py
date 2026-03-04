@@ -26,6 +26,16 @@ print(f"  pets:       {profile.get('pets')}")
 
 changes = []
 
+# 0. Reset campi artefatti di test (Marco Ferrara, Laura) per non influenzare il prossimo test
+_TEST_NAMES = {"marco ferrara", "marco", "ferrara"}
+if (profile.get("name") or "").lower() in _TEST_NAMES:
+    profile["name"] = None
+    changes.append("name rimosso (artefatto test Marco)")
+_TEST_SPOUSES = {"laura"}
+if (profile.get("spouse") or "").lower() in _TEST_SPOUSES:
+    profile["spouse"] = None
+    changes.append("spouse rimosso (artefatto test Laura)")
+
 # 1. City: se è corrotta (non è Imola), ripristina
 bad_cities = {"Roma", "Razza Europea", "Professione Cuoco", None, ""}
 if profile.get("city") in bad_cities:

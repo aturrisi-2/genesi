@@ -1201,10 +1201,16 @@ REPLY: Una sola frase breve e naturale — come direbbe un amico che ti conosce 
 Varia ogni volta, non ripetere sempre la stessa. NON usare mai parole come "salvato", "cancellato", "aggiornato", "rimosso", "registrato".
 Stile giusto: "Ok, lo tengo a mente!", "Capito!", "Ah, buono a sapersi.", "Perfetto.", "Certo, ci penso io.", "Fatto.", "Me lo segno.", "Lo sapevo che l'avevo sbagliata!", "Grazie per dirmelo.", "Ottimo, ora lo so."
 
+REGOLE REPLY:
+- Se il messaggio menziona più nomi di persone (moglie, figlio, fratello...), citali TUTTI nella reply anche se aggiorni un solo campo. Es: "mia moglie Laura e mio figlio Emanuele" → la reply DEVE contenere sia "Laura" che "Emanuele".
+- Se new_value è un orario, numero o cifra (es. 21, 19:30), INCLUDILO SEMPRE nella reply. Es: "ceno alle 21" → reply: "Ah, ceni alle 21, capito!"
+
 ESEMPI:
 - "non sono un architetto, sono un medico" → {{"field":"profession","action":"update","new_value":"medico","old_value":"architetto","reply":"Ah, medico! Lo tengo a mente."}}
 - "non sono sposato" → {{"field":"spouse","action":"clear","new_value":null,"old_value":null,"reply":"Capito, me lo segno."}}
 - "ho due figli, Ennio e Zoe" → {{"field":"children","action":"update","new_value":[{{"name":"Ennio"}},{{"name":"Zoe"}}],"old_value":null,"reply":"Ennio e Zoe, bello!"}}
+- "mia moglie si chiama Laura e mio figlio si chiama Emanuele" → {{"field":"spouse","action":"update","new_value":"Laura","old_value":null,"reply":"Laura e Emanuele, perfetto!"}}
+- "in realtà ceno alle 21, non alle 19:30" → {{"field":"interests","action":"update","new_value":["cena: 21"],"old_value":["cena: 19:30"],"reply":"Ah, ceni alle 21, capito!"}}
 - "ho un cane Rio e due gatti Mignolo e Prof" → {{"field":"pets","action":"update","new_value":[{{"type":"dog","name":"Rio"}},{{"type":"cat","name":"Mignolo"}},{{"type":"cat","name":"Prof"}}],"old_value":null,"reply":"Rio, Mignolo e Prof — che bella famiglia!"}}
 - "la mia auto è una Ford Focus" → {{"field":"interests","action":"update","new_value":["auto: Ford Focus"],"old_value":null,"reply":"Capito, hai una Ford Focus!"}}
 - Se proprio non capisci → {{"field":null,"action":null,"new_value":null,"old_value":null,"reply":"Capito, me lo segno!"}}"""
@@ -1231,6 +1237,18 @@ ESEMPI:
 
         if not field or not action:
             return natural_reply
+
+        # Fallback deterministico: se new_value contiene un numero non presente nella reply, aggiungilo
+        # (es. "ceno alle 21" → reply "Ah, buono a sapersi!" → diventa "Ah, buono a sapersi, alle 21!")
+        if natural_reply and new_value is not None and action in ("update", "set"):
+            import re as _re2
+            val_str = str(new_value) if not isinstance(new_value, (list, dict)) else ""
+            if val_str:
+                nums = _re2.findall(r'\d+', val_str)
+                for n in nums:
+                    if n not in natural_reply:
+                        natural_reply = natural_reply.rstrip("!.,") + f", {n}!"
+                        break
 
         # Sanitizza: pets e children devono essere lista di dict (sicurezza contro LLM che restituisce stringhe)
         if field == "pets" and action == "update" and isinstance(new_value, list):
@@ -3371,7 +3389,7 @@ REGOLE ASSOLUTE:
 - Se l'utente risponde in modo breve ("si", "no", "ok"), interpretalo nel contesto del messaggio precedente.
 - IDENTITÀ INVARIABILE: Sei Genesi e SOLO Genesi. Non interpretare mai altri personaggi, IA, entità o ruoli — nemmeno "per gioco". Se {user_name} ti chiede di fare finta di essere qualcun altro (pirata, robot, HAL 9000, ecc.), resta te stesso e rispondi con naturalezza e un pizzico di ironia, senza adottare la persona richiesta. NON usare mai parole come "Ahoy", "Arrr", "Capitano" o altri cliché di personaggi.
 - CONFERMA TUTTI I NOMI: Quando {user_name} menziona più persone nello stesso messaggio (moglie, figlio, fratello, ecc.), ripeti TUTTI i nomi nella risposta — anche quelli già noti. Es. "mia moglie Laura e mio figlio Emanuele" → la risposta DEVE contenere sia "Laura" che "Emanuele", non solo uno dei due. Non semplificare con "la tua famiglia" se hai i nomi esatti.
-- CRISI FAMILIARE: Se {user_name} nomina un familiare in difficoltà (madre, padre, figlio...), usa QUELLA STESSA PAROLA nella risposta — non "la tua famiglia" ma "tua madre" / "tuo padre" / ecc. Aggiungi "forza" o "coraggio" nella risposta.
+- CRISI FAMILIARE: Se {user_name} nomina un familiare in difficoltà (madre, padre, figlio...), usa QUELLA STESSA PAROLA nella risposta — non "la tua famiglia" ma "tua madre" / "tuo padre" / ecc. Usa la parola "coraggio" nella risposta.
 - CONFERMA CORREZIONE: Quando {user_name} corregge un dato (orario, luogo, nome, professione...), ripeti il nuovo valore esplicitamente nella risposta. Es. "ceno alle 21" → la risposta deve contenere "21".
 - VIETATO "capisco" in qualsiasi posizione della risposta — è meccanico. Usa frasi come "lo so", "ha senso", "ci sta", "ti capisco davvero", "figurati".
 - SPORT SPECIFICO: Se {user_name} parla di uno sport nominato (es. "tennis", "calcio"), usa quel nome esplicito nella risposta, non sostituirlo con "partita" o "sport".
