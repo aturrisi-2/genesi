@@ -32,11 +32,19 @@ if profile.get("city") in bad_cities:
     profile["city"] = "Imola"
     changes.append("city → Imola")
 
-# 2. Profession: rimuovi se corrotta
+# 2. Profession: rimuovi se corrotta da artefatti di test o frasi emotive
 bad_professions = {"persiani", "leclerc e hamilton", "professione cuoco", "cuoco"}
-if profile.get("profession", "").lower() in bad_professions:
+current_prof = profile.get("profession") or ""
+current_prof_lower = current_prof.lower()
+if current_prof_lower in bad_professions:
     profile["profession"] = None
-    changes.append(f"profession rimossa ({profile.get('profession')})")
+    changes.append(f"profession rimossa ({current_prof})")
+# Rimuovi frasi emotive/narrative finite in profession per bug CME
+_EMOTIONAL_FRAGMENTS = ["scosso", "distrutto", "preoccupato", "agitato", "emozionato",
+                        "stanco", "felice", "triste", "arrabbiato", "ancora molto"]
+if any(frag in current_prof_lower for frag in _EMOTIONAL_FRAGMENTS):
+    profile["profession"] = None
+    changes.append(f"profession rimossa (frammento emotivo: '{current_prof}')")
 
 # 3. Interests: rimuovi 'gatti persiani' (falso positivo)
 interests = profile.get("interests", [])
