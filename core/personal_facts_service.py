@@ -22,6 +22,7 @@ from datetime import datetime
 from typing import List, Dict
 
 from core.storage import storage
+from core.log import log as _structured_log
 
 logger = logging.getLogger("genesi")
 
@@ -182,6 +183,7 @@ class PersonalFactsService:
                     existing_facts.append(new_f)
                     fact_index[key] = len(existing_facts) - 1
                     logger.info("PERSONAL_FACT_SAVED key=%s user=%s text=%s", key, user_id, new_f["text"][:60])
+                    _structured_log("PERSONAL_FACTS", key=key, user_id=user_id)
 
         # Limite massimo FIFO
         if len(existing_facts) > self.MAX_FACTS:

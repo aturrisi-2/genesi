@@ -2,6 +2,7 @@ import logging
 import re
 from core.storage import storage
 from core.brain_state import brain_state
+from core.log import log as _structured_log
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,7 @@ class CognitiveMemoryEngine:
             field = "name"
             value = extracted_name
             logger.info("COGNITIVE_NAME_EXTRACT value=%s", value)
+            _structured_log("COGNITIVE_NAME_EXTRACT", value=value)
             
             # FIX DEFINITIVO: Scrittura diretta su storage
             profile = await storage.load(f"profile:{user_id}", default={}) or {}
@@ -121,6 +123,7 @@ class CognitiveMemoryEngine:
             field = "city"
             value = city_match.group(1)
             logger.info("COGNITIVE_CITY_EXTRACT value=%s", value)
+            _structured_log("COGNITIVE_CITY_EXTRACT", value=value)
             
         # Parole/frasi che indicano situazioni o attività — NON professioni
         _PROFESSION_STOPWORDS = {
@@ -184,6 +187,7 @@ class CognitiveMemoryEngine:
                     memory_type = "profile"
                 
                 logger.info("COGNITIVE_PROFESSION_EXTRACT value=%s", value)
+                _structured_log("COGNITIVE_PROFESSION_EXTRACT", value=value)
                 
                 # FIX DEFINITIVO: Scrittura diretta su storage
                 profile = await storage.load(f"profile:{user_id}", default={}) or {}
@@ -199,6 +203,7 @@ class CognitiveMemoryEngine:
             field = "spouse"
             value = extracted_spouse
             logger.info("COGNITIVE_SPOUSE_EXTRACT value=%s", value)
+            _structured_log("COGNITIVE_SPOUSE_EXTRACT", value=value)
             
             # FIX DEFINITIVO: Scrittura diretta su storage
             profile = await storage.load(f"profile:{user_id}", default={}) or {}
@@ -213,6 +218,7 @@ class CognitiveMemoryEngine:
             field = "children"
             value = [{"name": children_match.group(1)}, {"name": children_match.group(2)}]
             logger.info("COGNITIVE_CHILDREN_EXTRACT value=%s", value)
+            _structured_log("COGNITIVE_CHILDREN_EXTRACT", value=str(value))
 
         if son_match:
             name = son_match.group(1).strip().title()
@@ -221,6 +227,7 @@ class CognitiveMemoryEngine:
             field = "children"
             value = {"name": name}
             logger.info("COGNITIVE_CHILDREN_EXTRACT son_name=%s", name)
+            _structured_log("COGNITIVE_CHILDREN_EXTRACT", son_name=name)
 
         if daughter_match:
             name = daughter_match.group(1).strip().title()
@@ -229,6 +236,7 @@ class CognitiveMemoryEngine:
             field = "children"
             value = {"name": name}
             logger.info("COGNITIVE_CHILDREN_EXTRACT daughter_name=%s", name)
+            _structured_log("COGNITIVE_CHILDREN_EXTRACT", daughter_name=name)
 
         if dog_match:
             extracted_profile_data["pets"] = {"type": "dog", "name": dog_match.group(1)}
@@ -265,6 +273,7 @@ class CognitiveMemoryEngine:
                 field = "emotional_state"
                 value = message.strip()
                 logger.info("COGNITIVE_EMOTIONAL_EVENT detected keyword=%s", k)
+                _structured_log("COGNITIVE_EMOTIONAL_EVENT", keyword=k)
                 break
 
         # Ensure field and value are initialized
