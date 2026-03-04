@@ -693,7 +693,11 @@ class IntentClassifier:
 
         # Raccogli ultimi messaggi per il contesto
         history = chat_memory.get_messages(user_id, limit=5) if user_id else []
-        history_text = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in history])
+        # chat_memory ritorna {"user_message": ..., "system_response": ...} — NON role/content
+        history_text = "\n".join([
+            f"utente: {msg.get('user_message', '')}\ngenesi: {msg.get('system_response', '')}"
+            for msg in history
+        ])
         
         system_prompt = """Sei un classificatore di intent. Analizza l'ultimo messaggio dell'utente considerando il contesto recente.
 Valuta il parametro "score" tra 0.0 e 1.0 (dove 1.0 è certezza assoluta).
@@ -747,10 +751,12 @@ REGOLE SPECIALI:
         user_prompt = f"Contesto recente della chat:\n{history_text}\n\nUltimo messaggio utente:\n{message}"
         
         try:
-            response = await llm_service._call_with_protection(
-                model="gpt-4o-mini",
-                prompt=system_prompt,
-                message=user_prompt,
+            # USA _call_model per preservare system_prompt del classificatore
+            # _call_with_protection lo sovrascrive con il prompt adattivo globale!
+            response = await llm_service._call_model(
+                "openai/gpt-4o-mini",
+                system_prompt,
+                user_prompt,
                 user_id=user_id or "system",
                 route="classification"
             )

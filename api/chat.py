@@ -212,6 +212,26 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                 log("PERSONAL_FACTS_SAVE_ERROR", user_id=user_id, error=str(_pf_e))
         _asyncio.create_task(_extract_and_save_personal_facts())
 
+        # Audit automatico ogni 25 turni di chat (background, silenzioso)
+        async def _maybe_audit():
+            try:
+                from core.genesi_auditor import genesi_auditor as _auditor
+                _counter_file = "monitor_trigger_count.txt"
+                try:
+                    with open(_counter_file, "r") as _cf:
+                        _count = int(_cf.read().strip())
+                except Exception:
+                    _count = 0
+                _count += 1
+                with open(_counter_file, "w") as _cf:
+                    _cf.write(str(_count))
+                if _count % 25 == 0:
+                    log("AUDIT_AUTO_TRIGGER", turn=_count, user_id=user_id)
+                    await _auditor.generate_report()
+            except Exception:
+                pass
+        _asyncio.create_task(_maybe_audit())
+
         # Use 'multi' for general emoji enrichment as we now support multiple intents
         intent = "multi"
         
@@ -306,6 +326,27 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                 except Exception as _pf_e:
                     log("PERSONAL_FACTS_SAVE_ERROR", user_id=user_id, error=str(_pf_e))
             _aio.create_task(_stream_extract_personal_facts())
+
+            # Audit automatico ogni 25 turni di chat (background, silenzioso)
+            async def _stream_maybe_audit():
+                try:
+                    from core.genesi_auditor import genesi_auditor as _auditor
+                    _counter_file = "monitor_trigger_count.txt"
+                    try:
+                        with open(_counter_file, "r") as _cf:
+                            _count = int(_cf.read().strip())
+                    except Exception:
+                        _count = 0
+                    _count += 1
+                    with open(_counter_file, "w") as _cf:
+                        _cf.write(str(_count))
+                    if _count % 25 == 0:
+                        log("AUDIT_AUTO_TRIGGER", turn=_count, user_id=user_id)
+                        await _auditor.generate_report()
+                except Exception:
+                    pass
+            _aio.create_task(_stream_maybe_audit())
+
             await queue.put({"done": True, "response": resp})
         except Exception as _e:
             log("CHAT_STREAM_PIPELINE_ERROR", user_id=user_id, error=str(_e))

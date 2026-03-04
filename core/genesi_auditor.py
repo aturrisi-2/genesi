@@ -35,10 +35,12 @@ Sii onesto, tecnico ma leggibile. Usa il formato Markdown in ITALIANO.
 
             print(f"[DEBUG_AUDITOR] Invio {len(lines[-lines_to_read:])} righe di log all'LLM per analisi...")
             
-            report = await llm_service._call_with_protection(
-                model="gpt-4o",  # Usiamo un modello forte per l'analisi
-                prompt=system_prompt,
-                message=user_prompt,
+            # USA _call_model per preservare il system prompt dell'auditor
+            # _call_with_protection lo sovrascrive con il prompt adattivo globale!
+            report = await llm_service._call_model(
+                "openai/gpt-4o",
+                system_prompt,
+                user_prompt,
                 user_id="system_auditor",
                 route="deep_analysis"
             )

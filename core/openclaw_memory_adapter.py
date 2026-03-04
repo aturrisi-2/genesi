@@ -35,9 +35,9 @@ Se non c'è nulla di deducibile o rilevante, restituisci array vuoti.'''
         user_content = f"Comando Utente: {task_prompt}\n\nRisultato Navigazione:\n{raw_openclaw_output[:3000]}"
         
         try:
-            # Chiamata LLM leggera in background
-            llm_response = await llm_service._call_with_protection(
-                "gpt-4o-mini", system_prompt, user_content, user_id=user_id, route="classification"
+            # USA _call_model per preservare system_prompt dell'adapter
+            llm_response = await llm_service._call_model(
+                "openai/gpt-4o-mini", system_prompt, user_content, user_id=user_id, route="classification"
             )
             
             if not llm_response:
