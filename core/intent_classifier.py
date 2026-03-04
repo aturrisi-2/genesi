@@ -142,6 +142,12 @@ class IntentClassifier:
                 "collega google", "configura google", "imposta google", "accesso google",
                 "connetti google", "login google", "account google", "attiva google", "usa google"
             ],
+            "genesi_audit": [
+                "fammi un riassunto dei log", "come sta andando genesi", "analisi log",
+                "auditor genesi", "report genesi", "debug log", "cosa non va?",
+                "analizza i miei log", "report prestazioni", "audit sistema",
+                "audita", "audit log", "riassunto prestazioni"
+            ],
             "google_sync": [
                 "sincronizza google", "aggiorna google", "scarica da google", "scarica google"
             ],
@@ -723,6 +729,7 @@ INTENT POSSIBILI:
 - telegram_setup: collegare o configurare il bot Telegram
 - social_read: leggere aggiornamenti da Facebook, Instagram o TikTok
 - social_setup: collegare Facebook, Instagram o TikTok
+- genesi_audit: analisi dei log per monitorare cosa funziona e cosa no (report prestazioni)
 - chat_free: salutare, ringraziare, generico
 
 Devi restituire esclusivamente un payload JSON valido in questa forma:
@@ -749,9 +756,11 @@ REGOLE SPECIALI:
             )
             
             if response:
+                print(f"[DEBUG_GENESI] Risposta LLM Classifier: {response.strip()}")
                 json_match = re.search(r'\{.*\}', response, re.DOTALL)
                 if json_match:
                     data = json.loads(json_match.group(0))
+                    print(f"[DEBUG_GENESI] JSON Parsificato: {data}")
                     intents = data.get("intents", [])
                     if not intents and "intent" in data:
                         intents = [data["intent"]]
