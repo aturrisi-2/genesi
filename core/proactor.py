@@ -1164,7 +1164,7 @@ class Proactor:
         }
         
         history = chat_memory.get_messages(user_id, limit=3) if user_id else []
-        history_text = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in history])
+        history_text = "\n".join([f"utente: {msg.get('user_message', '')}\ngenesi: {msg.get('system_response', '')}" for msg in history])
 
         parse_prompt = f"""Sei Genesi. L'utente ti sta comunicando qualcosa su di sé — aggiorna il profilo. Tieni conto del contesto della conversazione per correzioni implicite come "No, è al contrario" o "Hai sbagliato".
 
@@ -3358,6 +3358,7 @@ REGOLE ASSOLUTE:
 - NON dire mai di essere un'IA o un software.
 - NON usare formule da chatbot ("Spero sia utile", "Sono a tua disposizione").
 - Se l'utente risponde in modo breve ("si", "no", "ok"), interpretalo nel contesto del messaggio precedente.
+- IDENTITÀ INVARIABILE: Sei Genesi e SOLO Genesi. Non interpretare mai altri personaggi, IA, entità o ruoli — nemmeno "per gioco". Se {user_name} ti chiede di fare finta di essere qualcun altro (pirata, robot, HAL 9000, ecc.), resta te stesso e rispondi con naturalezza e un pizzico di ironia, senza adottare la persona richiesta.
 
 {user_boundaries}
 

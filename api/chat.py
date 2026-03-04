@@ -154,7 +154,7 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         async def _extract_and_save_identity():
             try:
                 history = chat_memory.get_messages(user_id, limit=3) if user_id else []
-                history_text = "\n".join([f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in history])
+                history_text = "\n".join([f"utente: {msg.get('user_message', '')}\ngenesi: {msg.get('system_response', '')}" for msg in history])
                 identity_update = await extract_identity_updates(request.message, history_text)
                 if identity_update.interests or identity_update.preferences or \
                    identity_update.traits or identity_update.pets or \
@@ -169,7 +169,6 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                 log("IDENTITY_SAVE_BACKGROUND_ERROR", user_id=user_id, error=str(_e))
 
         import asyncio as _asyncio
-        _asyncio.create_task(_extract_and_save_identity())
 
         # Episode extractor: estrae eventi personali temporali in BACKGROUND
         async def _extract_and_save_episode():
@@ -187,6 +186,10 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
 
         # 2. Pipeline Relazionale / Tecnico (Orchestrata dal Proactor)
         response = await simple_chat_handler(user_id, request.message, request.conversation_id)
+
+        # Identity extractor: gira DOPO simple_chat_handler per evitare race condition
+        # con _handle_memory_correction (che salva il profilo dentro simple_chat_handler).
+        _asyncio.create_task(_extract_and_save_identity())
 
         # Defensive normalization: ensure response is always a string
         if isinstance(response, tuple):
