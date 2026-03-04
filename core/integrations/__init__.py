@@ -11,6 +11,7 @@ from core.integrations.whatsapp_integration import whatsapp_integration
 from core.integrations.facebook_integration import facebook_integration
 from core.integrations.instagram_integration import instagram_integration
 from core.integrations.tiktok_integration import tiktok_integration
+from core.integrations.icloud_integration import icloud_integration
 
 # Registry piattaforma → istanza
 integrations_registry = {
@@ -21,6 +22,7 @@ integrations_registry = {
     "facebook": facebook_integration,
     "instagram": instagram_integration,
     "tiktok": tiktok_integration,
+    "icloud": icloud_integration,
 }
 
 __all__ = [
@@ -32,4 +34,5 @@ __all__ = [
     "facebook_integration",
     "instagram_integration",
     "tiktok_integration",
+    "icloud_integration",
 ]

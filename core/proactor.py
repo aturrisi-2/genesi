@@ -580,7 +580,7 @@ class Proactor:
                     
                 elif current_intent == "icloud_setup":
                     log("ROUTING_DECISION", route="icloud_setup", user_id=user_id)
-                    current_response = await self._handle_icloud_setup(user_id, processed_message)
+                    current_response = await self._handle_integration_setup(user_id, "icloud")
                     final_source = "tool"
                 
                 elif current_intent == "icloud_sync":
@@ -590,7 +590,7 @@ class Proactor:
 
                 elif current_intent == "google_setup":
                     log("ROUTING_DECISION", route="google_setup", user_id=user_id)
-                    current_response = await self._handle_google_setup(user_id, processed_message)
+                    current_response = await self._handle_integration_setup(user_id, "google_calendar")
                     final_source = "tool"
 
                 elif current_intent == "google_sync":
@@ -3840,6 +3840,24 @@ Messaggio utente: {message}"""
             return "Sembra che ci sia un problema con il token Google nel sistema. Verifica il file token.json."
             
         return "Non ho ancora il permesso per accedere al tuo Google Calendar. Questa funzione sarà disponibile a breve per tutti gli utenti tramite accesso sicuro Google OAuth."
+
+    async def _handle_icloud_sync(self, user_id: str, message: str) -> str:
+        """Sincronizza manualmente iCloud Calendar/Reminders."""
+        from core.reminder_engine import reminder_engine
+        try:
+            reminders = await reminder_engine.fetch_icloud_reminders(user_id)
+            if reminders:
+                return f"Sincronizzazione completata: ho recuperato {len(reminders)} nuovi promemoria da iCloud."
+                
+            profile = await storage.load(f"profile:{user_id}", default={})
+            if profile.get("icloud_user") or profile.get("icloud_verified") or os.environ.get("ICLOUD_USER"):
+                return "Sincronizzazione iCloud completata. Nessun nuovo elemento trovato."
+            else:
+                return "iCloud non è ancora configurato. Dimmi 'collega iCloud' per iniziare."
+        except Exception as e:
+            logger.error("ICLOUD_SYNC_ERROR user=%s err=%s", user_id, str(e))
+            return "C'è stato un problema durante la sincronizzazione con iCloud. Assicurati che le credenziali siano valide."
+
 
 
 # Istanza globale

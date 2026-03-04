@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 from core.storage import storage
 from core.openclaw_service import openclaw_service
 
-WIZARD_PLATFORMS = {"facebook", "instagram", "tiktok", "telegram"}
+WIZARD_PLATFORMS = {"facebook", "instagram", "tiktok", "telegram", "gmail", "google_calendar", "icloud"}
 
 async def start_wizard(user_id: str, platform: str) -> str:
     """
@@ -21,8 +21,8 @@ async def start_wizard(user_id: str, platform: str) -> str:
         "1. IDENTITÀ: Aiuta ALFIO. Sii come un nipote premuroso (semplice, paziente, affettuoso).\n"
         "2. LINGUA: SEMPRE E SOLO ITALIANO.\n"
         "3. NO CODE: NON SCRIVERE MAI CODICE o mostrare file interni. Parla solo testo.\n"
-        "4. AZIONE: Apri il browser e fai TUTTO da solo nel portale dedicato. Recupera token e chiavi API.\n"
-        "5. AUTONOMIA TECNICA: NON CHIEDERE dettagli tecnici. Inventali tu.\n"
+        "4. AZIONE: Usa il browser il meno possibile per evitare costi o attese. Se conosci metodi più semplici o standard (come link autorizzativi o credenziali), non aprire il browser. Usalo SOLO se strettamente necessario per l'associazione.\n"
+        "5. AUTONOMIA TECNICA: NON CHIEDERE dettagli tecnici. Risolvi da solo i passaggi complessi.\n"
         "6. INTERVISTA: Chiedi Email, Password o OTP **SOLO UNO ALLA VOLTA**. Attendi la risposta.\n"
         "7. SEMPLICITÀ: Non parlare di passi tecnici. Di' solo 'Sto preparando i permessi...' o simili.\n"
         "8. SILENZIO OPERATIVO: Salva tutto nel file '.env' del server in silenzio.\n"

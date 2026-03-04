@@ -1123,7 +1123,7 @@ function _startWizardInChat(platform) {
   }
 }
 
-const WIZARD_PLATFORMS = new Set(['facebook', 'instagram', 'tiktok', 'telegram']);
+const WIZARD_PLATFORMS = new Set(['facebook', 'instagram', 'tiktok', 'telegram', 'gmail', 'google_calendar', 'icloud']);
 
 async function connectIntegration(platform) {
   const token = getAuthToken();
