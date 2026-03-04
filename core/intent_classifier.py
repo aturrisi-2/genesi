@@ -713,7 +713,7 @@ INTENT POSSIBILI:
 - google_sync: sincronizzare appuntamenti da Google
 - emotional: stato d'animo utente
 - memory_context: riferimento ESPLICITO a messaggi passati (es: "cosa ho detto prima?")
-- openclaw: comandi informatici complessi, form filling, inviare email o messaggi whatsapp a terzi, navigare su siti specifici (eccetto meteo e notizie), compiere azioni sul sistema operativo. (es. "vai su ryanair", "scrivi a Rita", "leggi la mia mail").
+- openclaw: DA USARE SOLO COME EXTREMA RATIO se l'utente chiede esplicitamente di navigare su uno specifico sito web, usare il browser, o compilare form complessi. NON usare per domande o ricerche generali (usa chat_free o tecnica). (es. "vai sul sito ryanair e prenota un volo", "naviga su amazon e cerca...").
 - gmail_setup: collegare o configurare Gmail (es. "collega gmail", "accedi a gmail")
 - gmail_read: leggere email Gmail (es. "leggi le mail", "controlla la posta", "ho nuove email")
 - gmail_send: inviare email tramite Gmail (es. "invia mail a X", "scrivi un'email a Y")
