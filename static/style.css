@@ -2654,6 +2654,7 @@ body.coding-active {
 .weather-widget__rain,
 .weather-widget__snow,
 .weather-widget__fog,
+.weather-widget__star,
 .weather-widget__lightning {
   opacity: 0;
   transition: opacity 0.35s ease;
@@ -2783,16 +2784,43 @@ body.coding-active {
   text-shadow: 0 0 12px rgba(255, 249, 171, 0.85);
 }
 
-.weather-widget__lightning--a {
-  animation: ww-lightning 3.5s steps(1, end) infinite;
+.weather-widget__star {
+  position: absolute;
+  color: #eaf5ff;
+  text-shadow: 0 0 8px rgba(208, 234, 255, 0.8);
+  font-size: 0.5rem;
+}
+
+.weather-widget__star--a {
+  top: 10px;
+  left: 11px;
+  animation: ww-star-twinkle 2.6s ease-in-out infinite;
+}
+
+.weather-widget__star--b {
+  top: 23px;
+  left: 7px;
+  font-size: 0.43rem;
+  animation: ww-star-twinkle 3.3s ease-in-out infinite;
+  animation-delay: -1.4s;
+}
+
+.weather-widget__star--c {
+  top: 7px;
+  left: 22px;
+  font-size: 0.38rem;
+  animation: ww-star-twinkle 2.9s ease-in-out infinite;
+  animation-delay: -0.8s;
 }
 
 .weather-widget__lightning--b {
   right: 38px;
   top: 20px;
   font-size: 0.7rem;
-  animation: ww-lightning 4.3s steps(1, end) infinite;
-  animation-delay: -1.5s;
+}
+
+#weather-widget[data-phase='night']:not([data-weather='thunder']) .weather-widget__star {
+  opacity: 0.92;
 }
 
 #weather-widget[data-phase='day'] .weather-widget__sun {
@@ -2825,6 +2853,15 @@ body.coding-active {
 
 #weather-widget[data-weather='thunder'] .weather-widget__lightning {
   opacity: 0.95;
+}
+
+#weather-widget[data-weather='thunder'] .weather-widget__lightning--a {
+  animation: ww-lightning 3.5s steps(1, end) infinite;
+}
+
+#weather-widget[data-weather='thunder'] .weather-widget__lightning--b {
+  animation: ww-lightning 4.3s steps(1, end) infinite;
+  animation-delay: -1.5s;
 }
 
 #weather-widget[data-weather='snow'] .weather-widget__snow {
@@ -2887,6 +2924,19 @@ body.coding-active {
   86%,
   89% {
     opacity: 1;
+  }
+}
+
+@keyframes ww-star-twinkle {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.9);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
   }
 }
 
