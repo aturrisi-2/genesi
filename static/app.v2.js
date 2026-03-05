@@ -1022,11 +1022,70 @@ const settingsModal = document.getElementById('settings-modal');
 const settingsBtn = document.getElementById('settings-btn');
 const closeSettingsBtn = document.getElementById('close-settings-btn');
 const resetMicBtn = document.getElementById('reset-mic-btn');
+const settingsTabs = Array.from(document.querySelectorAll('.settings-tab'));
+const settingsPanels = Array.from(document.querySelectorAll('.settings-panel'));
+const resetPreferencesBtn = document.getElementById('reset-preferences-btn');
+
+const SETTINGS_DEFAULTS = {
+  desktopNotifications: false,
+  uiSounds: false,
+  sendOnEnter: true,
+  confirmCritical: true,
+  maskSensitive: true,
+};
+
+const SETTINGS_INPUTS = {
+  desktopNotifications: document.getElementById('setting-desktop-notifications'),
+  uiSounds: document.getElementById('setting-ui-sounds'),
+  sendOnEnter: document.getElementById('setting-send-on-enter'),
+  confirmCritical: document.getElementById('setting-confirm-critical'),
+  maskSensitive: document.getElementById('setting-mask-sensitive'),
+};
+
+function loadSystemSettings() {
+  let parsed = {};
+  try {
+    parsed = JSON.parse(localStorage.getItem('genesi-system-settings') || '{}') || {};
+  } catch (e) {
+    parsed = {};
+  }
+
+  const finalSettings = { ...SETTINGS_DEFAULTS, ...parsed };
+  Object.entries(SETTINGS_INPUTS).forEach(([key, el]) => {
+    if (el) el.checked = !!finalSettings[key];
+  });
+}
+
+function saveSystemSettings() {
+  const payload = { ...SETTINGS_DEFAULTS };
+  Object.entries(SETTINGS_INPUTS).forEach(([key, el]) => {
+    if (el) payload[key] = !!el.checked;
+  });
+  localStorage.setItem('genesi-system-settings', JSON.stringify(payload));
+}
+
+function activateSettingsTab(tabName) {
+  settingsTabs.forEach((tab) => {
+    const active = tab.dataset.settingsTab === tabName;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+
+  settingsPanels.forEach((panel) => {
+    const active = panel.dataset.settingsPanel === tabName;
+    panel.classList.toggle('hidden', !active);
+  });
+
+  if (tabName === 'sync') {
+    loadIntegrationsStatus();
+  }
+}
 
 if (settingsBtn) {
   settingsBtn.onclick = () => {
     settingsModal.classList.remove('hidden');
-    loadIntegrationsStatus();
+    loadSystemSettings();
+    activateSettingsTab('system');
   };
 }
 
@@ -1044,6 +1103,25 @@ if (resetMicBtn) {
     }, 300);
   };
 }
+
+if (resetPreferencesBtn) {
+  resetPreferencesBtn.onclick = () => {
+    Object.entries(SETTINGS_INPUTS).forEach(([key, el]) => {
+      if (el) el.checked = !!SETTINGS_DEFAULTS[key];
+    });
+    saveSystemSettings();
+  };
+}
+
+settingsTabs.forEach((tab) => {
+  tab.addEventListener('click', () => activateSettingsTab(tab.dataset.settingsTab));
+});
+
+Object.values(SETTINGS_INPUTS).forEach((inputEl) => {
+  if (inputEl) {
+    inputEl.addEventListener('change', saveSystemSettings);
+  }
+});
 
 // Combined background click for modals
 window.addEventListener('click', (e) => {

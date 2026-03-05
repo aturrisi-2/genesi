@@ -1264,6 +1264,42 @@ body {
   overflow-y: auto;
 }
 
+.settings-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 2px 0 18px;
+}
+
+.settings-tab {
+  flex: 1;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.65);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.settings-tab:hover {
+  border-color: rgba(0, 229, 255, 0.35);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.settings-tab.active {
+  background: rgba(0, 229, 255, 0.15);
+  color: #00e5ff;
+  border-color: rgba(0, 229, 255, 0.45);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.2);
+}
+
+.settings-panel.hidden {
+  display: none;
+}
+
 .settings-section {
   margin-bottom: 24px;
 }
@@ -1325,6 +1361,51 @@ body {
   background: #00e5ff;
   color: #0c0c14;
   box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+}
+
+.settings-switch {
+  position: relative;
+  display: inline-flex;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.settings-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.settings-switch-slider {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 100px;
+  transition: 0.2s ease;
+}
+
+.settings-switch-slider::before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 2px;
+  top: 2px;
+  border-radius: 50%;
+  background: #d6dbe6;
+  transition: 0.2s ease;
+}
+
+.settings-switch input:checked + .settings-switch-slider {
+  background: rgba(0, 229, 255, 0.3);
+  border-color: rgba(0, 229, 255, 0.5);
+}
+
+.settings-switch input:checked + .settings-switch-slider::before {
+  transform: translateX(20px);
+  background: #00e5ff;
 }
 
 .settings-grid {

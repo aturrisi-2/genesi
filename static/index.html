@@ -403,74 +403,131 @@
       <button class="close-modal" id="close-settings-btn">&times;</button>
     </div>
 
-    <!-- ── INTEGRAZIONI ──────────────────────────────────── -->
-    <div class="settings-section">
-      <h4>Integrazioni</h4>
-      <p style="font-size:0.78rem;color:#888;margin-bottom:12px;">
-        Connetti i tuoi account per permettere a Genesi di leggere email,
-        calendario, messaggi e social.
-      </p>
-      <div id="integrations-list">
-        <div class="intg-loading">Caricamento...</div>
+    <div class="settings-tabs" role="tablist" aria-label="Pannelli impostazioni">
+      <button class="settings-tab active" data-settings-tab="system" role="tab" aria-selected="true">Sistema</button>
+      <button class="settings-tab" data-settings-tab="sync" role="tab" aria-selected="false">Sync</button>
+    </div>
+
+    <div class="settings-panel" data-settings-panel="system">
+      <div class="settings-section">
+        <h4>Generali</h4>
+
+        <div class="settings-row">
+          <div class="settings-info">
+            <span class="settings-label">Notifiche Desktop</span>
+            <span class="settings-desc">Mostra avvisi browser per eventi importanti.</span>
+          </div>
+          <label class="settings-switch">
+            <input type="checkbox" id="setting-desktop-notifications">
+            <span class="settings-switch-slider"></span>
+          </label>
+        </div>
+
+        <div class="settings-row">
+          <div class="settings-info">
+            <span class="settings-label">Suono Interfaccia</span>
+            <span class="settings-desc">Attiva feedback audio per azioni rapide.</span>
+          </div>
+          <label class="settings-switch">
+            <input type="checkbox" id="setting-ui-sounds">
+            <span class="settings-switch-slider"></span>
+          </label>
+        </div>
+
+        <div class="settings-row">
+          <div class="settings-info">
+            <span class="settings-label">Invio con Invio</span>
+            <span class="settings-desc">Invia messaggi con Invio, usa Shift+Invio per nuova riga.</span>
+          </div>
+          <label class="settings-switch">
+            <input type="checkbox" id="setting-send-on-enter">
+            <span class="settings-switch-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h4>Privacy & Sicurezza</h4>
+
+        <div class="settings-row">
+          <div class="settings-info">
+            <span class="settings-label">Conferma Azioni Critiche</span>
+            <span class="settings-desc">Chiede conferma prima di operazioni distruttive.</span>
+          </div>
+          <label class="settings-switch">
+            <input type="checkbox" id="setting-confirm-critical">
+            <span class="settings-switch-slider"></span>
+          </label>
+        </div>
+
+        <div class="settings-row">
+          <div class="settings-info">
+            <span class="settings-label">Maschera Dati Sensibili</span>
+            <span class="settings-desc">Riduce la visibilità di dati sensibili nelle anteprime UI.</span>
+          </div>
+          <label class="settings-switch">
+            <input type="checkbox" id="setting-mask-sensitive">
+            <span class="settings-switch-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h4>Diagnostica</h4>
+        <p style="font-size: 0.8rem; color: #888; margin-bottom: 1rem;">
+          Strumenti per risolvere rapidamente blocchi locali di sessione.
+        </p>
+
+        <div class="settings-row">
+          <div class="settings-info">
+            <span class="settings-label">Reset Microfono</span>
+            <span class="settings-desc">Riavvia forzatamente il motore vocale se bloccato.</span>
+          </div>
+          <button id="reset-mic-btn" class="settings-action-btn">🔊 Reset</button>
+        </div>
+
+        <div class="settings-row">
+          <div class="settings-info">
+            <span class="settings-label">Ripristina Preferenze UI</span>
+            <span class="settings-desc">Resetta le impostazioni locali del pannello sistema.</span>
+          </div>
+          <button id="reset-preferences-btn" class="settings-action-btn">Ripristina</button>
+        </div>
       </div>
     </div>
 
-    <div class="settings-section">
-      <h4>Strumenti di Diagnosi</h4>
-      <p style="font-size: 0.8rem; color: #888; margin-bottom: 1rem;">
-        Utilizza questi strumenti se riscontri problemi tecnici durante la sessione.
-      </p>
-
-      <div class="settings-row">
-        <div class="settings-info">
-          <span class="settings-label">Reset Microfono</span>
-          <span class="settings-desc">Riavvia forzatamente il motore di riconoscimento vocale se bloccato.</span>
-        </div>
-        <button id="reset-mic-btn" class="settings-action-btn">🔊 Reset</button>
-      </div>
-    </div>
-
-    <div class="settings-section">
-      <h4>Stato Sistema (Skill Health)</h4>
-      <div class="settings-grid">
-        <div class="health-item">
-          <span>Conversazione Naturale</span>
-          <span class="health-pill status-ready">Pronta</span>
-        </div>
-        <div class="health-item">
-          <span>Memoria Core (EP)</span>
-          <span class="health-pill status-ready">Attiva</span>
-        </div>
-        <div class="health-item">
-          <span>Sync Calendar</span>
-          <span class="health-pill status-ok">Sincronizzato</span>
-        </div>
-        <div class="health-item">
-          <span>Upload & Vision</span>
-          <span class="health-pill status-ready">Ottimizzato</span>
+    <div class="settings-panel hidden" data-settings-panel="sync">
+      <div class="settings-section">
+        <h4>Sincronizzazioni</h4>
+        <p style="font-size:0.78rem;color:#888;margin-bottom:12px;">
+          Collega gli account esterni e gestisci qui tutte le operazioni di sincronizzazione.
+        </p>
+        <div id="integrations-list">
+          <div class="intg-loading">Caricamento...</div>
         </div>
       </div>
-    </div>
 
-    <div class="settings-section">
-      <h4>Change Log - v1.0 Gold</h4>
-      <div class="changelog-container">
-        <ul>
-          <li><strong>FEAT:</strong> Implementato Sistema Guardian Anti-Regressione</li>
-          <li><strong>FEAT:</strong> Trigger Sincronizzazione Google/iCloud</li>
-          <li><strong>FIX:</strong> Risolto loop microfono durante risposte lunghe</li>
-          <li><strong>UI:</strong> Nuovo pannello impostazioni centralizzato</li>
-        </ul>
+      <div class="settings-section">
+        <h4>Stato Sync</h4>
+        <div class="settings-grid">
+          <div class="health-item">
+            <span>Calendar Sync</span>
+            <span class="health-pill status-ok">Monitorato</span>
+          </div>
+          <div class="health-item">
+            <span>Credenziali OAuth</span>
+            <span class="health-pill status-ready">Disponibili</span>
+          </div>
+          <div class="health-item">
+            <span>iCloud CalDAV</span>
+            <span class="health-pill status-ready">Pronto</span>
+          </div>
+          <div class="health-item">
+            <span>Ultimo Check</span>
+            <span class="health-pill status-ready">Automatico</span>
+          </div>
+        </div>
       </div>
-    </div>
-
-    <div class="settings-section">
-      <h4>Informazioni Genesi</h4>
-      <p style="font-size: 0.8rem; color: #888;">
-        Versione: <strong>Gold Stable (Faro)</strong><br>
-        Architettura: Proactor Engine v2<br>
-        Stato: Ottimizzato per prestazioni.
-      </p>
     </div>
   </div>
 </div>
