@@ -847,8 +847,24 @@ function startNotificationPolling() {
           if (sessionStorage.getItem(key)) continue;
           sessionStorage.setItem(key, '1');
 
+          const reminderText = maskSensitiveText(notif.text || 'Promemoria');
+
           // Inserisci in chat come messaggio assistente
-          addMessage(`🔔 Promemoria: ${notif.text}`, 'genesi');
+          addMessage(`🔔 Promemoria: ${reminderText}`, 'genesi');
+          playUISound('notification');
+
+          // Notifica desktop opzionale
+          if (getSystemSetting('desktopNotifications') && 'Notification' in window && Notification.permission === 'granted') {
+            try {
+              new Notification('Genesi · Promemoria', {
+                body: reminderText,
+                icon: '/static/icon.png',
+                tag: `genesi-reminder-${notif.id}`,
+              });
+            } catch (e) {
+              console.warn('DESKTOP_NOTIFICATION_FAILED', e);
+            }
+          }
 
           // Marca come letta chiamando endpoint ack
           await fetch(`/api/notifications/ack/${notif.id}`, {
@@ -1042,26 +1058,97 @@ const SETTINGS_INPUTS = {
   maskSensitive: document.getElementById('setting-mask-sensitive'),
 };
 
-function loadSystemSettings() {
-  let parsed = {};
-  try {
-    parsed = JSON.parse(localStorage.getItem('genesi-system-settings') || '{}') || {};
-  } catch (e) {
-    parsed = {};
-  }
+let currentSystemSettings = { ...SETTINGS_DEFAULTS };
 
-  const finalSettings = { ...SETTINGS_DEFAULTS, ...parsed };
+function getStoredSystemSettings() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('genesi-system-settings') || '{}') || {};
+    return { ...SETTINGS_DEFAULTS, ...parsed };
+  } catch (e) {
+    return { ...SETTINGS_DEFAULTS };
+  }
+}
+
+function applySystemSettingsRuntime(settings) {
+  currentSystemSettings = { ...SETTINGS_DEFAULTS, ...(settings || {}) };
+  document.body.classList.toggle('privacy-mask-sensitive', !!currentSystemSettings.maskSensitive);
+}
+
+function getSystemSetting(key) {
+  return !!currentSystemSettings[key];
+}
+
+function shouldConfirmCritical() {
+  return getSystemSetting('confirmCritical');
+}
+
+function askCriticalConfirm(message) {
+  if (!shouldConfirmCritical()) return true;
+  return confirm(message);
+}
+
+function maskSensitiveText(text) {
+  const raw = String(text || '');
+  if (!getSystemSetting('maskSensitive')) return raw;
+  return raw
+    .replace(/([\w.+-]{2})[\w.+-]*@([\w-]+\.[\w.-]+)/g, '$1***@$2')
+    .replace(/\b(\d{2})\d{4,}(\d{2})\b/g, '$1••••$2')
+    .replace(/\b([A-Za-z0-9_\-]{3})[A-Za-z0-9_\-]{6,}\b/g, '$1••••');
+}
+
+async function ensureDesktopNotificationPermission() {
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied') return false;
+  try {
+    const permission = await Notification.requestPermission();
+    return permission === 'granted';
+  } catch (e) {
+    return false;
+  }
+}
+
+function playUISound(kind = 'tap') {
+  if (!getSystemSetting('uiSounds')) return;
+  const ctx = window.audioContext;
+  if (!ctx) return;
+  const baseFreq = kind === 'notification' ? 880 : kind === 'receive' ? 720 : 560;
+  try {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = baseFreq;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.04, ctx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.11);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.12);
+  } catch (e) {
+    console.warn('[UI_SOUND] playback failed', e);
+  }
+}
+
+function loadSystemSettings() {
+  const finalSettings = getStoredSystemSettings();
   Object.entries(SETTINGS_INPUTS).forEach(([key, el]) => {
     if (el) el.checked = !!finalSettings[key];
   });
+  applySystemSettingsRuntime(finalSettings);
 }
 
-function saveSystemSettings() {
+async function saveSystemSettings() {
   const payload = { ...SETTINGS_DEFAULTS };
   Object.entries(SETTINGS_INPUTS).forEach(([key, el]) => {
     if (el) payload[key] = !!el.checked;
   });
   localStorage.setItem('genesi-system-settings', JSON.stringify(payload));
+  applySystemSettingsRuntime(payload);
+
+  if (payload.desktopNotifications) {
+    await ensureDesktopNotificationPermission();
+  }
 }
 
 function activateSettingsTab(tabName) {
@@ -1122,6 +1209,8 @@ Object.values(SETTINGS_INPUTS).forEach((inputEl) => {
     inputEl.addEventListener('change', saveSystemSettings);
   }
 });
+
+loadSystemSettings();
 
 // Combined background click for modals
 window.addEventListener('click', (e) => {
@@ -1248,7 +1337,7 @@ async function connectIntegration(platform) {
 }
 
 async function disconnectIntegration(platform) {
-  if (!confirm(`Vuoi davvero disconnettere ${platform}?`)) return;
+  if (!askCriticalConfirm(`Vuoi davvero disconnettere ${platform}?`)) return;
 
   try {
     await fetch(`/api/integrations/${platform}/disconnect`, {
@@ -1698,6 +1787,7 @@ async function sendMessage(voiceText = null) {
   ic.classList.add('pulse');
 
   addUserMessage(text);
+  playUISound('tap');
 
   // Salva messaggio utente nella conversazione corrente
   saveMessageToConversation('user', text);
@@ -1758,6 +1848,7 @@ async function sendMessage(voiceText = null) {
           streamBubble.classList.remove('streaming');
           streamBubble.innerHTML = renderMessageContent(parsed.text) + renderImages(parsed.images);
           saveMessageToConversation('assistant', parsed.text);
+          playUISound('receive');
           scrollToBottom();
           alreadyRendered = true;
         } else if (!data?.response) {
@@ -1786,11 +1877,13 @@ async function sendMessage(voiceText = null) {
       if (parsed.images && parsed.images.length > 0) {
         addMessage(parsed.text, 'genesi');
         saveMessageToConversation('assistant', parsed.text);
+        playUISound('receive');
         const lastMsg = document.querySelector('.message.genesi:last-child');
         if (lastMsg) lastMsg.insertAdjacentHTML('beforeend', renderImages(parsed.images));
       } else {
         addMessage(parsed.text, 'genesi');
         saveMessageToConversation('assistant', parsed.text);
+        playUISound('receive');
       }
     }
     console.log('[TEXT_RENDERED] text_len=' + (data?.response?.length || 0));
@@ -2868,7 +2961,7 @@ textInput.addEventListener('input', () => {
 
 // Enter invia, Shift+Enter va a capo
 textInput.addEventListener('keydown', function (e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (e.key === 'Enter' && !e.shiftKey && getSystemSetting('sendOnEnter')) {
     e.preventDefault();
     sendMessage();
   }
@@ -3104,11 +3197,12 @@ function renderConvList(convs) {
   });
 
   filtered.forEach(c => {
+      const safeTitle = maskSensitiveText(c.title || 'Conversazione');
     const item = document.createElement('div');
     item.className = 'conv-item' + (c.id === currentConvId ? ' active' : '') + (c.pinned ? ' pinned' : '');
     item.dataset.id = c.id;
     item.innerHTML = `
-            <span class="conv-title" title="${c.title}">${c.pinned ? '📌 ' : ''}${c.title}</span>
+        <span class="conv-title" title="${safeTitle}">${c.pinned ? '📌 ' : ''}${safeTitle}</span>
             <div class="conv-actions">
                 <button class="conv-btn" onclick="togglePinConv('${c.id}', ${!c.pinned})" title="${c.pinned ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}">${c.pinned ? '★' : '☆'}</button>
                 <button class="conv-btn" onclick="renameConv('${c.id}')" title="Rinomina">✎</button>
@@ -3140,7 +3234,7 @@ window.togglePinConv = async function (convId, pinValue) {
 };
 
 window.clearAllConvs = async function () {
-  if (!confirm('Sei sicuro di voler svuotare TUTTE le chat? Questa azione è irreversibile.')) return;
+  if (!askCriticalConfirm('Sei sicuro di voler svuotare TUTTE le chat? Questa azione è irreversibile.')) return;
   await fetch('/api/conversations', {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${getAuthToken()}` }
@@ -3184,7 +3278,7 @@ async function renameConv(convId) {
 }
 
 async function deleteConv(convId) {
-  if (!confirm('Eliminare questa conversazione?')) return;
+  if (!askCriticalConfirm('Eliminare questa conversazione?')) return;
   await fetch(`/api/conversations/${convId}`, {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${getAuthToken()}` }
@@ -4046,7 +4140,7 @@ if (saveICloudBtn) {
 const disconnectICloudBtn = document.getElementById('disconnect-icloud-btn');
 if (disconnectICloudBtn) {
   disconnectICloudBtn.addEventListener('click', async () => {
-    if (!confirm("Vuoi davvero scollegare l'account iCloud?")) return;
+    if (!askCriticalConfirm("Vuoi davvero scollegare l'account iCloud?")) return;
     try {
       const res = await fetch('/api/proactor/icloud/status', { method: 'DELETE', headers: authHeaders() });
       alert("Account scollegato.");
@@ -4132,6 +4226,11 @@ if (manualSyncBtn) {
   }
 
   async function initPush() {
+    if (!getSystemSetting('desktopNotifications')) {
+      console.info('[PUSH] Desktop notifications disabled by settings — skip push init.');
+      return;
+    }
+
     // Aspetta che l'utente sia loggato (presenza del token)
     const token = localStorage.getItem('genesi_access_token');
     if (!token) {
