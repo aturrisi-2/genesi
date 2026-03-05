@@ -4107,25 +4107,11 @@ function setVoiceStatusText(text) {
 (function initWeatherWidget() {
   'use strict';
 
-  // Mappa icon_code OpenWeather → emoji
-  const WEATHER_ICONS_MAP = {
-    '01d': '☀️', '01n': '🌙',
-    '02d': '⛅', '02n': '🌤️',
-    '03d': '☁️', '03n': '☁️',
-    '04d': '☁️', '04n': '☁️',
-    '09d': '🌧️', '09n': '🌧️',
-    '10d': '🌦️', '10n': '🌧️',
-    '11d': '⛈️', '11n': '⛈️',
-    '13d': '❄️', '13n': '❄️',
-    '50d': '🌫️', '50n': '🌫️'
-  };
-
   const els = {
     widget: document.getElementById('weather-widget'),
     loading: document.getElementById('ww-loading'),
     data: document.getElementById('ww-data'),
     error: document.getElementById('ww-error'),
-    icon: document.getElementById('ww-icon'),
     city: document.getElementById('ww-city'),
     temp: document.getElementById('ww-temp'),
     desc: document.getElementById('ww-desc'),
@@ -4155,20 +4141,6 @@ function setVoiceStatusText(text) {
     if (els.time) els.time.textContent = time;
   }
 
-  function getDayPhaseEmoji(condition, hour) {
-    const isNight = hour < 6 || hour >= 20;
-    const cond = String(condition || '').toLowerCase();
-
-    if (cond.includes('thunder')) return '⛈️';
-    if (cond.includes('snow')) return '❄️';
-    if (cond.includes('mist') || cond.includes('fog') || cond.includes('haze')) return '🌫️';
-    if (cond.includes('rain') || cond.includes('drizzle')) return isNight ? '🌧️' : '🌦️';
-    if (cond.includes('cloud')) return isNight ? '☁️' : '⛅';
-    if (cond.includes('clear')) return isNight ? '🌙' : '☀️';
-
-    return isNight ? '🌙' : '☀️';
-  }
-
   function getWeatherScene(condition, iconCode, hour) {
     const cond = String(condition || '').toLowerCase();
     const icon = String(iconCode || '').toLowerCase();
@@ -4185,14 +4157,12 @@ function setVoiceStatusText(text) {
   }
 
   function renderWeather(payload) {
-    // Usa fase giorno/notte locale per coerenza visiva; fallback su icon_code OpenWeather
+    // Usa fase giorno/notte locale per coerenza visiva e guida la scena animata.
     const currentHour = new Date().getHours();
-    const icon = getDayPhaseEmoji(payload.condition, currentHour) || WEATHER_ICONS_MAP[payload.icon_code] || '🌡️';
     const scene = getWeatherScene(payload.condition, payload.icon_code, currentHour);
 
     els.widget.dataset.weather = scene.weather;
     els.widget.dataset.phase = scene.phase;
-    els.icon.textContent = icon;
     els.city.textContent = payload.city;
     els.temp.textContent = `${payload.temp}°`;
     els.desc.textContent = payload.description;
