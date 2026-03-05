@@ -4142,6 +4142,11 @@ function setVoiceStatusText(text) {
     els.loading.hidden = state !== 'loading';
     els.data.hidden = state !== 'data';
     els.error.hidden = state !== 'error';
+
+    if (state !== 'data') {
+      els.widget.dataset.weather = 'clear';
+      els.widget.dataset.phase = 'day';
+    }
   }
 
   function updateClock() {
@@ -4164,10 +4169,29 @@ function setVoiceStatusText(text) {
     return isNight ? '🌙' : '☀️';
   }
 
+  function getWeatherScene(condition, iconCode, hour) {
+    const cond = String(condition || '').toLowerCase();
+    const icon = String(iconCode || '').toLowerCase();
+    const isNight = icon.endsWith('n') || hour < 6 || hour >= 20;
+
+    if (cond.includes('thunder')) return { weather: 'thunder', phase: isNight ? 'night' : 'day' };
+    if (cond.includes('snow')) return { weather: 'snow', phase: isNight ? 'night' : 'day' };
+    if (cond.includes('mist') || cond.includes('fog') || cond.includes('haze')) return { weather: 'mist', phase: isNight ? 'night' : 'day' };
+    if (cond.includes('rain') || cond.includes('drizzle')) return { weather: 'rain', phase: isNight ? 'night' : 'day' };
+    if (cond.includes('cloud') || icon.startsWith('02') || icon.startsWith('03') || icon.startsWith('04')) {
+      return { weather: 'clouds', phase: isNight ? 'night' : 'day' };
+    }
+    return { weather: 'clear', phase: isNight ? 'night' : 'day' };
+  }
+
   function renderWeather(payload) {
     // Usa fase giorno/notte locale per coerenza visiva; fallback su icon_code OpenWeather
     const currentHour = new Date().getHours();
     const icon = getDayPhaseEmoji(payload.condition, currentHour) || WEATHER_ICONS_MAP[payload.icon_code] || '🌡️';
+    const scene = getWeatherScene(payload.condition, payload.icon_code, currentHour);
+
+    els.widget.dataset.weather = scene.weather;
+    els.widget.dataset.phase = scene.phase;
     els.icon.textContent = icon;
     els.city.textContent = payload.city;
     els.temp.textContent = `${payload.temp}°`;
