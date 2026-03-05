@@ -3,6 +3,7 @@ import asyncio
 import logging
 import json
 import contextvars
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -25,6 +26,11 @@ _STREAMING_ROUTES = frozenset({
     'relational', 'knowledge', 'general', 'general_llm',
     'tecnica', 'spiegazione', 'emotional', 'debug', 'synthesis',
 })
+
+MAX_LLM_INPUT_CHARS = int(os.environ.get("LLM_MAX_INPUT_CHARS", "45000"))
+MAX_LLM_SYSTEM_CHARS = int(os.environ.get("LLM_MAX_SYSTEM_CHARS", "12000"))
+MAX_LLM_MESSAGE_CHARS = int(os.environ.get("LLM_MAX_MESSAGE_CHARS", "4000"))
+MAX_LLM_HISTORY_MESSAGES = int(os.environ.get("LLM_MAX_HISTORY_MESSAGES", "12"))
 
 # ═══════════════════════════════════════════════════════════
 # LLM CONFIGURATION
@@ -183,7 +189,7 @@ class LLMService:
             clean_model = model.split('/')[-1] if '/' in model else model
             if "claude-3-opus" in clean_model: clean_model = "gpt-4o"
         
-        msg_list = messages if messages else [{"role": "system", "content": prompt}, {"role": "user", "content": message}]
+        msg_list = self._prepare_message_payload(messages, prompt, message, tag)
         extra_headers = {"HTTP-Referer": "https://genesi.app", "X-Title": "Genesi"} if "openrouter" in str(current_client.base_url) else None
 
         async def make_request(client, model_name):
@@ -273,6 +279,81 @@ class LLMService:
                 except: pass
 
             return None
+
+    @staticmethod
+    def _truncate_text(value: Any, limit: int) -> str:
+        text = str(value or "")
+        if len(text) <= limit:
+            return text
+        return text[: max(0, limit)] + "\n[...troncato automaticamente per limite contesto...]"
+
+    @staticmethod
+    def _scrub_sensitive_payload(text: str) -> str:
+        if not text:
+            return text
+        scrubbed = text
+        patterns = [
+            r"(?i)(access_token\s*[:=]\s*)[A-Za-z0-9\-\._~\+/=]+",
+            r"(?i)(refresh_token\s*[:=]\s*)[A-Za-z0-9\-\._~\+/=]+",
+            r"(?i)(client_secret\s*[:=]\s*)[A-Za-z0-9\-\._~\+/=]+",
+            r"(?i)(authorization\s*[:=]\s*bearer\s+)[A-Za-z0-9\-\._~\+/=]+",
+        ]
+        for pattern in patterns:
+            scrubbed = re.sub(pattern, r"\1[REDACTED]", scrubbed)
+        return scrubbed
+
+    def _prepare_message_payload(
+        self,
+        messages: Optional[List[Dict[str, str]]],
+        prompt: str,
+        message: str,
+        tag: str,
+    ) -> List[Dict[str, str]]:
+        if not messages:
+            safe_prompt = self._truncate_text(self._scrub_sensitive_payload(prompt), MAX_LLM_SYSTEM_CHARS)
+            safe_message = self._truncate_text(self._scrub_sensitive_payload(message), MAX_LLM_MESSAGE_CHARS)
+            return [{"role": "system", "content": safe_prompt}, {"role": "user", "content": safe_message}]
+
+        normalized: List[Dict[str, str]] = []
+        for item in messages:
+            if not isinstance(item, dict):
+                continue
+            role = (item.get("role") or "user").strip() or "user"
+            content = self._scrub_sensitive_payload(str(item.get("content") or ""))
+            per_msg_limit = MAX_LLM_SYSTEM_CHARS if role == "system" else MAX_LLM_MESSAGE_CHARS
+            normalized.append({"role": role, "content": self._truncate_text(content, per_msg_limit)})
+
+        if len(normalized) > MAX_LLM_HISTORY_MESSAGES:
+            system_head = [m for m in normalized[:1] if m.get("role") == "system"]
+            tail = normalized[-(MAX_LLM_HISTORY_MESSAGES - len(system_head)):]
+            normalized = system_head + tail
+
+        total_chars = sum(len(m.get("content", "")) for m in normalized)
+        if total_chars <= MAX_LLM_INPUT_CHARS:
+            return normalized
+
+        system_msgs = [m for m in normalized if m.get("role") == "system"][:1]
+        other_msgs = [m for m in normalized if m.get("role") != "system"]
+        kept_tail: List[Dict[str, str]] = []
+        current_chars = sum(len(m.get("content", "")) for m in system_msgs)
+        for item in reversed(other_msgs):
+            item_len = len(item.get("content", ""))
+            if current_chars + item_len <= MAX_LLM_INPUT_CHARS or not kept_tail:
+                kept_tail.append(item)
+                current_chars += item_len
+            else:
+                break
+
+        trimmed = system_msgs + list(reversed(kept_tail))
+        logger.warning(
+            "%s_CONTEXT_TRIMMED original_chars=%d final_chars=%d messages=%d->%d",
+            tag,
+            total_chars,
+            sum(len(m.get("content", "")) for m in trimmed),
+            len(normalized),
+            len(trimmed),
+        )
+        return trimmed
 
     @staticmethod
     def _deterministic_fallback(message: str, route: str, user_id: str = None) -> str:

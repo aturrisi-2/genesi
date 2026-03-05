@@ -3328,8 +3328,8 @@ REGOLE TASSATIVE:
         """
         messages = []
         
-        # Get chat history (last 20 turns to keep context manageable)
-        history = chat_memory.get_messages(user_id, limit=20)
+        # Get chat history (hard cap to avoid oversized LLM payloads)
+        history = chat_memory.get_messages(user_id, limit=8)
         
         # Add conversation history as separate messages
         for entry in history:
@@ -3337,12 +3337,12 @@ REGOLE TASSATIVE:
             sys_resp = entry.get("system_response", "")
             
             if user_msg:
-                messages.append({"role": "user", "content": user_msg})
+                messages.append({"role": "user", "content": user_msg[:1200]})
             if sys_resp:
-                messages.append({"role": "assistant", "content": sys_resp})
+                messages.append({"role": "assistant", "content": sys_resp[:1200]})
         
         # Add current message
-        messages.append({"role": "user", "content": current_message})
+        messages.append({"role": "user", "content": current_message[:1200]})
         
         return messages
 
