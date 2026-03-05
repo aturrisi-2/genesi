@@ -71,10 +71,22 @@
     /* Thinking dots - independent row, no wrapper */
     .thinking-row {
       display: flex;
+      flex-direction: column;
       justify-content: flex-start;
+      align-items: flex-start;
+      gap: 4px;
       margin: 10px 0 6px 0;
       padding-left: 18px;
       /* leggermente rientrato rispetto al bubble */
+    }
+
+    .thinking-label {
+      color: rgba(220, 225, 235, 0.84);
+      font-size: 0.84rem;
+      line-height: 1.35;
+      letter-spacing: 0.01em;
+      font-style: normal;
+      animation: thinkingLabelPulse 1.8s ease-in-out infinite;
     }
 
     .thinking-dots {
@@ -113,6 +125,17 @@
       100% {
         transform: scale(0.7);
         opacity: 0.3;
+      }
+    }
+
+    @keyframes thinkingLabelPulse {
+      0%,
+      100% {
+        opacity: 0.75;
+      }
+
+      50% {
+        opacity: 1;
       }
     }
 

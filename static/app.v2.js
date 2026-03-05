@@ -19,7 +19,13 @@ window.ttsSessionActive = false;
 window.ttsExpected = false;
 window.responseProcessed = false;
 window.isGenesiSpeaking = false;
-let currentStatusRow = null;
+let thinkingLabelTimer = null;
+let thinkingStepIndex = 0;
+const THINKING_STEPS = [
+  'Analizzo richiesta e contesto...',
+  'Controllo memoria e strumenti...',
+  'Compongo la risposta finale...'
+];
 let restartAttempts = 0;
 const MAX_RESTARTS = 5;
 
@@ -1413,44 +1419,13 @@ function addUserMessage(text) { return addMessage(text, 'user'); }
 
 function updateAgentStatus(statusData) {
   if (!statusData) {
-    if (currentStatusRow) {
-      currentStatusRow.remove();
-      currentStatusRow = null;
-    }
+    hideThinking();
     return;
   }
 
   // Handle both string and object { text, screenshot }
   const text = typeof statusData === 'string' ? statusData : statusData.text;
-  const screenshot = statusData.screenshot;
-
-  if (!currentStatusRow) {
-    currentStatusRow = document.createElement('div');
-    currentStatusRow.className = 'agent-task-row';
-    currentStatusRow.innerHTML = `
-      <div class="agent-task-spinner"></div>
-      <div class="agent-task-text"></div>
-    `;
-    dialogue.appendChild(currentStatusRow);
-  }
-
-  const textEl = currentStatusRow.querySelector('.agent-task-text');
-  if (textEl) textEl.textContent = text;
-
-  if (screenshot) {
-    let img = currentStatusRow.querySelector('.agent-task-preview');
-    if (!img) {
-      img = document.createElement('img');
-      img.className = 'agent-task-preview';
-      // Fade in effect
-      img.style.opacity = '0';
-      img.style.transition = 'opacity 0.3s ease';
-      currentStatusRow.prepend(img);
-      setTimeout(() => img.style.opacity = '1', 10);
-    }
-    img.src = screenshot.startsWith('data:') ? screenshot : `data:image/png;base64,${screenshot}`;
-  }
-
+  showThinking(text || 'Sto lavorando in background...');
   scrollToBottom();
 }
 
@@ -1846,26 +1821,62 @@ function playTTSAsync(text, mode) {
 // THINKING DOTS - INDEPENDENT ROW
 // ===============================
 function showThinking(labelText = null) {
-  const thinking = document.createElement("div");
-  thinking.className = "thinking-row";
-  thinking.id = "genesi-thinking";
+  let thinking = document.getElementById("genesi-thinking");
+  const isAnimated = !labelText;
 
-  let labelHtml = labelText ? `<div class="thinking-label" style="color:#aaa; font-style:italic; font-size:0.9rem; margin-bottom:4px;">${labelText}</div>` : '';
+  if (!thinking) {
+    thinking = document.createElement("div");
+    thinking.className = "thinking-row";
+    thinking.id = "genesi-thinking";
+    thinking.innerHTML = `
+      <div class="thinking-label"></div>
+      <div class="thinking-dots">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    `;
 
-  thinking.innerHTML = `
-    ${labelHtml}
-    <div class="thinking-dots">
-      <span></span>
-      <span></span>
-      <span></span>
-    </div>
-  `;
+    const messages = dialogue.querySelectorAll('.message.genesi');
+    const lastGenesiBubble = messages.length ? messages[messages.length - 1] : null;
+    if (lastGenesiBubble && lastGenesiBubble.parentElement === dialogue) {
+      dialogue.insertBefore(thinking, lastGenesiBubble);
+    } else {
+      dialogue.appendChild(thinking);
+    }
+  }
 
-  dialogue.appendChild(thinking);
+  const labelEl = thinking.querySelector('.thinking-label');
+  if (!labelEl) return;
+
+  if (thinkingLabelTimer) {
+    clearInterval(thinkingLabelTimer);
+    thinkingLabelTimer = null;
+  }
+
+  if (isAnimated) {
+    thinking.dataset.animated = 'true';
+    labelEl.textContent = THINKING_STEPS[thinkingStepIndex % THINKING_STEPS.length];
+    thinkingLabelTimer = setInterval(() => {
+      const node = document.getElementById('genesi-thinking');
+      if (!node || node.dataset.animated !== 'true') return;
+      thinkingStepIndex = (thinkingStepIndex + 1) % THINKING_STEPS.length;
+      const lbl = node.querySelector('.thinking-label');
+      if (lbl) lbl.textContent = THINKING_STEPS[thinkingStepIndex];
+    }, 1400);
+  } else {
+    thinking.dataset.animated = 'false';
+    labelEl.textContent = labelText;
+  }
+
   dialogue.scrollTop = dialogue.scrollHeight;
 }
 
 function hideThinking() {
+  if (thinkingLabelTimer) {
+    clearInterval(thinkingLabelTimer);
+    thinkingLabelTimer = null;
+  }
   const thinking = document.getElementById("genesi-thinking");
   if (thinking) thinking.remove();
 }
