@@ -37,6 +37,7 @@ from api.coding import coding_router
 from api.calendar_auth import router as calendar_auth_router
 from api.admin_fallback import router as admin_fallback_router
 from api.integrations import router as integrations_router
+from api.news import router as news_router
 from auth.database import init_db, async_session
 from auth.models import Visit
 from core.log import log
@@ -341,6 +342,7 @@ app.include_router(conversations_router, prefix="/api")
 app.include_router(calendar_auth_router, prefix="/api")
 app.include_router(admin_fallback_router, prefix="/api")
 app.include_router(integrations_router, prefix="/api")
+app.include_router(news_router)
 app.include_router(coding_router)
 from api.weather_widget import router as weather_widget_router
 app.include_router(weather_widget_router)

@@ -3492,7 +3492,38 @@ async function fetchTickerFeed(rssUrl) {
   return payload.items;
 }
 
+async function fetchTickerItemsFromBackend(source) {
+  const endpoint = `/api/news/ticker?source=${encodeURIComponent(source)}`;
+  const response = await fetch(endpoint, {
+    headers: {
+      'Authorization': `Bearer ${getAuthToken()}`,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Ticker backend unavailable (${response.status})`);
+  }
+  const payload = await response.json();
+  if (!payload || !Array.isArray(payload.items)) {
+    throw new Error('Ticker backend payload invalid');
+  }
+  return payload.items
+    .map((item) => ({
+      link: String(item.link || '').trim(),
+      title: String(item.title || '').trim(),
+    }))
+    .filter((item) => item.link && item.title);
+}
+
 async function loadTickerItems(source) {
+  try {
+    const backendItems = await fetchTickerItemsFromBackend(source);
+    if (backendItems.length) {
+      return backendItems;
+    }
+  } catch (err) {
+    console.warn('[TICKER] backend source error', source, err);
+  }
+
   const selected = NEWS_TICKER_SOURCES[source] || NEWS_TICKER_SOURCES[SETTINGS_DEFAULTS.newsTickerSource];
   const allItems = [];
 
