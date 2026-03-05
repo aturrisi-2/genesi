@@ -3102,11 +3102,14 @@ Messaggio: "{message}" """
         # 3. GPT call with conversation-aware prompt
         logger.info("PROACTOR_LLM_CALL user=%s route=relational messages_count=%d", user_id, len(messages))
         
-        # NEW: Fetch calendar summary for prompt
+        # NEW: Fetch calendar summary for prompt (non-blocking, fail-open)
         calendar_info = ""
         try:
             from calendar_manager import calendar_manager
-            rems = calendar_manager.list_reminders(user_id, days=3)
+            rems = await asyncio.wait_for(
+                asyncio.to_thread(calendar_manager.list_reminders, user_id, 3, False),
+                timeout=1.2
+            )
             if rems:
                 items = []
                 for r in rems[:5]:
@@ -3117,6 +3120,9 @@ Messaggio: "{message}" """
                 calendar_info = " | ".join(items)
             else:
                 calendar_info = "Nessun impegno imminente."
+        except asyncio.TimeoutError:
+            logger.warning("CALENDAR_FETCH_PROMPT_TIMEOUT user=%s", user_id)
+            calendar_info = "Calendario non disponibile al momento."
         except Exception as e:
             logger.error(f"CALENDAR_FETCH_PROMPT_ERROR: {e}")
             calendar_info = "Errore recupero calendario."
