@@ -3234,7 +3234,7 @@ window.togglePinConv = async function (convId, pinValue) {
 };
 
 window.clearAllConvs = async function () {
-  if (!askCriticalConfirm('Sei sicuro di voler svuotare TUTTE le chat? Questa azione è irreversibile.')) return;
+  if (!confirm('Stai per svuotare TUTTE le chat. Questa azione è irreversibile. Vuoi procedere?')) return;
   await fetch('/api/conversations', {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${getAuthToken()}` }
