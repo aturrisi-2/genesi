@@ -1892,11 +1892,26 @@ body {
 
 .sidebar-header {
   display: flex;
+  flex-direction: column;
   justify-content: flex-start;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 16px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-header-description {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.sidebar-header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .icon-btn {
