@@ -292,7 +292,14 @@ async def serve_admin():
 
 @app.get("/brochure")
 async def serve_brochure():
-    return FileResponse(BASE_DIR / "static" / "brochure.html")
+    return FileResponse(
+        BASE_DIR / "static" / "brochure.html",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 @app.get("/guida-icloud")
 async def serve_guida_icloud():

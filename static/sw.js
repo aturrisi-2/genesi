@@ -2,7 +2,7 @@
 // Strategia: Network First con fallback cache
 // Non cacha le API calls — solo asset statici
 
-const CACHE_NAME = 'genesi-v4';
+const CACHE_NAME = 'genesi-v5';
 const CACHE_TIMEOUT = 8000; // ms prima di usare cache (aumentato per immagini su mobile)
 
 // Asset da precachare al primo install
@@ -19,6 +19,12 @@ const API_ROUTES = [
     '/api/',
     '/auth/',
     '/coding/',
+];
+
+// Pagine informative: sempre network (evita brochure stale)
+const NO_CACHE_ROUTES = [
+    '/brochure',
+    '/guida-icloud',
 ];
 
 // ── Install: precache asset statici ─────────────────────────
@@ -55,7 +61,8 @@ self.addEventListener('fetch', (event) => {
 
     // API e auth: sempre network, mai cache
     const isAPI = API_ROUTES.some((route) => url.pathname.startsWith(route));
-    if (isAPI || event.request.method !== 'GET') return;
+    const isNoCachePage = NO_CACHE_ROUTES.some((route) => url.pathname === route || url.pathname.startsWith(route + '/'));
+    if (isAPI || isNoCachePage || event.request.method !== 'GET') return;
 
     // Asset statici: Network First con fallback cache
     event.respondWith(
