@@ -1048,6 +1048,7 @@ const SETTINGS_DEFAULTS = {
   sendOnEnter: true,
   confirmCritical: true,
   maskSensitive: true,
+  newsTickerSource: 'italy',
 };
 
 const SETTINGS_INPUTS = {
@@ -1056,6 +1057,7 @@ const SETTINGS_INPUTS = {
   sendOnEnter: document.getElementById('setting-send-on-enter'),
   confirmCritical: document.getElementById('setting-confirm-critical'),
   maskSensitive: document.getElementById('setting-mask-sensitive'),
+  newsTickerSource: document.getElementById('setting-news-ticker-source'),
 };
 
 let currentSystemSettings = { ...SETTINGS_DEFAULTS };
@@ -1063,6 +1065,9 @@ let currentSystemSettings = { ...SETTINGS_DEFAULTS };
 function getStoredSystemSettings() {
   try {
     const parsed = JSON.parse(localStorage.getItem('genesi-system-settings') || '{}') || {};
+    if (!['italy', 'world', 'technology'].includes(parsed.newsTickerSource)) {
+      parsed.newsTickerSource = SETTINGS_DEFAULTS.newsTickerSource;
+    }
     return { ...SETTINGS_DEFAULTS, ...parsed };
   } catch (e) {
     return { ...SETTINGS_DEFAULTS };
@@ -1075,7 +1080,14 @@ function applySystemSettingsRuntime(settings) {
 }
 
 function getSystemSetting(key) {
-  return !!currentSystemSettings[key];
+  return !!getSystemSettingValue(key);
+}
+
+function getSystemSettingValue(key, fallback = null) {
+  if (Object.prototype.hasOwnProperty.call(currentSystemSettings, key)) {
+    return currentSystemSettings[key];
+  }
+  return fallback;
 }
 
 function shouldConfirmCritical() {
@@ -1133,7 +1145,12 @@ function playUISound(kind = 'tap') {
 function loadSystemSettings() {
   const finalSettings = getStoredSystemSettings();
   Object.entries(SETTINGS_INPUTS).forEach(([key, el]) => {
-    if (el) el.checked = !!finalSettings[key];
+    if (!el) return;
+    if (el.type === 'checkbox') {
+      el.checked = !!finalSettings[key];
+      return;
+    }
+    el.value = finalSettings[key];
   });
   applySystemSettingsRuntime(finalSettings);
 }
@@ -1141,13 +1158,26 @@ function loadSystemSettings() {
 async function saveSystemSettings() {
   const payload = { ...SETTINGS_DEFAULTS };
   Object.entries(SETTINGS_INPUTS).forEach(([key, el]) => {
-    if (el) payload[key] = !!el.checked;
+    if (!el) return;
+    if (el.type === 'checkbox') {
+      payload[key] = !!el.checked;
+      return;
+    }
+    payload[key] = String(el.value || SETTINGS_DEFAULTS[key]);
   });
+  if (!['italy', 'world', 'technology'].includes(payload.newsTickerSource)) {
+    payload.newsTickerSource = SETTINGS_DEFAULTS.newsTickerSource;
+  }
   localStorage.setItem('genesi-system-settings', JSON.stringify(payload));
+  const previousTickerSource = currentSystemSettings.newsTickerSource;
   applySystemSettingsRuntime(payload);
 
   if (payload.desktopNotifications) {
     await ensureDesktopNotificationPermission();
+  }
+
+  if (payload.newsTickerSource !== previousTickerSource && typeof initializeNewsTicker === 'function') {
+    initializeNewsTicker();
   }
 }
 
@@ -1194,7 +1224,12 @@ if (resetMicBtn) {
 if (resetPreferencesBtn) {
   resetPreferencesBtn.onclick = () => {
     Object.entries(SETTINGS_INPUTS).forEach(([key, el]) => {
-      if (el) el.checked = !!SETTINGS_DEFAULTS[key];
+      if (!el) return;
+      if (el.type === 'checkbox') {
+        el.checked = !!SETTINGS_DEFAULTS[key];
+        return;
+      }
+      el.value = SETTINGS_DEFAULTS[key];
     });
     saveSystemSettings();
   };
@@ -3403,6 +3438,186 @@ async function startNewSession() {
   }
 }
 
+const NEWS_TICKER_SOURCES = {
+  italy: {
+    label: 'News Italia',
+    rssUrls: [
+      'https://news.google.com/rss?hl=it&gl=IT&ceid=IT:it',
+    ],
+  },
+  world: {
+    label: 'News Mondo',
+    rssUrls: [
+      'https://news.google.com/rss/headlines/section/topic/WORLD?hl=it&gl=IT&ceid=IT:it',
+      'https://news.google.com/rss?hl=it&gl=IT&ceid=IT:it',
+    ],
+  },
+  technology: {
+    label: 'Tecnologia',
+    rssUrls: [
+      'https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=it&gl=IT&ceid=IT:it',
+    ],
+  },
+};
+
+let newsTickerState = {
+  animation: null,
+  source: SETTINGS_DEFAULTS.newsTickerSource,
+  mobilePaused: false,
+};
+
+function normalizeTickerSource(source) {
+  return Object.prototype.hasOwnProperty.call(NEWS_TICKER_SOURCES, source) ? source : SETTINGS_DEFAULTS.newsTickerSource;
+}
+
+function escapeHtml(raw) {
+  return String(raw || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+async function fetchTickerFeed(rssUrl) {
+  const endpoint = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
+  const response = await fetch(endpoint);
+  if (!response.ok) {
+    throw new Error(`Ticker feed unavailable (${response.status})`);
+  }
+  const payload = await response.json();
+  if (payload.status !== 'ok' || !Array.isArray(payload.items)) {
+    throw new Error('Ticker feed payload invalid');
+  }
+  return payload.items;
+}
+
+async function loadTickerItems(source) {
+  const selected = NEWS_TICKER_SOURCES[source] || NEWS_TICKER_SOURCES[SETTINGS_DEFAULTS.newsTickerSource];
+  const allItems = [];
+
+  for (const feedUrl of selected.rssUrls) {
+    try {
+      const items = await fetchTickerFeed(feedUrl);
+      allItems.push(...items);
+    } catch (err) {
+      console.warn('[TICKER] feed error', feedUrl, err);
+    }
+  }
+
+  const deduped = [];
+  const seenLinks = new Set();
+  for (const item of allItems) {
+    const link = String(item.link || '').trim();
+    const title = String(item.title || '').trim();
+    if (!link || !title || seenLinks.has(link)) continue;
+    seenLinks.add(link);
+    deduped.push({ link, title });
+    if (deduped.length >= 14) break;
+  }
+
+  return deduped;
+}
+
+function stopNewsTickerAnimation() {
+  if (newsTickerState.animation) {
+    newsTickerState.animation.cancel();
+    newsTickerState.animation = null;
+  }
+}
+
+function renderTickerItems(trackEl, items) {
+  const sourceLabel = NEWS_TICKER_SOURCES[newsTickerState.source]?.label || 'News';
+  if (!items.length) {
+    trackEl.innerHTML = `<span class="presence-item">${sourceLabel}: nessuna notizia disponibile al momento.</span>`;
+    return;
+  }
+
+  const rowMarkup = items
+    .map((item) => `<a class="presence-link" href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)}</a>`)
+    .join('<span class="presence-separator" aria-hidden="true">|</span>');
+
+  trackEl.innerHTML = `${rowMarkup}<span class="presence-separator" aria-hidden="true">|</span>${rowMarkup}`;
+}
+
+function startNewsTickerAnimation(containerEl, trackEl) {
+  stopNewsTickerAnimation();
+  newsTickerState.mobilePaused = false;
+
+  const loopWidth = Math.max(trackEl.scrollWidth / 2, containerEl.offsetWidth);
+  const startX = containerEl.offsetWidth;
+  const endX = -loopWidth;
+  const pixelsPerSecond = 42;
+  const duration = Math.max(18000, Math.round(((startX + loopWidth) / pixelsPerSecond) * 1000));
+
+  newsTickerState.animation = trackEl.animate(
+    [
+      { transform: `translateX(${startX}px)` },
+      { transform: `translateX(${endX}px)` },
+    ],
+    {
+      duration,
+      iterations: Infinity,
+      easing: 'linear',
+    },
+  );
+}
+
+function bindNewsTickerInteractions(containerEl) {
+  if (!containerEl || containerEl.dataset.tickerBound === '1') return;
+  containerEl.dataset.tickerBound = '1';
+
+  containerEl.addEventListener('mouseenter', () => {
+    if (newsTickerState.animation) {
+      newsTickerState.animation.pause();
+    }
+  });
+
+  containerEl.addEventListener('mouseleave', () => {
+    if (newsTickerState.animation && !newsTickerState.mobilePaused) {
+      newsTickerState.animation.play();
+    }
+  });
+
+  containerEl.addEventListener('click', (event) => {
+    const isLink = !!event.target.closest('.presence-link');
+    if (isLink) return;
+    const isTouchLike = window.matchMedia('(hover: none)').matches || navigator.maxTouchPoints > 0;
+    if (!isTouchLike || !newsTickerState.animation) return;
+    newsTickerState.mobilePaused = !newsTickerState.mobilePaused;
+    if (newsTickerState.mobilePaused) {
+      newsTickerState.animation.pause();
+      containerEl.classList.add('is-paused');
+    } else {
+      newsTickerState.animation.play();
+      containerEl.classList.remove('is-paused');
+    }
+  });
+}
+
+async function initializeNewsTicker() {
+  const containerEl = document.getElementById('presence');
+  const trackEl = document.getElementById('presence-track');
+  if (!containerEl || !trackEl) return;
+
+  bindNewsTickerInteractions(containerEl);
+  const selectedSource = normalizeTickerSource(getSystemSettingValue('newsTickerSource', SETTINGS_DEFAULTS.newsTickerSource));
+  newsTickerState.source = selectedSource;
+
+  stopNewsTickerAnimation();
+  containerEl.classList.remove('is-paused');
+  trackEl.innerHTML = `<span class="presence-item">Caricamento ${escapeHtml(NEWS_TICKER_SOURCES[selectedSource].label)}...</span>`;
+
+  try {
+    const items = await loadTickerItems(selectedSource);
+    renderTickerItems(trackEl, items);
+    requestAnimationFrame(() => startNewsTickerAnimation(containerEl, trackEl));
+  } catch (e) {
+    console.warn('[TICKER] initialization failed', e);
+    trackEl.innerHTML = '<span class="presence-item">Errore nel caricamento notizie.</span>';
+  }
+}
+
 (async () => {
   // Apply auth state FIRST - sempre loggato
   applyAuthState();
@@ -3457,46 +3672,7 @@ async function startNewSession() {
 
   console.log("SIDEBAR_INIT_DONE");
 
-  // Giornalismo Ticker — pull ANSA news
-  const presenceP = document.querySelector('#presence p');
-  if (presenceP) {
-    presenceP.textContent = "Caricamento ultime notizie...";
-    fetch('https://api.rss2json.com/v1/api.json?rss_url=https://www.ansa.it/sito/ansait_rss.xml')
-      .then(r => r.json())
-      .then(data => {
-        if (data.status === 'ok' && data.items) {
-          // Rimuove qualsiasi influenza CSS che causa accelerazioni "ease" o bug di reflow
-          presenceP.style.animation = 'none';
-          presenceP.style.paddingLeft = '0';
-
-          const headlines = data.items.slice(0, 10).map(item => "📰 " + item.title).join(" | \u00a0\u00a0\u00a0\u00a0 ");
-          const fullText = headlines + " | \u00a0\u00a0\u00a0\u00a0 " + headlines;
-          presenceP.textContent = fullText;
-
-          // Misura il container e forza il motore a scorrere in pixel assoluti
-          const containerWidth = document.querySelector('#presence').offsetWidth;
-
-          // Durata fissa calcolata solo dai caratteri (es. velocità tartaruga, no accelerazioni)
-          const charsPerSecond = 8;
-          const scrollSpeedMs = Math.max(20000, Math.floor(fullText.length / charsPerSecond) * 1000);
-
-          // Web Animations API: garantisce scorrimento matematicamente lineare
-          presenceP.animate([
-            { transform: `translateX(${containerWidth}px)` },
-            { transform: `translateX(-100%)` }
-          ], {
-            duration: scrollSpeedMs,
-            iterations: Infinity,
-            easing: 'linear'
-          });
-        } else {
-          presenceP.textContent = "Nessuna notizia disponibile al momento | Genesi OS v3";
-        }
-      })
-      .catch(e => {
-        presenceP.textContent = "Errore nel caricamento notizie | Genesi OS v3";
-      });
-  }
+  initializeNewsTicker();
 })();
 
 // Esponi activeTTSSources globalmente per Voice Mode

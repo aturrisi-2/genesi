@@ -237,7 +237,7 @@
      WEATHER WIDGET & MARQUEE 
      ═══════════════════════════════════════════════ -->
       <header id="presence">
-        <p>Ciò che conta davvero è come attraversi il fuoco.</p>
+        <div id="presence-track" class="presence-track">Caricamento ultime notizie...</div>
       </header>
 
       <div id="weather-widget" class="weather-widget" aria-live="polite" aria-atomic="true">
@@ -442,6 +442,20 @@
           <label class="settings-switch">
             <input type="checkbox" id="setting-send-on-enter">
             <span class="settings-switch-slider"></span>
+          </label>
+        </div>
+
+        <div class="settings-row">
+          <div class="settings-info">
+            <span class="settings-label">Ticker Notizie</span>
+            <span class="settings-desc">Scegli i contenuti del testo scorrevole in alto.</span>
+          </div>
+          <label class="settings-select-wrap" for="setting-news-ticker-source">
+            <select id="setting-news-ticker-source" class="settings-select" aria-label="Sorgente notizie ticker">
+              <option value="italy">News Italia</option>
+              <option value="world">News Mondo (Italia inclusa)</option>
+              <option value="technology">Tecnologia</option>
+            </select>
           </label>
         </div>
       </div>

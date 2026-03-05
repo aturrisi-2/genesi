@@ -108,6 +108,7 @@ body::after {
    PRESENCE HEADER — NEWS TICKER
    =============================== */
 #presence {
+  position: relative;
   flex-shrink: 0;
   width: 100%;
   overflow: hidden;
@@ -118,30 +119,51 @@ body::after {
   white-space: nowrap;
 }
 
-#presence p {
+#presence .presence-track {
   display: inline-block;
   font-family: 'Times New Roman', Georgia, serif;
   font-size: 1.15rem;
   letter-spacing: 0.5px;
   color: #cccccc;
   margin: 0;
-  padding-left: 100%;
-  animation: newsMarquee 90s linear infinite;
+  padding-left: 0;
   text-transform: uppercase;
 }
 
-#presence p:hover {
-  animation-play-state: paused;
+#presence .presence-link,
+#presence .presence-item {
+  display: inline-block;
+  color: rgba(0, 229, 255, 0.92);
+  text-decoration: none;
+  padding: 0 0.22rem;
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.32);
 }
 
-@keyframes newsMarquee {
-  0% {
-    transform: translateX(0);
-  }
+#presence .presence-link:hover,
+#presence .presence-link:focus-visible {
+  color: #e8fbff;
+  text-decoration: underline;
+}
 
-  100% {
-    transform: translateX(-100%);
-  }
+#presence .presence-separator {
+  display: inline-block;
+  padding: 0 0.45rem;
+  color: rgba(0, 229, 255, 0.58);
+}
+
+#presence.is-paused::after {
+  content: 'PAUSA';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  color: #9de9f3;
+  border: 1px solid rgba(157, 233, 243, 0.55);
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: rgba(5, 22, 26, 0.8);
 }
 
 
@@ -1406,6 +1428,26 @@ body {
 .settings-switch input:checked + .settings-switch-slider::before {
   transform: translateX(20px);
   background: #00e5ff;
+}
+
+.settings-select-wrap {
+  min-width: 170px;
+}
+
+.settings-select {
+  width: 100%;
+  border-radius: 9px;
+  border: 1px solid rgba(0, 229, 255, 0.32);
+  background: rgba(0, 14, 20, 0.82);
+  color: #dcf8ff;
+  padding: 8px 10px;
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+
+.settings-select:focus-visible {
+  outline: 2px solid rgba(0, 229, 255, 0.55);
+  outline-offset: 2px;
 }
 
 .settings-grid {
@@ -2798,18 +2840,17 @@ body {
   flex-shrink: 0 !important;
 }
 
-#presence p {
+#presence .presence-track {
   display: inline-block !important;
   font-family: 'Cormorant Garamond', serif !important;
   font-style: italic !important;
   font-size: 1.15rem !important;
   font-weight: 500 !important;
   color: rgba(0, 229, 255, 0.9) !important;
-  padding-left: 100% !important;
+  padding-left: 0 !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
   padding-right: 0 !important;
-  animation: marqueeTicker 16s linear infinite !important;
   margin: 0 !important;
   background: transparent !important;
   border: none !important;
@@ -2819,13 +2860,18 @@ body {
   max-width: none !important;
 }
 
-@keyframes marqueeTicker {
-  0% {
-    transform: translate(0, 0);
+#presence .presence-link {
+  color: rgba(0, 229, 255, 0.93) !important;
+}
+
+@media (max-width: 900px) {
+  .settings-row {
+    align-items: flex-start;
+    gap: 12px;
   }
 
-  100% {
-    transform: translate(-100%, 0);
+  .settings-select-wrap {
+    min-width: 145px;
   }
 }
 
