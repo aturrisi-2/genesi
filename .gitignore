@@ -64,3 +64,4 @@ data/tts_cache/
 # ===============================
 *.log
 nohup.out
+_cestino_/
