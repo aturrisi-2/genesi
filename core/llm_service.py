@@ -23,7 +23,7 @@ _STREAM_QUEUE: contextvars.ContextVar = contextvars.ContextVar('genesi_stream_q'
 # Routes whose final LLM response is streamed (not tool/JSON routes)
 _STREAMING_ROUTES = frozenset({
     'relational', 'knowledge', 'general', 'general_llm',
-    'tecnica', 'spiegazione', 'emotional', 'debug',
+    'tecnica', 'spiegazione', 'emotional', 'debug', 'synthesis',
 })
 
 # ═══════════════════════════════════════════════════════════

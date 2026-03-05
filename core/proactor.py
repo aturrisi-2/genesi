@@ -577,6 +577,17 @@ class Proactor:
             
             terminal_intents = ["chat_free", "relational", "tecnica", "debug", "spiegazione", "identity", "memory_context", "emotional", "memory_correction", "dove_sono"]
             
+            # If multi-intent, hide streaming from individual handlers to avoid "fake" responses
+            # that get replaced by synthesis later.
+            original_stream_q = None
+            if len(intents) > 1:
+                try:
+                    from core.llm_service import _STREAM_QUEUE
+                    original_stream_q = _STREAM_QUEUE.get()
+                    _STREAM_QUEUE.set(None) # Force full strings collection, no streaming chunks
+                except Exception:
+                    pass
+
             processed_message = message # Keep track if we need to modify it or pass it through
             
             for current_intent in intents:
@@ -826,6 +837,15 @@ class Proactor:
             # STEP 5: SYNTHESIS
             if len(final_responses) > 1:
                 log("PROACTOR_SYNTHESIS_START", count=len(final_responses))
+                
+                # Restore streaming for synthesis if it was disabled
+                if original_stream_q:
+                    try:
+                        from core.llm_service import _STREAM_QUEUE
+                        _STREAM_QUEUE.set(original_stream_q)
+                    except Exception:
+                        pass
+
                 # Signal frontend to clear relational streaming chunks before synthesis arrives.
                 # Without this, the bubble shows "Mi dispiace non ho accesso..." (relational LLM)
                 # and then jumps to the correct synthesis result — a jarring visual transition.
