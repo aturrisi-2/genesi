@@ -532,7 +532,8 @@ class ToolService:
                 # General news
                 topic = self._extract_topic(message)
                 query = topic if topic else "Italia"
-                return await self._news_rss_search(client, query, "IT", "Italia")
+                display_topic = topic if topic else "Italia"
+                return await self._news_rss_search(client, query, "IT", display_topic)
 
         except httpx.TimeoutException:
             logger.error("TOOL_NEWS_HTTP_ERROR error=timeout")
@@ -809,6 +810,15 @@ class ToolService:
         for topic in NEWS_CATEGORIES:
             if topic in message_lower:
                 return topic
+        
+        import re
+        # Rimuove parole chiave generiche per estrarre l'argomento reale
+        clean_msg = re.sub(r'(?i)(notizie|news|ultime|aggiornamenti|cosa succede|cosa sta succedendo|novità|novita\'|di|su|sulla|sui|sulle|sull\')\b', ' ', message)
+        clean_msg = " ".join(clean_msg.split())
+        
+        if len(clean_msg) > 3:
+            return clean_msg
+            
         return None
 
 
