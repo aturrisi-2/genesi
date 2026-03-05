@@ -307,7 +307,14 @@ async def serve_guida_icloud():
 
 @app.get("/sw.js")
 async def serve_sw():
-    return FileResponse(BASE_DIR / "static" / "sw.js")
+    return FileResponse(
+        BASE_DIR / "static" / "sw.js",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 @app.get("/")
 async def serve_index(request: Request):
