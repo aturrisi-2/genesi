@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 
 # Full path to the openclaw binary on the VPS
 OPENCLAW_BIN = "/home/luca/.npm-global/bin/openclaw"
+# File di sessione principale di OpenClaw (accumulatore di storia conversazionale)
+OPENCLAW_SESSION_FILE = "/home/luca/.openclaw/agents/main/sessions/4b84a9ba-8d95-47c5-8086-3f26269d73aa.jsonl"
+OPENCLAW_SESSION_MAX_BYTES = 50_000  # reset se supera 50KB (~15k token)
 
 class OpenClawService:
     def __init__(self):
@@ -25,6 +28,18 @@ class OpenClawService:
             import time
             if session_id is None:
                 session_id = f"genesi_{user_id.replace('-', '_')}_{int(time.time())}"
+
+            # Reset automatico della sessione se troppo grande (evita context overflow)
+            try:
+                if os.path.exists(OPENCLAW_SESSION_FILE):
+                    size = os.path.getsize(OPENCLAW_SESSION_FILE)
+                    if size > OPENCLAW_SESSION_MAX_BYTES:
+                        with open(OPENCLAW_SESSION_FILE, 'w') as _sf:
+                            pass  # truncate
+                        logger.info("OPENCLAW_SESSION_RESET size_before=%d user=%s", size, user_id)
+            except Exception as _reset_err:
+                logger.warning("OPENCLAW_SESSION_RESET_FAILED error=%s", _reset_err)
+
             logger.info("OPENCLAW_CLI_START user=%s session=%s prompt=%.50s...", user_id, session_id, prompt)
             
             env = os.environ.copy()
