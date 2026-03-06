@@ -91,17 +91,40 @@ async def get_weather_widget(
                             or geo_data[0].get("name", "—")
                         )
             else:
-                # Fallback IP-based
-                if 'ip_data' not in locals():
-                    ip_resp = await client.get(IPAPI_FALLBACK)
-                    ip_data = ip_resp.json()
-                
-                resolved_lat = ip_data.get("lat")
-                resolved_lon = ip_data.get("lon")
-                city_name    = ip_data.get("city", "—")
+                # Priorità ai GPS salvati nel profilo utente (più accurati dell'IP server).
+                resolved_lat = None
+                resolved_lon = None
+                city_name = "—"
 
-                if not resolved_lat or not resolved_lon:
-                    raise ValueError("Impossibile determinare posizione da IP")
+                if user:
+                    profile_for_geo = await storage.load(f"profile:{user.id}", default={})
+                    if isinstance(profile_for_geo, dict):
+                        gps_lat = profile_for_geo.get("gps_lat")
+                        gps_lon = profile_for_geo.get("gps_lon")
+                        if gps_lat is not None and gps_lon is not None:
+                            resolved_lat = gps_lat
+                            resolved_lon = gps_lon
+                            city_name = profile_for_geo.get("city") or "—"
+                            logger.info(
+                                f"WEATHER_WIDGET_GPS_PROFILE_USED user={user.id} city={city_name} "
+                                f"lat={resolved_lat} lon={resolved_lon}"
+                            )
+                        elif profile_for_geo.get("city"):
+                            city_name = profile_for_geo.get("city")
+
+                # Se non abbiamo GPS salvati, fallback IP-based.
+                if resolved_lat is None or resolved_lon is None:
+                    if 'ip_data' not in locals():
+                        ip_resp = await client.get(IPAPI_FALLBACK)
+                        ip_data = ip_resp.json()
+
+                    resolved_lat = ip_data.get("lat")
+                    resolved_lon = ip_data.get("lon")
+                    if city_name == "—":
+                        city_name = ip_data.get("city", "—")
+
+                    if resolved_lat is None or resolved_lon is None:
+                        raise ValueError("Impossibile determinare posizione da IP")
             
             # ── 1.5 Salva Posizione nel Profilo ───────────────────────────
             if user:
