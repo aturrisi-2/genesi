@@ -72,11 +72,17 @@ class CognitiveMemoryEngine:
             }
 
         # Semantic classification using regex
-        name_match = re.search(r"mi chiamo (?:un |il )?([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
+        name_match = re.search(r"mi chiamo (?:un |il )?(\w+(?:\s+\w+)?)", message, re.IGNORECASE)
         # Limita la cattura a max 3 parole per evitare di salvare frasi di contesto come professione
-        profession_match = re.search(r"(?:faccio|sono|lavoro come)\s+(?:il\s+|la\s+|lo\s+|l'|l\s+|un\s+|una\s+|uno\s+|un'\s+)?(\w+(?:\s+\w+){0,2})", message, re.IGNORECASE)
-        city_match = re.search(r"(?:vivo|abito|mi trovo) a ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
-        spouse_match = re.search(r"(?:mia moglie|mio marito|il mio partner|la mia compagna) si chiama ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
+        profession_match = re.search(
+            r"(?:"
+            r"(?:faccio|lavoro come)\s+(?:il\s+|la\s+|lo\s+|l'|l\s+|un\s+|una\s+|uno\s+|un'\s+)?"
+            r"|sono\s+(?:il\s+|la\s+|lo\s+|l'|l\s+|un\s+|una\s+|uno\s+|un'\s+)"
+            r"|(?:il mio|la mia)\s+lavoro\s+[eè]\s+(?:il\s+|la\s+|lo\s+|un\s+|una\s+|uno\s+)?"
+            r")(\w+(?:\s+\w+){0,2})",
+            message, re.IGNORECASE)
+        city_match = re.search(r"(?:vivo|abito|mi trovo) a ([A-Za-zÀ-ÿ\-]+)", message, re.IGNORECASE)
+        spouse_match = re.search(r"(?:mia moglie|mio marito|il mio partner|la mia compagna) si chiama (\w+)", message, re.IGNORECASE)
         children_match = re.search(r"i miei figli si chiamano ([A-Z][a-zÀ-ÿ]+) e ([A-Z][a-zÀ-ÿ]+)", message, re.IGNORECASE)
         son_match = re.search(r"mio figlio si chiama ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
         daughter_match = re.search(r"mia figlia si chiama ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)

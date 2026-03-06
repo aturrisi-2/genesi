@@ -37,46 +37,50 @@ MAX_LLM_HISTORY_MESSAGES = int(os.environ.get("LLM_MAX_HISTORY_MESSAGES", "12"))
 # ═══════════════════════════════════════════════════════════
 
 # Modelli OpenRouter (vengono mappati automaticamente su OpenAI se necessario)
-LLM_DEFAULT_MODEL = "openai/gpt-4o"
+LLM_DEFAULT_MODEL = "openai/gpt-4o-mini"
 LLM_FALLBACK_MODEL = "openai/gpt-4o-mini"
+LLM_STRONG_MODEL = "openai/gpt-4o"
 LLM_DEEP_MODEL = "anthropic/claude-opus-4"
 
+# Frasi esplicite che richiedono un'analisi esistenziale/psicologica profonda → Opus
 DEEP_ANALYSIS_TRIGGERS = [
-    "analisi profonda", 
-    "senso della mia vita", 
-    "perché esisto", 
+    "analisi profonda",
+    "senso della mia vita",
+    "perché esisto",
     "chi sono veramente",
     "riflessione esistenziale",
     "scava a fondo",
-    "psicoanalisi"
+    "psicoanalisi",
+    "non so più cosa fare della mia vita",
+    "mi sento perso nella vita",
+    "qual è il senso di tutto",
 ]
+
+# Route che richiedono qualità superiore (gpt-4o, non mini)
+_STRONG_ROUTES = frozenset({"knowledge", "tecnica", "spiegazione", "debug", "document_query"})
 
 def model_selector(message: str, route: str = "general") -> str:
     """
     Seleziona il modello LLM in base al contenuto del messaggio.
-    Default: openai/gpt-4o
-    Deep: anthropic/claude-3-opus (per domande esistenziali/psicologiche profonde)
+    Default: openai/gpt-4o-mini (economico, adeguato per la maggior parte dei task)
+    Strong: openai/gpt-4o (route tecnico-cognitive che richiedono ragionamento)
+    Deep:   anthropic/claude-opus-4 (solo analisi esistenziale/psicologica profonda)
     """
-    selected_model = LLM_DEFAULT_MODEL
-    reason = "default"
+    msg_lower = message.lower()
 
-    # Usa Claude Opus per trigger di analisi profonda
-    if any(trigger in message.lower() for trigger in DEEP_ANALYSIS_TRIGGERS):
-        selected_model = LLM_DEEP_MODEL
-        reason = "deep analysis trigger"
-    
-    # ⚡ FAST-TRACK: Per risposte brevi e semplici in route relazionale, usa il modello mini (più veloce)
-    elif route == "relational" and len(message.strip().split()) <= 4:
-        selected_model = LLM_FALLBACK_MODEL
-        reason = "relational_fast_track"
+    # Opus SOLO per trigger esistenziali espliciti — frasi complete, non parole singole
+    if any(trigger in msg_lower for trigger in DEEP_ANALYSIS_TRIGGERS):
+        logger.info("LLM_MODEL_SELECTED=%s reason=deep_analysis_trigger", LLM_DEEP_MODEL)
+        return LLM_DEEP_MODEL
 
-    # Forza Opus per route relazionali con domande sul senso o sul "perché"
-    if route == "relational" and ("perché" in message.lower() or "senso" in message.lower()):
-        selected_model = LLM_DEEP_MODEL
-        reason = "psychological depth"
+    # Route tecnico-cognitive → gpt-4o per qualità ragionamento
+    if route in _STRONG_ROUTES:
+        logger.info("LLM_MODEL_SELECTED=%s reason=strong_route_%s", LLM_STRONG_MODEL, route)
+        return LLM_STRONG_MODEL
 
-    logger.info("LLM_MODEL_SELECTED=%s reason=%s", selected_model, reason)
-    return selected_model
+    # Tutto il resto (relational, emotional, general, memory, reminder…) → gpt-4o-mini
+    logger.info("LLM_MODEL_SELECTED=%s reason=default_mini route=%s", LLM_DEFAULT_MODEL, route)
+    return LLM_DEFAULT_MODEL
 
 
 class LLMService:
@@ -270,11 +274,11 @@ class LLMService:
                 except Exception as b_e:
                     logger.error("%s_BACKUP_FAIL: %s", tag, str(b_e))
             
-            # Se 404 su Opus e siamo su OR, tenta Sonnet 3.5
-            if "404" in str(e) and "claude-3-opus" in model and self.base_url:
-                logger.info("%s_RETRY_ALTERNATIVE trying Claude 3.5 Sonnet", tag)
+            # Se 404 su Opus e siamo su OR, fallback a gpt-4o (non Sonnet — troppo costoso)
+            if "404" in str(e) and "claude-opus" in model and self.base_url:
+                logger.info("%s_RETRY_ALTERNATIVE trying gpt-4o as opus fallback", tag)
                 try:
-                    response = await make_request(current_client, "anthropic/claude-3.5-sonnet")
+                    response = await make_request(current_client, "openai/gpt-4o")
                     return response.choices[0].message.content.strip()
                 except: pass
 

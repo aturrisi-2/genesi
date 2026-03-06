@@ -1282,9 +1282,24 @@ ESEMPI:
                 "openai/gpt-4o-mini", parse_prompt,
                 message, user_id=user_id, route="memory_correction"
             )
-            m = _re.search(r'\{.*\}', result_str or "", _re.DOTALL)
-            if m:
-                correction = _json.loads(m.group(0))
+            # Extract first complete JSON object using balanced-brace parsing
+            # (avoids "Extra data" error when LLM returns multiple JSON objects)
+            _raw = result_str or ""
+            _depth = 0
+            _start = None
+            for _i, _ch in enumerate(_raw):
+                if _ch == '{':
+                    if _start is None:
+                        _start = _i
+                    _depth += 1
+                elif _ch == '}' and _depth > 0:
+                    _depth -= 1
+                    if _depth == 0:
+                        try:
+                            correction = _json.loads(_raw[_start:_i + 1])
+                        except _json.JSONDecodeError:
+                            pass
+                        break
         except Exception as ex:
             logger.error("MEMORY_CORRECTION_PARSE_ERROR user=%s err=%s", user_id, ex)
             return reply_fallback
@@ -3717,8 +3732,8 @@ Messaggio utente: {message}"""
                 "carattere", "cultura", "parere", "nazione", "cuoco", "medico"
             }
             city_patterns = [
-                r"vivo\s+a\s+([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)",
-                r"abito\s+a\s+([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)",
+                r"vivo\s+a\s+([A-Za-zÀ-ÿ\-]+)",
+                r"abito\s+a\s+([A-Za-zÀ-ÿ\-]+)",
             ]
             _msg_lower = message.lower()
             for pattern in city_patterns:
