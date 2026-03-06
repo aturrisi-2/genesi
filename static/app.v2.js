@@ -4117,6 +4117,9 @@ function setVoiceStatusText(text) {
     desc: document.getElementById('ww-desc'),
     meta: document.getElementById('ww-meta'),
     time: document.getElementById('ww-time'),
+    sun: document.querySelector('#weather-widget .weather-widget__sun'),
+    moon: document.querySelector('#weather-widget .weather-widget__moon'),
+    stars: document.querySelectorAll('#weather-widget .weather-widget__star'),
   };
 
   if (!els.widget) {
@@ -4178,6 +4181,17 @@ function setVoiceStatusText(text) {
 
     els.widget.dataset.weather = scene.weather;
     els.widget.dataset.phase = scene.phase;
+
+    // Failsafe UI: forza visibilità astro anche se CSS stale lato client.
+    if (els.sun) els.sun.hidden = scene.phase !== 'day';
+    if (els.moon) els.moon.hidden = scene.phase !== 'night';
+    if (els.stars && els.stars.length) {
+      const showStars = scene.phase === 'night' && scene.weather !== 'thunder';
+      els.stars.forEach((star) => {
+        star.hidden = !showStars;
+      });
+    }
+
     els.city.textContent = payload.city;
     els.temp.textContent = `${payload.temp}°`;
     els.desc.textContent = payload.description;
