@@ -4181,6 +4181,57 @@ function setVoiceStatusText(text) {
     els.widget.style.setProperty('--ww-rain-speed', rainSpeed);
     els.widget.style.setProperty('--ww-fog-opacity', fogOpacity);
     els.widget.style.setProperty('--ww-star-opacity', starOpacity);
+
+    // Tema cromatico condiviso: ticker + aura generale coerenti col meteo corrente.
+    let accent = '#6ed8ff';
+    let accentSoft = 'rgba(110, 216, 255, 0.35)';
+    let auraTop = 'rgba(110, 216, 255, 0.28)';
+    let auraBottom = 'rgba(68, 158, 214, 0.20)';
+
+    if (scene.weather === 'thunder') {
+      accent = '#c4d7ff';
+      accentSoft = 'rgba(196, 215, 255, 0.42)';
+      auraTop = 'rgba(160, 188, 255, 0.30)';
+      auraBottom = 'rgba(95, 124, 214, 0.22)';
+    } else if (scene.weather === 'rain') {
+      accent = '#8ccfff';
+      accentSoft = 'rgba(140, 207, 255, 0.38)';
+      auraTop = 'rgba(120, 184, 236, 0.28)';
+      auraBottom = 'rgba(70, 132, 186, 0.22)';
+    } else if (scene.weather === 'snow') {
+      accent = '#eaf7ff';
+      accentSoft = 'rgba(214, 240, 255, 0.40)';
+      auraTop = 'rgba(205, 234, 255, 0.30)';
+      auraBottom = 'rgba(146, 188, 222, 0.22)';
+    } else if (scene.weather === 'mist') {
+      accent = '#bdd7e8';
+      accentSoft = 'rgba(189, 215, 232, 0.34)';
+      auraTop = 'rgba(166, 194, 212, 0.26)';
+      auraBottom = 'rgba(108, 139, 158, 0.2)';
+    } else if (scene.weather === 'clouds') {
+      accent = scene.phase === 'day' ? '#a7d2ee' : '#9ab7d6';
+      accentSoft = scene.phase === 'day' ? 'rgba(167, 210, 238, 0.34)' : 'rgba(154, 183, 214, 0.34)';
+      auraTop = scene.phase === 'day' ? 'rgba(144, 192, 223, 0.26)' : 'rgba(126, 160, 194, 0.24)';
+      auraBottom = scene.phase === 'day' ? 'rgba(90, 137, 172, 0.2)' : 'rgba(72, 105, 150, 0.2)';
+    } else if (scene.phase === 'night') {
+      accent = '#9fc2ff';
+      accentSoft = 'rgba(159, 194, 255, 0.34)';
+      auraTop = 'rgba(122, 155, 219, 0.24)';
+      auraBottom = 'rgba(74, 102, 170, 0.2)';
+    }
+
+    if (cloudCover >= 75 && scene.weather === 'clear') {
+      accent = '#9ec7e8';
+      accentSoft = 'rgba(158, 199, 232, 0.34)';
+      auraTop = 'rgba(136, 176, 206, 0.24)';
+      auraBottom = 'rgba(84, 122, 154, 0.2)';
+    }
+
+    const rootStyle = document.documentElement.style;
+    rootStyle.setProperty('--meteo-accent', accent);
+    rootStyle.setProperty('--meteo-accent-soft', accentSoft);
+    rootStyle.setProperty('--meteo-aura-top', auraTop);
+    rootStyle.setProperty('--meteo-aura-bottom', auraBottom);
   }
 
   function getWeatherScene(condition, iconCode) {

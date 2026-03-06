@@ -94,6 +94,7 @@ body::after {
    =============================== */
 #genesi-app {
   position: relative;
+  isolation: isolate;
   z-index: 1;
   height: var(--app-height);
   display: flex;
@@ -102,6 +103,20 @@ body::after {
   margin: 0 auto;
   overflow: hidden;
   background: transparent;
+}
+
+#genesi-app::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 80% at 50% 0%, var(--meteo-aura-top, rgba(110, 216, 255, 0.24)), transparent 62%),
+    radial-gradient(140% 95% at 50% 100%, var(--meteo-aura-bottom, rgba(68, 158, 214, 0.18)), transparent 68%);
+  filter: blur(14px);
+  opacity: 0.9;
+  transition: background 0.8s ease;
 }
 
 /* ===============================
@@ -124,7 +139,7 @@ body::after {
   font-family: 'Times New Roman', Georgia, serif;
   font-size: 1.15rem;
   letter-spacing: 0.5px;
-  color: #cccccc;
+  color: var(--meteo-accent, #b8d0e8);
   margin: 0;
   padding-left: 0;
   text-transform: uppercase;
@@ -133,10 +148,10 @@ body::after {
 #presence .presence-link,
 #presence .presence-item {
   display: inline-block;
-  color: rgba(0, 229, 255, 0.92);
+  color: var(--meteo-accent, rgba(0, 229, 255, 0.92));
   text-decoration: none;
   padding: 0 0.22rem;
-  text-shadow: 0 0 10px rgba(0, 229, 255, 0.32);
+  text-shadow: 0 0 10px var(--meteo-accent-soft, rgba(0, 229, 255, 0.32));
 }
 
 #presence .presence-link:hover,
@@ -148,7 +163,7 @@ body::after {
 #presence .presence-separator {
   display: inline-block;
   padding: 0 0.45rem;
-  color: rgba(0, 229, 255, 0.58);
+  color: var(--meteo-accent-soft, rgba(0, 229, 255, 0.58));
 }
 
 #presence.is-paused::after {
@@ -3368,7 +3383,7 @@ body {
   font-style: italic !important;
   font-size: 1.15rem !important;
   font-weight: 500 !important;
-  color: rgba(0, 229, 255, 0.9) !important;
+  color: var(--meteo-accent, rgba(0, 229, 255, 0.9)) !important;
   padding-left: 0 !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
@@ -3378,12 +3393,16 @@ body {
   border: none !important;
   outline: none !important;
   box-shadow: none !important;
-  text-shadow: 0 0 10px rgba(0, 229, 255, 0.4) !important;
+  text-shadow: 0 0 10px var(--meteo-accent-soft, rgba(0, 229, 255, 0.4)) !important;
   max-width: none !important;
 }
 
 #presence .presence-link {
-  color: rgba(0, 229, 255, 0.93) !important;
+  color: var(--meteo-accent, rgba(0, 229, 255, 0.93)) !important;
+}
+
+#presence .presence-separator {
+  color: var(--meteo-accent-soft, rgba(0, 229, 255, 0.58)) !important;
 }
 
 @media (max-width: 900px) {
