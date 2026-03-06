@@ -4171,6 +4171,8 @@ function setVoiceStatusText(text) {
     const cloudSpeedA = Math.max(9, 20 - Math.round(cloudCover / 9) - Math.round(wind / 10));
     const cloudSpeedB = Math.max(11, cloudSpeedA + 3);
     const rainSpeed = heavyRain ? '0.35s' : '0.55s';
+    const rainTilt = Math.min(22, Math.max(9, Math.round((wind / 2) + 8)));
+    const cinemaBoost = scene.weather === 'thunder' ? '1' : (scene.weather === 'rain' ? '0.85' : '0.65');
     const fogOpacity = thickMist ? '0.95' : '0.8';
     const starOpacity = cloudCover >= 70 ? '0.52' : cloudCover >= 40 ? '0.7' : '0.92';
 
@@ -4179,6 +4181,8 @@ function setVoiceStatusText(text) {
     els.widget.style.setProperty('--ww-cloud-speed-a', `${cloudSpeedA}s`);
     els.widget.style.setProperty('--ww-cloud-speed-b', `${cloudSpeedB}s`);
     els.widget.style.setProperty('--ww-rain-speed', rainSpeed);
+    els.widget.style.setProperty('--ww-rain-tilt', `${rainTilt}deg`);
+    els.widget.style.setProperty('--ww-cinema-boost', cinemaBoost);
     els.widget.style.setProperty('--ww-fog-opacity', fogOpacity);
     els.widget.style.setProperty('--ww-star-opacity', starOpacity);
 
