@@ -201,7 +201,8 @@ async def get_weather_widget(
 
             logger.info(
                 f"WEATHER_WIDGET_OK city={payload['city']} "
-                f"temp={payload['temp']} condition={payload['condition']}"
+                f"temp={payload['temp']} condition={payload['condition']} "
+                f"icon={payload['icon_code']} lat={resolved_lat} lon={resolved_lon}"
             )
             return JSONResponse(content=payload, headers=_no_cache_headers())
 

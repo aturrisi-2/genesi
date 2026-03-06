@@ -4232,8 +4232,20 @@ function setVoiceStatusText(text) {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         pos => {
-          loadWithCoords(pos.coords.latitude, pos.coords.longitude)
-            .finally(endRefresh);
+          const { latitude, longitude, accuracy } = pos.coords;
+
+          // Se il fix è troppo grossolano (tipico fallback IP), preferiamo
+          // lasciare al backend la scelta profilo/IP per evitare posizione errata.
+          if (Number.isFinite(accuracy) && accuracy > 20000) {
+            console.warn('[WEATHER_WIDGET] GPS poco preciso, fallback backend. accuracy=', accuracy);
+            fetchWeather(null, null)
+              .then(renderWeather)
+              .catch(() => showState('error'))
+              .finally(endRefresh);
+            return;
+          }
+
+          loadWithCoords(latitude, longitude).finally(endRefresh);
         },
         _err => {
           console.info('[WEATHER_WIDGET] Geolocation negata — fallback IP');
@@ -4242,7 +4254,7 @@ function setVoiceStatusText(text) {
             .catch(() => showState('error'))
             .finally(endRefresh);
         },
-        { timeout: 6000, maximumAge: 60_000 }
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
       );
     } else {
       console.info('[WEATHER_WIDGET] Geolocation non disponibile — fallback IP');
@@ -4280,10 +4292,13 @@ function setVoiceStatusText(text) {
 
 // ── PWA: registrazione Service Worker ───────────────────────
 if ('serviceWorker' in navigator) {
+  const SW_VERSION = 'v7';
   navigator.serviceWorker
-    .register('/sw.js')
+    .register(`/sw.js?v=${SW_VERSION}`, { updateViaCache: 'none' })
     .then((reg) => {
       console.log('[PWA] Service Worker registrato:', reg.scope);
+      // Forza check aggiornamenti ad ogni load per ridurre i casi di JS stale.
+      reg.update().catch(() => {});
     })
     .catch((err) => {
       console.warn('[PWA] Service Worker non registrato:', err);
