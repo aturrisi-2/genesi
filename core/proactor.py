@@ -1436,6 +1436,9 @@ class Proactor:
                     _clean_traits.append(t)
             profile["traits"] = _clean_traits
 
+        profile["updated_at"] = datetime.now().isoformat()
+        await storage.save(f"profile:{user_id}", profile)
+
         _verify = await storage.load(f"profile:{user_id}", default={})
         log("MEMORY_CORRECTION_VERIFY", user_id=user_id, profession_after_save=_verify.get("profession"),
             fields=[c.get("field") for c in corrections_list])
