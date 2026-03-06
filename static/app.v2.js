@@ -782,6 +782,9 @@ async function _playTTSChunk(text) {
 
     console.log('[TTS_FLOW] step=7 calling_playTTSAudio');
 
+    // Set current TTS chunk text for typewriter sync
+    window._twCurrentText = text;
+
     // USA NUOVA FUNZIONE playTTSAudio con decodeAudioData
     await playTTSAudio(blob);
 
