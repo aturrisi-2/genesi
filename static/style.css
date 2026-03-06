@@ -3074,19 +3074,28 @@ body.coding-active {
   opacity: calc(var(--ww-cloud-opacity, 0.72) * 0.65);
 }
 
-#weather-widget[data-cloudiness='low'] .weather-widget__cloud {
+/* Cloudiness-based fine-tuning: si applica SOLO a condizioni con nuvole */
+#weather-widget[data-weather='clouds'][data-cloudiness='low'] .weather-widget__cloud,
+#weather-widget[data-weather='rain'][data-cloudiness='low'] .weather-widget__cloud,
+#weather-widget[data-weather='thunder'][data-cloudiness='low'] .weather-widget__cloud {
   opacity: 0.42;
 }
 
-#weather-widget[data-cloudiness='mid'] .weather-widget__cloud {
+#weather-widget[data-weather='clouds'][data-cloudiness='mid'] .weather-widget__cloud,
+#weather-widget[data-weather='rain'][data-cloudiness='mid'] .weather-widget__cloud,
+#weather-widget[data-weather='thunder'][data-cloudiness='mid'] .weather-widget__cloud {
   opacity: 0.58;
 }
 
-#weather-widget[data-cloudiness='high'] .weather-widget__cloud {
+#weather-widget[data-weather='clouds'][data-cloudiness='high'] .weather-widget__cloud,
+#weather-widget[data-weather='rain'][data-cloudiness='high'] .weather-widget__cloud,
+#weather-widget[data-weather='thunder'][data-cloudiness='high'] .weather-widget__cloud {
   opacity: 0.76;
 }
 
-#weather-widget[data-cloudiness='overcast'] .weather-widget__cloud {
+#weather-widget[data-weather='clouds'][data-cloudiness='overcast'] .weather-widget__cloud,
+#weather-widget[data-weather='rain'][data-cloudiness='overcast'] .weather-widget__cloud,
+#weather-widget[data-weather='thunder'][data-cloudiness='overcast'] .weather-widget__cloud {
   opacity: 0.9;
 }
 

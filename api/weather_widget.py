@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timezone as dt_timezone
 
 import httpx
-from fastapi import APIRouter, Query, HTTPException, Depends
+from fastapi import APIRouter, Query, HTTPException, Depends, Request
 from fastapi.responses import JSONResponse
 from typing import Optional
 from auth.router import require_auth
@@ -31,8 +31,20 @@ def _no_cache_headers() -> dict[str, str]:
     }
 
 
+def _client_ip(request: Request) -> str:
+    """Estrae l'IP reale del client (supporta X-Forwarded-For da proxy/nginx)."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+    return request.client.host if request.client else ""
+
+
 @router.get("")
 async def get_weather_widget(
+    request: Request,
     lat: float | None = Query(None, description="Latitudine da Geolocation API"),
     lon: float | None = Query(None, description="Longitudine da Geolocation API"),
     tz: str | None = Query(None, description="Timezone passata dal client"),
@@ -66,10 +78,12 @@ async def get_weather_widget(
             # ── 1. Risolvi coordinate e Timezone ─────────────────────────
             resolved_timezone = tz or "Europe/Rome"
             
-            # Solo se tz non è fornito, proviamo a indovinare da IP
+            # Solo se tz non è fornito, proviamo a indovinare dall'IP del client
             if not tz:
                 try:
-                    ip_resp = await client.get(IPAPI_FALLBACK)
+                    client_ip = _client_ip(request)
+                    ip_url = f"{IPAPI_FALLBACK}/{client_ip}" if client_ip else IPAPI_FALLBACK
+                    ip_resp = await client.get(ip_url)
                     ip_data = ip_resp.json()
                     resolved_timezone = ip_data.get("timezone", "Europe/Rome")
                 except Exception:
@@ -107,10 +121,12 @@ async def get_weather_widget(
                     if profile_for_geo.get("city"):
                         city_name = profile_for_geo["city"]
 
-                # 1. Prova IP-based (posizione corrente più affidabile)
+                # 1. Prova IP-based usando l'IP reale del client (posizione attuale)
                 try:
                     if 'ip_data' not in locals():
-                        ip_resp = await client.get(IPAPI_FALLBACK)
+                        client_ip = _client_ip(request)
+                        ip_url = f"{IPAPI_FALLBACK}/{client_ip}" if client_ip else IPAPI_FALLBACK
+                        ip_resp = await client.get(ip_url)
                         ip_data = ip_resp.json()
                     resolved_lat = ip_data.get("lat")
                     resolved_lon = ip_data.get("lon")
