@@ -4241,7 +4241,12 @@ function setVoiceStatusText(text) {
   function getWeatherScene(condition, iconCode) {
     const cond = String(condition || '').toLowerCase();
     const icon = String(iconCode || '').toLowerCase();
-    const isNight = icon.endsWith('n');
+
+    // OpenWeather icon suffix ('d'/'n') is authoritative for the location.
+    // Client local hour is used only when icon is missing or ambiguous.
+    const hour = new Date().getHours();
+    const clientNight = hour < 6 || hour >= 21;
+    const isNight = icon ? icon.endsWith('n') : clientNight;
 
     if (cond.includes('thunder')) return { weather: 'thunder', phase: isNight ? 'night' : 'day' };
     if (cond.includes('snow') || icon.startsWith('13')) return { weather: 'snow', phase: isNight ? 'night' : 'day' };

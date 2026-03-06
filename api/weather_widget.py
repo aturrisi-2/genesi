@@ -102,13 +102,29 @@ async def get_weather_widget(
                         gps_lat = profile_for_geo.get("gps_lat")
                         gps_lon = profile_for_geo.get("gps_lon")
                         if gps_lat is not None and gps_lon is not None:
-                            resolved_lat = gps_lat
-                            resolved_lon = gps_lon
-                            city_name = profile_for_geo.get("city") or "—"
-                            logger.info(
-                                f"WEATHER_WIDGET_GPS_PROFILE_USED user={user.id} city={city_name} "
-                                f"lat={resolved_lat} lon={resolved_lon}"
-                            )
+                            # Salta coordinate profilo se più vecchie di 24 ore
+                            gps_fresh = True
+                            gps_updated_at = profile_for_geo.get("gps_updated_at")
+                            if gps_updated_at:
+                                try:
+                                    from datetime import timedelta
+                                    gps_age = datetime.now(dt_timezone.utc) - datetime.fromisoformat(gps_updated_at)
+                                    if gps_age > timedelta(hours=24):
+                                        gps_fresh = False
+                                        logger.info(
+                                            f"WEATHER_WIDGET_GPS_STALE user={user.id} "
+                                            f"age_h={gps_age.total_seconds()/3600:.1f} — fallback IP"
+                                        )
+                                except Exception:
+                                    pass
+                            if gps_fresh:
+                                resolved_lat = gps_lat
+                                resolved_lon = gps_lon
+                                city_name = profile_for_geo.get("city") or "—"
+                                logger.info(
+                                    f"WEATHER_WIDGET_GPS_PROFILE_USED user={user.id} city={city_name} "
+                                    f"lat={resolved_lat} lon={resolved_lon}"
+                                )
                         elif profile_for_geo.get("city"):
                             city_name = profile_for_geo.get("city")
 
@@ -149,6 +165,7 @@ async def get_weather_widget(
                     if raw_profile.get("gps_lat") != lat or raw_profile.get("gps_lon") != lon:
                         raw_profile["gps_lat"] = lat
                         raw_profile["gps_lon"] = lon
+                        raw_profile["gps_updated_at"] = datetime.now(dt_timezone.utc).isoformat()
                         profile_updated = True
 
                 # Se abbiamo una timezone (da IP/client), salviamola

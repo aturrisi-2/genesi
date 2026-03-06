@@ -3046,6 +3046,22 @@ body.coding-active {
   opacity: 0.9;
 }
 
+/* Sun hidden when heavy clouds block it */
+#weather-widget[data-phase='day'][data-weather='rain'] .weather-widget__sun,
+#weather-widget[data-phase='day'][data-weather='thunder'] .weather-widget__sun {
+  opacity: 0 !important;
+}
+
+/* Sun barely visible through mist/fog */
+#weather-widget[data-phase='day'][data-weather='mist'] .weather-widget__sun {
+  opacity: 0.22 !important;
+}
+
+/* Sun dimmed behind thick overcast */
+#weather-widget[data-phase='day'][data-cloudiness='overcast'] .weather-widget__sun {
+  opacity: 0.14 !important;
+}
+
 #weather-widget[data-weather='clouds'] .weather-widget__cloud,
 #weather-widget[data-weather='rain'] .weather-widget__cloud,
 #weather-widget[data-weather='thunder'] .weather-widget__cloud {
