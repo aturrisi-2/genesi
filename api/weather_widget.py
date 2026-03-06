@@ -91,56 +91,55 @@ async def get_weather_widget(
                             or geo_data[0].get("name", "—")
                         )
             else:
-                # Priorità ai GPS salvati nel profilo utente (più accurati dell'IP server).
+                # Il client non ha inviato coordinate (geolocalizzazione negata o non disponibile).
+                # Priorità: 1) IP-based (sempre aggiornato, riflette posizione attuale)
+                #            2) GPS profilo (fallback se IP non risponde)
                 resolved_lat = None
                 resolved_lon = None
                 city_name = "—"
 
+                # Carica profilo per nome città e GPS di riserva
+                profile_for_geo = {}
                 if user:
                     profile_for_geo = await storage.load(f"profile:{user.id}", default={})
-                    if isinstance(profile_for_geo, dict):
-                        gps_lat = profile_for_geo.get("gps_lat")
-                        gps_lon = profile_for_geo.get("gps_lon")
-                        if gps_lat is not None and gps_lon is not None:
-                            # Salta coordinate profilo se più vecchie di 24 ore
-                            gps_fresh = True
-                            gps_updated_at = profile_for_geo.get("gps_updated_at")
-                            if gps_updated_at:
-                                try:
-                                    from datetime import timedelta
-                                    gps_age = datetime.now(dt_timezone.utc) - datetime.fromisoformat(gps_updated_at)
-                                    if gps_age > timedelta(hours=24):
-                                        gps_fresh = False
-                                        logger.info(
-                                            f"WEATHER_WIDGET_GPS_STALE user={user.id} "
-                                            f"age_h={gps_age.total_seconds()/3600:.1f} — fallback IP"
-                                        )
-                                except Exception:
-                                    pass
-                            if gps_fresh:
-                                resolved_lat = gps_lat
-                                resolved_lon = gps_lon
-                                city_name = profile_for_geo.get("city") or "—"
-                                logger.info(
-                                    f"WEATHER_WIDGET_GPS_PROFILE_USED user={user.id} city={city_name} "
-                                    f"lat={resolved_lat} lon={resolved_lon}"
-                                )
-                        elif profile_for_geo.get("city"):
-                            city_name = profile_for_geo.get("city")
+                    if not isinstance(profile_for_geo, dict):
+                        profile_for_geo = {}
+                    if profile_for_geo.get("city"):
+                        city_name = profile_for_geo["city"]
 
-                # Se non abbiamo GPS salvati, fallback IP-based.
-                if resolved_lat is None or resolved_lon is None:
+                # 1. Prova IP-based (posizione corrente più affidabile)
+                try:
                     if 'ip_data' not in locals():
                         ip_resp = await client.get(IPAPI_FALLBACK)
                         ip_data = ip_resp.json()
-
                     resolved_lat = ip_data.get("lat")
                     resolved_lon = ip_data.get("lon")
-                    if city_name == "—":
-                        city_name = ip_data.get("city", "—")
+                    ip_city = ip_data.get("city", "")
+                    if resolved_lat is not None and resolved_lon is not None:
+                        if ip_city:
+                            city_name = ip_city
+                        logger.info(
+                            f"WEATHER_WIDGET_IP_USED city={city_name} "
+                            f"lat={resolved_lat} lon={resolved_lon}"
+                        )
+                except Exception as ip_err:
+                    logger.warning(f"WEATHER_WIDGET_IP_FAIL err={ip_err}")
 
-                    if resolved_lat is None or resolved_lon is None:
-                        raise ValueError("Impossibile determinare posizione da IP")
+                # 2. Fallback: GPS dal profilo (se IP ha fallito)
+                if (resolved_lat is None or resolved_lon is None) and profile_for_geo:
+                    gps_lat = profile_for_geo.get("gps_lat")
+                    gps_lon = profile_for_geo.get("gps_lon")
+                    if gps_lat is not None and gps_lon is not None:
+                        resolved_lat = gps_lat
+                        resolved_lon = gps_lon
+                        city_name = profile_for_geo.get("city") or city_name
+                        logger.info(
+                            f"WEATHER_WIDGET_GPS_PROFILE_FALLBACK user={user.id if user else '?'} "
+                            f"city={city_name} lat={resolved_lat} lon={resolved_lon}"
+                        )
+
+                if resolved_lat is None or resolved_lon is None:
+                    raise ValueError("Impossibile determinare posizione da IP o profilo")
             
             # ── 1.5 Salva Posizione nel Profilo ───────────────────────────
             if user:
