@@ -4141,15 +4141,31 @@ function setVoiceStatusText(text) {
     if (els.time) els.time.textContent = time;
   }
 
-  function getWeatherScene(condition, iconCode, hour) {
+  let weatherRefreshInFlight = false;
+
+  function getWeatherScene(condition, iconCode) {
     const cond = String(condition || '').toLowerCase();
     const icon = String(iconCode || '').toLowerCase();
-    const isNight = icon.endsWith('n') || hour < 6 || hour >= 20;
+    const isNight = icon.endsWith('n');
 
     if (cond.includes('thunder')) return { weather: 'thunder', phase: isNight ? 'night' : 'day' };
-    if (cond.includes('snow')) return { weather: 'snow', phase: isNight ? 'night' : 'day' };
-    if (cond.includes('mist') || cond.includes('fog') || cond.includes('haze')) return { weather: 'mist', phase: isNight ? 'night' : 'day' };
-    if (cond.includes('rain') || cond.includes('drizzle')) return { weather: 'rain', phase: isNight ? 'night' : 'day' };
+    if (cond.includes('snow') || icon.startsWith('13')) return { weather: 'snow', phase: isNight ? 'night' : 'day' };
+
+    const isMist = cond.includes('mist')
+      || cond.includes('fog')
+      || cond.includes('haze')
+      || cond.includes('smoke')
+      || cond.includes('dust')
+      || cond.includes('sand')
+      || cond.includes('ash')
+      || cond.includes('squall')
+      || cond.includes('tornado')
+      || icon.startsWith('50');
+    if (isMist) return { weather: 'mist', phase: isNight ? 'night' : 'day' };
+
+    if (cond.includes('rain') || cond.includes('drizzle') || icon.startsWith('09') || icon.startsWith('10')) {
+      return { weather: 'rain', phase: isNight ? 'night' : 'day' };
+    }
     if (cond.includes('cloud') || icon.startsWith('02') || icon.startsWith('03') || icon.startsWith('04')) {
       return { weather: 'clouds', phase: isNight ? 'night' : 'day' };
     }
@@ -4157,9 +4173,8 @@ function setVoiceStatusText(text) {
   }
 
   function renderWeather(payload) {
-    // Usa fase giorno/notte locale per coerenza visiva e guida la scena animata.
-    const currentHour = new Date().getHours();
-    const scene = getWeatherScene(payload.condition, payload.icon_code, currentHour);
+    // Usa i codici OpenWeather per mantenere la scena coerente con i dati meteo reali.
+    const scene = getWeatherScene(payload.condition, payload.icon_code);
 
     els.widget.dataset.weather = scene.weather;
     els.widget.dataset.phase = scene.phase;
@@ -4176,7 +4191,7 @@ function setVoiceStatusText(text) {
 
   async function fetchWeather(lat, lon) {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    let url = `/api/weather-widget?tz=${encodeURIComponent(tz)}`;
+    let url = `/api/weather-widget?tz=${encodeURIComponent(tz)}&_ts=${Date.now()}`;
     if (lat !== null && lon !== null) {
       url += `&lat=${lat}&lon=${lon}`;
     }
@@ -4187,6 +4202,7 @@ function setVoiceStatusText(text) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getAuthToken()}`
       },
+      cache: 'no-store',
     });
 
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -4194,34 +4210,46 @@ function setVoiceStatusText(text) {
   }
 
   function loadWithCoords(lat, lon) {
-    fetchWeather(lat, lon)
+    return fetchWeather(lat, lon)
       .then(renderWeather)
       .catch(err => {
         console.warn('[WEATHER_WIDGET] Fetch con coordinate fallita:', err);
         // Secondo tentativo: fallback IP
-        fetchWeather(null, null)
+        return fetchWeather(null, null)
           .then(renderWeather)
           .catch(() => showState('error'));
       });
   }
 
   function refreshMeteoData() {
+    if (weatherRefreshInFlight) return;
+    weatherRefreshInFlight = true;
+
+    const endRefresh = () => {
+      weatherRefreshInFlight = false;
+    };
+
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
-        pos => loadWithCoords(pos.coords.latitude, pos.coords.longitude),
+        pos => {
+          loadWithCoords(pos.coords.latitude, pos.coords.longitude)
+            .finally(endRefresh);
+        },
         _err => {
           console.info('[WEATHER_WIDGET] Geolocation negata — fallback IP');
           fetchWeather(null, null)
             .then(renderWeather)
-            .catch(() => showState('error'));
+            .catch(() => showState('error'))
+            .finally(endRefresh);
         },
-        { timeout: 6000, maximumAge: 300_000 }
+        { timeout: 6000, maximumAge: 60_000 }
       );
     } else {
       console.info('[WEATHER_WIDGET] Geolocation non disponibile — fallback IP');
       fetchWeather(null, null)
         .then(renderWeather)
-        .catch(() => showState('error'));
+        .catch(() => showState('error'))
+        .finally(endRefresh);
     }
   }
 
@@ -4233,6 +4261,13 @@ function setVoiceStatusText(text) {
     setInterval(updateClock, 60_000);
     // Aggiorna i dati meteo ogni 15 minuti (900.000 ms)
     setInterval(refreshMeteoData, 900_000);
+
+    // Riprende aggiornamento quando l'utente torna sulla tab o online.
+    window.addEventListener('focus', refreshMeteoData);
+    window.addEventListener('online', refreshMeteoData);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) refreshMeteoData();
+    });
   }
 
   if (document.readyState === 'complete') {
