@@ -194,8 +194,11 @@ async def get_weather_widget(
                 "humidity"   : data["main"]["humidity"],
                 "description": data["weather"][0]["description"].capitalize(),
                 "icon_code"  : data["weather"][0]["icon"],
+                "weather_id" : data["weather"][0].get("id", 800),
                 "wind_speed" : round(data["wind"]["speed"] * 3.6),  # m/s → km/h
                 "condition"  : data["weather"][0]["main"].lower(),  # clear/clouds/rain/...
+                "cloud_cover": data.get("clouds", {}).get("all", 0),
+                "visibility_m": data.get("visibility"),
                 "updated_at" : datetime.now(dt_timezone.utc).isoformat(),
             }
 

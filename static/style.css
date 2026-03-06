@@ -2633,6 +2633,7 @@ body.coding-active {
   min-height: 2.2rem;
   overflow: hidden;
   background: linear-gradient(135deg, rgba(6, 18, 30, 0.9), rgba(10, 32, 50, 0.72));
+  transition: background 0.75s ease, box-shadow 0.75s ease, border-color 0.75s ease;
 }
 
 #weather-widget[data-phase='day'] .weather-widget__inner {
@@ -2653,7 +2654,8 @@ body.coding-active {
   background:
     radial-gradient(130% 90% at 0% 0%, rgba(120, 206, 255, 0.2), transparent 58%),
     radial-gradient(140% 95% at 100% 100%, rgba(11, 66, 109, 0.26), transparent 62%);
-  animation: ww-ambient-pan 10s ease-in-out infinite;
+  animation: ww-ambient-pan var(--ww-ambient-speed, 10s) ease-in-out infinite;
+  transition: background 0.8s ease, opacity 0.8s ease;
 }
 
 #weather-widget[data-phase='day'] .weather-widget__ambient {
@@ -2661,6 +2663,13 @@ body.coding-active {
   background:
     radial-gradient(130% 95% at 0% 0%, rgba(183, 231, 255, 0.36), transparent 56%),
     radial-gradient(120% 100% at 100% 100%, rgba(84, 185, 244, 0.3), transparent 62%);
+}
+
+#weather-widget[data-phase='day'][data-weather='clear'] .weather-widget__ambient {
+  opacity: 0.82;
+  background:
+    radial-gradient(120% 90% at 0% 0%, rgba(201, 238, 255, 0.46), transparent 52%),
+    radial-gradient(120% 95% at 100% 100%, rgba(72, 177, 242, 0.38), transparent 60%);
 }
 
 #weather-widget[data-phase='night'] .weather-widget__ambient {
@@ -2854,14 +2863,14 @@ body.coding-active {
 }
 
 .weather-widget__cloud--a {
-  animation: ww-cloud-drift 18s linear infinite;
+  animation: ww-cloud-drift var(--ww-cloud-speed-a, 18s) linear infinite;
 }
 
 .weather-widget__cloud--b {
   top: 30px;
   width: 44%;
   opacity: 0;
-  animation: ww-cloud-drift 21s linear infinite;
+  animation: ww-cloud-drift var(--ww-cloud-speed-b, 21s) linear infinite;
   animation-delay: -9s;
 }
 
@@ -2881,7 +2890,7 @@ body.coding-active {
     transparent 16px
   );
   background-size: 12px 24px;
-  animation: ww-rain-fall 0.55s linear infinite;
+  animation: ww-rain-fall var(--ww-rain-speed, 0.55s) linear infinite;
 }
 
 .weather-widget__snow {
@@ -2949,7 +2958,7 @@ body.coding-active {
 }
 
 #weather-widget[data-phase='night']:not([data-weather='thunder']) .weather-widget__star {
-  opacity: 0.92;
+  opacity: var(--ww-star-opacity, 0.92);
 }
 
 #weather-widget[data-phase='day'] .weather-widget__sun {
@@ -2967,13 +2976,29 @@ body.coding-active {
 #weather-widget[data-weather='clouds'] .weather-widget__cloud,
 #weather-widget[data-weather='rain'] .weather-widget__cloud,
 #weather-widget[data-weather='thunder'] .weather-widget__cloud {
-  opacity: 0.72;
+  opacity: var(--ww-cloud-opacity, 0.72);
 }
 
 #weather-widget[data-weather='clouds'] .weather-widget__cloud--b,
 #weather-widget[data-weather='rain'] .weather-widget__cloud--b,
 #weather-widget[data-weather='thunder'] .weather-widget__cloud--b {
-  opacity: 0.46;
+  opacity: calc(var(--ww-cloud-opacity, 0.72) * 0.65);
+}
+
+#weather-widget[data-cloudiness='low'] .weather-widget__cloud {
+  opacity: 0.42;
+}
+
+#weather-widget[data-cloudiness='mid'] .weather-widget__cloud {
+  opacity: 0.58;
+}
+
+#weather-widget[data-cloudiness='high'] .weather-widget__cloud {
+  opacity: 0.76;
+}
+
+#weather-widget[data-cloudiness='overcast'] .weather-widget__cloud {
+  opacity: 0.9;
 }
 
 #weather-widget[data-weather='rain'] .weather-widget__rain {
@@ -3002,7 +3027,7 @@ body.coding-active {
 }
 
 #weather-widget[data-weather='mist'] .weather-widget__fog {
-  opacity: 0.9;
+  opacity: var(--ww-fog-opacity, 0.9);
 }
 
 @keyframes ww-cloud-drift {

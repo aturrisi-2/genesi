@@ -4146,6 +4146,43 @@ function setVoiceStatusText(text) {
 
   let weatherRefreshInFlight = false;
 
+  function classifyCloudiness(cloudCover) {
+    const cc = Number(cloudCover);
+    if (!Number.isFinite(cc) || cc < 15) return 'low';
+    if (cc < 45) return 'mid';
+    if (cc < 80) return 'high';
+    return 'overcast';
+  }
+
+  function applyDynamicSceneTuning(payload, scene) {
+    const cloudCover = Number(payload.cloud_cover ?? (scene.weather === 'clear' ? 8 : 60));
+    const wind = Number(payload.wind_speed ?? 10);
+    const humidity = Number(payload.humidity ?? 60);
+    const weatherId = Number(payload.weather_id ?? 800);
+
+    const cloudiness = classifyCloudiness(cloudCover);
+    els.widget.dataset.cloudiness = cloudiness;
+
+    const heavyRain = scene.weather === 'rain' && (weatherId >= 502 || wind >= 28);
+    const thickMist = scene.weather === 'mist' && (humidity >= 85 || cloudCover >= 70);
+
+    const cloudOpacity = Math.min(0.9, Math.max(0.35, 0.35 + (cloudCover / 100) * 0.6));
+    const ambientSpeed = heavyRain ? '6.5s' : (scene.weather === 'thunder' ? '6s' : cloudCover >= 70 ? '8.5s' : '11s');
+    const cloudSpeedA = Math.max(9, 20 - Math.round(cloudCover / 9) - Math.round(wind / 10));
+    const cloudSpeedB = Math.max(11, cloudSpeedA + 3);
+    const rainSpeed = heavyRain ? '0.35s' : '0.55s';
+    const fogOpacity = thickMist ? '0.95' : '0.8';
+    const starOpacity = cloudCover >= 70 ? '0.52' : cloudCover >= 40 ? '0.7' : '0.92';
+
+    els.widget.style.setProperty('--ww-cloud-opacity', cloudOpacity.toFixed(2));
+    els.widget.style.setProperty('--ww-ambient-speed', ambientSpeed);
+    els.widget.style.setProperty('--ww-cloud-speed-a', `${cloudSpeedA}s`);
+    els.widget.style.setProperty('--ww-cloud-speed-b', `${cloudSpeedB}s`);
+    els.widget.style.setProperty('--ww-rain-speed', rainSpeed);
+    els.widget.style.setProperty('--ww-fog-opacity', fogOpacity);
+    els.widget.style.setProperty('--ww-star-opacity', starOpacity);
+  }
+
   function getWeatherScene(condition, iconCode) {
     const cond = String(condition || '').toLowerCase();
     const icon = String(iconCode || '').toLowerCase();
@@ -4181,6 +4218,7 @@ function setVoiceStatusText(text) {
 
     els.widget.dataset.weather = scene.weather;
     els.widget.dataset.phase = scene.phase;
+    applyDynamicSceneTuning(payload, scene);
 
     // Failsafe UI: forza visibilità astro anche se CSS stale lato client.
     if (els.sun) els.sun.hidden = scene.phase !== 'day';
