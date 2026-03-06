@@ -277,6 +277,55 @@ let _isPlayingChunk = false;
 let _wasPlayingChunk = false;
 let ttsEnabled = true;
 let _ttsAborted = false;
+
+// Typewriter animation state — syncs text display with TTS audio
+let _twBubble   = null;  // bubble element to animate
+let _twShown    = '';    // text already typed (previous chunks)
+let _twTimeout  = null;  // active setTimeout handle
+let _twFullText = '';    // complete response text (for final render / fallback)
+let _twImages   = '';    // rendered images HTML (appended on final render)
+
+// Starts character-by-character typewriter for one TTS chunk, timed to audio duration
+function _startTypewriterChunk(text, durationMs) {
+  if (!_twBubble || !text) return;
+  clearTimeout(_twTimeout);
+
+  const chars = text.split('');
+  const getWeight = (ch) => {
+    if ('.!?'.includes(ch)) return 5;
+    if (',;:'.includes(ch)) return 2.5;
+    if (ch === '\n') return 4;
+    if (ch === ' ') return 1.2;
+    return 1;
+  };
+  const totalWeight = chars.reduce((sum, ch) => sum + getWeight(ch), 0);
+  const msPerWeight = totalWeight > 0 ? durationMs / totalWeight : 30;
+
+  let i = 0;
+  let typed = '';
+  const typeNext = () => {
+    if (i >= chars.length) { _twShown += text; return; }
+    const ch = chars[i++];
+    typed += ch;
+    _twBubble.innerHTML = _twShown + typed + '<span class="stream-cursor">▋</span>';
+    _twTimeout = setTimeout(typeNext, Math.max(1, getWeight(ch) * msPerWeight));
+  };
+  typeNext();
+}
+
+// Shows fully-rendered markdown in bubble — called after TTS ends or on barge-in
+function _twFinalRender() {
+  if (!_twBubble) return;
+  clearTimeout(_twTimeout);
+  _twBubble.classList.remove('streaming');
+  _twBubble.innerHTML = (_twFullText || '') + (_twImages || '');
+  _twBubble = null;
+  _twShown = '';
+  _twFullText = '';
+  _twImages = '';
+  scrollToBottom();
+}
+
 let activeTTSSources = [];           // ALL active Audio elements
 let currentTTSAbortController = null; // AbortController for in-flight fetches
 let ttsGenerationId = 0;              // Monotonic ID — stale async skips playback
@@ -404,6 +453,7 @@ function stopAllTTS(isNewSession = false) {
   if (!isNewSession) {
     window.ttsSessionActive = false;
     window.ttsExpected = false;
+    _twFinalRender(); // barge-in: show full text immediately
   }
 
   console.log('[TTS_INTERRUPTED_BY_USER]');
@@ -623,6 +673,9 @@ async function _playTTSChunkWithBlob(text, blob, chunkIndex) {
 
   try {
     console.log('[TTS_FLOW] step=7 calling_playTTSAudio');
+
+    // Set current TTS chunk text for typewriter sync
+    window._twCurrentText = text;
 
     // USA NUOVA FUNZIONE playTTSAudio con decodeAudioData
     await playTTSAudio(blob);
@@ -1868,11 +1921,18 @@ async function sendMessage(voiceText = null) {
             streamBubble.style.setProperty('--neon-hue', hue + 'deg');
             _neonIdx++;
             dialogue.appendChild(streamBubble);
+            // Init typewriter state
+            _twBubble = streamBubble;
+            _twShown = '';
+            _twFullText = '';
+            _twImages = '';
+            clearTimeout(_twTimeout);
             scrollToBottom();
           },
           onChunk: (fullText) => {
             if (streamBubble) {
-              streamBubble.innerHTML = renderMessageContent(fullText) + '<span class="stream-cursor">▋</span>';
+              // Show only cursor while TTS will drive the typewriter
+              streamBubble.innerHTML = '<span class="stream-cursor">▋</span>';
               scrollToBottom();
             }
           }
@@ -1881,7 +1941,10 @@ async function sendMessage(voiceText = null) {
         if (data && data.response && streamBubble) {
           const parsed = handleChatResponse(data.response);
           streamBubble.classList.remove('streaming');
-          streamBubble.innerHTML = renderMessageContent(parsed.text) + renderImages(parsed.images);
+          // Save for _twFinalRender — TTS will drive typewriter, render markdown at end
+          _twFullText = renderMessageContent(parsed.text);
+          _twImages = renderImages(parsed.images);
+          streamBubble.innerHTML = '<span class="stream-cursor">▋</span>';
           saveMessageToConversation('assistant', parsed.text);
           playUISound('receive');
           scrollToBottom();
@@ -1939,6 +2002,7 @@ async function sendMessage(voiceText = null) {
       console.log('[TTS_ASYNC] Skipped: empty tts text');
       window.ttsExpected = false;
       window.isGenesiSpeaking = false;
+      _twFinalRender();
       return;
     }
 
@@ -1966,6 +2030,7 @@ async function sendMessage(voiceText = null) {
     if (!ttsText || ttsText.trim().length === 0) {
       console.log('[TTS_ASYNC] Skipped: empty after code filtering or no text');
       window.ttsExpected = false;
+      _twFinalRender();
       return;
     }
 
@@ -2012,6 +2077,7 @@ function playTTSAsync(text, mode) {
       console.log('[TTS_ASYNC] Starting TTS genId=' + myGenId + ' len=' + text.length + ' mode=' + mode);
       await playTTS(text, mode);
       console.log('[TTS_ASYNC] TTS completed genId=' + myGenId);
+      _twFinalRender();
     } catch (e) {
       if (e.name === 'AbortError') {
         console.log('[TTS_ASYNC] TTS aborted genId=' + myGenId);
@@ -3141,6 +3207,9 @@ async function playSimpleAudio(blob) {
       window.ttsPlaying = true;
       _wasPlayingChunk = true;
       _isPlayingChunk = true;
+
+      // Avvia typewriter sincronizzato con l'audio
+      _startTypewriterChunk(window._twCurrentText || '', audioBuffer.duration * 1000);
 
       // Avvia playback
       console.log('[TTS] Avvio playback genId=' + myGenId);
