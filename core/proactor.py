@@ -1676,10 +1676,12 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                         payload["screenshot"] = screenshot
                     await stream_q.put({"status": payload})
             
-            response = await openclaw_service.execute_task(user_id, prompt, status_callback=status_callback)
-            
+            import time as _time
+            oc_session_id = f"genesi_{user_id.replace('-', '_')}_{int(_time.time())}"
+            response = await openclaw_service.execute_task(user_id, prompt, status_callback=status_callback, session_id=oc_session_id)
+
             if "[DOMANDA]" in response:
-                await storage.save(f"openclaw_session:{user_id}", {"active": True, "prompt": prompt})
+                await storage.save(f"openclaw_session:{user_id}", {"active": True, "prompt": prompt, "session_id": oc_session_id})
                 return response.replace("[DOMANDA]", "").strip()
             else:
                 await storage.delete(f"openclaw_session:{user_id}")
@@ -1702,19 +1704,21 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 "4. CHIUSURA: Finisci con '[COMPLETATO]' se hai finito o salvato i token nel .env. Sii breve e amichevole."
             )
             
+            session = await storage.load(f"openclaw_session:{user_id}", default={})
+            orig_prompt = session.get("prompt", prompt)
+            oc_session_id = session.get("session_id")
+
             from core.llm_service import _STREAM_QUEUE
             import asyncio
             stream_q = _STREAM_QUEUE.get()
             if stream_q is not None:
                 asyncio.create_task(stream_q.put({"status": "Ripresa navigazione nel browser, attendi..."}))
-                
-            response = await openclaw_service.execute_task(user_id, prompt)
-            
+
+            response = await openclaw_service.execute_task(user_id, prompt, session_id=oc_session_id)
+
             if "[DOMANDA]" in response:
                 return response.replace("[DOMANDA]", "").strip()
             else:
-                session = await storage.load(f"openclaw_session:{user_id}", default={})
-                orig_prompt = session.get("prompt", prompt)
                 await storage.delete(f"openclaw_session:{user_id}")
                 from core.openclaw_memory_adapter import openclaw_adapter
                 asyncio.create_task(openclaw_adapter.extract_and_store(user_id, response, orig_prompt))

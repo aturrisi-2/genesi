@@ -16,14 +16,16 @@ class OpenClawService:
         # We check if the binary exists, but don't error out during initialization
         pass
 
-    async def execute_task(self, user_id: str, prompt: str, status_callback=None) -> str:
+    async def execute_task(self, user_id: str, prompt: str, status_callback=None, session_id: str = None) -> str:
         """
         Esegue un task tramite il comando CLI di OpenClaw con feedback in tempo reale.
         Supporta log umanizzati e anteprime screenshot.
         """
         try:
-            logger.info("OPENCLAW_CLI_START user=%s prompt=%.50s...", user_id, prompt)
-            session_id = f"genesi_{user_id.replace('-', '_')}"
+            import time
+            if session_id is None:
+                session_id = f"genesi_{user_id.replace('-', '_')}_{int(time.time())}"
+            logger.info("OPENCLAW_CLI_START user=%s session=%s prompt=%.50s...", user_id, session_id, prompt)
             
             env = os.environ.copy()
             env["PLAYWRIGHT_BROWSERS_PATH"] = "/home/luca/.cache/ms-playwright"
@@ -151,6 +153,11 @@ class OpenClawService:
             if process.returncode == 0:
                 output = "\n".join(all_stdout).strip()
                 logger.debug("OPENCLAW_RAW_OUTPUT user=%s sample=%.200s", user_id, output.replace('\n', ' '))
+
+                # Rileva overflow di contesto: OpenClaw ha esaurito la finestra del modello
+                if "context overflow" in output.lower() or "prompt too large" in output.lower():
+                    logger.warning("OPENCLAW_CONTEXT_OVERFLOW user=%s session=%s", user_id, session_id)
+                    return "La sessione precedente era diventata troppo lunga. L'ho resettata: riprova a darmi il tuo comando e ripartirò da zero."
                 
                 import re
                 output = re.sub(r'<thought>.*?</thought>', '', output, flags=re.DOTALL | re.IGNORECASE)
