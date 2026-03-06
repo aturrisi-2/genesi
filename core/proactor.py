@@ -1654,16 +1654,9 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         """
         try:
             logger.info("OPENCLAW_REQUEST user=%s message=%s", user_id, message[:50])
-            prompt = (
-                f"Obiettivo finale dell'utente (ALFIO): {message.strip()}\n\n"
-                "ISTRUZIONI GLOBALI PER IL BRACCIO MECCANICO (OPENCLAW):\n"
-                "1. IDENTITÀ: Stai aiutando ALFIO. È un signore che non se ne intende di tecnologia. Sii come un nipote premuroso: paziente, gentile e semplice.\n"
-                "2. LINGUA: Parla SEMPRE E SOLO IN ITALIANO. Niente inglese, mai.\n"
-                "3. NO CODE: NON SCRIVERE MAI CODICE (Javascript, Python, ecc.) o dump di file. Parla solo testo.\n"
-                "4. AUTONOMIA TECNICA: NON CHIEDERE il permesso di cliccare, non chiedere Redirect URL o nomi App. Inventali tu.\n"
-                "5. INTERVISTA: Se ti servono dati personali (Email, Password, OTP), chiedine **SOLO UNO ALLA VOLTA**. Attendi la risposta.\n"
-                "6. SEMPLICITÀ: Non dire cosa fai tecnicamente. Di' solo 'Un attimo che preparo tutto...'."
-            )
+            # Passa solo il task all'agente OpenClaw — il suo system prompt interno
+            # è già molto grande, aggiungere istruzioni meta causa context overflow.
+            prompt = message.strip()
             
             from core.llm_service import _STREAM_QUEUE
             import asyncio
