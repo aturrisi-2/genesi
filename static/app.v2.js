@@ -3578,7 +3578,7 @@ function startNewsTickerAnimation(containerEl, trackEl) {
   const loopWidth = Math.max(trackEl.scrollWidth / 2, containerEl.offsetWidth);
   const startX = containerEl.offsetWidth;
   const endX = -loopWidth;
-  const pixelsPerSecond = 42;
+  const pixelsPerSecond = 50;
   const duration = Math.max(18000, Math.round(((startX + loopWidth) / pixelsPerSecond) * 1000));
 
   newsTickerState.animation = trackEl.animate(
