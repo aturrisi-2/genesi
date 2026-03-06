@@ -377,7 +377,7 @@ class CognitiveMemoryEngine:
             if m:
                 return ("food", m.group(1).strip())
 
-        # General preferences (catch-all "mi piace X")
+        # General preferences (catch-all "mi piace X") — NON catturare se preceduto da "non"
         general_patterns = [
             r"mi piace (?:molto |tanto )?(\w[\w\s]{2,30})",
             r"adoro (\w[\w\s]{2,30})",
@@ -386,6 +386,10 @@ class CognitiveMemoryEngine:
         for pat in general_patterns:
             m = re.search(pat, msg_lower)
             if m:
+                # Controlla che "non" non preceda immediatamente il match
+                preceding = msg_lower[max(0, m.start() - 5):m.start()]
+                if re.search(r'\bnon\s*$', preceding):
+                    continue
                 val = m.group(1).strip()
                 # Skip if it's a person reference or too short
                 if len(val) < 3 or val in ("il", "la", "le", "lo", "un", "una"):

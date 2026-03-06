@@ -1211,6 +1211,16 @@ class Proactor:
 
         profile = await storage.load(f"profile:{user_id}", default={})
 
+        # Normalizza preferences: gestisce sia lista piatta che dict strutturato
+        _prefs_raw = profile.get("preferences", [])
+        if isinstance(_prefs_raw, dict):
+            _prefs_flat = []
+            for _cat_vals in _prefs_raw.values():
+                if isinstance(_cat_vals, list):
+                    _prefs_flat.extend(_cat_vals)
+        else:
+            _prefs_flat = list(_prefs_raw) if isinstance(_prefs_raw, list) else []
+
         profile_summary = {
             "nome": profile.get("name"),
             "città": profile.get("city"),
@@ -1219,71 +1229,64 @@ class Proactor:
             "figli": [c.get("name") if isinstance(c, dict) else str(c) for c in profile.get("children", [])],
             "animali": [f"{p.get('type','?')} {p.get('name','?')}" for p in profile.get("pets", []) if isinstance(p, dict)],
             "interessi": profile.get("interests", []),
-            "tratti": profile.get("traits", []),
+            "preferenze": _prefs_flat,
+            "tratti": [t for t in profile.get("traits", []) if isinstance(t, str)],
         }
         
         history = chat_memory.get_messages(user_id, limit=3) if user_id else []
         history_text = "\n".join([f"utente: {msg.get('user_message', '')}\ngenesi: {msg.get('system_response', '')}" for msg in history])
 
-        parse_prompt = f"""Sei Genesi. L'utente ti sta comunicando qualcosa su di sé — aggiorna il profilo. Tieni conto del contesto della conversazione per correzioni implicite come "No, è al contrario" o "Hai sbagliato".
+        parse_prompt = (
+            "Sei Genesi. L'utente ti sta correggendo o rivelando qualcosa su di se'.\n"
+            "Tieni conto del contesto per correzioni implicite ('No, e' al contrario', 'Hai sbagliato').\n\n"
+            f"Profilo attuale: {_json.dumps(profile_summary, ensure_ascii=False)}\n\n"
+            f"Contesto recente:\n{history_text}\n\n"
+            f"Messaggio: \"{message}\"\n\n"
+            "Rispondi SOLO con JSON valido su una riga:\n"
+            "{\"corrections\":[{\"field\":\"...\",\"action\":\"...\",\"new_value\":...,\"old_value\":...}],\"reply\":\"...\"}\n\n"
+            "CAMPI disponibili:\n"
+            "- name: nome\n"
+            "- city: citta' di residenza\n"
+            "- profession: lavoro attuale\n"
+            "- spouse: partner/coniuge\n"
+            "- children: figli -> [{\"name\":\"...\"}]\n"
+            "- pets: animali -> [{\"type\":\"cat|dog|bird|altro\",\"name\":\"...\",\"breed\":\"...\"}]\n"
+            "- interests: hobby e passioni stabili (sport praticati, musica, cinema...)\n"
+            "- preferences: gusti e preferenze (squadra del cuore, cibo preferito, abitudini orario...)\n"
+            "- traits: caratteristiche personali (SOLO aggettivi sull'utente stesso, mai nomi propri)\n\n"
+            "AZIONI:\n"
+            "- 'update': per scalari sostituisce il valore; per liste con old_value rimuove old e aggiunge new\n"
+            "- 'delete': rimuove singolo elemento da lista (new_value = stringa da eliminare)\n"
+            "- 'clear': svuota il campo\n\n"
+            "REGOLE CRITICHE:\n"
+            "- Orari pasti ('ceno alle 21') -> preferences, NON interests\n"
+            "- Squadra del cuore -> preferences (es. 'tifoso inter')\n"
+            "- 'Non tifo piu' per X, tifo per Y' -> correzione preferences rimuove X, aggiunge Y\n"
+            "  Se c'era anche un trait come 'tifoso della X', aggiorna anche traits\n"
+            "- 'non mi piace X' -> rimuovi X da preferences/interests se presente, NON aggiungere X\n"
+            "- pets/children: includi SEMPRE tutti quelli esistenti nel profilo per non perderli\n"
+            "- traits: SOLO aggettivi in prima persona, MAI nomi propri\n\n"
+            "REPLY: Una frase breve e naturale, come un amico. MAI 'salvato/rimosso/aggiornato/registrato'.\n\n"
+            "ESEMPI:\n"
+            "- \"non sono architetto, sono medico\" -> {\"corrections\":[{\"field\":\"profession\",\"action\":\"update\",\"new_value\":\"medico\",\"old_value\":\"architetto\"}],\"reply\":\"Ah, medico!\"}\n"
+            "- \"tifo Inter non Juventus, non mi piace il tennis\" -> {\"corrections\":["
+            "{\"field\":\"preferences\",\"action\":\"update\",\"new_value\":[\"tifoso inter\"],\"old_value\":[\"juventus\",\"tennis\"]},"
+            "{\"field\":\"traits\",\"action\":\"update\",\"new_value\":[\"tifoso dell'inter\"],\"old_value\":[\"tifoso della juventus\"]}],\"reply\":\"Forza Inter!\"}\n"
+            "- \"ceno alle 21 non alle 19:30\" -> {\"corrections\":[{\"field\":\"preferences\",\"action\":\"update\",\"new_value\":[\"cena alle 21\"],\"old_value\":[\"cena alle 19:30\",\"cenare alle 19:30\"]}],\"reply\":\"Alle 21, capito!\"}\n"
+            "- \"non mi piace il tennis\" -> {\"corrections\":[{\"field\":\"preferences\",\"action\":\"delete\",\"new_value\":\"tennis\",\"old_value\":null}],\"reply\":\"Tennis fuori!\"}\n"
+            "- \"ho due figli, Ennio e Zoe\" -> {\"corrections\":[{\"field\":\"children\",\"action\":\"update\",\"new_value\":[{\"name\":\"Ennio\"},{\"name\":\"Zoe\"}],\"old_value\":null}],\"reply\":\"Ennio e Zoe!\"}\n"
+            "- \"ho un cane Rio e due gatti Mignolo e Prof\" -> {\"corrections\":[{\"field\":\"pets\",\"action\":\"update\",\"new_value\":[{\"type\":\"dog\",\"name\":\"Rio\"},{\"type\":\"cat\",\"name\":\"Mignolo\"},{\"type\":\"cat\",\"name\":\"Prof\"}],\"old_value\":null}],\"reply\":\"Rio, Mignolo e Prof!\"}\n"
+            "- Se non capisci -> {\"corrections\":[],\"reply\":\"Capito!\"}"
+        )
 
-Profilo attuale: {_json.dumps(profile_summary, ensure_ascii=False)}
-
-Contesto recente della conversazione:
-{history_text}
-
-Messaggio dell'utente da analizzare: "{message}"
-
-Rispondi SOLO con JSON valido su una riga:
-{{"field":"...","action":"...","new_value":...,"old_value":...,"reply":"..."}}
-
-CAMPI:
-- name: nome dell'utente
-- city: città di residenza
-- profession: lavoro/professione attuale (NON lo stato civile, NON la razza di animali)
-- spouse: partner o coniuge ("non sono sposato" → clear spouse, non profession!)
-- children: figli → new_value = lista di {{"name":"..."}}
-- pets: animali → new_value = lista COMPLETA di TUTTI gli animali (inclusi quelli già nel profilo!) → {{"type":"cat|dog|bird|altro","name":"...","breed":"..."}}
-- interests: hobby e interessi → lista di stringhe
-- traits: caratteristiche personali → lista di stringhe
-
-AZIONI: "update" (sostituisce), "delete" (rimuove elemento da lista, new_value deve indicare SOLO la stringa del nome da rimuovere), "clear" (svuota campo)
-
-ATTENZIONE pets/children: se l'utente aggiunge un animale/figlio senza menzionare gli altri,
-includi comunque TUTTI quelli già nel profilo nel new_value per non perderli.
-Esempio: profilo ha gatti [Mignolo, Prof], utente dice "ho anche un cane Rio" →
-new_value: [{{"type":"dog","name":"Rio"}},{{"type":"cat","name":"Mignolo"}},{{"type":"cat","name":"Prof"}}]
-Esempio cancellazione: utente dice "Lina non c'è più" →
-{{"field":"pets","action":"delete","new_value":"Lina","old_value":null,"reply":"Capito, mi dispiace per Lina."}}
-
-REPLY: Una sola frase breve e naturale — come direbbe un amico che ti conosce bene.
-Varia ogni volta, non ripetere sempre la stessa. NON usare mai parole come "salvato", "cancellato", "aggiornato", "rimosso", "registrato".
-Stile giusto: "Ok, lo tengo a mente!", "Capito!", "Ah, buono a sapersi.", "Perfetto.", "Certo, ci penso io.", "Fatto.", "Me lo segno.", "Lo sapevo che l'avevo sbagliata!", "Grazie per dirmelo.", "Ottimo, ora lo so."
-
-REGOLE REPLY:
-- Se il messaggio menziona più nomi di persone (moglie, figlio, fratello...), citali TUTTI nella reply anche se aggiorni un solo campo. Es: "mia moglie Laura e mio figlio Emanuele" → la reply DEVE contenere sia "Laura" che "Emanuele".
-- Se new_value è un orario, numero o cifra (es. 21, 19:30), INCLUDILO SEMPRE nella reply. Es: "ceno alle 21" → reply: "Ah, ceni alle 21, capito!"
-
-ESEMPI:
-- "non sono un architetto, sono un medico" → {{"field":"profession","action":"update","new_value":"medico","old_value":"architetto","reply":"Ah, medico! Lo tengo a mente."}}
-- "non sono sposato" → {{"field":"spouse","action":"clear","new_value":null,"old_value":null,"reply":"Capito, me lo segno."}}
-- "ho due figli, Ennio e Zoe" → {{"field":"children","action":"update","new_value":[{{"name":"Ennio"}},{{"name":"Zoe"}}],"old_value":null,"reply":"Ennio e Zoe, bello!"}}
-- "mia moglie si chiama Laura e mio figlio si chiama Emanuele" → {{"field":"spouse","action":"update","new_value":"Laura","old_value":null,"reply":"Laura e Emanuele, perfetto!"}}
-- "in realtà ceno alle 21, non alle 19:30" → {{"field":"interests","action":"update","new_value":["cena: 21"],"old_value":["cena: 19:30"],"reply":"Ah, ceni alle 21, capito!"}}
-- "ho un cane Rio e due gatti Mignolo e Prof" → {{"field":"pets","action":"update","new_value":[{{"type":"dog","name":"Rio"}},{{"type":"cat","name":"Mignolo"}},{{"type":"cat","name":"Prof"}}],"old_value":null,"reply":"Rio, Mignolo e Prof — che bella famiglia!"}}
-- "la mia auto è una Ford Focus" → {{"field":"interests","action":"update","new_value":["auto: Ford Focus"],"old_value":null,"reply":"Capito, hai una Ford Focus!"}}
-- Se proprio non capisci → {{"field":null,"action":null,"new_value":null,"old_value":null,"reply":"Capito, me lo segno!"}}"""
-
-        correction = {}
+        parsed_response = {}
         reply_fallback = "Capito, me lo segno!"
         try:
-            # USA _call_model per preservare parse_prompt — _call_with_protection lo sovrascrive con l'adattivo
             result_str = await llm_service._call_model(
                 "openai/gpt-4o-mini", parse_prompt,
                 message, user_id=user_id, route="memory_correction"
             )
-            # Extract first complete JSON object using balanced-brace parsing
-            # (avoids "Extra data" error when LLM returns multiple JSON objects)
+            # Estrai primo oggetto JSON completo con parser a profondità
             _raw = result_str or ""
             _depth = 0
             _start = None
@@ -1296,7 +1299,7 @@ ESEMPI:
                     _depth -= 1
                     if _depth == 0:
                         try:
-                            correction = _json.loads(_raw[_start:_i + 1])
+                            parsed_response = _json.loads(_raw[_start:_i + 1])
                         except _json.JSONDecodeError:
                             pass
                         break
@@ -1304,99 +1307,141 @@ ESEMPI:
             logger.error("MEMORY_CORRECTION_PARSE_ERROR user=%s err=%s", user_id, ex)
             return reply_fallback
 
-        field = correction.get("field")
-        action = correction.get("action")
-        new_value = correction.get("new_value")
-        natural_reply = (correction.get("reply") or reply_fallback).strip()
+        natural_reply = (parsed_response.get("reply") or reply_fallback).strip()
 
-        if not field or not action:
-            return natural_reply
-
-        # Fallback deterministico: se new_value contiene un numero non presente nella reply, aggiungilo
-        # (es. "ceno alle 21" → reply "Ah, buono a sapersi!" → diventa "Ah, buono a sapersi, alle 21!")
-        if natural_reply and new_value is not None and action in ("update", "set"):
-            import re as _re2
-            val_str = str(new_value) if not isinstance(new_value, (list, dict)) else ""
-            if val_str:
-                nums = _re2.findall(r'\d+', val_str)
-                for n in nums:
-                    if n not in natural_reply:
-                        natural_reply = natural_reply.rstrip("!.,") + f", {n}!"
-                        break
-
-        # Sanitizza: pets e children devono essere lista di dict (sicurezza contro LLM che restituisce stringhe)
-        if field == "pets" and action == "update" and isinstance(new_value, list):
-            sanitized = []
-            for item in new_value:
-                if isinstance(item, dict) and "name" in item:
-                    pet_dict = {"type": item.get("type", "?"), "name": item["name"]}
-                    if "breed" in item and item["breed"]:
-                        pet_dict["breed"] = item["breed"]
-                    sanitized.append(pet_dict)
-                elif isinstance(item, str) and item.strip():
-                    parts = item.strip().split(" ", 1)
-                    sanitized.append({"type": parts[0], "name": parts[1]} if len(parts) == 2 else {"type": "?", "name": item})
-            new_value = sanitized
-
-        if field == "children" and action == "update" and isinstance(new_value, list):
-            new_value = [
-                item if isinstance(item, dict) and "name" in item else {"name": str(item)}
-                for item in new_value if item
-            ]
-
-        # Applica la correzione
-        if action == "update":
-            # Sicurezza per pets/children: se il LLM restituisce solo i nuovi elementi
-            # (dimenticando quelli esistenti), merge invece di sovrascrivere
-            if field in ("pets", "children") and isinstance(new_value, list):
-                existing = profile.get(field, [])
-                existing_names = {
-                    (x.get("name", "") if isinstance(x, dict) else str(x)).lower()
-                    for x in existing if x
-                }
-                new_names = {
-                    (x.get("name", "") if isinstance(x, dict) else str(x)).lower()
-                    for x in new_value if x
-                }
-                # Se non c'è sovrapposizione con gli esistenti → merge (il LLM ha omesso quelli esistenti)
-                if existing_names and not (existing_names & new_names):
-                    merged = list(existing)
-                    for item in new_value:
-                        n = (item.get("name", "") if isinstance(item, dict) else str(item)).lower()
-                        if n and n not in existing_names:
-                            merged.append(item)
-                    profile[field] = merged
-                    logger.info("MEMORY_CORRECTION_MERGE field=%s added=%s kept=%s", field, list(new_names), list(existing_names))
-                else:
-                    profile[field] = new_value
+        # Supporta sia nuovo formato {"corrections": [...]} che vecchio {"field":..., "action":...}
+        corrections_list = parsed_response.get("corrections")
+        if corrections_list is None:
+            # Retrocompatibilità formato vecchio
+            if parsed_response.get("field") and parsed_response.get("action"):
+                corrections_list = [parsed_response]
             else:
-                profile[field] = new_value
-        elif action == "clear":
-            profile[field] = [] if field in ("children", "pets", "interests", "traits") else None
-        elif action == "delete" and isinstance(profile.get(field), list):
-            profile[field] = [
-                x for x in profile[field]
-                if (x.get("name", "") if isinstance(x, dict) else str(x)).lower() != str(new_value or "").lower()
-            ]
+                corrections_list = []
 
-        # Se abbiamo aggiornato la professione, rimuovila da traits se c'era finita per bug
-        if field == "profession" and action in ("update", "clear"):
-            raw_traits = profile.get("traits", [])
-            if raw_traits:
-                _pv = str(new_value or "").lower().strip()
+        def _apply_list_correction(field, action, new_value, old_value):
+            """Applica una correzione a un campo lista del profilo (in-place)."""
+            list_fields = {"children", "pets", "interests", "preferences", "traits"}
+
+            # Sanitizza pets
+            if field == "pets" and action == "update" and isinstance(new_value, list):
+                sanitized = []
+                for item in new_value:
+                    if isinstance(item, dict) and "name" in item:
+                        pd = {"type": item.get("type", "?"), "name": item["name"]}
+                        if item.get("breed"):
+                            pd["breed"] = item["breed"]
+                        sanitized.append(pd)
+                    elif isinstance(item, str) and item.strip():
+                        parts = item.strip().split(" ", 1)
+                        sanitized.append({"type": parts[0], "name": parts[1]} if len(parts) == 2 else {"type": "?", "name": item})
+                new_value = sanitized
+
+            if field == "children" and action == "update" and isinstance(new_value, list):
+                new_value = [
+                    item if isinstance(item, dict) and "name" in item else {"name": str(item)}
+                    for item in new_value if item
+                ]
+
+            if action == "update":
+                if field in ("pets", "children") and isinstance(new_value, list):
+                    # Merge safety: se LLM omette gli esistenti, non perderli
+                    existing = profile.get(field, [])
+                    existing_names = {
+                        (x.get("name", "") if isinstance(x, dict) else str(x)).lower()
+                        for x in existing if x
+                    }
+                    new_names = {
+                        (x.get("name", "") if isinstance(x, dict) else str(x)).lower()
+                        for x in new_value if x
+                    }
+                    if existing_names and not (existing_names & new_names):
+                        merged = list(existing)
+                        for item in new_value:
+                            n = (item.get("name", "") if isinstance(item, dict) else str(item)).lower()
+                            if n and n not in existing_names:
+                                merged.append(item)
+                        profile[field] = merged
+                        logger.info("MEMORY_CORRECTION_MERGE field=%s added=%s kept=%s", field, list(new_names), list(existing_names))
+                    else:
+                        profile[field] = new_value
+                elif field in list_fields - {"pets", "children"} and isinstance(new_value, list) and old_value is not None:
+                    # Targeted replace: rimuovi old_value, aggiungi new_value
+                    old_vals = {str(v).lower().strip() for v in (old_value if isinstance(old_value, list) else [old_value]) if v}
+                    existing = profile.get(field, [])
+                    # Normalizza preferences se è un dict
+                    if field == "preferences" and isinstance(existing, dict):
+                        flat = []
+                        for cat_vals in existing.values():
+                            if isinstance(cat_vals, list):
+                                flat.extend(cat_vals)
+                        existing = flat
+                    kept = [x for x in existing if isinstance(x, str) and x.lower().strip() not in old_vals]
+                    for v in new_value:
+                        if isinstance(v, str) and v.lower().strip() not in {k.lower().strip() for k in kept}:
+                            kept.append(v)
+                    profile[field] = kept
+                    logger.info("MEMORY_CORRECTION_TARGETED field=%s removed=%s added=%s", field, list(old_vals), new_value)
+                else:
+                    # Flat replace (scalare o lista senza old_value specificato)
+                    if field == "preferences" and isinstance(profile.get(field), dict):
+                        profile[field] = new_value  # sovrascrive struttura dict con lista flat
+                    else:
+                        profile[field] = new_value
+
+            elif action == "clear":
+                profile[field] = [] if field in list_fields else None
+
+            elif action == "delete" and isinstance(profile.get(field, []), list):
+                target = str(new_value or "").lower().strip()
+                existing = profile.get(field, [])
+                if field == "preferences" and isinstance(existing, dict):
+                    flat = []
+                    for cat_vals in existing.values():
+                        if isinstance(cat_vals, list):
+                            flat.extend(cat_vals)
+                    existing = flat
+                profile[field] = [
+                    x for x in existing
+                    if (x.get("name", "") if isinstance(x, dict) else str(x)).lower().strip() != target
+                ]
+
+        for corr in corrections_list:
+            _field = corr.get("field")
+            _action = corr.get("action")
+            _new_value = corr.get("new_value")
+            _old_value = corr.get("old_value")
+            if not _field or not _action:
+                continue
+            _apply_list_correction(_field, _action, _new_value, _old_value)
+            log("MEMORY_CORRECTION_APPLIED", user_id=user_id, field=_field, action=_action, new_value=_new_value)
+            # Pulizia auto: se la professione è aggiornata, rimuovila da traits
+            if _field == "profession" and _action in ("update", "clear"):
+                raw_traits = [t for t in profile.get("traits", []) if isinstance(t, str)]
+                _pv = str(_new_value or "").lower().strip()
                 cleaned = [t for t in raw_traits if not _pv or t.lower().strip() != _pv]
                 if len(cleaned) != len(raw_traits):
                     profile["traits"] = cleaned
-                    logger.info("MEMORY_CORRECTION_TRAITS_CLEAN removed=%s from traits", new_value)
 
-        await storage.save(f"profile:{user_id}", profile)
-        log("MEMORY_CORRECTION_APPLIED", user_id=user_id, field=field, action=action, new_value=new_value)
-        # DEBUG: verifica immediata che il valore sia effettivamente salvato nel file
+        # Normalizza traits: rimuovi duplicati e oggetti non-stringa
+        _raw_traits = profile.get("traits", [])
+        if isinstance(_raw_traits, list):
+            _seen = set()
+            _clean_traits = []
+            for t in _raw_traits:
+                if not isinstance(t, str):
+                    continue
+                _tl = t.lower().strip()
+                if _tl and _tl not in _seen:
+                    _seen.add(_tl)
+                    _clean_traits.append(t)
+            profile["traits"] = _clean_traits
+
         _verify = await storage.load(f"profile:{user_id}", default={})
-        log("MEMORY_CORRECTION_VERIFY", user_id=user_id, profession_after_save=_verify.get("profession"), field=field)
+        log("MEMORY_CORRECTION_VERIFY", user_id=user_id, profession_after_save=_verify.get("profession"),
+            fields=[c.get("field") for c in corrections_list])
 
-        # Se la professione è stata corretta, rimuovi fatti personali obsoleti sulla professione
-        if field == "profession" and action in ("update", "set"):
+        # Se la professione è stata corretta, rimuovi fatti personali obsoleti
+        if any(c.get("field") == "profession" and c.get("action") in ("update", "set") for c in corrections_list):
             try:
                 from core.personal_facts_service import personal_facts_service as _pfs
                 await _pfs.remove_profession_facts(user_id)

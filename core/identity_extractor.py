@@ -23,22 +23,34 @@ class IdentityUpdate(BaseModel):
 
 
 EXTRACTION_PROMPT = """Sei un classificatore di identita' personale.
-Analizza il messaggio dell'utente considerando il contesto recente, e estrai SOLO informazioni identitarie STABILI.
+Analizza il messaggio dell'utente e estrai SOLO informazioni identitarie STABILI sulla persona che parla in PRIMA PERSONA.
 
-REGOLE:
-- Salva SOLO dichiarazioni stabili (gusti, preferenze, tratti, nomi di animali domestici o familiari)
-- Animali (pets) devono avere "type" (es. dog, cat) e "name"
-- Figli (children) devono avere "name"
-- Coniuge (spouse) e' una stringa col nome
-- NON salvare stati temporanei (stanchezza, umore)
-- Rispondi SOLO con JSON valido
+CAMPI E REGOLE RIGOROSE:
+- interests: hobby, sport praticati, passioni (es. "formula 1", "musica elettronica", "padel")
+- preferences: gusti e preferenze stabili (es. "tifoso inter", "preferisce cena alle 21")
+- traits: SOLO aggettivi in prima persona che descrivono l'utente stesso (es. "determinato", "appassionato").
+  MAI nomi propri di persone. MAI nomi di terzi. MAI aggettivi al femminile/plurale se l'utente parla di sé.
+  MAI etichette come "nome: X". MAI tratti estratti da frasi sulla risposta dell'AI.
+- pets: animali dell'utente con "type" e "name"
+- children: figli dell'utente con "name"
+- spouse: nome del coniuge/partner
 
-ESEMPI:
+REGOLE GENERALI:
+- NON salvare stati temporanei (stanchezza, umore del momento)
+- NON estrarre informazioni su terze persone come se fossero dell'utente
+- NON estrarre se il messaggio è una domanda ("chi sono?", "cosa sai di me?")
+- NON estrarre negazioni come preferenze ("non mi piace X" → NON aggiungere X a preferences/interests)
+- Rispondi SOLO con JSON valido su una riga
+
+ESEMPI CORRETTI:
 - "Adoro la musica elettronica" -> {"interests": ["musica elettronica"]}
+- "Tifo per l'Inter, non la Juventus" -> {"preferences": ["tifoso inter"]}
 - "I miei gatti Mignolo e Prof" -> {"pets": [{"type": "cat", "name": "Mignolo"}, {"type": "cat", "name": "Prof"}]}
 - "Mia figlia Zoe" -> {"children": [{"name": "Zoe"}]}
+- "Non mi piace il tennis" -> {}
+- "Marco Ferrara ha detto..." -> {}  (terza persona, non estrarre)
 
-Rispondi con questo formato JSON (aggiungi solo i campi pertinenti, omettendo quelli non trovati, e tieni validi quelli vuoti di default):
+Rispondi con questo formato JSON (ometti campi vuoti):
 {"interests": [], "preferences": [], "traits": [], "pets": [], "children": [], "spouse": null}
 """
 
