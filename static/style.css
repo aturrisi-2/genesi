@@ -2634,6 +2634,16 @@ body.coding-active {
   overflow: hidden;
   background: linear-gradient(135deg, rgba(6, 18, 30, 0.9), rgba(10, 32, 50, 0.72));
 }
+
+#weather-widget[data-phase='day'] .weather-widget__inner {
+  background: linear-gradient(135deg, rgba(58, 154, 220, 0.3), rgba(132, 213, 255, 0.26));
+  border-top-color: rgba(214, 244, 255, 0.58);
+  box-shadow: inset 0 0 18px rgba(167, 229, 255, 0.2);
+}
+
+#weather-widget[data-phase='night'] .weather-widget__inner {
+  background: linear-gradient(135deg, rgba(6, 18, 30, 0.9), rgba(10, 32, 50, 0.72));
+}
 .weather-widget__ambient {
   position: absolute;
   inset: 0;
@@ -3130,6 +3140,16 @@ body.coding-active {
   border-radius: 10px;
   padding: 0.34rem 0.5rem;
   backdrop-filter: blur(2px);
+}
+
+#weather-widget[data-phase='day'] .weather-widget__details {
+  background: rgba(123, 203, 245, 0.16);
+  border-color: rgba(207, 241, 255, 0.56);
+}
+
+#weather-widget[data-phase='night'] .weather-widget__details {
+  background: rgba(2, 8, 16, 0.34);
+  border-color: rgba(160, 221, 255, 0.34);
 }
 
 .weather-widget__city {
