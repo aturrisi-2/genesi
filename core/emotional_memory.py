@@ -130,7 +130,61 @@ async def get_emotion_trend_summary(user_id: str, n: int = 8) -> Optional[str]:
             if needs_counts[top_need] >= 2 and top_need not in ("informazione", ""):
                 summary += f" Sembra cercare principalmente: {top_need}."
 
+        # Aggiungi nota su emotional shift: se le ultime 3 interazioni sono molto diverse
+        # dalle 3 precedenti, segnala il cambiamento
+        if len(emotions) >= 6:
+            recent_avg = sum(e.get("intensity", 0.3) for e in emotions[-3:]) / 3
+            older_avg = sum(e.get("intensity", 0.3) for e in emotions[-6:-3]) / 3
+            shift = recent_avg - older_avg
+            if shift > 0.25:
+                summary += " Noto un aumento dell'intensità emotiva recente."
+            elif shift < -0.25:
+                summary += " Noto un miglioramento rispetto alle sessioni precedenti."
+
         return summary
     except Exception as e:
         logger.debug("EMOTIONAL_TREND_ERROR user=%s err=%s", user_id, e)
+        return None
+
+
+async def detect_emotional_shift(user_id: str) -> Optional[Dict]:
+    """
+    Rileva cambiamenti stabili nello stato emotivo tra sessioni recenti e precedenti.
+    Utile per far notare a Genesi quando l'utente sta meglio o peggio.
+    Restituisce Dict con {direction, magnitude, recent_emotion} o None se non rilevato.
+    """
+    if not user_id:
+        return None
+    try:
+        emotions = await get_recent_emotions(user_id, n=12)
+        if len(emotions) < 6:
+            return None
+
+        half = len(emotions) // 2
+        recent = emotions[half:]
+        older = emotions[:half]
+
+        recent_avg = sum(e.get("intensity", 0.3) for e in recent) / len(recent)
+        older_avg = sum(e.get("intensity", 0.3) for e in older) / len(older)
+        shift = recent_avg - older_avg
+
+        if abs(shift) < 0.2:
+            return None  # Shift troppo piccolo
+
+        # Emozione dominante recente
+        recent_emotions = [e["emotion"] for e in recent if e["emotion"] not in ("neutral", "")]
+        dominant = Counter(recent_emotions).most_common(1)
+        dominant_emotion = dominant[0][0] if dominant else "neutral"
+
+        result = {
+            "direction": "increase" if shift > 0 else "decrease",
+            "magnitude": round(abs(shift), 2),
+            "recent_emotion": dominant_emotion,
+            "confidence": min(1.0, abs(shift) * 2),
+        }
+        logger.info("EMOTIONAL_SHIFT_DETECTED user=%s direction=%s magnitude=%.2f emotion=%s",
+                    user_id, result["direction"], result["magnitude"], dominant_emotion)
+        return result
+    except Exception as e:
+        logger.debug("EMOTIONAL_SHIFT_ERROR user=%s err=%s", user_id, e)
         return None

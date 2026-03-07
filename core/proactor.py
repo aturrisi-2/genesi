@@ -426,6 +426,13 @@ class Proactor:
                 if "emotion" not in brain_state:
                     brain_state["emotion"] = {"emotion": "neutral", "intensity": 0.3, "vulnerability": 0.3, "urgency": 0.1, "needs": "ascolto"}
 
+            # STEP 3.2: AUTO-CONSOLIDATION — comprimi episodi in pattern/tratti se soglia raggiunta
+            try:
+                if await memory_brain.consolidation.should_consolidate(user_id):
+                    asyncio.create_task(self._auto_consolidate(user_id))
+            except Exception as _cons_err:
+                logger.debug("AUTO_CONSOLIDATION_CHECK_FAIL user=%s err=%s", user_id, _cons_err)
+
             # Load the profile from persistent storage
             # (profile già caricato sopra per non-identity)
 
@@ -1544,6 +1551,15 @@ class Proactor:
     # ═══════════════════════════════════════════════════════════════
     # TOOL ROUTER — 100% deterministico, zero GPT su errore
     # ═══════════════════════════════════════════════════════════════
+
+    async def _auto_consolidate(self, user_id: str) -> None:
+        """Consolida episodi in pattern/tratti — lanciato in background, fail-silent."""
+        try:
+            result = await memory_brain.consolidation.consolidate(user_id)
+            logger.info("AUTO_CONSOLIDATION_DONE user=%s consolidated=%s patterns=%s traits=%s",
+                        user_id, result.get("consolidated", 0), result.get("patterns", 0), result.get("traits", 0))
+        except Exception as e:
+            logger.debug("AUTO_CONSOLIDATION_FAIL user=%s err=%s", user_id, e)
 
     async def _handle_tool(self, intent: str, message: str, user_id: str) -> str:
         """
@@ -3210,8 +3226,13 @@ Messaggio: "{message}" """
         # Emotional trend (fail-silent) — inietta storia emotiva nel prompt
         emotional_trend = ""
         try:
-            from core.emotional_memory import get_emotion_trend_summary as _get_trend
+            from core.emotional_memory import get_emotion_trend_summary as _get_trend, detect_emotional_shift as _detect_shift
             emotional_trend = await _get_trend(user_id) or ""
+            # Arricchisci il trend con shift detection
+            _shift = await _detect_shift(user_id)
+            if _shift and _shift.get("confidence", 0) >= 0.4:
+                _direction = "in aumento" if _shift["direction"] == "increase" else "in miglioramento"
+                emotional_trend = (emotional_trend or "") + f" [SHIFT EMOTIVO: intensità {_direction}, emozione dominante: {_shift['recent_emotion']}]"
             if emotional_trend:
                 logger.info("EMOTIONAL_TREND_INJECTED user=%s trend_len=%d", user_id, len(emotional_trend))
         except Exception:
