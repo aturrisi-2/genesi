@@ -24,7 +24,7 @@ except ImportError:
 
 # ─── Configurazione ───────────────────────────────────────────────────────────
 
-DEFAULT_BASE_URL = "http://localhost:8080"
+DEFAULT_BASE_URL = "http://localhost:8000"
 EMAIL = "alfio.turrisi@gmail.com"
 PASSWORD = "ZOEennio0810"
 
