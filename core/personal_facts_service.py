@@ -123,31 +123,122 @@ class PersonalFactsService:
         """Estrae fatti semplici via regex (fail-safe per quota LLM)."""
         import re
         results = []
-        
+        ts = datetime.utcnow().isoformat()
+
+        def _fact(text_str: str, category: str, key: str) -> Dict:
+            return {"id": str(uuid.uuid4())[:8], "text": text_str,
+                    "category": category, "key": key, "saved_at": ts}
+
         # 1. Dove sono/vivono i familiari ("mia figlia è a Cork")
-        family_loc = re.search(r"(mia figlia|mio figlio|mio marito|mia moglie|mio padre|mia madre) (?:è|si trova|abita|vive) a ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", text, re.IGNORECASE)
+        family_loc = re.search(
+            r"(mia figlia|mio figlio|mio marito|mia moglie|mio padre|mia madre)"
+            r" (?:è|si trova|abita|vive) a ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)",
+            text, re.IGNORECASE)
         if family_loc:
             role = family_loc.group(1).lower().strip()
             loc = family_loc.group(2).strip().title()
-            results.append({
-                "id": str(uuid.uuid4())[:8],
-                "text": f"{role.capitalize()} è a {loc}.",
-                "category": "famiglia",
-                "key": f"{role.replace(' ', '_')}_a_{loc.lower().replace(' ', '_')}",
-                "saved_at": datetime.utcnow().isoformat(),
-            })
+            results.append(_fact(f"{role.capitalize()} è a {loc}.", "famiglia",
+                                 f"{role.replace(' ', '_')}_a_{loc.lower().replace(' ', '_')}"))
 
-        # 2. Orario cena/abitudini ("cena alle 20")
-        habit_loc = re.search(r"(?:di solito|solitamente|sempre)? (?:ceno|mangio) (?:alle|verso le) (\d{1,2}(?::\d{2})?)", text, re.IGNORECASE)
-        if habit_loc:
-            time = habit_loc.group(1)
-            results.append({
-                "id": str(uuid.uuid4())[:8],
-                "text": f"L'utente cena di solito alle {time}.",
-                "category": "abitudini",
-                "key": f"cena_ore_{time.replace(':', '_')}",
-                "saved_at": datetime.utcnow().isoformat(),
-            })
+        # 2. Orario pasti ("ceno alle 20", "pranzo alle 13")
+        for meal, label in [("cen[oi]|mangio la sera", "cena"), ("pranzo|mangio a pranzo", "pranzo"), ("faccio colazione", "colazione")]:
+            meal_m = re.search(
+                rf"(?:di solito|solitamente|sempre)?[^.]*?(?:{meal})[^.]*?(?:alle|verso le) (\d{{1,2}}(?::\d{{2}})?)",
+                text, re.IGNORECASE)
+            if meal_m:
+                t = meal_m.group(1)
+                results.append(_fact(f"Fa {label} di solito alle {t}.", "abitudini", f"{label}_ore_{t.replace(':', '_')}"))
+
+        # 3. Sport/attività fisica ("vado in palestra", "faccio jogging")
+        sport_m = re.search(
+            r"(?:vado|faccio|pratico|mi alleno|gioco a)\s+(in palestra|a correre|jogging|yoga|pilates|nuoto|calcio|tennis|basket|ciclismo|bici|boxe|crossfit|padel)",
+            text, re.IGNORECASE)
+        if sport_m:
+            act = sport_m.group(1).lower().strip()
+            results.append(_fact(f"Pratica {act}.", "interessi", f"sport_{act.replace(' ', '_')}"))
+
+        # 4. Interessi espliciti ("mi piace/mi piacciono X")
+        like_m = re.findall(
+            r"mi (?:piace|piacciono|appassiona|interessa)\s+(?:molto\s+)?(?:la |le |il |i |l['']\s*)?([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{2,30}?)(?:[,.]|$)",
+            text, re.IGNORECASE)
+        for item in like_m[:2]:
+            item = item.strip().lower()
+            if len(item) > 2 and item not in ("sapere", "parlare", "sentire", "capire"):
+                results.append(_fact(f"Gli piace: {item}.", "interessi", f"piace_{item[:30].replace(' ', '_')}"))
+
+        # 5. Hobby/passioni ("ho una passione per", "sono appassionato di")
+        hobby_m = re.search(
+            r"(?:ho una passione per|sono appassionato(?:a)? di|il mio hobby è|nel tempo libero)\s+(?:la |le |il |i |l['']\s*)?([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{2,30}?)(?:[,.]|$)",
+            text, re.IGNORECASE)
+        if hobby_m:
+            hobby = hobby_m.group(1).strip().lower()
+            results.append(_fact(f"Hobby/passione: {hobby}.", "interessi", f"hobby_{hobby[:30].replace(' ', '_')}"))
+
+        # 6. Studi ("ho studiato", "mi sono laureato in", "studio")
+        study_m = re.search(
+            r"(?:ho studiato|mi sono laureato(?:a)? in|studio|sto studiando)\s+([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{2,40}?)(?:[,.]|$)",
+            text, re.IGNORECASE)
+        if study_m:
+            field = study_m.group(1).strip().lower()
+            if len(field) > 3:
+                results.append(_fact(f"Ha studiato/studia: {field}.", "biografia", f"studio_{field[:30].replace(' ', '_')}"))
+
+        # 7. Auto/mezzo di trasporto ("ho una macchina", "vado al lavoro in treno")
+        transport_m = re.search(
+            r"(?:vado|vengo|mi sposto|viaggio) (?:al lavoro|in città|ogni giorno)? (?:in|con la|col)\s+(macchina|auto|moto|treno|bici|bicicletta|metro|autobus|scooter)",
+            text, re.IGNORECASE)
+        if transport_m:
+            t = transport_m.group(1).lower()
+            results.append(_fact(f"Si sposta in {t}.", "abitudini", f"trasporto_{t}"))
+
+        # 8. Orario di lavoro ("lavoro dalle 9 alle 18", "finisco di lavorare alle 17")
+        work_hours_m = re.search(
+            r"(?:lavoro|finisco di lavorare|inizio a lavorare|entro|esco dal lavoro)[^.]*?(?:alle|verso le|dalle)\s*(\d{1,2}(?::\d{2})?)",
+            text, re.IGNORECASE)
+        if work_hours_m:
+            wh = work_hours_m.group(1)
+            results.append(_fact(f"Orario di lavoro indicativo: ore {wh}.", "abitudini", f"lavoro_ore_{wh.replace(':', '_')}"))
+
+        # 9. Luogo di lavoro ("lavoro in centro", "lavoro da casa", "ufficio a Milano")
+        workplace_m = re.search(
+            r"(?:lavoro|sono) (?:in smart working|da casa|in ufficio|in remoto|al piano|nel centro)",
+            text, re.IGNORECASE)
+        if workplace_m:
+            wp = workplace_m.group(0).strip().lower()
+            results.append(_fact(f"Modalità lavoro: {wp}.", "lavoro", f"workplace_{wp[:20].replace(' ', '_')}"))
+
+        # 10. Situazione finanziaria/economica implicita ("ho il mutuo", "affitto casa")
+        finance_m = re.search(
+            r"(ho il mutuo|pago l['']\s*affitto|sono in affitto|ho comprato casa|ho investito in)",
+            text, re.IGNORECASE)
+        if finance_m:
+            fin = finance_m.group(1).lower()
+            results.append(_fact(f"Situazione abitativa: {fin}.", "biografia", f"abitazione_{fin[:30].replace(' ', '_')}"))
+
+        # 11. Salute/benessere ("soffro di", "ho problemi di")
+        health_m = re.search(
+            r"(?:soffro di|ho problemi di|sono celiaco|sono diabetico|sono allergico a|ho l['']\s*ansia|ho la pressione)\s*([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{1,30}?)(?:[,.]|$)",
+            text, re.IGNORECASE)
+        if health_m:
+            cond = health_m.group(0).strip().lower()
+            results.append(_fact(f"Salute/benessere: {cond}.", "salute", f"salute_{cond[:30].replace(' ', '_')}"))
+
+        # 12. Preferenza musicale ("ascolto", "mi piace la musica")
+        music_m = re.search(
+            r"(?:ascolto|mi piace la musica|sono fan di|il mio genere musicale)\s*(?:molto\s*)?([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{1,25}?)(?:[,.]|$)",
+            text, re.IGNORECASE)
+        if music_m:
+            genre = music_m.group(1).strip().lower()
+            if len(genre) > 2 and genre not in ("tanto", "molto", "sempre", "spesso"):
+                results.append(_fact(f"Musica preferita: {genre}.", "interessi", f"musica_{genre[:20].replace(' ', '_')}"))
+
+        # 13. Cucina/cibo preferito ("adoro la pizza", "sono vegetariano", "sono vegano")
+        food_m = re.search(
+            r"(sono vegetariano|sono vegano|sono celiaco|sono intollerante al lattosio|non mangio carne|adoro la pasta|adoro la pizza|il mio piatto preferito è)",
+            text, re.IGNORECASE)
+        if food_m:
+            fd = food_m.group(1).lower()
+            results.append(_fact(f"Alimentazione: {fd}.", "abitudini", f"cibo_{fd[:30].replace(' ', '_')}"))
 
         return results
 
