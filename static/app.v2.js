@@ -21,10 +21,20 @@ window.responseProcessed = false;
 window.isGenesiSpeaking = false;
 let thinkingLabelTimer = null;
 let thinkingStepIndex = 0;
+let voiceStepIndex = 0;
 const THINKING_STEPS = [
   'Analizzo richiesta e contesto...',
   'Controllo memoria e strumenti...',
-  'Compongo la risposta finale...'
+  'Compongo la risposta finale...',
+  'Organizzo i pensieri...',
+];
+
+// Fasi mostrate dopo che la risposta è pronta, in attesa che parta l'audio
+const VOICE_STEPS = [
+  'Preparo la voce...',
+  'Elaboro il suono...',
+  'Sto per parlare...',
+  'Un momento...',
 ];
 let restartAttempts = 0;
 const MAX_RESTARTS = 5;
@@ -288,6 +298,7 @@ let _twImages   = '';    // rendered images HTML (appended on final render)
 // Starts character-by-character typewriter for one TTS chunk, timed to audio duration
 function _startTypewriterChunk(text, durationMs) {
   if (!_twBubble || !text) return;
+  hideThinking(); // L'audio sta partendo — nascondi qualsiasi status residuo
   clearTimeout(_twTimeout);
 
   const chars = text.split('');
@@ -319,6 +330,7 @@ function _startTypewriterChunk(text, durationMs) {
 
 // Shows fully-rendered markdown in bubble — called after TTS ends or on barge-in
 function _twFinalRender() {
+  hideThinking(); // safety: se TTS non parte mai, nascondi comunque il thinking
   if (!_twBubble) return;
   clearTimeout(_twTimeout);
   _twBubble.classList.remove('streaming');
@@ -1740,7 +1752,7 @@ async function sendChatMessageStream(message, { onChunk, onFirstChunk } = {}) {
       try { evt = JSON.parse(line.slice(6)); } catch { continue; }
 
       if (evt.chunk) {
-        updateAgentStatus(null); // Hide status when typing starts
+        // Non nascondere il thinking — la risposta è pronta ma l'audio non ha ancora iniziato
         fullText += evt.chunk;
         if (!firstChunkFired) {
           firstChunkFired = true;
@@ -1752,9 +1764,9 @@ async function sendChatMessageStream(message, { onChunk, onFirstChunk } = {}) {
       } else if (evt.synthesis_pending) {
         updateAgentStatus('Sintetizzando risposta finale...');
         fullText = '';
-        if (onChunk) onChunk(''); // empty → bubble shows just cursor ▋ while synthesis runs
+        if (onChunk) onChunk(''); // empty → bubble shows just cursor mentre synthesis gira
       } else if (evt.done) {
-        updateAgentStatus(null);
+        showThinking(null, 'voice');
         ttsText = evt.done_tts || evt.tts_text || fullText;
         // Se il backend fornisce 'response' (es: payload JSON per le immagini), usa quello!
         const finalResponse = typeof evt.response !== 'undefined' ? evt.response : (ttsText || fullText);
@@ -1921,7 +1933,7 @@ async function sendMessage(voiceText = null) {
       try {
         data = await sendChatMessageStream(text, {
           onFirstChunk: () => {
-            hideThinking();
+            // Non nascondere thinking qui — lo farà _startTypewriterChunk quando l'audio parte
             streamBubble = document.createElement('div');
             streamBubble.className = 'message genesi streaming';
             const hue = _neonHues[_neonIdx % _neonHues.length];
@@ -2099,7 +2111,7 @@ function playTTSAsync(text, mode) {
 // ===============================
 // THINKING DOTS - INDEPENDENT ROW
 // ===============================
-function showThinking(labelText = null) {
+function showThinking(labelText = null, mode = 'thinking') {
   let thinking = document.getElementById("genesi-thinking");
   const isAnimated = !labelText;
 
@@ -2135,14 +2147,27 @@ function showThinking(labelText = null) {
 
   if (isAnimated) {
     thinking.dataset.animated = 'true';
-    labelEl.textContent = THINKING_STEPS[thinkingStepIndex % THINKING_STEPS.length];
-    thinkingLabelTimer = setInterval(() => {
-      const node = document.getElementById('genesi-thinking');
-      if (!node || node.dataset.animated !== 'true') return;
-      thinkingStepIndex = (thinkingStepIndex + 1) % THINKING_STEPS.length;
-      const lbl = node.querySelector('.thinking-label');
-      if (lbl) lbl.textContent = THINKING_STEPS[thinkingStepIndex];
-    }, 1400);
+    thinking.dataset.mode = mode;
+    if (mode === 'voice') {
+      voiceStepIndex = 0;
+      labelEl.textContent = VOICE_STEPS[voiceStepIndex];
+      thinkingLabelTimer = setInterval(() => {
+        const node = document.getElementById('genesi-thinking');
+        if (!node || node.dataset.animated !== 'true') return;
+        voiceStepIndex = (voiceStepIndex + 1) % VOICE_STEPS.length;
+        const lbl = node.querySelector('.thinking-label');
+        if (lbl) lbl.textContent = VOICE_STEPS[voiceStepIndex];
+      }, 1200);
+    } else {
+      labelEl.textContent = THINKING_STEPS[thinkingStepIndex % THINKING_STEPS.length];
+      thinkingLabelTimer = setInterval(() => {
+        const node = document.getElementById('genesi-thinking');
+        if (!node || node.dataset.animated !== 'true') return;
+        thinkingStepIndex = (thinkingStepIndex + 1) % THINKING_STEPS.length;
+        const lbl = node.querySelector('.thinking-label');
+        if (lbl) lbl.textContent = THINKING_STEPS[thinkingStepIndex];
+      }, 1400);
+    }
   } else {
     thinking.dataset.animated = 'false';
     labelEl.textContent = labelText;
