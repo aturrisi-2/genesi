@@ -304,7 +304,7 @@ class Proactor:
     
     async def _handle_internal(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None, skip_document_mode: bool = False) -> tuple[str, str]:
         print(f"\n[DEBUG_GENESI] >>> _handle_internal INIZIO (User: {user_id}, Conv: {conversation_id})")
-        print(f"[DEBUG_GENESI] Message: '{message}'")
+        logger.debug(f"[PROACTOR] Message: '{message}'")
         try:
             # STEP 0.4: Unified Calendar Command (/cal)
             if message.startswith("/cal"):
@@ -361,11 +361,11 @@ class Proactor:
 
             # STEP 1: IDENTITY ROUTE (PRIMA DI TUTTO - MASSIMA PRIORITÀ)
             if is_identity_question(message):
-                print(f"[DEBUG_GENESI] -> Identity Route rilevata (deterministico)")
+                logger.debug("[PROACTOR] -> Identity Route rilevata (deterministico)")
                 log("ROUTING_DECISION", route="identity", user_id=user_id)
                 logger.info("IDENTITY_ROUTE_EXECUTION_ORDER_OK user=%s", user_id)
                 profile = await storage.load(f"profile:{user_id}", default={})
-                print(f"[DEBUG_GENESI] Profilo caricato per identity: {profile.get('name', 'Sconosciuto')}")
+                logger.debug("[PROACTOR] Profilo caricato per identity: %s", profile.get('name', 'Sconosciuto'))
                 brain_state_identity = {"profile": profile}
                 response = await self._handle_identity(user_id, message, brain_state_identity)
                 return response, "identity"
@@ -396,14 +396,14 @@ class Proactor:
                     asyncio.create_task(storage.save(f"profile:{user_id}", profile))
 
             # STEP 3: MEMORY UPDATE
-            print(f"[DEBUG_GENESI] Esecuzione memory_brain.update_brain...")
+            logger.debug("[PROACTOR] Esecuzione memory_brain.update_brain...")
             brain_state = await memory_brain.update_brain(user_id, message)
             if brain_state is None:
-                print(f"[DEBUG_GENESI] ! brain_state caricato era nullo, inizializzo default")
+                logger.debug("[PROACTOR] ! brain_state caricato era nullo, inizializzo default")
                 brain_state = {"profile": {}, "latent": {}, "relational": {}}
 
             _prof_name = brain_state.get('profile', {}).get('name', 'unknown')
-            print(f"[DEBUG_GENESI] Memory aggiornata. Profilo persistente nome: {_prof_name}")
+            logger.debug(f"[PROACTOR] Memory aggiornata. Profilo persistente nome: {_prof_name}")
 
             logger.info("PROACTOR_MEMORY_UPDATED user=%s profile_name=%s trust=%.3f episodes=%d",
                         user_id,
@@ -505,17 +505,17 @@ class Proactor:
 
             # STEP 4: INTENT CLASSIFICATION
             if intent is None:
-                print(f"[DEBUG_GENESI] Avvio Intent Classifier LLM...")
+                logger.debug("[PROACTOR] Avvio Intent Classifier LLM...")
                 intents = await intent_classifier.classify_async(message, user_id)
             else:
-                print(f"[DEBUG_GENESI] Intent già fornito: {intent}")
+                logger.debug(f"[PROACTOR] Intent già fornito: {intent}")
                 intents = [intent] if isinstance(intent, str) else intent
                 
             if not intents:
-                print(f"[DEBUG_GENESI] Nessun intento rilevato, default a 'chat_free'")
+                logger.debug("[PROACTOR] Nessun intento rilevato, default a 'chat_free'")
                 intents = ["chat_free"]
             
-            print(f"[DEBUG_GENESI] INTENTI FINALI: {intents}")
+            logger.debug(f"[PROACTOR] INTENTI FINALI: {intents}")
             
             # STEP 4.1: CONVERSATIONAL INTEGRATION FORCE
             # Ensures tool/technical responses are wrapped in Genesi's voice via Relational synthesis
