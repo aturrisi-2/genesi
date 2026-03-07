@@ -4367,8 +4367,8 @@ function setVoiceStatusText(text) {
     if (cond.includes('rain') || cond.includes('drizzle') || icon.startsWith('09') || icon.startsWith('10')) {
       return { weather: 'rain', phase: isNight ? 'night' : 'day' };
     }
-    // 02* = few clouds (11-25%) → trattato come clear, non mostra le bande
-    if (cond.includes('cloud') || icon.startsWith('03') || icon.startsWith('04')) {
+    // Solo 03* (scattered) e 04* (broken/overcast) mostrano nuvole — "few clouds" (02*) = clear
+    if (icon.startsWith('03') || icon.startsWith('04')) {
       return { weather: 'clouds', phase: isNight ? 'night' : 'day' };
     }
     return { weather: 'clear', phase: isNight ? 'night' : 'day' };
