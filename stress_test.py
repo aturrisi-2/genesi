@@ -565,7 +565,8 @@ def main():
     parser = argparse.ArgumentParser(description="Genesi Stress Test")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="Base URL del server")
     parser.add_argument("--verbose", action="store_true", help="Mostra risposte complete")
-    parser.add_argument("--skip", nargs="*", default=[], help="Test da saltare (es. 08 09)")
+    parser.add_argument("--skip", nargs="*", default=[], help="Test da saltare (es. image_gen live_search)")
+    parser.add_argument("--image-gen", action="store_true", help="Abilita test generazione immagini (disabilitato di default — costa crediti API)")
     args = parser.parse_args()
 
     print(f"\n{C.BOLD}{C.CYAN}═══════════════════════════════════════════════════{C.RESET}")
@@ -581,28 +582,31 @@ def main():
         print(f"\n{C.RED}{C.BOLD}STOP: autenticazione fallita. Verifica credenziali e URL.{C.RESET}\n")
         sys.exit(1)
 
+    # image_gen disabilitato di default per evitare costi API non voluti
     skip = set(args.skip or [])
+    if not args.image_gen:
+        skip.add("image_gen")
 
-    def run(num, fn):
-        if num not in skip:
+    def run(key, fn):
+        if key not in skip:
             fn(c)
 
-    run("03", test_03_basic_response)
-    run("04", test_04_personal_facts_learning)
-    run("05", test_05_memory_cross_message)
-    run("06", test_06_weather)
-    run("07", test_07_news)
-    run("08", test_08_image_search)
-    run("09", test_09_image_generation)
-    run("10", test_10_live_search)
-    run("11", test_11_reminder)
-    run("12", test_12_emotional_warmth)
-    run("13", test_13_multi_intent_synthesis)
-    run("14", test_14_memory_correction)
-    run("15", test_15_identity_resilience)
-    run("16", test_16_conversation_continuity)
-    run("17", test_17_edge_cases)
-    run("18", test_18_performance)
+    run("basic",           test_03_basic_response)
+    run("personalfacts",   test_04_personal_facts_learning)
+    run("memory",          test_05_memory_cross_message)
+    run("weather",         test_06_weather)
+    run("news",            test_07_news)
+    run("image_search",    test_08_image_search)
+    run("image_gen",       test_09_image_generation)   # disabilitato di default — usa --image-gen per abilitare
+    run("live_search",     test_10_live_search)
+    run("reminder",        test_11_reminder)
+    run("emotional",       test_12_emotional_warmth)
+    run("multi_intent",    test_13_multi_intent_synthesis)
+    run("memory_correction", test_14_memory_correction)
+    run("identity",        test_15_identity_resilience)
+    run("continuity",      test_16_conversation_continuity)
+    run("edge",            test_17_edge_cases)
+    run("performance",     test_18_performance)
 
     # ─── Summary ──────────────────────────────────────────────────────────────
     section("RISULTATI FINALI")
