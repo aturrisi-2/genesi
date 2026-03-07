@@ -2982,15 +2982,9 @@ body.coding-active {
 }
 
 .weather-widget__fog {
-  background: repeating-linear-gradient(
-    to bottom,
-    rgba(218, 232, 248, 0.22) 0px,
-    rgba(218, 232, 248, 0.22) 6px,
-    transparent 6px,
-    transparent 16px
-  );
-  filter: blur(1px);
-  animation: ww-fog-drift 8s ease-in-out infinite, ww-fog-breathe 6s ease-in-out infinite;
+  background: rgba(210, 228, 245, 0.18);
+  filter: blur(3px);
+  animation: ww-fog-breathe 6s ease-in-out infinite;
 }
 
 .weather-widget__lightning {
