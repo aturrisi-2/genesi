@@ -328,22 +328,43 @@ body::after {
 .stream-cursor {
   display: inline-block;
   width: 2px;
-  height: 1em;
-  background: currentColor;
+  height: 0.95em;
   margin-left: 2px;
   vertical-align: text-bottom;
-  animation: blink-cursor 0.7s step-end infinite;
+  border-radius: 2px;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    currentColor 20%,
+    currentColor 80%,
+    transparent 100%
+  );
+  animation: cursor-breathe 1.6s ease-in-out infinite;
+  will-change: opacity, transform, filter;
 }
 
-@keyframes blink-cursor {
+@keyframes cursor-breathe {
+  0%   { opacity: 0.9; transform: scaleY(1);    filter: brightness(1)   blur(0px); }
+  40%  { opacity: 0.7; transform: scaleY(0.92); filter: brightness(1.6) blur(0.5px); }
+  100% { opacity: 0.9; transform: scaleY(1);    filter: brightness(1)   blur(0px); }
+}
 
-  0%,
-  100% {
-    opacity: 1;
-  }
+/* ── Char materialize — ogni nuovo carattere appare dalla luce ── */
+.char-appear {
+  animation: char-materialize 0.25s ease-out forwards;
+}
 
-  50% {
+@keyframes char-materialize {
+  from {
     opacity: 0;
+    filter: blur(6px) brightness(4);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(1px) brightness(1.8);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0px) brightness(1);
   }
 }
 

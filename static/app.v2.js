@@ -307,7 +307,11 @@ function _startTypewriterChunk(text, durationMs) {
     if (i >= chars.length) { _twShown += text; return; }
     const ch = chars[i++];
     typed += ch;
-    _twBubble.innerHTML = _twShown + typed + '<span class="stream-cursor">▋</span>';
+    const _twPrev = typed.slice(0, -1);
+    const _twLast = typed.slice(-1);
+    _twBubble.innerHTML = _twShown + _twPrev +
+      '<span class="char-appear">' + _twLast + '</span>' +
+      '<span class="stream-cursor"></span>';
     _twTimeout = setTimeout(typeNext, Math.max(1, getWeight(ch) * msPerWeight));
   };
   typeNext();
@@ -1935,7 +1939,7 @@ async function sendMessage(voiceText = null) {
           onChunk: (fullText) => {
             if (streamBubble) {
               // Show only cursor while TTS will drive the typewriter
-              streamBubble.innerHTML = '<span class="stream-cursor">▋</span>';
+              streamBubble.innerHTML = '<span class="stream-cursor"></span>';
               scrollToBottom();
             }
           }
@@ -1947,7 +1951,7 @@ async function sendMessage(voiceText = null) {
           // Save for _twFinalRender — TTS will drive typewriter, render markdown at end
           _twFullText = renderMessageContent(parsed.text);
           _twImages = renderImages(parsed.images);
-          streamBubble.innerHTML = '<span class="stream-cursor">▋</span>';
+          streamBubble.innerHTML = '<span class="stream-cursor"></span>';
           saveMessageToConversation('assistant', parsed.text);
           playUISound('receive');
           scrollToBottom();
