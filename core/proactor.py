@@ -995,7 +995,7 @@ class Proactor:
                 profile["pets"] = deduped_pets
                 _profile_dirty = True
 
-        # AUTO-CLEAN TRAITS: rimuove valori professione finiti erroneamente in traits
+        # AUTO-CLEAN TRAITS: rimuove valori professione e dict finiti erroneamente in traits
         _PROF_KW_TRAITS = [
             "manager", "medico", "architetto", "ingegnere", "avvocato", "dottore",
             "comandante", "direttore", "tecnico", "analista", "developer", "programmer",
@@ -1011,8 +1011,40 @@ class Proactor:
                 and t.lower().strip() != _current_prof
             ]
             if len(cleaned_traits) != len(raw_traits):
-                logger.info("IDENTITY_AUTO_CLEAN traits old=%s new=%s", raw_traits, cleaned_traits)
+                logger.info("IDENTITY_AUTO_CLEAN traits old=%d new=%d", len(raw_traits), len(cleaned_traits))
                 profile["traits"] = cleaned_traits
+                _profile_dirty = True
+
+        # AUTO-CLEAN PREFERENCES: rimuove near-duplicates accumulati nel tempo
+        raw_prefs = profile.get("preferences", [])
+        if isinstance(raw_prefs, list) and len(raw_prefs) > 1:
+            _pstop = {"il", "la", "lo", "i", "gli", "le", "un", "una", "uno",
+                      "di", "da", "in", "a", "con", "su", "per", "tra", "fra",
+                      "che", "e", "o", "ma", "non", "si", "mi", "ti", "ci", "vi"}
+
+            def _pref_words(s: str):
+                return {w for w in s.lower().split() if len(w) > 3 and w not in _pstop}
+
+            deduped_prefs = []
+            for pref in raw_prefs:
+                if not isinstance(pref, str):
+                    continue
+                pw = _pref_words(pref)
+                is_dup = False
+                for kept in deduped_prefs:
+                    kw = _pref_words(kept)
+                    if not pw or not kw:
+                        if pref.lower().strip() == kept.lower().strip():
+                            is_dup = True
+                            break
+                    elif len(pw & kw) / max(min(len(pw), len(kw)), 1) > 0.5:
+                        is_dup = True
+                        break
+                if not is_dup:
+                    deduped_prefs.append(pref)
+            if len(deduped_prefs) != len(raw_prefs):
+                logger.info("IDENTITY_AUTO_CLEAN prefs old=%d new=%d", len(raw_prefs), len(deduped_prefs))
+                profile["preferences"] = deduped_prefs
                 _profile_dirty = True
 
         if _profile_dirty:
@@ -1421,9 +1453,26 @@ class Proactor:
                                 flat.extend(cat_vals)
                         existing = flat
                     kept = [x for x in existing if isinstance(x, str) and x.lower().strip() not in old_vals]
+
+                    def _pref_similar(a: str, b: str) -> bool:
+                        """True se a e b condividono >50% delle parole significative (len>3)."""
+                        _stop = {"il", "la", "lo", "i", "gli", "le", "un", "una", "uno",
+                                 "di", "da", "in", "a", "con", "su", "per", "tra", "fra",
+                                 "che", "e", "o", "ma", "non", "si", "mi", "ti", "ci", "vi"}
+                        wa = {w for w in a.lower().split() if len(w) > 3 and w not in _stop}
+                        wb = {w for w in b.lower().split() if len(w) > 3 and w not in _stop}
+                        if not wa or not wb:
+                            return a.lower().strip() == b.lower().strip()
+                        return len(wa & wb) / max(min(len(wa), len(wb)), 1) > 0.5
+
                     for v in new_value:
-                        if isinstance(v, str) and v.lower().strip() not in {k.lower().strip() for k in kept}:
-                            kept.append(v)
+                        if not isinstance(v, str):
+                            continue
+                        v_norm = v.lower().strip()
+                        # Skip se già presente esattamente o per similarità
+                        if any(_pref_similar(v_norm, k) for k in kept):
+                            continue
+                        kept.append(v)
                     profile[field] = kept
                     logger.info("MEMORY_CORRECTION_TARGETED field=%s removed=%s added=%s", field, list(old_vals), new_value)
                 else:

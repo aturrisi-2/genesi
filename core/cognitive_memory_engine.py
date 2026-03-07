@@ -142,6 +142,10 @@ class CognitiveMemoryEngine:
             "noi", "voi", "loro", "qui", "lì", "qua", "là", "dove",
             "nato", "nata",   # "sono nato a..." non è una professione
             "razza",           # "sono di razza X" = razza animale, non professione
+            # Falsi positivi da "sono un po'..." o simili
+            "po", "pò", "poco", "tanto", "molto", "abbastanza", "piuttosto",
+            "sempre", "spesso", "mai", "ancora", "già", "solo", "anche",
+            "stesso", "stessa", "sicuro", "sicura", "convinto", "convinta",
         }
         # Preposizioni/articoli che non possono aprire una professione
         _PROFESSION_BAD_STARTERS = {

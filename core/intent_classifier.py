@@ -765,11 +765,9 @@ REGOLE SPECIALI:
             )
             
             if response:
-                print(f"[DEBUG_GENESI] Risposta LLM Classifier: {response.strip()}")
                 json_match = re.search(r'\{.*\}', response, re.DOTALL)
                 if json_match:
                     data = json.loads(json_match.group(0))
-                    print(f"[DEBUG_GENESI] JSON Parsificato: {data}")
                     intents = data.get("intents", [])
                     if not intents and "intent" in data:
                         intents = [data["intent"]]
