@@ -180,6 +180,16 @@ class ContextAssembler:
         except Exception:
             pass
 
+        # Emotional history: andamento emotivo recente (fail-silent)
+        try:
+            from core.emotional_memory import get_emotion_trend_summary as _get_trend
+            trend = await _get_trend(user_id)
+            if trend:
+                context["emotional_trend"] = trend
+                summary += f"\n[ANDAMENTO EMOTIVO RECENTE]\n{trend}"
+        except Exception:
+            pass
+
         context["summary"] = summary
         context["current_message"] = user_message
 

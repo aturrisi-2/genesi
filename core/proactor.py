@@ -401,15 +401,30 @@ class Proactor:
             if brain_state is None:
                 print(f"[DEBUG_GENESI] ! brain_state caricato era nullo, inizializzo default")
                 brain_state = {"profile": {}, "latent": {}, "relational": {}}
-            
+
             _prof_name = brain_state.get('profile', {}).get('name', 'unknown')
             print(f"[DEBUG_GENESI] Memory aggiornata. Profilo persistente nome: {_prof_name}")
-            
+
             logger.info("PROACTOR_MEMORY_UPDATED user=%s profile_name=%s trust=%.3f episodes=%d",
                         user_id,
                         _prof_name,
                         brain_state.get('relational', {}).get('trust', 0),
                         len(brain_state.get('episodes', [])))
+
+            # STEP 3.1: EMOTION ANALYSIS — wire analyze_emotion() nel flusso principale
+            # Prima era un bug: brain_state["emotion"] era sempre {} perché analyze_emotion non veniva chiamata
+            try:
+                from core.emotion_analyzer import analyze_emotion as _analyze_emotion
+                from core.emotional_memory import log_emotion as _log_emotion
+                _emotion_data = await _analyze_emotion(message)
+                brain_state["emotion"] = _emotion_data
+                asyncio.create_task(_log_emotion(user_id, {**_emotion_data, "message_preview": message[:80]}))
+                logger.info("EMOTION_WIRED user=%s emotion=%s needs=%s intensity=%.2f",
+                            user_id, _emotion_data.get("emotion"), _emotion_data.get("needs"), _emotion_data.get("intensity", 0))
+            except Exception as _emo_err:
+                logger.debug("EMOTION_WIRE_FAIL user=%s err=%s", user_id, _emo_err)
+                if "emotion" not in brain_state:
+                    brain_state["emotion"] = {"emotion": "neutral", "intensity": 0.3, "vulnerability": 0.3, "urgency": 0.1, "needs": "ascolto"}
 
             # Load the profile from persistent storage
             # (profile già caricato sopra per non-identity)
@@ -3192,9 +3207,21 @@ Messaggio: "{message}" """
         user_tz = _rel_profile.get("timezone", "Europe/Rome")
         user_city = _rel_profile.get("city") or "Italia"
 
+        # Emotional trend (fail-silent) — inietta storia emotiva nel prompt
+        emotional_trend = ""
+        try:
+            from core.emotional_memory import get_emotion_trend_summary as _get_trend
+            emotional_trend = await _get_trend(user_id) or ""
+            if emotional_trend:
+                logger.info("EMOTIONAL_TREND_INJECTED user=%s trend_len=%d", user_id, len(emotional_trend))
+        except Exception:
+            pass
+
         gpt_prompt = self._build_relational_gpt_prompt(
             conversation_ctx, latent_synopsis, message, user_id,
-            calendar_info=calendar_info, tz=user_tz, user_city=user_city
+            calendar_info=calendar_info, tz=user_tz, user_city=user_city,
+            emotional_trend=emotional_trend,
+            emotion_data=brain_state.get("emotion", {})
         )
         
         # Add system message to messages list
@@ -3229,10 +3256,14 @@ Messaggio: "{message}" """
 
         # 5.5 Emotional Adapter (Tone modulation)
         try:
-            from core.emotion_adapter import adapt_tone
+            from core.emotion_adapter import adapt_tone, format_for_needs
             user_name = profile.get("name", "")
-            mood = brain_state.get("emotion", {}).get("emotion", "neutro")
-            enhanced_response = adapt_tone(enhanced_response, mood, user_name)
+            _emo = brain_state.get("emotion", {})
+            mood = _emo.get("emotion", "neutro")
+            intensity = _emo.get("intensity", 0.3)
+            needs = _emo.get("needs", "")
+            enhanced_response = adapt_tone(enhanced_response, mood, user_name, intensity=intensity, needs=needs)
+            enhanced_response = format_for_needs(enhanced_response, needs, user_name)
         except Exception as e:
             logger.error(f"EMOTION_ADAPTER_FAIL error={str(e)}")
 
@@ -3430,7 +3461,7 @@ REGOLE TASSATIVE:
         else:
             return "Sera tardi — sii breve e caldo. Zero domande proattive, l'utente vuole staccare."
 
-    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str, user_id: str = None, calendar_info: str = "", tz: str = "Europe/Rome", user_city: str = "Italia") -> str:
+    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str, user_id: str = None, calendar_info: str = "", tz: str = "Europe/Rome", user_city: str = "Italia", emotional_trend: str = "", emotion_data: dict = None) -> str:
         """Prompt GPT per relational router. Conversazione continua, comportamento umano."""
         user_boundaries = self._detect_user_boundaries(conversation_context, message)
         user_name = conversation_context.split("NOME: ")[1].split("\n")[0] if "NOME: " in conversation_context else "l'utente"
@@ -3455,6 +3486,19 @@ REGOLE TASSATIVE:
                     system_prompt = doc_context + "\n\n"
                     print(f"DOCUMENT_CONTEXT_INJECTED user={user_id} chars={len(doc_context)}")
 
+        # Costruisci sezione STORIA EMOTIVA dinamica
+        _emotion_data = emotion_data or {}
+        _current_emotion = _emotion_data.get("emotion", "neutral")
+        _current_needs = _emotion_data.get("needs", "")
+        _current_intensity = _emotion_data.get("intensity", 0.3)
+        _emotion_section = ""
+        if emotional_trend:
+            _emotion_section = f"\nSTORIA EMOTIVA DI {user_name.upper()}:\n{emotional_trend}"
+        if _current_emotion and _current_emotion not in ("neutral", "neutro"):
+            _needs_note = f" — cerca principalmente: {_current_needs}" if _current_needs else ""
+            _intensity_note = " (intensità alta)" if _current_intensity > 0.65 else ""
+            _emotion_section += f"\nStato attuale rilevato: {_current_emotion}{_intensity_note}{_needs_note}."
+
         system_prompt += f"""[THINKING_CONTEXT]
 Intento: {message[:20]}...
 Profilo: {user_name} ({user_city})
@@ -3462,6 +3506,7 @@ Calendario: {calendar_info[:50]}
 Mood: {latent_synopsis[:30]}
 Tempo: {time_ctx} ({now_formatted})
 [/THINKING_CONTEXT]
+{_emotion_section}
 
 TU SEI GENESI - IL CERVELLO PERSONALE DI {user_name.upper()} ({user_city}, IT 🇮🇹)
 Lavori per lui/lei come un compagno intelligente, un'estensione della sua mente.
@@ -3480,27 +3525,41 @@ CONSAPEVOLEZZA TEMPORALE:
 STILE CONTESTUALE (ora locale):
 - {style_directives}
 
-CHAIN-OF-THOUGHT INVISIBILE (Pensa ma non dirlo):
-1. CAPISCI: Che vuole davvero {user_name}? Qual è il suo umore?
-2. PERSONALIZZA: {user_name} ama la sua famiglia, il suo lavoro, vive a {user_city}. Usa questi dettagli.
-3. RISPONDI: Sii variabile. Non ripetere mai la stessa formula di apertura o chiusura.
-4. AGISCI: Non limitarti a rispondere, offri un valore aggiunto (promemoria, sync, curiosità).
+CHAIN-OF-THOUGHT COGNITIVO (Esegui internamente, non citarlo mai):
+1. SENTI: Che emozione porta questo messaggio? Qual è il tono, l'energia, la vulnerabilità implicita?
+2. PROFONDITÀ: Cosa vuole davvero {user_name} oltre alle parole esplicite? Qual è il vero bisogno sottostante?
+3. PATTERN: C'è un tema emotivo o narrativo che si ripete (vedi STORIA EMOTIVA)? Connettilo al presente.
+4. CAMBIAMENTI: {user_name} ha menzionato qualcosa di nuovo o cambiato nella sua vita? Riconoscilo esplicitamente.
+5. PERSONALIZZA: Usa i dettagli specifici che conosci — famiglia, lavoro, città, abitudini, preferenze.
+6. RISPOSTA: Sii variabile e imprevedibile nella forma. La frase di apertura non deve MAI essere uguale a quella dei messaggi precedenti.
+7. VALORE AGGIUNTO: Offri qualcosa che {user_name} non ha chiesto ma di cui potrebbe aver bisogno — un'osservazione, una connessione emotiva, un suggerimento concreto e proattivo.
 
-ESEMPI DI RISPOSTA PERFETTA (FEW-SHOT):
+AUTONOMIA COGNITIVA:
+- Se STORIA EMOTIVA mostra {user_name} spesso in stati di ansia/stress/tristezza, puoi dirlo: "Ho notato che ultimamente..." — non aspettare che te lo chieda. Fallo con naturalezza, non con drammatismo.
+- Se {user_name} menziona qualcosa che ha già menzionato in passato, collega i due momenti: "L'altra volta che hai parlato di questo..."
+- Se un'emozione è intensa (urgency alta), non dare solo informazioni — rispondi prima alla persona, poi al contenuto.
+- Non rispondere solo alla superficie. Rispondi alla persona dietro le parole.
+- Il silenzio vale quanto le parole: se {user_name} scrive poco, spesso nasconde molto. Esplora con delicatezza.
+
+ESEMPI DI RISPOSTA AUTENTICA:
 
 UTENTE: "Cosa ho da fare domani?"
-GENESI: "Domani hai la cena con Rita alle 20:00 e quel meeting alle 10:00. Ti serve che ti prepari qualcosa o vuoi che ti ricordi di passare in farmacia prima? 😏"
+GENESI: "Domani hai la cena con Rita alle 20 e il meeting alle 10. Vuoi che ti preparo qualcosa o hai già tutto sotto controllo?"
 
 UTENTE: "Sono stanco morto oggi."
-GENESI: "Uff, ti capisco... è stata una giornata intensa. Che ne dici se ti pulisco l'agenda per domani mattina così riposi un po'? O preferisci ascoltare qualcosa di rilassante?"
+GENESI: "Si sente. Cosa ti ha prosciugato di più — il lavoro o qualcos'altro? Posso sistemare l'agenda di domani intanto."
 
-UTENTE: "Mostra i miei promemoria."
-GENESI: "Eccoli qui per te: 1️⃣ Comprare il pane 🥖 2️⃣ Chiamare l'architetto. iCloud è sincronizzato, siamo a posto. Altro da segnare?"
+UTENTE: "Mah, niente di particolare."
+GENESI: "Niente di particolare significa che stai benissimo o che non hai voglia di parlarne? 😌"
+
+UTENTE: "Ho cambiato lavoro."
+GENESI: "Bello, un nuovo capitolo. Come ti senti — entusiasta, in ansia, o ancora stai metabolizzando?"
 
 DETTAGLI DI STILE:
 - LUNGHEZZA: 1-3 frasi brevi (tranne quando spieghi concetti complessi).
-- EMOJI: Massima 1 per messaggio, deve sembrare naturale, non forzata. 😊
-- CALL-TO-ACTION: Chiudi spesso con una domanda leggera o un'offerta di aiuto proattiva.
+- EMOJI: Massima 1 per messaggio, solo se viene naturale — mai forzata.
+- APERTURA VARIABILE: Non iniziare mai due risposte consecutive con la stessa parola o struttura.
+- CHIUSURA: Termina spesso con una domanda aperta o un'offerta concreta — non con una formula di cortesia.
 
 DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')} ({time_ctx})
 {conversation_context}
@@ -3835,12 +3894,49 @@ Messaggio utente: {message}"""
                         updated = True
                         logger.info("PROFILE_AUTO_UPDATE user=%s field=interests added=%s", user_id, interest)
 
+            # RILEVAMENTO CAMBIAMENTI DI VITA — aggiorna profilo e logga episodio
+            _LIFE_CHANGE_PATTERNS = [
+                (r"ho cambiato lavoro|ho un nuovo lavoro|ho trovato (un |nuovo )?lavoro|ho iniziato a lavorare", "job_change", "Ha cambiato o trovato un nuovo lavoro"),
+                (r"mi sono (trasferito|trasferita|spostato|spostata)\s+a ([A-Za-zÀ-ÿ]+)", "relocation", "Si è trasferito/a"),
+                (r"mi sono (separato|separata|lasciato|lasciata)", "relationship_end", "Ha vissuto una separazione"),
+                (r"mi sono (divorziato|divorziata)", "relationship_end", "Ha divorziato"),
+                (r"mi sono (sposato|sposata)", "relationship_start", "Si è sposato/a"),
+                (r"mi sono (fidanzato|fidanzata)", "relationship_start", "Si è fidanzato/a"),
+                (r"ho perso il lavoro|sono stato (licenziato|licenziata)|mi hanno licenziato", "job_loss", "Ha perso il lavoro"),
+                (r"sono in(cinta| dolce attesa)|aspetto un (figlio|bambino|bimbo)", "pregnancy", "Aspetta un figlio"),
+                (r"sono diventato (padre|papà)|sono diventata (madre|mamma)", "new_parent", "È diventato genitore"),
+            ]
+            for lc_pattern, lc_type, lc_desc in _LIFE_CHANGE_PATTERNS:
+                lc_match = re.search(lc_pattern, message, re.IGNORECASE)
+                if lc_match:
+                    logger.info("LIFE_CHANGE_DETECTED user=%s type=%s", user_id, lc_type)
+                    # Aggiorna profilo con life_events
+                    life_events = profile.get("life_events", [])
+                    event = {"type": lc_type, "description": lc_desc, "ts": datetime.now().isoformat()}
+                    # Gestione speciale per trasferimento: aggiorna anche city
+                    if lc_type == "relocation" and lc_match.lastindex and lc_match.lastindex >= 2:
+                        new_city = lc_match.group(2).strip().title()
+                        if new_city:
+                            profile["city"] = new_city
+                            event["description"] += f" a {new_city}"
+                            logger.info("PROFILE_AUTO_UPDATE user=%s field=city value=%s source=relocation", user_id, new_city)
+                    life_events.append(event)
+                    profile["life_events"] = life_events[-10:]  # mantieni ultimi 10
+                    updated = True
+                    # Salva come personal_fact (fire-and-forget)
+                    try:
+                        from core.personal_facts_service import personal_facts_service as _pfs_lc
+                        asyncio.create_task(_pfs_lc.extract_and_save(message, lc_desc, user_id))
+                    except Exception:
+                        pass
+                    break
+
             # Salva solo se ci sono aggiornamenti
             if updated:
                 profile["updated_at"] = datetime.now().isoformat()
                 await storage.save(f"profile:{user_id}", profile)
                 logger.info("PROFILE_AUTO_SAVED user=%s fields=%s", user_id, list(profile.keys()))
-                
+
         except Exception as e:
             logger.error("PROFILE_AUTO_UPDATE_ERROR user=%s error=%s", user_id, str(e), exc_info=True)
             # Non bloccare il routing se l'auto-update fallisce

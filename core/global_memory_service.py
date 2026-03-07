@@ -21,7 +21,7 @@ from core.log import log
 logger = logging.getLogger("genesi")
 
 _STORAGE_KEY = "global_insights:{user_id}"
-_CONSOLIDATION_INTERVAL_HOURS = 24
+_CONSOLIDATION_INTERVAL_HOURS = 6
 
 _CONSOLIDATION_PROMPT = """\
 Sei un assistente che analizza conversazioni per estrarre pattern stabili sull'utente.
