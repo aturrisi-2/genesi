@@ -157,10 +157,13 @@ class IntentClassifier:
             ],
             "image_generation": [
                 "genera un'immagine", "genera una immagine", "genera un immagine",
+                "generami un'immagine", "generami una immagine", "generami un immagine",
+                "generami immagine", "generami una foto", "generami foto",
                 "crea un'immagine", "crea una immagine",
                 "disegna", "crea un'illustrazione", "genera una foto", "crea una foto",
                 "illustra", "crea una picture", "genera grafica", "dipingi", "disegni",
                 "genera immagine", "crea immagine", "genera foto",
+                "fammi vedere un'immagine", "mostrami un'immagine",
             ],
             # ── Integrazioni esterne ──────────────────────────────────────────
             "gmail_setup": [
