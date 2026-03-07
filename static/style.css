@@ -2835,7 +2835,7 @@ body.coding-active {
   background: transparent;
   border: none;
   box-shadow: none;
-  overflow: visible;
+  overflow: hidden;
   pointer-events: none;
   z-index: 2;
 }
