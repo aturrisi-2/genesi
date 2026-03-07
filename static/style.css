@@ -2925,7 +2925,7 @@ body.coding-active {
 .weather-widget__cloud {
   position: absolute;
   top: 18px;
-  left: -46%;
+  left: 110%;
   width: 52%;
   height: 13px;
   border-radius: 999px;
@@ -3161,7 +3161,7 @@ body.coding-active {
   }
 
   to {
-    transform: translateX(340%);
+    transform: translateX(-380%);
   }
 }
 
