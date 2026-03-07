@@ -3392,6 +3392,7 @@ body.coding-active {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
+  overflow: hidden;
 }
 
 .weather-widget__details {
