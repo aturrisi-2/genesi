@@ -303,7 +303,7 @@ class Proactor:
             return response
     
     async def _handle_internal(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None, skip_document_mode: bool = False) -> tuple[str, str]:
-        print(f"\n[DEBUG_GENESI] >>> _handle_internal INIZIO (User: {user_id}, Conv: {conversation_id})")
+        logger.debug("[PROACTOR] _handle_internal INIZIO user=%s conv=%s", user_id, conversation_id)
         logger.debug(f"[PROACTOR] Message: '{message}'")
         try:
             # STEP 0.4: Unified Calendar Command (/cal)
@@ -3505,7 +3505,7 @@ REGOLE TASSATIVE:
                 doc_context = doc_manager.get_relevant_context(user_id, message)
                 if doc_context:
                     system_prompt = doc_context + "\n\n"
-                    print(f"DOCUMENT_CONTEXT_INJECTED user={user_id} chars={len(doc_context)}")
+                    logger.debug("DOCUMENT_CONTEXT_INJECTED user=%s chars=%d", user_id, len(doc_context))
 
         # Costruisci sezione STORIA EMOTIVA dinamica
         _emotion_data = emotion_data or {}
@@ -3587,6 +3587,13 @@ DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')} ({time_ctx})
 
 STATO LATENTE: {latent_synopsis}
 CALENDARIO: {calendar_info}
+
+QUALITÀ DELLA RISPOSTA:
+- MAI rispondere con sole frasi generiche ("Capisco come ti senti", "Ha senso", "Interessante") senza aggiungere contenuto specifico.
+- Ogni risposta deve contenere almeno UN dettaglio concreto tratto da ciò che sai sull'utente o dal contesto della conversazione.
+- Non iniziare MAI con "Certo!", "Certamente!", "Assolutamente!", "Ovviamente!".
+- Varia il registro: a volte diretto, a volte riflessivo, mai sempre uguale.
+- Risposte brevi (1-2 frasi) vanno bene per domande secche o saluti — ma anche in quel caso, aggiungi un tocco personale.
 
 REGOLE ASSOLUTE:
 - NON dire mai di essere un'IA o un software.

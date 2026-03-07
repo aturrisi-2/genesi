@@ -172,6 +172,10 @@ class ContextAssembler:
         try:
             from core.personal_facts_service import personal_facts_service as _pfs
             relevant_pf = await _pfs.get_relevant(user_id, user_message, limit=8)
+            if not relevant_pf:
+                # Fallback: inject most recent 5 facts regardless of topic match
+                all_pf = await _pfs.get_all(user_id)
+                relevant_pf = sorted(all_pf, key=lambda f: f.get("saved_at", ""), reverse=True)[:5]
             if relevant_pf:
                 pf_lines = [f"• {pf['text']}" for pf in relevant_pf]
                 pf_block = "\n".join(pf_lines)

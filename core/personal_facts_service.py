@@ -29,13 +29,19 @@ logger = logging.getLogger("genesi")
 _EXTRACTION_PROMPT = """\
 Sei un assistente che estrae fatti personali appresi durante la conversazione.
 
-ESTRAI SOLO fatti duraturi che l'utente ha rivelato su se stesso o la sua famiglia:
+ESTRAI fatti duraturi che l'utente ha rivelato su se stesso o la sua famiglia:
 - Dove sono stati o stanno i familiari ("mia figlia è stata a Cork in Irlanda")
-- Preferenze specifiche non ancora nel profilo ("i miei piloti F1 preferiti sono Leclerc e Hamilton", "tifo per la Ferrari")
+- Preferenze specifiche ("i miei piloti F1 preferiti sono Leclerc e Hamilton", "tifo per la Ferrari")
 - Abitudini e routine ("di solito ceno alle 20:00", "mi sveglio alle 7")
 - Hobby e passioni specifiche ("colleziono vinili", "gioco a padel il sabato")
 - Fatti sulla famiglia o amici ("mio figlio studia medicina", "mia moglie lavora in ospedale")
-- Argomenti o temi di cui abbiamo parlato ("Abbiamo parlato di Formula 1", "Mi ha raccontato del suo lavoro come medico")
+- Amici e relazioni rilevanti ("il mio migliore amico si chiama Marco", "la mia collega Giulia")
+- Valori e credenze importanti ("ci tengo molto alla famiglia", "per me il lavoro è tutto", "la lealtà è fondamentale")
+- Sfide ricorrenti ("fatico a dormire", "ho difficoltà con la gestione del tempo", "mi perdo nei dettagli")
+- Aspetti della personalità rilevati dal parlato ("sono una persona ansiosa", "tendo ad essere perfezionista", "sono molto riservato")
+- Contesto attuale importante ("sta attraversando un periodo difficile al lavoro", "è in un momento di transizione")
+- Obiettivi e aspirazioni ("voglio imparare a suonare la chitarra", "voglio smettere di fumare", "sto cercando di perdere peso")
+- Argomenti o temi di cui abbiamo parlato ("Abbiamo parlato di Formula 1")
 
 NON ESTRARRE:
 - Dati strutturati già nel profilo: nome, città di residenza, nome del coniuge, nomi dei figli, animali domestici
@@ -44,9 +50,9 @@ NON ESTRARRE:
 - Frasi di saluto o conversazione generica
 
 Per ogni fatto estratto:
-- "text": il fatto in terza persona ("L'utente cena di solito alle 20:00" / "Oggi abbiamo parlato di Formula 1")
-- "category": una di: ["famiglia", "interessi", "abitudini", "luoghi", "conversazione", "altro"]
-- "key": stringa breve univoca snake_case (es. "cena_ore_20", "f1_piloti_preferiti", "zoe_cork_irlanda")
+- "text": il fatto in terza persona ("L'utente cena di solito alle 20:00" / "L'utente tende ad essere perfezionista")
+- "category": una di: ["famiglia", "interessi", "abitudini", "luoghi", "conversazione", "valori", "sfide", "personalità", "obiettivi", "relazioni", "altro"]
+- "key": stringa breve univoca snake_case (es. "cena_ore_20", "f1_piloti_preferiti", "tende_perfezionista")
 
 Rispondi SOLO con JSON valido:
 {{"facts": [{{"text":"...","category":"...","key":"..."}}]}}
@@ -240,6 +246,50 @@ class PersonalFactsService:
             fd = food_m.group(1).lower()
             results.append(_fact(f"Alimentazione: {fd}.", "abitudini", f"cibo_{fd[:30].replace(' ', '_')}"))
 
+        # 14. Amici / relazioni non familiari ("il mio migliore amico", "la mia migliore amica", "la mia collega")
+        friend_m = re.search(
+            r"(?:il mio migliore amico|la mia migliore amica|il mio amico|la mia amica|il mio collega|la mia collega|il mio coinquilino|la mia coinquilina)\s+(?:si chiama|è)\s+(\w+)",
+            text, re.IGNORECASE)
+        if friend_m:
+            name = friend_m.group(1).strip()
+            prefix = friend_m.group(0).split("si chiama")[0].split("è")[0].strip().lower()
+            results.append(_fact(f"Relazione: {prefix}, si chiama {name}.", "relazioni", f"amico_{name.lower()}"))
+
+        # 15. Tendenze psicologiche ("tendo a", "di solito mi sento", "spesso mi capita di")
+        psych_m = re.search(
+            r"(?:tendo a|di solito mi sento|spesso mi sento|ho la tendenza a|mi capita spesso di)\s+([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{2,40}?)(?:[,.]|$)",
+            text, re.IGNORECASE)
+        if psych_m:
+            trait = psych_m.group(1).strip().lower()
+            if len(trait) > 3 and trait not in ("bene", "male", "così", "così"):
+                results.append(_fact(f"Tendenza: tende a {trait}.", "personalità", f"tendenza_{trait[:30].replace(' ', '_')}"))
+
+        # 16. Obiettivi espliciti ("voglio imparare", "voglio smettere", "voglio iniziare", "sto cercando di")
+        goal_m = re.search(
+            r"(?:voglio|vorrei)\s+(?:imparare|smettere di|iniziare a|diventare|riuscire a|provare a)\s+([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{2,40}?)(?:[,.]|$)",
+            text, re.IGNORECASE)
+        if goal_m:
+            goal = goal_m.group(0).strip().lower()
+            results.append(_fact(f"Obiettivo: {goal}.", "obiettivi", f"obiettivo_{goal[:30].replace(' ', '_')}"))
+
+        # 17. Situazione attuale ("sto attraversando", "in questo periodo", "ultimamente")
+        situation_m = re.search(
+            r"(?:sto attraversando|in questo periodo|ultimamente|di recente|negli ultimi tempi)\s+([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{4,60}?)(?:[,.]|$)",
+            text, re.IGNORECASE)
+        if situation_m:
+            sit = situation_m.group(0).strip().lower()
+            if len(sit) > 10:
+                results.append(_fact(f"Contesto attuale: {sit}.", "sfide", f"situazione_{sit[:30].replace(' ', '_')}"))
+
+        # 18. Valori espliciti ("ci tengo molto a", "per me è importante", "la cosa più importante")
+        value_m = re.search(
+            r"(?:ci tengo molto a|per me è (?:molto )?importante|la (?:cosa|cosa più) importante per me è|per me conta)\s+([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{2,40}?)(?:[,.]|$)",
+            text, re.IGNORECASE)
+        if value_m:
+            val = value_m.group(1).strip().lower()
+            if len(val) > 3:
+                results.append(_fact(f"Valore importante: {val}.", "valori", f"valore_{val[:30].replace(' ', '_')}"))
+
         return results
 
     async def _save_facts(self, user_id: str, new_facts: List[Dict]) -> None:
@@ -380,9 +430,12 @@ class PersonalFactsService:
 
         scored.sort(key=lambda x: x[0], reverse=True)
 
-        # Restituisce solo se ci sono match diretti con score > 0
+        # Priorità a match diretti con score > 0
         matches = [f for score, f in scored if score > 0]
-        return matches[:limit]
+        if matches:
+            return matches[:limit]
+        # Fallback: ritorna i più recenti (as docstring promised)
+        return sorted(facts, key=lambda f: f.get("saved_at", ""), reverse=True)[:limit]
 
 
 personal_facts_service = PersonalFactsService()
