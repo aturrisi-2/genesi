@@ -77,7 +77,10 @@ class GenesisClient:
         self.token: Optional[str] = None
         self.user_id: Optional[str] = None
         self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
+        self.session.headers.update({
+            "Content-Type": "application/json",
+            "Connection": "close",  # evita RemoteDisconnected su keepalive scaduto
+        })
 
     def login(self) -> bool:
         try:
