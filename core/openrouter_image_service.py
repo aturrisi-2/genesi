@@ -8,10 +8,13 @@ Risposta: base64 data URL ("data:image/png;base64,...") usabile direttamente
 come <img src="..."> nel browser senza dipendenze S3/hosting.
 """
 
+import asyncio
 import os
 import re
 import logging
 from typing import Optional
+
+_IMAGE_TIMEOUT = 30.0  # secondi massimi per generazione immagine
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +64,13 @@ class OpenRouterImageService:
                 user_id, len(prompt), MODEL_ID,
             )
 
-            response = await client.chat.completions.create(
-                model=MODEL_ID,
-                messages=[{"role": "user", "content": prompt}],
-                extra_body={"modalities": ["image", "text"]},
+            response = await asyncio.wait_for(
+                client.chat.completions.create(
+                    model=MODEL_ID,
+                    messages=[{"role": "user", "content": prompt}],
+                    extra_body={"modalities": ["image", "text"]},
+                ),
+                timeout=_IMAGE_TIMEOUT,
             )
 
             message = response.choices[0].message

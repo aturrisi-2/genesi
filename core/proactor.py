@@ -711,7 +711,14 @@ class Proactor:
 
                 elif current_intent == "image_generation":
                     log("ROUTING_DECISION", route="image_generation", user_id=user_id)
-                    current_response = await self._handle_image_generation(user_id, processed_message)
+                    try:
+                        current_response = await asyncio.wait_for(
+                            self._handle_image_generation(user_id, processed_message),
+                            timeout=40.0,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning("IMAGE_GENERATION_TIMEOUT user=%s — fallback image search", user_id)
+                        current_response = await self._handle_image_search(user_id, processed_message)
                     final_source = "tool"
 
                 elif current_intent == "spiegazione":
