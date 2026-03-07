@@ -878,7 +878,7 @@ class Proactor:
                         _q.put_nowait({"synthesis_pending": True})
                 except Exception:
                     pass
-                synthesized = await self._synthesize_responses(user_id, message, final_responses)
+                synthesized = await self._synthesize_responses(user_id, message, final_responses, brain_state)
                 return synthesized, final_source
 
             return final_responses[0] if final_responses else "", final_source
@@ -3314,7 +3314,7 @@ Messaggio: "{message}" """
                      brain_state.get("emotion", {}).get("emotion", "?"))
         return response
 
-    async def _synthesize_responses(self, user_id: str, message: str, responses: list[str]) -> str:
+    async def _synthesize_responses(self, user_id: str, message: str, responses: list[str], brain_state: dict = None) -> str:
         """
         Synthesize multiple tool/knowledge responses into a fluid narrative.
         Uses gpt-4o-mini for efficient post-processing.
@@ -3325,16 +3325,31 @@ Messaggio: "{message}" """
             return responses[0]
 
         fragments = "\n---\n".join(responses)
-        
+
         # Get user name for personalization
         profile = await storage.load(f"profile:{user_id}", default={})
         user_name = profile.get("name", "l'utente")
+
+        # Build emotional context note if available
+        emotion_note = ""
+        if brain_state:
+            emo = brain_state.get("emotion", {})
+            emo_label = emo.get("emotion", "neutral")
+            emo_intensity = emo.get("intensity", 0.3)
+            emo_needs = emo.get("needs", "")
+            if emo_label not in ("neutral", "neutro", "") and emo_intensity > 0.3:
+                emotion_note = (
+                    f"\nSTATO EMOTIVO RILEVATO: {user_name} sembra {emo_label} (intensità {emo_intensity:.1f})."
+                    f"{' Necessità: ' + emo_needs + '.' if emo_needs else ''}"
+                    f"\nIMPORTANTE: Integra i dati tecnici tenendo conto di questo stato emotivo. "
+                    f"Se l'utente ha espresso un bisogno emotivo, rispondi PRIMA alla persona, poi ai dati.\n"
+                )
 
         prompt = f"""Sei Genesi. Hai appena eseguito diverse azioni per rispondere a {user_name}.
 I vari moduli del sistema hanno prodotto questi frammenti separati: uno tecnico (dati crudi) e uno conversazionale.
 
 MESSAGGIO UTENTE: {message}
-
+{emotion_note}
 FRAMMENTI DA INTEGRARE (Dati crudi + Relazionale):
 {fragments}
 

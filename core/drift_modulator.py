@@ -188,8 +188,8 @@ class DriftModulator:
 
     def _apply_warmth(self, text: str, warmth: float) -> str:
         """Aggiunge chiusura calda con probabilita' proporzionale a warmth."""
-        # Probability of adding warm suffix scales with warmth
-        p = 0.3
+        # Probability scales with warmth: 0.3 at low warmth → 0.65 at high warmth
+        p = min(0.65, 0.30 + warmth * 0.35)
         if random.random() >= p:
             return text
 

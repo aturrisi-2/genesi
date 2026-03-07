@@ -19,7 +19,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from core.storage import storage
 from core.log import log as _structured_log
@@ -316,10 +316,16 @@ class PersonalFactsService:
                 conflict_idx = self._find_semantic_conflict(new_f, existing_facts)
                 if conflict_idx >= 0:
                     old_key = existing_facts[conflict_idx]["key"]
-                    existing_facts[conflict_idx] = new_f
-                    # Aggiorna indice
-                    fact_index = {f["key"]: i for i, f in enumerate(existing_facts)}
-                    logger.info("PERSONAL_FACT_REPLACED old_key=%s new_key=%s user=%s", old_key, key, user_id)
+                    # Per interessi: accumula preferenze invece di sovrascrivere
+                    merged = self._try_merge_preferences(new_f, existing_facts[conflict_idx])
+                    if merged:
+                        existing_facts[conflict_idx] = merged
+                        fact_index = {f["key"]: i for i, f in enumerate(existing_facts)}
+                        logger.info("PERSONAL_FACT_MERGED key=%s user=%s", merged["key"], user_id)
+                    else:
+                        existing_facts[conflict_idx] = new_f
+                        fact_index = {f["key"]: i for i, f in enumerate(existing_facts)}
+                        logger.info("PERSONAL_FACT_REPLACED old_key=%s new_key=%s user=%s", old_key, key, user_id)
                 else:
                     existing_facts.append(new_f)
                     fact_index[key] = len(existing_facts) - 1
@@ -370,6 +376,44 @@ class PersonalFactsService:
                 return idx
 
         return -1
+
+    @staticmethod
+    def _try_merge_preferences(new_f: Dict, existing_f: Dict) -> Optional[Dict]:
+        """
+        Se entrambi i fatti sono preferenze accumulative ("Gli piace: X"),
+        aggiunge il nuovo item invece di sovrascrivere.
+        Es: "Gli piace: pizza." + "Gli piace: pasta." → "Gli piace: pizza, pasta."
+        """
+        import re as _re
+        _PAT = _re.compile(r'^(?:Gli|Le|Gli piace anche)(?:\s+piace(?:iono)?)?\s*[:\-]\s*(.+?)\.?\s*$', _re.IGNORECASE)
+        _PIACE_PAT = _re.compile(r'[Gg]li piace[:\s]|piace[:\s]', _re.IGNORECASE)
+
+        new_text = new_f.get("text", "")
+        ex_text = existing_f.get("text", "")
+
+        # Solo se entrambi hanno pattern "Gli piace:"
+        if not (_PIACE_PAT.search(new_text) and _PIACE_PAT.search(ex_text)):
+            return None
+
+        ex_m = _PAT.match(ex_text)
+        new_m = _PAT.match(new_text)
+        if not (ex_m and new_m):
+            return None
+
+        existing_items = [i.strip().rstrip(".") for i in ex_m.group(1).split(",") if i.strip()]
+        new_item = new_m.group(1).strip().rstrip(".")
+
+        # Evita duplicati (case-insensitive)
+        if any(new_item.lower() == ei.lower() for ei in existing_items):
+            return None
+
+        merged_items = existing_items + [new_item]
+        merged_text = f"Gli piace: {', '.join(merged_items)}."
+        return {
+            **existing_f,
+            "text": merged_text,
+            "saved_at": new_f["saved_at"],
+        }
 
     async def remove_profession_facts(self, user_id: str) -> None:
         """

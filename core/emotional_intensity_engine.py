@@ -52,9 +52,19 @@ RELATIONAL_OPENINGS_NO_NAME = [
     "Lasciami dire una cosa. ",
 ]
 
-# Aperture piu' calde per intensita' > 0.7 — disabilitate (coach-style)
-WARM_OPENINGS_WITH_NAME = []
-WARM_OPENINGS_NO_NAME = []
+# Aperture piu' calde per intensita' > 0.7, usate solo se trust > 0.6
+WARM_OPENINGS_WITH_NAME = [
+    "{name}, sento il peso di quello che dici. ",
+    "Lo sento, {name}. ",
+    "{name} — ci sono. ",
+    "So cosa intendi, {name}. ",
+]
+WARM_OPENINGS_NO_NAME = [
+    "Lo sento. ",
+    "Ci sono. ",
+    "So cosa intendi. ",
+    "Sento il peso di quello che dici. ",
+]
 
 # ═══════════════════════════════════════════════════════════════
 # PASSIVE PATTERNS — frasi standalone vietate
@@ -531,6 +541,10 @@ class EmotionalIntensityEngine:
 
         # ── ANTI-GENERIC ENDING ──
         response = self._fix_generic_ending(response)
+
+        # ── WARM OPENING: solo per alta intensità emotiva + alto trust ──
+        if trust > 0.6 and intensity > 0.7 and not is_greeting:
+            response = self._maybe_add_opening(response, user_name, intensity, resonance, is_greeting)
 
         # ── Track response for empathic repetition detection ──
         self._recent_responses.append(response.lower())
@@ -1052,6 +1066,8 @@ class EmotionalIntensityEngine:
             pool = RELATIONAL_OPENINGS_WITH_NAME if name else RELATIONAL_OPENINGS_NO_NAME
 
         # Filter out recently used
+        if not pool:
+            return response
         available = [o for o in pool if o not in self._recent_openings]
         if not available:
             available = pool  # All used recently, reset
