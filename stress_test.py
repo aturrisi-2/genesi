@@ -11,7 +11,6 @@ Uso:
 """
 
 import argparse
-import json
 import sys
 import time
 import textwrap
@@ -25,7 +24,7 @@ except ImportError:
 
 # ─── Configurazione ───────────────────────────────────────────────────────────
 
-DEFAULT_BASE_URL = "http://localhost:8000"
+DEFAULT_BASE_URL = "http://localhost:8080"
 EMAIL = "alfio.turrisi@gmail.com"
 PASSWORD = "ZOEennio0810"
 
@@ -83,7 +82,7 @@ class GenesisClient:
     def login(self) -> bool:
         try:
             r = self.session.post(
-                f"{self.base}/login",
+                f"{self.base}/auth/login",
                 json={"email": EMAIL, "password": PASSWORD},
                 timeout=15
             )
@@ -178,7 +177,6 @@ def test_03_basic_response(c: GenesisClient):
             record(label, False, "nessuna risposta")
             continue
         has_content = len(resp.strip()) > 10
-        first_word_lower = resp.strip().lower().split()[0] if resp.strip() else ""
         bad_opening = any(resp.strip().lower().startswith(b) for b in banned_openings)
         if bad_opening:
             record(label, False, f"apertura vietata: '{resp[:40]}'")
@@ -512,8 +510,7 @@ def test_16_conversation_continuity(c: GenesisClient):
     for msg, check_label in msgs:
         resp = c.chat(msg)
         if check_label and resp:
-            resp_lower = resp.lower()
-            contextual = any(w in resp_lower for w in [
+            contextual = any(w in resp.lower() for w in [
                 "umberto eco", "eco", "rosa", "libro", "romanzo", "medioevo", "monaco", "jorge"
             ])
             record(f"Continuità: {check_label}", contextual,
