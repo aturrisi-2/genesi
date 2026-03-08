@@ -716,6 +716,11 @@ class IntentClassifier:
             log("INTENT_CLASSIFIED", intent="identity", user_id=user_id, engine="regex_priority", message=message[:50])
             return ["identity"]
 
+        # PRIORITÀ ALTA: emotional — keyword emotive chiare (prima del LLM, resistente al contesto)
+        if any(kw in message_lower for kw in EMOTIONAL_KEYWORDS):
+            log("INTENT_CLASSIFIED", intent="emotional", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["emotional"]
+
         # BLOCCO: imperativi "dimmelo tu" = l'utente chiede a Genesi di decidere/rispondere
         # NON sono richieste di notizie o tool — sono chat conversazionale
         _tu_imperatives = [

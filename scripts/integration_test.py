@@ -165,7 +165,7 @@ class GenesiIntegrationTester:
             ("che ore sono",                  "time",              "INTENT_CLASSIFIED.*intent=time"),
             ("dimmi una notizia",             "news",              "LLM_INTENT_CLASSIFICATION.*news"),
             ("cosa è il machine learning",    "tecnica/chat_free",  "LLM_INTENT_CLASSIFICATION.*(tecnica|chat_free|spiegazione)"),
-            ("sono triste",                   "emotional",         "LLM_INTENT_CLASSIFICATION.*emotional"),
+            ("sono triste",                   "emotional",         "(INTENT_CLASSIFIED.*intent=emotional|LLM_INTENT_CLASSIFICATION.*emotional)"),
             ("in realtà mi chiamo Luca",      "memory_correction", "INTENT_CLASSIFIED.*intent=memory_correction"),
         ]
 
