@@ -1049,7 +1049,7 @@ class Proactor:
 
         if _profile_dirty:
             try:
-                asyncio.create_task(storage.save(f"profile:{user_id}", profile))
+                await storage.save(f"profile:{user_id}", profile)
             except Exception: pass
 
         logger.info("IDENTITY_ROUTER user=%s profile=%s", user_id,
@@ -1234,6 +1234,8 @@ class Proactor:
             "- Se l'informazione richiesta non è nei dati, dillo con naturalezza (es: 'Non me lo hai ancora detto.').",
             "- Eccezione: se l'utente chiede 'cosa sai di me', 'dimmi tutto quello che sai', 'raccontami di me' "
             "→ dai un riassunto COMPLETO e fluente di TUTTI i dati disponibili sopra, in tono caldo.",
+            "- IMPORTANTE: se la domanda è generica ('sai chi sono io', 'chi sono', 'come mi chiamo', 'conosci il mio nome') "
+            "→ rispondi con UNA sola frase corta che include solo il nome. Esempio: 'Sì, sei Alfio.' Niente altro.",
             "- In tutti gli altri casi, rispondi solo a quello che è stato chiesto, senza elencare tutto il profilo.",
             "- Varia il tuo stile — non rispondere sempre nello stesso modo.",
         ]
@@ -1400,6 +1402,11 @@ class Proactor:
             list_fields = {"children", "pets", "interests", "preferences", "traits"}
 
             # Sanitizza pets
+            # Blocca valori professione tronchi/invalidi (min 3 chars)
+            if field == "profession" and action == "update" and isinstance(new_value, str):
+                if len(new_value.strip()) < 3:
+                    return  # ignora — valore corrotto, non sovrascrivere
+
             if field == "pets" and action == "update" and isinstance(new_value, list):
                 sanitized = []
                 for item in new_value:
@@ -1421,24 +1428,39 @@ class Proactor:
 
             if action == "update":
                 if field in ("pets", "children") and isinstance(new_value, list):
-                    # Merge safety: se LLM omette gli esistenti, non perderli
+                    # Merge intelligente: aggiorna i match per nome, aggiungi nuovi, preserva non menzionati
                     existing = profile.get(field, [])
-                    existing_names = {
-                        (x.get("name", "") if isinstance(x, dict) else str(x)).lower()
+                    existing_by_name = {
+                        (x.get("name", "") if isinstance(x, dict) else str(x)).lower(): x
                         for x in existing if x
                     }
                     new_names = {
                         (x.get("name", "") if isinstance(x, dict) else str(x)).lower()
                         for x in new_value if x
                     }
-                    if existing_names and not (existing_names & new_names):
-                        merged = list(existing)
-                        for item in new_value:
-                            n = (item.get("name", "") if isinstance(item, dict) else str(item)).lower()
-                            if n and n not in existing_names:
-                                merged.append(item)
-                        profile[field] = merged
-                        logger.info("MEMORY_CORRECTION_MERGE field=%s added=%s kept=%s", field, list(new_names), list(existing_names))
+                    # Parti dagli esistenti, aggiorna i match
+                    merged = []
+                    for ex_name, ex_item in existing_by_name.items():
+                        if ex_name in new_names:
+                            # Trova il nuovo item e fai merge dei campi
+                            for nv in new_value:
+                                nv_name = (nv.get("name", "") if isinstance(nv, dict) else str(nv)).lower()
+                                if nv_name == ex_name:
+                                    if isinstance(ex_item, dict) and isinstance(nv, dict):
+                                        merged.append({**ex_item, **nv})
+                                    else:
+                                        merged.append(nv)
+                                    break
+                        else:
+                            # Non menzionato nel new_value → preservalo
+                            merged.append(ex_item)
+                    # Aggiungi quelli nuovi non presenti negli esistenti
+                    for nv in new_value:
+                        nv_name = (nv.get("name", "") if isinstance(nv, dict) else str(nv)).lower()
+                        if nv_name not in existing_by_name:
+                            merged.append(nv)
+                    profile[field] = merged
+                    logger.info("MEMORY_CORRECTION_MERGE field=%s updated=%s", field, list(new_names))
                     else:
                         profile[field] = new_value
                 elif field in list_fields - {"pets", "children"} and isinstance(new_value, list) and old_value is not None:

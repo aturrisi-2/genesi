@@ -74,7 +74,9 @@ class PersonalFactsService:
         Fail-silent — chiamare da asyncio background task.
         """
         try:
-            combined = f"UTENTE: {user_message}\nGENESI: {assistant_response}"
+            # Estrai solo dal messaggio utente: i fatti devono venire da ciò che dice l'utente,
+            # non dalla risposta di Genesi (che potrebbe contenere sue elaborazioni/metafore)
+            combined = f"UTENTE: {user_message}"
             new_facts = await self._extract(combined, user_id)
             if new_facts:
                 await self._save_facts(user_id, new_facts)

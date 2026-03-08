@@ -2128,13 +2128,7 @@ function showThinking(labelText = null, mode = 'thinking') {
       </div>
     `;
 
-    const messages = dialogue.querySelectorAll('.message.genesi');
-    const lastGenesiBubble = messages.length ? messages[messages.length - 1] : null;
-    if (lastGenesiBubble && lastGenesiBubble.parentElement === dialogue) {
-      dialogue.insertBefore(thinking, lastGenesiBubble);
-    } else {
-      dialogue.appendChild(thinking);
-    }
+    dialogue.appendChild(thinking);
   }
 
   const labelEl = thinking.querySelector('.thinking-label');

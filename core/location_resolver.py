@@ -117,6 +117,8 @@ _SKIP_WORDS = {
     "molto", "poco", "tutto", "niente", "qualcosa", "qualcuno",
     "fa", "fatto", "fare", "bene", "male", "così", "cosi", "tanto",
     "questo", "quello", "qui", "qua", "là", "la", "li", "lo",
+    # Copula italiana — mai nomi di città
+    "è", "e'", "fuori", "ci", "c'", "c'è", "c'e'", "adesso", "sai",
 }
 
 # STT-specific stop words to remove for robust parsing
