@@ -802,7 +802,7 @@ REGOLE SPECIALI:
         ]
         user_prompt = "\n".join(p for p in _user_prompt_parts if p)
 
-        def _extract_json_balanced(text: str) -> str | None:
+        def _extract_json_balanced(text: str) -> Optional[str]:
             """Parser JSON robusto: trova il primo oggetto {} bilanciato."""
             start = text.find('{')
             if start < 0:
