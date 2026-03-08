@@ -61,7 +61,7 @@ class GenesiIntegrationTester:
             "password": TEST_PASSWORD
         }
         
-        async with self.session.post(f"{BASE_URL}/api/auth/login", json=auth_data) as resp:
+        async with self.session.post(f"{BASE_URL}/auth/login", json=auth_data) as resp:
             if resp.status != 200:
                 raise Exception(f"Login failed: {resp.status}")
             
