@@ -227,12 +227,15 @@ class GenesiIntegrationTester:
     async def test_profile_detection(self):
         """GRUPPO 4 — Profile Detection"""
         print("\n👤 Testing Profile Detection...")
-        
+
+        # Breve pausa per far completare i background task dei test precedenti
+        await asyncio.sleep(2)
         # Verifica solo HTTP 200 — il log di personal facts è asincrono e non garantito entro la finestra
         result = await self.send_message("adoro il jazz e suono la chitarra")
         results.append(result)
         status = "✅" if result.passed else "❌"
-        print(f"  {status} Profile detection ({result.latency_ms:.0f}ms)")
+        extra = f" | {result.notes}" if not result.passed and result.notes else ""
+        print(f"  {status} Profile detection ({result.latency_ms:.0f}ms){extra}")
     
     async def test_evolution_engine(self):
         """GRUPPO 5 — Evolution Engine"""
