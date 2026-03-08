@@ -183,6 +183,13 @@ async def get_weather_widget(
                         raw_profile["gps_updated_at"] = datetime.now(dt_timezone.utc).isoformat()
                         profile_updated = True
 
+                # Salva sempre la città GPS corrente — separata da profile.city (residenza).
+                # Permette a Genesi di sapere dove si trova l'utente ORA vs dove vive.
+                if city_name and city_name != "—":
+                    if raw_profile.get("gps_city") != city_name:
+                        raw_profile["gps_city"] = city_name
+                        profile_updated = True
+
                 # Se abbiamo una timezone (da IP/client), salviamola
                 current_tz = raw_profile.get("timezone", "Europe/Rome")
                 new_tz = resolved_timezone if 'resolved_timezone' in locals() else current_tz

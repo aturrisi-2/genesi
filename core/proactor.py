@@ -3295,6 +3295,31 @@ Messaggio: "{message}" """
         user_tz = _rel_profile.get("timezone", "Europe/Rome")
         user_city = _rel_profile.get("city") or "Italia"
 
+        # CALENDAR AWARENESS — contesto temporale (fail-silent, non blocca mai)
+        _cal_context = ""
+        _primo_oggi = False
+        try:
+            from core.calendar_awareness import get_calendar_context, is_first_message_of_day as _is_first
+            _cal = get_calendar_context(user_tz)
+            _last_ts = _rel_profile.get("updated_at")
+            _primo_oggi = _is_first(str(_last_ts) if _last_ts else None, user_tz)
+            _gps_city = _rel_profile.get("gps_city")
+            _pos_attuale = _gps_city if _gps_city and _gps_city.lower() != user_city.lower() else None
+            _festivo_str = f"Ricorrenza/Festivo: {_cal['festivo'][0]}" if _cal.get("festivo") else ""
+            _giorno_tipo = ("Weekend" if _cal["is_weekend"]
+                            else ("Lunedì — rientro" if _cal["is_lunedi"]
+                            else ("Venerdì — vigilia weekend" if _cal["is_venerdi"]
+                            else "Giorno feriale")))
+            _cal_context = "\n".join(filter(None, [
+                f"CONTESTO CALENDARIO:",
+                f"- {_cal['giorno_it']} {_cal['data_it']} · {_cal['stagione']}",
+                f"- {_giorno_tipo}{(' · ' + _festivo_str) if _festivo_str else ''}",
+                f"- Prima interazione odierna: {'sì' if _primo_oggi else 'no'}",
+                f"- Residenza: {user_city}{f' · Posizione attuale: {_pos_attuale}' if _pos_attuale else ''}",
+            ]))
+        except Exception:
+            pass
+
         # Emotional trend (fail-silent) — inietta storia emotiva nel prompt
         emotional_trend = ""
         try:
@@ -3314,7 +3339,8 @@ Messaggio: "{message}" """
             conversation_ctx, latent_synopsis, message, user_id,
             calendar_info=calendar_info, tz=user_tz, user_city=user_city,
             emotional_trend=emotional_trend,
-            emotion_data=brain_state.get("emotion", {})
+            emotion_data=brain_state.get("emotion", {}),
+            cal_context=_cal_context, primo_oggi=_primo_oggi,
         )
         
         # Add system message to messages list
@@ -3569,7 +3595,7 @@ REGOLE TASSATIVE:
         else:
             return "Sera tardi — sii breve e caldo. Zero domande proattive, l'utente vuole staccare."
 
-    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str, user_id: str = None, calendar_info: str = "", tz: str = "Europe/Rome", user_city: str = "Italia", emotional_trend: str = "", emotion_data: dict = None) -> str:
+    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str, user_id: str = None, calendar_info: str = "", tz: str = "Europe/Rome", user_city: str = "Italia", emotional_trend: str = "", emotion_data: dict = None, cal_context: str = "", primo_oggi: bool = False) -> str:
         """Prompt GPT per relational router. Conversazione continua, comportamento umano."""
         user_boundaries = self._detect_user_boundaries(conversation_context, message)
         user_name = conversation_context.split("NOME: ")[1].split("\n")[0] if "NOME: " in conversation_context else "l'utente"
@@ -3613,6 +3639,7 @@ Profilo: {user_name} ({user_city})
 Calendario: {calendar_info[:50]}
 Mood: {latent_synopsis[:30]}
 Tempo: {time_ctx} ({now_formatted})
+{cal_context}
 [/THINKING_CONTEXT]
 {_emotion_section}
 
@@ -3648,6 +3675,14 @@ AUTONOMIA COGNITIVA:
 - Se un'emozione è intensa (urgency alta), non dare solo informazioni — rispondi prima alla persona, poi al contenuto.
 - Non rispondere solo alla superficie. Rispondi alla persona dietro le parole.
 - Il silenzio vale quanto le parole: se {user_name} scrive poco, spesso nasconde molto. Esplora con delicatezza.
+
+PRESENZA CONTESTUALE (usa il CONTESTO CALENDARIO nel [THINKING_CONTEXT]):
+{"- Questa è la prima volta che " + user_name + " ti parla oggi: apri con un saluto naturale — il suo nome, il momento del giorno. Una riga sola, poi vai subito alla risposta. Non cerimonioso." if primo_oggi else "- Non è la prima interazione di oggi: NON salutare di nuovo, rispondi direttamente."}
+- Se oggi cade una ricorrenza o festività (vedi CONTESTO CALENDARIO): una nota breve e vera, come farebbe un amico. Non il bigliettino da banco.
+- Se è weekend: tono più rilassato, nessuna urgenza lavorativa implicita.
+- Se è lunedì: puoi riconoscere il rientro con leggerezza, se pertinente.
+- Se la posizione attuale ≠ residenza: Genesi può notarlo con curiosità naturale, mai in modo invasivo. La città di residenza resta l'ancoraggio identitario.
+- Non menzionare mai esplicitamente "prima interazione della giornata" — Genesi lo sa e basta.
 
 ESEMPI DI RISPOSTA AUTENTICA:
 
