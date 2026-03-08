@@ -651,18 +651,23 @@ class IntentClassifier:
 
         # PRIORITÀ ALTA: dove_sono — "dove sono", "dove mi trovo", ecc.
         _location_self_kw = [
-            "dove mi trovo", "dove siamo",
+            "dove mi trovo",
             "in che zona sono", "in che posto sono",
             "la mia posizione", "dove sono adesso",
+            "dove mi trovo adesso",
         ]
-        # "dove sono" generico: solo se non seguito da participio passato (evento, non posizione utente)
-        # es. "dove sono state le qualifiche" → NO; "dove sono?" → SÌ
+        # "dove sono" generico: solo se non seguito da participio passato O articolo+nome (oggetti/eventi)
+        # es. "dove sono state le qualifiche" → NO; "dove sono le chiavi" → NO; "dove sono?" → SÌ
         _dove_sono_event_pp = re.compile(
             r"dove\s+sono\s+(state?|stati?|andate?|andati?|avvenute?|successe?|svolte?|tenute?|disputate?)", re.IGNORECASE
         )
+        _dove_sono_article = re.compile(
+            r"dove\s+sono\s+(il|la|le|i|gli|lo|un|una|uno)\s+", re.IGNORECASE
+        )
+        # "dove siamo" è ambiguo (metafora progresso) — NON triggera dove_sono via keyword list
         _has_location_self = any(kw in message_lower for kw in _location_self_kw)
         if not _has_location_self and "dove sono" in message_lower:
-            if not _dove_sono_event_pp.search(message_lower):
+            if not _dove_sono_event_pp.search(message_lower) and not _dove_sono_article.search(message_lower):
                 _has_location_self = True
         if _has_location_self:
             log("INTENT_CLASSIFIED", intent="dove_sono", user_id=user_id, engine="regex_priority", message=message[:50])
@@ -685,10 +690,31 @@ class IntentClassifier:
             "non sono più", "non ho più",
             # Negazioni partner/famiglia
             "non sono sposato", "non sono sposata", "non ho animali",
+            # Correzioni dopo identity ("ti ho detto che lavoro/sono/vivo/abito...")
+            "ti ho detto che lavoro", "ti ho detto che sono", "ti ho detto che vivo",
+            "ti ho detto che abito", "ti ho detto che mi chiamo",
         ]
         if any(kw in message_lower for kw in _correction_kw):
             log("INTENT_CLASSIFIED", intent="memory_correction", user_id=user_id, engine="regex_priority", message=message[:50])
             return ["memory_correction"]
+
+        # PRIORITÀ ALTA: identity — domande dirette dell'utente sul PROPRIO profilo
+        # (messo DOPO memory_correction così "non ho figli" è già catturato dalla correzione)
+        _identity_first_person = [
+            "come mi chiamo", "come mi chiama",
+            "qual è il mio nome", "qual è il mio cognome",
+            "dove vivo", "dove abito", "dove sono nato", "dove sono nata",
+            "cosa sai di me", "dimmi quello che sai di me",
+            "ho figli", "ho un figlio", "ho una figlia",
+            "quanti anni ho", "che età ho", "la mia età",
+            "che lavoro faccio", "che mestiere faccio", "di cosa mi occupo",
+            "sono sposato", "sono sposata", "ho un marito", "ho una moglie",
+            "ho un partner", "ho una partner",
+            "ho animali", "ho un cane", "ho una gatta", "ho un gatto",
+        ]
+        if any(kw in message_lower for kw in _identity_first_person):
+            log("INTENT_CLASSIFIED", intent="identity", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["identity"]
 
         # BLOCCO: imperativi "dimmelo tu" = l'utente chiede a Genesi di decidere/rispondere
         # NON sono richieste di notizie o tool — sono chat conversazionale
