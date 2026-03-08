@@ -253,10 +253,16 @@ class Proactor:
 
         # Post-processing deterministico: applica regole critiche indipendentemente dall'handler
         if response and message:
-            response = self._post_process_response(response, message)
+            _pp_user_name = ""
+            try:
+                _pp_profile = await storage.load(f"profile:{user_id}", default={})
+                _pp_user_name = _pp_profile.get("name", "") or ""
+            except Exception:
+                pass
+            response = self._post_process_response(response, message, user_name=_pp_user_name)
         return response
 
-    def _post_process_response(self, response: str, user_message: str) -> str:
+    def _post_process_response(self, response: str, user_message: str, user_name: str = "") -> str:
         """
         Applica regole critiche deterministicamente sull'output finale.
         Copre tutti gli handler (relational, emotional, identity, ecc.).
@@ -325,6 +331,13 @@ class Proactor:
                         response, count=1, flags=_re_pp.IGNORECASE
                     )
                 break
+
+        # 5. OPINIONE SU UTENTE: se risponde a "cosa pensi di me" e non usa il nome, iniettalo in apertura
+        _OPINION_TRIGGERS = ["cosa pensi di me", "che idea hai di me", "come mi vedi", "cosa penso di me"]
+        if user_name and any(t in msg_lower for t in _OPINION_TRIGGERS):
+            resp_lower = response.lower()
+            if user_name.lower() not in resp_lower:
+                response = f"{user_name}, {response[0].lower()}{response[1:]}" if response else response
 
         return response
 
