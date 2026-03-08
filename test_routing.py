@@ -50,37 +50,40 @@ def login() -> str:
 
 
 def send_message(token: str, message: str) -> tuple[str, str]:
-    """Invia messaggio SSE, restituisce (testo_risposta, source)."""
-    headers = {"Authorization": f"Bearer {token}", "Accept": "text/event-stream"}
-    chunks, source = [], ""
+    """Invia messaggio a Genesi, restituisce (testo_risposta, intent)."""
+    headers = {"Authorization": f"Bearer {token}"}
     try:
-        with requests.post(f"{BASE_URL}/api/chat",
-                           json={"message": message},
-                           headers=headers, stream=True, timeout=35) as resp:
-            for raw in resp.iter_lines():
-                if not raw:
-                    continue
-                line = raw.decode("utf-8") if isinstance(raw, bytes) else raw
-                if not line.startswith("data:"):
-                    continue
-                payload = line[5:].strip()
-                if not payload:
-                    continue
-                try:
-                    obj = json.loads(payload)
-                    if obj.get("text"):
-                        chunks.append(obj["text"])
-                    if obj.get("done"):
-                        source = obj.get("source", "")
-                except Exception:
-                    pass
+        resp = requests.post(f"{BASE_URL}/api/chat",
+                             json={"message": message},
+                             headers=headers, timeout=35)
+        resp.raise_for_status()
+        data = resp.json()
+        text = data.get("response", "")
+        intent = data.get("intent", "")
+        return text, intent
     except Exception as e:
         return f"[ERRORE: {e}]", "error"
-    return "".join(chunks), source
 
 
 def get_logs(since: datetime.datetime) -> str:
-    """Legge log systemd del servizio genesi dal timestamp dato."""
+    """Legge genesi.log dal timestamp dato (fallback journalctl se non disponibile)."""
+    log_file = "genesi.log"
+    result_lines = []
+    try:
+        with open(log_file, "r", encoding="utf-8") as f:
+            for line in f:
+                # Il formato è: [YYYY-MM-DDTHH:MM:SS] TAG ...
+                try:
+                    ts_str = line[1:20]
+                    line_dt = datetime.datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%S")
+                    if line_dt >= since:
+                        result_lines.append(line.rstrip())
+                except Exception:
+                    pass
+        return "\n".join(result_lines)
+    except Exception:
+        pass
+    # Fallback journalctl
     since_str = since.strftime("%Y-%m-%d %H:%M:%S")
     try:
         r = subprocess.run(
@@ -111,6 +114,13 @@ def parse_routing(logs: str) -> dict:
                     info["engine"] = part.split("=", 1)[1]
         if "LLM_INTENT_CLASSIFICATION" in line:
             info["lines"].append(line.strip())
+            # Estrai anche il primary intent dal log LLM
+            for part in line.split():
+                if part.startswith("intents="):
+                    raw = part.split("=", 1)[1].strip("[]'\"")
+                    primary = raw.split(",")[0].strip("'\"")
+                    if primary and not info["intent"]:
+                        info["intent"] = primary
     return info
 
 
@@ -148,7 +158,8 @@ def run(token: str, name: str, message: str,
 
     if must_not:
         for bad in must_not:
-            if bad in (info["route"] or "") or bad in (info["intent"] or ""):
+            if (bad in (info["route"] or "") or bad in (info["intent"] or "")
+                    or bad in (source or "")):
                 passed = False
                 fail_reason = f"route '{bad}' NON attesa — trovata"
                 break

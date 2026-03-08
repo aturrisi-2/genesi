@@ -11,34 +11,38 @@ from core.chat_memory import chat_memory
 from core.log import log
 from core.fallback_engine import fallback_engine
 
-async def simple_chat_handler(user_id: str, message: str, conversation_id: str = None) -> str:
+async def simple_chat_handler(user_id: str, message: str, conversation_id: str = None):
     """
     Chat handler — Proactor orchestrator centrale.
     Identity filtering avviene dentro evolution_engine (no doppio filtro).
-    Returns: response_text (string only)
+    Returns: (response_text, primary_intent) tuple
     """
     try:
         # Validazione user_id
         if not user_id:
             raise ValueError("simple_chat_handler received empty user_id")
-        
+
         if len(user_id) > 50:
             raise ValueError("Invalid user_id: too long")
-        
+
         if " " in user_id:
             raise ValueError("Invalid user_id: contains spaces")
-        
+
         log("CHAT_INPUT", message=message[:100], user_id=user_id)
 
+        # Classifica intent qui per passarlo al proactor (evita doppia classificazione)
+        # e per poterlo ritornare al chiamante senza modificare proactor.handle()
+        intents = await intent_classifier.classify_async(message, user_id)
+        primary_intent = intents[0] if intents else "chat_free"
+
         # 2. Proactor orchestration (brain update + evolution engine)
-        # Pass intent=None to allow Proactor to use its new multi-intent classification
         response = await proactor.handle(
             user_id=user_id,
             message=message,
-            intent=None, 
+            intent=intents,
             conversation_id=conversation_id
         )
-        
+
         # Ensure we return only the response string, not the tuple
         if isinstance(response, tuple):
             response = response[0]
@@ -47,10 +51,10 @@ async def simple_chat_handler(user_id: str, message: str, conversation_id: str =
         if not user_manager.get_user(user_id):
             user_manager.create_user(user_id)
         user_manager.increment_messages(user_id)
-        chat_memory.add_message(user_id, message, response, "multi")
+        chat_memory.add_message(user_id, message, response, primary_intent)
 
-        log("CHAT_OUTPUT", response=response[:100], intent="multi", user_id=user_id)
-        return response
+        log("CHAT_OUTPUT", response=response[:100], intent=primary_intent, user_id=user_id)
+        return response, primary_intent
 
     except Exception as e:
         log("CHAT_ERROR", error=str(e), user_id=user_id)
@@ -63,5 +67,5 @@ async def simple_chat_handler(user_id: str, message: str, conversation_id: str =
             response_given=msg_error,
             reason=str(e)
         ))
-        return msg_error
+        return msg_error, "chat_free"
 

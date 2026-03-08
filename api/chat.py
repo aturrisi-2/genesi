@@ -185,15 +185,17 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         _asyncio.create_task(_extract_and_save_episode())
 
         # 2. Pipeline Relazionale / Tecnico (Orchestrata dal Proactor)
-        response = await simple_chat_handler(user_id, request.message, request.conversation_id)
+        _handler_result = await simple_chat_handler(user_id, request.message, request.conversation_id)
+        if isinstance(_handler_result, tuple):
+            response, classified_intent = _handler_result[0], _handler_result[1]
+        else:
+            response, classified_intent = _handler_result, "chat_free"
 
         # Identity extractor: gira DOPO simple_chat_handler per evitare race condition
         # con _handle_memory_correction (che salva il profilo dentro simple_chat_handler).
         _asyncio.create_task(_extract_and_save_identity())
 
         # Defensive normalization: ensure response is always a string
-        if isinstance(response, tuple):
-            response = response[0]
         if not isinstance(response, str):
             response = str(response)
 
@@ -235,8 +237,8 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                 pass
         _asyncio.create_task(_maybe_audit())
 
-        # Use 'multi' for general emoji enrichment as we now support multiple intents
-        intent = "multi"
+        # Usa il vero intent classificato (surfacato da simple_chat_handler)
+        intent = classified_intent
         
         # Apply emoji enrichment to final response (after all routing and fallbacks)
         if response and not response.startswith('{') and not response.startswith('['):
