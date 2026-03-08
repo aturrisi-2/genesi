@@ -382,18 +382,10 @@ class Proactor:
                 response = await self._handle_image_search(user_id, image_query)
                 return response, "tool"
 
-            # STEP 1: IDENTITY ROUTE (PRIMA DI TUTTO - MASSIMA PRIORITÀ)
-            if is_identity_question(message):
-                logger.debug("[PROACTOR] -> Identity Route rilevata (deterministico)")
-                log("ROUTING_DECISION", route="identity", user_id=user_id)
-                logger.info("IDENTITY_ROUTE_EXECUTION_ORDER_OK user=%s", user_id)
-                profile = await storage.load(f"profile:{user_id}", default={})
-                logger.debug("[PROACTOR] Profilo caricato per identity: %s", profile.get('name', 'Sconosciuto'))
-                brain_state_identity = {"profile": profile}
-                response = await self._handle_identity(user_id, message, brain_state_identity)
-                return response, "identity"
+            # STEP 1: rimosso — identity ora classificata dal LLM classifier con contesto conversazionale
+            # (is_identity_question() mantenuto per compatibilità test, non usato per routing)
 
-            # Load profile for other routing (non-identity)
+            # Load profile
             profile = await storage.load(f"profile:{user_id}", default={})
 
             # Sanitize corrupted profession (articles, prepositions, >4 words)
@@ -537,7 +529,16 @@ class Proactor:
             if not intents:
                 logger.debug("[PROACTOR] Nessun intento rilevato, default a 'chat_free'")
                 intents = ["chat_free"]
-            
+
+            # Salva ultimo intent classificato per contesto futuro del classifier (fail-silent)
+            if intents and user_id:
+                try:
+                    _prof_snap = brain_state.get("profile", {})
+                    _prof_snap["_last_classified_intent"] = intents[0]
+                    asyncio.create_task(storage.save(f"profile:{user_id}", _prof_snap))
+                except Exception:
+                    pass
+
             logger.debug(f"[PROACTOR] INTENTI FINALI: {intents}")
             
             # STEP 4.1: CONVERSATIONAL INTEGRATION FORCE

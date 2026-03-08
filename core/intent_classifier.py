@@ -714,15 +714,37 @@ class IntentClassifier:
         import json
         import re
 
-        # Raccogli ultimi messaggi per il contesto
-        history = chat_memory.get_messages(user_id, limit=5) if user_id else []
+        # Raccogli ultimi 12 messaggi per un contesto conversazionale robusto
+        history = chat_memory.get_messages(user_id, limit=12) if user_id else []
         # chat_memory ritorna {"user_message": ..., "system_response": ...} — NON role/content
         history_text = "\n".join([
             f"utente: {msg.get('user_message', '')}\ngenesi: {msg.get('system_response', '')}"
             for msg in history
         ])
-        
-        system_prompt = """Sei un classificatore di intent. Analizza l'ultimo messaggio dell'utente considerando il contesto recente.
+
+        # Recupera contesto minimo del profilo per aiutare il classifier (fail-silent)
+        _prof_ctx = ""
+        _last_intent_ctx = ""
+        try:
+            from core.storage import storage as _ctx_storage
+            _prof = await _ctx_storage.get(f"profile:{user_id}") or {}
+            _nome = _prof.get("name", "")
+            _citta = _prof.get("city", "")
+            _last_intent = _prof.get("_last_classified_intent", "")
+            _prof_parts = [p for p in [f"nome={_nome}" if _nome else "", f"città={_citta}" if _citta else ""] if p]
+            if _prof_parts:
+                _prof_ctx = "Profilo utente: " + ", ".join(_prof_parts)
+            if _last_intent:
+                _last_intent_ctx = f"Ultimo intent classificato: {_last_intent}"
+        except Exception:
+            pass
+
+        system_prompt = """Sei un classificatore di intent per un assistente AI personale italiano.
+
+IMPORTANTE: Non analizzare il messaggio in isolamento. Leggi TUTTA la conversazione recente
+e classifica l'intent in base al CONTESTO COMPLETO. Una stessa frase può avere intent diversi
+a seconda di cosa è stato detto prima. Privilegia sempre il contesto sulla parola isolata.
+
 Valuta il parametro "score" tra 0.0 e 1.0 (dove 1.0 è certezza assoluta).
 
 INTENT POSSIBILI:
@@ -772,8 +794,30 @@ REGOLE SPECIALI:
 - Se l'intenzione non è chiara, usa uno score basso.
 """
 
-        user_prompt = f"Contesto recente della chat:\n{history_text}\n\nUltimo messaggio utente:\n{message}"
-        
+        _user_prompt_parts = [
+            f"Conversazione recente:\n{history_text}" if history_text else "",
+            _prof_ctx,
+            _last_intent_ctx,
+            f"\nUltimo messaggio utente:\n{message}",
+        ]
+        user_prompt = "\n".join(p for p in _user_prompt_parts if p)
+
+        def _extract_json_balanced(text: str) -> str | None:
+            """Parser JSON robusto: trova il primo oggetto {} bilanciato."""
+            start = text.find('{')
+            if start < 0:
+                return None
+            depth, i = 0, start
+            while i < len(text):
+                if text[i] == '{':
+                    depth += 1
+                elif text[i] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        return text[start:i + 1]
+                i += 1
+            return None
+
         try:
             # USA _call_model per preservare system_prompt del classificatore
             # _call_with_protection lo sovrascrive con il prompt adattivo globale!
@@ -784,11 +828,11 @@ REGOLE SPECIALI:
                 user_id=user_id or "system",
                 route="classification"
             )
-            
+
             if response:
-                json_match = re.search(r'\{.*\}', response, re.DOTALL)
-                if json_match:
-                    data = json.loads(json_match.group(0))
+                _json_str = _extract_json_balanced(response)
+                if _json_str:
+                    data = json.loads(_json_str)
                     intents = data.get("intents", [])
                     if not intents and "intent" in data:
                         intents = [data["intent"]]
