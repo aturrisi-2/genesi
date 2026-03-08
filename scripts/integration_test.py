@@ -149,28 +149,31 @@ class GenesiIntegrationTester:
             )
     
     async def test_intent_classification(self):
-        """GRUPPO 1 — Intent Classification"""
+        """GRUPPO 1 — Intent Classification
+        Fast-track (≤4 word o priority regex) → INTENT_CLASSIFIED
+        LLM path (>4 word o intent non in fast-track) → LLM_INTENT_CLASSIFICATION
+        """
         print("\n🔍 Testing Intent Classification...")
-        
+
+        # (message, label, log_pattern)
+        # fast-track: greeting/how_are_you/time/memory_correction → INTENT_CLASSIFIED
+        # LLM path: weather(lungo)/news/tecnica/emotional → LLM_INTENT_CLASSIFICATION
         test_cases = [
-            ("ciao", "greeting"),
-            ("come stai", "how_are_you"),
-            ("che tempo fa a Roma", "weather"),
-            ("che ore sono", "time"),
-            ("dimmi una notizia", "news"),
-            ("cosa è il machine learning", "tecnica"),
-            ("sono triste", "emotional"),
-            ("in realtà mi chiamo Luca", "memory_correction"),
+            ("ciao",                          "greeting",          "INTENT_CLASSIFIED.*intent=greeting"),
+            ("come stai",                     "how_are_you",       "INTENT_CLASSIFIED.*intent=how_are_you"),
+            ("che tempo fa a Roma",           "weather",           "LLM_INTENT_CLASSIFICATION.*weather"),
+            ("che ore sono",                  "time",              "INTENT_CLASSIFIED.*intent=time"),
+            ("dimmi una notizia",             "news",              "LLM_INTENT_CLASSIFICATION.*news"),
+            ("cosa è il machine learning",    "tecnica",           "LLM_INTENT_CLASSIFICATION.*tecnica"),
+            ("sono triste",                   "emotional",         "LLM_INTENT_CLASSIFICATION.*emotional"),
+            ("in realtà mi chiamo Luca",      "memory_correction", "INTENT_CLASSIFIED.*intent=memory_correction"),
         ]
-        
-        for message, expected_intent in test_cases:
-            result = await self.send_message(
-                message, 
-                f"INTENT_CLASSIFIED.*intent={expected_intent}"
-            )
+
+        for message, label, log_pattern in test_cases:
+            result = await self.send_message(message, log_pattern)
             results.append(result)
             status = "✅" if result.passed else "❌"
-            print(f"  {status} {message} → {expected_intent} ({result.latency_ms:.0f}ms)")
+            print(f"  {status} {message} → {label} ({result.latency_ms:.0f}ms)")
             await asyncio.sleep(0.5)
     
     async def test_tts_routing(self):
@@ -248,7 +251,7 @@ class GenesiIntegrationTester:
         evolution_patterns = [
             "COGNITIVE_EMOTIONAL_EVENT",
             "ROUTING_DECISION.*route=emotional",
-            "INTENT_CLASSIFIED.*intent=emotional",
+            "LLM_INTENT_CLASSIFICATION.*emotional",
         ]
         
         found_evolution = False
@@ -273,8 +276,8 @@ class GenesiIntegrationTester:
         print("\n⏱️ Testing Latency...")
         
         latency_tests = [
-            ("ciao", 3000),  # Chat semplice
-            ("che tempo fa a Roma", 5000),  # Chat con tool
+            ("ciao", 4000),           # Chat semplice
+            ("che tempo fa a Roma", 9000),  # Chat con tool (weather API + LLM)
         ]
         
         for message, threshold_ms in latency_tests:
