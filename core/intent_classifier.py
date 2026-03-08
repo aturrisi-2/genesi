@@ -712,7 +712,6 @@ class IntentClassifier:
         from core.chat_memory import chat_memory
         from core.llm_service import llm_service
         import json
-        import re
 
         # Raccogli ultimi 12 messaggi per un contesto conversazionale robusto
         history = chat_memory.get_messages(user_id, limit=12) if user_id else []
