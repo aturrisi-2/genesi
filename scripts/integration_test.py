@@ -19,8 +19,8 @@ from typing import List, Optional, Dict, Any
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 BASE_URL = "http://localhost:8000"
-TEST_EMAIL = "test_integration@genesi.local"
-TEST_PASSWORD = "integration_test_2026"
+TEST_EMAIL = "alfio.turrisi@gmail.com"
+TEST_PASSWORD = "ZOEennio0810"
 
 @dataclass
 class TestResult:
