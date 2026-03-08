@@ -188,7 +188,11 @@ class NeuralTester:
         # Valuta risposta
         resp_lower = response.lower()
         must_hit  = all(kw.lower() in resp_lower for kw in (response_must_contain or []))
-        must_miss = not any(kw.lower() in resp_lower for kw in (response_must_not_contain or []))
+        # Usa word-boundary per must_not per evitare falsi positivi (es. "non lo so" dentro "non lo sono")
+        must_miss = not any(
+            re.search(r'\b' + re.escape(kw.lower()) + r'\b', resp_lower)
+            for kw in (response_must_not_contain or [])
+        )
 
         passed = log_found and must_hit and must_miss
 
