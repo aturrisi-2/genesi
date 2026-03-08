@@ -18,7 +18,13 @@ EMOTIONAL_KEYWORDS = [
     "mi manca", "soffro", "sono deluso", "mi sento inutile",
     "non ce la faccio", "sono esausto", "tutto mi pesa",
     "mi sento sopraffatto", "sono giù", "non sto bene",
-    "ho il cuore pesante", "non so come andare avanti"
+    "ho il cuore pesante", "non so come andare avanti",
+    # Varianti con avverbi intensificatori (evitano mancati match per "sono molto stressato" etc.)
+    "molto stressato", "molto triste", "molto solo", "molto ansioso",
+    "molto depresso", "molto esausto", "molto deluso", "molto spaventato",
+    "tanto stressato", "tanto triste", "tanto solo", "tanto esausto",
+    "non riesco a dormire", "non riesco a smettere", "non dormo",
+    "mi sento sopraffatto", "sono a pezzi", "sono distrutto", "sono distrutta",
 ]
 
 def _is_emotional(message: str) -> bool:
@@ -736,7 +742,7 @@ class IntentClassifier:
         # Evita un roundtrip LLM per "Ciao", "Come stai", "Che ore sono", ecc.
         if len(message_lower.split()) <= 4:
             fast_intent = self.classify(message, user_id)
-            if fast_intent in ["greeting", "how_are_you", "time", "date", "weather"]:
+            if fast_intent in ["greeting", "how_are_you", "time", "date", "weather", "emotional"]:
                 log("INTENT_CLASSIFIED", intent=fast_intent, user_id=user_id, engine="regex_fast_track", message=message[:50])
                 return [fast_intent]
 

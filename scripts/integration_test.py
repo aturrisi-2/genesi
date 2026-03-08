@@ -101,14 +101,14 @@ class GenesiIntegrationTester:
         logs = await self.get_recent_logs(seconds)
         return bool(re.search(pattern, logs, re.IGNORECASE))
     
-    async def send_message(self, message: str, expected_log_pattern: str = "") -> TestResult:
-        """Invia un messaggio e verifica i log."""
+    async def send_message(self, message: str, expected_log_pattern: str = "", _retry: int = 1) -> TestResult:
+        """Invia un messaggio e verifica i log. Retry automatico su disconnessione transitoria."""
         start_time = time.time()
-        
+
         try:
             headers = {"Authorization": f"Bearer {self.auth_token}"}
             data = {"message": message}
-            
+
             async with self.session.post(f"{BASE_URL}/api/chat/", json=data, headers=headers) as resp:
                 response_text = await resp.text()
                 latency_ms = (time.time() - start_time) * 1000
@@ -141,6 +141,10 @@ class GenesiIntegrationTester:
                 return result
                 
         except Exception as e:
+            # Retry una volta su disconnessione transitoria del server
+            if _retry > 0 and "disconnect" in str(e).lower():
+                await asyncio.sleep(2)
+                return await self.send_message(message, expected_log_pattern, _retry=_retry - 1)
             return TestResult(
                 name=f"Message: {message[:50]}",
                 passed=False,
