@@ -306,6 +306,26 @@ class Proactor:
             elif needs_family:
                 response = response.rstrip("!., ") + f" Pensa a tua {mentioned}."
 
+        # 4. SPORT SPECIFICO: se il messaggio menziona uno sport e la risposta usa solo "partita/gara"
+        #    senza nominare lo sport, inietta il nome dello sport (es. "partita" → "partita di tennis")
+        _SPORT_MAP = [
+            ("tennis", "tennis"), ("calcio", "calcio"), ("basket", "basket"),
+            ("nuoto", "nuoto"), ("padel", "padel"), ("golf", "golf"),
+            ("pallavolo", "pallavolo"), ("rugby", "rugby"), ("ciclismo", "ciclismo"),
+            ("formula 1", "Formula 1"), (" f1 ", "Formula 1"), ("motogp", "MotoGP"),
+        ]
+        resp_lower = response.lower()
+        for sport_key, sport_name in _SPORT_MAP:
+            if sport_key in msg_lower and sport_key not in resp_lower:
+                # Lo sport è nel messaggio ma NON nella risposta → iniettalo
+                if _re_pp.search(r'\b(partita|gara|incontro|match)\b', resp_lower):
+                    response = _re_pp.sub(
+                        r'\b(partita|gara|incontro|match)\b',
+                        f'\\1 di {sport_name}',
+                        response, count=1, flags=_re_pp.IGNORECASE
+                    )
+                break
+
         return response
 
     def handle_response_only(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None) -> str:
