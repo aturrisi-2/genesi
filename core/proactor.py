@@ -1461,8 +1461,6 @@ class Proactor:
                             merged.append(nv)
                     profile[field] = merged
                     logger.info("MEMORY_CORRECTION_MERGE field=%s updated=%s", field, list(new_names))
-                    else:
-                        profile[field] = new_value
                 elif field in list_fields - {"pets", "children"} and isinstance(new_value, list) and old_value is not None:
                     # Targeted replace: rimuovi old_value, aggiungi new_value
                     old_vals = {str(v).lower().strip() for v in (old_value if isinstance(old_value, list) else [old_value]) if v}
