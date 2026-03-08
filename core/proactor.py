@@ -3328,7 +3328,10 @@ Messaggio: "{message}" """
         try:
             from core.calendar_awareness import get_calendar_context, is_first_message_of_day as _is_first
             _cal = get_calendar_context(user_tz)
-            _last_ts = _rel_profile.get("updated_at")
+            # Usa relational history.last_ts per la logica "prima interazione del giorno"
+            _last_ts = (brain_state.get("relational", {})
+                        .get("history", {}).get("last_ts")
+                        or _rel_profile.get("updated_at"))
             _primo_oggi = _is_first(str(_last_ts) if _last_ts else None, user_tz)
             _gps_city = _rel_profile.get("gps_city")
             _pos_attuale = _gps_city if _gps_city and _gps_city.lower() != user_city.lower() else None
