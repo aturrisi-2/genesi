@@ -651,11 +651,20 @@ class IntentClassifier:
 
         # PRIORITÀ ALTA: dove_sono — "dove sono", "dove mi trovo", ecc.
         _location_self_kw = [
-            "dove sono", "dove mi trovo", "dove siamo",
+            "dove mi trovo", "dove siamo",
             "in che zona sono", "in che posto sono",
             "la mia posizione", "dove sono adesso",
         ]
-        if any(kw in message_lower for kw in _location_self_kw):
+        # "dove sono" generico: solo se non seguito da participio passato (evento, non posizione utente)
+        # es. "dove sono state le qualifiche" → NO; "dove sono?" → SÌ
+        _dove_sono_event_pp = re.compile(
+            r"dove\s+sono\s+(state?|stati?|andate?|andati?|avvenute?|successe?|svolte?|tenute?|disputate?)", re.IGNORECASE
+        )
+        _has_location_self = any(kw in message_lower for kw in _location_self_kw)
+        if not _has_location_self and "dove sono" in message_lower:
+            if not _dove_sono_event_pp.search(message_lower):
+                _has_location_self = True
+        if _has_location_self:
             log("INTENT_CLASSIFIED", intent="dove_sono", user_id=user_id, engine="regex_priority", message=message[:50])
             return ["dove_sono"]
 
@@ -680,6 +689,17 @@ class IntentClassifier:
         if any(kw in message_lower for kw in _correction_kw):
             log("INTENT_CLASSIFIED", intent="memory_correction", user_id=user_id, engine="regex_priority", message=message[:50])
             return ["memory_correction"]
+
+        # BLOCCO: imperativi "dimmelo tu" = l'utente chiede a Genesi di decidere/rispondere
+        # NON sono richieste di notizie o tool — sono chat conversazionale
+        _tu_imperatives = [
+            "dimmelo tu", "dimmi tu", "decidilo tu", "decidi tu",
+            "scegli tu", "pensaci tu", "dicci tu", "dillo tu",
+            "lo sai tu", "dimmelo", "dimmi pure",
+        ]
+        if any(imp in message_lower for imp in _tu_imperatives):
+            log("INTENT_CLASSIFIED", intent="chat_free", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["chat_free"]
 
         # ⚡ FAST-TRACK: Per messaggi corti e intent comuni, usa il classificatore regex istantaneo
         # Evita un roundtrip LLM per "Ciao", "Come stai", "Che ore sono", ecc.
@@ -748,6 +768,7 @@ REGOLE SPECIALI:
 - Se l'utente ti dice "No, è al contrario" dopo che gli hai detto un suo dato (es: dove vive e dov'è nato), è ASSOLUTAMENTE "memory_correction".
 - Se il messaggio contiene "cosa pensi", "cosa ne pensi", "ti piace", "ti sembra", "sei d'accordo" riguardo al meteo/temperatura/freddo/caldo, usa "relational" o "chat_free" — NON "weather".
 - Se l'utente chiede dove si trova un'altra città, luogo o persona (es. "dove si trova Sofia", "dove è mia figlia"), usa "chat_free" — NON "dove_sono".
+- Se il messaggio è un imperativo che chiede a Genesi di rispondere/decidere ("dimmelo tu", "dimmi tu", "scegli tu", "decidilo tu"), usa sempre "chat_free" — NON "news" o altri tool.
 - Se l'intenzione non è chiara, usa uno score basso.
 """
 

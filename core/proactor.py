@@ -65,7 +65,7 @@ logger.info("ARCHITECTURE_MODE=cost_optimized_v1")
 # ═══════════════════════════════════════════════════════════════
 
 IDENTITY_TRIGGERS = [
-    "come mi chiamo", "chi sono", "dove vivo", "dove abito",
+    "come mi chiamo", "dove vivo", "dove abito",
     "che lavoro faccio", "che lavoro svolgo", "qual è il mio nome",
     "qual e' il mio nome", "il mio nome", "ricordi il mio nome",
     "sai come mi chiamo", "quanti anni ho", "cosa faccio",
@@ -75,7 +75,7 @@ IDENTITY_TRIGGERS = [
     "come si chiama il mio cane", "come si chiama la mia gatta",
     "come si chiamano i miei figli",
     "cosa mi piace", "che musica mi piace", "quali sono i miei interessi",
-    "quali sono le mie preferenze", "come sono", "che tipo di persona sono",
+    "quali sono le mie preferenze", "come sono fatto", "come sono come persona", "che tipo di persona sono",
     "quale frutto mi piace", "cosa sai di me", "account collegati",
     "miei account", "quali account ho", "i miei account", "e icloud", "e google",
     # Domande su Genesi stessa
@@ -107,11 +107,18 @@ def is_identity_question(message: str) -> bool:
     msg_lower = message.lower().strip()
     if any(trigger in msg_lower for trigger in IDENTITY_TRIGGERS):
         return True
-    
+
+    # "chi sono" speciale: match solo se riferito all'utente stesso,
+    # non a terze parti ("chi sono i candidati?", "chi sono stati?")
+    if "chi sono" in msg_lower:
+        # Esclude: "chi sono" seguito da articolo determinativo o pronome di terza persona
+        if not re.search(r"chi sono\s+(i|le|gli|lo|la|l'|questi|queste|quelli|quelle|loro|essi|esse)\b", msg_lower):
+            return True
+
     # Elliptical follow-ups for accounts
     if msg_lower.startswith("e ") or msg_lower.startswith("invece "):
         return any(kw in msg_lower for kw in ["icloud", "google", "apple", "account", "calendario"])
-    
+
     return False
 
 
