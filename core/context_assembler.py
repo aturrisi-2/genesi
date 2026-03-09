@@ -446,7 +446,7 @@ def is_document_reference(message: str) -> bool:
     return any(trigger in msg_lower for trigger in _DOCUMENT_TRIGGERS)
 
 
-def _format_doc_block(doc: Dict[str, Any]) -> str:
+def _format_doc_block(doc: Dict[str, Any], is_most_recent: bool = False) -> str:
     """Format a single document as a [DOCUMENT_CONTEXT] block (max 2000 chars content)."""
     raw_content = doc.get("content", "")
     summary = doc.get("summary", "")
@@ -459,7 +459,8 @@ def _format_doc_block(doc: Dict[str, Any]) -> str:
     else:
         content_section = raw_content
 
-    return (f"[DOCUMENT_CONTEXT]\n"
+    recency_tag = " (PIÙ RECENTE)" if is_most_recent else ""
+    return (f"[DOCUMENT_CONTEXT{recency_tag}]\n"
             f"filename: {doc.get('filename', '?')}\n"
             f"type: {doc.get('type', '?')}\n"
             f"content:\n<<<\n{content_section}\n>>>\n"
@@ -486,28 +487,33 @@ def _inject_document_context(user_id: str, message: str,
     if not is_document_reference(message):
         return ""
 
+    # I più recenti sono in fondo — invertiamo per dargli priorità nel selector
+    active_docs_recent_first = list(reversed(active_docs))
+
     # Use document selector to pick relevant docs
-    selected = resolve_documents(message, user_id, active_docs)
+    selected = resolve_documents(message, user_id, active_docs_recent_first)
     if not selected:
         return ""
 
-    # Build context blocks
+    # Il primo nella lista è il più recente (dopo il reverse)
+    most_recent_id = active_docs_recent_first[0] if active_docs_recent_first else None
+
+    # Build context blocks — più recente per primo
     blocks = []
-    for doc in selected:
-        blocks.append(_format_doc_block(doc))
-        logger.info("DOCUMENT_CONTEXT_INJECTED doc_id=%s type=%s",
-                    doc.get("doc_id"), doc.get("type"))
+    for i, doc in enumerate(selected):
+        is_most_recent = (doc.get("doc_id") == most_recent_id)
+        blocks.append(_format_doc_block(doc, is_most_recent=is_most_recent))
+        logger.info("DOCUMENT_CONTEXT_INJECTED doc_id=%s type=%s recent=%s",
+                    doc.get("doc_id"), doc.get("type"), is_most_recent)
 
     doc_count = len(selected)
     instruction = (
-        f"ISTRUZIONE: L'utente si riferisce a {'questi documenti' if doc_count > 1 else 'questo documento'}. "
-        f"Rispondi usando il contenuto {'dei documenti' if doc_count > 1 else 'del documento'} sopra. "
+        f"ISTRUZIONE: L'utente si riferisce a {'questi file' if doc_count > 1 else 'questo file'}. "
+        f"Rispondi usando il contenuto {'dei file' if doc_count > 1 else 'del file'} sopra. "
         f"NON dire che non hai accesso al file. HAI il contenuto. "
-        f"NON rispondere con frasi generiche. USA i dati {'dei documenti' if doc_count > 1 else 'del documento'}."
+        f"NON rispondere con frasi generiche. USA i dati {'dei file' if doc_count > 1 else 'del file'}. "
+        f"Il file contrassegnato come (PIÙ RECENTE) è quello caricato per ultimo — dagli priorità se l'utente non specifica quale. "
+        f"Se l'utente chiede di confrontare più file o immagini, usa tutti quelli disponibili qui sopra."
     )
-    if doc_count > 1:
-        instruction += (
-            " Se l'utente chiede un confronto, analizza le differenze e similitudini tra i documenti."
-        )
 
     return "\n\n".join(blocks) + "\n\n" + instruction
