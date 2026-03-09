@@ -1567,6 +1567,12 @@ class Proactor:
             _old_value = corr.get("old_value")
             if not _field or not _action:
                 continue
+            # Guard: non sovrascrivere name con la città del profilo (bug LLM confonde city e name)
+            if _field == "name" and isinstance(_new_value, str) and _action in ("update", "set"):
+                _profile_city = (profile.get("city") or "").lower().strip()
+                if _profile_city and _new_value.lower().strip() == _profile_city:
+                    logger.warning("MEMORY_CORRECTION_BLOCKED field=name new_value=%s matches city=%s", _new_value, _profile_city)
+                    continue
             _apply_list_correction(_field, _action, _new_value, _old_value)
             log("MEMORY_CORRECTION_APPLIED", user_id=user_id, field=_field, action=_action, new_value=_new_value)
             # Pulizia auto: se la professione è aggiornata, rimuovila da traits

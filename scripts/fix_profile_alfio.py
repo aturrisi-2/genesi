@@ -31,6 +31,12 @@ _TEST_NAMES = {"marco ferrara", "marco", "ferrara"}
 if (profile.get("name") or "").lower() in _TEST_NAMES:
     profile["name"] = None
     changes.append("name rimosso (artefatto test Marco)")
+# Reset se name == città (bug: city salvata come name)
+_current_name = (profile.get("name") or "").lower().strip()
+_current_city = (profile.get("city") or "").lower().strip()
+if _current_name and _current_city and _current_name == _current_city:
+    profile["name"] = "Alfio"
+    changes.append(f"name ripristinato a Alfio (era '{_current_name}' = city)")
 _TEST_SPOUSES = {"laura"}
 if (profile.get("spouse") or "").lower() in _TEST_SPOUSES:
     profile["spouse"] = None
