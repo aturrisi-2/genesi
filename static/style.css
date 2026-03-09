@@ -304,7 +304,7 @@ body::after {
   content: '';
   position: absolute;
   right: 5px;
-  top: 1em;
+  top: 15px;
   transform: translateY(-50%);
   width: 11px;
   height: 11px;
@@ -322,7 +322,7 @@ body::after {
   content: '';
   position: absolute;
   left: 5px;
-  top: 1em;
+  top: 15px;
   transform: translateY(-50%);
   width: 11px;
   height: 11px;
