@@ -4339,6 +4339,19 @@ function setVoiceStatusText(text) {
       auraBottom = 'rgba(84, 122, 154, 0.2)';
     }
 
+    // Golden hour override: accenti caldi arancio/oro/rosa
+    if (scene.phase === 'sunrise') {
+      accent = '#ffb868';
+      accentSoft = 'rgba(255, 168, 80, 0.40)';
+      auraTop = 'rgba(255, 140, 50, 0.32)';
+      auraBottom = 'rgba(220, 90, 30, 0.22)';
+    } else if (scene.phase === 'sunset') {
+      accent = '#ff8c5a';
+      accentSoft = 'rgba(255, 120, 60, 0.40)';
+      auraTop = 'rgba(240, 80, 40, 0.32)';
+      auraBottom = 'rgba(160, 40, 20, 0.24)';
+    }
+
     const rootStyle = document.documentElement.style;
     rootStyle.setProperty('--meteo-accent', accent);
     rootStyle.setProperty('--meteo-accent-soft', accentSoft);
@@ -4346,7 +4359,7 @@ function setVoiceStatusText(text) {
     rootStyle.setProperty('--meteo-aura-bottom', auraBottom);
   }
 
-  function getWeatherScene(condition, iconCode) {
+  function getWeatherScene(condition, iconCode, payload) {
     const cond = String(condition || '').toLowerCase();
     const icon = String(iconCode || '').toLowerCase();
 
@@ -4356,8 +4369,22 @@ function setVoiceStatusText(text) {
     const clientNight = hour < 6 || hour >= 21;
     const isNight = icon ? icon.endsWith('n') : clientNight;
 
-    if (cond.includes('thunder')) return { weather: 'thunder', phase: isNight ? 'night' : 'day' };
-    if (cond.includes('snow') || icon.startsWith('13')) return { weather: 'snow', phase: isNight ? 'night' : 'day' };
+    // Golden hour detection: alba (sunrise ±window) e tramonto (sunset ±window)
+    // sunrise: -30min → +90min; sunset: -90min → +30min (finestre asimmetriche)
+    let goldenPhase = null;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const sr = payload && payload.sunrise ? Number(payload.sunrise) : null;
+    const ss = payload && payload.sunset  ? Number(payload.sunset)  : null;
+    if (!isNight && sr && ss) {
+      if (nowSec >= sr - 30 * 60 && nowSec <= sr + 90 * 60) {
+        goldenPhase = 'sunrise';
+      } else if (nowSec >= ss - 90 * 60 && nowSec <= ss + 30 * 60) {
+        goldenPhase = 'sunset';
+      }
+    }
+
+    if (cond.includes('thunder')) return { weather: 'thunder', phase: goldenPhase || (isNight ? 'night' : 'day') };
+    if (cond.includes('snow') || icon.startsWith('13')) return { weather: 'snow', phase: goldenPhase || (isNight ? 'night' : 'day') };
 
     const isMist = cond.includes('mist')
       || cond.includes('fog')
@@ -4369,28 +4396,30 @@ function setVoiceStatusText(text) {
       || cond.includes('squall')
       || cond.includes('tornado')
       || icon.startsWith('50');
-    if (isMist) return { weather: 'mist', phase: isNight ? 'night' : 'day' };
+    if (isMist) return { weather: 'mist', phase: goldenPhase || (isNight ? 'night' : 'day') };
 
     if (cond.includes('rain') || cond.includes('drizzle') || icon.startsWith('09') || icon.startsWith('10')) {
-      return { weather: 'rain', phase: isNight ? 'night' : 'day' };
+      return { weather: 'rain', phase: goldenPhase || (isNight ? 'night' : 'day') };
     }
     // Solo 03* (scattered) e 04* (broken/overcast) mostrano nuvole — "few clouds" (02*) = clear
     if (icon.startsWith('03') || icon.startsWith('04')) {
-      return { weather: 'clouds', phase: isNight ? 'night' : 'day' };
+      return { weather: 'clouds', phase: goldenPhase || (isNight ? 'night' : 'day') };
     }
-    return { weather: 'clear', phase: isNight ? 'night' : 'day' };
+    return { weather: 'clear', phase: goldenPhase || (isNight ? 'night' : 'day') };
   }
 
   function renderWeather(payload) {
     // Usa i codici OpenWeather per mantenere la scena coerente con i dati meteo reali.
-    const scene = getWeatherScene(payload.condition, payload.icon_code);
+    const scene = getWeatherScene(payload.condition, payload.icon_code, payload);
 
     els.widget.dataset.weather = scene.weather;
     els.widget.dataset.phase = scene.phase;
     applyDynamicSceneTuning(payload, scene);
 
     // Failsafe UI: forza visibilità astro anche se CSS stale lato client.
-    if (els.sun) els.sun.hidden = scene.phase !== 'day';
+    // Sole visibile: giorno, alba, tramonto — Luna: solo notte.
+    const sunPhases = ['day', 'sunrise', 'sunset'];
+    if (els.sun) els.sun.hidden = !sunPhases.includes(scene.phase);
     if (els.moon) els.moon.hidden = scene.phase !== 'night';
     if (els.stars && els.stars.length) {
       const showStars = scene.phase === 'night' && scene.weather !== 'thunder';

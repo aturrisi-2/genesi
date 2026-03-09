@@ -2725,6 +2725,15 @@ body.coding-active {
   background: linear-gradient(165deg, #04050a 0%, #07080e 28%, #0a0c14 56%, #0e1018 100%);
 }
 
+/* Alba · tutte le condizioni */
+#weather-widget[data-phase='sunrise'] .weather-widget__inner {
+  background: linear-gradient(165deg, #1a0a2e 0%, #3d1c5a 18%, #8b3a62 36%, #d4603a 56%, #f0a040 78%, #ffd070 100%);
+}
+/* Tramonto · tutte le condizioni */
+#weather-widget[data-phase='sunset'] .weather-widget__inner {
+  background: linear-gradient(165deg, #0d1b3e 0%, #1a2050 16%, #5c2a5e 34%, #c04030 54%, #e87030 72%, #f4a040 88%, #ffe0a0 100%);
+}
+
 /* ── LUCE ATMOSFERICA ANIMATA ───────────────────────── */
 .weather-widget__ambient {
   position: absolute;
@@ -2943,10 +2952,40 @@ body.coding-active {
   animation-delay: -0.9s;
 }
 
+/* ── LUCE ATMOSFERICA GOLDEN HOUR ───────────────────── */
+#weather-widget[data-phase='sunrise'] .weather-widget__ambient {
+  background:
+    radial-gradient(ellipse 100% 90% at 80% 95%, rgba(255,160,40,0.55), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 18% 110%, rgba(180,50,20,0.28), transparent 52%);
+  opacity: 0.72;
+}
+#weather-widget[data-phase='sunset'] .weather-widget__ambient {
+  background:
+    radial-gradient(ellipse 100% 90% at 82% 95%, rgba(240,100,30,0.60), transparent 55%),
+    radial-gradient(ellipse 65% 50% at 15% 110%, rgba(120,30,60,0.30), transparent 52%);
+  opacity: 0.74;
+}
+
+/* ── POSIZIONE SOLE SULL'ORIZZONTE (golden hour) ────── */
+#weather-widget[data-phase='sunrise'] .weather-widget__sun,
+#weather-widget[data-phase='sunset'] .weather-widget__sun {
+  top: auto;
+  bottom: -28px;
+  right: 10%;
+  width: 110px;
+  height: 110px;
+  filter: drop-shadow(0 0 28px rgba(255,180,40,0.85)) drop-shadow(0 0 64px rgba(255,120,20,0.50));
+}
+
 /* ── VISIBILITÀ PER CONDIZIONE ──────────────────────── */
 #weather-widget[data-phase='day'] .weather-widget__sun { opacity: 0.92; }
 #weather-widget[data-phase='day'] .weather-widget__moon { opacity: 0 !important; }
 #weather-widget[data-phase='night'] .weather-widget__moon { opacity: 0.88; }
+/* Golden hour: sole sull'orizzonte, luna nascosta */
+#weather-widget[data-phase='sunrise'] .weather-widget__sun,
+#weather-widget[data-phase='sunset'] .weather-widget__sun { opacity: 0.94; }
+#weather-widget[data-phase='sunrise'] .weather-widget__moon,
+#weather-widget[data-phase='sunset'] .weather-widget__moon { opacity: 0 !important; }
 
 #weather-widget[data-phase='day'][data-weather='rain'] .weather-widget__sun,
 #weather-widget[data-phase='day'][data-weather='thunder'] .weather-widget__sun { opacity: 0 !important; }
@@ -3078,6 +3117,21 @@ body.coding-active {
 #weather-widget[data-weather='snow'] .weather-widget__meta {
   color: rgba(18,30,48,0.80);
   text-shadow: 0 1px 4px rgba(255,255,255,0.45);
+}
+
+/* Golden hour: testo chiaro con warm glow */
+#weather-widget[data-phase='sunrise'] .weather-widget__city,
+#weather-widget[data-phase='sunrise'] .weather-widget__time,
+#weather-widget[data-phase='sunrise'] .weather-widget__temp,
+#weather-widget[data-phase='sunrise'] .weather-widget__desc,
+#weather-widget[data-phase='sunrise'] .weather-widget__meta,
+#weather-widget[data-phase='sunset'] .weather-widget__city,
+#weather-widget[data-phase='sunset'] .weather-widget__time,
+#weather-widget[data-phase='sunset'] .weather-widget__temp,
+#weather-widget[data-phase='sunset'] .weather-widget__desc,
+#weather-widget[data-phase='sunset'] .weather-widget__meta {
+  color: rgba(255, 248, 235, 0.95);
+  text-shadow: 0 1px 8px rgba(180, 60, 0, 0.70);
 }
 
 /* ── LOADING ─────────────────────────────────────────── */

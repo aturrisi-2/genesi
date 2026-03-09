@@ -238,6 +238,8 @@ async def get_weather_widget(
                 "condition"  : data["weather"][0]["main"].lower(),  # clear/clouds/rain/...
                 "cloud_cover": data.get("clouds", {}).get("all", 0),
                 "visibility_m": data.get("visibility"),
+                "sunrise"    : data.get("sys", {}).get("sunrise"),  # Unix timestamp UTC
+                "sunset"     : data.get("sys", {}).get("sunset"),   # Unix timestamp UTC
                 "updated_at" : datetime.now(dt_timezone.utc).isoformat(),
             }
 
