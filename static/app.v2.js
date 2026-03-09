@@ -4431,7 +4431,10 @@ function setVoiceStatusText(text) {
     els.city.textContent = payload.city;
     els.temp.textContent = `${payload.temp}°`;
     els.desc.textContent = payload.description;
-    els.meta.textContent = `${payload.humidity} % umidità · ${payload.wind_speed} km / h`;
+    els.meta.innerHTML =
+      `<svg viewBox="0 0 10 14" width="9" height="12" fill="currentColor" style="vertical-align:middle;margin-right:3px;opacity:.82"><path d="M5 0 C5 0 0 6.5 0 9.5 A5 5 0 0 0 10 9.5 C10 6.5 5 0 5 0Z"/></svg>${payload.humidity}%` +
+      `<span style="margin:0 0.55em;opacity:.35">|</span>` +
+      `<svg viewBox="0 0 14 10" width="13" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="vertical-align:middle;margin-right:3px;opacity:.82"><path d="M1 3 Q5 3 7 1.5 Q9 0 11 1.5 Q13 3 13 3"/><path d="M1 6.5 Q4 6.5 6 5 Q8 3.5 10 5 Q12 6.5 13 6.5"/><path d="M1 10 Q3 10 5 8.5 Q7 7 9 8.5"/></svg>${payload.wind_speed} km/h`;
     updateClock();
     showState('data');
     console.log(
