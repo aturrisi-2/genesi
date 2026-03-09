@@ -3071,10 +3071,10 @@ body.coding-active {
 
 .weather-widget__time {
   font-size: 0.68rem;
-  font-weight: 300;
+  font-weight: 400;
   letter-spacing: 0.04em;
-  color: rgba(255,255,255,0.50);
-  text-shadow: 0 1px 4px rgba(0,0,0,0.45);
+  color: rgba(255,255,255,0.92);
+  text-shadow: 0 1px 6px rgba(0,0,0,0.65);
 }
 
 .weather-widget__temp {
@@ -3316,8 +3316,7 @@ body {
 }
 
 .weather-widget__desc,
-.weather-widget__meta,
-.weather-widget__time {
+.weather-widget__meta {
   font-size: 1rem !important;
   opacity: 0.85 !important;
 }
