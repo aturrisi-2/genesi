@@ -25,8 +25,12 @@ from auth.router import require_auth
 from auth.models import AuthUser
 from datetime import datetime
 import json
+import asyncio as _asyncio_mod
 
 router = APIRouter(prefix="/chat")
+
+# Semaforo per limitare LLM calls in background (max 5 concurrent)
+_BACKGROUND_LLM_SEM = _asyncio_mod.Semaphore(5)
 
 MAX_MESSAGE_LENGTH = 4000  # caratteri massimi per messaggio
 
@@ -152,35 +156,37 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         # Identity extractor: runs in BACKGROUND while proactor generates response.
         # Saves ~1-2s per message (avoids blocking on gpt-4o-mini call).
         async def _extract_and_save_identity():
-            try:
-                history = chat_memory.get_messages(user_id, limit=3) if user_id else []
-                history_text = "\n".join([f"utente: {msg.get('user_message', '')}\ngenesi: {msg.get('system_response', '')}" for msg in history])
-                identity_update = await extract_identity_updates(request.message, history_text)
-                if identity_update.interests or identity_update.preferences or \
-                   identity_update.traits or identity_update.pets or \
-                   identity_update.children or identity_update.spouse:
-                    fresh_raw = await storage.load(f"profile:{user_id}", default={})
-                    fresh_profile = UserProfile(**normalize_profile_dict(fresh_raw))
-                    merge_identity_update(fresh_profile, identity_update)
-                    fresh_profile.updated_at = datetime.utcnow()
-                    await storage.save(f"profile:{user_id}", fresh_profile.model_dump(mode="json"))
-                    log("IDENTITY_SAVE_BACKGROUND", user_id=user_id)
-            except Exception as _e:
-                log("IDENTITY_SAVE_BACKGROUND_ERROR", user_id=user_id, error=str(_e))
+            async with _BACKGROUND_LLM_SEM:
+                try:
+                    history = chat_memory.get_messages(user_id, limit=3) if user_id else []
+                    history_text = "\n".join([f"utente: {msg.get('user_message', '')}\ngenesi: {msg.get('system_response', '')}" for msg in history])
+                    identity_update = await extract_identity_updates(request.message, history_text)
+                    if identity_update.interests or identity_update.preferences or \
+                       identity_update.traits or identity_update.pets or \
+                       identity_update.children or identity_update.spouse:
+                        fresh_raw = await storage.load(f"profile:{user_id}", default={})
+                        fresh_profile = UserProfile(**normalize_profile_dict(fresh_raw))
+                        merge_identity_update(fresh_profile, identity_update)
+                        fresh_profile.updated_at = datetime.utcnow()
+                        await storage.save(f"profile:{user_id}", fresh_profile.model_dump(mode="json"))
+                        log("IDENTITY_SAVE_BACKGROUND", user_id=user_id)
+                except Exception as _e:
+                    log("IDENTITY_SAVE_BACKGROUND_ERROR", user_id=user_id, error=str(_e))
 
         import asyncio as _asyncio
 
         # Episode extractor: estrae eventi personali temporali in BACKGROUND
         async def _extract_and_save_episode():
-            try:
-                from core.episode_extractor import extract_episodes
-                from core.episode_memory import episode_memory as _em
-                episodes = await extract_episodes(request.message, user_id)
-                for ep in episodes:
-                    await _em.add(user_id, ep)
-                    log("EPISODE_SAVED", user_id=user_id, text=ep['text'][:60])
-            except Exception as _ep_e:
-                log("EPISODE_SAVE_ERROR", user_id=user_id, error=str(_ep_e))
+            async with _BACKGROUND_LLM_SEM:
+                try:
+                    from core.episode_extractor import extract_episodes
+                    from core.episode_memory import episode_memory as _em
+                    episodes = await extract_episodes(request.message, user_id)
+                    for ep in episodes:
+                        await _em.add(user_id, ep)
+                        log("EPISODE_SAVED", user_id=user_id, text=ep['text'][:60])
+                except Exception as _ep_e:
+                    log("EPISODE_SAVE_ERROR", user_id=user_id, error=str(_ep_e))
 
         _asyncio.create_task(_extract_and_save_episode())
 
@@ -202,19 +208,22 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         # Consolidazione memoria globale in background (max 1 volta/24h per utente)
         try:
             from core.global_memory_service import global_memory_service
-            import asyncio as _aio_mem
-            _aio_mem.create_task(global_memory_service.consolidate_if_needed(user_id))
+            async def _consolidate_global_memory():
+                async with _BACKGROUND_LLM_SEM:
+                    await global_memory_service.consolidate_if_needed(user_id)
+            _asyncio.create_task(_consolidate_global_memory())
         except Exception:
             pass
 
         # Personal facts extraction: fatti rivelati in conversazione (abitudini, preferenze, familiari...)
         _raw_response = response
         async def _extract_and_save_personal_facts():
-            try:
-                from core.personal_facts_service import personal_facts_service as _pfs
-                await _pfs.extract_and_save(request.message, _raw_response, user_id)
-            except Exception as _pf_e:
-                log("PERSONAL_FACTS_SAVE_ERROR", user_id=user_id, error=str(_pf_e))
+            async with _BACKGROUND_LLM_SEM:
+                try:
+                    from core.personal_facts_service import personal_facts_service as _pfs
+                    await _pfs.extract_and_save(request.message, _raw_response, user_id)
+                except Exception as _pf_e:
+                    log("PERSONAL_FACTS_SAVE_ERROR", user_id=user_id, error=str(_pf_e))
         _asyncio.create_task(_extract_and_save_personal_facts())
 
         # Audit automatico ogni 25 turni di chat (background, silenzioso)
@@ -307,29 +316,34 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
             # Consolidazione memoria globale in background (max 1/24h per utente)
             try:
                 from core.global_memory_service import global_memory_service
-                _aio.create_task(global_memory_service.consolidate_if_needed(user_id))
+                async def _stream_consolidate_global_memory():
+                    async with _BACKGROUND_LLM_SEM:
+                        await global_memory_service.consolidate_if_needed(user_id)
+                _aio.create_task(_stream_consolidate_global_memory())
             except Exception:
                 pass
             # Episode extractor in background (eventi personali temporali)
             async def _stream_extract_episode():
-                try:
-                    from core.episode_extractor import extract_episodes
-                    from core.episode_memory import episode_memory as _em
-                    episodes = await extract_episodes(request.message, user_id)
-                    for ep in episodes:
-                        await _em.add(user_id, ep)
-                        log("EPISODE_SAVED", user_id=user_id, text=ep['text'][:60])
-                except Exception as _ep_e:
-                    log("EPISODE_SAVE_ERROR", user_id=user_id, error=str(_ep_e))
+                async with _BACKGROUND_LLM_SEM:
+                    try:
+                        from core.episode_extractor import extract_episodes
+                        from core.episode_memory import episode_memory as _em
+                        episodes = await extract_episodes(request.message, user_id)
+                        for ep in episodes:
+                            await _em.add(user_id, ep)
+                            log("EPISODE_SAVED", user_id=user_id, text=ep['text'][:60])
+                    except Exception as _ep_e:
+                        log("EPISODE_SAVE_ERROR", user_id=user_id, error=str(_ep_e))
             _aio.create_task(_stream_extract_episode())
             # Personal facts extraction in background (abitudini, preferenze, familiari...)
             _stream_resp = resp
             async def _stream_extract_personal_facts():
-                try:
-                    from core.personal_facts_service import personal_facts_service as _pfs
-                    await _pfs.extract_and_save(request.message, _stream_resp, user_id)
-                except Exception as _pf_e:
-                    log("PERSONAL_FACTS_SAVE_ERROR", user_id=user_id, error=str(_pf_e))
+                async with _BACKGROUND_LLM_SEM:
+                    try:
+                        from core.personal_facts_service import personal_facts_service as _pfs
+                        await _pfs.extract_and_save(request.message, _stream_resp, user_id)
+                    except Exception as _pf_e:
+                        log("PERSONAL_FACTS_SAVE_ERROR", user_id=user_id, error=str(_pf_e))
             _aio.create_task(_stream_extract_personal_facts())
 
             # Audit automatico ogni 25 turni di chat (background, silenzioso)
