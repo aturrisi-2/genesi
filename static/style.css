@@ -297,7 +297,7 @@ body::after {
   color: rgba(255, 255, 255, 0.88);
   margin-left: auto;
   text-align: right;
-  padding-right: 26px;
+  padding-right: 18px;
 }
 
 .message.user::after {
@@ -305,15 +305,16 @@ body::after {
   position: absolute;
   right: 0;
   top: 0;
-  font-size: 1.5rem;
-  line-height: 1.65;
+  font-size: 3rem;
+  line-height: 1;
+  transform: translateY(calc(-50% + 0.8rem));
   color: rgba(120, 168, 235, 0.80);
 }
 
 .message.genesi {
   color: rgba(255, 255, 255, 0.70);
   margin-right: auto;
-  padding-left: 26px;
+  padding-left: 18px;
 }
 
 .message.genesi::before {
@@ -321,8 +322,9 @@ body::after {
   position: absolute;
   left: 0;
   top: 0;
-  font-size: 1.5rem;
-  line-height: 1.65;
+  font-size: 3rem;
+  line-height: 1;
+  transform: translateY(calc(-50% + 0.8rem));
   color: rgba(175, 178, 188, 0.70);
 }
 
