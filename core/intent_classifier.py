@@ -170,6 +170,10 @@ class IntentClassifier:
                 "illustra", "crea una picture", "genera grafica", "dipingi", "disegni",
                 "genera immagine", "crea immagine", "genera foto",
                 "fammi vedere un'immagine", "mostrami un'immagine",
+                "fotomontaggio", "crea un fotomontaggio", "fai un fotomontaggio",
+                "modifica la foto", "modifica l'immagine", "modifica foto", "modifica immagine",
+                "ritocca la foto", "ritocca l'immagine", "edita la foto", "edita l'immagine",
+                "aggiungi alla foto", "metti nella foto", "metti nella immagine",
             ],
             # ── Integrazioni esterne ──────────────────────────────────────────
             "gmail_setup": [
