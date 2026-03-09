@@ -305,14 +305,14 @@ body::after {
   position: absolute;
   right: 0;
   top: 0;
-  transform: translateY(calc(-50% + 0.8rem));
+  transform: translateY(calc(-50% + 0.8rem + 2px));
   font-size: 3rem;
   line-height: 1;
   color: rgba(120, 168, 235, 0.80);
 }
 
 .message.genesi {
-  color: rgba(255, 255, 255, 0.70);
+  color: rgba(255, 255, 255, 0.88);
   margin-right: auto;
   padding-left: 34px;
 }
@@ -322,7 +322,7 @@ body::after {
   position: absolute;
   left: 0;
   top: 0;
-  transform: translateY(calc(-50% + 0.8rem));
+  transform: translateY(calc(-50% + 0.8rem + 2px));
   font-size: 3rem;
   line-height: 1;
   color: rgba(175, 178, 188, 0.70);
