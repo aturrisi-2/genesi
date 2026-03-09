@@ -459,12 +459,13 @@ body::after {
 
 #input-container {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  /* Allineamento al baricentro */
   gap: 8px;
   background: transparent;
   border: none;
   box-shadow: none;
+  min-height: 46px;
 }
 
 /* ─── INPUT BOX ─────────────────────────────────────────── */
@@ -473,7 +474,7 @@ body::after {
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-self: center;
+  margin: auto 0;
 }
 
 #text-input,
@@ -694,7 +695,6 @@ textarea#text-input:focus {
    =============================== */
 #plus-button {
   flex-shrink: 0;
-  align-self: center;
   width: 40px;
   height: 40px;
   background: #1a1a1a;
@@ -705,8 +705,7 @@ textarea#text-input:focus {
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  margin: 0;
-  /* Reset margins to ensure flex centering works */
+  margin: auto 0;
 }
 
 #plus-button svg {
@@ -2364,8 +2363,7 @@ body.coding-active {
   justify-content: center;
   transition: all 0.2s;
   flex-shrink: 0;
-  align-self: center;
-  margin: 0;
+  margin: auto 0;
 }
 
 #voice-mode-btn svg {
