@@ -291,15 +291,18 @@ let _ttsAborted = false;
 // Typewriter animation state — syncs text display with TTS audio
 let _twBubble   = null;  // bubble element to animate
 let _twShown    = '';    // text already typed (previous chunks)
-let _twTimeout  = null;  // active setTimeout handle
+let _twRafId    = null;  // active requestAnimationFrame handle
+let _twTimeout  = null;  // legacy alias (kept for stopAllTTS compat — unused)
 let _twFullText = '';    // complete response text (for final render / fallback)
 let _twImages   = '';    // rendered images HTML (appended on final render)
 
-// Starts character-by-character typewriter for one TTS chunk, timed to audio duration
-function _startTypewriterChunk(text, durationMs) {
+// Starts character-by-character typewriter for one TTS chunk.
+// Uses AudioContext.currentTime as clock so text is locked to the audio thread —
+// no setTimeout drift, no lag under CPU load.
+function _startTypewriterChunk(text, durationMs, audioCtx, audioStartCtxTime) {
   if (!_twBubble || !text) return;
-  hideThinking(); // L'audio sta partendo — nascondi qualsiasi status residuo
-  clearTimeout(_twTimeout);
+  hideThinking();
+  if (_twRafId) { cancelAnimationFrame(_twRafId); _twRafId = null; }
 
   const chars = text.split('');
   const getWeight = (ch) => {
@@ -312,26 +315,54 @@ function _startTypewriterChunk(text, durationMs) {
   const totalWeight = chars.reduce((sum, ch) => sum + getWeight(ch), 0);
   const msPerWeight = totalWeight > 0 ? durationMs / totalWeight : 30;
 
-  let i = 0;
-  let typed = '';
-  const typeNext = () => {
-    if (i >= chars.length) { _twShown += text; return; }
-    const ch = chars[i++];
-    typed += ch;
-    const _twPrev = typed.slice(0, -1);
-    const _twLast = typed.slice(-1);
-    _twBubble.innerHTML = _twShown + _twPrev +
-      '<span class="char-appear">' + _twLast + '</span>' +
-      '<span class="stream-cursor"></span>';
-    _twTimeout = setTimeout(typeNext, Math.max(1, getWeight(ch) * msPerWeight));
+  // Pre-compute cumulative schedule (ms from audio start → text shown so far)
+  let cumMs = 0;
+  const schedule = chars.map(ch => {
+    cumMs += getWeight(ch) * msPerWeight;
+    return cumMs;
+  });
+
+  let lastIdx = -1; // last character index rendered
+
+  const tick = () => {
+    if (!_twBubble) return;
+
+    // Elapsed ms on the AudioContext clock (immune to JS timer drift)
+    const elapsedMs = audioCtx && audioStartCtxTime != null
+      ? (audioCtx.currentTime - audioStartCtxTime) * 1000
+      : performance.now() - (_twPerfStart || performance.now());
+
+    // Advance to the latest character whose time has passed
+    let idx = lastIdx;
+    while (idx + 1 < schedule.length && schedule[idx + 1] <= elapsedMs) idx++;
+
+    if (idx !== lastIdx) {
+      lastIdx = idx;
+      const shown = chars.slice(0, idx + 1).join('');
+      const prev  = shown.slice(0, -1);
+      const last  = shown.slice(-1);
+      _twBubble.innerHTML = _twShown + prev +
+        '<span class="char-appear">' + last + '</span>' +
+        '<span class="stream-cursor"></span>';
+    }
+
+    if (lastIdx < chars.length - 1) {
+      _twRafId = requestAnimationFrame(tick);
+    } else {
+      _twShown += text;
+      _twRafId = null;
+    }
   };
-  typeNext();
+
+  _twRafId = requestAnimationFrame(tick);
 }
+let _twPerfStart = null; // fallback when AudioContext not available
 
 // Shows fully-rendered markdown in bubble — called after TTS ends or on barge-in
 function _twFinalRender() {
-  hideThinking(); // safety: se TTS non parte mai, nascondi comunque il thinking
+  hideThinking();
   if (!_twBubble) return;
+  if (_twRafId) { cancelAnimationFrame(_twRafId); _twRafId = null; }
   clearTimeout(_twTimeout);
   _twBubble.classList.remove('streaming');
   _twBubble.innerHTML = (_twFullText || '') + (_twImages || '');
@@ -3226,20 +3257,26 @@ async function playSimpleAudio(blob) {
         cleanup();
       };
 
-      // Imposta timestamp TTS PRIMA del playback
-      window.lastTTSStart = Date.now();
-
       // Set variables before start
       window.ttsPlaying = true;
       _wasPlayingChunk = true;
       _isPlayingChunk = true;
 
-      // Avvia typewriter sincronizzato con l'audio
-      _startTypewriterChunk(window._twCurrentText || '', audioBuffer.duration * 1000);
-
-      // Avvia playback
+      // Avvia playback PRIMA, poi registra il timestamp esatto del clock audio
       console.log('[TTS] Avvio playback genId=' + myGenId);
       source.start(0);
+      window.lastTTSStart = Date.now();
+
+      // Snapshot del clock audio DOPO source.start() — questo è t=0 per il typewriter
+      const audioStartCtxTime = audioCtx.currentTime;
+
+      // Avvia typewriter agganciato al clock AudioContext (nessun drift)
+      _startTypewriterChunk(
+        window._twCurrentText || '',
+        audioBuffer.duration * 1000,
+        audioCtx,
+        audioStartCtxTime
+      );
 
       // Timeout di sicurezza per evitare blocchi infiniti su iOS
       // Safari (se la Context è rimasta suspendata l'onended non scatta mai)
