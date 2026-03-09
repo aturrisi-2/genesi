@@ -222,44 +222,27 @@ body::after {
 }
 
 /* ===============================
-   MESSAGES — NEON LIGHT BOXES
+   MESSAGES — MINIMALIST TEXT
    =============================== */
-/* ─── BUBBLE MESSAGES ──────────────────────────────────── */
 .message {
   position: relative;
-  border-radius: 20px;
-  padding: 14px 22px;
-  max-width: 85%;
+  padding: 2px 0;
+  max-width: 82%;
   width: fit-content;
   font-size: 15.5px;
   line-height: 1.65;
-  border: 1px solid rgba(255, 255, 255, 0.08);
   display: block;
-  margin: 0 auto 24px auto;
+  margin: 0 0 20px 0;
   animation: msgAppear 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   word-break: break-word;
   white-space: normal;
-  will-change: transform, opacity;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  will-change: opacity;
   letter-spacing: 0.2px;
 }
 
-.message:hover {
-  transform: translateY(-2px);
-}
-
-/* ── Assistant Icon (Sparkle) ── */
+/* ── Assistant Icon — rimosso per layout minimale ── */
 .message.genesi::before {
-  content: '✦';
-  position: absolute;
-  left: -32px;
-  top: 10px;
-  font-size: 20px;
-  color: #fbd38d;
-  text-shadow: 0 0 12px rgba(251, 211, 141, 0.5);
-  animation: sparkleRotate 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  display: none;
 }
 
 @keyframes sparkleRotate {
@@ -315,23 +298,14 @@ body::after {
 }
 
 .message.user {
-  background: linear-gradient(135deg, rgba(20, 60, 100, 0.82), rgba(10, 80, 130, 0.82));
-  color: #f0f9ff;
-  border-color: rgba(56, 189, 248, 0.25);
-  box-shadow:
-    0 12px 36px rgba(0, 0, 0, 0.35),
-    0 0 15px rgba(56, 189, 248, 0.12);
+  color: rgba(255, 255, 255, 0.88);
+  margin-left: auto;
+  text-align: right;
 }
 
 .message.genesi {
-  background: linear-gradient(135deg, rgba(40, 32, 20, 0.88), rgba(55, 45, 10, 0.88));
-  color: #fef3c7;
-  border-color: rgba(251, 211, 141, 0.2);
-  box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.45),
-    0 0 15px rgba(251, 211, 141, 0.08);
-  /* Visual compensation for the icon at left: -32px */
-  transform: translateX(16px);
+  color: rgba(255, 255, 255, 0.70);
+  margin-right: auto;
 }
 
 
