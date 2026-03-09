@@ -301,14 +301,15 @@ body::after {
 }
 
 .message.user::after {
-  content: '•';
+  content: '';
   position: absolute;
-  right: 0;
-  top: 0;
-  transform: translateY(calc(-50% + 0.62rem));
-  font-size: 3rem;
-  line-height: 1;
-  color: rgba(120, 168, 235, 0.80);
+  right: 5px;
+  top: 1em;
+  transform: translateY(-50%);
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: rgba(120, 168, 235, 0.80);
 }
 
 .message.genesi {
@@ -318,14 +319,15 @@ body::after {
 }
 
 .message.genesi::before {
-  content: '•';
+  content: '';
   position: absolute;
-  left: 0;
-  top: 0;
-  transform: translateY(calc(-50% + 0.62rem));
-  font-size: 3rem;
-  line-height: 1;
-  color: rgba(175, 178, 188, 0.70);
+  left: 5px;
+  top: 1em;
+  transform: translateY(-50%);
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: rgba(175, 178, 188, 0.70);
 }
 
 /* ── Streaming cursor ────────────────────────────────── */
