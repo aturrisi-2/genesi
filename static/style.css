@@ -304,8 +304,8 @@ body::after {
   content: '•';
   position: absolute;
   right: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 0;
+  transform: translateY(calc(-50% + 0.8rem));
   font-size: 3rem;
   line-height: 1;
   color: rgba(120, 168, 235, 0.80);
@@ -321,8 +321,8 @@ body::after {
   content: '•';
   position: absolute;
   left: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 0;
+  transform: translateY(calc(-50% + 0.8rem));
   font-size: 3rem;
   line-height: 1;
   color: rgba(175, 178, 188, 0.70);
