@@ -3670,6 +3670,19 @@ function startNewsTickerAnimation(containerEl, trackEl) {
   stopNewsTickerAnimation();
   newsTickerState.mobilePaused = false;
 
+  // Se il container è dentro un elemento hidden (ww-data), offsetWidth=0.
+  // Attende che diventi visibile tramite ResizeObserver prima di animare.
+  if (!containerEl.offsetWidth) {
+    const obs = new ResizeObserver(() => {
+      if (containerEl.offsetWidth > 0) {
+        obs.disconnect();
+        startNewsTickerAnimation(containerEl, trackEl);
+      }
+    });
+    obs.observe(containerEl);
+    return;
+  }
+
   const loopWidth = Math.max(trackEl.scrollWidth / 2, containerEl.offsetWidth);
   const startX = containerEl.offsetWidth;
   const endX = -loopWidth;

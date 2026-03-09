@@ -234,12 +234,8 @@
       </div>
 
       <!-- ═══════════════════════════════════════════════
-     WEATHER WIDGET & MARQUEE 
+     WEATHER WIDGET — cielo + notizie integrate
      ═══════════════════════════════════════════════ -->
-      <header id="presence">
-        <div id="presence-track" class="presence-track">Caricamento ultime notizie...</div>
-      </header>
-
       <div id="weather-widget" class="weather-widget" aria-live="polite" aria-atomic="true">
         <div class="weather-widget__inner">
 
@@ -275,6 +271,12 @@
               <span class="weather-widget__city" id="ww-city">—</span>
               <span class="weather-widget__time" id="ww-time">—</span>
             </div>
+
+            <!-- Ticker notizie — tra città e temperatura -->
+            <div id="presence">
+              <div id="presence-track" class="presence-track">Caricamento ultime notizie...</div>
+            </div>
+
             <div class="weather-widget__row weather-widget__row--main">
               <span class="weather-widget__desc" id="ww-desc">—</span>
               <span class="weather-widget__temp" id="ww-temp">—°</span>
