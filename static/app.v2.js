@@ -2804,8 +2804,9 @@ function _renderPastePreview(file) {
   const existing = document.getElementById('paste-preview');
   if (existing) existing.remove();
 
-  const wrapper = document.querySelector('.input-wrapper');
-  if (!wrapper) return;
+  // Inserisci nel form, SOPRA #input-container — non dentro .input-wrapper
+  const inputContainer = document.getElementById('input-container');
+  if (!inputContainer) return;
 
   const preview = document.createElement('div');
   preview.id = 'paste-preview';
@@ -2838,8 +2839,8 @@ function _renderPastePreview(file) {
   closeBtn.addEventListener('click', _clearPastedFile);
   preview.appendChild(closeBtn);
 
-  // Inserisci SOPRA la textarea
-  wrapper.insertBefore(preview, wrapper.firstChild);
+  // Inserisci PRIMA di #input-container, non dentro il wrapper
+  inputContainer.parentNode.insertBefore(preview, inputContainer);
 }
 
 // ===============================
