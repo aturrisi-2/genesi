@@ -4554,6 +4554,27 @@ function setVoiceStatusText(text) {
 
 })();
 
+// ── Permessi: controlla silenziosamente lo stato all'avvio ──
+// Non chiede nulla — usa solo Permissions API per sapere cosa è già concesso
+(async function checkSavedPermissions() {
+  if (!navigator.permissions) return;
+  try {
+    const mic = await navigator.permissions.query({ name: 'microphone' });
+    localStorage.setItem('genesi_perm_microphone', mic.state);
+    mic.onchange = () => localStorage.setItem('genesi_perm_microphone', mic.state);
+  } catch (_) {}
+  try {
+    const loc = await navigator.permissions.query({ name: 'geolocation' });
+    localStorage.setItem('genesi_perm_geolocation', loc.state);
+    loc.onchange = () => localStorage.setItem('genesi_perm_geolocation', loc.state);
+  } catch (_) {}
+  try {
+    const cam = await navigator.permissions.query({ name: 'camera' });
+    localStorage.setItem('genesi_perm_camera', cam.state);
+    cam.onchange = () => localStorage.setItem('genesi_perm_camera', cam.state);
+  } catch (_) {}
+})();
+
 // ── PWA: registrazione Service Worker ───────────────────────
 if ('serviceWorker' in navigator) {
   const SW_VERSION = 'v7';
