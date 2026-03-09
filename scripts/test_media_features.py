@@ -105,7 +105,7 @@ class MediaTester:
 
     async def setup(self):
         connector = aiohttp.TCPConnector(limit=5)
-        timeout = aiohttp.ClientTimeout(total=120)
+        timeout = aiohttp.ClientTimeout(total=180)  # 3 min per image generation
         self.session = aiohttp.ClientSession(connector=connector, timeout=timeout)
         await self._login()
 
@@ -161,17 +161,24 @@ class MediaTester:
                 raise RuntimeError(f"Upload {r.status}: {await r.text()}")
             return await r.json()
 
-    async def chat(self, message: str) -> dict:
-        """Invia messaggio e ritorna JSON risposta."""
-        async with self.session.post(
-            f"{BASE_URL}/api/chat/",
-            json={"message": message},
-            headers=self._auth()
-        ) as r:
-            text = await r.text()
-            if r.status != 200:
-                raise RuntimeError(f"Chat {r.status}: {text}")
-            return json.loads(text)
+    async def chat(self, message: str, retries: int = 2) -> dict:
+        """Invia messaggio e ritorna JSON risposta. Retry su ServerDisconnectedError."""
+        for attempt in range(retries + 1):
+            try:
+                async with self.session.post(
+                    f"{BASE_URL}/api/chat/",
+                    json={"message": message},
+                    headers=self._auth()
+                ) as r:
+                    text = await r.text()
+                    if r.status != 200:
+                        raise RuntimeError(f"Chat {r.status}: {text}")
+                    return json.loads(text)
+            except (aiohttp.ServerDisconnectedError, aiohttp.ClientConnectorError) as e:
+                if attempt < retries:
+                    await asyncio.sleep(3)
+                    continue
+                raise RuntimeError(f"Server disconnected after {retries+1} attempts: {e}")
 
     def _record(self, name: str, passed: bool, response: str = "", notes: str = "",
                 latency: float = 0):
@@ -264,7 +271,7 @@ class MediaTester:
 
             # 2.3 Log DOCUMENT_CONTEXT_INJECTED
             await asyncio.sleep(1)
-            log_ok = await self._log_contains("DOCUMENT_CONTEXT_INJECTED", 20)
+            log_ok = await self._log_contains("DOCUMENT_CONTEXT_INJECTED", 10)
             self._record("2.3 Log DOCUMENT_CONTEXT_INJECTED", log_ok)
 
         except Exception as e:
@@ -343,7 +350,7 @@ class MediaTester:
 
             # 4.3 Log per entrambi i doc iniettati
             await asyncio.sleep(1)
-            log_ok = await self._log_contains("DOCUMENT_CONTEXT_INJECTED", 20)
+            log_ok = await self._log_contains("DOCUMENT_CONTEXT_INJECTED", 10)
             self._record("4.3 Log DOCUMENT_CONTEXT_INJECTED presente", log_ok)
 
         except Exception as e:
@@ -427,22 +434,24 @@ class MediaTester:
 
         for msg, expected_intent in cases:
             try:
+                await asyncio.sleep(2)  # pausa per isolare la finestra log
                 t0 = time.time()
                 reply = await self.chat(msg)
                 lat = (time.time() - t0) * 1000
                 actual_intent = reply.get("intent", "")
                 resp_text = reply.get("response", reply.get("text", ""))
 
-                # Verifica: intent corretto O log IMAGE_GENERATION
+                # Finestra log stretta: solo gli ultimi 8 secondi (isolata per questo test)
                 await asyncio.sleep(1)
                 log_ok = await self._log_contains(
-                    r"ROUTING_DECISION.*route=image_generation|IMAGE_GENERATION", 20
+                    r"ROUTING_DECISION.*route=image_generation|IMAGE_GENERATION_TRY", 8
                 )
                 intent_ok = actual_intent == expected_intent or log_ok
 
-                # La risposta non deve essere un rifiuto
-                not_refused = "non sono in grado" not in resp_text.lower() and \
-                              "non posso modificare" not in resp_text.lower()
+                # La risposta non deve essere un rifiuto esplicito
+                refused_kw = ["non sono in grado", "non posso modificare",
+                              "non posso ritoccare", "fotoshop", "photoshop", "canva"]
+                not_refused = not any(k in resp_text.lower() for k in refused_kw)
 
                 self._record(
                     f"6.x [{msg[:40]}]",
@@ -451,7 +460,7 @@ class MediaTester:
                     f"intent={actual_intent} log={log_ok} not_refused={not_refused}",
                     lat
                 )
-                await asyncio.sleep(3)  # evita flood
+                await asyncio.sleep(4)  # evita flood + tempo per la finestra log
             except Exception as e:
                 self._record(f"6.x [{msg[:40]}]", False, notes=str(e))
 

@@ -12,6 +12,7 @@ from core.storage import storage
 from core.chat_memory import chat_memory
 from core.document_memory import load_document
 from core.document_selector import resolve_documents
+from core.log import log as _structured_log
 
 logger = logging.getLogger(__name__)
 
@@ -505,6 +506,8 @@ def _inject_document_context(user_id: str, message: str,
         blocks.append(_format_doc_block(doc, is_most_recent=is_most_recent))
         logger.info("DOCUMENT_CONTEXT_INJECTED doc_id=%s type=%s recent=%s",
                     doc.get("doc_id"), doc.get("type"), is_most_recent)
+        _structured_log("DOCUMENT_CONTEXT_INJECTED", doc_id=doc.get("doc_id"),
+                        doc_type=doc.get("type"), most_recent=is_most_recent)
 
     doc_count = len(selected)
     instruction = (

@@ -776,6 +776,9 @@ class Proactor:
                     except asyncio.TimeoutError:
                         logger.warning("IMAGE_GENERATION_TIMEOUT user=%s", user_id)
                         current_response = "La generazione dell'immagine sta richiedendo troppo tempo. Riprova tra qualche momento."
+                    except BaseException as _img_err:
+                        logger.error("IMAGE_GENERATION_UNEXPECTED user=%s error=%s", user_id, _img_err)
+                        current_response = "Ho avuto un problema tecnico nella generazione. Riprova tra poco."
                     final_source = "tool"
 
                 elif current_intent == "spiegazione":
