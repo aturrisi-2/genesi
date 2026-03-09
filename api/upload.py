@@ -105,12 +105,20 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
 
             # Add to active_documents list on user profile (max 5)
             try:
+                from core.document_memory import load_document as _ld
                 profile = await storage.load(f"profile:{user_id}", default={})
                 active_docs = profile.get("active_documents", [])
                 # Migrate from old active_document_id if present
                 old_id = profile.pop("active_document_id", None)
                 if old_id and old_id not in active_docs:
                     active_docs.append(old_id)
+                # Se è un'immagine, rimuovi le vecchie immagini — una sola immagine attiva per volta
+                if result.get("type") == "image":
+                    active_docs = [
+                        did for did in active_docs
+                        if (_ld(did) or {}).get("type") != "image"
+                    ]
+                    log("ACTIVE_IMAGE_REPLACED", user_id=user_id, kept_docs=len(active_docs))
                 # Add new doc
                 if doc_id not in active_docs:
                     active_docs.append(doc_id)

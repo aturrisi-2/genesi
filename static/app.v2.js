@@ -1921,19 +1921,26 @@ async function sendMessage(voiceText = null) {
       reader.readAsDataURL(fileToUpload);
     }
 
+    // Feedback visivo durante l'upload (può durare 30-60s per analisi OCR/vision)
+    showThinking("Sto elaborando il file...");
+
     const fd = new FormData();
     fd.append('file', fileToUpload, fileToUpload.name || 'paste_' + Date.now() + '.jpg');
 
     try {
       const res = await fetch('/api/upload/', { method: 'POST', body: fd, headers: authHeadersRaw() });
+      hideThinking();
       if (res.ok) {
         const uploadResult = await res.json();
         // Se c'è anche un testo, non mostrare la risposta Genesi ora — arriverà con il testo
         if (!text) {
           addMessage(uploadResult.response || "File caricato. Dimmi cosa vuoi fare!", 'genesi');
         }
+      } else {
+        addMessage("Errore nel caricamento. Riprova.", 'genesi');
       }
     } catch (err) {
+      hideThinking();
       console.error('Paste upload error:', err);
       addMessage("Errore nel caricamento. Riprova.", 'genesi');
     }
@@ -3019,25 +3026,23 @@ function handleFileUpload() {
     fd.append('file', file);
 
     // Per immagini: mostra subito preview locale nella chat come messaggio utente
-    let localPreviewEl = null;
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
-      reader.onload = (ev) => {
-        localPreviewEl = _addAttachmentMessage(ev.target.result, file.name);
-      };
+      reader.onload = (ev) => { _addAttachmentMessage(ev.target.result, file.name); };
       reader.readAsDataURL(file);
     }
 
+    // Feedback visivo durante l'upload
+    showThinking("Sto elaborando il file...");
+
     try {
       const res = await fetch('/api/upload/', { method: 'POST', body: fd, headers: authHeadersRaw() });
+      hideThinking();
       if (!res.ok) throw new Error(`Upload ${res.status}`);
       const result = await res.json();
 
-      // Se non era un'immagine, aggiungi la preview ora (con data_url dal server)
-      if (!file.type.startsWith('image/') && result.image_data_url) {
-        _addAttachmentMessage(result.image_data_url, file.name);
-      } else if (!file.type.startsWith('image/')) {
-        // Doc/PDF: messaggio utente testuale con nome file
+      // Se non era un'immagine, aggiungi la preview ora
+      if (!file.type.startsWith('image/')) {
         const docMsg = document.createElement('div');
         docMsg.className = 'message user attachment-msg';
         docMsg.innerHTML = `<span class="attachment-icon">${_fileIcon(file.type)}</span> <span class="attachment-name">${file.name}</span>`;
@@ -3051,6 +3056,7 @@ function handleFileUpload() {
       if (result.type !== 'image') playTTSAsync(confirmMsg, 'normal');
 
     } catch (e) {
+      hideThinking();
       console.error('Upload error:', e);
       addMessage("Errore nel caricamento. Riprova.", 'genesi');
     } finally {
