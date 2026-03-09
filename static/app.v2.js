@@ -141,11 +141,22 @@ async function tryRefreshToken() {
     if (!res.ok) return false;
     const data = await res.json();
     localStorage.setItem('genesi_access_token', data.access_token);
+    // Salva il nuovo refresh token (rolling — allunga la sessione ad ogni uso)
+    if (data.refresh_token) {
+      localStorage.setItem('genesi_refresh_token', data.refresh_token);
+    }
     return true;
   } catch (e) {
     return false;
   }
 }
+
+// Refresh proattivo: rinnova l'access token ogni 50 minuti (scade a 60)
+// Mantiene la sessione viva finché il browser è aperto
+setInterval(async () => {
+  const token = getAuthToken();
+  if (token) await tryRefreshToken();
+}, 50 * 60 * 1000);
 
 function doLogout() {
   const token = getAuthToken();
