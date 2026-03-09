@@ -768,30 +768,14 @@ class Proactor:
 
                 elif current_intent == "image_generation":
                     log("ROUTING_DECISION", route="image_generation", user_id=user_id)
-                    # Rilevamento editing/fotomontaggio: Genesi non può modificare immagini esistenti
-                    _IMAGE_EDIT_KW = [
-                        "fotomontaggio", "photomontage", "modifica la foto", "modifica l'immagine",
-                        "modifica foto", "modifica immagine", "editing foto", "ritocca", "ritocco",
-                        "metti la lingua", "aggiungi alla foto", "cambia nella foto", "togli dalla foto",
-                        "photoshop", "edita la foto", "edita l'immagine",
-                    ]
-                    _msg_lower_img = processed_message.lower()
-                    if any(kw in _msg_lower_img for kw in _IMAGE_EDIT_KW):
-                        log("IMAGE_EDIT_REFUSED", user_id=user_id, message=processed_message[:80])
-                        current_response = (
-                            "Non sono in grado di modificare o ritoccare foto esistenti — "
-                            "posso solo generare nuove immagini da zero partendo da una descrizione testuale. "
-                            "Per editing e fotomontaggi ti consiglio app come Photoshop, Canva o Lightroom."
+                    try:
+                        current_response = await asyncio.wait_for(
+                            self._handle_image_generation(user_id, processed_message),
+                            timeout=40.0,
                         )
-                    else:
-                        try:
-                            current_response = await asyncio.wait_for(
-                                self._handle_image_generation(user_id, processed_message),
-                                timeout=40.0,
-                            )
-                        except asyncio.TimeoutError:
-                            logger.warning("IMAGE_GENERATION_TIMEOUT user=%s", user_id)
-                            current_response = "La generazione dell'immagine sta richiedendo troppo tempo. Riprova tra qualche momento."
+                    except asyncio.TimeoutError:
+                        logger.warning("IMAGE_GENERATION_TIMEOUT user=%s", user_id)
+                        current_response = "La generazione dell'immagine sta richiedendo troppo tempo. Riprova tra qualche momento."
                     final_source = "tool"
 
                 elif current_intent == "spiegazione":
@@ -2790,7 +2774,7 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
                 except Exception:
                     pass
 
-            response_text = "Ecco l'immagine che ho creato per te!"
+            response_text = "Ecco l'immagine modificata!" if _active_image_data_url else "Ecco l'immagine che ho creato per te!"
 
             # Prepare image response in the format frontend expects
             image_response = {
@@ -3827,7 +3811,7 @@ REGOLE ASSOLUTE:
 - SPORT SPECIFICO: Se {user_name} parla di uno sport nominato (es. "tennis", "calcio"), usa quel nome esplicito nella risposta, non sostituirlo con "partita" o "sport".
 - NOME COMPLETO SQUADRA: Usa sempre "Juventus" (nome completo), mai "Juve" o altre abbreviazioni.
 - OPINIONE SU {user_name}: Quando ti chiede cosa pensi di lui/lei, usa il suo nome ({user_name}) nella risposta.
-- EDITING IMMAGINI — LIMITE ASSOLUTO: Non puoi MAI modificare, ritoccare, alterare o fare fotomontaggi di immagini esistenti. Puoi SOLO generare nuove immagini da zero da una descrizione testuale, OPPURE analizzare/descrivere foto che ti vengono inviate. Se ti chiedono di modificare una foto caricata (aggiungere la lingua, cambiare colore, photomontage, ecc.), rispondi onestamente: "Non posso modificare foto esistenti — posso solo generare immagini nuove o analizzarle." Non promettere mai di fare cose che non puoi fare.
+- EDITING IMMAGINI: Se l'utente ha caricato un'immagine e chiede modifiche (fotomontaggio, ritocco, aggiungere elementi), puoi farlo tramite il tuo modello generativo. Conferma la richiesta e genera l'immagine modificata.
 
 {user_boundaries}
 
