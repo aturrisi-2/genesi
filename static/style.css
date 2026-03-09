@@ -297,34 +297,34 @@ body::after {
   color: rgba(255, 255, 255, 0.88);
   margin-left: auto;
   text-align: right;
-  padding-right: 18px;
+  padding-right: 34px;
 }
 
 .message.user::after {
   content: '•';
   position: absolute;
   right: 0;
-  top: 0;
+  top: 50%;
+  transform: translateY(-50%);
   font-size: 3rem;
   line-height: 1;
-  transform: translateY(calc(-50% + 0.8rem));
   color: rgba(120, 168, 235, 0.80);
 }
 
 .message.genesi {
   color: rgba(255, 255, 255, 0.70);
   margin-right: auto;
-  padding-left: 18px;
+  padding-left: 34px;
 }
 
 .message.genesi::before {
   content: '•';
   position: absolute;
   left: 0;
-  top: 0;
+  top: 50%;
+  transform: translateY(-50%);
   font-size: 3rem;
   line-height: 1;
-  transform: translateY(calc(-50% + 0.8rem));
   color: rgba(175, 178, 188, 0.70);
 }
 
