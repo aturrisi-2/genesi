@@ -240,9 +240,25 @@ body::after {
   letter-spacing: 0.2px;
 }
 
-/* ── Assistant Icon — rimosso per layout minimale ── */
+/* ── Dot indicator — prima riga messaggio ── */
 .message.genesi::before {
-  display: none;
+  content: '•';
+  position: absolute;
+  left: -14px;
+  top: 0;
+  line-height: 1.65;
+  font-size: 10px;
+  color: rgba(180, 182, 190, 0.65);
+}
+
+.message.user::after {
+  content: '•';
+  position: absolute;
+  right: -14px;
+  top: 0;
+  line-height: 1.65;
+  font-size: 10px;
+  color: rgba(130, 175, 230, 0.70);
 }
 
 @keyframes sparkleRotate {
