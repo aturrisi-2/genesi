@@ -727,6 +727,13 @@ class IntentClassifier:
             log("INTENT_CLASSIFIED", intent="emotional", user_id=user_id, engine="regex_priority", message=message[:50])
             return ["emotional"]
 
+        # PRIORITÀ ALTA: spiegazione — domande definitorie "cosa è il/la/un X", "cos'è X", "come funziona X"
+        # Resistente al contesto: una domanda definitoria è sempre spiegazione, indipendentemente dalla history
+        if re.search(r"^cos[a'][\s']+[èe]\s+(il|la|lo|i|gli|le|un|un'|una|l')\b", message_lower) or \
+           re.search(r"^(come funziona|cosa vuol dire|cosa significa|cosa intendi per)\b", message_lower):
+            log("INTENT_CLASSIFIED", intent="spiegazione", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["spiegazione"]
+
         # BLOCCO: imperativi "dimmelo tu" = l'utente chiede a Genesi di decidere/rispondere
         # NON sono richieste di notizie o tool — sono chat conversazionale
         _tu_imperatives = [
