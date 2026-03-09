@@ -515,6 +515,52 @@ body::after {
   margin: auto 0;
 }
 
+/* Paste preview — thumbnail sopra la textarea */
+#paste-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px 14px 0 0;
+  padding: 6px 10px;
+  margin-bottom: -2px;
+}
+
+.paste-preview__thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.paste-preview__icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+
+.paste-preview__name {
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.65);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paste-preview__close {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.40);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.paste-preview__close:hover { color: rgba(255,255,255,0.80); }
+
 #text-input,
 textarea#text-input {
   border-radius: 20px;

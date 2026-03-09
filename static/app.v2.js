@@ -1880,8 +1880,9 @@ async function sendMessage(voiceText = null) {
   _warmTTSCtx();
 
   const text = textToUse;
-  console.log('SEND_MSG_STATE state=' + currentState + ' text_len=' + text.length);
-  if (!text || currentState !== STATES.IDLE) {
+  const hasPasted = !!_pastedFile;
+  console.log('SEND_MSG_STATE state=' + currentState + ' text_len=' + text.length + ' pasted=' + hasPasted);
+  if ((!text && !hasPasted) || currentState !== STATES.IDLE) {
     window.isGenesiSpeaking = false; // RELEASE LOCK if msg skipped
     return;
   }
@@ -1904,8 +1905,56 @@ async function sendMessage(voiceText = null) {
   void ic.offsetWidth;
   ic.classList.add('pulse');
 
-  addUserMessage(text);
   playUISound('tap');
+
+  // Se c'è un file incollato, caricalo prima (mostra thumbnail + breve risposta Genesi)
+  if (hasPasted) {
+    const fileToUpload = _pastedFile;
+    _clearPastedFile();
+
+    setState(STATES.THINKING);
+
+    // Mostra preview locale immediata nella chat come messaggio utente
+    if (fileToUpload.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => { _addAttachmentMessage(ev.target.result, fileToUpload.name || 'immagine'); };
+      reader.readAsDataURL(fileToUpload);
+    }
+
+    const fd = new FormData();
+    fd.append('file', fileToUpload, fileToUpload.name || 'paste_' + Date.now() + '.jpg');
+
+    try {
+      const res = await fetch('/api/upload/', { method: 'POST', body: fd, headers: authHeadersRaw() });
+      if (res.ok) {
+        const uploadResult = await res.json();
+        // Se c'è anche un testo, non mostrare la risposta Genesi ora — arriverà con il testo
+        if (!text) {
+          addMessage(uploadResult.response || "File caricato. Dimmi cosa vuoi fare!", 'genesi');
+        }
+      }
+    } catch (err) {
+      console.error('Paste upload error:', err);
+      addMessage("Errore nel caricamento. Riprova.", 'genesi');
+    }
+
+    // Se non c'è testo, siamo già done
+    if (!text) {
+      setState(STATES.IDLE);
+      window.isGenesiSpeaking = false;
+      return;
+    }
+
+    // Altrimenti resetta lo state e continua con l'invio del testo
+    setState(STATES.IDLE);
+  }
+
+  if (!text) {
+    window.isGenesiSpeaking = false;
+    return;
+  }
+
+  addUserMessage(text);
 
   // Salva messaggio utente nella conversazione corrente
   saveMessageToConversation('user', text);
@@ -2735,6 +2784,65 @@ function _showSTTRetryFeedback() {
 // ===============================
 // FILE BUBBLE — preview fumetto
 // ===============================
+// PASTE FILE — incolla immagine/file nell'input
+// ===============================
+let _pastedFile = null;  // file in attesa di upload al send
+
+function _setPastedFile(file) {
+  _pastedFile = file;
+  _renderPastePreview(file);
+}
+
+function _clearPastedFile() {
+  _pastedFile = null;
+  const prev = document.getElementById('paste-preview');
+  if (prev) prev.remove();
+}
+
+function _renderPastePreview(file) {
+  // Rimuovi eventuale preview precedente
+  const existing = document.getElementById('paste-preview');
+  if (existing) existing.remove();
+
+  const wrapper = document.querySelector('.input-wrapper');
+  if (!wrapper) return;
+
+  const preview = document.createElement('div');
+  preview.id = 'paste-preview';
+
+  const isImage = file.type.startsWith('image/');
+  if (isImage) {
+    const img = document.createElement('img');
+    img.className = 'paste-preview__thumb';
+    img.alt = file.name || 'immagine';
+    const reader = new FileReader();
+    reader.onload = (ev) => { img.src = ev.target.result; };
+    reader.readAsDataURL(file);
+    preview.appendChild(img);
+  } else {
+    const icon = document.createElement('span');
+    icon.className = 'paste-preview__icon';
+    icon.textContent = _fileIcon(file.type || '');
+    preview.appendChild(icon);
+  }
+
+  const name = document.createElement('span');
+  name.className = 'paste-preview__name';
+  name.textContent = file.name || (isImage ? 'immagine incollata' : 'file incollato');
+  preview.appendChild(name);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'paste-preview__close';
+  closeBtn.type = 'button';
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', _clearPastedFile);
+  preview.appendChild(closeBtn);
+
+  // Inserisci SOPRA la textarea
+  wrapper.insertBefore(preview, wrapper.firstChild);
+}
+
+// ===============================
 let _activeBubble = null;
 const _isMobile = () => window.innerWidth <= 600;
 const _truncate = (s, max) => { if (!s) return ''; return s.length > max ? s.slice(0, max - 1) + '…' : s; };
@@ -3075,6 +3183,23 @@ function stopCamera() {
 // ===============================
 sendButton.addEventListener('click', sendMessage);
 plusButton.addEventListener('click', handleFileUpload);
+
+// Paste immagine/file nell'input
+textInput.addEventListener('paste', (e) => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.kind === 'file') {
+      const file = item.getAsFile();
+      if (file) {
+        e.preventDefault();
+        _setPastedFile(file);
+        return;
+      }
+    }
+  }
+  // Nessun file — lascia passare il normale testo incollato
+});
 
 // Intercept form submit to prevent page reload
 chatForm.addEventListener('submit', async (e) => {
