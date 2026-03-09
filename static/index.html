@@ -242,7 +242,25 @@
 
       <div id="weather-widget" class="weather-widget" aria-live="polite" aria-atomic="true">
         <div class="weather-widget__inner">
+
+          <!-- Luce atmosferica animata -->
           <div class="weather-widget__ambient" aria-hidden="true"></div>
+
+          <!-- Cielo full-bleed: elementi assoluti sullo sfondo -->
+          <div class="weather-widget__scene" aria-hidden="true">
+            <span class="weather-widget__sun"></span>
+            <span class="weather-widget__moon"></span>
+            <span class="weather-widget__cloud weather-widget__cloud--a"></span>
+            <span class="weather-widget__cloud weather-widget__cloud--b"></span>
+            <span class="weather-widget__rain"></span>
+            <span class="weather-widget__snow"></span>
+            <span class="weather-widget__fog"></span>
+            <span class="weather-widget__star weather-widget__star--a"></span>
+            <span class="weather-widget__star weather-widget__star--b"></span>
+            <span class="weather-widget__star weather-widget__star--c"></span>
+            <span class="weather-widget__lightning weather-widget__lightning--a">⚡</span>
+            <span class="weather-widget__lightning weather-widget__lightning--b">⚡</span>
+          </div>
 
           <!-- Stato: loading -->
           <div class="weather-widget__loading" id="ww-loading">
@@ -253,36 +271,22 @@
 
           <!-- Stato: dati -->
           <div class="weather-widget__data" id="ww-data" hidden>
-            <div class="weather-widget__icon-wrap">
-              <div class="weather-widget__scene" aria-hidden="true">
-                <span class="weather-widget__sun"></span>
-                <span class="weather-widget__moon"></span>
-                <span class="weather-widget__cloud weather-widget__cloud--a"></span>
-                <span class="weather-widget__cloud weather-widget__cloud--b"></span>
-                <span class="weather-widget__rain"></span>
-                <span class="weather-widget__snow"></span>
-                <span class="weather-widget__fog"></span>
-                <span class="weather-widget__star weather-widget__star--a"></span>
-                <span class="weather-widget__star weather-widget__star--b"></span>
-                <span class="weather-widget__star weather-widget__star--c"></span>
-                <span class="weather-widget__lightning weather-widget__lightning--a">⚡</span>
-                <span class="weather-widget__lightning weather-widget__lightning--b">⚡</span>
-              </div>
-            </div>
-            <div class="weather-widget__details">
+            <div class="weather-widget__row weather-widget__row--top">
               <span class="weather-widget__city" id="ww-city">—</span>
-              <span class="weather-widget__temp" id="ww-temp">—°</span>
-              <span class="weather-widget__desc" id="ww-desc">—</span>
-              <span class="weather-widget__meta" id="ww-meta">—</span>
               <span class="weather-widget__time" id="ww-time">—</span>
+            </div>
+            <div class="weather-widget__row weather-widget__row--main">
+              <span class="weather-widget__desc" id="ww-desc">—</span>
+              <span class="weather-widget__temp" id="ww-temp">—°</span>
+            </div>
+            <div class="weather-widget__row weather-widget__row--bottom">
+              <span class="weather-widget__meta" id="ww-meta">—</span>
             </div>
           </div>
 
           <!-- Stato: errore -->
           <div class="weather-widget__error" id="ww-error" hidden>
-            <span class="weather-widget__error-text">
-              Meteo non disponibile
-            </span>
+            <span class="weather-widget__error-text">Meteo non disponibile</span>
           </div>
 
         </div>
