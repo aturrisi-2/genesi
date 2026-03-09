@@ -241,3 +241,52 @@ def decay_and_forget(user_id: str, inactive_days: int = 14, min_score: int = 25)
                 logger.error("DOCUMENT_DECAY_ERROR doc_id=%s error=%s", doc["doc_id"], str(e))
 
     return archived
+
+
+def cleanup_by_size(user_id: str, max_mb: float = 150.0) -> List[str]:
+    """
+    Elimina i documenti più vecchi dell'utente se lo spazio totale supera max_mb.
+    Cancella prima gli archiviati, poi i passive, poi gli active — dal più vecchio.
+    Ritorna lista doc_id eliminati.
+    """
+    docs = get_user_documents(user_id)
+    if not docs:
+        return []
+
+    def _doc_size_bytes(doc: Dict[str, Any]) -> int:
+        path = _doc_path(doc["doc_id"])
+        try:
+            return os.path.getsize(path)
+        except OSError:
+            return 0
+
+    total_bytes = sum(_doc_size_bytes(d) for d in docs)
+    max_bytes = max_mb * 1024 * 1024
+
+    if total_bytes <= max_bytes:
+        return []
+
+    # Ordine di eliminazione: archived prima, poi passive, poi active — sempre dal più vecchio
+    priority_order = {"archived": 0, "passive": 1, "active": 2}
+    docs_sorted = sorted(
+        docs,
+        key=lambda d: (priority_order.get(d.get("status", "active"), 2), d.get("created_at", "")),
+    )
+
+    deleted = []
+    for doc in docs_sorted:
+        if total_bytes <= max_bytes:
+            break
+        doc_id = doc["doc_id"]
+        path = _doc_path(doc_id)
+        size = _doc_size_bytes(doc)
+        try:
+            os.remove(path)
+            total_bytes -= size
+            deleted.append(doc_id)
+            log("DOCUMENT_DELETED_SPACE", doc_id=doc_id, user_id=user_id,
+                filename=doc.get("filename", "?"), freed_mb=round(size / 1024 / 1024, 2))
+        except OSError as e:
+            logger.error("DOCUMENT_DELETE_ERROR doc_id=%s error=%s", doc_id, str(e))
+
+    return deleted

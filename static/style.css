@@ -318,6 +318,49 @@ body::after {
   padding-left: 34px;
 }
 
+/* Messaggi con allegato immagine — lato utente */
+.message.attachment-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  background: transparent;
+  padding: 0;
+  margin-left: auto;
+}
+
+.attachment-thumb {
+  max-width: 220px;
+  max-height: 220px;
+  border-radius: 12px;
+  object-fit: cover;
+  display: block;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+
+.attachment-label {
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.50);
+  text-align: right;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-msg.message.user::after {
+  display: none;
+}
+
+.attachment-icon {
+  font-size: 1.4rem;
+}
+
+.attachment-name {
+  font-size: 0.82rem;
+  color: rgba(255,255,255,0.75);
+}
+
 .message.genesi::before {
   content: '';
   position: absolute;

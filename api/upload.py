@@ -13,7 +13,7 @@ import asyncio
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Depends
 from core.file_analyzer import analyze_file
-from core.document_memory import save_document, decay_and_forget
+from core.document_memory import save_document, decay_and_forget, cleanup_by_size
 from core.storage import storage
 from core.log import log
 from auth.router import require_auth
@@ -84,8 +84,9 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
                 content=result.get("content", ""),
                 meta=result.get("meta", {}),
             )
-            # Fire-and-forget: decay documenti non usati (non blocca l'upload)
+            # Fire-and-forget: decay + cleanup spazio (non blocca l'upload)
             asyncio.create_task(asyncio.to_thread(decay_and_forget, user_id))
+            asyncio.create_task(asyncio.to_thread(cleanup_by_size, user_id))
             
             # STEP 2: Register in Document Context Manager (NotebookLM behavior)
             try:
@@ -122,20 +123,18 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
             except Exception as profile_err:
                 log("ACTIVE_DOCUMENTS_UPDATE_ERROR", user_id=user_id, error=str(profile_err))
 
-        # Build response for frontend — usa title LLM-generato se disponibile
+        # Build response for frontend — risposta breve, Genesi aspetta l'input utente
         raw_filename = result.get("meta", {}).get("filename", file.filename or "file")
         display_name = (saved_doc.get("title") if saved_doc else None) or raw_filename
         file_type = result.get("type", "unknown")
         if file_type == "image":
-            # Per le immagini: descrizione immediata completa (vision + OCR)
-            description = result.get("content", "")
-            response_text = f"Ho analizzato l'immagine '{display_name}'. {description}"
+            response_text = f"Immagine caricata. Dimmi cosa vuoi fare!"
         elif file_type == "pdf":
             pages = result.get("meta", {}).get("pages", "?")
-            response_text = f"Ho caricato il documento '{display_name}' ({pages} pagine). Cosa vuoi sapere?"
+            response_text = f"Documento '{display_name}' caricato ({pages} pagine). Cosa vuoi sapere?"
         else:
             lines = result.get("meta", {}).get("lines", "?")
-            response_text = f"Ho caricato il file '{display_name}' ({lines} righe). Cosa vuoi sapere?"
+            response_text = f"File '{display_name}' caricato ({lines} righe). Cosa vuoi sapere?"
 
         # List active documents for frontend
         active_docs_info = []
@@ -147,15 +146,11 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
                 if d:
                     active_docs_info.append({"doc_id": did, "filename": d.get("filename", "?"), "type": d.get("type", "?")})
 
-        # Solo per le immagini suggerisce il confronto (gli altri doc aspettano la domanda)
-        if file_type == "image" and len(active_docs_info) >= 2:
-            names = [d["filename"] for d in active_docs_info[-2:]]
-            response_text += f"\n\nPuoi chiedere: confronta '{names[0]}' e '{names[1]}'"
-
         return {
             "type": result.get("type"),
             "content": result.get("content"),
             "meta": result.get("meta"),
+            "image_data_url": result.get("meta", {}).get("image_data_url") if file_type == "image" else None,
             "doc_id": doc_id,
             "active_documents": active_docs_info,
             "response": response_text,

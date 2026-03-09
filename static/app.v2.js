@@ -2749,6 +2749,27 @@ function _fileIcon(type) {
   return '📎';
 }
 
+function _addAttachmentMessage(dataUrl, filename) {
+  const el = document.createElement('div');
+  el.className = 'message user attachment-msg';
+
+  const img = document.createElement('img');
+  img.src = dataUrl;
+  img.alt = filename;
+  img.className = 'attachment-thumb';
+  img.loading = 'lazy';
+
+  const label = document.createElement('div');
+  label.className = 'attachment-label';
+  label.textContent = filename;
+
+  el.appendChild(img);
+  el.appendChild(label);
+  dialogue.appendChild(el);
+  requestAnimationFrame(() => scrollToBottom());
+  return el;
+}
+
 function _showFileBubble(file, status) {
   _dismissFileBubble(true);
 
@@ -2884,42 +2905,45 @@ function handleFileUpload() {
     const file = e.target.files[0];
     if (!file) return;
 
-    let loadingMsg = null;
-    try {
-      // Show bubble immediately with local preview
-      _showFileBubble(file, 'Genesi sta guardando...');
-    } catch (_) { /* bubble is cosmetic, never block upload */ }
-
-    loadingMsg = addMessage("Sto analizzando il file...", 'genesi');
     setState(STATES.THINKING);
-
     const fd = new FormData();
     fd.append('file', file);
+
+    // Per immagini: mostra subito preview locale nella chat come messaggio utente
+    let localPreviewEl = null;
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        localPreviewEl = _addAttachmentMessage(ev.target.result, file.name);
+      };
+      reader.readAsDataURL(file);
+    }
 
     try {
       const res = await fetch('/api/upload/', { method: 'POST', body: fd, headers: authHeadersRaw() });
       if (!res.ok) throw new Error(`Upload ${res.status}`);
       const result = await res.json();
-      if (loadingMsg) loadingMsg.remove();
 
-      // Update bubble — short status only, full analysis goes to chat
-      try {
-        _updateBubbleStatus('Analisi completata');
-        if (result.preview_url) _setBubblePreview(result.preview_url, file);
-      } catch (_) { /* cosmetic */ }
+      // Se non era un'immagine, aggiungi la preview ora (con data_url dal server)
+      if (!file.type.startsWith('image/') && result.image_data_url) {
+        _addAttachmentMessage(result.image_data_url, file.name);
+      } else if (!file.type.startsWith('image/')) {
+        // Doc/PDF: messaggio utente testuale con nome file
+        const docMsg = document.createElement('div');
+        docMsg.className = 'message user attachment-msg';
+        docMsg.innerHTML = `<span class="attachment-icon">${_fileIcon(file.type)}</span> <span class="attachment-name">${file.name}</span>`;
+        dialogue.appendChild(docMsg);
+        requestAnimationFrame(() => scrollToBottom());
+      }
 
-      // Full analysis in chat message (not in bubble)
-      addMessage(result.response || "File ricevuto.", 'genesi');
-      if (result.response) playTTSAsync(result.response, result.tts_mode || 'normal');
+      // Breve conferma di Genesi (no TTS per le immagini — aspetta input utente)
+      const confirmMsg = result.response || "File ricevuto.";
+      addMessage(confirmMsg, 'genesi');
+      if (result.type !== 'image') playTTSAsync(confirmMsg, 'normal');
 
-      // Auto-dismiss bubble after 6s
-      setTimeout(() => { try { _dismissFileBubble(); } catch (_) { } }, 6000);
     } catch (e) {
       console.error('Upload error:', e);
-      if (loadingMsg) loadingMsg.remove();
-      try { _updateBubbleStatus('Errore'); } catch (_) { }
       addMessage("Errore nel caricamento. Riprova.", 'genesi');
-      setTimeout(() => { try { _dismissFileBubble(); } catch (_) { } }, 3000);
     } finally {
       setState(STATES.IDLE);
     }
@@ -3000,8 +3024,11 @@ async function captureFrame() {
 }
 
 async function uploadCapturedImage(blob) {
-  const loadingMsg = addMessage("Sto analizzando la foto...", 'genesi');
   setState(STATES.THINKING);
+
+  // Mostra preview locale immediata come messaggio utente
+  const localUrl = URL.createObjectURL(blob);
+  _addAttachmentMessage(localUrl, "foto_" + Date.now() + ".jpg");
 
   const formData = new FormData();
   formData.append("file", blob, "camera_" + Date.now() + ".jpg");
@@ -3016,17 +3043,16 @@ async function uploadCapturedImage(blob) {
     if (!res.ok) throw new Error("Upload " + res.status);
 
     const data = await res.json();
-    if (loadingMsg) loadingMsg.remove();
 
-    addMessage(data.response || "Foto caricata.", 'genesi');
-    if (data.response) playTTSAsync(data.response, data.tts_mode || 'normal');
+    addMessage(data.response || "Foto caricata. Dimmi cosa vuoi fare!", 'genesi');
+    // No TTS — Genesi aspetta input utente
 
     console.log("[CAMERA_UPLOAD] success doc_id=", data.doc_id);
   } catch (err) {
     console.error("[CAMERA_UPLOAD] error:", err);
-    if (loadingMsg) loadingMsg.remove();
     addMessage("Errore nel caricamento della foto.", 'genesi');
   } finally {
+    URL.revokeObjectURL(localUrl);
     setState(STATES.IDLE);
   }
 }
