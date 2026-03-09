@@ -30,7 +30,7 @@ class OpenRouterImageService:
         else:
             logger.warning("OPENROUTER_IMAGE_SERVICE_DISABLED no OPENROUTER_API_KEY")
 
-    def _generate_sync(self, prompt: str, user_id: Optional[str] = None) -> Optional[str]:
+    def _generate_sync(self, prompt: str, user_id: Optional[str] = None, input_image_data_url: Optional[str] = None) -> Optional[str]:
         """
         Versione SINCRONA — eseguita in asyncio.to_thread() per non corrompere
         l'event loop asyncio in caso di cancellazione/timeout.
@@ -49,13 +49,22 @@ class OpenRouterImageService:
         )
 
         logger.info(
-            "OPENROUTER_IMAGE_REQUEST user=%s prompt_len=%d model=%s",
-            user_id, len(prompt), MODEL_ID,
+            "OPENROUTER_IMAGE_REQUEST user=%s prompt_len=%d model=%s has_input_image=%s",
+            user_id, len(prompt), MODEL_ID, bool(input_image_data_url),
         )
+
+        # Composizione messaggio: con o senza immagine sorgente (image editing vs text-to-image)
+        if input_image_data_url:
+            message_content = [
+                {"type": "image_url", "image_url": {"url": input_image_data_url}},
+                {"type": "text", "text": prompt},
+            ]
+        else:
+            message_content = prompt
 
         response = client.chat.completions.create(
             model=MODEL_ID,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": message_content}],
             extra_body={"modalities": ["image", "text"]},
         )
 
@@ -94,7 +103,7 @@ class OpenRouterImageService:
         )
         return None
 
-    async def generate_image(self, prompt: str, user_id: Optional[str] = None) -> Optional[str]:
+    async def generate_image(self, prompt: str, user_id: Optional[str] = None, input_image_data_url: Optional[str] = None) -> Optional[str]:
         """
         Genera un'immagine via OpenRouter (Gemini 3.1 Flash Image Preview).
 
@@ -112,7 +121,7 @@ class OpenRouterImageService:
 
         try:
             return await asyncio.wait_for(
-                asyncio.to_thread(self._generate_sync, prompt, user_id),
+                asyncio.to_thread(self._generate_sync, prompt, user_id, input_image_data_url),
                 timeout=_IMAGE_TIMEOUT + 2.0,  # margine extra sopra il timeout sync
             )
         except Exception as e:

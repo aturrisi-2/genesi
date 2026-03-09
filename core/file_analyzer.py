@@ -118,6 +118,12 @@ async def analyze_file(file: UploadFile) -> dict:
             result = await _handle_pdf(tmp_path, file.filename)
         elif file_type == "image":
             result = await _handle_image(tmp_path, file.filename)
+            # Salva il base64 dell'immagine per supportare image editing
+            import base64
+            ext_clean = ext.lstrip('.') or 'jpeg'
+            mime = f"image/{ext_clean}" if ext_clean in ('png','webp','gif') else "image/jpeg"
+            b64 = base64.b64encode(data).decode('ascii')
+            result["meta"]["image_data_url"] = f"data:{mime};base64,{b64}"
         elif file_type == "text":
             result = await _handle_text(data, file.filename)
         else:

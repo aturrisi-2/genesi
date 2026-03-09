@@ -768,14 +768,30 @@ class Proactor:
 
                 elif current_intent == "image_generation":
                     log("ROUTING_DECISION", route="image_generation", user_id=user_id)
-                    try:
-                        current_response = await asyncio.wait_for(
-                            self._handle_image_generation(user_id, processed_message),
-                            timeout=40.0,
+                    # Rilevamento editing/fotomontaggio: Genesi non può modificare immagini esistenti
+                    _IMAGE_EDIT_KW = [
+                        "fotomontaggio", "photomontage", "modifica la foto", "modifica l'immagine",
+                        "modifica foto", "modifica immagine", "editing foto", "ritocca", "ritocco",
+                        "metti la lingua", "aggiungi alla foto", "cambia nella foto", "togli dalla foto",
+                        "photoshop", "edita la foto", "edita l'immagine",
+                    ]
+                    _msg_lower_img = processed_message.lower()
+                    if any(kw in _msg_lower_img for kw in _IMAGE_EDIT_KW):
+                        log("IMAGE_EDIT_REFUSED", user_id=user_id, message=processed_message[:80])
+                        current_response = (
+                            "Non sono in grado di modificare o ritoccare foto esistenti — "
+                            "posso solo generare nuove immagini da zero partendo da una descrizione testuale. "
+                            "Per editing e fotomontaggi ti consiglio app come Photoshop, Canva o Lightroom."
                         )
-                    except asyncio.TimeoutError:
-                        logger.warning("IMAGE_GENERATION_TIMEOUT user=%s — fallback image search", user_id)
-                        current_response = await self._handle_image_search(user_id, processed_message)
+                    else:
+                        try:
+                            current_response = await asyncio.wait_for(
+                                self._handle_image_generation(user_id, processed_message),
+                                timeout=40.0,
+                            )
+                        except asyncio.TimeoutError:
+                            logger.warning("IMAGE_GENERATION_TIMEOUT user=%s", user_id)
+                            current_response = "La generazione dell'immagine sta richiedendo troppo tempo. Riprova tra qualche momento."
                     final_source = "tool"
 
                 elif current_intent == "spiegazione":
@@ -2658,11 +2674,23 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
             from core.openrouter_image_service import openrouter_image_service as _or_img_svc
             if not bedrock_image_service.enabled and not _or_img_svc.enabled:
                 logger.warning("IMAGE_GENERATION_DISABLED user=%s no_providers_configured", user_id)
-                fallback_prompt = message.strip()
-                fallback = await self._handle_image_search(user_id, fallback_prompt)
-                if isinstance(fallback, tuple) and fallback and isinstance(fallback[0], str) and fallback[0].startswith("{"):
-                    return fallback
-                return "La generazione immagini non è disponibile al momento. Posso però cercare immagini sul web se me lo chiedi con 'cerca immagini di ...'.", "tool"
+                return "La generazione immagini non è disponibile al momento.", "tool"
+
+            # Cerca immagine caricata attiva — se presente, usa image editing (img2img)
+            _active_image_data_url: Optional[str] = None
+            try:
+                _profile_img = await storage.load(f"profile:{user_id}", default={})
+                _active_docs = _profile_img.get("active_documents", [])
+                from core.document_memory import load_document
+                for _did in reversed(_active_docs):
+                    _doc = load_document(_did)
+                    if _doc and _doc.get("type") == "image":
+                        _active_image_data_url = _doc.get("meta", {}).get("image_data_url")
+                        if _active_image_data_url:
+                            logger.info("IMAGE_EDIT_MODE user=%s doc_id=%s", user_id, _did)
+                            break
+            except Exception as _ie:
+                logger.warning("IMAGE_EDIT_LOAD_FAILED user=%s error=%s", user_id, _ie)
             
             # Extract the prompt from the message
             # Remove common trigger phrases: "genera un'immagine di", "disegna", "crea una foto di", etc.
@@ -2722,10 +2750,13 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
             image_url: Optional[str] = None
             image_source = "Genesi AI"
 
-            # 1️⃣ Prova OpenRouter — Gemini 3.1 Flash Image Preview (Nano Banana 2)
+            # 1️⃣ Prova OpenRouter — Gemini 3.1 Flash Image Preview (con image editing se img disponibile)
             if openrouter_image_service.enabled:
-                logger.info("IMAGE_GENERATION_TRY provider=openrouter user=%s prompt_len=%d", user_id, len(prompt))
-                image_url = await openrouter_image_service.generate_image(prompt=prompt, user_id=user_id)
+                logger.info("IMAGE_GENERATION_TRY provider=openrouter user=%s prompt_len=%d edit_mode=%s",
+                            user_id, len(prompt), bool(_active_image_data_url))
+                image_url = await openrouter_image_service.generate_image(
+                    prompt=prompt, user_id=user_id, input_image_data_url=_active_image_data_url
+                )
                 if image_url:
                     image_source = "Gemini 3.1 Flash Image"
                     logger.info("IMAGE_GENERATION_OK provider=openrouter user=%s", user_id)
@@ -2749,10 +2780,7 @@ Se non ci sono impegni per il periodo richiesto, faglielo presente con calore.""
 
             if image_url is None:
                 logger.error("IMAGE_GENERATION_FAILED_ALL_PROVIDERS user=%s prompt=%s", user_id, prompt[:50])
-                fallback = await self._handle_image_search(user_id, prompt)
-                if isinstance(fallback, tuple) and fallback and isinstance(fallback[0], str) and fallback[0].startswith("{"):
-                    return fallback
-                return "Ho avuto un problema nella generazione dell'immagine. Riprova con una descrizione diversa o più semplice.", "tool"
+                return "Ho avuto un problema nella generazione dell'immagine. Riprova tra qualche momento.", "tool"
 
             # Stats Bedrock (solo se usato)
             stats = {}
@@ -3799,6 +3827,7 @@ REGOLE ASSOLUTE:
 - SPORT SPECIFICO: Se {user_name} parla di uno sport nominato (es. "tennis", "calcio"), usa quel nome esplicito nella risposta, non sostituirlo con "partita" o "sport".
 - NOME COMPLETO SQUADRA: Usa sempre "Juventus" (nome completo), mai "Juve" o altre abbreviazioni.
 - OPINIONE SU {user_name}: Quando ti chiede cosa pensi di lui/lei, usa il suo nome ({user_name}) nella risposta.
+- EDITING IMMAGINI — LIMITE ASSOLUTO: Non puoi MAI modificare, ritoccare, alterare o fare fotomontaggi di immagini esistenti. Puoi SOLO generare nuove immagini da zero da una descrizione testuale, OPPURE analizzare/descrivere foto che ti vengono inviate. Se ti chiedono di modificare una foto caricata (aggiungere la lingua, cambiare colore, photomontage, ecc.), rispondi onestamente: "Non posso modificare foto esistenti — posso solo generare immagini nuove o analizzarle." Non promettere mai di fare cose che non puoi fare.
 
 {user_boundaries}
 
