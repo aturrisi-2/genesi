@@ -3624,7 +3624,7 @@ textarea#text-input {
   font-family: 'Inter', 'Roboto', sans-serif;
   font-size: 0.92rem;
   background: rgba(51, 58, 68, 0.88);
-  margin: 8px 0 16px 0;
+  margin: 0;
   outline: none;
 }
 
