@@ -265,7 +265,12 @@ async def v1_upload(
     # Risposta breve
     display_name = (saved_doc.get("title") if saved_doc else None) or file.filename
     if file_type == "image":
-        response_text = f"Immagine '{display_name}' caricata. Dimmi cosa vuoi fare!"
+        # Usa la descrizione vision reale se disponibile (GPT-4o ha già analizzato l'immagine)
+        vision_content = result.get("content", "").strip()
+        if vision_content:
+            response_text = vision_content
+        else:
+            response_text = f"Immagine '{display_name}' caricata. Dimmi cosa vuoi fare!"
     elif file_type == "pdf":
         pages = result.get("meta", {}).get("pages", "?")
         response_text = f"Documento '{display_name}' caricato ({pages} pagine). Cosa vuoi sapere?"
