@@ -348,6 +348,8 @@ from api.weather_widget import router as weather_widget_router
 app.include_router(weather_widget_router)
 from api.push import router as push_router
 app.include_router(push_router)
+from api.v1.router import router as v1_router
+app.include_router(v1_router, prefix="/v1")
 
 # ===============================
 # Health check

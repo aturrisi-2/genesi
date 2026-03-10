@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, JSON
+from sqlalchemy import Column, String, Boolean, DateTime, JSON, Integer
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -58,3 +58,18 @@ class UsageLog(Base):
     prompt_tokens = Column(JSON, default=0) # Storing as total count for now
     completion_tokens = Column(JSON, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ApiKey(Base):
+    """API key per accesso programmatico a Genesi (B2B / integrations)."""
+    __tablename__ = "api_keys"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, nullable=False, index=True)   # owner
+    key_hash = Column(String, nullable=False, unique=True) # sha256 hex
+    name = Column(String, nullable=True)                   # etichetta leggibile
+    is_active = Column(Boolean, default=True)
+    rate_limit_per_min = Column(Integer, default=30)       # max req/minuto
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime, nullable=True)
+    requests_total = Column(Integer, default=0)

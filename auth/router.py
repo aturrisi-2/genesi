@@ -1,19 +1,21 @@
 import re
 import os
+import secrets
+import hashlib
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.config import (
     ADMIN_EMAILS, VERIFY_TOKEN_EXPIRE_HOURS, RESET_TOKEN_EXPIRE_HOURS,
 )
 from auth.database import get_db
-from auth.models import AuthUser, AuthToken, Visit, UsageLog
+from auth.models import AuthUser, AuthToken, Visit, UsageLog, ApiKey
 from auth.security import (
     hash_password, verify_password,
     create_access_token, create_refresh_token,
@@ -678,6 +680,158 @@ async def require_admin(request: Request, db: AsyncSession = Depends(get_db)) ->
     if not user.is_admin or user.email not in ADMIN_EMAILS:
         raise HTTPException(status_code=403, detail="Accesso negato.")
     return user
+
+
+# ===============================
+# API KEY — utility
+# ===============================
+
+def _hash_key(raw_key: str) -> str:
+    return hashlib.sha256(raw_key.encode()).hexdigest()
+
+def _generate_raw_key() -> str:
+    return "gns_" + secrets.token_urlsafe(32)
+
+# Rate limiting per API key (in-memory, stesso pattern del JWT rate limit)
+_api_key_rate: dict = {}
+
+def _check_api_key_rate(key_id: str, limit_per_min: int):
+    now = datetime.utcnow()
+    entries = _api_key_rate.get(key_id, [])
+    entries = [t for t in entries if (now - t).total_seconds() < 60]
+    if len(entries) >= limit_per_min:
+        raise HTTPException(status_code=429, detail="Rate limit API key superato. Riprova tra poco.")
+    entries.append(now)
+    _api_key_rate[key_id] = entries
+
+
+# ===============================
+# API KEY — dependency
+# ===============================
+
+async def require_api_key(request: Request, db: AsyncSession = Depends(get_db)) -> AuthUser:
+    """
+    FastAPI dependency per endpoint /v1/*.
+    Accetta header:  X-API-Key: gns_xxxxx
+    Ritorna l'AuthUser proprietario della chiave.
+    """
+    raw_key = request.headers.get("X-API-Key", "").strip()
+    if not raw_key or not raw_key.startswith("gns_"):
+        raise HTTPException(status_code=401, detail="API key mancante o non valida. Usa l'header X-API-Key.")
+
+    key_hash = _hash_key(raw_key)
+    result = await db.execute(select(ApiKey).where(ApiKey.key_hash == key_hash))
+    api_key_obj: Optional[ApiKey] = result.scalar_one_or_none()
+
+    if not api_key_obj or not api_key_obj.is_active:
+        raise HTTPException(status_code=403, detail="API key non valida o revocata.")
+
+    # Rate limiting
+    _check_api_key_rate(api_key_obj.id, api_key_obj.rate_limit_per_min)
+
+    # Aggiorna statistiche (fire-and-forget via update)
+    await db.execute(
+        update(ApiKey)
+        .where(ApiKey.id == api_key_obj.id)
+        .values(last_used_at=datetime.utcnow(),
+                requests_total=ApiKey.requests_total + 1)
+    )
+    await db.commit()
+
+    # Carica l'utente proprietario
+    user_result = await db.execute(select(AuthUser).where(AuthUser.id == api_key_obj.user_id))
+    user: Optional[AuthUser] = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=403, detail="Utente associato alla API key non trovato.")
+
+    _log("API_KEY_AUTH", key_id=api_key_obj.id, user_id=user.id, name=api_key_obj.name)
+    return user
+
+
+# ===============================
+# API KEY — CRUD endpoints (richiedono JWT)
+# ===============================
+
+class ApiKeyCreateRequest(BaseModel):
+    name: Optional[str] = None
+    rate_limit_per_min: int = 30
+
+class ApiKeyResponse(BaseModel):
+    id: str
+    name: Optional[str]
+    is_active: bool
+    rate_limit_per_min: int
+    created_at: str
+    last_used_at: Optional[str]
+    requests_total: int
+
+
+@router.post("/api-keys", summary="Crea una nuova API key")
+async def create_api_key(
+    body: ApiKeyCreateRequest,
+    user: AuthUser = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    raw_key = _generate_raw_key()
+    key_hash = _hash_key(raw_key)
+    api_key = ApiKey(
+        user_id=user.id,
+        key_hash=key_hash,
+        name=body.name or f"Key {datetime.utcnow().strftime('%Y-%m-%d')}",
+        rate_limit_per_min=max(1, min(body.rate_limit_per_min, 300)),
+    )
+    db.add(api_key)
+    await db.commit()
+    _log("API_KEY_CREATED", user_id=user.id, key_id=api_key.id, name=api_key.name)
+    return {
+        "id": api_key.id,
+        "key": raw_key,   # mostrata UNA SOLA VOLTA — non viene mai più restituita
+        "name": api_key.name,
+        "rate_limit_per_min": api_key.rate_limit_per_min,
+        "created_at": api_key.created_at.isoformat(),
+        "warning": "Salva la chiave ora: non sarà più visibile.",
+    }
+
+
+@router.get("/api-keys", summary="Lista le tue API key", response_model=List[ApiKeyResponse])
+async def list_api_keys(
+    user: AuthUser = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(ApiKey).where(ApiKey.user_id == user.id).order_by(ApiKey.created_at.desc())
+    )
+    keys = result.scalars().all()
+    return [
+        ApiKeyResponse(
+            id=k.id,
+            name=k.name,
+            is_active=k.is_active,
+            rate_limit_per_min=k.rate_limit_per_min,
+            created_at=k.created_at.isoformat(),
+            last_used_at=k.last_used_at.isoformat() if k.last_used_at else None,
+            requests_total=k.requests_total,
+        )
+        for k in keys
+    ]
+
+
+@router.delete("/api-keys/{key_id}", summary="Revoca una API key")
+async def revoke_api_key(
+    key_id: str,
+    user: AuthUser = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(ApiKey).where(ApiKey.id == key_id, ApiKey.user_id == user.id)
+    )
+    api_key = result.scalar_one_or_none()
+    if not api_key:
+        raise HTTPException(status_code=404, detail="API key non trovata.")
+    api_key.is_active = False
+    await db.commit()
+    _log("API_KEY_REVOKED", user_id=user.id, key_id=key_id)
+    return {"message": "API key revocata."}
 
 
 # ===============================
