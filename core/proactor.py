@@ -374,23 +374,27 @@ class Proactor:
             if user_name.lower() not in resp_lower:
                 response = f"{user_name}, {response[0].lower()}{response[1:]}" if response else response
 
-        # 6. STRIP ROBOTIC CTA / CLOSINGS (ovunque nella risposta, non solo in fondo)
+        # 6. STRIP ROBOTIC CTA / CLOSINGS
+        # Rimuovi frasi complete che terminano con CTA robotica (anche se iniziano con "Se hai bisogno...")
+        _FAMMI_SAPERE_PAT = _re_pp.compile(
+            r'[\.,;]?\s+[^.!?\n]*?fammi sapere[^.!?\n]*[.!?]?\s*$',
+            _re_pp.IGNORECASE
+        )
+        response = _FAMMI_SAPERE_PAT.sub("", response).strip()
+        # Strip frasi ROBOT_CLOSINGS ovunque nella risposta
         _ROBOT_STRIP_PHRASES = _re_pp.compile(
-            r'(?:^|\. |! |\? |\n)'
+            r'(?:^|(?<=[.!?\n])\s*)'
             r'(?:'
-            r'fammi sapere[^.!?\n]*[.!?]?|'
-            r'dimmi pure se hai(?: altre)? domande[^.!?\n]*[.!?]?|'
-            r'non esitare a (?:chiedere|contattarmi)[^.!?\n]*[.!?]?|'
-            r'sono a tua disposizione[^.!?\n]*[.!?]?|'
-            r'sono qui con te,? senza fretta[^.!?\n]*[.!?]?|'
-            r'possiamo parlare di quello che vuoi,? quando vuoi[^.!?\n]*[.!?]?|'
-            r'prenditi il tempo che ti serve[^.!?\n]*[.!?]?|'
-            r'non vado da nessuna parte[^.!?\n]*[.!?]?|'
-            r'quello che senti è importante,? e merita di essere ascoltato[^.!?\n]*[.!?]?|'
-            r'ogni persona porta con sé un mondo intero[^.!?\n]*[.!?]?|'
-            r'a volte le parole non bastano per esprimere tutto[^.!?\n]*[.!?]?|'
-            r'spero (?:di esserti|che questo ti) (?:stat[ao]|sia) util[ei][^.!?\n]*[.!?]?|'
-            r'spero sia utile[^.!?\n]*[.!?]?'
+            r'(?:[A-Z\u00C0-\u024F][^.!?\n]*?)?(?:dimmi pure se hai(?: altre)? domande|non esitare a (?:chiedere|contattarmi)|sono a tua disposizione)[^.!?\n]*[.!?]?\s*|'
+            r'sono qui con te,? senza fretta[^.!?\n]*[.!?]?\s*|'
+            r'possiamo parlare di quello che vuoi,? quando vuoi[^.!?\n]*[.!?]?\s*|'
+            r'prenditi il tempo che ti serve[^.!?\n]*[.!?]?\s*|'
+            r'non vado da nessuna parte[^.!?\n]*[.!?]?\s*|'
+            r'quello che senti è importante,? e merita di essere ascoltato[^.!?\n]*[.!?]?\s*|'
+            r'ogni persona porta con sé un mondo intero[^.!?\n]*[.!?]?\s*|'
+            r'a volte le parole non bastano per esprimere tutto[^.!?\n]*[.!?]?\s*|'
+            r'spero (?:di esserti|che questo ti) (?:stat[ao]|sia) util[ei][^.!?\n]*[.!?]?\s*|'
+            r'spero sia utile[^.!?\n]*[.!?]?\s*'
             r')',
             _re_pp.IGNORECASE
         )
