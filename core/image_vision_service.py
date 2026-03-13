@@ -34,11 +34,21 @@ def _get_mime(path: str) -> str:
     return _VISION_MIME.get(ext, "image/png")
 
 
+# Singleton clients — creati una sola volta al caricamento del modulo
+# per evitare il leak di socket/httpx-client che si accumulano ad ogni chiamata.
+_VISION_CLIENTS: list | None = None
+
+
 def _get_vision_clients() -> list:
     """
     Ritorna lista di (AsyncOpenAI client, label) in ordine di priorità.
     OpenRouter primo (billing separato da OpenAI), poi OpenAI diretto.
+    I client sono singleton: creati una sola volta e riutilizzati.
     """
+    global _VISION_CLIENTS
+    if _VISION_CLIENTS is not None:
+        return _VISION_CLIENTS
+
     clients = []
     or_key = os.environ.get("OPENROUTER_API_KEY")
     oa_key = os.environ.get("OPENAI_API_KEY")
@@ -54,8 +64,9 @@ def _get_vision_clients() -> list:
     if oa_key:
         clients.append((AsyncOpenAI(api_key=oa_key), "openai"))
     if not clients:
-        # Nessuna chiave configurata — prova con variabile d'ambiente default
         clients.append((AsyncOpenAI(), "openai_default"))
+
+    _VISION_CLIENTS = clients
     return clients
 
 
