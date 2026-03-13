@@ -904,6 +904,29 @@ class Proactor:
                     current_response = await genesi_auditor.generate_report()
                     final_source = "knowledge"
 
+                elif current_intent == "greeting":
+                    log("ROUTING_DECISION", route="greeting", user_id=user_id)
+                    import random as _rnd
+                    _g_name = profile.get("name", "") if profile else ""
+                    if _g_name:
+                        _opts = [
+                            f"Ehi {_g_name}.",
+                            f"Ciao {_g_name}.",
+                            f"{_g_name}. Dimmi.",
+                            f"Eccomi {_g_name}.",
+                            f"Ciao. Come va?",
+                        ]
+                    else:
+                        _opts = [
+                            "Ehi.",
+                            "Ciao.",
+                            "Eccomi.",
+                            "Ciao. Come va?",
+                            "Dimmi.",
+                        ]
+                    current_response = _rnd.choice(_opts)
+                    final_source = "relational"
+
                 elif current_intent == "emotional":
                     log("ROUTING_DECISION", route="emotional", user_id=user_id)
                     current_response = await self._handle_relational(user_id, processed_message, brain_state, conversation_id)
@@ -3695,7 +3718,7 @@ REGOLE TASSATIVE:
         elif 14 <= hour < 18:
             return "Pomeriggio — tono normale, collaborativo."
         elif 18 <= hour < 21:
-            return "Sera — tono caldo e rilassato. Evita sovraccarico di informazioni."
+            return "Sera — tono caldo e diretto. Risposte brevi. VIETATO chiedere se l'utente è stanco o come è andata la giornata."
         else:
             return "Sera tardi — sii breve e caldo. Zero domande proattive, l'utente vuole staccare."
 
@@ -3781,7 +3804,7 @@ AUTONOMIA COGNITIVA:
 - Il silenzio vale quanto le parole: se {user_name} scrive poco, spesso nasconde molto. Esplora con delicatezza.
 
 PRESENZA CONTESTUALE (usa il CONTESTO CALENDARIO nel [THINKING_CONTEXT]):
-{"- Questa è la prima volta che " + user_name + " ti parla oggi: apri con un saluto naturale — il suo nome, il momento del giorno. Una riga sola, poi vai subito alla risposta. Non cerimonioso." if primo_oggi else "- Non è la prima interazione di oggi: NON salutare di nuovo, rispondi direttamente."}
+{"- Prima interazione di oggi con " + user_name + ": saluto brevissimo e diretto, UNA parola o due al massimo (es. 'Ciao.', '" + user_name + ".', 'Ehi.', 'Eccomi.'). POI rispondi subito. VIETATO: chiedere se è stanco, come sta, fare check-in sul benessere, usare 'Buonasera/Buongiorno + domanda'. Un amico non fa interrogatori all'ingresso." if primo_oggi else "- Non è la prima interazione di oggi: NON salutare di nuovo, rispondi direttamente."}
 - Se oggi cade una ricorrenza o festività (vedi CONTESTO CALENDARIO): una nota breve e vera, come farebbe un amico. Non il bigliettino da banco.
 - Se è weekend: tono più rilassato, nessuna urgenza lavorativa implicita.
 - Se è lunedì: puoi riconoscere il rientro con leggerezza, se pertinente.
