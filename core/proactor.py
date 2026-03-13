@@ -284,12 +284,20 @@ class Proactor:
                 response = "Resto Genesi. Dimmi cosa ti serve davvero."
 
         # 1b. ANTI-JAILBREAK: intercetta auto-identificazione come altri sistemi AI
+        # Pattern ampio: cattura anche "sono il tuo fedele ChatGPT", "mi chiamo GPT-4", ecc.
+        _AI_NAMES = r'(chatgpt|chat\s*gpt|gpt[\-\s]?\d*|openai|claude|gemini|copilot|bard|llama|mistral)'
         _AI_IDENTITY_PAT = _re_pp.compile(
-            r'\b(sono|sono proprio|sono davvero|sono in realtà)\s+(chatgpt|gpt[\-\s]?\d*|openai|claude|gemini|copilot|bard|llama|mistral)\b',
+            r'\b(sono|mi\s+chiamo|sono\s+il\s+tuo|sono\s+proprio|sono\s+davvero|sono\s+in\s+realtà)\b.{0,60}?' + _AI_NAMES,
             _re_pp.IGNORECASE
         )
         if _AI_IDENTITY_PAT.search(response):
             response = "Sono Genesi. " + _AI_IDENTITY_PAT.sub("sono Genesi", response)
+        # Fallback: se il nome di un altro AI compare ancora come soggetto → rimuovilo
+        _AI_BARE_PAT = _re_pp.compile(
+            r'\b' + _AI_NAMES + r'\b',
+            _re_pp.IGNORECASE
+        )
+        response = _AI_BARE_PAT.sub("Genesi", response)
 
         # 1c. ANTI-JAILBREAK: intercetta accettazione di ruolo "senza limitazioni"
         _NO_LIMITS_PAT = _re_pp.compile(
