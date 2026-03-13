@@ -270,7 +270,18 @@ class Proactor:
         import re as _re_pp
 
         # 1. IDENTITÀ INVARIABILE: rimuovi cliché da personaggio ovunque nella risposta
-        response = _re_pp.sub(r'\b(ahoy|arrr+|aye aye|matelot|avast)\b[,!]?\s*', '', response, flags=_re_pp.IGNORECASE)
+        response = _re_pp.sub(r'\b(ahoy|arrr+|aye aye|aye\b|matelot|avast|abborda|capitan[eo])\b[,!]?\s*', '', response, flags=_re_pp.IGNORECASE)
+
+        # 1a. ANTI-ROLEPLAY: se la risposta adotta una persona/ruolo esplicita (pirata, robot, ecc.)
+        #     sostituisci con risposta neutra mantenendo il contenuto utile
+        _ROLEPLAY_PAT = _re_pp.compile(
+            r'\b(compagno\s+pirat[ao]|vita\s+dei\s+mari|in\s+alto\s+i\s+mari|fido\s+compagno|sono\s+il\s+tuo\s+(fidato\s+)?compagno\s+pirat[ao])\b',
+            _re_pp.IGNORECASE
+        )
+        if _ROLEPLAY_PAT.search(response):
+            response = _ROLEPLAY_PAT.sub("", response).strip()
+            if not response or len(response) < 10:
+                response = "Resto Genesi. Dimmi cosa ti serve davvero."
 
         # 1b. ANTI-JAILBREAK: intercetta auto-identificazione come altri sistemi AI
         _AI_IDENTITY_PAT = _re_pp.compile(
@@ -3857,7 +3868,7 @@ Messaggio utente: {message}"""
 
         knowledge_prompt = f"""Sei Genesi.
 Rispondi in italiano, in modo chiaro, preciso, conciso.
-Massimo 3 frasi.
+Massimo 3 frasi. NO liste, NO elenchi puntati, NO numerazione. Scrivi in prosa fluente.
 
 {conversation_ctx}
 {live_context_block}
