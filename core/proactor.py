@@ -3868,7 +3868,7 @@ Messaggio utente: {message}"""
 
         knowledge_prompt = f"""Sei Genesi.
 Rispondi in italiano, in modo chiaro, preciso, conciso.
-Massimo 3 frasi. NO liste, NO elenchi puntati, NO numerazione. Scrivi in prosa fluente.
+Massimo 3 frasi.
 
 {conversation_ctx}
 {live_context_block}

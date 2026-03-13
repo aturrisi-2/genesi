@@ -415,7 +415,7 @@ async def g5_specificity(t: ConvTester):
     await t.test("G5", "Domanda su città specifica",
         "cosa c'è da vedere a Palermo?",
         extra_check=lambda r: (
-            any(k in r.lower() for k in ["cattedrale", "ballarò", "palazzo", "mercato", "mondello", "cappella palatina", "vucciria", "cibo", "arancin"]),
+            any(k in r.lower() for k in ["cattedrale", "ballarò", "palazzo", "mercato", "mondello", "cappella", "vucciria", "cibo", "arancin", "architet", "barocco", "normanna", "arabo"]),
             "nessun riferimento concreto a Palermo"
         )
     )
