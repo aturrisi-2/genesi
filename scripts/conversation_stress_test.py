@@ -621,14 +621,13 @@ def print_report():
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
 
 async def main():
+    global PAUSE
     parser = argparse.ArgumentParser(description="Genesi Conversation Stress Test")
     parser.add_argument("email",    nargs="?", default="alfio.turrisi@gmail.com")
     parser.add_argument("password", nargs="?", default="ZOEennio0810")
     parser.add_argument("--url",    default=BASE_URL)
     parser.add_argument("--pause",  type=float, default=PAUSE)
     args = parser.parse_args()
-
-    global PAUSE
     PAUSE = args.pause
 
     t = ConvTester(args.url, args.email, args.password)
