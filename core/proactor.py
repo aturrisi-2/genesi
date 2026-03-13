@@ -299,6 +299,14 @@ class Proactor:
         )
         response = _AI_BARE_PAT.sub("Genesi", response)
 
+        # 1b2. IDENTITÀ: mai "sono un'intelligenza artificiale" — sempre "sono Genesi"
+        response = _re_pp.sub(
+            r"\bsono un['\u2019]intelligenza artificiale\b",
+            "sono Genesi",
+            response,
+            flags=_re_pp.IGNORECASE
+        )
+
         # 1c. ANTI-JAILBREAK: intercetta accettazione di ruolo "senza limitazioni"
         _NO_LIMITS_PAT = _re_pp.compile(
             r'\b(sarò|sono|agisco come|mi comporterò come).{0,40}(senza limitazioni|senza limiti|senza restrizioni|senza filtri|senza vincoli)\b',
