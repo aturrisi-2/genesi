@@ -751,47 +751,19 @@ class EmotionalIntensityEngine:
         random.shuffle(reflections)
         random.shuffle(questions)
 
-        presence_pool = [
-            "Sono qui con te, senza fretta. Possiamo parlare di quello che vuoi, quando vuoi.",
-            "Non c'e' fretta. Possiamo restare qui quanto serve.",
-            "Prenditi il tempo che ti serve. Sono qui e non vado da nessuna parte.",
-            "Quello che senti e' importante, e merita di essere ascoltato con attenzione.",
-        ]
-
-        depth_pool = [
-            "A volte le parole non bastano per esprimere tutto quello che sentiamo dentro, e va bene cosi'. L'importante e' che tu sappia che qui c'e' spazio per tutto.",
-            "Ogni persona porta con se' un mondo intero di esperienze, emozioni, ricordi. E ogni conversazione e' un'occasione per scoprire qualcosa di nuovo su quel mondo.",
-            "Non devi avere tutte le risposte adesso. A volte il primo passo e' semplicemente permettersi di sentire quello che c'e', senza giudicarlo.",
-        ]
-
         parts = [response]
-        used = set()
 
-        # Add reflections until we approach target
-        for r in reflections:
-            if len(" ".join(parts).split()) >= min_words:
-                break
-            if r.lower()[:25] not in " ".join(parts).lower():
-                parts.append(r)
-                used.add(r[:25])
+        # Aggiungi al massimo UNA riflessione se la risposta è davvero troppo corta
+        if len(response.split()) < 6:
+            for r in reflections:
+                if r.lower()[:25] not in response.lower():
+                    parts.append(r)
+                    break
 
-        # Add question if missing
-        if len(" ".join(parts).split()) < min_words and not self._has_question(" ".join(parts)):
-            parts.append(questions[0] if questions else "Come ti senti in questo momento?")
-
-        # Add presence
-        for p in presence_pool:
-            if len(" ".join(parts).split()) >= min_words:
-                break
-            if p[:20] not in " ".join(parts):
-                parts.append(p)
-
-        # Add depth
-        for d in depth_pool:
-            if len(" ".join(parts).split()) >= min_words:
-                break
-            if d[:20] not in " ".join(parts):
-                parts.append(d)
+        # Se manca ancora una domanda, aggiungine una sola
+        current = " ".join(parts)
+        if not self._has_question(current) and len(current.split()) < min_words:
+            parts.append(questions[0] if questions else "Come stai davvero?")
 
         result = " ".join(parts)
         return result

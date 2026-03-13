@@ -209,13 +209,15 @@ def _greeting_response(prefix: str, name: str, trust: float, stage: str) -> str:
         options = [
             f"Ehi {name}, come stai?",
             f"Ciao {name}. Tutto bene?",
-            f"Eccomi {name}. Come posso aiutarti stasera?",
+            f"{name}. Che c'è?",
+            f"Eccomi {name}. Dimmi.",
         ]
     else:
         options = [
-            "Ciao! Mi stavi cercando?",
-            "Ehi, dimmi tutto.",
-            "Ciao. Come procede la giornata?",
+            "Ehi, dimmi.",
+            "Ciao. Come va?",
+            "Eccomi. Che succede?",
+            "Ciao. Come procede?",
         ]
     return random.choice(options)
 
