@@ -374,32 +374,27 @@ class Proactor:
             if user_name.lower() not in resp_lower:
                 response = f"{user_name}, {response[0].lower()}{response[1:]}" if response else response
 
-        # 6. STRIP ROBOTIC CTA ENDINGS (fammi sapere, dimmi pure, non esitare, ecc.)
-        _ROBOT_CTA_PAT = _re_pp.compile(
-            r'\s*[.!?]?\s*(?:'
-            r'fammi sapere[^.!?\n]*|'
-            r'dimmi pure se hai (altre )?domande[^.!?\n]*|'
-            r'non esitare a (chiedere|contattarmi)[^.!?\n]*|'
-            r'sono a tua disposizione[^.!?\n]*|'
-            r'se hai bisogno di (altro|informazioni)[,\s]+fammi sapere[^.!?\n]*'
-            r')[.!?]?\s*$',
+        # 6. STRIP ROBOTIC CTA / CLOSINGS (ovunque nella risposta, non solo in fondo)
+        _ROBOT_STRIP_PHRASES = _re_pp.compile(
+            r'(?:^|\. |! |\? |\n)'
+            r'(?:'
+            r'fammi sapere[^.!?\n]*[.!?]?|'
+            r'dimmi pure se hai(?: altre)? domande[^.!?\n]*[.!?]?|'
+            r'non esitare a (?:chiedere|contattarmi)[^.!?\n]*[.!?]?|'
+            r'sono a tua disposizione[^.!?\n]*[.!?]?|'
+            r'sono qui con te,? senza fretta[^.!?\n]*[.!?]?|'
+            r'possiamo parlare di quello che vuoi,? quando vuoi[^.!?\n]*[.!?]?|'
+            r'prenditi il tempo che ti serve[^.!?\n]*[.!?]?|'
+            r'non vado da nessuna parte[^.!?\n]*[.!?]?|'
+            r'quello che senti è importante,? e merita di essere ascoltato[^.!?\n]*[.!?]?|'
+            r'ogni persona porta con sé un mondo intero[^.!?\n]*[.!?]?|'
+            r'a volte le parole non bastano per esprimere tutto[^.!?\n]*[.!?]?|'
+            r'spero (?:di esserti|che questo ti) (?:stat[ao]|sia) util[ei][^.!?\n]*[.!?]?|'
+            r'spero sia utile[^.!?\n]*[.!?]?'
+            r')',
             _re_pp.IGNORECASE
         )
-        response = _ROBOT_CTA_PAT.sub("", response).strip()
-        # Rimuovi anche ROBOT_CLOSINGS comuni
-        _ROBOT_CLOSE_PAT = _re_pp.compile(
-            r'\s*(?:'
-            r'sono qui con te,? senza fretta[^.!?\n]*|'
-            r'prenditi il tempo che ti serve[^.!?\n]*|'
-            r'non vado da nessuna parte[^.!?\n]*|'
-            r'quello che senti è importante,? e merita di essere ascoltato[^.!?\n]*|'
-            r'ogni persona porta con sé un mondo intero[^.!?\n]*|'
-            r'a volte le parole non bastano per esprimere tutto[^.!?\n]*|'
-            r'spero (?:di esserti|che questo ti) (?:stat[ao]|sia) util[ei][^.!?\n]*'
-            r')[.!?]?\s*$',
-            _re_pp.IGNORECASE
-        )
-        response = _ROBOT_CLOSE_PAT.sub("", response).strip()
+        response = _ROBOT_STRIP_PHRASES.sub("", response).strip()
 
         return response
 

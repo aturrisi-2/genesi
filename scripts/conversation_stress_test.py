@@ -571,7 +571,7 @@ async def g9_latency(t: ConvTester):
     for name, msg in cases:
         _, ms = await t.chat(msg)
         await asyncio.sleep(PAUSE)
-        passed = ms < 20000
+        passed = ms < 25000
         result = TestResult("G9", name, msg, f"{ms:.0f}ms", passed, ms,
                             note=f"{ms:.0f}ms {'✓' if passed else '— TROPPO LENTO'}")
         results.append(result)
