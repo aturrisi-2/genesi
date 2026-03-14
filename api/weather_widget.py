@@ -15,9 +15,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/weather-widget", tags=["weather-widget"])
 
-OPENWEATHER_BASE = "https://api.openweathermap.org/data/2.5/weather"
-OPENWEATHER_GEO  = "https://api.openweathermap.org/geo/1.0/reverse"
-IPAPI_FALLBACK   = "http://ip-api.com/json"
+OPENWEATHER_BASE     = "https://api.openweathermap.org/data/2.5/weather"
+OPENWEATHER_FORECAST = "https://api.openweathermap.org/data/2.5/forecast"
+OPENWEATHER_GEO      = "https://api.openweathermap.org/geo/1.0/reverse"
+IPAPI_FALLBACK       = "http://ip-api.com/json"
 
 TIMEOUT_SECONDS = 8
 
@@ -242,6 +243,36 @@ async def get_weather_widget(
                 "sunset"     : data.get("sys", {}).get("sunset"),   # Unix timestamp UTC
                 "updated_at" : datetime.now(dt_timezone.utc).isoformat(),
             }
+
+            # ── 4. Previsioni orarie (prossime 6 slot da /forecast) ────────
+            try:
+                now_ts = datetime.now(dt_timezone.utc).timestamp()
+                forecast_resp = await client.get(
+                    OPENWEATHER_FORECAST,
+                    params={
+                        "lat"   : resolved_lat,
+                        "lon"   : resolved_lon,
+                        "appid" : api_key,
+                        "units" : "metric",
+                        "cnt"   : 8,  # 8 slot × 3h = 24h
+                    }
+                )
+                hourly = []
+                if forecast_resp.status_code == 200:
+                    for slot in forecast_resp.json().get("list", []):
+                        if slot["dt"] <= now_ts:
+                            continue
+                        hourly.append({
+                            "dt"  : slot["dt"],
+                            "icon": slot["weather"][0]["icon"],
+                            "temp": round(slot["main"]["temp"]),
+                        })
+                        if len(hourly) >= 6:
+                            break
+                payload["hourly"] = hourly
+            except Exception as fe:
+                logger.warning(f"WEATHER_FORECAST_ERROR {fe}")
+                payload["hourly"] = []
 
             logger.info(
                 f"WEATHER_WIDGET_OK city={payload['city']} "

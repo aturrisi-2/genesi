@@ -4577,6 +4577,21 @@ function setVoiceStatusText(text) {
     return { weather: 'clear', phase: goldenPhase || (isNight ? 'night' : 'day') };
   }
 
+  function iconToEmoji(icon) {
+    const map = {
+      '01d': '☀️',  '01n': '🌙',
+      '02d': '🌤️', '02n': '🌤️',
+      '03d': '⛅',  '03n': '⛅',
+      '04d': '☁️',  '04n': '☁️',
+      '09d': '🌦️', '09n': '🌦️',
+      '10d': '🌧️', '10n': '🌧️',
+      '11d': '⛈️', '11n': '⛈️',
+      '13d': '❄️',  '13n': '❄️',
+      '50d': '🌫️', '50n': '🌫️',
+    };
+    return map[icon] || '🌡️';
+  }
+
   function renderWeather(payload) {
     // Usa i codici OpenWeather per mantenere la scena coerente con i dati meteo reali.
     const scene = getWeatherScene(payload.condition, payload.icon_code, payload);
@@ -4604,6 +4619,23 @@ function setVoiceStatusText(text) {
       `<svg viewBox="0 0 10 14" width="9" height="12" fill="currentColor" style="vertical-align:middle;margin-right:3px;opacity:.82"><path d="M5 0 C5 0 0 6.5 0 9.5 A5 5 0 0 0 10 9.5 C10 6.5 5 0 5 0Z"/></svg>${payload.humidity}%` +
       `<span style="margin:0 0.55em;opacity:.35">|</span>` +
       `<svg viewBox="0 0 14 10" width="13" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="vertical-align:middle;margin-right:3px;opacity:.82"><path d="M1 3 Q5 3 7 1.5 Q9 0 11 1.5 Q13 3 13 3"/><path d="M1 6.5 Q4 6.5 6 5 Q8 3.5 10 5 Q12 6.5 13 6.5"/><path d="M1 10 Q3 10 5 8.5 Q7 7 9 8.5"/></svg>${payload.wind_speed} km/h`;
+    // ── Previsioni orarie ────────────────────────────────
+    const hourlyRow = document.getElementById('ww-hourly');
+    if (hourlyRow && Array.isArray(payload.hourly) && payload.hourly.length) {
+      hourlyRow.innerHTML = payload.hourly.map(h => {
+        const d = new Date(h.dt * 1000);
+        const label = String(d.getHours()).padStart(2, '0');
+        return `<div class="ww-hourly-slot">` +
+          `<span class="ww-hourly-hour">${label}</span>` +
+          `<span class="ww-hourly-icon">${iconToEmoji(h.icon)}</span>` +
+          `<span class="ww-hourly-temp">${h.temp}°</span>` +
+          `</div>`;
+      }).join('');
+      hourlyRow.hidden = false;
+    } else if (hourlyRow) {
+      hourlyRow.hidden = true;
+    }
+
     updateClock();
     showState('data');
     console.log(

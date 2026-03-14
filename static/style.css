@@ -3138,6 +3138,50 @@ body.coding-active {
   letter-spacing: 0.03em;
 }
 
+/* ── PREVISIONI ORARIE ───────────────────────────────── */
+.weather-widget__row--hourly {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-top: 0.28rem;
+  margin-top: 0.18rem;
+  border-top: 1px solid rgba(255,255,255,0.13);
+}
+
+.ww-hourly-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.06rem;
+  flex: 1;
+}
+
+.ww-hourly-hour {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 0.57rem;
+  font-weight: 400;
+  color: rgba(255,255,255,0.58);
+  letter-spacing: 0.02em;
+}
+
+.ww-hourly-icon {
+  font-size: 0.95rem;
+  line-height: 1.1;
+}
+
+.ww-hourly-temp {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 0.60rem;
+  font-weight: 300;
+  color: rgba(255,255,255,0.78);
+}
+
+/* Snow theme — testo scuro anche sulle ore */
+#weather-widget[data-weather='snow'] .ww-hourly-hour,
+#weather-widget[data-weather='snow'] .ww-hourly-temp {
+  color: rgba(18,30,48,0.72);
+}
+
 /* Testo scuro su neve (sfondo chiaro) */
 #weather-widget[data-weather='snow'] .weather-widget__city,
 #weather-widget[data-weather='snow'] .weather-widget__time,
