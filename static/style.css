@@ -1164,29 +1164,23 @@ body {
   }
 
   #chat-form {
-    /* Bottom-sheet: flush al fondo, angoli arrotondati solo in alto */
-    width: 100%;
-    left: 0;
-    right: 0;
-    transform: none;
-    bottom: 0;
-    border-radius: 20px 20px 0 0;
-    padding: 8px 8px calc(env(safe-area-inset-bottom, 0px) + 22px) !important;
+    width: calc(100% - 20px);
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 26px);
+    border-radius: 22px;
+    padding: 5px 6px;
   }
-  /* Footer sovrapposto nella zona padding del form */
   #legal-footer {
-    z-index: 125;
     font-size: 0.50rem;
-    padding: 0 12px calc(env(safe-area-inset-bottom, 4px) + 4px);
+    padding: 2px 12px calc(env(safe-area-inset-bottom, 2px) + 2px);
     gap: 4px;
   }
-  /* Nascondi la frase descrittiva su mobile — restano solo i link */
   .legal-desc {
     display: none;
   }
   #dialogue {
-    /* mobile: padding-top spinge i messaggi sotto il widget (≈320px dal top viewport) */
-    padding: 300px 16px 100px;
+    padding: 300px 16px 120px;
   }
 }
 
@@ -3685,7 +3679,7 @@ body::before {
 }
 
 #dialogue {
-  padding: 1.15rem 20px;
+  padding: 1.15rem 268px 110px 20px;
   gap: 20px;
 }
 
@@ -3815,7 +3809,7 @@ body::before {
 }
 
 #dialogue {
-  padding: 1.15rem 20px;
+  padding: 1.15rem 268px 110px 20px;
   gap: 20px;
 }
 
