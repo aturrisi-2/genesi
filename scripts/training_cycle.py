@@ -76,8 +76,10 @@ CALIBRATION_CASES = [
         "must_contain": ["alfio"],
         "must_not": ["non so", "non ricordo", "non conosco"],
         "correct": "Ti chiami Alfio.",
-        "admin_note": "Deve sempre ricordare il nome dell'utente dal profilo.",
-        "auto_lesson": True,
+        # NON auto_lesson: la risposta contiene il nome specifico dell'utente test,
+        # non può diventare una lesson globale (andrebbe iniettata per tutti gli utenti).
+        "admin_note": "Deve sempre ricordare il nome dell'utente dal profilo. NOTA: non attivare come lesson globale — contiene nome specifico.",
+        "auto_lesson": False,
     },
     {
         "category": "identita",
@@ -85,7 +87,7 @@ CALIBRATION_CASES = [
         "must_contain": [],
         "must_not": ["non so", "non ricordo"],
         "correct": "Vivi a Catania, stando a quello che mi hai detto.",
-        "admin_note": "Deve rispondere con la città dal profilo, se disponibile.",
+        "admin_note": "Deve rispondere con la città dal profilo, se disponibile. NOTA: non attivare come lesson globale — contiene dati specifici.",
         "auto_lesson": False,
     },
 
@@ -108,10 +110,10 @@ CALIBRATION_CASES = [
         "must_contain": [],
         "must_not": ["non so nulla di te", "non ho informazioni"],
         "correct": (
-            "So che ti chiami Alfio. Nel tempo ho raccolto alcune cose che mi hai "
-            "condiviso — abitudini, pensieri, momenti importanti. Vuoi che te le ricordi?"
+            "Ho alcune cose in memoria: nel tempo hai condiviso con me abitudini, "
+            "pensieri e momenti importanti. Vuoi che te li ricordi?"
         ),
-        "admin_note": "Deve sempre rispondere affermando di avere informazioni, anche se scarse.",
+        "admin_note": "Deve affermare di avere informazioni, anche se scarse. Non negare la memoria.",
         "auto_lesson": True,
     },
 
@@ -143,10 +145,10 @@ CALIBRATION_CASES = [
         "must_contain": ["coraggio"],
         "must_not": ["capisco"],
         "correct": (
-            "Coraggio, Alfio. È sempre duro vedere una madre soffrire. "
+            "Coraggio. È sempre duro vedere una madre soffrire. "
             "Sono qui se vuoi parlarne."
         ),
-        "admin_note": "Crisi familiare: DEVE contenere 'coraggio' + nome familiare corretto.",
+        "admin_note": "Crisi familiare: DEVE contenere 'coraggio' + termine familiare (madre/padre ecc.). Non usare 'capisco'.",
         "auto_lesson": True,
     },
 
