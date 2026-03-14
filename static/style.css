@@ -177,10 +177,17 @@ body::after {
   flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
-  /* right: 268px lascia libera la zona del widget fisso (236px + 32px gap) */
-  padding: 0.6rem 268px 110px 16px;
+  padding: 0 16px 110px;
+  gap: 20px;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
+}
+
+/* Spacer che spinge i messaggi sotto il widget (min-height = altezza widget) */
+#dialogue::before {
+  content: '';
+  display: block;
+  flex: 1 0 300px; /* cresce per riempire lo spazio, minimo 300px (altezza widget) */
 }
 
 #dialogue::-webkit-scrollbar {
@@ -1180,7 +1187,10 @@ body {
     display: none;
   }
   #dialogue {
-    padding: 300px 16px 120px;
+    padding: 0 16px 120px;
+  }
+  #dialogue::before {
+    flex-basis: 280px; /* widget leggermente più basso su mobile */
   }
 }
 
@@ -3679,7 +3689,6 @@ body::before {
 }
 
 #dialogue {
-  padding: 1.15rem 268px 110px 20px;
   gap: 20px;
 }
 
@@ -3809,7 +3818,6 @@ body::before {
 }
 
 #dialogue {
-  padding: 1.15rem 268px 110px 20px;
   gap: 20px;
 }
 

@@ -253,6 +253,15 @@ if (window.visualViewport) {
     });
     setTimeout(scrollToBottom, 50);
     setTimeout(scrollToBottom, 200);
+
+    // 4. Su mobile: solleva il form sopra la tastiera virtuale
+    if (window.innerWidth <= 600) {
+      const chatForm = document.getElementById('chat-form');
+      if (chatForm) {
+        const kbH = Math.max(0, window.innerHeight - window.visualViewport.height);
+        chatForm.style.bottom = kbH > 50 ? (kbH + 26) + 'px' : '';
+      }
+    }
   };
   window.visualViewport.addEventListener('resize', _onViewport);
   window.visualViewport.addEventListener('scroll', _onViewport);
