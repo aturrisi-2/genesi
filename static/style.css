@@ -1164,7 +1164,7 @@ body {
 
   #chat-form {
     width: calc(100% - 24px);
-    bottom: max(10px, env(safe-area-inset-bottom, 10px));
+    bottom: calc(26px + env(safe-area-inset-bottom, 0px));
     border-radius: 22px;
     padding: 5px 6px;
   }
