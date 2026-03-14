@@ -1831,7 +1831,7 @@ async function sendChatMessage(message) {
 // ===============================
 function autoResizeInput(el) {
   el.style.height = 'auto';
-  const newHeight = Math.min(el.scrollHeight, 150);
+  const newHeight = Math.min(el.scrollHeight, 120);
   el.style.height = newHeight + 'px';
 
   // Aggiusta l'altezza del container chat per compensare

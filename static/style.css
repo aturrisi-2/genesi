@@ -465,10 +465,11 @@ body::after {
   background: transparent;
   border: none;
   box-shadow: none;
-  padding: 12px 16px;
-  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  padding: 10px 16px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
+  align-items: center;
 }
 
 #input-container {
@@ -480,6 +481,7 @@ body::after {
   border: none;
   box-shadow: none;
   min-height: 46px;
+  width: clamp(300px, 55%, 520px);
 }
 
 /* ─── INPUT BOX ─────────────────────────────────────────── */
@@ -545,11 +547,11 @@ textarea#text-input {
   background: #111;
   border: 1px solid #222;
   color: #ddd;
-  padding: 12px 42px 12px 18px;
-  /* space for 3 dots */
+  padding: 11px 42px 11px 16px;
   font-size: 14px;
-  min-height: 46px;
-  max-height: 140px;
+  min-height: 44px;
+  max-height: 120px;
+  height: auto;
   resize: none;
   overflow-y: auto;
   width: 100%;
@@ -557,9 +559,8 @@ textarea#text-input {
   transition: border-color 0.2s, box-shadow 0.2s;
   outline: none;
   scrollbar-width: none;
-  /* Firefox */
   -ms-overflow-style: none;
-  /* IE/Edge */
+  line-height: 1.45;
 }
 
 #text-input::-webkit-scrollbar,
