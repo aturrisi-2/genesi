@@ -195,7 +195,8 @@ function applyAuthState() {
   }
 
   userBar.style.display = 'flex';
-  document.getElementById('presence').style.display = '';
+  const _presenceEl = document.getElementById('presence');
+  if (_presenceEl) _presenceEl.style.display = '';
   dialogue.style.display = '';
   document.getElementById('status').style.display = '';
   chatForm.style.display = '';
