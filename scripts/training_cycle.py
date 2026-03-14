@@ -376,7 +376,7 @@ class TrainingCycleRunner:
                         cr.correction_id = cid
                         print(f"         📝 Correction creata: {cid}")
 
-                        if (self.auto_lesson or case.get("auto_lesson", False)) and cid:
+                        if (self.auto_lesson and case.get("auto_lesson", False)) and cid:
                             ok = self.activate_lesson(cid)
                             cr.lesson_activated = ok
                             if ok:
@@ -385,7 +385,7 @@ class TrainingCycleRunner:
                         print(f"         ✗ Training API error: {e}")
                 else:
                     print(f"         [DRY-RUN] avrebbe creato correction in '{cat}'")
-                    if self.auto_lesson or case.get("auto_lesson"):
+                    if self.auto_lesson and case.get("auto_lesson"):
                         print(f"         [DRY-RUN] avrebbe attivato come lesson globale")
 
             results.append(cr)
