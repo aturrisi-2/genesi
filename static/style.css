@@ -1164,10 +1164,25 @@ body {
   }
 
   #chat-form {
-    width: calc(100% - 24px);
-    bottom: calc(26px + env(safe-area-inset-bottom, 0px));
-    border-radius: 22px;
-    padding: 5px 6px;
+    /* Bottom-sheet: flush al fondo, angoli arrotondati solo in alto */
+    width: 100%;
+    left: 0;
+    right: 0;
+    transform: none;
+    bottom: 0;
+    border-radius: 20px 20px 0 0;
+    padding: 8px 8px calc(env(safe-area-inset-bottom, 0px) + 22px) !important;
+  }
+  /* Footer sovrapposto nella zona padding del form */
+  #legal-footer {
+    z-index: 125;
+    font-size: 0.50rem;
+    padding: 0 12px calc(env(safe-area-inset-bottom, 4px) + 4px);
+    gap: 4px;
+  }
+  /* Nascondi la frase descrittiva su mobile — restano solo i link */
+  .legal-desc {
+    display: none;
   }
   #dialogue {
     /* mobile: padding-top spinge i messaggi sotto il widget (≈320px dal top viewport) */
@@ -3359,8 +3374,11 @@ body {
 }
 
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
-  #chat-form {
-    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+  /* Solo su desktop: su mobile il padding safe-area è già gestito nel @media */
+  @media (min-width: 601px) {
+    #chat-form {
+      padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+    }
   }
 }
 
@@ -3883,6 +3901,27 @@ textarea#text-input:focus {
 #legal-footer a:hover {
   color: #fff;
   text-decoration-color: #fff;
+}
+
+/* Override stili pill iniettati da iubenda nei link del footer */
+#legal-footer .iubenda-embed {
+  all: unset !important;
+  display: inline !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  color: rgba(148, 163, 184, 0.55) !important;
+  font-size: inherit !important;
+  background: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 2px !important;
+  box-shadow: none !important;
+  text-decoration: none !important;
+  font-family: inherit !important;
+  transition: color 0.2s !important;
+}
+#legal-footer .iubenda-embed:hover {
+  color: #fff !important;
 }
 
 /* Nascondi i badge widget flottanti di Iubenda o iframe vari che coprono la view */
