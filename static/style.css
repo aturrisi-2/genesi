@@ -3076,15 +3076,16 @@ body.coding-active {
   font-weight: 600;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.75);
+  color: var(--meteo-accent, rgba(255,255,255,0.75));
   text-shadow: 0 1px 5px rgba(0,0,0,0.5);
+  transition: color 1.2s ease;
 }
 
 .weather-widget__time {
   font-size: 1rem;
   font-weight: 300;
   letter-spacing: 0.06em;
-  color: rgba(255,255,255,0.92);
+  color: #ffffff;
   text-shadow: 0 1px 6px rgba(0,0,0,0.65);
 }
 
@@ -3101,7 +3102,7 @@ body.coding-active {
 .weather-widget__desc {
   font-size: 1rem;
   font-weight: 300;
-  color: rgba(255,255,255,0.86);
+  color: var(--meteo-accent, rgba(255,255,255,0.86));
   text-shadow: 0 1px 6px rgba(0,0,0,0.38);
   letter-spacing: 0.01em;
   padding-bottom: 0.22rem;
@@ -3110,14 +3111,17 @@ body.coding-active {
   white-space: nowrap;
   text-overflow: ellipsis;
   padding-right: 0.5rem;
+  transition: color 1.2s ease;
 }
 
 .weather-widget__meta {
   font-size: 0.74rem;
   font-weight: 300;
-  color: rgba(255,255,255,0.52);
+  color: var(--meteo-accent, rgba(255,255,255,0.52));
+  opacity: 0.70;
   text-shadow: 0 1px 4px rgba(0,0,0,0.4);
   letter-spacing: 0.03em;
+  transition: color 1.2s ease;
 }
 
 /* ── PREVISIONI ORARIE ───────────────────────────────── */
@@ -3127,7 +3131,7 @@ body.coding-active {
   align-items: flex-start;
   padding-top: 0.28rem;
   margin-top: 0.16rem;
-  border-top: 1px solid rgba(255,255,255,0.13);
+  border-top: 1px solid var(--meteo-accent-soft, rgba(255,255,255,0.13));
 }
 
 .ww-hourly-slot {
@@ -3142,8 +3146,9 @@ body.coding-active {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
   font-size: 0.68rem;
   font-weight: 500;
-  color: rgba(255,255,255,0.72);
+  color: var(--meteo-accent, rgba(255,255,255,0.72));
   letter-spacing: 0.02em;
+  transition: color 1.2s ease;
 }
 
 .ww-hourly-icon {
@@ -3154,14 +3159,15 @@ body.coding-active {
 .ww-hourly-temp {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
   font-size: 0.72rem;
-  font-weight: 400;
-  color: rgba(255,255,255,0.88);
+  font-weight: 500;
+  color: #ffffff;
 }
 
-/* Snow theme — testo scuro anche sulle ore */
+/* Snow theme — testo scuro su sfondo chiaro */
 #weather-widget[data-weather='snow'] .ww-hourly-hour,
 #weather-widget[data-weather='snow'] .ww-hourly-temp {
-  color: rgba(18,30,48,0.72);
+  color: rgba(18,30,48,0.80);
+  transition: none;
 }
 
 /* Testo scuro su neve (sfondo chiaro) */
