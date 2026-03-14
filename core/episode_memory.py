@@ -73,6 +73,17 @@ class EpisodeMemory:
             scored.sort(key=lambda x: x[1], reverse=True)
             # Prendi solo quelli con score > 0
             relevant = [ep for ep, score in scored if score > 0]
+            # Recency fallback: se nessun episodio supera score>0, includi il più
+            # recente salvato nelle ultime 72h — garantisce continuità di contesto
+            # anche quando il topic della nuova conversazione è diverso.
+            if not relevant and episodes:
+                try:
+                    most_recent = max(episodes, key=lambda e: e.get("saved_at", ""))
+                    saved_dt = datetime.fromisoformat(most_recent.get("saved_at", ""))
+                    if (datetime.utcnow() - saved_dt).total_seconds() < 259200:  # 72h
+                        relevant = [most_recent]
+                except Exception:
+                    pass
             return relevant[:limit]
         except Exception:
             return []

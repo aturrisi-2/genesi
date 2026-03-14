@@ -169,8 +169,8 @@ class ContextAssembler:
                 import asyncio as _aio_ep
                 for ep in relevant_episodes:
                     _aio_ep.create_task(_em.mark_used(user_id, ep['id']))
-        except Exception:
-            pass
+        except Exception as _ep_exc:
+            logging.getLogger(__name__).warning("EPISODE_CONTEXT_ERROR user=%s err=%s", user_id, _ep_exc)
 
         # Personal facts: fatti appresi dalla conversazione (abitudini, preferenze, familiari...)
         try:
