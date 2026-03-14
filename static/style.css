@@ -3163,7 +3163,7 @@ body.coding-active {
 
 .ww-hourly-hour {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
-  font-size: 0.68rem;
+  font-size: 0.74rem;
   font-weight: 500;
   color: var(--meteo-accent, rgba(255,255,255,0.72));
   letter-spacing: 0.02em;
@@ -3171,13 +3171,13 @@ body.coding-active {
 }
 
 .ww-hourly-icon {
-  font-size: 1.25rem;
+  font-size: 1.35rem;
   line-height: 1.1;
 }
 
 .ww-hourly-temp {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 500;
   color: #ffffff;
 }
@@ -3364,24 +3364,47 @@ body {
 
 /* 4. Dimensioni widget floating card */
 .weather-widget__temp {
-  font-size: 2.0rem;
+  font-size: 2.4rem;
 }
 
 .weather-widget__city {
-  font-size: 0.62rem;
+  font-size: 0.72rem;
 }
 
 .weather-widget__time {
-  font-size: 0.82rem;
+  font-size: 0.96rem;
 }
 
 .weather-widget__desc {
-  font-size: 0.78rem;
+  font-size: 0.88rem;
   padding-bottom: 0.12rem;
 }
 
 .weather-widget__meta {
-  font-size: 0.68rem;
+  font-size: 0.76rem;
+}
+
+/* Mobile — font più grandi e widget più largo */
+@media (max-width: 600px) {
+  #weather-widget {
+    width: calc(100% - 24px);
+    right: 12px;
+    top: 60px;
+  }
+
+  .weather-widget__inner {
+    padding: 0.85rem 1.0rem 0.9rem;
+  }
+
+  .weather-widget__temp  { font-size: 2.8rem; }
+  .weather-widget__city  { font-size: 0.80rem; }
+  .weather-widget__time  { font-size: 1.05rem; }
+  .weather-widget__desc  { font-size: 0.96rem; }
+  .weather-widget__meta  { font-size: 0.82rem; }
+
+  .ww-hourly-hour  { font-size: 0.80rem; }
+  .ww-hourly-icon  { font-size: 1.4rem; }
+  .ww-hourly-temp  { font-size: 0.82rem; }
 }
 
 /* 5. Ticker News — nel widget meteo (nessun box neon) */
