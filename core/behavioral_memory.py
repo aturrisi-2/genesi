@@ -257,7 +257,7 @@ class BehavioralMemory:
             if sensitive:
                 sensitive.sort(key=lambda x: x[2], reverse=True)
                 top = sensitive[:4]
-                topic_str = ", ".join(f"{t}→{e} ({c}x)" for t, e, c in top)
+                topic_str = ", ".join(f"{t}={e} ({c}x)" for t, e, c in top)
                 parts.append(f"Topic ricorrenti: {topic_str}")
 
             if not parts:
