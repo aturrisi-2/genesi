@@ -208,6 +208,16 @@ class ContextAssembler:
         except Exception:
             pass
 
+        # Few-shot lessons from training engine (fail-silent)
+        try:
+            from core.training_engine import training_engine as _te
+            lessons_block = await _te.get_context_lessons(user_message)
+            if lessons_block:
+                context["training_lessons"] = lessons_block
+                summary += f"\n{lessons_block}"
+        except Exception:
+            pass
+
         context["summary"] = summary
         context["current_message"] = user_message
 

@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Genesi — Training Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --surface2: #1a1a26;
+      --border: rgba(255,255,255,0.08);
+      --text: #e2e8f0;
+      --muted: rgba(148,163,184,0.6);
+      --accent: #60a5fa;
+      --green: #34d399;
+      --purple: #a78bfa;
+      --orange: #fb923c;
+      --pink: #f472b6;
+      --yellow: #facc15;
+      --red: #f87171;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── NAV ── */
+    nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .nav-logo { font-size: 1.1rem; font-weight: 700; letter-spacing: .04em; color: var(--accent); }
+    .nav-links { display: flex; gap: 20px; }
+    .nav-links a { color: var(--muted); text-decoration: none; transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-badge {
+      font-size: .7rem; background: rgba(96,165,250,.15); color: var(--accent);
+      border: 1px solid rgba(96,165,250,.3); border-radius: 20px; padding: 2px 10px;
+    }
+
+    /* ── LAYOUT ── */
+    main { max-width: 1280px; margin: 0 auto; padding: 32px 24px 80px; }
+    h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { color: var(--muted); margin-bottom: 32px; }
+
+    /* ── TABS ── */
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 28px; }
+    .tab {
+      padding: 10px 20px; cursor: pointer; color: var(--muted);
+      border-bottom: 2px solid transparent; transition: all .2s;
+      font-weight: 500;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px;
+    }
+    .card-title { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+
+    /* ── GRID ── */
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .grid-6 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    @media (max-width: 768px) {
+      .grid-2, .grid-3, .grid-6 { grid-template-columns: 1fr; }
+    }
+
+    /* ── SCORE CARDS ── */
+    .score-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px; position: relative; overflow: hidden;
+    }
+    .score-label { font-size: .75rem; color: var(--muted); margin-bottom: 6px; }
+    .score-value { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .score-bar-bg {
+      height: 4px; background: rgba(255,255,255,.06); border-radius: 2px; margin-top: 10px;
+    }
+    .score-bar { height: 4px; border-radius: 2px; transition: width .8s ease; }
+
+    /* ── CHART WRAPPER ── */
+    .chart-wrap { position: relative; }
+    .chart-wrap canvas { max-height: 320px; }
+
+    /* ── HISTORY LINE ── */
+    .history-wrap canvas { max-height: 260px; }
+
+    /* ── TABLE ── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 10px 12px; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--border); }
+    td { padding: 12px 12px; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: top; }
+    tr:hover td { background: rgba(255,255,255,.02); }
+    .empty-row td { text-align: center; color: var(--muted); padding: 32px; }
+
+    /* ── BADGE ── */
+    .badge {
+      display: inline-block; font-size: .68rem; font-weight: 600;
+      padding: 2px 8px; border-radius: 8px;
+    }
+    .badge-active   { background: rgba(52,211,153,.15); color: var(--green); }
+    .badge-inactive { background: rgba(148,163,184,.1);  color: var(--muted); }
+    .badge-cat      { background: rgba(96,165,250,.1);   color: var(--accent); }
+
+    /* ── FORM ── */
+    .form-section { display: flex; flex-direction: column; gap: 16px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+    label { font-size: .8rem; color: var(--muted); display: block; margin-bottom: 6px; }
+    input, textarea, select {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); padding: 9px 12px;
+      font-size: .9rem; font-family: inherit; outline: none;
+      transition: border-color .2s;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+    textarea { min-height: 80px; resize: vertical; }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer;
+      font-size: .85rem; font-weight: 600; transition: all .2s;
+    }
+    .btn-primary  { background: var(--accent); color: #0a0a0f; }
+    .btn-primary:hover { background: #93c5fd; }
+    .btn-ghost { background: rgba(255,255,255,.06); color: var(--text); }
+    .btn-ghost:hover { background: rgba(255,255,255,.1); }
+    .btn-danger { background: rgba(248,113,113,.15); color: var(--red); }
+    .btn-danger:hover { background: rgba(248,113,113,.25); }
+    .btn-success { background: rgba(52,211,153,.15); color: var(--green); }
+    .btn-success:hover { background: rgba(52,211,153,.25); }
+    .btn-sm { padding: 5px 12px; font-size: .78rem; }
+
+    /* ── ALERTS ── */
+    .alert {
+      padding: 12px 16px; border-radius: 8px; font-size: .85rem;
+      border: 1px solid transparent;
+    }
+    .alert-info    { background: rgba(96,165,250,.1); border-color: rgba(96,165,250,.2); color: #93c5fd; }
+    .alert-success { background: rgba(52,211,153,.1); border-color: rgba(52,211,153,.2); color: var(--green); }
+    .alert-warn    { background: rgba(251,146,60,.1); border-color: rgba(251,146,60,.2);  color: var(--orange); }
+
+    /* ── MISC ── */
+    .flex { display: flex; align-items: center; }
+    .flex-between { display: flex; align-items: center; justify-content: space-between; }
+    .gap-8  { gap: 8px; }
+    .gap-12 { gap: 12px; }
+    .mt-8   { margin-top: 8px; }
+    .mt-16  { margin-top: 16px; }
+    .mt-24  { margin-top: 24px; }
+    .text-muted { color: var(--muted); }
+    .text-sm    { font-size: .82rem; }
+    .text-xs    { font-size: .72rem; }
+    .truncate   { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
+    .spinner { width: 18px; height: 18px; border: 2px solid rgba(96,165,250,.3); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── SNAPSHOT BTN ── */
+    #snapshotBtn { float: right; margin-top: -4px; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="nav-logo">⚡ Genesi Training</span>
+  <div class="nav-links">
+    <a href="/admin">← Admin Panel</a>
+    <span class="nav-badge" id="lastUpdate">–</span>
+  </div>
+</nav>
+
+<main>
+  <div class="flex-between" style="margin-bottom:4px">
+    <h1>Training Dashboard</h1>
+    <button class="btn btn-ghost btn-sm" id="snapshotBtn" onclick="saveSnapshot()">
+      📸 Salva Snapshot
+    </button>
+  </div>
+  <p class="subtitle">Capacità di Genesi nel tempo · Corrections · Lessons attive</p>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('overview')">Panoramica</div>
+    <div class="tab" onclick="switchTab('history')">Storico</div>
+    <div class="tab" onclick="switchTab('corrections')">Corrections <span id="corrCount" class="nav-badge" style="margin-left:4px">0</span></div>
+    <div class="tab" onclick="switchTab('lessons')">Lessons attive <span id="lessonCount" class="nav-badge" style="margin-left:4px">0</span></div>
+  </div>
+
+  <!-- ══════════ TAB: OVERVIEW ══════════ -->
+  <div class="tab-panel active" id="tab-overview">
+    <div class="grid-2" style="gap:24px;align-items:start">
+
+      <!-- Spider Chart -->
+      <div class="card">
+        <div class="card-title">Capacità correnti</div>
+        <div class="chart-wrap" style="max-width:340px;margin:0 auto">
+          <canvas id="spiderChart"></canvas>
+        </div>
+        <p class="text-xs text-muted mt-8" id="computedAt" style="text-align:center"></p>
+      </div>
+
+      <!-- Score Cards -->
+      <div>
+        <div class="grid-6" id="scoreCards"></div>
+        <div class="mt-16" id="overallBig"></div>
+      </div>
+    </div>
+
+    <!-- Alerts / Suggerimenti -->
+    <div id="alertsBlock" class="mt-24" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+
+  <!-- ══════════ TAB: STORICO ══════════ -->
+  <div class="tab-panel" id="tab-history">
+    <div class="card">
+      <div class="flex-between gap-8">
+        <div class="card-title" style="margin-bottom:0">Andamento metriche</div>
+        <select id="historyDays" onchange="loadMetrics()" style="width:auto;padding:4px 10px;font-size:.8rem">
+          <option value="7">7 giorni</option>
+          <option value="14">14 giorni</option>
+          <option value="30" selected>30 giorni</option>
+          <option value="90">90 giorni</option>
+        </select>
+      </div>
+      <div class="history-wrap mt-16">
+        <canvas id="historyChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card mt-24">
+      <div class="card-title">Contatori giornalieri</div>
+      <div class="table-wrap">
+        <table id="countersTable">
+          <thead>
+            <tr>
+              <th>Data</th><th>Messaggi</th><th>Episodi salvati</th>
+              <th>Fatti salvati</th><th>Contesto iniettato</th><th>Fallback</th>
+            </tr>
+          </thead>
+          <tbody id="countersTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ TAB: CORRECTIONS ══════════ -->
+  <div class="tab-panel" id="tab-corrections">
+    <!-- Form nuova correction -->
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-title">Aggiungi Correction</div>
+      <div class="form-section">
+        <div class="form-row">
+          <div>
+            <label>Messaggio utente</label>
+            <textarea id="cf_input" placeholder="Cosa ha scritto l'utente?"></textarea>
+          </div>
+          <div>
+            <label>Risposta errata di Genesi</label>
+            <textarea id="cf_bad" placeholder="Copia la risposta sbagliata..."></textarea>
+          </div>
+        </div>
+        <div>
+          <label>Risposta corretta (quella che Genesi avrebbe dovuto dare)</label>
+          <textarea id="cf_correct" placeholder="Scrivi la risposta ottimale..."></textarea>
+        </div>
+        <div class="form-row">
+          <div>
+            <label>Categoria</label>
+            <select id="cf_cat">
+              <option value="memoria">Memoria / Ricordi</option>
+              <option value="identita">Identità utente</option>
+              <option value="emozione">Risposta emotiva</option>
+              <option value="stile">Stile / Tono</option>
+              <option value="fatto">Fatto errato</option>
+              <option value="intent">Intent sbagliato</option>
+              <option value="altro" selected>Altro</option>
+            </select>
+          </div>
+          <div>
+            <label>Nota admin (opzionale)</label>
+            <input id="cf_note" type="text" placeholder="Es: Genesi non ricordava il nome del figlio">
+          </div>
+        </div>
+        <div>
+          <button class="btn btn-primary" onclick="addCorrection()">➕ Aggiungi Correction</button>
+          <span id="cfMsg" style="margin-left:12px;font-size:.82rem"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lista corrections -->
+    <div class="card">
+      <div class="flex-between gap-8" style="margin-bottom:14px">
+        <div class="card-title" style="margin-bottom:0">
+          Corrections registrate
+        </div>
+        <select id="catFilter" onchange="loadCorrections()" style="width:auto;padding:4px 10px;font-size:.8rem">
+          <option value="">Tutte le categorie</option>
+          <option value="memoria">Memoria</option>
+          <option value="identita">Identità</option>
+          <option value="emozione">Emozione</option>
+          <option value="stile">Stile</option>
+          <option value="fatto">Fatto errato</option>
+          <option value="intent">Intent</option>
+          <option value="altro">Altro</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th><th>Categoria</th><th>Input</th>
+              <th>Risposta sbagliata</th><th>Corretta</th><th>Nota</th><th>Lesson</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="corrTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ TAB: LESSONS ══════════ -->
+  <div class="tab-panel" id="tab-lessons">
+    <div class="alert alert-info" style="margin-bottom:20px">
+      💡 Le <strong>Lessons attive</strong> vengono iniettate automaticamente nel prompt LLM quando il topic del messaggio corrente è simile. Attiva solo le corrections più rappresentative (max 5-6 consigliato).
+    </div>
+    <div class="card">
+      <div class="card-title">Lessons attive (few-shot examples)</div>
+      <div id="lessonsList"></div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ════════════════════════════════════════════════════
+//  AUTH
+// ════════════════════════════════════════════════════
+const token = localStorage.getItem('genesi_access_token') || '';
+const isAdmin = localStorage.getItem('genesi_is_admin') === 'true';
+if (!token || !isAdmin) {
+  alert('Accesso negato. Effettua il login come admin.');
+  window.location.href = '/login';
+}
+const H = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+async function api(method, path, body) {
+  const res = await fetch(`/api${path}`, {
+    method, headers: H, body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// ════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════
+let spiderChartInst = null;
+let historyChartInst = null;
+
+// ════════════════════════════════════════════════════
+//  TABS
+// ════════════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const names = ['overview','history','corrections','lessons'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  if (name === 'history') loadHistory();
+  if (name === 'corrections') loadCorrections();
+  if (name === 'lessons') loadLessons();
+}
+
+// ════════════════════════════════════════════════════
+//  LOAD METRICS
+// ════════════════════════════════════════════════════
+async function loadMetrics() {
+  const days = document.getElementById('historyDays')?.value || 30;
+  try {
+    const data = await api('GET', `/admin/training/metrics?days=${days}`);
+    renderOverview(data.current);
+    renderHistoryChart(data.history);
+    renderCounters(data.counters);
+    document.getElementById('lastUpdate').textContent =
+      'Aggiornato ' + new Date(data.current.computed_at).toLocaleTimeString('it');
+  } catch (e) {
+    console.error('loadMetrics error', e);
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  OVERVIEW
+// ════════════════════════════════════════════════════
+const DIM_ORDER = ['episode_coverage','facts_coverage','insight_depth','fallback_health','correction_rate'];
+const DIM_COLORS = {
+  episode_coverage: '#60a5fa',
+  facts_coverage:   '#34d399',
+  insight_depth:    '#a78bfa',
+  fallback_health:  '#fb923c',
+  correction_rate:  '#f472b6',
+  overall_health:   '#facc15',
+};
+
+function renderOverview(current) {
+  if (!current) return;
+  const scores = current.scores || {};
+  const labels = current.labels || {};
+
+  // Score cards (5 dimensioni)
+  const cardsEl = document.getElementById('scoreCards');
+  cardsEl.innerHTML = DIM_ORDER.map(key => {
+    const val = scores[key] ?? 0;
+    const col = DIM_COLORS[key];
+    return `
+      <div class="score-card">
+        <div class="score-label">${labels[key] || key}</div>
+        <div class="score-value" style="color:${col}">${val.toFixed(1)}<span style="font-size:.9rem;font-weight:400;color:var(--muted)">%</span></div>
+        <div class="score-bar-bg"><div class="score-bar" style="width:${val}%;background:${col}"></div></div>
+      </div>`;
+  }).join('');
+
+  // Overall big card
+  const ov = scores['overall_health'] ?? 0;
+  const ovColor = ov >= 75 ? '#34d399' : ov >= 50 ? '#facc15' : '#f87171';
+  document.getElementById('overallBig').innerHTML = `
+    <div class="score-card" style="background:rgba(255,255,255,.03)">
+      <div class="score-label">Overall Health</div>
+      <div class="score-value" style="color:${ovColor};font-size:3.2rem">${ov.toFixed(1)}<span style="font-size:1.2rem;font-weight:400;color:var(--muted)">%</span></div>
+      <div class="score-bar-bg" style="height:6px;margin-top:14px"><div class="score-bar" style="width:${ov}%;background:${ovColor};height:6px"></div></div>
+    </div>`;
+
+  // Computed at
+  document.getElementById('computedAt').textContent =
+    'Calcolato ' + new Date(current.computed_at).toLocaleString('it');
+
+  // Spider chart
+  buildSpiderChart(scores, labels);
+
+  // Alerts
+  buildAlerts(scores, labels);
+}
+
+function buildSpiderChart(scores, labels) {
+  const ctx = document.getElementById('spiderChart').getContext('2d');
+  const dims = DIM_ORDER;
+  const vals = dims.map(d => scores[d] ?? 0);
+  const labs = dims.map(d => labels[d] || d);
+
+  if (spiderChartInst) spiderChartInst.destroy();
+  spiderChartInst = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: labs,
+      datasets: [{
+        data: vals,
+        backgroundColor: 'rgba(96,165,250,0.12)',
+        borderColor: '#60a5fa',
+        pointBackgroundColor: dims.map(d => DIM_COLORS[d]),
+        pointRadius: 5,
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        r: {
+          min: 0, max: 100,
+          ticks: { stepSize: 25, color: 'rgba(148,163,184,.5)', font: { size: 10 } },
+          grid:       { color: 'rgba(255,255,255,.06)' },
+          angleLines: { color: 'rgba(255,255,255,.06)' },
+          pointLabels:{ color: '#94a3b8', font: { size: 11 } },
+        }
+      }
+    }
+  });
+}
+
+function buildAlerts(scores, labels) {
+  const alerts = [];
+  if ((scores['episode_coverage'] ?? 100) < 30)
+    alerts.push({ type: 'warn', msg: '⚠️ <b>Memory Retention bassa</b>: pochi episodi per utente. Verificare che l\'episodic extractor funzioni correttamente.' });
+  if ((scores['facts_coverage'] ?? 100) < 20)
+    alerts.push({ type: 'warn', msg: '⚠️ <b>Identity Recall bassa</b>: personal_facts insufficienti. Controllare personal_facts_service.' });
+  if ((scores['fallback_health'] ?? 100) < 60)
+    alerts.push({ type: 'warn', msg: '🔴 <b>System Stability critica</b>: troppi fallback LLM. Controllare i log di errore.' });
+  if ((scores['correction_rate'] ?? 100) < 70)
+    alerts.push({ type: 'warn', msg: '📝 <b>Response Quality degradata</b>: molte corrections admin registrate. Considerare aggiornamento del prompt.' });
+  if ((scores['overall_health'] ?? 0) >= 80)
+    alerts.push({ type: 'success', msg: '✅ <b>Genesi è in ottima forma!</b> Tutte le metriche principali sono sopra la soglia.' });
+
+  const el = document.getElementById('alertsBlock');
+  el.innerHTML = alerts.map(a =>
+    `<div class="alert alert-${a.type}">${a.msg}</div>`
+  ).join('');
+}
+
+// ════════════════════════════════════════════════════
+//  HISTORY CHART
+// ════════════════════════════════════════════════════
+function renderHistoryChart(history) {
+  if (!history?.length) return;
+  const ctx = document.getElementById('historyChart').getContext('2d');
+  const dates = history.map(h => h.date);
+  const dims  = [...DIM_ORDER, 'overall_health'];
+
+  const datasets = dims.map(d => ({
+    label: (history[0]?.labels || {})[d] || d,
+    data:  history.map(h => h.scores?.[d] ?? null),
+    borderColor: DIM_COLORS[d],
+    backgroundColor: 'transparent',
+    tension: 0.4,
+    pointRadius: 3,
+    borderWidth: d === 'overall_health' ? 2.5 : 1.5,
+    borderDash: d === 'overall_health' ? [] : [4,3],
+  }));
+
+  if (historyChartInst) historyChartInst.destroy();
+  historyChartInst = new Chart(ctx, {
+    type: 'line',
+    data: { labels: dates, datasets },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 14 }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,.04)' } },
+        y: {
+          min: 0, max: 100,
+          ticks: { color: '#64748b', font: { size: 10 } },
+          grid:  { color: 'rgba(255,255,255,.04)' },
+        }
+      }
+    }
+  });
+}
+
+function loadHistory() {
+  loadMetrics();
+}
+
+// ════════════════════════════════════════════════════
+//  COUNTERS TABLE
+// ════════════════════════════════════════════════════
+function renderCounters(counters) {
+  const tbody = document.getElementById('countersTbody');
+  if (!counters || !Object.keys(counters).length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Nessun contatore disponibile ancora</td></tr>';
+    return;
+  }
+  const days = Object.keys(counters).sort().reverse();
+  tbody.innerHTML = days.map(d => {
+    const c = counters[d];
+    return `<tr>
+      <td>${d}</td>
+      <td>${c.total_messages || 0}</td>
+      <td>${c.episodes_saved || 0}</td>
+      <td>${c.personal_facts_saved || 0}</td>
+      <td>${c.context_injected || 0}</td>
+      <td>${c.fallbacks_triggered || 0}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════════════
+//  CORRECTIONS
+// ════════════════════════════════════════════════════
+async function loadCorrections() {
+  const cat = document.getElementById('catFilter')?.value || '';
+  try {
+    const data = await api('GET', `/admin/training/corrections${cat ? '?category='+cat : ''}`);
+    const corrs = data.corrections || [];
+    document.getElementById('corrCount').textContent  = data.stats?.total || 0;
+    document.getElementById('lessonCount').textContent = data.stats?.active_lessons || 0;
+
+    const tbody = document.getElementById('corrTbody');
+    if (!corrs.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Nessuna correction registrata</td></tr>';
+      return;
+    }
+    tbody.innerHTML = corrs.map(c => `
+      <tr id="corrRow_${c.id}">
+        <td class="text-xs text-muted">${c.timestamp.slice(0,10)}</td>
+        <td><span class="badge badge-cat">${c.category}</span></td>
+        <td><div class="truncate text-sm" title="${esc(c.input_message)}">${esc(c.input_message)}</div></td>
+        <td><div class="truncate text-sm text-muted" title="${esc(c.bad_response)}">${esc(c.bad_response)}</div></td>
+        <td><div class="truncate text-sm" title="${esc(c.correct_response)}">${esc(c.correct_response)}</div></td>
+        <td class="text-xs text-muted">${esc(c.admin_note || '—')}</td>
+        <td>
+          <span class="badge ${c.lesson_active ? 'badge-active' : 'badge-inactive'}">
+            ${c.lesson_active ? 'Attiva' : 'Off'}
+          </span>
+        </td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm ${c.lesson_active ? 'btn-ghost' : 'btn-success'}"
+            onclick="toggleLesson('${c.id}', ${!c.lesson_active})">
+            ${c.lesson_active ? '⏸ Disattiva' : '▶ Attiva'}
+          </button>
+          <button class="btn btn-sm btn-danger" style="margin-left:4px"
+            onclick="deleteCorrection('${c.id}')">🗑</button>
+        </td>
+      </tr>`).join('');
+  } catch(e) {
+    console.error('loadCorrections error', e);
+  }
+}
+
+async function addCorrection() {
+  const input   = document.getElementById('cf_input').value.trim();
+  const bad     = document.getElementById('cf_bad').value.trim();
+  const correct = document.getElementById('cf_correct').value.trim();
+  const cat     = document.getElementById('cf_cat').value;
+  const note    = document.getElementById('cf_note').value.trim();
+  const msg     = document.getElementById('cfMsg');
+
+  if (!input || !bad || !correct) {
+    msg.textContent = '⚠️ Compila i campi obbligatori'; msg.style.color = '#fb923c'; return;
+  }
+  try {
+    await api('POST', '/admin/training/corrections', { input_message: input, bad_response: bad, correct_response: correct, category: cat, admin_note: note });
+    msg.textContent = '✅ Correction aggiunta'; msg.style.color = '#34d399';
+    document.getElementById('cf_input').value = '';
+    document.getElementById('cf_bad').value   = '';
+    document.getElementById('cf_correct').value = '';
+    document.getElementById('cf_note').value  = '';
+    loadCorrections();
+    setTimeout(() => { msg.textContent = ''; }, 3000);
+  } catch(e) {
+    msg.textContent = '❌ Errore: ' + e.message; msg.style.color = '#f87171';
+  }
+}
+
+async function deleteCorrection(id) {
+  if (!confirm('Eliminare questa correction?')) return;
+  try {
+    await api('DELETE', `/admin/training/corrections/${id}`);
+    loadCorrections();
+  } catch(e) { alert('Errore: ' + e.message); }
+}
+
+async function toggleLesson(id, active) {
+  try {
+    await api('PATCH', `/admin/training/corrections/${id}/lesson?active=${active}`);
+    loadCorrections();
+    loadLessons();
+  } catch(e) { alert('Errore: ' + e.message); }
+}
+
+// ════════════════════════════════════════════════════
+//  LESSONS
+// ════════════════════════════════════════════════════
+async function loadLessons() {
+  try {
+    const data = await api('GET', '/admin/training/lessons');
+    const el   = document.getElementById('lessonsList');
+    const lessons = data.lessons || [];
+    document.getElementById('lessonCount').textContent = lessons.length;
+
+    if (!lessons.length) {
+      el.innerHTML = '<p class="text-muted text-sm" style="padding:24px;text-align:center">Nessuna lesson attiva. Vai su <b>Corrections</b> e attiva le più rappresentative.</p>';
+      return;
+    }
+    el.innerHTML = lessons.map((l, i) => `
+      <div style="border-top:1px solid var(--border);padding:16px 0${i===0?';border-top:none':''}">
+        <div class="flex-between gap-8">
+          <div class="flex gap-8">
+            <span class="badge badge-active">Lesson #${i+1}</span>
+            <span class="badge badge-cat">${l.category}</span>
+          </div>
+          <button class="btn btn-sm btn-danger" onclick="toggleLesson('${l.id}', false)">⏸ Disattiva</button>
+        </div>
+        <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <div class="text-xs text-muted" style="margin-bottom:4px">UTENTE DICE</div>
+            <div style="background:var(--surface2);border-radius:8px;padding:10px;font-size:.85rem">${esc(l.input_message)}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted" style="margin-bottom:4px">GENESI RISPONDE</div>
+            <div style="background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.15);border-radius:8px;padding:10px;font-size:.85rem">${esc(l.correct_response)}</div>
+          </div>
+        </div>
+        ${l.admin_note ? `<div class="text-xs text-muted mt-8">📝 ${esc(l.admin_note)}</div>` : ''}
+      </div>`).join('');
+  } catch(e) {
+    console.error('loadLessons error', e);
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  SNAPSHOT
+// ════════════════════════════════════════════════════
+async function saveSnapshot() {
+  const btn = document.getElementById('snapshotBtn');
+  btn.disabled = true; btn.textContent = '⏳ Salvando...';
+  try {
+    await api('POST', '/admin/training/metrics/snapshot');
+    btn.textContent = '✅ Salvato!';
+    await loadMetrics();
+  } catch(e) {
+    btn.textContent = '❌ Errore';
+  }
+  setTimeout(() => { btn.disabled = false; btn.textContent = '📸 Salva Snapshot'; }, 2500);
+}
+
+// ════════════════════════════════════════════════════
+//  UTILS
+// ════════════════════════════════════════════════════
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════
+loadMetrics();
+loadCorrections();
+</script>
+</body>
+</html>
