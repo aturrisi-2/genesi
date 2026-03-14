@@ -4638,12 +4638,44 @@ function setVoiceStatusText(text) {
       hourlyRow.hidden = true;
     }
 
+    // ── Vista compatta mobile ─────────────────────────────
+    const compactIcon = document.getElementById('ww-compact-icon');
+    const compactTemp = document.getElementById('ww-compact-temp');
+    if (compactIcon) compactIcon.textContent = iconToEmoji(payload.icon_code);
+    if (compactTemp) compactTemp.textContent = `${payload.temp}°`;
+
     updateClock();
     showState('data');
     console.log(
       `[WEATHER_WIDGET] OK city = ${payload.city} temp = ${payload.temp}° condition = ${payload.condition}`
     );
   }
+
+  // ── Tap expand/collapse su mobile ────────────────────────
+  (function initWeatherToggle() {
+    const widget = els.widget;
+    if (!widget) return;
+
+    function isMobile() { return window.matchMedia('(max-width: 600px)').matches; }
+
+    widget.addEventListener('click', (e) => {
+      if (!isMobile()) return;
+      widget.classList.toggle('is-expanded');
+    });
+
+    // Tap fuori → chiude
+    document.addEventListener('click', (e) => {
+      if (!isMobile()) return;
+      if (!widget.contains(e.target) && widget.classList.contains('is-expanded')) {
+        widget.classList.remove('is-expanded');
+      }
+    });
+
+    // Su resize da mobile → desktop: rimuove classe se rimasta
+    window.addEventListener('resize', () => {
+      if (!isMobile()) widget.classList.remove('is-expanded');
+    });
+  })();
 
   async function fetchWeather(lat, lon) {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
