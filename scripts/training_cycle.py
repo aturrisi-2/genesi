@@ -17,11 +17,13 @@ Flag:
 """
 
 import asyncio
-import aiohttp
+import httpx
 import argparse
 import json
 import sys
 import os
+import re
+import time
 from datetime import datetime
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
@@ -204,21 +206,20 @@ class TrainingCycleRunner:
         self.password   = password
         self.auto_lesson = auto_lesson
         self.dry_run    = dry_run
-        self.session: Optional[aiohttp.ClientSession] = None
+        self.session: Optional[httpx.AsyncClient] = None
         self.token:   Optional[str] = None
         self.admin_token: Optional[str] = None
 
     # ── Auth ─────────────────────────────────────────────────────────────────
 
     async def login(self, email: str, password: str) -> str:
-        async with self.session.post(
+        resp = await self.session.post(
             f"{BASE_URL}/auth/login",
             json={"email": email, "password": password}
-        ) as resp:
-            if resp.status != 200:
-                raise RuntimeError(f"Login fallito per {email}: HTTP {resp.status}")
-            data = await resp.json()
-            return data["access_token"]
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"Login fallito per {email}: HTTP {resp.status_code}")
+        return resp.json()["access_token"]
 
     async def get_admin_email(self) -> Optional[str]:
         """Cerca l'email admin leggendo gli utenti (solo se siamo admin)."""
@@ -227,25 +228,24 @@ class TrainingCycleRunner:
 
     # ── Chat ─────────────────────────────────────────────────────────────────
 
-    async def send_message(self, message: str) -> tuple[str, float]:
-        import time
+    async def send_message(self, message: str) -> tuple:
         t0 = time.time()
-        async with self.session.post(
+        resp = await self.session.post(
             f"{BASE_URL}/api/chat/",
             json={"message": message},
             headers={"Authorization": f"Bearer {self.token}"},
-        ) as resp:
-            latency = (time.time() - t0) * 1000
-            if resp.status != 200:
-                raise RuntimeError(f"Chat error HTTP {resp.status}")
-            data = await resp.json()
-            text = (
-                data.get("response")
-                or data.get("message")
-                or data.get("text")
-                or ""
-            )
-            return text.strip(), latency
+        )
+        latency = (time.time() - t0) * 1000
+        if resp.status_code != 200:
+            raise RuntimeError(f"Chat error HTTP {resp.status_code}")
+        data = resp.json()
+        text = (
+            data.get("response")
+            or data.get("message")
+            or data.get("text")
+            or ""
+        )
+        return text.strip(), latency
 
     # ── Training API ─────────────────────────────────────────────────────────
 
@@ -266,31 +266,29 @@ class TrainingCycleRunner:
             "admin_note":       admin_note,
             "user_id":          self.email,
         }
-        async with self.session.post(
+        resp = await self.session.post(
             f"{BASE_URL}/api/admin/training/corrections",
             json=payload,
             headers={"Authorization": f"Bearer {self.admin_token}"},
-        ) as resp:
-            if resp.status != 200:
-                body = await resp.text()
-                raise RuntimeError(f"Correction API error {resp.status}: {body}")
-            data = await resp.json()
-            return data.get("correction", {}).get("id")
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"Correction API error {resp.status_code}: {resp.text}")
+        return resp.json().get("correction", {}).get("id")
 
     async def activate_lesson(self, correction_id: str) -> bool:
-        async with self.session.patch(
+        resp = await self.session.patch(
             f"{BASE_URL}/api/admin/training/corrections/{correction_id}/lesson",
             params={"active": "true"},
             headers={"Authorization": f"Bearer {self.admin_token}"},
-        ) as resp:
-            return resp.status == 200
+        )
+        return resp.status_code == 200
 
     async def save_snapshot(self):
-        async with self.session.post(
+        resp = await self.session.post(
             f"{BASE_URL}/api/admin/training/metrics/snapshot",
             headers={"Authorization": f"Bearer {self.admin_token}"},
-        ) as resp:
-            return resp.status == 200
+        )
+        return resp.status_code == 200
 
     # ── Evaluation ───────────────────────────────────────────────────────────
 
@@ -304,8 +302,6 @@ class TrainingCycleRunner:
                 issues.append(f"MANCANTE: '{kw}'")
 
         for kw in case.get("must_not", []):
-            # word-boundary regex
-            import re
             if re.search(r'\b' + re.escape(kw.lower()) + r'\b', resp_lower):
                 issues.append(f"VIETATO: '{kw}'")
 
@@ -314,11 +310,9 @@ class TrainingCycleRunner:
     # ── Main cycle ───────────────────────────────────────────────────────────
 
     async def run(self):
-        self.session = aiohttp.ClientSession()
-        try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            self.session = client
             await self._run_cycle()
-        finally:
-            await self.session.close()
 
     async def _run_cycle(self):
         print(f"\n{'═'*62}")
@@ -337,17 +331,16 @@ class TrainingCycleRunner:
         print("▶ Login admin…")
         try:
             self.admin_token = self.token  # prova prima con lo stesso token
-            # verifica se il token ha accesso admin
-            async with self.session.get(
+            resp = await self.session.get(
                 f"{BASE_URL}/api/admin/training/metrics",
                 headers={"Authorization": f"Bearer {self.admin_token}"},
-            ) as resp:
-                if resp.status == 403:
-                    raise RuntimeError("Utente non admin — passa credenziali admin con --admin-email / --admin-password")
-                elif resp.status != 200:
-                    raise RuntimeError(f"Admin check failed: {resp.status}")
+            )
+            if resp.status_code == 403:
+                raise RuntimeError("Utente non admin — l'utente test deve avere ruolo admin")
+            elif resp.status_code != 200:
+                raise RuntimeError(f"Admin check failed: HTTP {resp.status_code}")
             print("  ✓ Token admin valido\n")
-        except Exception as e:
+        except RuntimeError as e:
             print(f"  ✗ {e}")
             sys.exit(1)
 
