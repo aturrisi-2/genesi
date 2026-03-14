@@ -143,7 +143,10 @@ class ContextAssembler:
         # Episodic memory: eventi personali specifici (fail-silent)
         try:
             from core.episode_memory import episode_memory as _em
-            relevant_episodes = await _em.get_relevant(user_id, user_message, limit=3)
+            # Passa current_emotion per mood-congruent retrieval
+            _current_emotion = context.get("current_emotion", None)
+            relevant_episodes = await _em.get_relevant(user_id, user_message, limit=3,
+                                                       current_emotion=_current_emotion)
             if relevant_episodes:
                 ep_lines = []
                 for ep in relevant_episodes:
@@ -192,6 +195,16 @@ class ContextAssembler:
             if trend:
                 context["emotional_trend"] = trend
                 summary += f"\n[ANDAMENTO EMOTIVO RECENTE]\n{trend}"
+        except Exception:
+            pass
+
+        # Behavioral memory: stile interazione appreso (fail-silent)
+        try:
+            from core.behavioral_memory import behavioral_memory as _bm
+            beh_snippet = _bm.get_context_snippet(user_id)
+            if beh_snippet:
+                context["behavioral_style"] = beh_snippet
+                summary += f"\n[STILE INTERAZIONE APPRESO]\n{beh_snippet}"
         except Exception:
             pass
 

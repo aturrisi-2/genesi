@@ -50,13 +50,26 @@ class EpisodeMemory:
         except Exception:
             return []
 
-    async def get_relevant(self, user_id: str, message: str, limit: int = 3) -> List[dict]:
-        """Restituisce gli episodi più rilevanti per il messaggio corrente."""
+    async def get_relevant(self, user_id: str, message: str, limit: int = 3,
+                           current_emotion: str = None) -> List[dict]:
+        """Restituisce gli episodi più rilevanti per il messaggio corrente.
+
+        Args:
+            current_emotion: se fornita, applica mood-congruent boost (+0.08)
+                             agli episodi con tag emotivo corrispondente.
+        """
         try:
             episodes = await self.get_all(user_id)
             if not episodes:
                 return []
-            scored = [(ep, self._score_relevance(ep, message)) for ep in episodes]
+            scored = []
+            for ep in episodes:
+                score = self._score_relevance(ep, message)
+                # Mood-congruent retrieval: boost episodi che condividono l'emozione corrente
+                if current_emotion and current_emotion not in ("neutral", ""):
+                    if current_emotion in ep.get("tags", []):
+                        score += 0.08
+                scored.append((ep, score))
             scored.sort(key=lambda x: x[1], reverse=True)
             # Prendi solo quelli con score > 0
             relevant = [ep for ep, score in scored if score > 0]
