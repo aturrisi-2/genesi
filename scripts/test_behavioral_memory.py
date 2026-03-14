@@ -257,7 +257,7 @@ async def test_integration_api(email: str, password: str):
         # Recupera user_id
         async with session.get(f"{BASE_URL}/auth/me", headers=headers) as r:
             me = await r.json()
-            user_id = me.get("id", "")
+            user_id = me.get("user_id", me.get("id", ""))
             ok(f"User ID: {user_id[:12]}...")
 
         beh_path = f"memory/behavioral/{user_id}.json"
