@@ -16,6 +16,11 @@ import sys
 import time
 import aiohttp
 
+# Assicura che la root del progetto sia nel path (per import di core.*)
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
 BASE_URL = "http://localhost:8000"
 TEST_UID = "_test_behavioral_unit_"
 
