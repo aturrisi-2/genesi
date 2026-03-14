@@ -1834,12 +1834,13 @@ function autoResizeInput(el) {
   const newHeight = Math.min(el.scrollHeight, 120);
   el.style.height = newHeight + 'px';
 
-  // Aggiusta l'altezza del container chat per compensare
+  // Aggiusta padding-bottom del dialogue per non nascondersi sotto il form flottante
   const chatBox = document.querySelector('#dialogue');
   if (chatBox) {
-    const inputArea = el.closest('#input-container') || el.parentElement;
-    const inputHeight = inputArea ? inputArea.offsetHeight : newHeight;
-    chatBox.style.paddingBottom = inputHeight + 'px';
+    const form = document.getElementById('chat-form');
+    const formH = form ? form.offsetHeight : newHeight;
+    const bottomOffset = parseInt(getComputedStyle(form || document.body).bottom) || 28;
+    chatBox.style.paddingBottom = (formH + bottomOffset + 20) + 'px';
   }
 }
 

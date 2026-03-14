@@ -177,7 +177,7 @@ body::after {
   flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0.6rem 16px;
+  padding: 0.6rem 16px 110px;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }
@@ -461,15 +461,24 @@ body::after {
    INPUT AREA — TECNICO SOBRIO
    =============================== */
 #chat-form {
-  flex-shrink: 0;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  padding: 10px 16px;
-  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: clamp(300px, 55%, 520px);
+  z-index: 120;
+  background: rgba(13, 13, 17, 0.84);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 28px;
+  box-shadow:
+    0 10px 36px rgba(0,0,0,0.52),
+    0 1px 0 rgba(255,255,255,0.06) inset;
+  padding: 6px 8px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
 }
 
 #input-container {
@@ -477,11 +486,8 @@ body::after {
   flex-direction: row;
   align-items: center;
   gap: 8px;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  min-height: 46px;
-  width: clamp(300px, 55%, 520px);
+  min-height: 44px;
+  width: 100%;
 }
 
 /* ─── INPUT BOX ─────────────────────────────────────────── */
@@ -983,9 +989,9 @@ body {
 }
 
 /* 3. Aggiungo Safe padding per la Dynamic Island e Bottom Bar di Apple iOS */
-@supports (padding-bottom: env(safe-area-inset-bottom)) {
+@supports (bottom: env(safe-area-inset-bottom)) {
   #chat-form {
-    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    bottom: calc(28px + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -1157,8 +1163,20 @@ body {
   }
 
   #chat-form {
-    padding: 0.3rem 0.4rem;
-    padding-bottom: calc(0.3rem + env(safe-area-inset-bottom, 0px));
+    width: calc(100% - 24px);
+    bottom: max(10px, env(safe-area-inset-bottom, 10px));
+    border-radius: 22px;
+    padding: 5px 6px;
+  }
+  #dialogue {
+    padding-bottom: 100px;
+  }
+}
+
+/* ── RESPONSIVE TABLET ─────────────────────────────── */
+@media (min-width: 601px) and (max-width: 900px) {
+  #chat-form {
+    width: clamp(320px, 75%, 580px);
   }
 }
 
@@ -3802,24 +3820,31 @@ textarea#text-input:focus {
 
 /* 7. Legal Footer */
 #legal-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 110;
   display: flex;
   justify-content: center;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
-  padding: 12px 0;
-  font-size: 0.68rem;
-  color: rgba(148, 163, 184, 0.7);
+  gap: 6px;
+  padding: 4px 16px calc(4px + env(safe-area-inset-bottom, 0px));
+  font-size: 0.60rem;
+  color: rgba(148, 163, 184, 0.42);
   font-family: 'Inter', 'Roboto', sans-serif;
   letter-spacing: 0.02em;
+  pointer-events: none;
+  background: transparent;
 }
 
 #legal-footer a,
 #legal-footer a:visited {
-  color: rgba(148, 163, 184, 0.9);
-  text-decoration: underline;
-  text-decoration-color: rgba(148, 163, 184, 0.4);
-  margin: 0 4px;
+  pointer-events: auto;
+  color: rgba(148, 163, 184, 0.55);
+  text-decoration: none;
+  margin: 0 2px;
   transition: color 0.2s;
 }
 
