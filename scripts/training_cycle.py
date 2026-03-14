@@ -202,11 +202,14 @@ class CaseResult:
 
 
 class TrainingCycleRunner:
-    def __init__(self, email: str, password: str, auto_lesson: bool, dry_run: bool):
-        self.email      = email
-        self.password   = password
-        self.auto_lesson = auto_lesson
-        self.dry_run    = dry_run
+    def __init__(self, email: str, password: str, auto_lesson: bool, dry_run: bool,
+                 admin_email: str = "", admin_password: str = ""):
+        self.email          = email
+        self.password       = password
+        self.admin_email    = admin_email or email
+        self.admin_password = admin_password or password
+        self.auto_lesson    = auto_lesson
+        self.dry_run        = dry_run
         self.token:        Optional[str] = None
         self.admin_token:  Optional[str] = None
 
@@ -313,13 +316,17 @@ class TrainingCycleRunner:
         self.token = self.login(self.email, self.password)
         print("  ✓ Token utente ottenuto")
 
-        # Auth admin (stesso token se l'utente è admin)
-        print("▶ Verifica accesso admin…")
-        self.admin_token = self.token
+        # Auth admin (credenziali separate se fornite)
+        print("▶ Login admin…")
+        if self.admin_email != self.email:
+            self.admin_token = self.login(self.admin_email, self.admin_password)
+            print(f"  ✓ Token admin ottenuto ({self.admin_email})")
+        else:
+            self.admin_token = self.token
         status, _ = self._request("GET", f"{BASE_URL}/api/admin/training/metrics",
                                   token=self.admin_token)
         if status == 403:
-            print("  ✗ Utente non admin — l'utente test deve avere ruolo admin")
+            print("  ✗ Utente non admin. Usa --admin-email e --admin-password con l'account admin.")
             sys.exit(1)
         elif status != 200:
             print(f"  ✗ Admin check failed: HTTP {status}")
@@ -445,17 +452,21 @@ class TrainingCycleRunner:
 
 def main():
     parser = argparse.ArgumentParser(description="Genesi Training Cycle")
-    parser.add_argument("--email",       default=DEFAULT_EMAIL,    help="Email utente test")
-    parser.add_argument("--password",    default=DEFAULT_PASSWORD, help="Password utente test")
-    parser.add_argument("--auto-lesson", action="store_true",
-                        help="Attiva automaticamente lessons per tutti i casi falliti con auto_lesson=True")
-    parser.add_argument("--dry-run",     action="store_true",
+    parser.add_argument("--email",          default=DEFAULT_EMAIL,    help="Email utente test (chat)")
+    parser.add_argument("--password",       default=DEFAULT_PASSWORD, help="Password utente test")
+    parser.add_argument("--admin-email",    default="",               help="Email account admin (se diverso da --email)")
+    parser.add_argument("--admin-password", default="",               help="Password account admin")
+    parser.add_argument("--auto-lesson",    action="store_true",
+                        help="Attiva automaticamente lessons per i casi falliti con auto_lesson=True")
+    parser.add_argument("--dry-run",        action="store_true",
                         help="Non chiama API admin, mostra solo cosa farebbe")
     args = parser.parse_args()
 
     runner = TrainingCycleRunner(
         email=args.email,
         password=args.password,
+        admin_email=args.admin_email,
+        admin_password=args.admin_password,
         auto_lesson=args.auto_lesson,
         dry_run=args.dry_run,
     )
