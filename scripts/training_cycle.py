@@ -16,14 +16,15 @@ Flag:
     --dry-run       Mostra cosa farebbe senza chiamare le API admin
 """
 
-import asyncio
-import httpx
 import argparse
 import json
 import sys
 import os
 import re
 import time
+import urllib.request
+import urllib.parse
+import urllib.error
 from datetime import datetime
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
@@ -206,58 +207,52 @@ class TrainingCycleRunner:
         self.password   = password
         self.auto_lesson = auto_lesson
         self.dry_run    = dry_run
-        self.session: Optional[httpx.AsyncClient] = None
-        self.token:   Optional[str] = None
-        self.admin_token: Optional[str] = None
+        self.token:        Optional[str] = None
+        self.admin_token:  Optional[str] = None
+
+    # ── HTTP helpers (stdlib only) ────────────────────────────────────────────
+
+    def _request(self, method: str, url: str, payload=None, params=None, token=None):
+        if params:
+            url = url + "?" + urllib.parse.urlencode(params)
+        data = json.dumps(payload).encode() if payload is not None else None
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                body = r.read().decode()
+                return r.status, body
+        except urllib.error.HTTPError as e:
+            return e.code, e.read().decode()
 
     # ── Auth ─────────────────────────────────────────────────────────────────
 
-    async def login(self, email: str, password: str) -> str:
-        resp = await self.session.post(
-            f"{BASE_URL}/auth/login",
-            json={"email": email, "password": password}
-        )
-        if resp.status_code != 200:
-            raise RuntimeError(f"Login fallito per {email}: HTTP {resp.status_code}")
-        return resp.json()["access_token"]
-
-    async def get_admin_email(self) -> Optional[str]:
-        """Cerca l'email admin leggendo gli utenti (solo se siamo admin)."""
-        # Proviamo con le credenziali test — se è admin va bene
-        return self.email
+    def login(self, email: str, password: str) -> str:
+        status, body = self._request("POST", f"{BASE_URL}/auth/login",
+                                     payload={"email": email, "password": password})
+        if status != 200:
+            raise RuntimeError(f"Login fallito per {email}: HTTP {status}")
+        return json.loads(body)["access_token"]
 
     # ── Chat ─────────────────────────────────────────────────────────────────
 
-    async def send_message(self, message: str) -> tuple:
+    def send_message(self, message: str):
         t0 = time.time()
-        resp = await self.session.post(
-            f"{BASE_URL}/api/chat/",
-            json={"message": message},
-            headers={"Authorization": f"Bearer {self.token}"},
-        )
+        status, body = self._request("POST", f"{BASE_URL}/api/chat/",
+                                     payload={"message": message}, token=self.token)
         latency = (time.time() - t0) * 1000
-        if resp.status_code != 200:
-            raise RuntimeError(f"Chat error HTTP {resp.status_code}")
-        data = resp.json()
-        text = (
-            data.get("response")
-            or data.get("message")
-            or data.get("text")
-            or ""
-        )
+        if status != 200:
+            raise RuntimeError(f"Chat error HTTP {status}: {body[:200]}")
+        data = json.loads(body)
+        text = data.get("response") or data.get("message") or data.get("text") or ""
         return text.strip(), latency
 
     # ── Training API ─────────────────────────────────────────────────────────
 
-    async def create_correction(
-        self,
-        input_message: str,
-        bad_response: str,
-        correct_response: str,
-        category: str,
-        admin_note: str,
-    ) -> Optional[str]:
-        """Crea una correction e ritorna l'id."""
+    def create_correction(self, input_message, bad_response, correct_response,
+                          category, admin_note) -> Optional[str]:
         payload = {
             "input_message":    input_message,
             "bad_response":     bad_response,
@@ -266,29 +261,25 @@ class TrainingCycleRunner:
             "admin_note":       admin_note,
             "user_id":          self.email,
         }
-        resp = await self.session.post(
-            f"{BASE_URL}/api/admin/training/corrections",
-            json=payload,
-            headers={"Authorization": f"Bearer {self.admin_token}"},
-        )
-        if resp.status_code != 200:
-            raise RuntimeError(f"Correction API error {resp.status_code}: {resp.text}")
-        return resp.json().get("correction", {}).get("id")
+        status, body = self._request("POST",
+                                     f"{BASE_URL}/api/admin/training/corrections",
+                                     payload=payload, token=self.admin_token)
+        if status != 200:
+            raise RuntimeError(f"Correction API error {status}: {body[:200]}")
+        return json.loads(body).get("correction", {}).get("id")
 
-    async def activate_lesson(self, correction_id: str) -> bool:
-        resp = await self.session.patch(
+    def activate_lesson(self, correction_id: str) -> bool:
+        status, _ = self._request(
+            "PATCH",
             f"{BASE_URL}/api/admin/training/corrections/{correction_id}/lesson",
-            params={"active": "true"},
-            headers={"Authorization": f"Bearer {self.admin_token}"},
-        )
-        return resp.status_code == 200
+            params={"active": "true"}, token=self.admin_token)
+        return status == 200
 
-    async def save_snapshot(self):
-        resp = await self.session.post(
-            f"{BASE_URL}/api/admin/training/metrics/snapshot",
-            headers={"Authorization": f"Bearer {self.admin_token}"},
-        )
-        return resp.status_code == 200
+    def save_snapshot(self) -> bool:
+        status, _ = self._request("POST",
+                                  f"{BASE_URL}/api/admin/training/metrics/snapshot",
+                                  token=self.admin_token)
+        return status == 200
 
     # ── Evaluation ───────────────────────────────────────────────────────────
 
@@ -309,12 +300,7 @@ class TrainingCycleRunner:
 
     # ── Main cycle ───────────────────────────────────────────────────────────
 
-    async def run(self):
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            self.session = client
-            await self._run_cycle()
-
-    async def _run_cycle(self):
+    def run(self):
         print(f"\n{'═'*62}")
         print(f"  GENESI TRAINING CYCLE — {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC")
         print(f"  Utente test : {self.email}")
@@ -324,35 +310,31 @@ class TrainingCycleRunner:
 
         # Auth utente test
         print("▶ Login utente test…")
-        self.token = await self.login(self.email, self.password)
+        self.token = self.login(self.email, self.password)
         print("  ✓ Token utente ottenuto")
 
-        # Auth admin (usiamo le stesse credenziali se l'utente è admin)
-        print("▶ Login admin…")
-        try:
-            self.admin_token = self.token  # prova prima con lo stesso token
-            resp = await self.session.get(
-                f"{BASE_URL}/api/admin/training/metrics",
-                headers={"Authorization": f"Bearer {self.admin_token}"},
-            )
-            if resp.status_code == 403:
-                raise RuntimeError("Utente non admin — l'utente test deve avere ruolo admin")
-            elif resp.status_code != 200:
-                raise RuntimeError(f"Admin check failed: HTTP {resp.status_code}")
-            print("  ✓ Token admin valido\n")
-        except RuntimeError as e:
-            print(f"  ✗ {e}")
+        # Auth admin (stesso token se l'utente è admin)
+        print("▶ Verifica accesso admin…")
+        self.admin_token = self.token
+        status, _ = self._request("GET", f"{BASE_URL}/api/admin/training/metrics",
+                                  token=self.admin_token)
+        if status == 403:
+            print("  ✗ Utente non admin — l'utente test deve avere ruolo admin")
             sys.exit(1)
+        elif status != 200:
+            print(f"  ✗ Admin check failed: HTTP {status}")
+            sys.exit(1)
+        print("  ✓ Token admin valido\n")
 
         # Ciclo calibrazione
         results: List[CaseResult] = []
         for i, case in enumerate(CALIBRATION_CASES, 1):
-            msg   = case["message"]
-            cat   = case["category"]
+            msg = case["message"]
+            cat = case["category"]
             print(f"[{i:02d}/{len(CALIBRATION_CASES):02d}] [{cat.upper():8s}] {msg}")
 
             try:
-                resp_text, latency = await self.send_message(msg)
+                resp_text, latency = self.send_message(msg)
             except Exception as e:
                 print(f"         ✗ Errore chat: {e}")
                 results.append(CaseResult(case=case, response="", passed=False,
@@ -361,7 +343,6 @@ class TrainingCycleRunner:
 
             issues = self.evaluate(case, resp_text)
             passed = len(issues) == 0
-
             cr = CaseResult(case=case, response=resp_text,
                             passed=passed, issues=issues, latency_ms=latency)
 
@@ -371,12 +352,12 @@ class TrainingCycleRunner:
                 print(f"         ✗ FAIL ({latency:.0f}ms)")
                 for iss in issues:
                     print(f"           → {iss}")
-                print(f"         Risposta: {resp_text[:120]}…" if len(resp_text) > 120 else f"         Risposta: {resp_text}")
+                preview = resp_text[:120] + ("…" if len(resp_text) > 120 else "")
+                print(f"         Risposta: {preview}")
 
-                # Crea correction
                 if not self.dry_run:
                     try:
-                        cid = await self.create_correction(
+                        cid = self.create_correction(
                             input_message=msg,
                             bad_response=resp_text,
                             correct_response=case["correct"],
@@ -386,10 +367,8 @@ class TrainingCycleRunner:
                         cr.correction_id = cid
                         print(f"         📝 Correction creata: {cid}")
 
-                        # Attiva come lesson se richiesto
-                        should_activate = self.auto_lesson or case.get("auto_lesson", False)
-                        if should_activate and cid:
-                            ok = await self.activate_lesson(cid)
+                        if (self.auto_lesson or case.get("auto_lesson", False)) and cid:
+                            ok = self.activate_lesson(cid)
                             cr.lesson_activated = ok
                             if ok:
                                 print(f"         🎓 Lesson attivata  → effetto GLOBALE")
@@ -401,15 +380,14 @@ class TrainingCycleRunner:
                         print(f"         [DRY-RUN] avrebbe attivato come lesson globale")
 
             results.append(cr)
-            await asyncio.sleep(0.8)   # pausa tra messaggi per non stressare il server
+            time.sleep(0.8)
 
         # Snapshot metriche
         if not self.dry_run:
             print("\n▶ Salvataggio snapshot metriche…")
-            ok = await self.save_snapshot()
+            ok = self.save_snapshot()
             print("  ✓ Snapshot salvato" if ok else "  ✗ Snapshot fallito")
 
-        # Report finale
         self._print_report(results)
 
     def _print_report(self, results: List[CaseResult]):
@@ -481,7 +459,7 @@ def main():
         auto_lesson=args.auto_lesson,
         dry_run=args.dry_run,
     )
-    asyncio.run(runner.run())
+    runner.run()
 
 
 if __name__ == "__main__":
