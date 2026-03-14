@@ -177,7 +177,8 @@ body::after {
   flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0.6rem 16px 110px;
+  /* right: 268px lascia libera la zona del widget fisso (236px + 32px gap) */
+  padding: 0.6rem 268px 110px 16px;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }
@@ -1169,7 +1170,8 @@ body {
     padding: 5px 6px;
   }
   #dialogue {
-    padding-bottom: 100px;
+    /* mobile: padding-top spinge i messaggi sotto il widget (≈320px dal top viewport) */
+    padding: 300px 16px 100px;
   }
 }
 
