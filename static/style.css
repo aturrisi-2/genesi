@@ -3384,79 +3384,34 @@ body {
   font-size: 0.76rem;
 }
 
-/* ── COMPACT / EXPANDED — mobile widget ─────────────────── */
-#ww-compact {
-  display: none;
-}
-
-/* Mobile: widget compatto di default */
+/* ── MOBILE: widget normale top-right, tap → full width ─── */
 @media (max-width: 600px) {
   #weather-widget {
-    width: 88px;
     top: 60px;
     right: 12px;
-    border-radius: 20px;
+    width: 220px;
     cursor: pointer;
     transition: width 0.38s cubic-bezier(0.34, 1.4, 0.64, 1),
-                border-radius 0.38s ease;
+                border-radius 0.30s ease;
   }
 
-  .weather-widget__inner {
-    padding: 0.6rem 0.7rem;
-  }
-
-  /* Nasconde tutto in stato compatto */
-  #weather-widget:not(.is-expanded) #ww-data,
-  #weather-widget:not(.is-expanded) #ww-loading,
-  #weather-widget:not(.is-expanded) #ww-error {
-    display: none !important;
-  }
-
-  /* Mostra pannello compatto */
-  #weather-widget:not(.is-expanded) #ww-compact {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.05rem;
-    padding: 0.2rem 0;
-  }
-
-  #ww-compact-icon {
-    font-size: 1.6rem;
-    line-height: 1;
-  }
-
-  #ww-compact-temp {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
-    font-size: 1.0rem;
-    font-weight: 500;
-    color: #fff;
-  }
-
-  /* Stato espanso */
   #weather-widget.is-expanded {
-    width: 248px;
-    border-radius: 18px;
+    width: calc(100vw - 24px);
+    border-radius: 20px;
   }
 
-  #weather-widget.is-expanded #ww-compact {
-    display: none !important;
-  }
-
-  /* Font scale per stato espanso */
+  /* Font più grandi in stato espanso */
   #weather-widget.is-expanded .weather-widget__inner {
-    padding: 0.80rem 0.90rem 0.85rem;
+    padding: 0.90rem 1.0rem 0.95rem;
   }
-
-  #weather-widget.is-expanded .weather-widget__temp  { font-size: 2.6rem; }
-  #weather-widget.is-expanded .weather-widget__city  { font-size: 0.76rem; }
-  #weather-widget.is-expanded .weather-widget__time  { font-size: 0.98rem; }
-  #weather-widget.is-expanded .weather-widget__desc  { font-size: 0.90rem; }
-  #weather-widget.is-expanded .weather-widget__meta  { font-size: 0.78rem; }
-  #weather-widget.is-expanded .ww-hourly-hour        { font-size: 0.76rem; }
-  #weather-widget.is-expanded .ww-hourly-icon        { font-size: 1.3rem; }
-  #weather-widget.is-expanded .ww-hourly-temp        { font-size: 0.78rem; }
+  #weather-widget.is-expanded .weather-widget__temp  { font-size: 2.8rem; }
+  #weather-widget.is-expanded .weather-widget__city  { font-size: 0.82rem; }
+  #weather-widget.is-expanded .weather-widget__time  { font-size: 1.05rem; }
+  #weather-widget.is-expanded .weather-widget__desc  { font-size: 0.96rem; }
+  #weather-widget.is-expanded .weather-widget__meta  { font-size: 0.82rem; }
+  #weather-widget.is-expanded .ww-hourly-hour        { font-size: 0.82rem; }
+  #weather-widget.is-expanded .ww-hourly-icon        { font-size: 1.45rem; }
+  #weather-widget.is-expanded .ww-hourly-temp        { font-size: 0.84rem; }
 }
 
 /* 5. Ticker News — nel widget meteo (nessun box neon) */

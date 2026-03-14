@@ -4638,12 +4638,6 @@ function setVoiceStatusText(text) {
       hourlyRow.hidden = true;
     }
 
-    // ── Vista compatta mobile ─────────────────────────────
-    const compactIcon = document.getElementById('ww-compact-icon');
-    const compactTemp = document.getElementById('ww-compact-temp');
-    if (compactIcon) compactIcon.textContent = iconToEmoji(payload.icon_code);
-    if (compactTemp) compactTemp.textContent = `${payload.temp}°`;
-
     updateClock();
     showState('data');
     console.log(
