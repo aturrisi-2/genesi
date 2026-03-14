@@ -1701,8 +1701,12 @@ function addMessage(text, sender) {
 
   dialogue.appendChild(el);
 
-  // Always scroll on new message (user just sent or received)
-  requestAnimationFrame(() => scrollToBottom());
+  // Always scroll on new message — double-RAF + timeout for iOS layout delay
+  requestAnimationFrame(() => {
+    scrollToBottom();
+    requestAnimationFrame(scrollToBottom);
+  });
+  setTimeout(scrollToBottom, 80);
 
   // Log per debugging del rendering
   console.log('[RENDER] Message added:', { sender, textLength: text.length, element: el });
@@ -3950,6 +3954,8 @@ async function initializeNewsTicker() {
   }
 
   scrollToBottom();
+  // iOS: layout del flex-spacer richiede frame multipli per stabilizzarsi
+  [50, 150, 350, 700].forEach(t => setTimeout(scrollToBottom, t));
 
   console.log("SIDEBAR_INIT_START");
 
