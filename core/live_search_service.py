@@ -21,6 +21,10 @@ _TEMPORAL = {
     "adesso", "attuale", "attualmente", "2024", "2025", "2026",
     "aggiornato", "aggiornata", "approvato", "approvata",
     "ultimo studio", "nuovi studi",
+    "oggi", "ieri", "stanotte", "stamattina", "stamattina",
+    "questa settimana", "questo mese", "quest'anno",
+    "ultimamente", "di recente", "in questi giorni",
+    "nelle ultime ore", "nelle ultime settimane",
 }
 
 # Ambito medico / farmacologico
@@ -43,7 +47,6 @@ _SCIENTIFIC = {
     "pubblicazione", "trial clinico", "sperimentazione",
     "evidence based", "meta-analisi", "revisione sistematic",
     "studi dimostrano", "studi mostrano", "secondo la ricerca",
-    # Pattern generici per "nuovi studi su X", "ricerche recenti su Y"
     "studi su", "studi sull", "studi sul", "studi sui",
     "nuovi studi", "ultimi studi", "ricerche recenti", "ricerche su",
     "cosa dicono gli studi", "ricerca recente",
@@ -56,38 +59,76 @@ _REGULATORY = {
     "tasso di", "incidenza",
 }
 
+# Ambito eventi correnti — politica, economia, sport, conflitti, tech
+_CURRENT_EVENTS = {
+    # Politica / governo
+    "elezioni", "governo", "premier", "presidente", "parlamento",
+    "ministro", "partito politico", "voto", "referendum",
+    "sondaggio politico", "legge approvata", "riforma",
+    # Economia / finanza
+    "borsa", "spread", "inflazione", "pil", "recessione",
+    "prezzo del petrolio", "prezzo della benzina", "costo dell",
+    "tasso di interesse", "bce", "banca centrale",
+    "bitcoin", "crypto", "azioni di", "mercati",
+    # Conflitti / crisi internazionali
+    "guerra", "conflitto armato", "crisi diplomatica",
+    "attacco missilistico", "bombardament", "cessate il fuoco",
+    "sanctions", "sanzioni",
+    # Sport — risultati e classifiche
+    "risultato di ieri", "risultato di oggi", "chi ha vinto",
+    "classifica attuale", "classifica di serie", "champions league",
+    "partita di ieri", "partita di oggi", "prossima partita",
+    "trasferimento di mercato", "calciomercato",
+    # Tecnologia / prodotti nuovi
+    "nuovo modello di", "nuova versione di", "ultimo aggiornamento di",
+    "ha appena lanciato", "ha presentato", "annunciato da",
+    # Disastri / cronaca
+    "terremoto", "alluvione", "incendio a", "tragedia",
+    "incidente a", "attentato",
+}
+
 
 def needs_live_data(message: str) -> bool:
     """
     Ritorna True se la domanda ha alta probabilità di richiedere
     informazioni aggiornate che il modello LLM potrebbe non avere.
-
-    Non viene mai attivato per messaggi brevi o generici.
     """
-    if len(message.strip()) < 20:
+    if len(message.strip()) < 15:
         return False
 
     msg = message.lower()
 
-    # Controlla ogni categoria — substring match (es. "farmac" → farmaco, farmaci...)
     def _hits(keyword_set: set) -> bool:
         return any(kw in msg for kw in keyword_set)
 
-    has_temporal = _hits(_TEMPORAL)
-    has_medical = _hits(_MEDICAL)
-    has_scientific = _hits(_SCIENTIFIC)
-    has_regulatory = _hits(_REGULATORY)
+    has_temporal      = _hits(_TEMPORAL)
+    has_medical       = _hits(_MEDICAL)
+    has_scientific    = _hits(_SCIENTIFIC)
+    has_regulatory    = _hits(_REGULATORY)
+    has_current_events = _hits(_CURRENT_EVENTS)
 
-    # Trigger: domanda medica/farmacologica specifica
+    # Medico/farmacologico: sempre live
     if has_medical:
         return True
 
-    # Trigger: ricerca scientifica citata esplicitamente
+    # Ricerca scientifica citata esplicitamente: sempre live
     if has_scientific:
         return True
 
-    # Trigger: normativa o statistiche + temporalità
+    # Normativa/statistiche + temporalità: live
     if has_regulatory and has_temporal:
+        return True
+
+    # Evento corrente + temporalità: live (es. "chi ha vinto le elezioni ieri?")
+    if has_current_events and has_temporal:
+        return True
+
+    # Solo topic corrente anche senza temporal marker (notizie per natura volatili)
+    if has_current_events and len(message.strip()) > 25:
+        return True
+
+    # Temporalità forte + messaggio specifico (es. "cosa è successo oggi in Italia?")
+    if has_temporal and len(message.strip()) > 40:
         return True
 
     return False
@@ -107,7 +148,12 @@ async def search_for_answer(query: str, max_results: int = 3) -> Optional[dict]:
     """
     try:
         import asyncio
-        from ddgs import DDGS
+
+        # Supporta sia ddgs (>=7) che duckduckgo_search (<7)
+        try:
+            from ddgs import DDGS
+        except ImportError:
+            from duckduckgo_search import DDGS
 
         def _sync_search():
             with DDGS() as ddgs:

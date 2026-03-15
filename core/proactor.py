@@ -696,14 +696,22 @@ class Proactor:
             final_source = "relational" # Default to relational if no tools hit
 
             # STEP 4.4: LIVE SEARCH INTENT OVERRIDE
-            # Medical/scientific queries (e.g. "ultimi studi melatonina") are often
-            # misclassified as 'news' or 'chat_free'. Redirect to 'tecnica' so
-            # _handle_knowledge runs with live web context instead of the news tool.
+            # Queries requiring live web data (medical, scientific, current events) are often
+            # misclassified as 'news', 'chat_free', 'relational', or 'general'.
+            # Redirect to 'tecnica' so _handle_knowledge runs with live web context.
+            # Safety: only redirect factual questions (? or question words), not emotional statements.
             try:
                 from core.live_search_service import needs_live_data as _needs_live
                 _actual_news_kw = ("ultime notizie", "cosa succede", "novità di", "notizie su", "aggiornamento politico")
-                if (intents and intents[0] in ("news", "chat_free")
+                _redirectable_intents = ("news", "chat_free", "relational", "general")
+                _question_starters = ("chi ", "cosa ", "come ", "dove ", "quando ", "quale ",
+                                      "qual ", "quanto ", "quanti ", "dimmi ", "spiega ",
+                                      "parlami ", "descrivi ", "raccontami ")
+                _is_factual_q = ("?" in message or
+                                 any(msg_lower.startswith(q) for q in _question_starters))
+                if (intents and intents[0] in _redirectable_intents
                         and _needs_live(message)
+                        and _is_factual_q
                         and not any(kw in msg_lower for kw in _actual_news_kw)):
                     logger.info("LIVE_SEARCH_INTENT_OVERRIDE user=%s from=%s to=tecnica", user_id, intents[0])
                     intents = ["tecnica"]
