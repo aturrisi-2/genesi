@@ -577,16 +577,18 @@ function buildAlerts(scores, stats, labels) {
   if ((scores['fallback_health'] ?? 100) < 60)
     alerts.push({ type: 'warn', msg: '🔴 <b>System Stability critica</b>: troppi fallback LLM. Controllare i log di errore.' });
 
-  // Response Quality — ora basata su irrisolte, non su totale
+  // Response Quality — ratio-based: lessons/total, 65% = piena
   const corrRate = scores['correction_rate'] ?? 100;
   const unresolved = stats ? (stats.total - stats.active_lessons) : null;
-  if (corrRate < 50) {
-    const hint = unresolved !== null
-      ? `${unresolved} corrections irrisolte su ${stats.total} totali. Attiva più lessons dal tab Corrections.`
-      : 'Molte corrections senza lesson attiva. Attiva le lessons più rilevanti.';
+  const lessonPct  = stats && stats.total > 0
+    ? Math.round(stats.active_lessons / stats.total * 100) : null;
+  if (corrRate < 40) {
+    const hint = lessonPct !== null
+      ? `Solo il ${lessonPct}% delle corrections ha una lesson attiva (${stats.active_lessons}/${stats.total}). Attiva più lessons dal tab Corrections.`
+      : 'Poche corrections hanno una lesson attiva. Attivane di più.';
     alerts.push({ type: 'warn', msg: `📝 <b>Response Quality da migliorare</b>: ${hint}` });
-  } else if (corrRate < 80 && unresolved !== null && unresolved > 5) {
-    alerts.push({ type: 'info', msg: `📝 <b>Response Quality buona</b>: ${unresolved} corrections ancora da risolvere. Considera di attivare altre lessons.` });
+  } else if (corrRate < 70 && lessonPct !== null) {
+    alerts.push({ type: 'info', msg: `📝 <b>Response Quality in crescita</b>: ${lessonPct}% delle corrections risolte (${stats.active_lessons}/${stats.total}). Obiettivo: 65%+.` });
   }
 
   // Training attivo — messaggio positivo quando le lessons sono tante

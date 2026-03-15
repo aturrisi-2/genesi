@@ -242,18 +242,21 @@ class CapabilityTracker:
 
     async def _correction_rate(self) -> float:
         """
-        1 − (correzioni_irrisolte / soglia).
-        Le corrections con lesson_active=True sono "risolte" — Genesi ha imparato.
-        Solo le correzioni senza lesson attiva indicano problemi aperti.
-        Soglia: 30 irrisolte = qualità 0 (realistico per sistema maturo).
+        Ratio-based: lessons_attive / total * (1/0.65).
+        Se il 65% delle corrections ha una lesson attiva → qualità 1.0.
+        Più robusto del conteggio assoluto: il marathon crea nuove corrections
+        ma ne attiva altrettante come lessons, mantenendo il ratio stabile.
         """
         try:
             corrections = await storage.load("admin/corrections", default=[])
             if not isinstance(corrections, list):
                 corrections = []
-            unresolved = sum(1 for c in corrections if not c.get("lesson_active", False))
-            # ≥ 30 irrisolte → qualità 0; 0 irrisolte → qualità 1.0
-            quality = max(0.0, 1.0 - unresolved / 30.0)
+            total   = len(corrections)
+            if total == 0:
+                return 1.0
+            lessons = sum(1 for c in corrections if c.get("lesson_active", False))
+            # 65% di lessons attive = qualità massima
+            quality = min(lessons / (total * 0.65), 1.0)
             return round(quality, 3)
         except Exception:
             return 1.0
