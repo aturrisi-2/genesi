@@ -153,38 +153,61 @@ class CapabilityTracker:
     # ── Metriche singole ──────────────────────────────────────────────────
 
     async def _episode_coverage(self) -> float:
-        """Avg episodi per utente / 50 (capacità massima)."""
+        """
+        Avg episodi per utente reale (esclude utenti di test).
+        Soglia 20 episodi = copertura piena (più realistica per un sistema personale).
+        """
+        _TEST_USERS = {"neural_test@genesi.local", "alfio.turrisi@gmail.com"}
         try:
             user_ids = await storage.list_keys("episodes")
             if not user_ids:
                 return 0.0
             counts = []
             for uid in user_ids[:60]:
+                if uid in _TEST_USERS:
+                    continue
                 eps = await storage.load(f"episodes:{uid}", default=[])
                 if isinstance(eps, list):
                     counts.append(len(eps))
+            # Se non ci sono utenti reali, usa tutti (sistema in bootstrap)
+            if not counts:
+                for uid in user_ids[:60]:
+                    eps = await storage.load(f"episodes:{uid}", default=[])
+                    if isinstance(eps, list):
+                        counts.append(len(eps))
             if not counts:
                 return 0.0
             avg = sum(counts) / len(counts)
-            return round(min(avg / 50.0, 1.0), 3)
+            return round(min(avg / 20.0, 1.0), 3)
         except Exception:
             return 0.0
 
     async def _facts_coverage(self) -> float:
-        """Avg fatti personali per utente / 25 (soglia buona copertura)."""
+        """
+        Avg fatti personali per utente reale (esclude utenti di test).
+        Soglia 15 fatti = copertura buona per un sistema personale.
+        """
+        _TEST_USERS = {"neural_test@genesi.local", "alfio.turrisi@gmail.com"}
         try:
             user_ids = await storage.list_keys("personal_facts")
             if not user_ids:
                 return 0.0
             counts = []
             for uid in user_ids[:60]:
+                if uid in _TEST_USERS:
+                    continue
                 facts = await storage.load(f"personal_facts:{uid}", default=[])
                 if isinstance(facts, list):
                     counts.append(len(facts))
             if not counts:
+                for uid in user_ids[:60]:
+                    eps = await storage.load(f"personal_facts:{uid}", default=[])
+                    if isinstance(eps, list):
+                        counts.append(len(eps))
+            if not counts:
                 return 0.0
             avg = sum(counts) / len(counts)
-            return round(min(avg / 25.0, 1.0), 3)
+            return round(min(avg / 15.0, 1.0), 3)
         except Exception:
             return 0.0
 
@@ -218,13 +241,19 @@ class CapabilityTracker:
             return 0.85  # assume buono se dati non disponibili
 
     async def _correction_rate(self) -> float:
-        """1 − (n_correzioni / soglia). Poche correzioni = alta qualità."""
+        """
+        1 − (correzioni_irrisolte / soglia).
+        Le corrections con lesson_active=True sono "risolte" — Genesi ha imparato.
+        Solo le correzioni senza lesson attiva indicano problemi aperti.
+        Soglia: 30 irrisolte = qualità 0 (realistico per sistema maturo).
+        """
         try:
             corrections = await storage.load("admin/corrections", default=[])
             if not isinstance(corrections, list):
                 corrections = []
-            # ≥ 40 correzioni → qualità percepita = 0
-            quality = max(0.0, 1.0 - len(corrections) / 40.0)
+            unresolved = sum(1 for c in corrections if not c.get("lesson_active", False))
+            # ≥ 30 irrisolte → qualità 0; 0 irrisolte → qualità 1.0
+            quality = max(0.0, 1.0 - unresolved / 30.0)
             return round(quality, 3)
         except Exception:
             return 1.0
