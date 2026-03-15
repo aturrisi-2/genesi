@@ -288,14 +288,17 @@ function isNearBottom(threshold = 80) {
 
 function scrollToBottom() {
   dialogue.scrollTop = dialogue.scrollHeight;
+  // scrollIntoView on last message: more reliable on iOS Safari
+  const last = dialogue.querySelector('.message:last-of-type');
+  if (last) last.scrollIntoView({ block: 'end', behavior: 'instant' });
 }
 
 function scrollToBottomSmooth() {
-  // Use instant scroll — smooth causes delays on keyboard open
   dialogue.scrollTop = dialogue.scrollHeight;
-  // Fallback for iOS rendering delay
   requestAnimationFrame(() => {
     dialogue.scrollTop = dialogue.scrollHeight;
+    const last = dialogue.querySelector('.message:last-of-type');
+    if (last) last.scrollIntoView({ block: 'end', behavior: 'instant' });
   });
 }
 
@@ -1701,12 +1704,17 @@ function addMessage(text, sender) {
 
   dialogue.appendChild(el);
 
-  // Always scroll on new message — double-RAF + timeout for iOS layout delay
-  requestAnimationFrame(() => {
-    scrollToBottom();
-    requestAnimationFrame(scrollToBottom);
-  });
-  setTimeout(scrollToBottom, 80);
+  // iOS-reliable scroll: RAF chain + multiple timeouts
+  // scrollIntoView on the new element is most reliable on Safari
+  const _scrollEl = el;
+  const _scrollToEl = () => {
+    dialogue.scrollTop = dialogue.scrollHeight;
+    _scrollEl.scrollIntoView({ block: 'end', behavior: 'instant' });
+  };
+  requestAnimationFrame(() => { _scrollToEl(); requestAnimationFrame(_scrollToEl); });
+  setTimeout(_scrollToEl, 80);
+  setTimeout(_scrollToEl, 250);
+  setTimeout(_scrollToEl, 500);
 
   // Log per debugging del rendering
   console.log('[RENDER] Message added:', { sender, textLength: text.length, element: el });

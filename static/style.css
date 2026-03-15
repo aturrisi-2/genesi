@@ -1187,10 +1187,13 @@ body {
     display: none;
   }
   #dialogue {
-    padding: 0 16px 120px;
+    padding: 0 12px 140px;
+    /* scroll-padding-top: tiene il focus dell'ultimo msg sotto il widget */
+    scroll-padding-top: 220px;
   }
   #dialogue::before {
-    flex-basis: 280px; /* widget leggermente più basso su mobile */
+    flex-basis: 240px;
+    flex-shrink: 0; /* evita che iOS collassi lo spacer */
   }
 }
 
