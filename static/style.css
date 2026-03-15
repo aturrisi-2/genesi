@@ -2121,10 +2121,30 @@ body {
   height: 20px;
 }
 
-/* Quando la sidebar è aperta, ruota le frecce a sinistra */
-#sidebar:not(.sidebar-collapsed)+#main-chat .sidebar-toggle-clean {
-  transform: rotate(180deg);
-  left: 12px;
+/* Bottone apri: nascosto quando sidebar è aperta */
+#sidebar:not(.sidebar-collapsed) + #main-chat .sidebar-toggle-clean {
+  display: none !important;
+}
+
+/* Bottone chiudi: dentro la sidebar header */
+.sidebar-close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: rgba(255,255,255,0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 6px;
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+.sidebar-close-btn:hover { color: #00e5ff; }
+
+/* Mostra il bottone chiudi solo quando sidebar è aperta */
+#sidebar:not(.sidebar-collapsed) .sidebar-close-btn {
+  display: flex;
 }
 
 .sidebar-header {
