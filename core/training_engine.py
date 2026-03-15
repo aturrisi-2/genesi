@@ -154,6 +154,46 @@ class TrainingEngine:
             "categories":     CATEGORIES,
         }
 
+    async def get_weak_categories(self, top_n: int = 3) -> List[Dict]:
+        """
+        Analizza le corrections e restituisce le categorie più deboli.
+        Debolezza = corrections non risolte (senza lesson attiva).
+        Se nessuna correction esiste, restituisce le categorie default più critiche.
+        """
+        corrections = await self._load()
+
+        cat_total: Dict[str, int]   = {}
+        cat_lessons: Dict[str, int] = {}
+        for c in corrections:
+            cat = c.get("category", "altro")
+            cat_total[cat] = cat_total.get(cat, 0) + 1
+            if c.get("lesson_active"):
+                cat_lessons[cat] = cat_lessons.get(cat, 0) + 1
+
+        if not cat_total:
+            # Nessuna correction → categorie default più critiche
+            defaults = ["confini", "crisi", "emozione"]
+            return [{"category": c, "total": 0, "lessons": 0, "unresolved": 0,
+                     "reason": "default (nessuna correction presente)"} for c in defaults[:top_n]]
+
+        scored = []
+        for cat, total in cat_total.items():
+            lessons    = cat_lessons.get(cat, 0)
+            unresolved = total - lessons
+            scored.append({
+                "category":   cat,
+                "total":      total,
+                "lessons":    lessons,
+                "unresolved": unresolved,
+                # peso: irrisolti contano doppio
+                "_score":     unresolved * 2 + total,
+            })
+
+        scored.sort(key=lambda x: -x["_score"])
+        for s in scored:
+            s.pop("_score", None)
+        return scored[:top_n]
+
     # ── Helpers ───────────────────────────────────────────────────────────
 
     async def _load(self) -> List[Dict]:

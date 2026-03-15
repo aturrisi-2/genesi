@@ -112,6 +112,13 @@
     .badge-active   { background: rgba(52,211,153,.15); color: var(--green); }
     .badge-inactive { background: rgba(148,163,184,.1);  color: var(--muted); }
     .badge-cat      { background: rgba(96,165,250,.1);   color: var(--accent); }
+    .badge-running  { background: rgba(251,146,60,.15);  color: var(--orange); }
+    .badge-completed{ background: rgba(52,211,153,.15);  color: var(--green); }
+    .badge-failed   { background: rgba(248,113,113,.15); color: var(--red); }
+    .badge-idle     { background: rgba(148,163,184,.1);  color: var(--muted); }
+    /* weak category bar */
+    .weak-bar-bg { height:6px;background:rgba(255,255,255,.06);border-radius:3px;margin-top:6px; }
+    .weak-bar    { height:6px;border-radius:3px; }
 
     /* ── FORM ── */
     .form-section { display: flex; flex-direction: column; gap: 16px; }
@@ -196,6 +203,7 @@
     <div class="tab" onclick="switchTab('history')">Storico</div>
     <div class="tab" onclick="switchTab('corrections')">Corrections <span id="corrCount" class="nav-badge" style="margin-left:4px">0</span></div>
     <div class="tab" onclick="switchTab('lessons')">Lessons attive <span id="lessonCount" class="nav-badge" style="margin-left:4px">0</span></div>
+    <div class="tab" onclick="switchTab('adaptive')" id="tab-btn-adaptive">🎯 Adattivo</div>
   </div>
 
   <!-- ══════════ TAB: OVERVIEW ══════════ -->
@@ -342,6 +350,69 @@
     </div>
   </div>
 
+  <!-- ══════════ TAB: ADATTIVO ══════════ -->
+  <div class="tab-panel" id="tab-adaptive">
+
+    <!-- Analisi aree deboli -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="flex-between gap-8" style="margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:0">Analisi aree deboli</div>
+        <button class="btn btn-ghost btn-sm" onclick="loadAdaptiveStatus()">↺ Aggiorna</button>
+      </div>
+      <div id="weakCatsBlock" class="text-muted text-sm">Caricamento…</div>
+    </div>
+
+    <!-- Configurazione e avvio -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title">Configurazione allenamento</div>
+      <div class="grid-3" style="gap:16px;margin-bottom:16px">
+        <div>
+          <label>Categorie da allenare (top N)</label>
+          <select id="ad_topn" style="width:100%">
+            <option value="2">2 categorie</option>
+            <option value="3" selected>3 categorie</option>
+            <option value="4">4 categorie</option>
+            <option value="5">5 categorie</option>
+          </select>
+        </div>
+        <div>
+          <label>Pausa tra messaggi (secondi)</label>
+          <select id="ad_pause" style="width:100%">
+            <option value="3">3s — veloce</option>
+            <option value="4" selected>4s — equilibrato</option>
+            <option value="6">6s — standard</option>
+            <option value="10">10s — lento</option>
+          </select>
+        </div>
+        <div>
+          <label>Auto-lesson sui fallimenti</label>
+          <select id="ad_lesson" style="width:100%">
+            <option value="true" selected>Sì — attiva lesson globale</option>
+            <option value="false">No — solo registra correction</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="startAdaptiveBtn" onclick="startAdaptive()" style="font-size:.95rem;padding:10px 28px">
+        🚀 Avvia Allenamento Adattivo
+      </button>
+      <p class="text-xs text-muted mt-8">Il processo gira in background. Puoi chiudere questa pagina e riaprirla per vedere lo stato.</p>
+    </div>
+
+    <!-- Status -->
+    <div class="card" id="adaptiveStatusCard" style="display:none">
+      <div class="flex-between gap-8" style="margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">Stato allenamento</div>
+        <span id="adaptiveStatusBadge" class="badge">–</span>
+      </div>
+      <div id="adaptiveStatusMeta" class="text-sm text-muted" style="margin-bottom:12px"></div>
+      <div id="adaptiveOutputWrap" style="display:none">
+        <div class="text-xs text-muted" style="margin-bottom:6px">Output (ultimi 40 righe):</div>
+        <pre id="adaptiveOutput" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:.72rem;line-height:1.6;max-height:360px;overflow-y:auto;color:#94a3b8;white-space:pre-wrap;word-break:break-word"></pre>
+      </div>
+    </div>
+
+  </div>
+
 </main>
 
 <script>
@@ -374,15 +445,16 @@ let historyChartInst = null;
 //  TABS
 // ════════════════════════════════════════════════════
 function switchTab(name) {
+  const names = ['overview','history','corrections','lessons','adaptive'];
   document.querySelectorAll('.tab').forEach((t, i) => {
-    const names = ['overview','history','corrections','lessons'];
     t.classList.toggle('active', names[i] === name);
   });
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById(`tab-${name}`).classList.add('active');
-  if (name === 'history') loadHistory();
+  if (name === 'history')     loadHistory();
   if (name === 'corrections') loadCorrections();
-  if (name === 'lessons') loadLessons();
+  if (name === 'lessons')     loadLessons();
+  if (name === 'adaptive')    loadAdaptiveStatus();
 }
 
 // ════════════════════════════════════════════════════
@@ -727,10 +799,138 @@ function esc(s) {
 }
 
 // ════════════════════════════════════════════════════
+//  ADAPTIVE TRAINING
+// ════════════════════════════════════════════════════
+let _adaptivePollTimer = null;
+
+async function loadAdaptiveStatus() {
+  try {
+    const data = await api('GET', '/admin/training/adaptive-status');
+    renderAdaptiveStatus(data);
+    renderWeakCats(data.weak_analysis || []);
+
+    // Polling automatico se running
+    if (data.status === 'running' || data.status === 'starting') {
+      if (!_adaptivePollTimer) {
+        _adaptivePollTimer = setInterval(loadAdaptiveStatus, 8000);
+      }
+    } else {
+      clearInterval(_adaptivePollTimer);
+      _adaptivePollTimer = null;
+    }
+  } catch(e) {
+    console.error('loadAdaptiveStatus error', e);
+  }
+}
+
+function renderWeakCats(weak) {
+  const el = document.getElementById('weakCatsBlock');
+  if (!weak || weak.length === 0) {
+    el.innerHTML = '<span class="text-muted">Nessuna correction registrata. Avvia prima un marathon completo.</span>';
+    return;
+  }
+  const maxScore = Math.max(...weak.map(w => (w.unresolved || 0) * 2 + (w.total || 0)), 1);
+  el.innerHTML = weak.map(w => {
+    const pct = Math.round(((w.unresolved||0)*2 + (w.total||0)) / maxScore * 100);
+    const color = w.unresolved > 0 ? 'var(--orange)' : 'var(--green)';
+    return `<div style="margin-bottom:14px">
+      <div class="flex-between gap-8">
+        <div class="flex gap-8">
+          <span class="badge badge-cat">${esc(w.category)}</span>
+          ${w.reason ? `<span class="text-xs text-muted">${esc(w.reason)}</span>` : ''}
+        </div>
+        <div class="text-xs text-muted">${w.unresolved||0} irrisolte / ${w.total||0} totali</div>
+      </div>
+      <div class="weak-bar-bg">
+        <div class="weak-bar" style="width:${pct}%;background:${color}"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderAdaptiveStatus(data) {
+  const card   = document.getElementById('adaptiveStatusCard');
+  const badge  = document.getElementById('adaptiveStatusBadge');
+  const meta   = document.getElementById('adaptiveStatusMeta');
+  const outWrap= document.getElementById('adaptiveOutputWrap');
+  const outEl  = document.getElementById('adaptiveOutput');
+  const startBtn = document.getElementById('startAdaptiveBtn');
+
+  const status = data.status || 'idle';
+  if (status === 'idle') { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  // Badge
+  const badgeMap = {
+    starting:  ['badge-running',   '⏳ Avvio…'],
+    running:   ['badge-running',   '🔄 In corso…'],
+    completed: ['badge-completed', '✅ Completato'],
+    failed:    ['badge-failed',    '❌ Fallito'],
+  };
+  const [bc, bl] = badgeMap[status] || ['badge-idle','–'];
+  badge.className = `badge ${bc}`;
+  badge.textContent = bl;
+
+  // Meta info
+  const cats = (data.categories || []).join(', ');
+  const startedAt = data.started_at ? new Date(data.started_at).toLocaleString('it-IT') : '';
+  const completedAt = data.completed_at ? new Date(data.completed_at).toLocaleString('it-IT') : '';
+  meta.innerHTML = [
+    cats ? `<strong>Categorie:</strong> ${esc(cats)}` : '',
+    startedAt ? `Avviato: ${startedAt}` : '',
+    completedAt ? `Completato: ${completedAt}` : '',
+    data.error ? `<span style="color:var(--red)">Errore: ${esc(data.error)}</span>` : '',
+  ].filter(Boolean).join(' &nbsp;·&nbsp; ');
+
+  // Pulsante start
+  if (status === 'running' || status === 'starting') {
+    startBtn.disabled = true;
+    startBtn.textContent = '🔄 Allenamento in corso…';
+  } else {
+    startBtn.disabled = false;
+    startBtn.innerHTML = '🚀 Avvia Allenamento Adattivo';
+  }
+
+  // Output
+  const lines = data.output_lines || [];
+  if (lines.length > 0) {
+    outWrap.style.display = 'block';
+    const preview = lines.slice(-40).join('\n');
+    outEl.textContent = preview;
+    outEl.scrollTop = outEl.scrollHeight;
+  } else {
+    outWrap.style.display = 'none';
+  }
+}
+
+async function startAdaptive() {
+  const btn     = document.getElementById('startAdaptiveBtn');
+  const topn    = document.getElementById('ad_topn').value;
+  const pause   = document.getElementById('ad_pause').value;
+  const lesson  = document.getElementById('ad_lesson').value === 'true';
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Avvio…';
+  try {
+    const data = await api('POST',
+      `/admin/training/adaptive-run?top_n=${topn}&pause=${pause}&auto_lesson=${lesson}`);
+    // Avvia polling
+    if (_adaptivePollTimer) clearInterval(_adaptivePollTimer);
+    _adaptivePollTimer = setInterval(loadAdaptiveStatus, 8000);
+    await loadAdaptiveStatus();
+  } catch(e) {
+    alert('Errore avvio: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = '🚀 Avvia Allenamento Adattivo';
+  }
+}
+
+// ════════════════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════════════════
 loadMetrics();
 loadCorrections();
+loadAdaptiveStatus();
 </script>
 </body>
 </html>

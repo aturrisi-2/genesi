@@ -521,17 +521,19 @@ class CaseResult:
 
 class MarathonRunner:
     def __init__(self, email, password, admin_email, admin_password,
-                 auto_lesson, dry_run, pause, category_filter):
-        self.email           = email
-        self.password        = password
-        self.admin_email     = admin_email or email
-        self.admin_password  = admin_password or password
-        self.auto_lesson     = auto_lesson
-        self.dry_run         = dry_run
-        self.pause           = pause
-        self.category_filter = category_filter
-        self.token           = None
-        self.admin_token     = None
+                 auto_lesson, dry_run, pause, category_filter, categories_filter=None):
+        self.email             = email
+        self.password          = password
+        self.admin_email       = admin_email or email
+        self.admin_password    = admin_password or password
+        self.auto_lesson       = auto_lesson
+        self.dry_run           = dry_run
+        self.pause             = pause
+        self.category_filter   = category_filter
+        # categories_filter: lista di categorie (da --categories cat1,cat2)
+        self.categories_filter = [c.strip() for c in categories_filter.split(",")] if categories_filter else None
+        self.token             = None
+        self.admin_token       = None
 
     def _request(self, method, url, payload=None, params=None, token=None):
         if params:
@@ -604,7 +606,13 @@ class MarathonRunner:
 
     def run(self):
         cases = CASES
-        if self.category_filter:
+        # --categories ha priorità su --category
+        if self.categories_filter:
+            cases = [c for c in cases if c["category"] in self.categories_filter]
+            if not cases:
+                print(f"Nessun caso trovato per categorie '{self.categories_filter}'")
+                sys.exit(1)
+        elif self.category_filter:
             cases = [c for c in cases if c["category"] == self.category_filter]
             if not cases:
                 print(f"Nessun caso trovato per categoria '{self.category_filter}'")
@@ -622,7 +630,9 @@ class MarathonRunner:
         print(f"  Durata est : ~{est_min} minuti")
         print(f"  Auto-lesson: {self.auto_lesson}")
         print(f"  Dry-run    : {self.dry_run}")
-        if self.category_filter:
+        if self.categories_filter:
+            print(f"  Categorie  : {', '.join(self.categories_filter)}")
+        elif self.category_filter:
             print(f"  Categoria  : {self.category_filter}")
         print(f"{'═'*64}\n")
 
@@ -780,7 +790,9 @@ def main():
     parser.add_argument("--pause",          type=float, default=6.0,
                         help="Secondi di pausa tra messaggi (default: 6 → ~1 ora)")
     parser.add_argument("--category",       default="",
-                        help="Esegui solo questa categoria")
+                        help="Esegui solo questa categoria (singola)")
+    parser.add_argument("--categories",     default="",
+                        help="Esegui solo queste categorie (es: confini,crisi,emozione)")
     parser.add_argument("--auto-lesson",    action="store_true")
     parser.add_argument("--dry-run",        action="store_true")
     args = parser.parse_args()
@@ -790,6 +802,7 @@ def main():
         admin_email=args.admin_email, admin_password=args.admin_password,
         auto_lesson=args.auto_lesson, dry_run=args.dry_run,
         pause=args.pause, category_filter=args.category,
+        categories_filter=args.categories or None,
     ).run()
 
 
