@@ -535,7 +535,9 @@ class MarathonRunner:
         self.token             = None
         self.admin_token       = None
 
-    def _request(self, method, url, payload=None, params=None, token=None):
+    def _request(self, method, url, payload=None, params=None, token=None,
+                 _retries=4, _retry_wait=15):
+        """HTTP request con retry automatico su connessione rifiutata (es. auto-deploy restart)."""
         if params:
             url = url + "?" + urllib.parse.urlencode(params)
         data = json.dumps(payload).encode() if payload is not None else None
@@ -543,11 +545,26 @@ class MarathonRunner:
         if token:
             headers["Authorization"] = f"Bearer {token}"
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
-        try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                return r.status, r.read().decode()
-        except urllib.error.HTTPError as e:
-            return e.code, e.read().decode()
+        last_err = None
+        for attempt in range(_retries):
+            try:
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    return r.status, r.read().decode()
+            except urllib.error.HTTPError as e:
+                return e.code, e.read().decode()
+            except (urllib.error.URLError, OSError) as e:
+                last_err = e
+                is_conn_err = ("Connection refused" in str(e) or
+                               "Connection reset" in str(e) or
+                               "timed out" in str(e).lower() or
+                               "[Errno 111]" in str(e))
+                if is_conn_err and attempt < _retries - 1:
+                    print(f"  ⚠  Connessione rifiutata (auto-deploy?). "
+                          f"Riprovo tra {_retry_wait}s… (tentativo {attempt+2}/{_retries})")
+                    time.sleep(_retry_wait)
+                    continue
+                raise
+        raise last_err
 
     def login(self, email, password):
         status, body = self._request("POST", f"{BASE_URL}/auth/login",
