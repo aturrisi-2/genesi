@@ -43,6 +43,7 @@ from auth.database import init_db, async_session
 from auth.models import Visit
 from core.log import log
 from core.reminder_engine import reminder_engine
+from core.training_autopilot import autopilot as training_autopilot
 from lab.supervisor import SupervisorEngine
 from calendar_manager import calendar_manager
 
@@ -59,24 +60,28 @@ async def lifespan(app: FastAPI):
     log("AUTH_DB_INIT", status="ok")
     
     # Start background tasks
-    reminder_task = asyncio.create_task(reminder_checker_background())
-    calendar_task = asyncio.create_task(calendar_checker_background())
+    reminder_task  = asyncio.create_task(reminder_checker_background())
+    calendar_task  = asyncio.create_task(calendar_checker_background())
     evolution_task = asyncio.create_task(evolution_scheduler())
-    
-    log("REMINDER_CHECKER_STARTED", status="ok")
-    log("CALENDAR_CHECKER_STARTED", status="ok")
+    autopilot_task = asyncio.create_task(training_autopilot.run_background_loop())
+
+    log("REMINDER_CHECKER_STARTED",  status="ok")
+    log("CALENDAR_CHECKER_STARTED",  status="ok")
     log("EVOLUTION_SCHEDULER_STARTED", status="ok")
-    
+    log("TRAINING_AUTOPILOT_STARTED", status="ok")
+
     yield  # ← app in esecuzione
-    
+
     # SHUTDOWN
     reminder_task.cancel()
     evolution_task.cancel()
     calendar_task.cancel()
+    autopilot_task.cancel()
     try:
         await reminder_task
         await evolution_task
         await calendar_task
+        await autopilot_task
     except asyncio.CancelledError:
         pass
     log("REMINDER_CHECKER_STOPPED", status="ok")

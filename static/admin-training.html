@@ -228,6 +228,22 @@
 
     <!-- Alerts / Suggerimenti -->
     <div id="alertsBlock" class="mt-24" style="display:flex;flex-direction:column;gap:10px"></div>
+
+    <!-- Autopilot status -->
+    <div class="card mt-24" id="autopilotCard" style="display:none">
+      <div class="flex-between gap-8" style="margin-bottom:10px">
+        <div class="flex gap-8">
+          <span style="font-size:1.1rem">🤖</span>
+          <div class="card-title" style="margin-bottom:0;color:var(--green)">Autopilot attivo</div>
+        </div>
+        <div class="flex gap-8">
+          <span id="autopilotNextCheck" class="text-xs text-muted"></span>
+          <button class="btn btn-ghost btn-sm" onclick="forceAutopilotTick()">⚡ Esegui ora</button>
+        </div>
+      </div>
+      <div id="autopilotInfo" class="text-sm" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px"></div>
+      <div id="autopilotLastActions" class="text-xs text-muted mt-8"></div>
+    </div>
   </div>
 
   <!-- ══════════ TAB: STORICO ══════════ -->
@@ -464,7 +480,7 @@ async function loadMetrics() {
   const days = document.getElementById('historyDays')?.value || 30;
   try {
     const data = await api('GET', `/admin/training/metrics?days=${days}`);
-    renderOverview(data.current, data.stats);
+    renderOverview(data.current, data.stats, data.autopilot);
     renderHistoryChart(data.history);
     renderCounters(data.counters);
     document.getElementById('lastUpdate').textContent =
@@ -487,7 +503,7 @@ const DIM_COLORS = {
   overall_health:   '#facc15',
 };
 
-function renderOverview(current, stats) {
+function renderOverview(current, stats, autopilot) {
   if (!current) return;
   const scores = current.scores || {};
   const labels = current.labels || {};
@@ -524,6 +540,9 @@ function renderOverview(current, stats) {
 
   // Alerts
   buildAlerts(scores, stats, labels);
+
+  // Autopilot status
+  renderAutopilotCard(autopilot);
 }
 
 function buildSpiderChart(scores, labels) {
@@ -946,6 +965,65 @@ async function startAdaptive() {
     alert('Errore avvio: ' + e.message);
     btn.disabled = false;
     btn.innerHTML = '🚀 Avvia Allenamento Adattivo';
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  AUTOPILOT CARD
+// ════════════════════════════════════════════════════
+function renderAutopilotCard(ap) {
+  const card = document.getElementById('autopilotCard');
+  if (!ap || !ap.enabled) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  // Prossimo check
+  const nextEl = document.getElementById('autopilotNextCheck');
+  if (ap.next_check_min !== null && ap.next_check_min !== undefined) {
+    nextEl.textContent = ap.next_check_min > 0
+      ? `Prossimo check tra ${ap.next_check_min} min`
+      : 'Check imminente…';
+  } else {
+    nextEl.textContent = 'Primo check tra ~3 min';
+  }
+
+  // Colonne info
+  const trainingEnd = ap.last_training_end
+    ? new Date(ap.last_training_end).toLocaleString('it-IT')
+    : '—';
+  const trainingCats = (ap.last_training_cats || []).join(', ') || '—';
+  const snapshotDate = ap.last_snapshot || '—';
+
+  document.getElementById('autopilotInfo').innerHTML = `
+    <div>
+      <div class="text-xs text-muted" style="margin-bottom:4px">ULTIMO SNAPSHOT</div>
+      <div style="color:var(--text)">${snapshotDate}</div>
+    </div>
+    <div>
+      <div class="text-xs text-muted" style="margin-bottom:4px">ULTIMO TRAINING AUTO</div>
+      <div style="color:var(--text);font-size:.8rem">${trainingEnd}</div>
+      ${trainingCats !== '—' ? `<div class="text-xs text-muted">${trainingCats}</div>` : ''}
+    </div>
+    <div>
+      <div class="text-xs text-muted" style="margin-bottom:4px">CONFIG</div>
+      <div class="text-xs text-muted">
+        Max ${ap.config?.max_lessons || 8} lessons · Soglia ${ap.config?.train_threshold || '45%'} · Cooldown ${ap.config?.cooldown_h || 22}h
+      </div>
+    </div>`;
+
+  // Ultime azioni
+  const actions = ap.last_actions || [];
+  document.getElementById('autopilotLastActions').textContent = actions.length
+    ? 'Ultimo tick: ' + actions.join(' · ')
+    : '';
+}
+
+async function forceAutopilotTick() {
+  try {
+    await api('POST', '/admin/training/autopilot-tick');
+    // Ricarica dopo 3s per vedere i risultati
+    setTimeout(loadMetrics, 3000);
+  } catch(e) {
+    alert('Errore: ' + e.message);
   }
 }
 

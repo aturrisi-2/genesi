@@ -18,6 +18,7 @@ from auth.router import require_admin
 from auth.models import AuthUser
 from core.capability_tracker import capability_tracker
 from core.training_engine import training_engine
+from core.training_autopilot import autopilot as training_autopilot
 from core.storage import storage
 
 logger = logging.getLogger(__name__)
@@ -43,15 +44,17 @@ async def get_metrics(
     user: AuthUser = Depends(require_admin),
 ):
     """Metriche correnti + storico N giorni."""
-    current  = await capability_tracker.compute_current()
-    history  = await capability_tracker.get_history(days=days)
-    counters = await capability_tracker.get_counters(days=days)
-    stats    = await training_engine.get_stats()
+    current   = await capability_tracker.compute_current()
+    history   = await capability_tracker.get_history(days=days)
+    counters  = await capability_tracker.get_counters(days=days)
+    stats     = await training_engine.get_stats()
+    autopilot = await training_autopilot.get_status()
     return {
-        "current":  current,
-        "history":  history,
-        "counters": counters,
-        "stats":    stats,
+        "current":   current,
+        "history":   history,
+        "counters":  counters,
+        "stats":     stats,
+        "autopilot": autopilot,
     }
 
 
@@ -60,6 +63,19 @@ async def save_snapshot(user: AuthUser = Depends(require_admin)):
     """Forza salvataggio snapshot manuale."""
     await capability_tracker.save_snapshot()
     return {"ok": True, "message": "Snapshot salvato"}
+
+
+@router.get("/autopilot-status")
+async def get_autopilot_status(user: AuthUser = Depends(require_admin)):
+    """Stato corrente dell'autopilot."""
+    return await training_autopilot.get_status()
+
+
+@router.post("/autopilot-tick")
+async def force_autopilot_tick(user: AuthUser = Depends(require_admin)):
+    """Forza un tick immediato dell'autopilot (gestione lessons + check training)."""
+    asyncio.create_task(training_autopilot._tick())
+    return {"ok": True, "message": "Autopilot tick avviato"}
 
 
 # ═══════════════════════════════════════════════════════
