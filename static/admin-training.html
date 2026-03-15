@@ -464,7 +464,7 @@ async function loadMetrics() {
   const days = document.getElementById('historyDays')?.value || 30;
   try {
     const data = await api('GET', `/admin/training/metrics?days=${days}`);
-    renderOverview(data.current);
+    renderOverview(data.current, data.stats);
     renderHistoryChart(data.history);
     renderCounters(data.counters);
     document.getElementById('lastUpdate').textContent =
@@ -487,7 +487,7 @@ const DIM_COLORS = {
   overall_health:   '#facc15',
 };
 
-function renderOverview(current) {
+function renderOverview(current, stats) {
   if (!current) return;
   const scores = current.scores || {};
   const labels = current.labels || {};
@@ -523,7 +523,7 @@ function renderOverview(current) {
   buildSpiderChart(scores, labels);
 
   // Alerts
-  buildAlerts(scores, labels);
+  buildAlerts(scores, stats, labels);
 }
 
 function buildSpiderChart(scores, labels) {
@@ -562,18 +562,40 @@ function buildSpiderChart(scores, labels) {
   });
 }
 
-function buildAlerts(scores, labels) {
+function buildAlerts(scores, stats, labels) {
   const alerts = [];
+
+  // Memory Retention — bassa solo se ci sono utenti reali con pochi episodi
   if ((scores['episode_coverage'] ?? 100) < 30)
-    alerts.push({ type: 'warn', msg: '⚠️ <b>Memory Retention bassa</b>: pochi episodi per utente. Verificare che l\'episodic extractor funzioni correttamente.' });
+    alerts.push({ type: 'warn', msg: '⚠️ <b>Memory Retention bassa</b>: pochi episodi salvati per utente. Normale nelle prime settimane di utilizzo.' });
+
+  // Identity Recall — bassa se nessun utente reale ha personal_facts
   if ((scores['facts_coverage'] ?? 100) < 20)
-    alerts.push({ type: 'warn', msg: '⚠️ <b>Identity Recall bassa</b>: personal_facts insufficienti. Controllare personal_facts_service.' });
+    alerts.push({ type: 'info', msg: '💡 <b>Identity Recall in crescita</b>: i fatti personali si accumulano con le conversazioni reali. Nessuna azione richiesta.' });
+
+  // System Stability — unico alert critico basato su fallback reali
   if ((scores['fallback_health'] ?? 100) < 60)
     alerts.push({ type: 'warn', msg: '🔴 <b>System Stability critica</b>: troppi fallback LLM. Controllare i log di errore.' });
-  if ((scores['correction_rate'] ?? 100) < 70)
-    alerts.push({ type: 'warn', msg: '📝 <b>Response Quality degradata</b>: molte corrections admin registrate. Considerare aggiornamento del prompt.' });
-  if ((scores['overall_health'] ?? 0) >= 80)
-    alerts.push({ type: 'success', msg: '✅ <b>Genesi è in ottima forma!</b> Tutte le metriche principali sono sopra la soglia.' });
+
+  // Response Quality — ora basata su irrisolte, non su totale
+  const corrRate = scores['correction_rate'] ?? 100;
+  const unresolved = stats ? (stats.total - stats.active_lessons) : null;
+  if (corrRate < 50) {
+    const hint = unresolved !== null
+      ? `${unresolved} corrections irrisolte su ${stats.total} totali. Attiva più lessons dal tab Corrections.`
+      : 'Molte corrections senza lesson attiva. Attiva le lessons più rilevanti.';
+    alerts.push({ type: 'warn', msg: `📝 <b>Response Quality da migliorare</b>: ${hint}` });
+  } else if (corrRate < 80 && unresolved !== null && unresolved > 5) {
+    alerts.push({ type: 'info', msg: `📝 <b>Response Quality buona</b>: ${unresolved} corrections ancora da risolvere. Considera di attivare altre lessons.` });
+  }
+
+  // Training attivo — messaggio positivo quando le lessons sono tante
+  if (stats && stats.active_lessons >= 5)
+    alerts.push({ type: 'info', msg: `🎓 <b>${stats.active_lessons} lessons attive</b>: Genesi sta applicando le correzioni di training in ogni conversazione.` });
+
+  // Ottimo
+  if ((scores['overall_health'] ?? 0) >= 75)
+    alerts.push({ type: 'success', msg: '✅ <b>Genesi è in buona forma!</b> Continua ad allenare per avvicinarti al 100%.' });
 
   const el = document.getElementById('alertsBlock');
   el.innerHTML = alerts.map(a =>

@@ -43,13 +43,15 @@ async def get_metrics(
     user: AuthUser = Depends(require_admin),
 ):
     """Metriche correnti + storico N giorni."""
-    current = await capability_tracker.compute_current()
-    history = await capability_tracker.get_history(days=days)
+    current  = await capability_tracker.compute_current()
+    history  = await capability_tracker.get_history(days=days)
     counters = await capability_tracker.get_counters(days=days)
+    stats    = await training_engine.get_stats()
     return {
         "current":  current,
         "history":  history,
         "counters": counters,
+        "stats":    stats,
     }
 
 
