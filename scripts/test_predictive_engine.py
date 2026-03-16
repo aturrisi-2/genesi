@@ -32,7 +32,7 @@ from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
 BASE_URL   = "http://localhost:8000"
-LOG_PATH   = Path("/root/genesi/genesi.log")
+LOG_PATH   = Path("/opt/genesi/genesi.log")
 
 DEFAULT_EMAIL = "alfio.turrisi@gmail.com"
 DEFAULT_PASS  = "ZOEennio0810"
@@ -131,7 +131,7 @@ def phase(n: int, title: str):
 def read_prediction_storage(user_id: str) -> dict:
     """Legge il file predizione direttamente dal disco."""
     candidates = [
-        Path(f"/root/genesi/memory/predictions/{user_id}.json"),
+        Path(f"/opt/genesi/memory/predictions/{user_id}.json"),
         Path(f"memory/predictions/{user_id}.json"),
     ]
     for p in candidates:
