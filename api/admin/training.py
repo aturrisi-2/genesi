@@ -49,12 +49,38 @@ async def get_metrics(
     counters  = await capability_tracker.get_counters(days=days)
     stats     = await training_engine.get_stats()
     autopilot = await training_autopilot.get_status()
+
+    # Predictive engine: lettura leggera (solo storage scan, nessun LLM)
+    from pathlib import Path as _Path
+    import json as _json
+    _pred_dir = _Path("memory/predictions")
+    _pred_users = []
+    if _pred_dir.exists():
+        for _pf in _pred_dir.glob("*.json"):
+            try:
+                _d = _json.loads(_pf.read_text(encoding="utf-8"))
+                _tot = _d.get("total_assessments", 0)
+                _hist = _d.get("accuracy_history", [])
+                _acc  = sum(_hist) / len(_hist) if _hist else 0.0
+                _pred_users.append({"shadow": _tot < 12, "acc": _acc, "total": _tot})
+            except Exception:
+                pass
+    _active_pp = [u for u in _pred_users if not u["shadow"]]
+    predictive = {
+        "total_users":  len(_pred_users),
+        "active_users": len(_active_pp),
+        "shadow_users": len(_pred_users) - len(_active_pp),
+        "avg_accuracy": round(sum(u["acc"] for u in _active_pp) / len(_active_pp), 3)
+                        if _active_pp else 0.0,
+    }
+
     return {
-        "current":   current,
-        "history":   history,
-        "counters":  counters,
-        "stats":     stats,
-        "autopilot": autopilot,
+        "current":    current,
+        "history":    history,
+        "counters":   counters,
+        "stats":      stats,
+        "autopilot":  autopilot,
+        "predictive": predictive,
     }
 
 
@@ -76,6 +102,62 @@ async def force_autopilot_tick(user: AuthUser = Depends(require_admin)):
     """Forza un tick immediato dell'autopilot (gestione lessons + check training)."""
     asyncio.create_task(training_autopilot._tick())
     return {"ok": True, "message": "Autopilot tick avviato"}
+
+
+@router.get("/predictive-overview")
+async def get_predictive_overview(user: AuthUser = Depends(require_admin)):
+    """
+    Statistiche aggregate del Predictive Processing Engine.
+    Scansiona tutti i file predictions:* in storage e aggrega i dati.
+    """
+    from pathlib import Path
+    import json as _json
+
+    pred_dir = Path("memory/predictions")
+    users_data = []
+
+    if pred_dir.exists():
+        for f in pred_dir.glob("*.json"):
+            try:
+                raw = _json.loads(f.read_text(encoding="utf-8"))
+                if not isinstance(raw, dict):
+                    continue
+                total   = raw.get("total_assessments", 0)
+                history = raw.get("accuracy_history", [])
+                avg_acc = sum(history) / len(history) if history else 0.0
+                users_data.append({
+                    "user_id":       f.stem,
+                    "total":         total,
+                    "shadow_mode":   total < 12,
+                    "avg_accuracy":  round(avg_acc, 3),
+                    "last_surprise": raw.get("last_surprise_score"),
+                    "last_pred":     raw.get("next_turn_prediction", "")[:100],
+                    "updated_at":    raw.get("prediction_updated_at"),
+                })
+            except Exception:
+                pass
+
+    active  = [u for u in users_data if not u["shadow_mode"]]
+    shadow  = [u for u in users_data if u["shadow_mode"]]
+    avg_all = (
+        sum(u["avg_accuracy"] for u in active) / len(active)
+        if active else 0.0
+    )
+    # Ultime 3 predizioni più recenti
+    recent_preds = sorted(
+        [u for u in users_data if u["last_pred"]],
+        key=lambda x: x.get("updated_at") or "",
+        reverse=True
+    )[:3]
+
+    return {
+        "total_users":       len(users_data),
+        "active_users":      len(active),
+        "shadow_users":      len(shadow),
+        "avg_accuracy":      round(avg_all, 3),
+        "recent_predictions": recent_preds,
+        "all_users":          sorted(users_data, key=lambda x: -x["total"]),
+    }
 
 
 # ═══════════════════════════════════════════════════════

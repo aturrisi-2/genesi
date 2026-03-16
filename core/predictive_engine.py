@@ -191,11 +191,16 @@ class PredictiveEngine:
             if avg_acc < MIN_ACCURACY:
                 return ""
 
-            return (
+            hint = (
                 f"[TENDENZA PREDITTIVA (accuratezza {avg_acc:.0%}): "
                 f"basandomi sui pattern dell'utente, potrebbe voler approfondire: "
                 f"{pred}]"
             )
+            logger.info(
+                "PREDICTIVE_HINT_INJECTED user=%s acc=%.2f pred='%s'",
+                user_id, avg_acc, pred[:80]
+            )
+            return hint
         except Exception:
             return ""
 
