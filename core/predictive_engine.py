@@ -24,6 +24,7 @@ from datetime import datetime
 from typing import Optional
 
 from core.storage import storage
+from core.log import log as _slog
 
 logger = logging.getLogger("genesi")
 
@@ -31,7 +32,7 @@ logger = logging.getLogger("genesi")
 STORAGE_KEY      = "predictions:{user_id}"
 MAX_HISTORY      = 30    # valutazioni di accuratezza da conservare
 SHADOW_TURNS     = 12    # turni in shadow mode (nessuna iniezione nel prompt)
-MIN_ACCURACY     = 0.28  # soglia minima di accuratezza per iniettare l'hint
+MIN_ACCURACY     = 0.08  # soglia minima di accuratezza per iniettare l'hint
 MAX_RECENT_TURNS = 5     # turni recenti usati per generare la predizione
 
 # Stop words italiane (ignorate nel calcolo di sorpresa)
@@ -78,10 +79,11 @@ class PredictiveEngine:
             shadow = data["total_assessments"] <= SHADOW_TURNS
             await storage.save(STORAGE_KEY.format(user_id=user_id), data)
 
-            logger.info(
-                "PREDICTIVE_ASSESS user=%s surprise=%.2f shadow=%s total=%d",
-                user_id, surprise, shadow, data["total_assessments"]
-            )
+            _slog("PREDICTIVE_ASSESS",
+                  user=user_id,
+                  surprise=round(surprise, 3),
+                  shadow=shadow,
+                  total=data["total_assessments"])
             return {
                 "surprise_score": surprise,
                 "prediction":     prediction,
@@ -94,8 +96,14 @@ class PredictiveEngine:
 
     def _compute_surprise(self, actual: str, prediction: str) -> float:
         """
-        Surprise score 0-1 basato su similarità lessicale (Jaccard).
-        0 = perfettamente previsto · 1 = completamente sorprendente.
+        Surprise score 0-1.
+        Formula soft: anche 1 keyword condivisa = partial match (0.45).
+        Il linguaggio naturale ha bassa ripetizione esatta tra predizione e realtà,
+        quindi la Jaccard pura darebbe 1.0 quasi sempre — usiamo una scala a step.
+
+        0.0  = predizione centrata (Jaccard ≥ 0.25)
+        0.45 = partial match (1-2 keyword in comune)
+        0.85 = nessuna parola in comune — alta sorpresa
         """
         def tokens(text: str):
             return {
@@ -112,7 +120,13 @@ class PredictiveEngine:
         intersection = a & p
         union        = a | p
         jaccard      = len(intersection) / len(union) if union else 0.0
-        return round(1.0 - jaccard, 3)
+
+        if jaccard >= 0.25:
+            return round(1.0 - jaccard, 3)   # buona previsione
+        elif len(intersection) >= 1:
+            return 0.45                        # almeno 1 keyword in comune
+        else:
+            return 0.85                        # nessun overlap
 
     # ── Generazione predizione (background, dopo ogni turno) ───────────────────
 
@@ -164,10 +178,9 @@ class PredictiveEngine:
                 data["next_turn_prediction"]  = prediction.strip()[:300]
                 data["prediction_updated_at"] = datetime.utcnow().isoformat()
                 await storage.save(STORAGE_KEY.format(user_id=user_id), data)
-                logger.info(
-                    "PREDICTIVE_UPDATED user=%s pred='%s'",
-                    user_id, data["next_turn_prediction"][:80]
-                )
+                _slog("PREDICTIVE_UPDATED",
+                      user=user_id,
+                      pred=data["next_turn_prediction"][:80])
         except Exception as e:
             logger.debug("PREDICTIVE_UPDATE_ERROR user=%s err=%s", user_id, e)
 
@@ -196,10 +209,10 @@ class PredictiveEngine:
                 f"basandomi sui pattern dell'utente, potrebbe voler approfondire: "
                 f"{pred}]"
             )
-            logger.info(
-                "PREDICTIVE_HINT_INJECTED user=%s acc=%.2f pred='%s'",
-                user_id, avg_acc, pred[:80]
-            )
+            _slog("PREDICTIVE_HINT_INJECTED",
+                  user=user_id,
+                  acc=round(avg_acc, 3),
+                  pred=pred[:80])
             return hint
         except Exception:
             return ""
