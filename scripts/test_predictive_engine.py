@@ -85,12 +85,25 @@ def send_message(token: str, message: str) -> str:
 
 # ── Log helpers ────────────────────────────────────────────────────────────────
 def read_log_tail(lines: int = 300) -> str:
-    if not LOG_PATH.exists():
-        return ""
     try:
+        if not LOG_PATH.exists():
+            return ""
         with open(LOG_PATH, "r", encoding="utf-8", errors="ignore") as f:
             all_lines = f.readlines()
         return "".join(all_lines[-lines:])
+    except PermissionError:
+        # Fallback: leggi solo ultimi N byte
+        try:
+            with open(LOG_PATH, "rb") as f:
+                f.seek(0, 2)
+                size = f.tell()
+                f.seek(max(0, size - 80000))
+                raw = f.read()
+            text = raw.decode("utf-8", errors="ignore")
+            all_lines = text.splitlines(keepends=True)
+            return "".join(all_lines[-lines:])
+        except Exception:
+            return ""
     except Exception:
         return ""
 
@@ -364,12 +377,30 @@ def main():
     phase_num = 7
     phase(phase_num, "Storage predizione su disco")
 
-    # Cerca lo user_id nell'API (tramite /api/users/me o simile)
-    _, me_data = _req("GET", "/api/users/me", token=token)
-    user_id = me_data.get("id") or me_data.get("user_id")
+    # Cerca lo user_id: prova più endpoint poi fallback su directory
+    user_id = None
+    for endpoint in ("/api/users/me", "/api/user/me", "/api/profile"):
+        _, me_data = _req("GET", endpoint, token=token)
+        user_id = (me_data.get("id") or me_data.get("user_id") or
+                   me_data.get("user", {}).get("id") if isinstance(me_data, dict) else None)
+        if user_id:
+            break
+
     if not user_id:
-        # Fallback: cerca nel log
-        user_id = get_user_id_from_log(email, log_after_all)
+        # Fallback: trova il file predictions modificato più di recente
+        pred_dir = Path("/opt/genesi/memory/predictions")
+        if pred_dir.exists():
+            files = sorted(pred_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+            if files:
+                user_id = files[0].stem
+                info(f"user_id dedotto dal file più recente: {user_id}")
+
+    pred_dir = Path("/opt/genesi/memory/predictions")
+    check(
+        pred_dir.exists() and any(pred_dir.glob("*.json")),
+        f"Directory predictions presente con almeno 1 file",
+        f"Directory /opt/genesi/memory/predictions vuota o assente"
+    )
 
     if user_id:
         info(f"user_id: {user_id}")

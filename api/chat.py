@@ -175,6 +175,17 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
 
         import asyncio as _asyncio
 
+        # Predictive engine: assess sorpresa dell'input rispetto alla predizione attesa
+        # (lightweight: storage read + Jaccard, nessuna chiamata LLM)
+        _assess_input = request.message
+        async def _assess_prediction_input():
+            try:
+                from core.predictive_engine import predictive_engine as _pe
+                await _pe.assess(user_id, _assess_input)
+            except Exception:
+                pass
+        _asyncio.create_task(_assess_prediction_input())
+
         # Episode extractor: estrae eventi personali temporali in BACKGROUND
         async def _extract_and_save_episode():
             async with _BACKGROUND_LLM_SEM:
@@ -335,6 +346,16 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
 
     async def _run_pipeline():
         try:
+            # Predictive engine: assess sorpresa input (lightweight, prima del processing)
+            _stream_assess_msg = request.message
+            async def _stream_assess_prediction():
+                try:
+                    from core.predictive_engine import predictive_engine as _pe
+                    await _pe.assess(user_id, _stream_assess_msg)
+                except Exception:
+                    pass
+            _aio.create_task(_stream_assess_prediction())
+
             resp = await _sch(user_id, request.message, request.conversation_id)
             if isinstance(resp, tuple):
                 resp = resp[0]
