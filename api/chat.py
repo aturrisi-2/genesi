@@ -226,6 +226,18 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                     log("PERSONAL_FACTS_SAVE_ERROR", user_id=user_id, error=str(_pf_e))
         _asyncio.create_task(_extract_and_save_personal_facts())
 
+        # Predictive engine: aggiorna predizione prossimo turno (background)
+        _pred_msg  = request.message
+        _pred_resp = _raw_response
+        async def _update_prediction():
+            async with _BACKGROUND_LLM_SEM:
+                try:
+                    from core.predictive_engine import predictive_engine as _pe
+                    await _pe.update_prediction(user_id, _pred_msg, _pred_resp)
+                except Exception:
+                    pass
+        _asyncio.create_task(_update_prediction())
+
         # Behavioral memory update in background (zero-cost, no LLM)
         _beh_msg = request.message
         _beh_resp = _raw_response
@@ -360,6 +372,18 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                     except Exception as _pf_e:
                         log("PERSONAL_FACTS_SAVE_ERROR", user_id=user_id, error=str(_pf_e))
             _aio.create_task(_stream_extract_personal_facts())
+
+            # Predictive engine: aggiorna predizione prossimo turno (background)
+            _stream_pred_msg  = request.message
+            _stream_pred_resp = resp
+            async def _stream_update_prediction():
+                async with _BACKGROUND_LLM_SEM:
+                    try:
+                        from core.predictive_engine import predictive_engine as _pe
+                        await _pe.update_prediction(user_id, _stream_pred_msg, _stream_pred_resp)
+                    except Exception:
+                        pass
+            _aio.create_task(_stream_update_prediction())
 
             # Behavioral memory update in background (zero-cost, no LLM)
             _stream_beh_msg = request.message
