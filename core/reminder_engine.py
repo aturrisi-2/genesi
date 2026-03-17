@@ -39,8 +39,7 @@ class ReminderEngine:
             with open(file_path, 'r', encoding='utf-8') as f:
                 reminders = json.load(f)
             
-            if reminders:
-                log("REMINDER_LOAD", user_id=user_id, count=len(reminders), level="DEBUG")
+            # REMINDER_LOAD rimosso — generava spam ogni 30s per ogni utente
             return reminders
             
         except Exception as e:
