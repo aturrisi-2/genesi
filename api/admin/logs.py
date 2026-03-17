@@ -34,11 +34,13 @@ def _extract_tag(line: str) -> str:
 
 
 def _matches(line: str, filter_tags: list[str]) -> bool:
-    """True se la riga passa il filtro attivo (OR tra i tag)."""
+    """True se la riga passa il filtro attivo (OR tra i tag).
+    Usa substring match: 'ERROR' matcha sia ERROR_X che REMINDER_LOAD_ERROR.
+    """
     if not filter_tags:
         return True
     tag = _extract_tag(line)
-    return any(tag.startswith(f) for f in filter_tags)
+    return any(f in tag for f in filter_tags)
 
 
 @router.get("/stream")
