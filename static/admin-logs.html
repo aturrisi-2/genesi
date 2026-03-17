@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Genesi — Log Live</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0a0a0f;
+    --surface:  #111118;
+    --border:   #1e1e2e;
+    --muted:    #4a4a6a;
+    --text:     #e2e8f0;
+    --dim:      #94a3b8;
+
+    /* tag colours */
+    --red:    #ef4444;
+    --green:  #22c55e;
+    --blue:   #3b82f6;
+    --cyan:   #06b6d4;
+    --purple: #a855f7;
+    --orange: #f97316;
+    --yellow: #eab308;
+    --pink:   #ec4899;
+    --teal:   #14b8a6;
+  }
+
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
+
+  /* ── Layout ── */
+  .shell     { display: grid; grid-template-rows: 48px 1fr; height: 100vh; }
+  .topbar    { display: flex; align-items: center; gap: 12px; padding: 0 16px;
+               background: var(--surface); border-bottom: 1px solid var(--border);
+               flex-shrink: 0; }
+  .body      { display: grid; grid-template-columns: 200px 1fr; overflow: hidden; }
+  .sidebar   { background: var(--surface); border-right: 1px solid var(--border);
+               overflow-y: auto; padding: 12px 0; }
+  .main      { display: flex; flex-direction: column; overflow: hidden; }
+  .toolbar   { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+               border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .terminal  { flex: 1; overflow-y: auto; padding: 8px 12px; font-family: 'JetBrains Mono','Fira Code','Courier New',monospace;
+               font-size: 12px; line-height: 1.6; background: var(--bg); }
+  .statusbar { display: flex; align-items: center; gap: 16px; padding: 4px 12px;
+               border-top: 1px solid var(--border); font-size: 11px; color: var(--muted);
+               background: var(--surface); flex-shrink: 0; }
+
+  /* ── Topbar ── */
+  .logo      { font-weight: 700; font-size: 1rem; color: var(--text); }
+  .logo span { color: var(--cyan); }
+  .back-link { font-size: .8rem; color: var(--muted); text-decoration: none; margin-right: 8px; }
+  .back-link:hover { color: var(--text); }
+  .conn-dot  { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .conn-dot.connected    { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .conn-dot.disconnected { background: var(--red); }
+  .conn-dot.connecting   { background: var(--yellow); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .conn-label { font-size: .75rem; color: var(--dim); }
+  .ml-auto { margin-left: auto; }
+
+  /* ── Sidebar ── */
+  .sb-group  { padding: 6px 12px 2px; font-size: .65rem; text-transform: uppercase;
+               letter-spacing: .08em; color: var(--muted); }
+  .sb-btn    { display: flex; align-items: center; gap: 8px; width: 100%;
+               padding: 5px 14px; font-size: .75rem; cursor: pointer; border: none;
+               background: transparent; color: var(--dim); text-align: left; transition: background .15s; }
+  .sb-btn:hover  { background: rgba(255,255,255,.04); color: var(--text); }
+  .sb-btn.active { background: rgba(255,255,255,.07); color: var(--text); }
+  .sb-dot    { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .sb-count  { margin-left: auto; font-size: .65rem; color: var(--muted); }
+  .sb-sep    { height: 1px; background: var(--border); margin: 6px 0; }
+
+  /* ── Toolbar ── */
+  .search    { flex: 1; background: var(--surface); border: 1px solid var(--border);
+               border-radius: 6px; padding: 5px 10px; color: var(--text); font-size: .8rem;
+               font-family: inherit; outline: none; }
+  .search:focus { border-color: var(--cyan); }
+  .search::placeholder { color: var(--muted); }
+  .btn       { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+               background: var(--surface); color: var(--dim); font-size: .75rem;
+               cursor: pointer; white-space: nowrap; transition: all .15s; }
+  .btn:hover { background: rgba(255,255,255,.06); color: var(--text); }
+  .btn.active { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.4); color: #818cf8; }
+  .btn.danger { border-color: rgba(239,68,68,.3); color: var(--red); }
+  .btn.danger:hover { background: rgba(239,68,68,.1); }
+  select.btn { padding: 4px 8px; }
+
+  /* ── Terminal log line ── */
+  .log-line  { display: block; padding: 1px 0; white-space: pre-wrap; word-break: break-all; border-radius: 2px; }
+  .log-line:hover { background: rgba(255,255,255,.03); }
+  .ts        { color: var(--muted); }
+  .tag-error  { color: var(--red);    font-weight: 600; }
+  .tag-ok     { color: var(--green);  font-weight: 600; }
+  .tag-intent { color: var(--blue);   font-weight: 600; }
+  .tag-memory { color: var(--purple); font-weight: 600; }
+  .tag-auto   { color: var(--orange); font-weight: 600; }
+  .tag-pred   { color: var(--cyan);   font-weight: 600; }
+  .tag-auth   { color: var(--yellow); font-weight: 600; }
+  .tag-chat   { color: var(--teal);   font-weight: 600; }
+  .tag-warn   { color: var(--pink);   font-weight: 600; }
+  .tag-def    { color: var(--dim);    font-weight: 600; }
+  .kv         { color: var(--text); }
+  .kv-key     { color: var(--muted); }
+  .highlight  { background: rgba(234,179,8,.25); color: var(--yellow); border-radius: 2px; }
+
+  /* ── Empty / loading ── */
+  .empty     { display: flex; align-items: center; justify-content: center; height: 100%;
+               color: var(--muted); font-size: .85rem; flex-direction: column; gap: 8px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <a href="/admin" class="back-link">← Admin</a>
+    <div class="logo">⚡ <span>Log Live</span></div>
+    <div class="conn-dot connecting" id="connDot"></div>
+    <span class="conn-label" id="connLabel">Connessione…</span>
+    <div class="ml-auto" style="display:flex;gap:8px;align-items:center">
+      <span id="linesPerMin" class="conn-label"></span>
+      <button class="btn" id="exportBtn" onclick="exportLog()">⬇ Export</button>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="body">
+
+    <!-- SIDEBAR FILTRI -->
+    <div class="sidebar">
+      <div class="sb-group">Visualizza</div>
+      <button class="sb-btn active" data-filter="" onclick="setFilter(this)">
+        <span class="sb-dot" style="background:var(--dim)"></span> Tutto
+        <span class="sb-count" id="cnt-all">0</span>
+      </button>
+
+      <div class="sb-sep"></div>
+      <div class="sb-group">Per categoria</div>
+
+      <button class="sb-btn" data-filter="ERROR,FAILED,CRASH" onclick="setFilter(this)">
+        <span class="sb-dot" style="background:var(--red)"></span> Errori
+        <span class="sb-count" id="cnt-err">0</span>
+      </button>
+      <button class="sb-btn" data-filter="WARN,SKIP,RETRY,TIMEOUT" onclick="setFilter(this)">
+        <span class="sb-dot" style="background:var(--pink)"></span> Warning
+        <span class="sb-count" id="cnt-warn">0</span>
+      </button>
+      <button class="sb-btn" data-filter="API_CHAT,CHAT_,SSE_,STREAM_" onclick="setFilter(this)">
+        <span class="sb-dot" style="background:var(--teal)"></span> Chat
+        <span class="sb-count" id="cnt-chat">0</span>
+      </button>
+      <button class="sb-btn" data-filter="INTENT_,LLM_,CLASSIFY_,ADAPTIVE" onclick="setFilter(this)">
+        <span class="sb-dot" style="background:var(--blue)"></span> AI / Intent
+        <span class="sb-count" id="cnt-intent">0</span>
+      </button>
+      <button class="sb-btn" data-filter="COGNITIVE_,PERSONAL_FACTS,EPISODE_,GLOBAL_" onclick="setFilter(this)">
+        <span class="sb-dot" style="background:var(--purple)"></span> Memoria
+        <span class="sb-count" id="cnt-mem">0</span>
+      </button>
+      <button class="sb-btn" data-filter="AUTOPILOT_,TRAINING_,LESSON_,MARATHON_" onclick="setFilter(this)">
+        <span class="sb-dot" style="background:var(--orange)"></span> Autopilot
+        <span class="sb-count" id="cnt-auto">0</span>
+      </button>
+      <button class="sb-btn" data-filter="PREDICTIVE_" onclick="setFilter(this)">
+        <span class="sb-dot" style="background:var(--cyan)"></span> Predittivo
+        <span class="sb-count" id="cnt-pred">0</span>
+      </button>
+      <button class="sb-btn" data-filter="AUTH_,JWT_,LOGIN_,REGISTER_" onclick="setFilter(this)">
+        <span class="sb-dot" style="background:var(--yellow)"></span> Auth
+        <span class="sb-count" id="cnt-auth">0</span>
+      </button>
+
+      <div class="sb-sep"></div>
+      <div class="sb-group">Azioni</div>
+      <button class="sb-btn" onclick="clearTerminal()">
+        <span style="font-size:.9rem">🗑</span> Pulisci schermo
+      </button>
+      <button class="sb-btn" id="pauseBtn" onclick="togglePause()">
+        <span style="font-size:.9rem">⏸</span> Pausa
+      </button>
+      <button class="sb-btn" onclick="reconnect()">
+        <span style="font-size:.9rem">🔄</span> Riconnetti
+      </button>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+
+      <!-- TOOLBAR -->
+      <div class="toolbar">
+        <input class="search" id="searchBox" type="text" placeholder="Cerca nel log… (supporta regex)"
+               oninput="onSearch()" onkeydown="if(e.key==='Escape')clearSearch()">
+        <button class="btn" id="regexBtn" onclick="toggleRegex()" title="Abilita regex">.*</button>
+        <button class="btn" id="wrapBtn"  onclick="toggleWrap()">↵ Wrap</button>
+        <button class="btn active" id="scrollBtn" onclick="toggleScroll()">↓ Auto-scroll</button>
+        <select class="btn" id="historySel" onchange="changeHistory()">
+          <option value="200">200 righe</option>
+          <option value="500" selected>500 righe</option>
+          <option value="1000">1000 righe</option>
+        </select>
+      </div>
+
+      <!-- TERMINAL -->
+      <div class="terminal" id="terminal">
+        <div class="empty" id="emptyMsg">
+          <span style="font-size:2rem">📋</span>
+          Connessione al log in corso…
+        </div>
+      </div>
+
+      <!-- STATUSBAR -->
+      <div class="statusbar">
+        <span id="sbLines">0 righe</span>
+        <span id="sbFiltered" style="display:none"></span>
+        <span id="sbLastTag"></span>
+        <span class="ml-auto" id="sbTime"></span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════
+//  AUTH
+// ════════════════════════════════════════════════════
+const token   = localStorage.getItem('genesi_access_token') || '';
+const isAdmin = localStorage.getItem('genesi_is_admin') === 'true';
+if (!token || !isAdmin) {
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#ef4444;font-size:1.2rem">⛔ Accesso riservato agli admin</div>';
+  throw new Error('not admin');
+}
+
+// ════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════
+let paused       = false;
+let autoScroll   = true;
+let wrapLines    = false;
+let useRegex     = false;
+let activeFilter = '';   // prefissi backend (inviati al server)
+let searchQuery  = '';
+let searchRx     = null;
+let lineCount    = 0;
+let errorCount   = 0;
+let recentRates  = [];   // timestamp degli ultimi 60s
+let allLines     = [];   // buffer completo per re-render dopo ricerca
+let abortCtrl    = null; // AbortController per il fetch stream
+
+// Contatori sidebar
+const counts = { all:0, err:0, warn:0, chat:0, intent:0, mem:0, auto:0, pred:0, auth:0 };
+
+// ════════════════════════════════════════════════════
+//  TAG CLASSIFICATION
+// ════════════════════════════════════════════════════
+function classifyTag(tag) {
+  if (!tag) return 'def';
+  const t = tag.toUpperCase();
+  if (t.includes('ERROR') || t.includes('FAILED') || t.includes('CRASH')) return 'error';
+  if (t.includes('WARN') || t.includes('SKIP') || t.includes('RETRY') || t.includes('TIMEOUT')) return 'warn';
+  if (t.includes('OK') || t.includes('SAVED') || t.includes('STARTED') ||
+      t.includes('DONE') || t.includes('COMPLETED') || t.includes('ACTIVATED')) return 'ok';
+  if (t.startsWith('PREDICTIVE')) return 'pred';
+  if (t.startsWith('AUTOPILOT') || t.startsWith('TRAINING') ||
+      t.startsWith('LESSON')    || t.startsWith('MARATHON')) return 'auto';
+  if (t.startsWith('COGNITIVE') || t.startsWith('PERSONAL_FACTS') ||
+      t.startsWith('EPISODE')   || t.startsWith('GLOBAL_')) return 'memory';
+  if (t.startsWith('INTENT')  || t.startsWith('LLM_') ||
+      t.startsWith('CLASSIFY') || t.startsWith('ADAPTIVE')) return 'intent';
+  if (t.startsWith('AUTH')  || t.startsWith('JWT') ||
+      t.startsWith('LOGIN') || t.startsWith('REGISTER')) return 'auth';
+  if (t.startsWith('API_CHAT') || t.startsWith('CHAT_') ||
+      t.startsWith('SSE_')     || t.startsWith('STREAM_')) return 'chat';
+  return 'def';
+}
+
+function updateCounts(tag) {
+  const t = (tag || '').toUpperCase();
+  counts.all++;
+  if (t.includes('ERROR') || t.includes('FAILED')) counts.err++;
+  if (t.includes('WARN')  || t.includes('SKIP') || t.includes('RETRY')) counts.warn++;
+  if (t.startsWith('API_CHAT') || t.startsWith('CHAT_') || t.startsWith('SSE_')) counts.chat++;
+  if (t.startsWith('INTENT')   || t.startsWith('LLM_')  || t.startsWith('CLASSIFY')) counts.intent++;
+  if (t.startsWith('COGNITIVE')|| t.startsWith('PERSONAL_FACTS')|| t.startsWith('EPISODE')|| t.startsWith('GLOBAL_')) counts.mem++;
+  if (t.startsWith('AUTOPILOT')|| t.startsWith('TRAINING')|| t.startsWith('LESSON')) counts.auto++;
+  if (t.startsWith('PREDICTIVE')) counts.pred++;
+  if (t.startsWith('AUTH')     || t.startsWith('JWT') || t.startsWith('LOGIN')) counts.auth++;
+  ['all','err','warn','chat','intent','mem','auto','pred','auth'].forEach(k => {
+    const el = document.getElementById('cnt-' + k);
+    if (el) el.textContent = counts[k] || '';
+  });
+}
+
+// ════════════════════════════════════════════════════
+//  LOG LINE RENDERING
+// ════════════════════════════════════════════════════
+function parseLine(raw) {
+  // Formato: [2026-03-17T14:32:45] TAG key=value key="val with spaces"
+  const m = raw.match(/^(\[\S+\])\s+(\S+)\s*(.*)$/s);
+  if (!m) return { ts: '', tag: '', rest: raw, tagClass: 'def' };
+  return { ts: m[1], tag: m[2], rest: m[3], tagClass: classifyTag(m[2]) };
+}
+
+function applyHighlight(text) {
+  if (!searchQuery) return text;
+  try {
+    const rx = searchRx || new RegExp(escapeRx(searchQuery), 'gi');
+    return text.replace(rx, match => `<span class="highlight">${match}</span>`);
+  } catch { return text; }
+}
+
+function escapeRx(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function renderLine(raw) {
+  const { ts, tag, rest, tagClass } = parseLine(raw);
+  const tsHtml  = ts   ? `<span class="ts">${ts} </span>` : '';
+  const tagHtml = tag  ? `<span class="tag-${tagClass}">${tag}</span> ` : '';
+  const restHtml = applyHighlight(rest.replace(/</g, '&lt;'));
+  return `<span class="log-line">${tsHtml}${tagHtml}<span class="kv">${restHtml}</span></span>`;
+}
+
+function shouldShow(raw) {
+  if (!searchQuery) return true;
+  try {
+    const rx = searchRx || new RegExp(useRegex ? searchQuery : escapeRx(searchQuery), 'i');
+    return rx.test(raw);
+  } catch { return raw.toLowerCase().includes(searchQuery.toLowerCase()); }
+}
+
+// ════════════════════════════════════════════════════
+//  TERMINAL DOM
+// ════════════════════════════════════════════════════
+const MAX_DOM_LINES = 3000;
+const terminal = document.getElementById('terminal');
+const emptyMsg = document.getElementById('emptyMsg');
+let   domLineCount = 0;
+
+function appendToTerminal(raw, isInitial = false) {
+  if (paused && !isInitial) return;
+
+  allLines.push(raw);
+  if (allLines.length > 5000) allLines.shift();
+
+  const { tag } = parseLine(raw);
+  updateCounts(tag);
+  lineCount++;
+  recentRates.push(Date.now());
+
+  if (shouldShow(raw)) {
+    if (emptyMsg.parentNode) emptyMsg.remove();
+    const span = document.createElement('div');
+    span.innerHTML = renderLine(raw);
+    terminal.appendChild(span);
+    domLineCount++;
+
+    // Limite DOM
+    if (domLineCount > MAX_DOM_LINES) {
+      terminal.removeChild(terminal.firstChild);
+      domLineCount--;
+    }
+
+    if (autoScroll) terminal.scrollTop = terminal.scrollHeight;
+  }
+
+  // Status bar
+  document.getElementById('sbLines').textContent = lineCount.toLocaleString('it') + ' righe';
+  document.getElementById('sbLastTag').textContent = tag || '';
+  document.getElementById('sbTime').textContent = new Date().toLocaleTimeString('it');
+
+  // Error count
+  if (tag && (tag.includes('ERROR') || tag.includes('FAILED'))) {
+    errorCount++;
+    const el = document.getElementById('connLabel');
+    el.textContent = `● ${errorCount} errori`;
+    el.style.color = 'var(--red)';
+  }
+}
+
+function reRenderAll() {
+  terminal.innerHTML = '';
+  domLineCount = 0;
+  const visible = allLines.filter(shouldShow);
+  visible.slice(-MAX_DOM_LINES).forEach(raw => {
+    const div = document.createElement('div');
+    div.innerHTML = renderLine(raw);
+    terminal.appendChild(div);
+    domLineCount++;
+  });
+  const sb = document.getElementById('sbFiltered');
+  if (searchQuery && visible.length < allLines.length) {
+    sb.textContent = `${visible.length} di ${allLines.length} filtrate`;
+    sb.style.display = '';
+  } else {
+    sb.style.display = 'none';
+  }
+  if (autoScroll) terminal.scrollTop = terminal.scrollHeight;
+}
+
+// ════════════════════════════════════════════════════
+//  STREAMING (fetch + ReadableStream)
+// ════════════════════════════════════════════════════
+function setConnState(state) {
+  const dot   = document.getElementById('connDot');
+  const label = document.getElementById('connLabel');
+  dot.className = 'conn-dot ' + state;
+  if (state === 'connected')    label.textContent = 'Connesso';
+  if (state === 'disconnected') label.textContent = 'Disconnesso';
+  if (state === 'connecting')   label.textContent = 'Connessione…';
+}
+
+async function startStream() {
+  if (abortCtrl) abortCtrl.abort();
+  abortCtrl = new AbortController();
+  setConnState('connecting');
+
+  const histLines = document.getElementById('historySel').value;
+  const url = `/api/admin/logs/stream?lines=${histLines}&filter=${encodeURIComponent(activeFilter)}`;
+
+  try {
+    const resp = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}` },
+      signal: abortCtrl.signal,
+    });
+    if (!resp.ok) {
+      setConnState('disconnected');
+      document.getElementById('connLabel').textContent = `Errore ${resp.status}`;
+      setTimeout(startStream, 5000);
+      return;
+    }
+
+    setConnState('connected');
+    const reader  = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let   buf     = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split('\n');
+      buf = parts.pop(); // ultimo pezzo incompleto
+      for (const part of parts) {
+        if (part.startsWith('data: ')) {
+          try {
+            const obj = JSON.parse(part.slice(6));
+            if (obj.line) appendToTerminal(obj.line, !!obj.initial);
+            if (obj.status === 'ready') {}  // stream pronto
+          } catch {}
+        }
+      }
+    }
+    // Stream chiuso: riconnetti
+    setConnState('disconnected');
+    setTimeout(startStream, 3000);
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      setConnState('disconnected');
+      setTimeout(startStream, 5000);
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  CONTROLS
+// ════════════════════════════════════════════════════
+function setFilter(btn) {
+  document.querySelectorAll('.sb-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeFilter = btn.dataset.filter || '';
+  // Riconnetti con nuovo filtro
+  allLines = [];
+  lineCount = 0;
+  Object.keys(counts).forEach(k => counts[k] = 0);
+  terminal.innerHTML = '';
+  terminal.appendChild(emptyMsg);
+  domLineCount = 0;
+  startStream();
+}
+
+function onSearch() {
+  searchQuery = document.getElementById('searchBox').value;
+  if (useRegex && searchQuery) {
+    try { searchRx = new RegExp(searchQuery, 'gi'); } catch { searchRx = null; }
+  } else {
+    searchRx = null;
+  }
+  reRenderAll();
+}
+
+function clearSearch() {
+  document.getElementById('searchBox').value = '';
+  searchQuery = '';
+  searchRx    = null;
+  reRenderAll();
+}
+
+function toggleRegex() {
+  useRegex = !useRegex;
+  document.getElementById('regexBtn').classList.toggle('active', useRegex);
+  onSearch();
+}
+
+function toggleWrap() {
+  wrapLines = !wrapLines;
+  terminal.style.whiteSpace = wrapLines ? 'pre-wrap' : 'nowrap';
+  terminal.style.overflowX  = wrapLines ? 'hidden' : 'auto';
+  document.getElementById('wrapBtn').classList.toggle('active', wrapLines);
+}
+
+function toggleScroll() {
+  autoScroll = !autoScroll;
+  document.getElementById('scrollBtn').classList.toggle('active', autoScroll);
+  if (autoScroll) terminal.scrollTop = terminal.scrollHeight;
+}
+
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('pauseBtn');
+  btn.innerHTML = paused
+    ? '<span style="font-size:.9rem">▶</span> Riprendi'
+    : '<span style="font-size:.9rem">⏸</span> Pausa';
+  btn.classList.toggle('active', paused);
+}
+
+function clearTerminal() {
+  terminal.innerHTML = '';
+  terminal.appendChild(emptyMsg);
+  emptyMsg.style.display = '';
+  allLines = [];
+  lineCount = 0;
+  domLineCount = 0;
+  Object.keys(counts).forEach(k => counts[k] = 0);
+  document.getElementById('sbLines').textContent = '0 righe';
+}
+
+function reconnect() {
+  clearTerminal();
+  startStream();
+}
+
+function changeHistory() {
+  reconnect();
+}
+
+function exportLog() {
+  const text = allLines.join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `genesi-log-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.txt`;
+  a.click();
+}
+
+// ════════════════════════════════════════════════════
+//  AUTO-SCROLL: pause when user scrolls up
+// ════════════════════════════════════════════════════
+terminal.addEventListener('scroll', () => {
+  const atBottom = terminal.scrollHeight - terminal.scrollTop - terminal.clientHeight < 60;
+  if (!atBottom && autoScroll) {
+    autoScroll = false;
+    document.getElementById('scrollBtn').classList.remove('active');
+  } else if (atBottom && !autoScroll) {
+    autoScroll = true;
+    document.getElementById('scrollBtn').classList.add('active');
+  }
+});
+
+// ════════════════════════════════════════════════════
+//  LINES/MIN COUNTER
+// ════════════════════════════════════════════════════
+setInterval(() => {
+  const now   = Date.now();
+  recentRates = recentRates.filter(t => now - t < 60000);
+  const rpm   = recentRates.length;
+  document.getElementById('linesPerMin').textContent = rpm > 0 ? `${rpm}/min` : '';
+}, 5000);
+
+// ════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════
+startStream();
+</script>
+</body>
+</html>

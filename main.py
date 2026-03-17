@@ -37,6 +37,7 @@ from api.coding import coding_router
 from api.calendar_auth import router as calendar_auth_router
 from api.admin_fallback import router as admin_fallback_router
 from api.admin.training import router as admin_training_router
+from api.admin.logs import router as admin_logs_router
 from api.integrations import router as integrations_router
 from api.news import router as news_router
 from auth.database import init_db, async_session
@@ -301,6 +302,10 @@ async def serve_admin():
 async def serve_training_admin():
     return FileResponse(BASE_DIR / "static" / "admin-training.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
+@app.get("/admin-logs")
+async def serve_admin_logs():
+    return FileResponse(BASE_DIR / "static" / "admin-logs.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
 @app.get("/brochure")
 async def serve_brochure():
     return FileResponse(
@@ -352,6 +357,7 @@ app.include_router(conversations_router, prefix="/api")
 app.include_router(calendar_auth_router, prefix="/api")
 app.include_router(admin_fallback_router, prefix="/api")
 app.include_router(admin_training_router, prefix="/api")
+app.include_router(admin_logs_router, prefix="/api")
 app.include_router(integrations_router, prefix="/api")
 app.include_router(news_router)
 app.include_router(coding_router)
