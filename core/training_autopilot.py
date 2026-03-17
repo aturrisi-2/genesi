@@ -124,23 +124,19 @@ class TrainingAutopilot:
         sorted_corr = sorted(corrections, key=priority)
         top_ids     = {c["id"] for c in sorted_corr[:MAX_ACTIVE_LESSONS]}
 
-        activated   = 0
-        deactivated = 0
-
+        # Calcola i cambiamenti necessari senza toccare il disco
+        changes = {}
         for c in corrections:
-            cid        = c["id"]
-            is_active  = c.get("lesson_active", False)
-            should_be  = cid in top_ids
-
+            cid       = c["id"]
+            is_active = c.get("lesson_active", False)
+            should_be = cid in top_ids
             if should_be and not is_active:
-                ok = await training_engine.toggle_lesson(cid, True)
-                if ok:
-                    activated += 1
+                changes[cid] = True
             elif not should_be and is_active:
-                ok = await training_engine.toggle_lesson(cid, False)
-                if ok:
-                    deactivated += 1
+                changes[cid] = False
 
+        # Un solo load+save per tutti i cambiamenti
+        activated, deactivated = await training_engine.batch_toggle_lessons(changes)
         return activated, deactivated
 
     # ── Trigger automatico training ────────────────────────────────────────────

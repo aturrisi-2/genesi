@@ -162,7 +162,6 @@ class MemoryStorage:
                 )
                 raise RuntimeError("JSON integrity failure after write")
 
-            log("STORAGE_SAVE", path=file_path, key=key)
             return True
             
         except RuntimeError:
@@ -299,7 +298,6 @@ class MemoryStorage:
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(json_string)
             
-            log("STORAGE_SAVE", path=file_path, key=key)
             return True
             
         except RuntimeError:

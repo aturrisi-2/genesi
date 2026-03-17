@@ -90,6 +90,29 @@ class TrainingEngine:
                 return True
         return False
 
+    async def batch_toggle_lessons(self, changes: dict) -> tuple[int, int]:
+        """Applica più toggle in un unico load+save.
+        changes = {correction_id: True/False}
+        Ritorna (activated, deactivated).
+        """
+        if not changes:
+            return 0, 0
+        corrections = await self._load()
+        activated = deactivated = 0
+        for c in corrections:
+            cid = c.get("id")
+            if cid in changes:
+                new_state = changes[cid]
+                if new_state and not c.get("lesson_active"):
+                    activated += 1
+                elif not new_state and c.get("lesson_active"):
+                    deactivated += 1
+                c["lesson_active"] = new_state
+        if activated or deactivated:
+            await storage.save(CORRECTIONS_KEY, corrections)
+            logger.info("LESSONS_BATCH_TOGGLED activated=%d deactivated=%d", activated, deactivated)
+        return activated, deactivated
+
     async def get_active_lessons(self) -> List[Dict]:
         """Restituisce solo le lessons attive."""
         corrections = await self._load()
