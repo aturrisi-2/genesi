@@ -146,9 +146,9 @@ async def append_message(conv_id: str, body: dict, current_user: AuthUser = Depe
         if first_user:
             conv["title"] = first_user["content"][:50]
     _save_conv(user_id, conv)
-    # Background: aggiorna sommario conversazione ogni 5 messaggi (>=4 totali)
+    # Background: aggiorna sommario conversazione ogni 3 messaggi (>=2 totali)
     msg_count = len(conv["messages"])
-    if msg_count >= 4 and msg_count % 5 == 0:
+    if msg_count >= 2 and msg_count % 3 == 0:
         try:
             from core.conversation_summary_service import conv_summary_service
             asyncio.create_task(conv_summary_service.record_summary(

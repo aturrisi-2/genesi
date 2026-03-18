@@ -13,8 +13,8 @@ from core.log import log
 logger = logging.getLogger(__name__)
 
 _MAX_SUMMARIES = 10
-_MIN_MESSAGES_FOR_SUMMARY = 4
-_UPDATE_EVERY_N_MESSAGES = 5
+_MIN_MESSAGES_FOR_SUMMARY = 2   # anche conversazioni brevi (1 scambio = 2 msg)
+_UPDATE_EVERY_N_MESSAGES = 3    # aggiorna ogni 3 nuovi messaggi
 
 
 class ConversationSummaryService:
