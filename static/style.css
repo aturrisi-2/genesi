@@ -181,6 +181,7 @@ body::after {
   gap: 20px;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
+  scroll-padding-bottom: 110px;
 }
 
 /* Spacer che spinge i messaggi sotto il widget (min-height = altezza widget) */
@@ -1190,6 +1191,7 @@ body {
     padding: 0 12px 140px;
     /* scroll-padding-top: tiene il focus dell'ultimo msg sotto il widget */
     scroll-padding-top: 220px;
+    scroll-padding-bottom: 140px;
   }
   #dialogue::before {
     flex-basis: 240px;
