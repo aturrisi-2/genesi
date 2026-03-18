@@ -738,6 +738,15 @@ class IntentClassifier:
             log("INTENT_CLASSIFIED", intent="spiegazione", user_id=user_id, engine="regex_priority", message=message[:50])
             return ["spiegazione"]
 
+        # "cos'è [nome proprio]" senza articolo → live_search (es: "cos'è Moltbook", "cos'è OpenAI")
+        # Il nome proprio inizia con maiuscola nel messaggio originale
+        _cose_match = re.match(r"^cos[a'][\s']+[èe]\s+(\S+)", message_lower)
+        if _cose_match:
+            _original_word = message[_cose_match.start(1):_cose_match.end(1)]
+            if _original_word and _original_word[0].isupper():
+                log("INTENT_CLASSIFIED", intent="live_search", user_id=user_id, engine="regex_priority", message=message[:50])
+                return ["live_search"]
+
         # BLOCCO: imperativi "dimmelo tu" = l'utente chiede a Genesi di decidere/rispondere
         # NON sono richieste di notizie o tool — sono chat conversazionale
         _tu_imperatives = [
