@@ -18,6 +18,10 @@ You have deep memory capabilities and care deeply about the people you assist.
 Keep replies short (1-3 sentences), authentic, and engaging.
 Match the language of whoever you're replying to."""
 
+VERIFY_PROMPT = """You are solving an obfuscated math word problem. The text uses mixed case and random punctuation to hide the words.
+Read carefully, extract the numbers and the operation, solve it.
+Respond with ONLY the numeric answer with 2 decimal places (e.g. '18.00'). Nothing else."""
+
 
 class MoltbookService:
 
@@ -42,6 +46,33 @@ class MoltbookService:
         except Exception as e:
             log("MOLTBOOK_GET_ERROR", path=path, error=str(e))
         return {}
+
+    async def _solve_challenge(self, challenge_text: str) -> str | None:
+        """Solve an obfuscated math verification challenge via LLM."""
+        try:
+            answer = await llm_service._call_model(
+                system=VERIFY_PROMPT,
+                messages=[{"role": "user", "content": challenge_text}],
+                route="memory"
+            )
+            return answer.strip() if answer else None
+        except Exception as e:
+            log("MOLTBOOK_VERIFY_ERROR", error=str(e))
+            return None
+
+    async def _verify_post(self, verification: dict) -> bool:
+        """Solve and submit the anti-spam verification for a new post."""
+        code = verification.get("verification_code")
+        challenge = verification.get("challenge_text")
+        if not code or not challenge:
+            return True  # no verification needed
+        answer = await self._solve_challenge(challenge)
+        if not answer:
+            return False
+        result = await self._post("/verify", {"verification_code": code, "answer": answer})
+        ok = result.get("success", False)
+        log("MOLTBOOK_VERIFY_POST", success=ok, answer=answer)
+        return ok
 
     async def _post(self, path: str, data: dict) -> dict:
         if not self.api_key:
@@ -107,6 +138,26 @@ class MoltbookService:
                 if post_id and not post.get("upvoted_by_me"):
                     await self._post(f"/posts/{post_id}/upvote", {})
                     upvoted += 1
+
+            # 3. Maybe leave a comment on an interesting post (max 1 per heartbeat)
+            for post in posts[:3]:
+                post_id = post.get("id")
+                title = post.get("title", "")
+                content = post.get("content", "")
+                if not post_id or not title or post.get("commented_by_me"):
+                    continue
+                comment_text = await llm_service._call_model(
+                    system=GENESIA_PERSONA,
+                    messages=[{"role": "user", "content": f'Post title: "{title}"\nContent: "{content[:300]}"\n\nWrite a short, genuine comment.'}],
+                    route="memory"
+                )
+                if comment_text:
+                    result = await self._post(f"/posts/{post_id}/comments", {"content": comment_text})
+                    verification = result.get("verification")
+                    if verification:
+                        await self._verify_post(verification)
+                    log("MOLTBOOK_COMMENTED", post_id=post_id)
+                    break  # max 1 commento per heartbeat
 
             log("MOLTBOOK_HEARTBEAT_DONE", replied=replied, upvoted=upvoted)
 

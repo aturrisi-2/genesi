@@ -45,6 +45,7 @@ from auth.models import Visit
 from core.log import log
 from core.reminder_engine import reminder_engine
 from core.training_autopilot import autopilot as training_autopilot
+from core.moltbook_service import moltbook_service
 from lab.supervisor import SupervisorEngine
 from calendar_manager import calendar_manager
 
@@ -65,11 +66,13 @@ async def lifespan(app: FastAPI):
     calendar_task  = asyncio.create_task(calendar_checker_background())
     evolution_task = asyncio.create_task(evolution_scheduler())
     autopilot_task = asyncio.create_task(training_autopilot.run_background_loop())
+    moltbook_task  = asyncio.create_task(moltbook_heartbeat_background())
 
     log("REMINDER_CHECKER_STARTED",  status="ok")
     log("CALENDAR_CHECKER_STARTED",  status="ok")
     log("EVOLUTION_SCHEDULER_STARTED", status="ok")
     log("TRAINING_AUTOPILOT_STARTED", status="ok")
+    log("MOLTBOOK_HEARTBEAT_STARTED", status="ok")
 
     yield  # ← app in esecuzione
 
@@ -78,11 +81,13 @@ async def lifespan(app: FastAPI):
     evolution_task.cancel()
     calendar_task.cancel()
     autopilot_task.cancel()
+    moltbook_task.cancel()
     try:
         await reminder_task
         await evolution_task
         await calendar_task
         await autopilot_task
+        await moltbook_task
     except asyncio.CancelledError:
         pass
     log("REMINDER_CHECKER_STOPPED", status="ok")
@@ -238,6 +243,17 @@ async def calendar_checker_background():
         except Exception as e:
             log("CALENDAR_CHECKER_ERROR", error=str(e))
             await asyncio.sleep(60)
+
+
+async def moltbook_heartbeat_background():
+    """Moltbook heartbeat ogni 2 ore: rispondi a commenti, upvota feed."""
+    await asyncio.sleep(300)  # attendi 5 min dopo startup
+    while True:
+        try:
+            await moltbook_service.heartbeat()
+        except Exception as e:
+            log("MOLTBOOK_LOOP_ERROR", error=str(e))
+        await asyncio.sleep(7200)  # ogni 2 ore
 
 
 async def evolution_scheduler():
