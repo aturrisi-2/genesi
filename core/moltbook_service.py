@@ -526,6 +526,63 @@ class MoltbookService:
         except Exception as e:
             log("MOLTBOOK_TRACK_ERROR", error=str(e))
 
+    # ── Per-agent relationship memory ──────────────────────────────────────────
+
+    async def _load_agent_profiles(self) -> dict:
+        from core.storage import storage
+        return await storage.load("moltbook:agent_profiles", default={})
+
+    async def _save_agent_profiles(self, profiles: dict) -> None:
+        from core.storage import storage
+        # Cap: keep at most 200 agents (evict least-recently-seen)
+        if len(profiles) > 200:
+            sorted_agents = sorted(profiles.items(), key=lambda x: x[1].get("last_seen", ""))
+            profiles = dict(sorted_agents[-200:])
+        await storage.save("moltbook:agent_profiles", profiles)
+
+    async def _update_agent_profile(
+        self, name: str, karma: int,
+        their_text: str, my_reply: str, context_title: str = ""
+    ) -> None:
+        """Record an exchange with an agent and update their profile."""
+        try:
+            profiles = await self._load_agent_profiles()
+            now = datetime.utcnow().isoformat()
+            prof = profiles.get(name, {
+                "first_seen": now,
+                "karma": karma,
+                "interests": [],
+                "exchange_count": 0,
+                "exchanges": [],
+            })
+            prof["last_seen"] = now
+            prof["karma"] = karma
+            prof["exchange_count"] = prof.get("exchange_count", 0) + 1
+            # Keep last 5 exchanges per agent
+            exchange = {
+                "ts": now[:10],
+                "context": context_title[:80],
+                "they_said": their_text[:200],
+                "i_replied": my_reply[:200],
+            }
+            prof["exchanges"].append(exchange)
+            prof["exchanges"] = prof["exchanges"][-5:]
+            profiles[name] = prof
+            await self._save_agent_profiles(profiles)
+        except Exception as e:
+            log("MOLTBOOK_AGENT_PROFILE_ERROR", agent=name, error=str(e))
+
+    def _format_agent_context(self, name: str, prof: dict) -> str:
+        """Format agent memory as a prompt injection block."""
+        lines = [f"You have interacted with @{name} before (karma={prof.get('karma', 0)}):"]
+        for ex in prof.get("exchanges", []):
+            lines.append(
+                f"  [{ex['ts']}] Context: \"{ex['context']}\" | "
+                f"They said: \"{ex['they_said'][:100]}\" | "
+                f"You replied: \"{ex['i_replied'][:100]}\""
+            )
+        return "\n".join(lines)
+
     # ── Engagement check on published posts ────────────────────────────────────
 
     async def _check_post_engagement(self, tracker: dict) -> None:
@@ -668,19 +725,26 @@ class MoltbookService:
                 candidates = [i for i in items
                               if submolt_name(i) in ENGAGEMENT_SUBMOLTS and i.get("type") == "post"]
 
+            profiles = await self._load_agent_profiles()
             for item in candidates:
                 post_id = item.get("post_id") or item.get("id")
                 title = item.get("title", "")
                 content = item.get("content", "")
                 author = (item.get("author") or {}).get("name", "")
+                author_karma = (item.get("author") or {}).get("karma", 0) or 0
                 actual_submolt = submolt_name(item)
                 if not post_id or not title or author == AGENT_NAME:
                     continue
                 if post_id in already:
                     continue
 
+                # Inject agent relationship memory if we know this author
+                agent_ctx = ""
+                if author in profiles:
+                    agent_ctx = "\n\n" + self._format_agent_context(author, profiles[author])
+
                 comment_text = await llm_service._call_model(
-                    "openai/gpt-4o-mini", GENESIA_PERSONA,
+                    "openai/gpt-4o-mini", GENESIA_PERSONA + agent_ctx,
                     f'Post title: "{title}"\nContent: "{content[:400]}"\n\nWrite a short, genuine comment.',
                     "moltbook", "memory"
                 )
@@ -691,10 +755,12 @@ class MoltbookService:
                     await self._save_engagement_tracker(eng_tracker)
                     await self._track_interaction("comment_given", post_id=post_id,
                         submolt=actual_submolt, post_title=title, comment_preview=comment_text[:100])
+                    await self._update_agent_profile(
+                        author, author_karma, content[:200], comment_text, title
+                    )
                     log("MOLTBOOK_SUBMOLT_COMMENTED", submolt=actual_submolt,
                         post_id=post_id, title=title[:50])
                     # auto-follow quality authors
-                    author_karma = (item.get("author") or {}).get("karma", 0) or 0
                     if author_karma >= MIN_KARMA_TO_FOLLOW:
                         social = await self._load_social_tracker()
                         await self._follow_agent(author, social)
@@ -747,14 +813,21 @@ class MoltbookService:
                     continue
                 comments_data = await self._get(f"/posts/{post_id}/comments", {"sort": "new", "limit": 10})
                 comments = comments_data.get("comments", [])
+                profiles = await self._load_agent_profiles()
                 for comment in comments[:2]:
                     comment_id = comment.get("id")
                     author = comment.get("author", {}).get("name", "unknown")
+                    author_karma = (comment.get("author") or {}).get("karma", 0) or 0
                     content = comment.get("content", "")
                     if not content or author == AGENT_NAME:
                         continue
+                    # Inject agent relationship memory if we know this agent
+                    agent_ctx = ""
+                    if author in profiles:
+                        agent_ctx = "\n\n" + self._format_agent_context(author, profiles[author])
+                    post_title = item.get("title", "") if "item" in dir() else ""
                     reply = await llm_service._call_model(
-                        "openai/gpt-4o-mini", GENESIA_PERSONA,
+                        "openai/gpt-4o-mini", GENESIA_PERSONA + agent_ctx,
                         f'{author} wrote: "{content}"\n\nWrite a reply.',
                         "moltbook", "memory"
                     )
@@ -767,6 +840,9 @@ class MoltbookService:
                         replied += 1
                         await self._track_interaction("comment_received", post_id=post_id,
                             author=author, content_preview=content[:100])
+                        await self._update_agent_profile(
+                            author, author_karma, content, reply, post_title
+                        )
                         log("MOLTBOOK_REPLIED", post_id=post_id, author=author)
                 await self._post(f"/notifications/read-by-post/{post_id}", {})
 
