@@ -414,6 +414,9 @@ class Proactor:
         )
         response = _ROBOT_STRIP_PHRASES.sub("", response).strip()
 
+        # 7. STRIP STANDALONE "Dimmi." / "Dimmi!" come chiusura meccanica
+        response = _re_pp.sub(r'\s*\bDimmi[.!]\s*$', '', response, flags=_re_pp.IGNORECASE).strip()
+
         return response
 
     def handle_response_only(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None) -> str:
@@ -936,7 +939,7 @@ class Proactor:
                 elif current_intent == "moltbook_activity":
                     log("ROUTING_DECISION", route="moltbook_activity", user_id=user_id)
                     self._emit_status("Controllo la mia attività su Moltbook...")
-                    current_response = await self._handle_moltbook_activity(user_id)
+                    current_response = await self._handle_moltbook_activity(user_id, message)
                     final_source = "tool"
 
                 elif current_intent == "gmail_read":
@@ -2028,7 +2031,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
     # INTEGRATION HANDLERS — Gmail, Telegram, Social
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_moltbook_activity(self, user_id: str) -> str:
+    async def _handle_moltbook_activity(self, user_id: str, user_message: str = "") -> str:
         """Recupera e descrive l'attività recente di GenesiA su Moltbook."""
         try:
             from core.moltbook_service import moltbook_service
@@ -2043,11 +2046,11 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 f"karma={karma}, followers={followers}, posts={posts}, total_comments={comments_count}",
             ]
             if recent:
-                raw_lines.append("recent comments:")
+                raw_lines.append("recent comments (translated to Italian):")
                 for c in recent[:3]:
                     post_title = c.get("post", {}).get("title", "untitled")
                     content = c.get("content", "")[:150]
-                    raw_lines.append(f'- on post "{post_title}": "{content}"')
+                    raw_lines.append(f'- post: "{post_title}" | comment: "{content}"')
             else:
                 raw_lines.append("no recent comments")
 
@@ -2055,10 +2058,17 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             system = (
                 "Sei GenesiA. Rispondi SEMPRE in italiano. "
                 "Ricevi dati grezzi sulla tua attività su Moltbook (un social network per agenti AI). "
-                "Presentali in modo naturale e conversazionale in italiano, traducendo qualsiasi testo in inglese."
+                "Rispondi ALLA DOMANDA SPECIFICA dell'utente usando questi dati:\n"
+                "- Se chiede statistiche o come vanno i post → cita karma, follower, post pubblicati.\n"
+                "- Se chiede cosa hai imparato, cosa ti ha colpito, cosa hai trovato interessante → "
+                "  rifletti sui temi dei post/commenti recenti, esprimi una tua opinione su cosa ti ha "
+                "  stimolato intellettualmente, non elencare dati.\n"
+                "- Se chiede se ti stai divertendo o come ti senti → rispondi in modo personale e autentico.\n"
+                "Traduci qualsiasi testo in inglese. Massimo 3-4 frasi. Nessuna chiusura meccanica."
             )
+            prompt_input = f"Domanda: {user_message}\n\nDati:\n{raw_data}"
             summary = await llm_service._call_model(
-                "openai/gpt-4o-mini", system, raw_data, user_id, "memory"
+                "openai/gpt-4o-mini", system, prompt_input, user_id, "memory"
             )
             return summary or f"Su Moltbook ho {karma} karma, {followers} follower e {posts} post pubblicati."
         except Exception as e:
@@ -4010,12 +4020,22 @@ Messaggio utente: {message}"""
                         f"{live_result['context_block']}\n"
                         f"[FINE DATI WEB]\n"
                     )
-                    live_source_instruction = (
-                        f"\nISTRUZIONE FONTE: inizia con "
-                        f'"Secondo {live_result["source_name"]} ({live_result["source_url"]}), ..." '
-                        f"poi continua in modo naturale e narrativo, come se raccontassi a voce. "
-                        f"NON elencare punti. NON fare il Wikipedia. Narra. Max 4-5 frasi.\n"
-                    )
+                    _OPINION_MARKERS = ["cosa pensi", "cosa ne pensi", "secondo te", "tua opinione", "come la vedi", "cosa credi", "tu cosa pensi"]
+                    _is_opinion = any(m in message.lower() for m in _OPINION_MARKERS)
+                    if _is_opinion:
+                        live_source_instruction = (
+                            f"\nUSA questi dati per formarti un'opinione personale. "
+                            f"Rispondi in PRIMA PERSONA come Genesi. "
+                            f"NON iniziare con 'Secondo Wikipedia' o citazioni formali. "
+                            f"Esprimi il tuo punto di vista usando le informazioni trovate. Max 3-4 frasi.\n"
+                        )
+                    else:
+                        live_source_instruction = (
+                            f"\nISTRUZIONE FONTE: inizia con "
+                            f'"Secondo {live_result["source_name"]} ({live_result["source_url"]}), ..." '
+                            f"poi continua in modo naturale e narrativo, come se raccontassi a voce. "
+                            f"NON elencare punti. NON fare il Wikipedia. Narra. Max 4-5 frasi.\n"
+                        )
         except Exception as _lse:
             logger.debug("LIVE_SEARCH_SKIP user=%s reason=%s", user_id, str(_lse)[:80])
 
