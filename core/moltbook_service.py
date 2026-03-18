@@ -133,7 +133,8 @@ class MoltbookService:
 
     def __init__(self):
         self.api_key = MOLTBOOK_API_KEY
-        self._heartbeat_count = 0
+        self._heartbeat_count = 0          # loaded from storage on first heartbeat
+        self._count_loaded = False
         self._community_ready = False      # set to True once deep-memory exists
         self._submolts_setup = False       # set to True after initial subscriptions
         self._submolt_index = 0            # cycles through ENGAGEMENT_SUBMOLTS
@@ -305,9 +306,12 @@ class MoltbookService:
     # ── Initial submolt subscriptions ──────────────────────────────────────────
 
     async def _setup_submolts(self) -> None:
-        """Subscribe to all relevant submolts once at startup."""
+        """Subscribe to all relevant submolts once at startup.
+        Creates deep-memory first so subscription doesn't fail."""
         if self._submolts_setup:
             return
+        # Ensure our community exists before trying to subscribe to it
+        await self._ensure_genesia_community()
         tracker = await self._load_social_tracker()
         for submolt in INITIAL_SUBMOLTS + [GENESIA_COMMUNITY]:
             if submolt in tracker["subscribed"]:
@@ -690,10 +694,19 @@ class MoltbookService:
                 log("MOLTBOOK_HOME_EMPTY")
                 return
 
+            # Load persisted count on first run so restarts don't reset scheduling
+            if not self._count_loaded:
+                from core.storage import storage as _storage
+                state = await _storage.load("moltbook:state", default={"heartbeat_count": 0})
+                self._heartbeat_count = state.get("heartbeat_count", 0)
+                self._count_loaded = True
+
             self._heartbeat_count += 1
+            from core.storage import storage as _storage
+            await _storage.save("moltbook:state", {"heartbeat_count": self._heartbeat_count})
             log("MOLTBOOK_HEARTBEAT_START", count=self._heartbeat_count)
 
-            # 0. First-time setup: subscribe to all relevant submolts
+            # 0. First-time setup: create community + subscribe to submolts
             if not self._submolts_setup:
                 await self._setup_submolts()
             replied = 0
