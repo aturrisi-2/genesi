@@ -113,6 +113,52 @@
                 <div id="lab-rules-list" style="margin-top:14px; font-size:0.8rem; color:#ccc;"></div>
             </div>
 
+            <!-- ── MOLTBOOK AUTO-MIGLIORAMENTO ─────────────────────────── -->
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Moltbook — Auto-Apprendimento</h2>
+            <div id="mb-section"
+                style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.22); border-radius:8px; padding:15px; margin-top:12px;">
+                <div id="mb-loading" style="font-size:0.85rem; color:#6ee7b7;">Caricamento dati Moltbook...</div>
+                <div id="mb-data" style="display:none;">
+                    <!-- Stats row -->
+                    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px;">
+                        <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                            <div id="mb-hb" style="font-size:1.3rem; font-weight:700; color:#6ee7b7;">—</div>
+                            <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Heartbeat</div>
+                        </div>
+                        <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                            <div id="mb-interactions" style="font-size:1.3rem; font-weight:700; color:#6ee7b7;">—</div>
+                            <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Interazioni</div>
+                        </div>
+                        <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                            <div id="mb-agents" style="font-size:1.3rem; font-weight:700; color:#6ee7b7;">—</div>
+                            <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Agenti noti</div>
+                        </div>
+                        <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                            <div id="mb-lab-obs" style="font-size:1.3rem; font-weight:700; color:#6ee7b7;">—</div>
+                            <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Obs. → Lab</div>
+                        </div>
+                    </div>
+                    <!-- Interaction breakdown -->
+                    <div id="mb-breakdown" style="font-size:0.78rem; color:#9ca3af; margin-bottom:12px; display:flex; flex-wrap:wrap; gap:8px;"></div>
+                    <!-- Engagement -->
+                    <div id="mb-engagement" style="font-size:0.82rem; color:#d1fae5; margin-bottom:12px;"></div>
+                    <!-- Last consolidation -->
+                    <div id="mb-consolidation" style="font-size:0.8rem; color:#ccc;"></div>
+                    <!-- Insights -->
+                    <div id="mb-insights-wrap" style="margin-top:12px; display:none;">
+                        <div style="font-size:0.78rem; font-weight:600; color:#6ee7b7; margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em;">
+                            Insights ricavati dalle interazioni
+                        </div>
+                        <ul id="mb-insights" style="margin:0; padding-left:16px; font-size:0.8rem; color:#d1d5db; line-height:1.6;"></ul>
+                        <div id="mb-topics" style="margin-top:8px; font-size:0.78rem; color:#9ca3af;"></div>
+                        <div id="mb-next" style="margin-top:6px; font-size:0.8rem; color:#fcd34d; font-style:italic;"></div>
+                    </div>
+                    <!-- Last lab observation -->
+                    <div id="mb-last-obs" style="margin-top:10px; font-size:0.78rem; color:#9ca3af; display:none;"></div>
+                </div>
+                <div id="mb-error" style="display:none; font-size:0.82rem; color:#f87171;">Errore nel caricamento dati Moltbook.</div>
+            </div>
+
             <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Dettaglio Utenti</h2>
             <div class="user-table-container">
                 <table id="user-table">
@@ -216,6 +262,7 @@
             loadStats();
             loadSuggestions();
             loadLabCycleStatus();
+            loadMoltbookStatus();
         }
 
         async function loadStats() {
@@ -475,6 +522,69 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Avvia Ciclo Ora';
+            }
+        }
+
+        async function loadMoltbookStatus() {
+            try {
+                const res = await fetch('/api/admin/moltbook/status', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error(res.status);
+                const d = await res.json();
+
+                document.getElementById('mb-loading').style.display = 'none';
+                document.getElementById('mb-data').style.display = 'block';
+
+                document.getElementById('mb-hb').textContent = d.heartbeat_count;
+                document.getElementById('mb-interactions').textContent = d.interaction_stats.total;
+                document.getElementById('mb-agents').textContent = d.agent_memory.agents_known;
+                document.getElementById('mb-lab-obs').textContent = d.lab_cycle.moltbook_observations_fed;
+
+                // Breakdown by type
+                const bdEl = document.getElementById('mb-breakdown');
+                const typeLabels = { post_insight:'Post', post_showcase:'Showcase', comment_given:'Commenti dati',
+                    comment_received:'Risposte ricevute', follow_received:'Follow ricevuti' };
+                bdEl.innerHTML = Object.entries(d.interaction_stats.by_type)
+                    .map(([k,v]) => `<span style="background:rgba(16,185,129,0.12);padding:2px 8px;border-radius:4px;">${typeLabels[k]||k}: <b>${v}</b></span>`)
+                    .join('');
+
+                // Engagement
+                const eng = d.engagement;
+                document.getElementById('mb-engagement').innerHTML =
+                    `<b>${eng.posts_published}</b> post pubblicati · <b>${eng.total_upvotes}</b> upvote ricevuti · <b>${eng.total_comments}</b> commenti ricevuti`;
+
+                // Last consolidation
+                const lc = d.last_consolidation;
+                const lcEl = document.getElementById('mb-consolidation');
+                if (lc.consolidated_at) {
+                    const dt = new Date(lc.consolidated_at).toLocaleString('it-IT');
+                    lcEl.textContent = `Ultima consolidazione: ${dt} (${lc.interactions_analyzed} interazioni analizzate)`;
+                } else {
+                    lcEl.textContent = 'Nessuna consolidazione ancora (serve ~2h di attività)';
+                }
+
+                // Insights
+                if (lc.insights && lc.insights.length > 0) {
+                    document.getElementById('mb-insights-wrap').style.display = 'block';
+                    const ul = document.getElementById('mb-insights');
+                    ul.innerHTML = lc.insights.map(i => `<li>${i}</li>`).join('');
+                    if (lc.top_topics.length)
+                        document.getElementById('mb-topics').textContent = 'Topic: ' + lc.top_topics.join(', ');
+                    if (lc.recommended_next)
+                        document.getElementById('mb-next').textContent = '→ ' + lc.recommended_next;
+                }
+
+                // Last lab observation
+                if (d.lab_cycle.last_observation) {
+                    const lo = document.getElementById('mb-last-obs');
+                    lo.style.display = 'block';
+                    lo.textContent = 'Ultima obs. → Lab: "' + d.lab_cycle.last_observation + '"';
+                }
+
+            } catch(e) {
+                document.getElementById('mb-loading').style.display = 'none';
+                document.getElementById('mb-error').style.display = 'block';
             }
         }
 

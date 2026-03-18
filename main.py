@@ -38,6 +38,7 @@ from api.calendar_auth import router as calendar_auth_router
 from api.admin_fallback import router as admin_fallback_router
 from api.admin.training import router as admin_training_router
 from api.admin.logs import router as admin_logs_router
+from api.admin.moltbook import router as admin_moltbook_router
 from api.integrations import router as integrations_router
 from api.news import router as news_router
 from auth.database import init_db, async_session
@@ -375,6 +376,7 @@ app.include_router(calendar_auth_router, prefix="/api")
 app.include_router(admin_fallback_router, prefix="/api")
 app.include_router(admin_training_router, prefix="/api")
 app.include_router(admin_logs_router, prefix="/api")
+app.include_router(admin_moltbook_router, prefix="/api")
 app.include_router(integrations_router, prefix="/api")
 app.include_router(news_router)
 app.include_router(coding_router)
