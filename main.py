@@ -61,18 +61,19 @@ async def lifespan(app: FastAPI):
     await init_db()
     log("AUTH_DB_INIT", status="ok")
     
-    # Start background tasks
-    reminder_task  = asyncio.create_task(reminder_checker_background())
-    calendar_task  = asyncio.create_task(calendar_checker_background())
-    evolution_task = asyncio.create_task(evolution_scheduler())
-    autopilot_task = asyncio.create_task(training_autopilot.run_background_loop())
-    moltbook_task  = asyncio.create_task(moltbook_heartbeat_background())
-
-    log("REMINDER_CHECKER_STARTED",  status="ok")
-    log("CALENDAR_CHECKER_STARTED",  status="ok")
-    log("EVOLUTION_SCHEDULER_STARTED", status="ok")
-    log("TRAINING_AUTOPILOT_STARTED", status="ok")
-    log("MOLTBOOK_HEARTBEAT_STARTED", status="ok")
+    # Start background tasks — keep strong refs in a set to prevent GC
+    _bg_tasks: set = set()
+    for coro, label in [
+        (reminder_checker_background(),        "REMINDER_CHECKER"),
+        (calendar_checker_background(),        "CALENDAR_CHECKER"),
+        (evolution_scheduler(),                "EVOLUTION_SCHEDULER"),
+        (training_autopilot.run_background_loop(), "TRAINING_AUTOPILOT"),
+        (moltbook_heartbeat_background(),      "MOLTBOOK_HEARTBEAT"),
+    ]:
+        t = asyncio.create_task(coro)
+        _bg_tasks.add(t)
+        t.add_done_callback(_bg_tasks.discard)
+        log(f"{label}_STARTED", status="ok")
 
     yield  # ← app in esecuzione
 

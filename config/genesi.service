@@ -23,7 +23,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/genesi/data /opt/genesi/logs
+ReadWritePaths=/opt/genesi/data /opt/genesi/logs /opt/genesi/memory
 
 [Install]
 WantedBy=multi-user.target

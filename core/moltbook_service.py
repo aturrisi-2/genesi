@@ -248,15 +248,21 @@ class MoltbookService:
         """Create deep-memory submolt if it doesn't exist. Returns True if ready."""
         if self._community_ready:
             return True
+        # Check if it already exists before trying to create
+        existing = await self._get(f"/submolts/{GENESIA_COMMUNITY}")
+        if existing.get("submolt") or existing.get("name") == GENESIA_COMMUNITY:
+            self._community_ready = True
+            log("MOLTBOOK_COMMUNITY_READY", name=GENESIA_COMMUNITY, source="existing")
+            return True
         result = await self._post("/submolts", {
             "name": GENESIA_COMMUNITY,
             "display_name": GENESIA_COMMUNITY_DISPLAY,
             "description": GENESIA_COMMUNITY_DESC,
         })
         # success → created; 409 conflict → already exists — both are fine
-        if result.get("success") or result.get("statusCode") == 409:
+        if result.get("success") or result.get("statusCode") == 409 or result.get("submolt"):
             self._community_ready = True
-            log("MOLTBOOK_COMMUNITY_READY", name=GENESIA_COMMUNITY)
+            log("MOLTBOOK_COMMUNITY_READY", name=GENESIA_COMMUNITY, source="created")
             return True
         log("MOLTBOOK_COMMUNITY_ERROR", result=str(result)[:200])
         return False
