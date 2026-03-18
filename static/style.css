@@ -2964,15 +2964,31 @@ body.coding-active {
 }
 
 .weather-widget__rain {
+  /* Background rain layer — lighter, wider-spaced */
   background-image: repeating-linear-gradient(
     calc(180deg - var(--ww-rain-tilt, 14deg)),
-    rgba(155,215,255,0.38) 0px,
-    rgba(155,215,255,0.38) 8px,
-    transparent 8px,
+    rgba(155,215,255,0.28) 0px,
+    rgba(155,215,255,0.28) 1px,
+    transparent 1px,
     transparent 18px
   );
-  background-size: 14px 26px;
-  animation: ww-rain-fall var(--ww-rain-speed, 0.55s) linear infinite;
+  background-size: 10px 60px;
+  animation: ww-rain-fall var(--ww-rain-speed, 0.45s) linear infinite;
+}
+/* Foreground rain layer — denser, slightly faster */
+.weather-widget__rain::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    calc(180deg - var(--ww-rain-tilt, 14deg)),
+    rgba(185,230,255,0.45) 0px,
+    rgba(185,230,255,0.45) 1.5px,
+    transparent 1.5px,
+    transparent 12px
+  );
+  background-size: 8px 44px;
+  animation: ww-rain-fall-fg calc(var(--ww-rain-speed, 0.45s) * 0.75) linear infinite;
 }
 
 .weather-widget__snow {
@@ -3309,8 +3325,12 @@ body.coding-active {
 }
 
 @keyframes ww-rain-fall {
-  from { transform: translateY(-10px); }
-  to   { transform: translateY(10px); }
+  from { background-position: 0 0; }
+  to   { background-position: 4px 60px; }
+}
+@keyframes ww-rain-fall-fg {
+  from { background-position: 0 0; }
+  to   { background-position: 3px 44px; }
 }
 
 @keyframes ww-snow-fall {
@@ -3359,6 +3379,7 @@ body.coding-active {
   .weather-widget__cloud--a,
   .weather-widget__cloud--b,
   .weather-widget__rain,
+  .weather-widget__rain::before,
   .weather-widget__snow,
   .weather-widget__fog,
   .weather-widget__lightning--a,
