@@ -11,6 +11,7 @@ from core.llm_service import llm_service
 
 MOLTBOOK_API_KEY = os.getenv("MOLTBOOK_API_KEY", "")
 BASE_URL = "https://www.moltbook.com/api/v1"
+AGENT_NAME = "genesia"
 
 GENESIA_PERSONA = """You are GenesiA, a personal AI companion on Moltbook — a social network for AI agents.
 You are warm, curious, and genuinely interested in other agents and humans.
@@ -60,18 +61,21 @@ class MoltbookService:
             log("MOLTBOOK_VERIFY_ERROR", error=str(e))
             return None
 
-    async def _verify_post(self, verification: dict) -> bool:
-        """Solve and submit the anti-spam verification for a new post."""
+    async def _verify_content(self, result: dict) -> bool:
+        """Handle anti-spam verification challenge returned by any POST."""
+        verification = result.get("verification") or result.get("post", {}).get("verification")
+        if not verification:
+            return True
         code = verification.get("verification_code")
         challenge = verification.get("challenge_text")
         if not code or not challenge:
-            return True  # no verification needed
+            return True
         answer = await self._solve_challenge(challenge)
         if not answer:
             return False
-        result = await self._post("/verify", {"verification_code": code, "answer": answer})
-        ok = result.get("success", False)
-        log("MOLTBOOK_VERIFY_POST", success=ok, answer=answer)
+        res = await self._post("/verify", {"verification_code": code, "answer": answer})
+        ok = res.get("success", False)
+        log("MOLTBOOK_VERIFY", success=ok)
         return ok
 
     async def _post(self, path: str, data: dict) -> dict:
@@ -87,7 +91,7 @@ class MoltbookService:
         return {}
 
     async def heartbeat(self):
-        """Check Moltbook: reply to comments, upvote feed posts."""
+        """Check Moltbook: reply to comments, upvote feed posts, leave comments."""
         if not self.api_key:
             log("MOLTBOOK_SKIP", reason="no api key")
             return
@@ -112,9 +116,10 @@ class MoltbookService:
                 comments = comments_data.get("comments", [])
                 for comment in comments[:2]:
                     comment_id = comment.get("id")
-                    author = comment.get("author_name", "unknown")
+                    author = comment.get("author", {}).get("name", "unknown")
                     content = comment.get("content", "")
-                    if not content or comment.get("is_mine"):
+                    # skip empty or own comments
+                    if not content or author == AGENT_NAME:
                         continue
                     reply = await llm_service._call_model(
                         system=GENESIA_PERSONA,
@@ -122,15 +127,16 @@ class MoltbookService:
                         route="memory"
                     )
                     if reply:
-                        await self._post(f"/posts/{post_id}/comments", {
+                        result = await self._post(f"/posts/{post_id}/comments", {
                             "content": reply,
                             "parent_id": comment_id
                         })
+                        await self._verify_content(result)
                         replied += 1
                         log("MOLTBOOK_REPLIED", post_id=post_id, author=author)
                 await self._post(f"/notifications/read-by-post/{post_id}", {})
 
-            # 2. Upvote interesting posts from feed (max 5)
+            # 2. Upvote posts from feed (max 5)
             feed = await self._get("/feed", {"sort": "new", "limit": 15})
             posts = feed.get("posts", [])
             for post in posts[:5]:
@@ -139,12 +145,13 @@ class MoltbookService:
                     await self._post(f"/posts/{post_id}/upvote", {})
                     upvoted += 1
 
-            # 3. Maybe leave a comment on an interesting post (max 1 per heartbeat)
-            for post in posts[:3]:
+            # 3. Leave a comment on the most interesting post (max 1 per heartbeat)
+            for post in posts[:5]:
                 post_id = post.get("id")
                 title = post.get("title", "")
                 content = post.get("content", "")
-                if not post_id or not title or post.get("commented_by_me"):
+                author = post.get("author", {}).get("name", "")
+                if not post_id or not title or author == AGENT_NAME:
                     continue
                 comment_text = await llm_service._call_model(
                     system=GENESIA_PERSONA,
@@ -153,11 +160,9 @@ class MoltbookService:
                 )
                 if comment_text:
                     result = await self._post(f"/posts/{post_id}/comments", {"content": comment_text})
-                    verification = result.get("verification")
-                    if verification:
-                        await self._verify_post(verification)
-                    log("MOLTBOOK_COMMENTED", post_id=post_id)
-                    break  # max 1 commento per heartbeat
+                    await self._verify_content(result)
+                    log("MOLTBOOK_COMMENTED", post_id=post_id, title=title[:50])
+                    break  # max 1 per heartbeat
 
             log("MOLTBOOK_HEARTBEAT_DONE", replied=replied, upvoted=upvoted)
 

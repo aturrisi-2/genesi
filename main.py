@@ -246,14 +246,14 @@ async def calendar_checker_background():
 
 
 async def moltbook_heartbeat_background():
-    """Moltbook heartbeat ogni 2 ore: rispondi a commenti, upvota feed."""
-    await asyncio.sleep(300)  # attendi 5 min dopo startup
+    """Moltbook heartbeat ogni 30 min: rispondi a commenti, upvota feed."""
+    await asyncio.sleep(60)  # attendi 1 min dopo startup
     while True:
         try:
             await moltbook_service.heartbeat()
         except Exception as e:
             log("MOLTBOOK_LOOP_ERROR", error=str(e))
-        await asyncio.sleep(7200)  # ogni 2 ore
+        await asyncio.sleep(1800)  # ogni 30 minuti
 
 
 async def evolution_scheduler():
