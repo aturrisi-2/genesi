@@ -3190,19 +3190,24 @@ body.coding-active {
 /* ── PREVISIONI ORARIE ───────────────────────────────── */
 .weather-widget__row--hourly {
   display: flex;
-  justify-content: space-evenly;
+  justify-content: center;
   align-items: flex-start;
   padding-top: 0.28rem;
   margin-top: 0.16rem;
   border-top: 1px solid var(--meteo-accent-soft, rgba(255,255,255,0.13));
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 0.1rem;
 }
+.weather-widget__row--hourly::-webkit-scrollbar { display: none; }
 
 .ww-hourly-slot {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.08rem;
-  flex: 1;
+  flex: 0 0 auto;
+  min-width: 2.6rem;
 }
 
 .ww-hourly-hour {
