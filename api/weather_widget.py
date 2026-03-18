@@ -272,7 +272,7 @@ async def get_weather_widget(
                             "temp": round(slot["temp"]),
                             "pop" : round(slot.get("pop", 0) * 100),  # probabilità pioggia %
                         })
-                        if len(hourly) >= 8:
+                        if len(hourly) >= 6:
                             break
                     logger.info("WEATHER_HOURLY_ONECALL slots=%d", len(hourly))
                 else:
@@ -306,9 +306,9 @@ async def get_weather_widget(
                                     "temp": round(t1 + (t2 - t1) * frac),
                                     "pop" : round(pop1 * 100),
                                 })
-                                if len(hourly) >= 8:
+                                if len(hourly) >= 6:
                                     break
-                            if len(hourly) >= 8:
+                            if len(hourly) >= 6:
                                 break
                     logger.info("WEATHER_HOURLY_INTERPOLATED slots=%d", len(hourly))
                 except Exception as fe:
