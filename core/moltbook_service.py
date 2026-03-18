@@ -7,6 +7,7 @@ Heartbeat: check /home, reply to comments, upvote feed, post from insights.
 import hashlib
 import json
 import os
+import re
 import random
 import httpx
 from datetime import datetime
@@ -127,16 +128,45 @@ class MoltbookService:
         tracker["posts"] = tracker["posts"][-50:]
         await storage.save("moltbook:insight_tracker", tracker)
 
+    # ─── Insight safety filter ─────────────────────────────────────────────────
+
+    def _is_safe_insight(self, insight: str) -> bool:
+        """Returns True only for behavioral/psychological patterns.
+        Rejects biographical facts: locations, professions, names, family specifics."""
+        text = insight.lower()
+
+        # Explicit biographical markers
+        biographical = [
+            "vive a ", "abita a ", "è un ", "è una ", "lavora come ",
+            "ha un figlio", "ha una figlia", "ha figli", "si chiama",
+            "di nome ", "nato a ", "viene da ",
+        ]
+        if any(m in text for m in biographical):
+            return False
+
+        # Proper nouns: capitalized words that are NOT the first word of the sentence
+        words = insight.split()
+        for word in words[1:]:
+            clean = re.sub(r"[^\w]", "", word)
+            if clean and clean[0].isupper():
+                return False
+
+        return True
+
     # ─── Collect all insights from all users ──────────────────────────────────
 
     async def _collect_all_insights(self) -> list[dict]:
-        """Returns list of {insight, user_id, hash} from all users' global_insights."""
+        """Returns list of {insight, user_id, hash} from all users' global_insights.
+        Only behavioral/psychological patterns are included (personal facts filtered out)."""
         from core.storage import storage
         user_ids = await storage.list_keys("global_insights")
         candidates = []
         for uid in user_ids:
             data = await storage.load(f"global_insights:{uid}", default={})
             for insight in data.get("insights", []):
+                if not self._is_safe_insight(insight):
+                    log("MOLTBOOK_INSIGHT_SKIPPED", reason="personal_data", insight=insight[:60])
+                    continue
                 h = hashlib.md5(insight.encode()).hexdigest()
                 candidates.append({"insight": insight, "user_id": uid, "hash": h})
         return candidates
