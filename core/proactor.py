@@ -195,6 +195,20 @@ class Proactor:
         logger.info("PROACTOR_V4_ACTIVE routers=identity,tool,relational,knowledge default_model=%s", LLM_DEFAULT_MODEL)
 
     # ═══════════════════════════════════════════════════════════════
+    # STATUS HELPER — Emette eventi reali al frontend via SSE
+    # ═══════════════════════════════════════════════════════════════
+
+    def _emit_status(self, text: str):
+        """Manda un status event reale al frontend (visibile nel bubble 'thinking')."""
+        try:
+            from core.llm_service import _STREAM_QUEUE
+            q = _STREAM_QUEUE.get()
+            if q:
+                q.put_nowait({"status": text})
+        except Exception:
+            pass
+
+    # ═══════════════════════════════════════════════════════════════
     # HANDLE — Entry point, routing obbligatorio
     # ═══════════════════════════════════════════════════════════════
 
@@ -473,6 +487,7 @@ class Proactor:
                 
             if image_query:
                 log("ROUTING_DECISION", route="image_search", user_id=user_id)
+                self._emit_status("Cerco immagini per te...")
                 response = await self._handle_image_search(user_id, image_query)
                 return response, "tool"
 
@@ -615,6 +630,7 @@ class Proactor:
             # STEP 4: INTENT CLASSIFICATION
             if intent is None:
                 logger.debug("[PROACTOR] Avvio Intent Classifier LLM...")
+                self._emit_status("Capisco cosa vuoi...")
                 intents = await intent_classifier.classify_async(message, user_id)
             else:
                 logger.debug(f"[PROACTOR] Intent già fornito: {intent}")
@@ -778,16 +794,25 @@ class Proactor:
 
                 if current_intent in self.tool_intents:
                     log("ROUTING_DECISION", route="tool", user_id=user_id, intent=current_intent)
+                    _tool_status = {
+                        "weather": "Controllo il meteo...",
+                        "news": "Cerco le ultime notizie...",
+                        "time": "Verifico l'orario...",
+                        "date": "Verifico la data...",
+                    }.get(current_intent, "Recupero le informazioni...")
+                    self._emit_status(_tool_status)
                     current_response = await self._handle_tool(current_intent, processed_message, user_id)
                     final_source = "tool"
 
                 elif current_intent == "memory_context":
                     log("ROUTING_DECISION", route="memory_context", user_id=user_id)
+                    self._emit_status("Recupero i tuoi ricordi...")
                     current_response = await self._handle_memory_context(user_id, processed_message, brain_state, conversation_id)
                     final_source = "tool"
                 
                 elif current_intent == "calendar_sync_all":
                     log("ROUTING_DECISION", route="calendar_sync_all", user_id=user_id)
+                    self._emit_status("Sincronizzo il calendario...")
                     current_response = await self._handle_calendar_sync_all(user_id, processed_message)
                     final_source = "tool"
                     
@@ -813,6 +838,7 @@ class Proactor:
 
                 elif current_intent == "reminder_create":
                     log("ROUTING_DECISION", route="reminder_create", user_id=user_id)
+                    self._emit_status("Creo il promemoria...")
                     reminder_result = await self._handle_reminder_creation(user_id, processed_message)
                     # 3-tuple (text, "reminder", True) = domanda chiarificatrice → return immediato, senza synthesis
                     if isinstance(reminder_result, tuple) and len(reminder_result) >= 3 and reminder_result[2]:
@@ -837,6 +863,7 @@ class Proactor:
 
                 elif current_intent == "image_generation":
                     log("ROUTING_DECISION", route="image_generation", user_id=user_id)
+                    self._emit_status("Creo la tua immagine con l'AI...")
                     try:
                         current_response = await asyncio.wait_for(
                             self._handle_image_generation(user_id, processed_message),
@@ -891,6 +918,7 @@ class Proactor:
 
                 elif current_intent == "memory_correction":
                     log("ROUTING_DECISION", route="memory_correction", user_id=user_id)
+                    self._emit_status("Aggiorno quello che so di te...")
                     current_response = await self._handle_memory_correction(user_id, processed_message, brain_state)
                     final_source = "identity"
 
@@ -901,6 +929,7 @@ class Proactor:
                     
                 elif current_intent == "openclaw":
                     log("ROUTING_DECISION", route="openclaw", user_id=user_id)
+                    self._emit_status("Navigo il web per te...")
                     current_response = await self._handle_openclaw(user_id, processed_message)
                     final_source = "tool"
 
