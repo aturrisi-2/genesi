@@ -3226,6 +3226,13 @@ body.coding-active {
   color: #ffffff;
 }
 
+.ww-hourly-pop {
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: rgba(130, 200, 255, 0.90);
+  letter-spacing: 0.01em;
+}
+
 /* Snow theme — testo scuro su sfondo chiaro */
 #weather-widget[data-weather='snow'] .ww-hourly-hour,
 #weather-widget[data-weather='snow'] .ww-hourly-temp {

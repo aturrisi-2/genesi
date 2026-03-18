@@ -17,6 +17,7 @@ router = APIRouter(prefix="/api/weather-widget", tags=["weather-widget"])
 
 OPENWEATHER_BASE     = "https://api.openweathermap.org/data/2.5/weather"
 OPENWEATHER_FORECAST = "https://api.openweathermap.org/data/2.5/forecast"
+OPENWEATHER_ONECALL  = "https://api.openweathermap.org/data/3.0/onecall"
 OPENWEATHER_GEO      = "https://api.openweathermap.org/geo/1.0/reverse"
 IPAPI_FALLBACK       = "http://ip-api.com/json"
 
@@ -244,35 +245,75 @@ async def get_weather_widget(
                 "updated_at" : datetime.now(dt_timezone.utc).isoformat(),
             }
 
-            # ── 4. Previsioni orarie (prossime 6 slot da /forecast) ────────
+            # ── 4. Previsioni orarie (12h) ─────────────────────────────────
+            # Tenta One Call API 3.0 (dati orari reali).
+            # Se non disponibile (piano free), interpola i slot 3h da /forecast.
+            hourly = []
             try:
                 now_ts = datetime.now(dt_timezone.utc).timestamp()
-                forecast_resp = await client.get(
-                    OPENWEATHER_FORECAST,
+                onecall_resp = await client.get(
+                    OPENWEATHER_ONECALL,
                     params={
-                        "lat"   : resolved_lat,
-                        "lon"   : resolved_lon,
-                        "appid" : api_key,
-                        "units" : "metric",
-                        "cnt"   : 8,  # 8 slot × 3h = 24h
+                        "lat"     : resolved_lat,
+                        "lon"     : resolved_lon,
+                        "appid"   : api_key,
+                        "units"   : "metric",
+                        "exclude" : "current,minutely,daily,alerts",
                     }
                 )
-                hourly = []
-                if forecast_resp.status_code == 200:
-                    for slot in forecast_resp.json().get("list", []):
+                if onecall_resp.status_code == 200:
+                    # One Call disponibile: dati orari reali
+                    for slot in onecall_resp.json().get("hourly", []):
                         if slot["dt"] <= now_ts:
                             continue
                         hourly.append({
                             "dt"  : slot["dt"],
                             "icon": slot["weather"][0]["icon"],
-                            "temp": round(slot["main"]["temp"]),
+                            "temp": round(slot["temp"]),
+                            "pop" : round(slot.get("pop", 0) * 100),  # probabilità pioggia %
                         })
-                        if len(hourly) >= 6:
+                        if len(hourly) >= 12:
                             break
-                payload["hourly"] = hourly
-            except Exception as fe:
-                logger.warning(f"WEATHER_FORECAST_ERROR {fe}")
-                payload["hourly"] = []
+                    logger.info("WEATHER_HOURLY_ONECALL slots=%d", len(hourly))
+                else:
+                    raise ValueError(f"onecall_status={onecall_resp.status_code}")
+            except Exception:
+                # Fallback: interpola i slot 3h → 1h (interpolazione lineare temperatura)
+                try:
+                    forecast_resp = await client.get(
+                        OPENWEATHER_FORECAST,
+                        params={
+                            "lat"   : resolved_lat,
+                            "lon"   : resolved_lon,
+                            "appid" : api_key,
+                            "units" : "metric",
+                            "cnt"   : 6,  # 6 slot × 3h = 18h
+                        }
+                    )
+                    if forecast_resp.status_code == 200:
+                        slots = [s for s in forecast_resp.json().get("list", [])
+                                 if s["dt"] > now_ts]
+                        for i in range(len(slots) - 1):
+                            s1, s2 = slots[i], slots[i + 1]
+                            t1 = s1["main"]["temp"]
+                            t2 = s2["main"]["temp"]
+                            pop1 = s1.get("pop", 0)
+                            for h in range(3):
+                                frac = h / 3.0
+                                hourly.append({
+                                    "dt"  : s1["dt"] + h * 3600,
+                                    "icon": s1["weather"][0]["icon"],
+                                    "temp": round(t1 + (t2 - t1) * frac),
+                                    "pop" : round(pop1 * 100),
+                                })
+                                if len(hourly) >= 12:
+                                    break
+                            if len(hourly) >= 12:
+                                break
+                    logger.info("WEATHER_HOURLY_INTERPOLATED slots=%d", len(hourly))
+                except Exception as fe:
+                    logger.warning("WEATHER_FORECAST_ERROR %s", fe)
+            payload["hourly"] = hourly
 
             logger.info(
                 f"WEATHER_WIDGET_OK city={payload['city']} "

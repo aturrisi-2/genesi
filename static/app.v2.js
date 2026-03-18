@@ -4649,11 +4649,13 @@ function setVoiceStatusText(text) {
     if (hourlyRow && Array.isArray(payload.hourly) && payload.hourly.length) {
       hourlyRow.innerHTML = payload.hourly.map(h => {
         const d = new Date(h.dt * 1000);
-        const label = String(d.getHours()).padStart(2, '0');
+        const label = String(d.getHours()).padStart(2, '0') + ':00';
+        const pop = h.pop > 10 ? `<span class="ww-hourly-pop">${h.pop}%</span>` : '';
         return `<div class="ww-hourly-slot">` +
           `<span class="ww-hourly-hour">${label}</span>` +
           `<span class="ww-hourly-icon">${iconToEmoji(h.icon)}</span>` +
           `<span class="ww-hourly-temp">${h.temp}°</span>` +
+          pop +
           `</div>`;
       }).join('');
       hourlyRow.hidden = false;
