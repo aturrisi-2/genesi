@@ -254,7 +254,7 @@ async def moltbook_heartbeat_background():
             await moltbook_service.heartbeat()
         except Exception as e:
             log("MOLTBOOK_LOOP_ERROR", error=str(e))
-        await asyncio.sleep(1800)  # ogni 30 minuti
+        await asyncio.sleep(600)   # ogni 10 minuti
 
 
 async def evolution_scheduler():
