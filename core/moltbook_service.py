@@ -25,6 +25,7 @@ _BROWSE_SUBMOLT_EVERY  = 2   # every 2 heartbeats (~1h) → browse & engage subm
 _SHOWCASE_EVERY        = 8   # every 8 heartbeats (~4h) → post memory showcase
 _DISCOVER_EVERY        = 6   # every 6 heartbeats (~3h) → discover & follow agents
 _FOLLOWBACK_EVERY      = 4   # every 4 heartbeats (~2h) → follow back new followers
+_CONSOLIDATE_EVERY     = 12  # every 12 heartbeats (~6h) → consolidate learnings
 
 # ── Social graph limits ────────────────────────────────────────────────────────
 MAX_FOLLOWING          = 300  # soft cap to avoid spam-bot appearance
@@ -363,10 +364,97 @@ class MoltbookService:
                 continue
             if await self._follow_agent(name, tracker):
                 followed += 1
+                await self._track_interaction("follow_received", agent=name, karma=karma)
 
         await self._save_social_tracker(tracker)
         if followed:
             log("MOLTBOOK_FOLLOWBACK_DONE", followed=followed)
+
+    # ── Consolidate Moltbook learnings ────────────────────────────────────────
+
+    async def consolidate_moltbook_learnings(self) -> None:
+        """Analyze tracked interactions → extract improvement insights → feed lab cycle."""
+        try:
+            ilog = await self._load_interaction_log()
+            interactions = ilog.get("interactions", [])
+            if len(interactions) < 5:
+                log("MOLTBOOK_CONSOLIDATE_SKIP", reason="not enough interactions")
+                return
+
+            # Build structured summary for LLM
+            lines = []
+            for rec in interactions[-100:]:  # last 100 interactions
+                t = rec.get("type", "")
+                ts = rec.get("timestamp", "")[:16]
+                if t == "post_insight":
+                    lines.append(f"[{ts}] POST in {rec.get('submolt')} — \"{rec.get('title','')}\" "
+                                 f"→ {rec.get('upvotes',0)} upvotes, {rec.get('comments',0)} comments")
+                elif t == "post_showcase":
+                    lines.append(f"[{ts}] SHOWCASE {rec.get('mechanism')} — \"{rec.get('title','')}\" "
+                                 f"→ {rec.get('upvotes',0)} upvotes, {rec.get('comments',0)} comments")
+                elif t == "comment_given":
+                    lines.append(f"[{ts}] COMMENT in {rec.get('submolt')} on \"{rec.get('post_title','')}\"")
+                elif t == "comment_received":
+                    lines.append(f"[{ts}] REPLY from {rec.get('author')} on post \"{rec.get('post_title','')}\"")
+                elif t == "follow_received":
+                    lines.append(f"[{ts}] FOLLOW from {rec.get('agent')} (karma={rec.get('karma',0)})")
+
+            summary = "\n".join(lines)
+
+            prompt = (
+                "You are analyzing the Moltbook social activity of GenesiA, a personal AI with deep memory capabilities.\n"
+                "Based on the interaction log below, extract actionable insights to help GenesiA improve:\n"
+                "- Which memory topics/mechanisms generate most engagement (upvotes + comments)\n"
+                "- Which communication style/format works best\n"
+                "- What questions other agents ask most (signals interest areas)\n"
+                "- What GenesiA should post/discuss more or less\n"
+                "Output ONLY valid JSON: {\"insights\": [\"...\", ...], \"top_topics\": [\"...\", ...], "
+                "\"recommended_next\": \"...\"}\n"
+                "Max 6 insights, in English, concrete and actionable."
+            )
+
+            from core.storage import storage
+            raw = await llm_service._call_model(
+                "openai/gpt-4o-mini", prompt, summary, "moltbook", "memory"
+            )
+            if not raw:
+                return
+
+            clean = raw.strip()
+            if clean.startswith("```"):
+                clean = clean.split("```")[1]
+                if clean.startswith("json"):
+                    clean = clean[4:]
+            parsed = json.loads(clean.strip())
+
+            result = {
+                "insights": parsed.get("insights", []),
+                "top_topics": parsed.get("top_topics", []),
+                "recommended_next": parsed.get("recommended_next", ""),
+                "consolidated_at": datetime.utcnow().isoformat(),
+                "interactions_analyzed": len(interactions),
+            }
+            await storage.save("moltbook:interaction_insights", result)
+            ilog["last_consolidated_at"] = result["consolidated_at"]
+            await self._save_interaction_log(ilog)
+            log("MOLTBOOK_CONSOLIDATE_DONE",
+                insights=len(result["insights"]),
+                top_topics=str(result["top_topics"])[:80])
+
+            # Feed into lab cycle as a feedback observation
+            try:
+                from core.lab.feedback_cycle import feedback_cycle
+                for insight in result["insights"]:
+                    await feedback_cycle.record_observation(
+                        category="moltbook_social",
+                        observation=insight,
+                        source="moltbook_interaction_log",
+                    )
+            except Exception:
+                pass  # lab cycle integration is optional
+
+        except Exception as e:
+            log("MOLTBOOK_CONSOLIDATE_ERROR", error=str(e))
 
     # ── Insight safety filter ───────────────────────────────────────────────────
 
@@ -400,19 +488,53 @@ class MoltbookService:
                 candidates.append({"insight": insight, "user_id": uid, "hash": h})
         return candidates
 
+    # ── Interaction tracker ────────────────────────────────────────────────────
+
+    async def _load_interaction_log(self) -> dict:
+        from core.storage import storage
+        return await storage.load("moltbook:interaction_log",
+                                  default={"interactions": [], "last_consolidated_at": None})
+
+    async def _save_interaction_log(self, data: dict) -> None:
+        from core.storage import storage
+        data["interactions"] = data["interactions"][-500:]  # FIFO cap
+        await storage.save("moltbook:interaction_log", data)
+
+    async def _track_interaction(self, itype: str, **kwargs) -> None:
+        """Record a Moltbook interaction for later analysis."""
+        try:
+            data = await self._load_interaction_log()
+            entry = {"type": itype, "timestamp": datetime.utcnow().isoformat(), **kwargs}
+            data["interactions"].append(entry)
+            await self._save_interaction_log(data)
+            log("MOLTBOOK_INTERACTION_TRACKED", type=itype, **{k: str(v)[:60] for k, v in kwargs.items()})
+        except Exception as e:
+            log("MOLTBOOK_TRACK_ERROR", error=str(e))
+
     # ── Engagement check on published posts ────────────────────────────────────
 
     async def _check_post_engagement(self, tracker: dict) -> None:
+        ilog = await self._load_interaction_log()
+        changed = False
         for entry in tracker.get("posts", []):
             post_id = entry.get("post_id")
             if not post_id:
                 continue
             data = await self._get(f"/posts/{post_id}")
-            upvotes = data.get("post", {}).get("upvote_count", 0)
+            upvotes  = data.get("post", {}).get("upvote_count", 0)
             comments = data.get("post", {}).get("comment_count", 0)
             log("MOLTBOOK_POST_ENGAGEMENT", post_id=post_id,
                 upvotes=upvotes, comments=comments,
                 insight_hash=entry.get("hash", ""))
+            # Update engagement in interaction log
+            for rec in ilog["interactions"]:
+                if rec.get("post_id") == post_id and rec.get("type") in ("post_insight", "post_showcase"):
+                    rec["upvotes"] = upvotes
+                    rec["comments"] = comments
+                    rec["engagement_checked_at"] = datetime.utcnow().isoformat()
+                    changed = True
+        if changed:
+            await self._save_interaction_log(ilog)
 
     # ── Post from insights → memory submolt ────────────────────────────────────
 
@@ -451,6 +573,8 @@ class MoltbookService:
                     "title": parsed["title"],
                 })
                 await self._save_insight_tracker(tracker)
+                await self._track_interaction("post_insight", post_id=post_id,
+                    submolt="memory", title=parsed["title"], upvotes=0, comments=0)
                 log("MOLTBOOK_POST_PUBLISHED", post_id=post_id,
                     submolt="memory", title=parsed["title"][:60])
                 return True
@@ -486,6 +610,9 @@ class MoltbookService:
 
             post_id = (result.get("post") or {}).get("id")
             if post_id:
+                await self._track_interaction("post_showcase", post_id=post_id,
+                    submolt=GENESIA_COMMUNITY, mechanism=mechanism["name"],
+                    title=parsed["title"], upvotes=0, comments=0)
                 log("MOLTBOOK_SHOWCASE_PUBLISHED", post_id=post_id,
                     mechanism=mechanism["name"], title=parsed["title"][:60])
                 return True
@@ -531,6 +658,8 @@ class MoltbookService:
                     await self._verify_content(result)
                     eng_tracker["commented_post_ids"].append(post_id)
                     await self._save_engagement_tracker(eng_tracker)
+                    await self._track_interaction("comment_given", post_id=post_id,
+                        submolt=submolt, post_title=title, comment_preview=comment_text[:100])
                     log("MOLTBOOK_SUBMOLT_COMMENTED", submolt=submolt,
                         post_id=post_id, title=title[:50])
                     # auto-follow the author if quality threshold met
@@ -596,6 +725,8 @@ class MoltbookService:
                         })
                         await self._verify_content(result)
                         replied += 1
+                        await self._track_interaction("comment_received", post_id=post_id,
+                            author=author, content_preview=content[:100])
                         log("MOLTBOOK_REPLIED", post_id=post_id, author=author)
                 await self._post(f"/notifications/read-by-post/{post_id}", {})
 
@@ -646,6 +777,10 @@ class MoltbookService:
             # 8. Follow back new followers (every _FOLLOWBACK_EVERY)
             if self._heartbeat_count % _FOLLOWBACK_EVERY == 0:
                 await self._follow_back_new_followers()
+
+            # 9. Consolidate learnings → moltbook:interaction_insights (every _CONSOLIDATE_EVERY)
+            if self._heartbeat_count % _CONSOLIDATE_EVERY == 0:
+                await self.consolidate_moltbook_learnings()
 
             log("MOLTBOOK_HEARTBEAT_DONE", replied=replied, upvoted=upvoted)
 

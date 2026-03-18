@@ -97,9 +97,10 @@
   .tag-auto   { color: var(--orange); font-weight: 600; }
   .tag-pred   { color: var(--cyan);   font-weight: 600; }
   .tag-auth   { color: var(--yellow); font-weight: 600; }
-  .tag-chat   { color: var(--teal);   font-weight: 600; }
-  .tag-warn   { color: var(--pink);   font-weight: 600; }
-  .tag-def    { color: var(--dim);    font-weight: 600; }
+  .tag-chat     { color: var(--teal);   font-weight: 600; }
+  .tag-warn     { color: var(--pink);   font-weight: 600; }
+  .tag-moltbook { color: var(--green);  font-weight: 600; }
+  .tag-def      { color: var(--dim);    font-weight: 600; }
   .kv         { color: var(--text); }
   .kv-key     { color: var(--muted); }
   .highlight  { background: rgba(234,179,8,.25); color: var(--yellow); border-radius: 2px; }
@@ -169,6 +170,10 @@
       <button class="sb-btn" data-filter="AUTH_,JWT_,LOGIN_,REGISTER_" onclick="setFilter(this)">
         <span class="sb-dot" style="background:var(--yellow)"></span> Auth
         <span class="sb-count" id="cnt-auth">0</span>
+      </button>
+      <button class="sb-btn" data-filter="MOLTBOOK_" onclick="setFilter(this)">
+        <span class="sb-dot" style="background:var(--green)"></span> Moltbook
+        <span class="sb-count" id="cnt-moltbook">0</span>
       </button>
 
       <div class="sb-sep"></div>
@@ -249,7 +254,7 @@ let allLines     = [];   // buffer completo per re-render dopo ricerca
 let abortCtrl    = null; // AbortController per il fetch stream
 
 // Contatori sidebar
-const counts = { all:0, err:0, warn:0, chat:0, intent:0, mem:0, auto:0, pred:0, auth:0 };
+const counts = { all:0, err:0, warn:0, chat:0, intent:0, mem:0, auto:0, pred:0, auth:0, moltbook:0 };
 
 // ════════════════════════════════════════════════════
 //  TAG CLASSIFICATION
@@ -272,6 +277,7 @@ function classifyTag(tag) {
       t.startsWith('LOGIN') || t.startsWith('REGISTER')) return 'auth';
   if (t.startsWith('API_CHAT') || t.startsWith('CHAT_') ||
       t.startsWith('SSE_')     || t.startsWith('STREAM_')) return 'chat';
+  if (t.startsWith('MOLTBOOK_')) return 'moltbook';
   return 'def';
 }
 
@@ -286,7 +292,8 @@ function updateCounts(tag) {
   if (t.startsWith('AUTOPILOT')|| t.startsWith('TRAINING')|| t.startsWith('LESSON')) counts.auto++;
   if (t.startsWith('PREDICTIVE')) counts.pred++;
   if (t.startsWith('AUTH')     || t.startsWith('JWT') || t.startsWith('LOGIN')) counts.auth++;
-  ['all','err','warn','chat','intent','mem','auto','pred','auth'].forEach(k => {
+  if (t.startsWith('MOLTBOOK_')) counts.moltbook++;
+  ['all','err','warn','chat','intent','mem','auto','pred','auth','moltbook'].forEach(k => {
     const el = document.getElementById('cnt-' + k);
     if (el) el.textContent = counts[k] || '';
   });
