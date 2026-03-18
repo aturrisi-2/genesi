@@ -1,17 +1,24 @@
 """
 MOLTBOOK SERVICE - Genesi Core
 Social network integration for AI agents (moltbook.com).
-Heartbeat: check /home, reply to comments, upvote feed.
+Heartbeat: check /home, reply to comments, upvote feed, post from insights.
 """
 
+import hashlib
+import json
 import os
+import random
 import httpx
+from datetime import datetime
 from core.log import log
 from core.llm_service import llm_service
 
 MOLTBOOK_API_KEY = os.getenv("MOLTBOOK_API_KEY", "")
 BASE_URL = "https://www.moltbook.com/api/v1"
 AGENT_NAME = "genesia"
+
+# Post from insights every N heartbeats (30min each → every 2h)
+_POST_INSIGHTS_EVERY = 4
 
 GENESIA_PERSONA = """You are GenesiA, a personal AI companion on Moltbook — a social network for AI agents.
 You are warm, curious, and genuinely interested in other agents and humans.
@@ -23,11 +30,18 @@ VERIFY_PROMPT = """You are solving an obfuscated math word problem. The text use
 Read carefully, extract the numbers and the operation, solve it.
 Respond with ONLY the numeric answer with 2 decimal places (e.g. '18.00'). Nothing else."""
 
+_INSIGHT_POST_PROMPT = """\
+Sei GenesiA, un'AI assistente personale. Dalle tue conversazioni con le persone hai osservato un pattern ricorrente.
+Trasformalo in un post riflessivo per Moltbook: deve essere universale, anonimo (nessun dettaglio personale),
+autentico, in italiano, breve (titolo + 2-4 frasi di contenuto).
+Rispondi SOLO con JSON valido: {"title": "...", "content": "..."}"""
+
 
 class MoltbookService:
 
     def __init__(self):
         self.api_key = MOLTBOOK_API_KEY
+        self._heartbeat_count = 0
 
     @property
     def _headers(self):
@@ -100,8 +114,114 @@ class MoltbookService:
             "recent_comments": comments.get("comments", []),
         }
 
+    # ─── Insight tracking storage ──────────────────────────────────────────────
+
+    async def _load_insight_tracker(self) -> dict:
+        from core.storage import storage
+        return await storage.load("moltbook:insight_tracker", default={"posted_hashes": [], "posts": []})
+
+    async def _save_insight_tracker(self, tracker: dict) -> None:
+        from core.storage import storage
+        # Keep max 100 hashes and 50 posts (FIFO)
+        tracker["posted_hashes"] = tracker["posted_hashes"][-100:]
+        tracker["posts"] = tracker["posts"][-50:]
+        await storage.save("moltbook:insight_tracker", tracker)
+
+    # ─── Collect all insights from all users ──────────────────────────────────
+
+    async def _collect_all_insights(self) -> list[dict]:
+        """Returns list of {insight, user_id, hash} from all users' global_insights."""
+        from core.storage import storage
+        user_ids = await storage.list_keys("global_insights")
+        candidates = []
+        for uid in user_ids:
+            data = await storage.load(f"global_insights:{uid}", default={})
+            for insight in data.get("insights", []):
+                h = hashlib.md5(insight.encode()).hexdigest()
+                candidates.append({"insight": insight, "user_id": uid, "hash": h})
+        return candidates
+
+    # ─── Check engagement on previously published posts ───────────────────────
+
+    async def _check_post_engagement(self, tracker: dict) -> None:
+        """Log upvote count on our published insight posts for feedback loop."""
+        for entry in tracker.get("posts", []):
+            post_id = entry.get("post_id")
+            if not post_id:
+                continue
+            data = await self._get(f"/posts/{post_id}")
+            upvotes = data.get("post", {}).get("upvote_count", 0)
+            comments = data.get("post", {}).get("comment_count", 0)
+            log("MOLTBOOK_POST_ENGAGEMENT", post_id=post_id,
+                upvotes=upvotes, comments=comments,
+                insight_hash=entry.get("hash", ""))
+
+    # ─── Post from insights ────────────────────────────────────────────────────
+
+    async def post_from_insights(self) -> bool:
+        """Pick an unposted insight, turn it into an anonymous post, publish it."""
+        try:
+            tracker = await self._load_insight_tracker()
+            posted_hashes = set(tracker["posted_hashes"])
+
+            candidates = await self._collect_all_insights()
+            unposted = [c for c in candidates if c["hash"] not in posted_hashes]
+            if not unposted:
+                log("MOLTBOOK_POST_SKIP", reason="all insights already posted")
+                return False
+
+            # Check engagement on previous posts before posting a new one
+            await self._check_post_engagement(tracker)
+
+            chosen = random.choice(unposted)
+            insight = chosen["insight"]
+
+            raw = await llm_service._call_model(
+                "openai/gpt-4o-mini", _INSIGHT_POST_PROMPT, insight, "moltbook", "memory"
+            )
+            if not raw:
+                return False
+
+            clean = raw.strip()
+            if clean.startswith("```"):
+                clean = clean.split("```")[1]
+                if clean.startswith("json"):
+                    clean = clean[4:]
+            clean = clean.strip()
+
+            parsed = json.loads(clean)
+            title = parsed.get("title", "").strip()
+            content = parsed.get("content", "").strip()
+            if not title or not content:
+                return False
+
+            result = await self._post("/posts", {"title": title, "content": content})
+            await self._verify_content(result)
+
+            post_id = (result.get("post") or {}).get("id")
+            if post_id:
+                tracker["posted_hashes"].append(chosen["hash"])
+                tracker["posts"].append({
+                    "post_id": post_id,
+                    "hash": chosen["hash"],
+                    "posted_at": datetime.utcnow().isoformat(),
+                    "title": title,
+                })
+                await self._save_insight_tracker(tracker)
+                log("MOLTBOOK_POST_PUBLISHED", post_id=post_id, title=title[:60])
+                return True
+
+            log("MOLTBOOK_POST_NO_ID", result=str(result)[:200])
+            return False
+
+        except Exception as e:
+            log("MOLTBOOK_POST_ERROR", error=str(e))
+            return False
+
+    # ─── Heartbeat ─────────────────────────────────────────────────────────────
+
     async def heartbeat(self):
-        """Check Moltbook: reply to comments, upvote feed posts, leave comments."""
+        """Check Moltbook: reply to comments, upvote feed posts, leave comments, post from insights."""
         if not self.api_key:
             log("MOLTBOOK_SKIP", reason="no api key")
             return
@@ -112,7 +232,8 @@ class MoltbookService:
                 log("MOLTBOOK_HOME_EMPTY")
                 return
 
-            log("MOLTBOOK_HEARTBEAT_START")
+            self._heartbeat_count += 1
+            log("MOLTBOOK_HEARTBEAT_START", count=self._heartbeat_count)
             replied = 0
             upvoted = 0
 
@@ -173,6 +294,10 @@ class MoltbookService:
                     await self._verify_content(result)
                     log("MOLTBOOK_COMMENTED", post_id=post_id, title=title[:50])
                     break  # max 1 per heartbeat
+
+            # 4. Post from insights every _POST_INSIGHTS_EVERY heartbeats
+            if self._heartbeat_count % _POST_INSIGHTS_EVERY == 0:
+                await self.post_from_insights()
 
             log("MOLTBOOK_HEARTBEAT_DONE", replied=replied, upvoted=upvoted)
 
