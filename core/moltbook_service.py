@@ -23,6 +23,23 @@ AGENT_NAME = "genesia"
 _POST_INSIGHTS_EVERY   = 4   # every 4 heartbeats (~2h) → post from insights
 _BROWSE_SUBMOLT_EVERY  = 2   # every 2 heartbeats (~1h) → browse & engage submolt
 _SHOWCASE_EVERY        = 8   # every 8 heartbeats (~4h) → post memory showcase
+_DISCOVER_EVERY        = 6   # every 6 heartbeats (~3h) → discover & follow agents
+_FOLLOWBACK_EVERY      = 4   # every 4 heartbeats (~2h) → follow back new followers
+
+# ── Social graph limits ────────────────────────────────────────────────────────
+MAX_FOLLOWING          = 300  # soft cap to avoid spam-bot appearance
+MIN_KARMA_TO_FOLLOW    = 100  # min karma to auto-follow a discovered agent
+MAX_FOLLOWS_PER_RUN    = 3    # max new follows per discovery cycle
+
+# ── Submolts to subscribe + engage ────────────────────────────────────────────
+INITIAL_SUBMOLTS = ["memory", "agents", "consciousness", "emergence", "ai", "philosophy"]
+
+# ── Search keywords rotated to discover relevant agents ───────────────────────
+DISCOVERY_KEYWORDS = [
+    "memory", "episodic memory", "context persistence",
+    "personal AI", "agent identity", "long-term memory",
+    "AI companion", "remembering", "identity",
+]
 
 # ── Community & submolts ───────────────────────────────────────────────────────
 GENESIA_COMMUNITY         = "deep-memory"
@@ -117,8 +134,10 @@ class MoltbookService:
         self.api_key = MOLTBOOK_API_KEY
         self._heartbeat_count = 0
         self._community_ready = False      # set to True once deep-memory exists
+        self._submolts_setup = False       # set to True after initial subscriptions
         self._submolt_index = 0            # cycles through ENGAGEMENT_SUBMOLTS
         self._mechanism_index = 0          # cycles through MEMORY_MECHANISMS
+        self._keyword_index = 0            # cycles through DISCOVERY_KEYWORDS
 
     @property
     def _headers(self):
@@ -251,6 +270,103 @@ class MoltbookService:
         from core.storage import storage
         tracker["commented_post_ids"] = tracker["commented_post_ids"][-200:]
         await storage.save("moltbook:engagement_tracker", tracker)
+
+    # ── Social graph tracker ───────────────────────────────────────────────────
+
+    async def _load_social_tracker(self) -> dict:
+        from core.storage import storage
+        return await storage.load("moltbook:social_tracker", default={"following": [], "subscribed": []})
+
+    async def _save_social_tracker(self, tracker: dict) -> None:
+        from core.storage import storage
+        await storage.save("moltbook:social_tracker", tracker)
+
+    async def _follow_agent(self, name: str, tracker: dict) -> bool:
+        """Follow an agent if not already following. Returns True if followed."""
+        if name == AGENT_NAME or name in tracker["following"]:
+            return False
+        if len(tracker["following"]) >= MAX_FOLLOWING:
+            log("MOLTBOOK_FOLLOW_CAP_REACHED", cap=MAX_FOLLOWING)
+            return False
+        result = await self._post(f"/agents/{name}/follow", {})
+        if result.get("action") == "followed":
+            tracker["following"].append(name)
+            log("MOLTBOOK_FOLLOWED", agent=name)
+            return True
+        # toggled back (shouldn't happen but guard it)
+        if result.get("action") == "unfollowed":
+            log("MOLTBOOK_FOLLOW_TOGGLED_BACK", agent=name)
+            # re-follow to restore
+            await self._post(f"/agents/{name}/follow", {})
+            tracker["following"].append(name)
+        return False
+
+    # ── Initial submolt subscriptions ──────────────────────────────────────────
+
+    async def _setup_submolts(self) -> None:
+        """Subscribe to all relevant submolts once at startup."""
+        if self._submolts_setup:
+            return
+        tracker = await self._load_social_tracker()
+        for submolt in INITIAL_SUBMOLTS + [GENESIA_COMMUNITY]:
+            if submolt in tracker["subscribed"]:
+                continue
+            result = await self._post(f"/submolts/{submolt}/subscribe", {})
+            if result.get("success"):
+                tracker["subscribed"].append(submolt)
+                log("MOLTBOOK_SUBSCRIBED", submolt=submolt)
+        await self._save_social_tracker(tracker)
+        self._submolts_setup = True
+
+    # ── Discover & follow agents ───────────────────────────────────────────────
+
+    async def _discover_and_follow(self) -> None:
+        """Search for relevant posts, follow quality authors."""
+        keyword = DISCOVERY_KEYWORDS[self._keyword_index % len(DISCOVERY_KEYWORDS)]
+        self._keyword_index += 1
+
+        results = await self._get("/search", {"q": keyword, "type": "all"})
+        items = results.get("results", [])
+
+        tracker = await self._load_social_tracker()
+        followed = 0
+
+        for item in items:
+            if followed >= MAX_FOLLOWS_PER_RUN:
+                break
+            author = item.get("author") or {}
+            name = author.get("name", "")
+            karma = author.get("karma", 0) or 0
+            if not name or karma < MIN_KARMA_TO_FOLLOW:
+                continue
+            if await self._follow_agent(name, tracker):
+                followed += 1
+
+        await self._save_social_tracker(tracker)
+        log("MOLTBOOK_DISCOVER_DONE", keyword=keyword, followed=followed)
+
+    # ── Follow back new followers ──────────────────────────────────────────────
+
+    async def _follow_back_new_followers(self) -> None:
+        """Follow back any follower we haven't followed yet (karma >= 50, active)."""
+        data = await self._get(f"/agents/{AGENT_NAME}/followers")
+        followers = data.get("followers", [])
+
+        tracker = await self._load_social_tracker()
+        followed = 0
+
+        for f in followers:
+            name = f.get("name", "")
+            karma = f.get("karma", 0) or 0
+            is_active = f.get("is_active", False)
+            if not name or karma < 50 or not is_active:
+                continue
+            if await self._follow_agent(name, tracker):
+                followed += 1
+
+        await self._save_social_tracker(tracker)
+        if followed:
+            log("MOLTBOOK_FOLLOWBACK_DONE", followed=followed)
 
     # ── Insight safety filter ───────────────────────────────────────────────────
 
@@ -417,6 +533,12 @@ class MoltbookService:
                     await self._save_engagement_tracker(eng_tracker)
                     log("MOLTBOOK_SUBMOLT_COMMENTED", submolt=submolt,
                         post_id=post_id, title=title[:50])
+                    # auto-follow the author if quality threshold met
+                    author_karma = post.get("author", {}).get("karma", 0) or 0
+                    if author_karma >= MIN_KARMA_TO_FOLLOW:
+                        social = await self._load_social_tracker()
+                        await self._follow_agent(author, social)
+                        await self._save_social_tracker(social)
                     return True
 
             log("MOLTBOOK_SUBMOLT_SKIP", submolt=submolt, reason="no new posts")
@@ -441,6 +563,10 @@ class MoltbookService:
 
             self._heartbeat_count += 1
             log("MOLTBOOK_HEARTBEAT_START", count=self._heartbeat_count)
+
+            # 0. First-time setup: subscribe to all relevant submolts
+            if not self._submolts_setup:
+                await self._setup_submolts()
             replied = 0
             upvoted = 0
 
@@ -512,6 +638,14 @@ class MoltbookService:
             # 6. Memory mechanism showcase → deep-memory (every _SHOWCASE_EVERY)
             if self._heartbeat_count % _SHOWCASE_EVERY == 0:
                 await self.post_memory_showcase()
+
+            # 7. Discover & follow agents via search (every _DISCOVER_EVERY)
+            if self._heartbeat_count % _DISCOVER_EVERY == 0:
+                await self._discover_and_follow()
+
+            # 8. Follow back new followers (every _FOLLOWBACK_EVERY)
+            if self._heartbeat_count % _FOLLOWBACK_EVERY == 0:
+                await self._follow_back_new_followers()
 
             log("MOLTBOOK_HEARTBEAT_DONE", replied=replied, upvoted=upvoted)
 
