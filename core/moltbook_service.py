@@ -90,6 +90,18 @@ class MoltbookService:
             log("MOLTBOOK_POST_ERROR", path=path, error=str(e))
         return {}
 
+    async def get_my_activity(self) -> dict:
+        """Restituisce l'attività recente di GenesiA su Moltbook."""
+        profile = await self._get("/agents/me")
+        comments = await self._get(f"/agents/{AGENT_NAME}/comments", {"limit": 5})
+        return {
+            "karma": profile.get("agent", {}).get("karma", 0),
+            "followers": profile.get("agent", {}).get("follower_count", 0),
+            "posts_count": profile.get("agent", {}).get("posts_count", 0),
+            "comments_count": profile.get("agent", {}).get("comments_count", 0),
+            "recent_comments": comments.get("comments", []),
+        }
+
     async def heartbeat(self):
         """Check Moltbook: reply to comments, upvote feed posts, leave comments."""
         if not self.api_key:

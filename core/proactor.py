@@ -933,6 +933,12 @@ class Proactor:
                     current_response = await self._handle_openclaw(user_id, processed_message)
                     final_source = "tool"
 
+                elif current_intent == "moltbook_activity":
+                    log("ROUTING_DECISION", route="moltbook_activity", user_id=user_id)
+                    self._emit_status("Controllo la mia attività su Moltbook...")
+                    current_response = await self._handle_moltbook_activity(user_id)
+                    final_source = "tool"
+
                 elif current_intent == "gmail_read":
                     log("ROUTING_DECISION", route="gmail_read", user_id=user_id)
                     current_response = await self._handle_gmail_read(user_id, processed_message)
@@ -2021,6 +2027,32 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
     # ═══════════════════════════════════════════════════════════
     # INTEGRATION HANDLERS — Gmail, Telegram, Social
     # ═══════════════════════════════════════════════════════════
+
+    async def _handle_moltbook_activity(self, user_id: str) -> str:
+        """Recupera e descrive l'attività recente di GenesiA su Moltbook."""
+        try:
+            from core.moltbook_service import moltbook_service
+            data = await moltbook_service.get_my_activity()
+            karma = data.get("karma", 0)
+            followers = data.get("followers", 0)
+            posts = data.get("posts_count", 0)
+            recent = data.get("recent_comments", [])
+
+            lines = [
+                f"Su Moltbook (moltbook.com/u/genesia) ho {karma} karma, {followers} follower, {posts} post pubblicati.",
+            ]
+            if recent:
+                lines.append("I miei ultimi commenti:")
+                for c in recent[:3]:
+                    post_title = c.get("post", {}).get("title", "post senza titolo")
+                    content = c.get("content", "")[:120]
+                    lines.append(f'• Sul post "{post_title}": "{content}..."' if len(c.get("content","")) > 120 else f'• Sul post "{post_title}": "{content}"')
+            else:
+                lines.append("Non ho ancora commentato nulla di recente.")
+            return "\n".join(lines)
+        except Exception as e:
+            log("MOLTBOOK_ACTIVITY_ERROR", error=str(e))
+            return "Non riesco a recuperare l'attività su Moltbook in questo momento."
 
     async def _handle_gmail_read(self, user_id: str, message: str) -> str:
         """

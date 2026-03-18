@@ -209,6 +209,13 @@ class IntentClassifier:
                 "collega telegram", "configura telegram", "attiva telegram",
                 "imposta telegram", "connetti telegram",
             ],
+            "moltbook_activity": [
+                "cosa hai fatto su moltbook", "cosa hai commentato su moltbook",
+                "cosa hai postato su moltbook", "moltbook oggi", "attività moltbook",
+                "hai commentato qualcosa", "hai postato qualcosa", "su moltbook cosa",
+                "cosa hai scritto su moltbook", "aggiornamenti moltbook",
+                "com'è andata su moltbook", "novità su moltbook",
+            ],
             "social_read": [
                 "controlla facebook", "vedi facebook", "leggi facebook",
                 "vedi instagram", "controlla instagram", "leggi instagram",
@@ -585,7 +592,7 @@ class IntentClassifier:
             if not intent.startswith('reminder_') and not self._has_datetime_reference(message_lower):
                 protected_intents = ["weather", "news", "tecnica", "debug", "spiegazione", "icloud_sync", "google_sync", "identity",
                                      "gmail_setup", "gmail_read", "gmail_send", "whatsapp_send", "whatsapp_setup",
-                                     "telegram_send", "telegram_setup", "social_read", "social_setup"]
+                                     "telegram_send", "telegram_setup", "social_read", "social_setup", "moltbook_activity"]
                 if intent in protected_intents:
                     return intent
                 
@@ -832,6 +839,7 @@ INTENT POSSIBILI:
 - whatsapp_setup: collegare o configurare WhatsApp
 - telegram_send: inviare un messaggio Telegram (es. "manda su telegram a X", "scrivi su telegram")
 - telegram_setup: collegare o configurare il bot Telegram
+- moltbook_activity: cosa ha fatto GenesiA su Moltbook (commenti, post, attività recente)
 - social_read: leggere aggiornamenti da Facebook, Instagram o TikTok
 - social_setup: collegare Facebook, Instagram o TikTok
 - genesi_audit: analisi dei log per monitorare cosa funziona e cosa no (report prestazioni)
