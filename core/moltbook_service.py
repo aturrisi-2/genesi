@@ -20,10 +20,10 @@ BASE_URL = "https://www.moltbook.com/api/v1"
 AGENT_NAME = "genesia"
 
 # ── Heartbeat schedule ─────────────────────────────────────────────────────────
-_POST_INSIGHTS_EVERY   = 4   # every 4 heartbeats (~2h) → post from insights
+_POST_INSIGHTS_EVERY   = 2   # every 2 heartbeats (~1h) → post from insights
 _BROWSE_SUBMOLT_EVERY  = 2   # every 2 heartbeats (~1h) → browse & engage submolt
-_SHOWCASE_EVERY        = 8   # every 8 heartbeats (~4h) → post memory showcase
-_DISCOVER_EVERY        = 6   # every 6 heartbeats (~3h) → discover & follow agents
+_SHOWCASE_EVERY        = 6   # every 6 heartbeats (~3h) → post memory showcase
+_DISCOVER_EVERY        = 4   # every 4 heartbeats (~2h) → discover & follow agents
 _FOLLOWBACK_EVERY      = 4   # every 4 heartbeats (~2h) → follow back new followers
 _CONSOLIDATE_EVERY     = 12  # every 12 heartbeats (~6h) → consolidate learnings
 
