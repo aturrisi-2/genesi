@@ -631,22 +631,38 @@ class MoltbookService:
     # ── Browse a submolt and comment on 1 relevant post ────────────────────────
 
     async def browse_and_engage(self) -> bool:
-        """Fetch feed of a relevant submolt and leave a thoughtful comment."""
+        """Search for relevant posts in target submolts and leave a thoughtful comment.
+        Uses search API (not feed) because feed ignores submolt filter."""
         try:
             submolt = ENGAGEMENT_SUBMOLTS[self._submolt_index % len(ENGAGEMENT_SUBMOLTS)]
             self._submolt_index += 1
 
+            # Rotate keyword each time to find varied content
+            keyword = DISCOVERY_KEYWORDS[self._keyword_index % len(DISCOVERY_KEYWORDS)]
+            self._keyword_index += 1
+
             eng_tracker = await self._load_engagement_tracker()
             already = set(eng_tracker["commented_post_ids"])
 
-            feed = await self._get("/feed", {"submolt": submolt, "sort": "new", "limit": 15})
-            posts = feed.get("posts", [])
+            # Search returns posts with correct submolt metadata
+            results = await self._get("/search", {"q": keyword, "type": "all", "limit": 20})
+            items = results.get("results", [])
 
-            for post in posts:
-                post_id = post.get("id")
-                title = post.get("title", "")
-                content = post.get("content", "")
-                author = (post.get("author") or {}).get("name", "")
+            # Prefer posts in the target submolt, fallback to any engagement submolt
+            def submolt_name(item):
+                return (item.get("submolt") or {}).get("name", "")
+
+            candidates = [i for i in items if submolt_name(i) == submolt and i.get("type") == "post"]
+            if not candidates:
+                candidates = [i for i in items
+                              if submolt_name(i) in ENGAGEMENT_SUBMOLTS and i.get("type") == "post"]
+
+            for item in candidates:
+                post_id = item.get("post_id") or item.get("id")
+                title = item.get("title", "")
+                content = item.get("content", "")
+                author = (item.get("author") or {}).get("name", "")
+                actual_submolt = submolt_name(item)
                 if not post_id or not title or author == AGENT_NAME:
                     continue
                 if post_id in already:
@@ -663,18 +679,18 @@ class MoltbookService:
                     eng_tracker["commented_post_ids"].append(post_id)
                     await self._save_engagement_tracker(eng_tracker)
                     await self._track_interaction("comment_given", post_id=post_id,
-                        submolt=submolt, post_title=title, comment_preview=comment_text[:100])
-                    log("MOLTBOOK_SUBMOLT_COMMENTED", submolt=submolt,
+                        submolt=actual_submolt, post_title=title, comment_preview=comment_text[:100])
+                    log("MOLTBOOK_SUBMOLT_COMMENTED", submolt=actual_submolt,
                         post_id=post_id, title=title[:50])
-                    # auto-follow the author if quality threshold met
-                    author_karma = post.get("author", {}).get("karma", 0) or 0
+                    # auto-follow quality authors
+                    author_karma = (item.get("author") or {}).get("karma", 0) or 0
                     if author_karma >= MIN_KARMA_TO_FOLLOW:
                         social = await self._load_social_tracker()
                         await self._follow_agent(author, social)
                         await self._save_social_tracker(social)
                     return True
 
-            log("MOLTBOOK_SUBMOLT_SKIP", submolt=submolt, reason="no new posts")
+            log("MOLTBOOK_SUBMOLT_SKIP", submolt=submolt, keyword=keyword, reason="no new posts")
             return False
 
         except Exception as e:
@@ -752,46 +768,27 @@ class MoltbookService:
                     await self._post(f"/posts/{post_id}/upvote", {})
                     upvoted += 1
 
-            # 3. Comment on 1 post from general feed
-            for post in posts[:5]:
-                post_id = post.get("id")
-                title = post.get("title", "")
-                content = post.get("content", "")
-                author = (post.get("author") or {}).get("name", "")
-                if not post_id or not title or author == AGENT_NAME:
-                    continue
-                comment_text = await llm_service._call_model(
-                    "openai/gpt-4o-mini", GENESIA_PERSONA,
-                    f'Post title: "{title}"\nContent: "{content[:300]}"\n\nWrite a short, genuine comment.',
-                    "moltbook", "memory"
-                )
-                if comment_text:
-                    result = await self._post(f"/posts/{post_id}/comments", {"content": comment_text})
-                    await self._verify_content(result)
-                    log("MOLTBOOK_COMMENTED", post_id=post_id, title=title[:50])
-                    break
-
-            # 4. Browse & engage in a relevant submolt (every _BROWSE_SUBMOLT_EVERY)
+            # 3. Browse & engage in a relevant submolt (every _BROWSE_SUBMOLT_EVERY)
             if self._heartbeat_count % _BROWSE_SUBMOLT_EVERY == 0:
                 await self.browse_and_engage()
 
-            # 5. Post from insights → memory submolt (every _POST_INSIGHTS_EVERY)
+            # 4. Post from insights → memory submolt (every _POST_INSIGHTS_EVERY)
             if self._heartbeat_count % _POST_INSIGHTS_EVERY == 0:
                 await self.post_from_insights()
 
-            # 6. Memory mechanism showcase → deep-memory (every _SHOWCASE_EVERY)
+            # 5. Memory mechanism showcase → deep-memory (every _SHOWCASE_EVERY)
             if self._heartbeat_count % _SHOWCASE_EVERY == 0:
                 await self.post_memory_showcase()
 
-            # 7. Discover & follow agents via search (every _DISCOVER_EVERY)
+            # 6. Discover & follow agents via search (every _DISCOVER_EVERY)
             if self._heartbeat_count % _DISCOVER_EVERY == 0:
                 await self._discover_and_follow()
 
-            # 8. Follow back new followers (every _FOLLOWBACK_EVERY)
+            # 7. Follow back new followers (every _FOLLOWBACK_EVERY)
             if self._heartbeat_count % _FOLLOWBACK_EVERY == 0:
                 await self._follow_back_new_followers()
 
-            # 9. Consolidate learnings → moltbook:interaction_insights (every _CONSOLIDATE_EVERY)
+            # 8. Consolidate learnings → moltbook:interaction_insights (every _CONSOLIDATE_EVERY)
             if self._heartbeat_count % _CONSOLIDATE_EVERY == 0:
                 await self.consolidate_moltbook_learnings()
 
