@@ -170,6 +170,9 @@ class MoltbookService:
                 r = await client.post(f"{BASE_URL}{path}", headers=self._headers, json=data)
                 if r.status_code in (200, 201):
                     return r.json()
+                if r.status_code == 409:
+                    # Conflict = already exists — return a sentinel so callers can handle it
+                    return {"_conflict": True, "statusCode": 409}
         except Exception as e:
             log("MOLTBOOK_POST_ERROR", path=path, error=str(e))
         return {}
@@ -179,7 +182,15 @@ class MoltbookService:
             answer = await llm_service._call_model(
                 "openai/gpt-4o-mini", VERIFY_PROMPT, challenge_text, "moltbook", "memory"
             )
-            return answer.strip() if answer else None
+            if not answer:
+                return None
+            # Extract only the numeric answer — strip markdown, spaces, text
+            import re as _re
+            match = _re.search(r'\d+\.?\d*', answer.strip())
+            if match:
+                num = float(match.group())
+                return f"{num:.2f}"
+            return answer.strip()
         except Exception as e:
             log("MOLTBOOK_VERIFY_ERROR", error=str(e))
             return None
