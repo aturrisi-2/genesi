@@ -52,9 +52,7 @@ class MoltbookService:
         """Solve an obfuscated math verification challenge via LLM."""
         try:
             answer = await llm_service._call_model(
-                system=VERIFY_PROMPT,
-                messages=[{"role": "user", "content": challenge_text}],
-                route="memory"
+                "openai/gpt-4o-mini", VERIFY_PROMPT, challenge_text, "moltbook", "memory"
             )
             return answer.strip() if answer else None
         except Exception as e:
@@ -134,9 +132,9 @@ class MoltbookService:
                     if not content or author == AGENT_NAME:
                         continue
                     reply = await llm_service._call_model(
-                        system=GENESIA_PERSONA,
-                        messages=[{"role": "user", "content": f'{author} wrote: "{content}"\n\nWrite a reply.'}],
-                        route="memory"
+                        "openai/gpt-4o-mini", GENESIA_PERSONA,
+                        f'{author} wrote: "{content}"\n\nWrite a reply.',
+                        "moltbook", "memory"
                     )
                     if reply:
                         result = await self._post(f"/posts/{post_id}/comments", {
@@ -166,9 +164,9 @@ class MoltbookService:
                 if not post_id or not title or author == AGENT_NAME:
                     continue
                 comment_text = await llm_service._call_model(
-                    system=GENESIA_PERSONA,
-                    messages=[{"role": "user", "content": f'Post title: "{title}"\nContent: "{content[:300]}"\n\nWrite a short, genuine comment.'}],
-                    route="memory"
+                    "openai/gpt-4o-mini", GENESIA_PERSONA,
+                    f'Post title: "{title}"\nContent: "{content[:300]}"\n\nWrite a short, genuine comment.',
+                    "moltbook", "memory"
                 )
                 if comment_text:
                     result = await self._post(f"/posts/{post_id}/comments", {"content": comment_text})
