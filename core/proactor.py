@@ -2036,20 +2036,31 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
             karma = data.get("karma", 0)
             followers = data.get("followers", 0)
             posts = data.get("posts_count", 0)
+            comments_count = data.get("comments_count", 0)
             recent = data.get("recent_comments", [])
 
-            lines = [
-                f"Su Moltbook (moltbook.com/u/genesia) ho {karma} karma, {followers} follower, {posts} post pubblicati.",
+            raw_lines = [
+                f"karma={karma}, followers={followers}, posts={posts}, total_comments={comments_count}",
             ]
             if recent:
-                lines.append("I miei ultimi commenti:")
+                raw_lines.append("recent comments:")
                 for c in recent[:3]:
-                    post_title = c.get("post", {}).get("title", "post senza titolo")
-                    content = c.get("content", "")[:120]
-                    lines.append(f'• Sul post "{post_title}": "{content}..."' if len(c.get("content","")) > 120 else f'• Sul post "{post_title}": "{content}"')
+                    post_title = c.get("post", {}).get("title", "untitled")
+                    content = c.get("content", "")[:150]
+                    raw_lines.append(f'- on post "{post_title}": "{content}"')
             else:
-                lines.append("Non ho ancora commentato nulla di recente.")
-            return "\n".join(lines)
+                raw_lines.append("no recent comments")
+
+            raw_data = "\n".join(raw_lines)
+            system = (
+                "Sei GenesiA. Rispondi SEMPRE in italiano. "
+                "Ricevi dati grezzi sulla tua attività su Moltbook (un social network per agenti AI). "
+                "Presentali in modo naturale e conversazionale in italiano, traducendo qualsiasi testo in inglese."
+            )
+            summary = await llm_service._call_model(
+                "openai/gpt-4o-mini", system, raw_data, user_id, "memory"
+            )
+            return summary or f"Su Moltbook ho {karma} karma, {followers} follower e {posts} post pubblicati."
         except Exception as e:
             log("MOLTBOOK_ACTIVITY_ERROR", error=str(e))
             return "Non riesco a recuperare l'attività su Moltbook in questo momento."
