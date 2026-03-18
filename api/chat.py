@@ -284,25 +284,6 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                 pass
         _asyncio.create_task(_maybe_audit())
 
-        # Moltbook heartbeat ogni 50 turni (background, silenzioso)
-        async def _maybe_moltbook():
-            try:
-                from core.moltbook_service import moltbook_service as _mb
-                _mb_counter_file = "moltbook_trigger_count.txt"
-                try:
-                    with open(_mb_counter_file, "r") as _cf:
-                        _mb_count = int(_cf.read().strip())
-                except Exception:
-                    _mb_count = 0
-                _mb_count += 1
-                with open(_mb_counter_file, "w") as _cf:
-                    _cf.write(str(_mb_count))
-                if _mb_count % 50 == 0:
-                    await _mb.heartbeat()
-            except Exception:
-                pass
-        _asyncio.create_task(_maybe_moltbook())
-
         # Usa il vero intent classificato (surfacato da simple_chat_handler)
         intent = classified_intent
         
@@ -459,25 +440,6 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                 except Exception:
                     pass
             _aio.create_task(_stream_maybe_audit())
-
-            # Moltbook heartbeat ogni 50 turni (background, silenzioso)
-            async def _stream_maybe_moltbook():
-                try:
-                    from core.moltbook_service import moltbook_service as _mb
-                    _mb_counter_file = "moltbook_trigger_count.txt"
-                    try:
-                        with open(_mb_counter_file, "r") as _cf:
-                            _mb_count = int(_cf.read().strip())
-                    except Exception:
-                        _mb_count = 0
-                    _mb_count += 1
-                    with open(_mb_counter_file, "w") as _cf:
-                        _cf.write(str(_mb_count))
-                    if _mb_count % 50 == 0:
-                        await _mb.heartbeat()
-                except Exception:
-                    pass
-            _aio.create_task(_stream_maybe_moltbook())
 
             await queue.put({"done": True, "response": resp})
         except Exception as _e:
