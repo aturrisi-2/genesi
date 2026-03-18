@@ -188,6 +188,16 @@ class ContextAssembler:
         except Exception:
             pass
 
+        # Past conversation summaries: cosa è stato discusso nelle sessioni precedenti (fail-silent)
+        try:
+            from core.conversation_summary_service import conv_summary_service
+            past_block = await conv_summary_service.get_context_block(user_id)
+            if past_block:
+                context["past_conversations"] = past_block
+                summary += f"\n[CONVERSAZIONI PRECEDENTI]\n{past_block}"
+        except Exception:
+            pass
+
         # Emotional history: andamento emotivo recente (fail-silent)
         try:
             from core.emotional_memory import get_emotion_trend_summary as _get_trend

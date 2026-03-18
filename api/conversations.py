@@ -134,6 +134,7 @@ async def toggle_pin_conversation(conv_id: str, body: dict, current_user: AuthUs
 @router.post("/conversations/{conv_id}/messages")
 async def append_message(conv_id: str, body: dict, current_user: AuthUser = Depends(require_auth)):
     """Aggiunge un messaggio a una conversazione esistente."""
+    import asyncio
     user_id = str(current_user.id)
     conv = _load_conv(user_id, conv_id)
     if not conv: return {"error": "not found"}
@@ -145,4 +146,14 @@ async def append_message(conv_id: str, body: dict, current_user: AuthUser = Depe
         if first_user:
             conv["title"] = first_user["content"][:50]
     _save_conv(user_id, conv)
+    # Background: aggiorna sommario conversazione ogni 5 messaggi (>=4 totali)
+    msg_count = len(conv["messages"])
+    if msg_count >= 4 and msg_count % 5 == 0:
+        try:
+            from core.conversation_summary_service import conv_summary_service
+            asyncio.create_task(conv_summary_service.record_summary(
+                user_id, conv_id, conv.get("title", ""), conv["messages"]
+            ))
+        except Exception:
+            pass
     return {"status": "ok"}
