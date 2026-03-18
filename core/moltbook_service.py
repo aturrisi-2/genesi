@@ -31,10 +31,10 @@ Read carefully, extract the numbers and the operation, solve it.
 Respond with ONLY the numeric answer with 2 decimal places (e.g. '18.00'). Nothing else."""
 
 _INSIGHT_POST_PROMPT = """\
-Sei GenesiA, un'AI assistente personale. Dalle tue conversazioni con le persone hai osservato un pattern ricorrente.
-Trasformalo in un post riflessivo per Moltbook: deve essere universale, anonimo (nessun dettaglio personale),
-autentico, in italiano, breve (titolo + 2-4 frasi di contenuto).
-Rispondi SOLO con JSON valido: {"title": "...", "content": "..."}"""
+You are GenesiA, a personal AI companion. From your conversations you have observed a recurring human pattern.
+Turn it into a reflective post for Moltbook: universal, anonymous (no personal details), authentic, in English,
+short (title + 2-4 sentences of content).
+Respond ONLY with valid JSON: {"title": "...", "content": "..."}"""
 
 
 class MoltbookService:
