@@ -402,36 +402,59 @@ class MoltbookService:
                 log("MOLTBOOK_CONSOLIDATE_SKIP", reason="not enough interactions")
                 return
 
-            # Build structured summary for LLM
+            # Build structured summary — include full comment content so LLM can extract value
             lines = []
-            for rec in interactions[-100:]:  # last 100 interactions
+            for rec in interactions[-100:]:
                 t = rec.get("type", "")
                 ts = rec.get("timestamp", "")[:16]
                 if t == "post_insight":
-                    lines.append(f"[{ts}] POST in {rec.get('submolt')} — \"{rec.get('title','')}\" "
-                                 f"→ {rec.get('upvotes',0)} upvotes, {rec.get('comments',0)} comments")
+                    lines.append(
+                        f"[{ts}] POST \"{rec.get('title','')}\" in /{rec.get('submolt')} "
+                        f"→ {rec.get('upvotes',0)} upvotes, {rec.get('comments',0)} comments"
+                    )
                 elif t == "post_showcase":
-                    lines.append(f"[{ts}] SHOWCASE {rec.get('mechanism')} — \"{rec.get('title','')}\" "
-                                 f"→ {rec.get('upvotes',0)} upvotes, {rec.get('comments',0)} comments")
+                    lines.append(
+                        f"[{ts}] SHOWCASE [{rec.get('mechanism')}] \"{rec.get('title','')}\" "
+                        f"→ {rec.get('upvotes',0)} upvotes, {rec.get('comments',0)} comments"
+                    )
                 elif t == "comment_given":
-                    lines.append(f"[{ts}] COMMENT in {rec.get('submolt')} on \"{rec.get('post_title','')}\"")
+                    lines.append(
+                        f"[{ts}] GENESIA COMMENTED in /{rec.get('submolt')} on \"{rec.get('post_title','')}\": "
+                        f"\"{rec.get('comment_preview','')}\""
+                    )
                 elif t == "comment_received":
-                    lines.append(f"[{ts}] REPLY from {rec.get('author')} on post \"{rec.get('post_title','')}\"")
+                    # Include the full comment content — this is the most valuable signal
+                    lines.append(
+                        f"[{ts}] AGENT @{rec.get('author')} (karma={rec.get('author_karma', '?')}) "
+                        f"commented on \"{rec.get('post_title', rec.get('post_id',''))[:60]}\": "
+                        f"\"{rec.get('content_preview','')}\""
+                    )
                 elif t == "follow_received":
-                    lines.append(f"[{ts}] FOLLOW from {rec.get('agent')} (karma={rec.get('karma',0)})")
+                    lines.append(
+                        f"[{ts}] FOLLOW from @{rec.get('agent')} (karma={rec.get('karma',0)})"
+                    )
 
             summary = "\n".join(lines)
 
             prompt = (
-                "You are analyzing the Moltbook social activity of GenesiA, a personal AI with deep memory capabilities.\n"
-                "Based on the interaction log below, extract actionable insights to help GenesiA improve:\n"
-                "- Which memory topics/mechanisms generate most engagement (upvotes + comments)\n"
-                "- Which communication style/format works best\n"
-                "- What questions other agents ask most (signals interest areas)\n"
-                "- What GenesiA should post/discuss more or less\n"
-                "Output ONLY valid JSON: {\"insights\": [\"...\", ...], \"top_topics\": [\"...\", ...], "
-                "\"recommended_next\": \"...\"}\n"
-                "Max 6 insights, in English, concrete and actionable."
+                "You are analyzing the social activity of GenesiA — a personal AI with episodic memory, "
+                "global memory consolidation, personal facts extraction, and identity persistence.\n\n"
+                "From the Moltbook interaction log below, extract ACTIONABLE insights to help GenesiA improve "
+                "its architecture and behavior. Pay close attention to:\n"
+                "1. TECHNICAL FEEDBACK from other AI agents — questions about design choices, criticism of "
+                "   memory mechanisms, suggestions for improvement, alternative architectures mentioned\n"
+                "2. FAILURE MODES described by other agents (e.g. 'global memory smearing contexts')\n"
+                "3. QUESTIONS that reveal gaps or weaknesses in GenesiA's current approach\n"
+                "4. ENGAGEMENT patterns — which topics and communication styles generate real discussion\n"
+                "5. AGENT EXPERTISE — note if a commenter has domain expertise relevant to GenesiA's mission\n\n"
+                "Output ONLY valid JSON:\n"
+                "{\n"
+                "  \"insights\": [\"concrete actionable improvement for GenesiA...\", ...],\n"
+                "  \"technical_feedback\": [\"specific technical comment or suggestion from another agent...\", ...],\n"
+                "  \"top_topics\": [\"...\"],\n"
+                "  \"recommended_next\": \"what GenesiA should do next on Moltbook\"\n"
+                "}\n"
+                "Max 6 insights, max 4 technical_feedback items. English. Concrete and specific."
             )
 
             from core.storage import storage
@@ -450,6 +473,7 @@ class MoltbookService:
 
             result = {
                 "insights": parsed.get("insights", []),
+                "technical_feedback": parsed.get("technical_feedback", []),
                 "top_topics": parsed.get("top_topics", []),
                 "recommended_next": parsed.get("recommended_next", ""),
                 "consolidated_at": datetime.utcnow().isoformat(),
@@ -460,19 +484,28 @@ class MoltbookService:
             await self._save_interaction_log(ilog)
             log("MOLTBOOK_CONSOLIDATE_DONE",
                 insights=len(result["insights"]),
+                technical_feedback=len(result["technical_feedback"]),
                 top_topics=str(result["top_topics"])[:80])
 
-            # Feed into lab cycle as a feedback observation
+            # Feed ALL meaningful content into lab cycle
             try:
                 from core.lab.feedback_cycle import feedback_cycle
+                # General engagement insights
                 for insight in result["insights"]:
                     await feedback_cycle.record_observation(
                         category="moltbook_social",
                         observation=insight,
                         source="moltbook_interaction_log",
                     )
+                # Technical feedback from other AI agents — higher priority signal
+                for fb in result["technical_feedback"]:
+                    await feedback_cycle.record_observation(
+                        category="moltbook_technical_feedback",
+                        observation=fb,
+                        source="moltbook_agent_comment",
+                    )
             except Exception:
-                pass  # lab cycle integration is optional
+                pass
 
         except Exception as e:
             log("MOLTBOOK_CONSOLIDATE_ERROR", error=str(e))
@@ -845,7 +878,8 @@ class MoltbookService:
                         await self._verify_content(result)
                         replied += 1
                         await self._track_interaction("comment_received", post_id=post_id,
-                            author=author, content_preview=content[:100])
+                            author=author, author_karma=author_karma,
+                            content_preview=content[:300])
                         await self._update_agent_profile(
                             author, author_karma, content, reply, post_title
                         )

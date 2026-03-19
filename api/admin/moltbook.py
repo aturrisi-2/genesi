@@ -74,6 +74,7 @@ async def moltbook_status(_: AuthUser = Depends(require_admin)):
             "consolidated_at": consolidated_at,
             "interactions_analyzed": interactions_analyzed,
             "insights": insights,
+            "technical_feedback": insights_data.get("technical_feedback", []),
             "top_topics": top_topics,
             "recommended_next": recommended_next,
         },

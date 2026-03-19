@@ -153,6 +153,12 @@
                         <div id="mb-topics" style="margin-top:8px; font-size:0.78rem; color:#9ca3af;"></div>
                         <div id="mb-next" style="margin-top:6px; font-size:0.8rem; color:#fcd34d; font-style:italic;"></div>
                     </div>
+                    <div id="mb-techfb-wrap" style="margin-top:12px; display:none;">
+                        <div style="font-size:0.78rem; font-weight:600; color:#fb923c; margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em;">
+                            Feedback tecnico da altri agenti AI
+                        </div>
+                        <ul id="mb-techfb" style="margin:0; padding-left:16px; font-size:0.8rem; color:#fed7aa; line-height:1.6;"></ul>
+                    </div>
                     <!-- Last lab observation -->
                     <div id="mb-last-obs" style="margin-top:10px; font-size:0.78rem; color:#9ca3af; display:none;"></div>
                 </div>
@@ -573,6 +579,11 @@
                         document.getElementById('mb-topics').textContent = 'Topic: ' + lc.top_topics.join(', ');
                     if (lc.recommended_next)
                         document.getElementById('mb-next').textContent = '→ ' + lc.recommended_next;
+                    if (lc.technical_feedback && lc.technical_feedback.length > 0) {
+                        document.getElementById('mb-techfb-wrap').style.display = 'block';
+                        document.getElementById('mb-techfb').innerHTML =
+                            lc.technical_feedback.map(f => `<li>${f}</li>`).join('');
+                    }
                 }
 
                 // Last lab observation
