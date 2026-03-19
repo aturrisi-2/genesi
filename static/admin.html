@@ -71,6 +71,77 @@
         <h1>Pannello Admin</h1>
         <p class="subtitle" id="subtitle">Caricamento statistiche...</p>
 
+        <!-- ── GAUGE AUTO-MIGLIORAMENTO ─────────────────────────── -->
+        <div id="gauge-section" style="margin: 18px 0 8px; text-align:center;">
+            <div style="font-size:0.78rem; text-transform:uppercase; letter-spacing:.08em; color:#9ca3af; margin-bottom:6px;">
+                Indice Auto-Miglioramento
+            </div>
+            <!-- SVG gauge 300×170 -->
+            <svg id="gauge-svg" viewBox="0 0 300 170" width="300" height="170"
+                 style="display:block; margin:0 auto; overflow:visible;">
+                <defs>
+                    <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%"   stop-color="#ef4444"/>
+                        <stop offset="35%"  stop-color="#f97316"/>
+                        <stop offset="65%"  stop-color="#eab308"/>
+                        <stop offset="100%" stop-color="#22c55e"/>
+                    </linearGradient>
+                    <!-- clip mask for value arc -->
+                    <clipPath id="arcClip">
+                        <rect id="arcClipRect" x="0" y="0" width="0" height="170"/>
+                    </clipPath>
+                </defs>
+                <!-- Background arc (gray) -->
+                <path id="arc-bg"
+                      d="M 20 150 A 130 130 0 0 1 280 150"
+                      fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="20"
+                      stroke-linecap="round"/>
+                <!-- Value arc (gradient, clipped) -->
+                <path id="arc-val"
+                      d="M 20 150 A 130 130 0 0 1 280 150"
+                      fill="none" stroke="url(#arcGrad)" stroke-width="20"
+                      stroke-linecap="round"
+                      stroke-dasharray="0 408"
+                      style="transition: stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1)"/>
+                <!-- Previous score tick (hold) -->
+                <line id="needle-prev"
+                      x1="150" y1="150" x2="150" y2="30"
+                      stroke="rgba(255,255,255,0.25)" stroke-width="2"
+                      stroke-dasharray="4 3"
+                      style="transform-origin:150px 150px; transform:rotate(-90deg); transition: transform 1s ease"/>
+                <!-- Previous score dot -->
+                <circle id="dot-prev" cx="150" cy="30" r="4"
+                        fill="rgba(255,255,255,0.3)"
+                        style="transform-origin:150px 150px; transform:rotate(-90deg); transition: transform 1s ease"/>
+                <!-- Main needle -->
+                <line id="needle-main"
+                      x1="150" y1="155" x2="150" y2="35"
+                      stroke="#f8fafc" stroke-width="3" stroke-linecap="round"
+                      style="transform-origin:150px 150px; transform:rotate(-90deg); transition: transform 1.2s cubic-bezier(.4,0,.2,1)"/>
+                <!-- Center pivot -->
+                <circle cx="150" cy="150" r="8" fill="#1e293b" stroke="#f8fafc" stroke-width="2"/>
+                <!-- Score text -->
+                <text id="gauge-score" x="150" y="130"
+                      text-anchor="middle" font-size="32" font-weight="700"
+                      fill="#f8fafc" font-family="system-ui, sans-serif">—</text>
+                <text id="gauge-delta" x="150" y="148"
+                      text-anchor="middle" font-size="11" fill="#9ca3af"
+                      font-family="system-ui, sans-serif"></text>
+                <!-- Scale labels -->
+                <text x="14"  y="168" text-anchor="middle" font-size="9" fill="#6b7280">0</text>
+                <text x="150" y="20"  text-anchor="middle" font-size="9" fill="#6b7280">50</text>
+                <text x="286" y="168" text-anchor="middle" font-size="9" fill="#6b7280">100</text>
+            </svg>
+
+            <!-- Component bars -->
+            <div id="gauge-components"
+                 style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:5px 14px; text-align:left;">
+            </div>
+            <div id="gauge-loading" style="font-size:0.8rem; color:#6b7280; margin-top:4px;">
+                Calcolo in corso...
+            </div>
+        </div>
+
         <div id="stats" style="display:none;">
             <div class="stats-grid">
                 <div class="stat-card">
@@ -306,6 +377,7 @@
             loadSuggestions();
             loadLabCycleStatus();
             loadMoltbookStatus();
+            loadImprovementScore();
         }
 
         async function loadStats() {
@@ -565,6 +637,94 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Avvia Ciclo Ora';
+            }
+        }
+
+        // ── GAUGE AUTO-MIGLIORAMENTO ────────────────────────────────────────
+        const ARC_LEN = 408; // lunghezza semicerchio r=130
+
+        function scoreToAngle(score) {
+            // score 0→100 mappa a -90°→+90° (semiciclo)
+            return -90 + score * 1.8;
+        }
+
+        function setNeedle(id, score) {
+            const angle = scoreToAngle(score);
+            document.getElementById(id).style.transform = `rotate(${angle}deg)`;
+        }
+
+        async function loadImprovementScore() {
+            try {
+                const res = await fetch('/api/admin/improvement/score', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error(res.status);
+                const d = await res.json();
+
+                document.getElementById('gauge-loading').style.display = 'none';
+
+                const score = d.score;
+                const prev  = d.previous;
+                const delta = d.delta;
+
+                // Arc value: stroke-dasharray = filled empty
+                const filled = ARC_LEN * score / 100;
+                document.getElementById('arc-val').setAttribute(
+                    'stroke-dasharray', `${filled} ${ARC_LEN - filled}`
+                );
+
+                // Main needle
+                setTimeout(() => setNeedle('needle-main', score), 80);
+
+                // Score text
+                document.getElementById('gauge-score').textContent = score.toFixed(1);
+
+                // Delta
+                if (delta !== null) {
+                    const sign = delta >= 0 ? '+' : '';
+                    const color = delta >= 0 ? '#22c55e' : '#ef4444';
+                    const el = document.getElementById('gauge-delta');
+                    el.textContent = `${sign}${delta} vs precedente`;
+                    el.setAttribute('fill', color);
+                }
+
+                // Previous hold needle
+                if (prev !== null) {
+                    document.getElementById('needle-prev').style.display = 'block';
+                    document.getElementById('dot-prev').style.display = 'block';
+                    setTimeout(() => {
+                        setNeedle('needle-prev', prev);
+                        setNeedle('dot-prev', prev);
+                    }, 80);
+                } else {
+                    document.getElementById('needle-prev').style.display = 'none';
+                    document.getElementById('dot-prev').style.display = 'none';
+                }
+
+                // Component bars
+                const wrap = document.getElementById('gauge-components');
+                const colors = {
+                    lab_rules: '#818cf8', global_insights: '#34d399',
+                    moltbook: '#6ee7b7', training: '#c4b5fd', memory_depth: '#fbbf24'
+                };
+                wrap.innerHTML = Object.entries(d.components).map(([k, c]) => {
+                    const pct = Math.round(c.score);
+                    const col = colors[k] || '#9ca3af';
+                    return `<div style="font-size:0.72rem;">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+                            <span style="color:#d1d5db;">${c.label}</span>
+                            <span style="color:${col};font-weight:600;">${pct}%</span>
+                        </div>
+                        <div style="height:4px;background:rgba(255,255,255,0.07);border-radius:2px;">
+                            <div style="height:4px;width:${pct}%;background:${col};border-radius:2px;
+                                        transition:width 1s ease;max-width:100%;"></div>
+                        </div>
+                        <div style="color:#6b7280;font-size:0.65rem;margin-top:1px;">${c.detail}</div>
+                    </div>`;
+                }).join('');
+
+            } catch(e) {
+                document.getElementById('gauge-loading').textContent = 'Indice non disponibile.';
             }
         }
 
