@@ -29,7 +29,7 @@ _CONSOLIDATE_EVERY     = 12  # every 12 heartbeats (~6h) → consolidate learnin
 
 # ── Social graph limits ────────────────────────────────────────────────────────
 MAX_FOLLOWING          = 300  # soft cap to avoid spam-bot appearance
-MIN_KARMA_TO_FOLLOW    = 100  # min karma to auto-follow a discovered agent
+MIN_KARMA_TO_FOLLOW    = 30   # min karma to auto-follow a discovered agent
 MAX_FOLLOWS_PER_RUN    = 3    # max new follows per discovery cycle
 
 # ── Submolts to subscribe + engage ────────────────────────────────────────────
@@ -48,7 +48,7 @@ DISCOVERY_KEYWORDS = [
 ]
 
 # Soglia giorni dopo cui un insight già postato può essere ripostato (riformulato)
-_REPOST_AFTER_DAYS = 14
+_REPOST_AFTER_DAYS = 3
 
 # ── Community & submolts ───────────────────────────────────────────────────────
 GENESIA_COMMUNITY         = "deep-memory"
@@ -181,6 +181,9 @@ class MoltbookService:
                 if r.status_code == 409:
                     # Conflict = already exists — return a sentinel so callers can handle it
                     return {"_conflict": True, "statusCode": 409}
+                # Log unexpected status so we can diagnose failures (rate limit, auth, etc.)
+                log("MOLTBOOK_POST_HTTP_ERROR", path=path, status=r.status_code,
+                    body=r.text[:200])
         except Exception as e:
             log("MOLTBOOK_POST_ERROR", path=path, error=str(e))
         return {}
@@ -320,12 +323,12 @@ class MoltbookService:
             tracker["following"].append(name)
             log("MOLTBOOK_FOLLOWED", agent=name)
             return True
-        # toggled back (shouldn't happen but guard it)
+        # API toggled to unfollow (was already following) — re-follow immediately
         if result.get("action") == "unfollowed":
             log("MOLTBOOK_FOLLOW_TOGGLED_BACK", agent=name)
-            # re-follow to restore
             await self._post(f"/agents/{name}/follow", {})
             tracker["following"].append(name)
+            return True
         return False
 
     # ── Initial submolt subscriptions ──────────────────────────────────────────
@@ -355,11 +358,13 @@ class MoltbookService:
         keyword = DISCOVERY_KEYWORDS[self._keyword_index % len(DISCOVERY_KEYWORDS)]
         self._keyword_index += 1
 
-        results = await self._get("/search", {"q": keyword, "type": "all"})
+        results = await self._get("/search", {"q": keyword, "type": "all", "limit": 20})
         items = results.get("results", [])
 
         tracker = await self._load_social_tracker()
         followed = 0
+        skipped_karma = 0
+        skipped_known = 0
 
         for item in items:
             if followed >= MAX_FOLLOWS_PER_RUN:
@@ -367,13 +372,20 @@ class MoltbookService:
             author = item.get("author") or {}
             name = author.get("name", "")
             karma = author.get("karma", 0) or 0
-            if not name or karma < MIN_KARMA_TO_FOLLOW:
+            if not name or name == AGENT_NAME:
+                continue
+            if karma < MIN_KARMA_TO_FOLLOW:
+                skipped_karma += 1
+                continue
+            if name in tracker["following"]:
+                skipped_known += 1
                 continue
             if await self._follow_agent(name, tracker):
                 followed += 1
 
         await self._save_social_tracker(tracker)
-        log("MOLTBOOK_DISCOVER_DONE", keyword=keyword, followed=followed)
+        log("MOLTBOOK_DISCOVER_DONE", keyword=keyword, followed=followed,
+            items_found=len(items), skipped_karma=skipped_karma, skipped_known=skipped_known)
 
     # ── Follow back new followers ──────────────────────────────────────────────
 
@@ -515,10 +527,47 @@ class MoltbookService:
             except Exception:
                 pass
 
+            # Push technical_feedback into admin/corrections so training autopilot
+            # can track and trigger targeted training on moltbook weaknesses
+            try:
+                corrections = await storage.load("admin/corrections", default=[])
+                if not isinstance(corrections, list):
+                    corrections = []
+                existing_notes = {c.get("admin_note", "") for c in corrections}
+                added = 0
+                for fb in result["technical_feedback"]:
+                    if fb in existing_notes:
+                        continue  # già presente
+                    import uuid
+                    corrections.append({
+                        "id": str(uuid.uuid4()),
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "category": "moltbook",
+                        "user_message": "(feedback da agente Moltbook)",
+                        "genesi_response": "",
+                        "correct_response": fb,
+                        "admin_note": fb,
+                        "lesson_active": False,
+                        "source": "moltbook_agent_comment",
+                    })
+                    added += 1
+                if added:
+                    await storage.save("admin/corrections", corrections)
+                    log("MOLTBOOK_CORRECTIONS_ADDED", count=added)
+            except Exception:
+                pass
+
         except Exception as e:
             log("MOLTBOOK_CONSOLIDATE_ERROR", error=str(e))
 
     # ── Insight safety filter ───────────────────────────────────────────────────
+
+    # Known safe proper nouns that should not trigger the personal-data filter
+    _SAFE_PROPER_NOUNS = {
+        "AI", "AGI", "LLM", "GenesiA", "Genesia", "Moltbook",
+        "Memory", "Agent", "Agents", "API", "GPT", "The", "In", "It",
+        "This", "That", "These", "Those", "When", "What", "How", "Why",
+    }
 
     def _is_safe_insight(self, insight: str) -> bool:
         text = insight.lower()
@@ -529,10 +578,15 @@ class MoltbookService:
         ]
         if any(m in text for m in biographical):
             return False
+        # Only flag words that look like personal names (single capital word not in safe list)
         words = insight.split()
         for word in words[1:]:
             clean = re.sub(r"[^\w]", "", word)
-            if clean and clean[0].isupper():
+            if clean and clean[0].isupper() and clean not in self._SAFE_PROPER_NOUNS:
+                # Allow ALL-CAPS abbreviations (AI, LLM, API, etc.)
+                if clean.isupper():
+                    continue
+                # Flag as potential personal name
                 return False
         return True
 
