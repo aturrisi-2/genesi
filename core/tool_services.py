@@ -7,7 +7,7 @@ Supporto mondiale. Italia ultra-dettagliata.
 import os
 import re
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from typing import Optional
 from xml.etree import ElementTree
@@ -34,6 +34,84 @@ TIMEZONE = ZoneInfo("Europe/Rome")
 GIORNI_IT = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]
 MESI_IT = ["", "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
            "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"]
+
+# ═══════════════════════════════════════════════════════════════
+# FESTIVITÀ E GIORNI SPECIALI ITALIANI
+# ═══════════════════════════════════════════════════════════════
+
+def _compute_easter(year: int) -> datetime:
+    """Pasqua con algoritmo Gregoriano anonimo."""
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    return datetime(year, month, day)
+
+
+def get_italian_day_events(dt: datetime) -> list[str]:
+    """
+    Restituisce la lista di festività/giorni speciali italiani per la data dt.
+    Fail-safe: non lancia mai eccezioni.
+    """
+    try:
+        month, day, year = dt.month, dt.day, dt.year
+        weekday = dt.weekday()  # 0=lun, 6=dom
+        events = []
+
+        # ── Festività nazionali fisse ──────────────────────────────────
+        _FIXED = {
+            (1,  1):  "Capodanno",
+            (1,  6):  "Epifania",
+            (2,  14): "San Valentino",
+            (3,  8):  "Festa della Donna",
+            (3,  19): "Festa del Papà (San Giuseppe)",
+            (4,  25): "Festa della Liberazione",
+            (5,  1):  "Festa del Lavoro",
+            (6,  2):  "Festa della Repubblica",
+            (8,  15): "Ferragosto",
+            (10, 31): "Halloween",
+            (11, 1):  "Ognissanti",
+            (11, 2):  "Giorno dei Morti",
+            (12, 8):  "Immacolata Concezione",
+            (12, 24): "Vigilia di Natale",
+            (12, 25): "Natale",
+            (12, 26): "Santo Stefano",
+            (12, 31): "San Silvestro",
+        }
+        if (month, day) in _FIXED:
+            events.append(_FIXED[(month, day)])
+
+        # ── Pasqua e derivate ──────────────────────────────────────────
+        easter = _compute_easter(year)
+        easter_monday = easter + timedelta(days=1)
+        martedi_grasso = easter - timedelta(days=47)
+        if dt.date() == easter.date():
+            events.append("Pasqua")
+        elif dt.date() == easter_monday.date():
+            events.append("Pasquetta (Lunedì dell'Angelo)")
+        elif dt.date() == martedi_grasso.date():
+            events.append("Martedì Grasso (Carnevale)")
+
+        # ── Festa della Mamma: seconda domenica di maggio ───────────────
+        if month == 5 and weekday == 6:
+            sundays = sorted(
+                d for d in range(1, 32)
+                if d <= 31 and datetime(year, 5, d).weekday() == 6
+            )
+            if len(sundays) >= 2 and day == sundays[1]:
+                events.append("Festa della Mamma")
+
+        return events
+    except Exception:
+        return []
+
 
 # Descrizioni meteo OpenWeather → italiano
 WEATHER_DESC_IT = {
@@ -787,7 +865,12 @@ class ToolService:
 
             date_info = f"Oggi è {weekday} {giorno} {mese} {anno}."
 
-            log("TOOL_DATE_RESPONSE", weekday_it=weekday, date=f"{giorno} {mese} {anno}", timezone="Europe/Rome")
+            events = get_italian_day_events(now)
+            if events:
+                date_info += f" Oggi è anche: {', '.join(events)}."
+
+            log("TOOL_DATE_RESPONSE", weekday_it=weekday, date=f"{giorno} {mese} {anno}",
+                timezone="Europe/Rome", special_days=events if events else None)
             logger.info("TOOL_DATE_RESPONSE date=%d %s %d weekday_it=%s timezone=Europe/Rome",
                         giorno, mese, anno, weekday)
             return date_info

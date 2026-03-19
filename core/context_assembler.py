@@ -238,6 +238,20 @@ class ContextAssembler:
         except Exception:
             pass
 
+        # Giorni speciali italiani: iniezione fail-silent (presente in tutti i route)
+        try:
+            from datetime import datetime as _dt
+            from zoneinfo import ZoneInfo as _ZI
+            from core.tool_services import get_italian_day_events as _gide
+            _now = _dt.now(tz=_ZI("Europe/Rome"))
+            _events = _gide(_now)
+            if _events:
+                _label = ", ".join(_events)
+                context["special_day"] = _label
+                summary += f"\n[GIORNO SPECIALE] Oggi è {_label}."
+        except Exception:
+            pass
+
         context["summary"] = summary
         context["current_message"] = user_message
 
