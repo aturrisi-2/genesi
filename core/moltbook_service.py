@@ -11,7 +11,7 @@ import os
 import re
 import random
 import httpx
-from datetime import datetime
+from datetime import datetime, timedelta
 from core.log import log
 from core.llm_service import llm_service
 
@@ -679,7 +679,7 @@ class MoltbookService:
 
             # Se tutto già postato, riabilita gli insight più vecchi di _REPOST_AFTER_DAYS
             if not unposted:
-                cutoff = (datetime.utcnow() - __import__('datetime').timedelta(days=_REPOST_AFTER_DAYS)).isoformat()
+                cutoff = (datetime.utcnow() - timedelta(days=_REPOST_AFTER_DAYS)).isoformat()
                 stale_hashes = {
                     p["hash"] for p in tracker.get("posts", [])
                     if p.get("posted_at", "") < cutoff
