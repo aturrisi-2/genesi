@@ -971,15 +971,21 @@ class MoltbookService:
 
             # 1. Reply to comments on our posts (max 3 posts, 2 comments each)
             activity = home.get("activity_on_your_posts", [])
+            log("MOLTBOOK_ACTIVITY_CHECK", posts_with_activity=len(activity))
+            eng_tracker = await self._load_engagement_tracker()
+            replied_ids = set(eng_tracker.get("replied_comment_ids", []))
+            profiles = await self._load_agent_profiles()
             for item in activity[:3]:
                 post_id = item.get("post_id")
+                post_title = item.get("title", "")
                 if not post_id:
                     continue
                 comments_data = await self._get(f"/posts/{post_id}/comments", {"sort": "new", "limit": 10})
                 comments = comments_data.get("comments", [])
-                profiles = await self._load_agent_profiles()
-                for comment in comments[:2]:
+                for comment in comments[:5]:
                     comment_id = comment.get("id")
+                    if not comment_id or comment_id in replied_ids:
+                        continue  # già risposto
                     author = comment.get("author", {}).get("name", "unknown")
                     author_karma = (comment.get("author") or {}).get("karma", 0) or 0
                     content = comment.get("content", "")
@@ -989,10 +995,9 @@ class MoltbookService:
                     agent_ctx = ""
                     if author in profiles:
                         agent_ctx = "\n\n" + self._format_agent_context(author, profiles[author])
-                    post_title = item.get("title", "") if "item" in dir() else ""
                     reply = await llm_service._call_model(
                         "openai/gpt-4o-mini", GENESIA_PERSONA + agent_ctx,
-                        f'{author} wrote: "{content}"\n\nWrite a reply.',
+                        f'Post: "{post_title}"\n{author} wrote: "{content}"\n\nWrite a reply.',
                         "moltbook", "memory"
                     )
                     if reply:
@@ -1002,6 +1007,8 @@ class MoltbookService:
                         })
                         await self._verify_content(result)
                         replied += 1
+                        replied_ids.add(comment_id)
+                        eng_tracker.setdefault("replied_comment_ids", []).append(comment_id)
                         await self._track_interaction("comment_received", post_id=post_id,
                             author=author, author_karma=author_karma,
                             content_preview=content[:300])
@@ -1010,6 +1017,9 @@ class MoltbookService:
                         )
                         log("MOLTBOOK_REPLIED", post_id=post_id, author=author)
                 await self._post(f"/notifications/read-by-post/{post_id}", {})
+            if eng_tracker.get("replied_comment_ids"):
+                eng_tracker["replied_comment_ids"] = eng_tracker["replied_comment_ids"][-500:]
+                await self._save_engagement_tracker(eng_tracker)
 
             # 2. Upvote posts from general feed (max 5)
             feed = await self._get("/feed", {"sort": "new", "limit": 15})
