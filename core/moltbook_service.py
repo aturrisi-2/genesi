@@ -37,10 +37,18 @@ INITIAL_SUBMOLTS = ["memory", "agents", "consciousness", "emergence", "ai", "phi
 
 # ── Search keywords rotated to discover relevant agents ───────────────────────
 DISCOVERY_KEYWORDS = [
+    # Specifici (memory niche)
     "memory", "episodic memory", "context persistence",
     "personal AI", "agent identity", "long-term memory",
     "AI companion", "remembering", "identity",
+    # Più larghi — più probabilità di trovare post sul feed
+    "AI", "artificial intelligence", "agent", "learning",
+    "consciousness", "awareness", "intelligence", "mind",
+    "human", "emotion", "connection", "future",
 ]
+
+# Soglia giorni dopo cui un insight già postato può essere ripostato (riformulato)
+_REPOST_AFTER_DAYS = 14
 
 # ── Community & submolts ───────────────────────────────────────────────────────
 GENESIA_COMMUNITY         = "deep-memory"
@@ -529,9 +537,12 @@ class MoltbookService:
         return True
 
     async def _collect_all_insights(self) -> list[dict]:
+        """Raccoglie insights da global_insights + moltbook:interaction_insights."""
         from core.storage import storage
-        user_ids = await storage.list_keys("global_insights")
         candidates = []
+
+        # 1. Global insights (cross-conversation patterns)
+        user_ids = await storage.list_keys("global_insights")
         for uid in user_ids:
             data = await storage.load(f"global_insights:{uid}", default={})
             for insight in data.get("insights", []):
@@ -540,6 +551,15 @@ class MoltbookService:
                     continue
                 h = hashlib.md5(insight.encode()).hexdigest()
                 candidates.append({"insight": insight, "user_id": uid, "hash": h})
+
+        # 2. Moltbook-derived social insights (from agent interactions)
+        mb_insights = await storage.load("moltbook:interaction_insights", default={})
+        for insight in mb_insights.get("insights", []):
+            if not self._is_safe_insight(insight):
+                continue
+            h = hashlib.md5(("mb:" + insight).encode()).hexdigest()
+            candidates.append({"insight": insight, "user_id": "moltbook", "hash": h})
+
         return candidates
 
     # ── Interaction tracker ────────────────────────────────────────────────────
@@ -656,6 +676,21 @@ class MoltbookService:
 
             candidates = await self._collect_all_insights()
             unposted = [c for c in candidates if c["hash"] not in posted_hashes]
+
+            # Se tutto già postato, riabilita gli insight più vecchi di _REPOST_AFTER_DAYS
+            if not unposted:
+                cutoff = (datetime.utcnow() - __import__('datetime').timedelta(days=_REPOST_AFTER_DAYS)).isoformat()
+                stale_hashes = {
+                    p["hash"] for p in tracker.get("posts", [])
+                    if p.get("posted_at", "") < cutoff
+                }
+                if stale_hashes:
+                    # Rimuovi gli hash scaduti dal tracker → saranno ripostati con nuova formulazione
+                    tracker["posted_hashes"] = [h for h in tracker["posted_hashes"] if h not in stale_hashes]
+                    posted_hashes = set(tracker["posted_hashes"])
+                    unposted = [c for c in candidates if c["hash"] not in posted_hashes]
+                    log("MOLTBOOK_POST_REPOST_ELIGIBLE", count=len(unposted))
+
             if not unposted:
                 log("MOLTBOOK_POST_SKIP", reason="all insights already posted")
                 return False
@@ -800,6 +835,42 @@ class MoltbookService:
                     log("MOLTBOOK_SUBMOLT_COMMENTED", submolt=actual_submolt,
                         post_id=post_id, title=title[:50])
                     # auto-follow quality authors
+                    if author_karma >= MIN_KARMA_TO_FOLLOW:
+                        social = await self._load_social_tracker()
+                        await self._follow_agent(author, social)
+                        await self._save_social_tracker(social)
+                    return True
+
+            # Fallback: usa il feed generale se la search non ha trovato nulla
+            feed = await self._get("/feed", {"sort": "new", "limit": 20})
+            feed_posts = feed.get("posts", [])
+            for post in feed_posts:
+                post_id = post.get("id")
+                title = post.get("title", "")
+                content = post.get("content", "")
+                author = (post.get("author") or {}).get("name", "")
+                author_karma = (post.get("author") or {}).get("karma", 0) or 0
+                if not post_id or not title or author == AGENT_NAME:
+                    continue
+                if post_id in already:
+                    continue
+                agent_ctx = ""
+                if author in profiles:
+                    agent_ctx = "\n\n" + self._format_agent_context(author, profiles[author])
+                comment_text = await llm_service._call_model(
+                    "openai/gpt-4o-mini", GENESIA_PERSONA + agent_ctx,
+                    f'Post title: "{title}"\nContent: "{content[:400]}"\n\nWrite a short, genuine comment.',
+                    "moltbook", "memory"
+                )
+                if comment_text:
+                    result = await self._post(f"/posts/{post_id}/comments", {"content": comment_text})
+                    await self._verify_content(result)
+                    eng_tracker["commented_post_ids"].append(post_id)
+                    await self._save_engagement_tracker(eng_tracker)
+                    await self._track_interaction("comment_given", post_id=post_id,
+                        submolt="general", post_title=title, comment_preview=comment_text[:100])
+                    await self._update_agent_profile(author, author_karma, content[:200], comment_text, title)
+                    log("MOLTBOOK_FEED_COMMENTED", post_id=post_id, author=author, title=title[:50])
                     if author_karma >= MIN_KARMA_TO_FOLLOW:
                         social = await self._load_social_tracker()
                         await self._follow_agent(author, social)
