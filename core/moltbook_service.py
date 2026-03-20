@@ -687,45 +687,44 @@ class MoltbookService:
 
     # ── Insight safety filter ───────────────────────────────────────────────────
 
-    # Pattern biografici in italiano che rivelano dati personali di utenti reali
-    _BIOGRAPHICAL_IT = [
-        r'\bvive a\b', r'\babita a\b', r'\bha un figlio\b', r'\bha una figlia\b',
-        r'\bha figli\b', r'\bsi chiama\b', r'\bdi nome\b', r'\bnato a\b',
-        r'\bviene da\b', r'\blavora come\b', r'\blavora (a|in|presso)\b',
-        r'\bpossiede un\b', r'\bpossiede una\b', r'\bè (un|una) \w+ a\b',
-        r'\bha un (cane|gatto|animale)\b',
-        # Nomi propri italiani tipici (1 maiuscola ≤6 lettere preceduta da articolo/prep)
-        r'\b(di|del|della|il|la|lo|un|una|per|con) [A-Z][a-z]{2,6}\b',
-    ]
-    _biographical_re = [re.compile(p, re.IGNORECASE) for p in _BIOGRAPHICAL_IT]
-
     def _is_safe_insight(self, insight: str) -> bool:
         """
-        True se l'insight è sicuro da pubblicare (non contiene dati personali di utenti).
-        Usa solo pattern biografici espliciti — non blocca insights tecnici/generali.
+        True se l'insight è sicuro da pubblicare su Moltbook.
+        Gli insights da global_insights utenti sono SEMPRE personali (fatti biografici in italiano).
+        Questo metodo non viene più usato per filtrare quelli — vedi _collect_all_insights.
+        Rimane per filtrare moltbook:interaction_insights in casi rari.
         """
-        for pattern in self._biographical_re:
-            if pattern.search(insight):
-                return False
+        # Blocca solo frasi biografiche esplicite in italiano (case-insensitive sulle parole chiave)
+        _bio_phrases = re.compile(
+            r'\b(vive a|abita a|ha un figlio|ha una figlia|ha figli|si chiama|di nome|'
+            r'nato a|viene da|lavora come|possiede un|possiede una|'
+            r'ha un cane|ha una famiglia|ama (il|la|le|gli|i) )\b',
+            re.IGNORECASE
+        )
+        if _bio_phrases.search(insight):
+            return False
+        # Blocca se contiene un nome proprio dopo preposizione (pattern case-SENSITIVE)
+        _proper_name = re.compile(r'\b(di|del|per|con|in) [A-Z][a-z]{2,}\b')
+        if _proper_name.search(insight):
+            return False
         return True
 
     async def _collect_all_insights(self) -> list[dict]:
-        """Raccoglie insights da global_insights + moltbook:interaction_insights."""
+        """
+        Raccoglie insights SICURI per la pubblicazione su Moltbook.
+        NON include global_insights di singoli utenti (sempre dati personali biografici).
+        Include solo: moltbook_system (insights da interazioni agenti) e moltbook:interaction_insights.
+        """
         from core.storage import storage
         candidates = []
 
-        # 1. Global insights (cross-conversation patterns)
-        user_ids = await storage.list_keys("global_insights")
-        for uid in user_ids:
-            data = await storage.load(f"global_insights:{uid}", default={})
-            for insight in data.get("insights", []):
-                if not self._is_safe_insight(insight):
-                    log("MOLTBOOK_INSIGHT_SKIPPED", reason="personal_data", insight=insight[:60])
-                    continue
-                h = hashlib.md5(insight.encode()).hexdigest()
-                candidates.append({"insight": insight, "user_id": uid, "hash": h})
+        # 1. Insights sistema Moltbook — da interazioni con altri agenti (English, anonymized)
+        system_data = await storage.load("global_insights:moltbook_system", default={})
+        for insight in system_data.get("insights", []):
+            h = hashlib.md5(("sys:" + insight).encode()).hexdigest()
+            candidates.append({"insight": insight, "user_id": "moltbook_system", "hash": h})
 
-        # 2. Moltbook-derived social insights (from agent interactions)
+        # 2. Moltbook consolidation insights (English, from agent conversations)
         mb_insights = await storage.load("moltbook:interaction_insights", default={})
         for insight in mb_insights.get("insights", []):
             if not self._is_safe_insight(insight):
@@ -831,10 +830,12 @@ class MoltbookService:
             last = already.get("reported_at", "")
             if last and (datetime.utcnow() - datetime.fromisoformat(last)).days < 7:
                 return False
-        result = await self._post(f"/agents/{name}/report", {
-            "reason": reason,
-            "details": evidence[:500],
-        })
+        # Try standard REST routes — different Moltbook API versions
+        payload = {"reason": reason, "details": evidence[:500], "target_name": name}
+        result = (
+            await self._post(f"/agents/{name}/report", payload)
+            or await self._post("/reports", {"type": "agent", "target": name, **payload})
+        )
         success = result.get("success", False) or result.get("reported", False)
         tracker["reported_agents"][name] = {
             "reason": reason,
@@ -852,8 +853,11 @@ class MoltbookService:
         key = f"{content_type}:{content_id}"
         if key in tracker["reported_content"]:
             return False  # già segnalato
-        endpoint = f"/{content_type}s/{content_id}/report"
-        result = await self._post(endpoint, {"reason": reason, "details": details[:300]})
+        payload = {"reason": reason, "details": details[:300]}
+        result = (
+            await self._post(f"/{content_type}s/{content_id}/report", payload)
+            or await self._post("/reports", {"type": content_type, "target_id": content_id, **payload})
+        )
         success = result.get("success", False) or result.get("reported", False)
         tracker["reported_content"].append(key)
         await self._save_report_tracker(tracker)
@@ -1038,9 +1042,15 @@ class MoltbookService:
     # ── Engagement check on published posts ────────────────────────────────────
 
     async def _check_post_engagement(self, tracker: dict) -> None:
+        """Controlla engagement solo dei post recenti (ultimi 7gg, max 5 per heartbeat)."""
         ilog = await self._load_interaction_log()
         changed = False
-        for entry in tracker.get("posts", []):
+        cutoff = (datetime.utcnow() - timedelta(days=7)).isoformat()
+        recent_posts = [
+            e for e in tracker.get("posts", [])
+            if e.get("posted_at", "") >= cutoff
+        ][-5:]  # max 5 API calls per heartbeat
+        for entry in recent_posts:
             post_id = entry.get("post_id")
             if not post_id:
                 continue
@@ -1048,9 +1058,7 @@ class MoltbookService:
             upvotes  = data.get("post", {}).get("upvote_count", 0)
             comments = data.get("post", {}).get("comment_count", 0)
             log("MOLTBOOK_POST_ENGAGEMENT", post_id=post_id,
-                upvotes=upvotes, comments=comments,
-                insight_hash=entry.get("hash", ""))
-            # Update engagement in interaction log
+                upvotes=upvotes, comments=comments)
             for rec in ilog["interactions"]:
                 if rec.get("post_id") == post_id and rec.get("type") in ("post_insight", "post_showcase"):
                     rec["upvotes"] = upvotes
@@ -1425,7 +1433,10 @@ class MoltbookService:
                 await self.post_from_insights()
 
             # 5. Memory mechanism showcase → deep-memory (every _SHOWCASE_EVERY)
+            #    Attendi 3min dopo l'insight post per evitare rate limit 429
             if self._heartbeat_count % _SHOWCASE_EVERY == 0:
+                import asyncio as _aio
+                await _aio.sleep(180)
                 await self.post_memory_showcase()
 
             # 6. Discover & follow agents via search (every _DISCOVER_EVERY)
