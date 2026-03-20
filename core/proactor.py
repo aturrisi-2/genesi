@@ -3715,7 +3715,15 @@ Messaggio: "{message}" """
             # Weather tool: risposta ambigua/clarification
             "sarebbe utile sapere quale", "diverse località chiamate",
             "potresti specificare di quale", "potrebbe riferirsi a diverse",
-            "ci sono diverse", "potresti indicare",
+            "ci sono diverse", "ci sono diversi", "potresti indicare",
+            "diversi luoghi chiamati", "diverse città chiamate",
+            # Generiche "non ho informazioni su X"
+            "non ho informazioni su", "non ho informazioni riguardo",
+            "non ho dati su", "non ho notizie su",
+            # Accesso web negato
+            "non ho accesso diretto", "non ho accesso diretto alla ricerca",
+            "non posso accedere direttamente", "non posso fare ricerche in tempo reale",
+            "non ho la capacità di cercare", "non sono in grado di accedere",
         ]
         resp_lower = response.lower()
         if not any(p in resp_lower for p in _REFUSAL_PHRASES):
