@@ -417,6 +417,17 @@ class Proactor:
         # 7. STRIP STANDALONE "Dimmi." / "Dimmi!" come chiusura meccanica
         response = _re_pp.sub(r'\s*\bDimmi[.!]\s*$', '', response, flags=_re_pp.IGNORECASE).strip()
 
+        # 8. STRIP URL / LINK: rimuovi qualsiasi URL http/https che il LLM ha incluso
+        #    Es: "Secondo Sky Sport (https://sky.it/...), ..." → "Secondo Sky Sport, ..."
+        #    Rimuovi prima parentesi con solo URL: " (https://...)" o "[https://...]"
+        response = _re_pp.sub(r'\s*[\(\[]\s*https?://\S+\s*[\)\]]', '', response)
+        #    Poi URL nudi rimasti
+        response = _re_pp.sub(r'https?://\S+', '', response)
+        #    Pulizia spazi doppi o virgole/punti prima di spazio generati dalla rimozione
+        response = _re_pp.sub(r'[ \t]{2,}', ' ', response)
+        response = _re_pp.sub(r'\s*,\s*,', ',', response)
+        response = response.strip()
+
         return response
 
     def handle_response_only(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None) -> str:
@@ -738,6 +749,23 @@ class Proactor:
                         and (_is_factual_q or _is_explicit_search)):
                     logger.info("LIVE_SEARCH_INTENT_OVERRIDE user=%s from=%s to=tecnica", user_id, intents[0])
                     intents = ["tecnica"]
+                # Follow-up sport/eventi: messaggi brevi senza keyword live ma con storia recente F1/sport
+                elif (intents and intents[0] in _redirectable_intents
+                        and _is_factual_q
+                        and len(message.strip().split()) <= 8):
+                    _SPORT_CTX_KW = {
+                        "formula 1", "formula uno", "f1", "gran premio", "motogp",
+                        "champions league", "serie a", "classifica", "calciomercato",
+                        "borsa", "elezioni", "governo", "guerra", "ucraina",
+                    }
+                    _recent_hist = chat_memory.get_messages(user_id, limit=3)
+                    _hist_text = " ".join(
+                        (m.get("user_message", "") + " " + m.get("system_response", "")).lower()
+                        for m in _recent_hist
+                    )
+                    if any(kw in _hist_text for kw in _SPORT_CTX_KW):
+                        logger.info("LIVE_SEARCH_FOLLOWUP_OVERRIDE user=%s from=%s to=tecnica", user_id, intents[0])
+                        intents = ["tecnica"]
             except Exception:
                 pass
 
@@ -4146,9 +4174,10 @@ Messaggio utente: {message}"""
                     else:
                         live_source_instruction = (
                             f"\nISTRUZIONE FONTE: inizia con "
-                            f'"Secondo {live_result["source_name"]} ({live_result["source_url"]}), ..." '
+                            f'"Secondo {live_result["source_name"]}, ..." '
                             f"poi continua in modo naturale e narrativo, come se raccontassi a voce. "
-                            f"NON elencare punti. NON fare il Wikipedia. Narra. Max 4-5 frasi.\n"
+                            f"NON includere URL, link, indirizzi web o titoli tecnici di articoli. "
+                            f"NON elencare punti. Narra. Max 4-5 frasi.\n"
                         )
         except Exception as _lse:
             logger.debug("LIVE_SEARCH_SKIP user=%s reason=%s", user_id, str(_lse)[:80])
