@@ -102,7 +102,15 @@ TEST_CASES = [
     (
         "T2 - Formula 1 questo weekend",
         "dove corrono la formula uno questo weekend?",
-        REAL_ANSWER_SIGNALS,
+        # Circuito/paese OR conferma che non c'è gara (risposta corretta se weekend libero)
+        REAL_ANSWER_SIGNALS + [
+            "australia", "melbourne", "giappone", "suzuka", "bahrain", "jeddah",
+            "miami", "monaco", "barcellona", "silverstone", "monza", "singapore",
+            "austin", "città del messico", "brasile", "abu dhabi", "las vegas",
+            "gran premio", "circuito",
+            "non ci sarà", "nessuna gara", "nessun gran premio", "pausa",
+            "non è prevista", "non sono previste", "weekend libero",
+        ],
     ),
     (
         "T3 - Meteo Melbourne (tool weather o auto_search)",
