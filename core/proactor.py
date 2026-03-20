@@ -3759,10 +3759,10 @@ Messaggio: "{message}" """
                 )
             else:
                 instruction = (
-                    f"Usa questi dati per rispondere direttamente alla domanda dell'utente. "
-                    f"Inizia in modo naturale citando la fonte: "
-                    f"\"Secondo {live_result.get('source_name', 'una fonte online')}, ...\". "
-                    f"Narra come se parlassi a voce. NON elencare punti. Max 4-5 frasi."
+                    f"Usa questi dati per rispondere alla domanda dell'utente in modo COLLOQUIALE e NARRATIVO. "
+                    f"Cita la fonte solo con il nome (es: 'Secondo {live_result.get('source_name', 'una fonte online')}, ...'). "
+                    f"NON includere URL, link, titoli di articoli o riferimenti tecnici. "
+                    f"NON elencare punti. Parla come se stessi raccontando la notizia a voce. Max 3-4 frasi."
                 )
             sys_prompt = (
                 "Sei Genesi, un assistente AI personale italiano. "

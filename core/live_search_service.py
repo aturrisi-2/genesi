@@ -319,7 +319,7 @@ async def search_for_answer(query: str, max_results: int = 5) -> Optional[dict]:
         snippet = r.get("snippet", "").strip()
         url = r.get("link", "")
         if snippet:
-            context_parts.append(f"[{_extract_domain(url)}] {title}: {snippet[:350]}")
+            context_parts.append(f"[{_extract_domain(url)}]: {snippet[:350]}")
 
     logger.info(
         "LIVE_SEARCH_OK provider=%s query=%s results=%d source=%s",
