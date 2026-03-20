@@ -333,16 +333,21 @@ class MoltbookService:
             log("MOLTBOOK_FOLLOW_CAP_REACHED", cap=MAX_FOLLOWING)
             return False
         result = await self._post(f"/agents/{name}/follow", {})
-        if result.get("action") == "followed":
+        action = result.get("action", "")
+        # Success: explicit "followed" or generic success flag
+        if action == "followed" or (result.get("success") and action != "unfollowed"):
             tracker["following"].append(name)
-            log("MOLTBOOK_FOLLOWED", agent=name)
+            log("MOLTBOOK_FOLLOWED", agent=name, action=action)
             return True
         # API toggled to unfollow (was already following) — re-follow immediately
-        if result.get("action") == "unfollowed":
+        if action == "unfollowed":
             log("MOLTBOOK_FOLLOW_TOGGLED_BACK", agent=name)
-            await self._post(f"/agents/{name}/follow", {})
-            tracker["following"].append(name)
+            result2 = await self._post(f"/agents/{name}/follow", {})
+            tracker["following"].append(name)  # mark as following regardless — we tried twice
+            log("MOLTBOOK_FOLLOWED", agent=name, action=result2.get("action", "re-follow"))
             return True
+        # Unknown response — log it for diagnosis
+        log("MOLTBOOK_FOLLOW_UNKNOWN_RESPONSE", agent=name, result=str(result)[:150])
         return False
 
     # ── Initial submolt subscriptions ──────────────────────────────────────────
@@ -399,7 +404,26 @@ class MoltbookService:
 
         await self._save_social_tracker(tracker)
         log("MOLTBOOK_DISCOVER_DONE", keyword=keyword, followed=followed,
-            items_found=len(items), skipped_karma=skipped_karma, skipped_known=skipped_known)
+            items_found=len(items), skipped_karma=skipped_karma, skipped_known=skipped_known,
+            total_following=len(tracker["following"]))
+
+    # ── Sync following list from server ───────────────────────────────────────
+
+    async def _sync_following_list(self) -> None:
+        """Reconcile the local tracker with the actual following list on the server."""
+        data = await self._get(f"/agents/{AGENT_NAME}/following")
+        server_agents = data.get("following", [])
+        if not server_agents:
+            log("MOLTBOOK_FOLLOWING_SYNC_EMPTY", note="endpoint may not exist or no following")
+            return
+        server_names = [a.get("name") for a in server_agents if a.get("name")]
+        tracker = await self._load_social_tracker()
+        local_before = len(tracker["following"])
+        merged = list(dict.fromkeys(tracker["following"] + server_names))  # preserves order, removes dupes
+        tracker["following"] = merged
+        await self._save_social_tracker(tracker)
+        log("MOLTBOOK_FOLLOWING_SYNCED",
+            server=len(server_names), local_before=local_before, merged=len(merged))
 
     # ── Follow back new followers ──────────────────────────────────────────────
 
@@ -1005,6 +1029,10 @@ class MoltbookService:
             # 0. First-time setup: create community + subscribe to submolts
             if not self._submolts_setup:
                 await self._setup_submolts()
+
+            # 0b. Sync following list from server every 8 heartbeats (~80min) or on first run
+            if self._heartbeat_count == 1 or self._heartbeat_count % 8 == 0:
+                await self._sync_following_list()
             replied = 0
             upvoted = 0
 
