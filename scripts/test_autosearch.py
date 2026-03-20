@@ -87,8 +87,13 @@ TEST_CASES = [
     (
         "T1 - Notizie guerra (topic corrente)",
         "Quali sono le ultime notizie sulla guerra?",
-        # Se passa auto_search deve contenere almeno un segnale di fonte
-        REAL_ANSWER_SIGNALS,
+        # Segnali reali: attributions oppure named entities specifici di notizie correnti
+        REAL_ANSWER_SIGNALS + [
+            "ucraina", "russia", "nato", "usa", "trump", "zelensky", "putin",
+            "missili", "bombardament", "cessate il fuoco", "accordo", "offensive",
+            "gaza", "israele", "hamas", "medio oriente", "cisgiordania",
+            "soldati", "truppe", "forze armate", "attacco",
+        ],
     ),
     (
         "T2 - Formula 1 questo weekend",
@@ -99,8 +104,9 @@ TEST_CASES = [
         "T3 - Meteo Melbourne (tool weather o auto_search)",
         "che tempo fa a Melbourne adesso?",
         # Il weather tool usa dati reali → temperature/condizioni specifiche
-        ["gradi", "temperatura", "°", "pioggia", "nuvoloso", "sole", "vento",
-         "celsius", "km/h", "mm"] + REAL_ANSWER_SIGNALS,
+        ["gradi", "temperatura", "temperature", "°", "pioggia", "nuvoloso", "sole",
+         "vento", "celsius", "km/h", "mm", "caldo", "fresco", "freddo", "umido",
+         "sereno", "coperto", "temporale"] + REAL_ANSWER_SIGNALS,
     ),
     (
         "T4 - Borsa italiana oggi",

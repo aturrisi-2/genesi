@@ -3708,6 +3708,14 @@ Messaggio: "{message}" """
             "suggerisco di verificare", "suggerisco di controllare",
             "non sono aggiornato", "potrebbe non essere accurata",
             "non ho la certezza", "non sono in grado di confermare",
+            # Varianti "non dispongo"
+            "non dispongo di informazioni aggiornate", "non dispongo di dati aggiornati",
+            "non dispongo di informazioni recenti", "non dispongo di notizie",
+            "non dispongo di dati recenti", "non dispongo di informazioni precise",
+            # Weather tool: risposta ambigua/clarification
+            "sarebbe utile sapere quale", "diverse località chiamate",
+            "potresti specificare di quale", "potrebbe riferirsi a diverse",
+            "ci sono diverse", "potresti indicare",
         ]
         resp_lower = response.lower()
         if not any(p in resp_lower for p in _REFUSAL_PHRASES):
