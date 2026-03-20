@@ -152,29 +152,32 @@ class CapabilityTracker:
 
     # ── Metriche singole ──────────────────────────────────────────────────
 
+    async def _is_test_user(self, uid: str) -> bool:
+        """Ritorna True se l'utente è un account di test (confronta l'email dal profilo)."""
+        _TEST_EMAILS = {"neural_test@genesi.local"}
+        try:
+            profile = await storage.load(f"profile:{uid}", default={})
+            return profile.get("email", "") in _TEST_EMAILS
+        except Exception:
+            return False
+
     async def _episode_coverage(self) -> float:
         """
         Avg episodi per utente reale (esclude utenti di test).
         Soglia 20 episodi = copertura piena (più realistica per un sistema personale).
         """
-        _TEST_USERS = {"neural_test@genesi.local", "alfio.turrisi@gmail.com"}
         try:
             user_ids = await storage.list_keys("episodes")
             if not user_ids:
                 return 0.0
             counts = []
             for uid in user_ids[:60]:
-                if uid in _TEST_USERS:
+                if await self._is_test_user(uid):
                     continue
                 eps = await storage.load(f"episodes:{uid}", default=[])
+                # episodes è sempre una lista
                 if isinstance(eps, list):
                     counts.append(len(eps))
-            # Se non ci sono utenti reali, usa tutti (sistema in bootstrap)
-            if not counts:
-                for uid in user_ids[:60]:
-                    eps = await storage.load(f"episodes:{uid}", default=[])
-                    if isinstance(eps, list):
-                        counts.append(len(eps))
             if not counts:
                 return 0.0
             avg = sum(counts) / len(counts)
@@ -187,23 +190,23 @@ class CapabilityTracker:
         Avg fatti personali per utente reale (esclude utenti di test).
         Soglia 15 fatti = copertura buona per un sistema personale.
         """
-        _TEST_USERS = {"neural_test@genesi.local", "alfio.turrisi@gmail.com"}
         try:
             user_ids = await storage.list_keys("personal_facts")
             if not user_ids:
                 return 0.0
             counts = []
             for uid in user_ids[:60]:
-                if uid in _TEST_USERS:
+                if await self._is_test_user(uid):
                     continue
-                facts = await storage.load(f"personal_facts:{uid}", default=[])
-                if isinstance(facts, list):
-                    counts.append(len(facts))
-            if not counts:
-                for uid in user_ids[:60]:
-                    eps = await storage.load(f"personal_facts:{uid}", default=[])
-                    if isinstance(eps, list):
-                        counts.append(len(eps))
+                data = await storage.load(f"personal_facts:{uid}", default={})
+                # personal_facts_service salva {"facts": [...]} — estraiamo la lista
+                if isinstance(data, dict):
+                    facts = data.get("facts", [])
+                elif isinstance(data, list):
+                    facts = data
+                else:
+                    facts = []
+                counts.append(len(facts))
             if not counts:
                 return 0.0
             avg = sum(counts) / len(counts)
