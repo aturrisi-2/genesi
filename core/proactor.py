@@ -1076,9 +1076,12 @@ class Proactor:
                 except Exception:
                     pass
                 synthesized = await self._synthesize_responses(user_id, message, final_responses, brain_state)
+                synthesized = await self._auto_search_if_needed(user_id, message, synthesized)
                 return synthesized, final_source
 
-            return final_responses[0] if final_responses else "", final_source
+            _single = final_responses[0] if final_responses else ""
+            _single = await self._auto_search_if_needed(user_id, message, _single)
+            return _single, final_source
 
         except Exception as e:
             logger.exception("PROACTOR_FATAL_ERROR user=%s intent=%s", user_id, intent, exc_info=True)
@@ -3669,6 +3672,76 @@ Messaggio: "{message}" """
         logger.info("PROACTOR_RESPONSE user=%s len=%d route=relational emotion=%s",
                      user_id, len(response),
                      brain_state.get("emotion", {}).get("emotion", "?"))
+        return response
+
+    async def _auto_search_if_needed(self, user_id: str, message: str, response: str) -> str:
+        """
+        Se la risposta contiene un'ammissione di ignoranza o impossibilità di cercare,
+        esegue automaticamente una ricerca web e rigenera la risposta con i dati trovati.
+        Approccio autonomo: nessun keyword trigger sul messaggio, solo sul tono della risposta.
+        """
+        if not response:
+            return response
+        _REFUSAL_PHRASES = [
+            "non posso cercare sul web", "non ho accesso a internet",
+            "non posso fare ricerche online", "non ho accesso alla rete",
+            "non posso navigare su internet", "non ho informazioni in tempo reale",
+            "non ho dati in tempo reale", "non ho accesso ai dati attuali",
+            "non sono in grado di cercare", "non posso accedere a siti",
+            "ti consiglio di cercare", "ti consiglio di verificare su",
+            "ti consiglio di controllare un sito", "ti suggerisco di cercare",
+            "puoi controllare su", "puoi verificare su",
+            "non ho aggiornamenti recenti", "le mie informazioni potrebbero non essere",
+            "potrebbero non essere aggiornate", "potrebbe non essere aggiornato",
+            "non ho notizie recenti", "non ho accesso alle ultime notizie",
+        ]
+        resp_lower = response.lower()
+        if not any(p in resp_lower for p in _REFUSAL_PHRASES):
+            return response
+        try:
+            from core.live_search_service import search_for_answer
+            logger.info("AUTO_SEARCH_TRIGGERED user=%s query=%s", user_id, message[:60])
+            live_result = await search_for_answer(message)
+            if not live_result:
+                return response
+            web_block = (
+                f"[DATI TROVATI ONLINE — fonte: {live_result.get('source_name', 'web')}]\n"
+                f"{live_result['context_block']}\n[FINE DATI WEB]\n"
+            )
+            _is_opinion = any(m in message.lower() for m in [
+                "cosa pensi", "cosa ne pensi", "secondo te", "tua opinione", "tu cosa pensi"
+            ])
+            if _is_opinion:
+                instruction = (
+                    "Usa questi dati per formarti un'opinione personale. "
+                    "Rispondi in prima persona come Genesi. NON citare la fonte in modo formale. "
+                    "Max 3-4 frasi."
+                )
+            else:
+                instruction = (
+                    f"Usa questi dati per rispondere direttamente alla domanda dell'utente. "
+                    f"Inizia in modo naturale citando la fonte: "
+                    f"\"Secondo {live_result.get('source_name', 'una fonte online')}, ...\". "
+                    f"Narra come se parlassi a voce. NON elencare punti. Max 4-5 frasi."
+                )
+            sys_prompt = (
+                "Sei Genesi, un assistente AI personale italiano. "
+                "Hai appena trovato informazioni aggiornate online.\n\n"
+                f"{web_block}\n{instruction}"
+            )
+            new_response = await llm_service._call_model(
+                "openai/gpt-4o-mini",
+                sys_prompt,
+                message,
+                user_id=user_id or "system",
+                route="live_search"
+            )
+            if new_response and len(new_response.strip()) > 20:
+                log("AUTO_SEARCH_OK", user_id=user_id,
+                    source=live_result.get("source_name", "?"), query=message[:50])
+                return new_response
+        except Exception as _ase:
+            logger.debug("AUTO_SEARCH_FAIL user=%s reason=%s", user_id, str(_ase)[:80])
         return response
 
     async def _synthesize_responses(self, user_id: str, message: str, responses: list[str], brain_state: dict = None) -> str:

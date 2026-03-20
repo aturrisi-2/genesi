@@ -666,6 +666,7 @@ class IntentClassifier:
             log("INTENT_CLASSIFIED", intent="image_generation", user_id=user_id, engine="regex_priority", message=message[:50])
             return ["image_generation"]
 
+
         # PRIORITÀ ALTA: dove_sono — "dove sono", "dove mi trovo", ecc.
         _location_self_kw = [
             "dove mi trovo",
@@ -918,6 +919,24 @@ REGOLE SPECIALI:
                     ]
                     if len(intents) == 1 and score < 0.8 and intents[0] in tool_intents:
                         if intents[0] == "weather":
+                            # Solo ambiguous_weather se il messaggio ha DAVVERO contesto meteo
+                            _actual_weather_kw = [
+                                "meteo", "temperatura", "piove", "nevica", "freddo", "caldo",
+                                "previsioni", "che tempo", "ombrello", "nuvol", "sole",
+                                "clima", "gradi", "umidità", "vento",
+                            ]
+                            if not any(kw in message_lower for kw in _actual_weather_kw):
+                                # LLM ha allucinato weather — reclassifica
+                                _news_rescue_kw = [
+                                    "notizie", "guerra", "politica", "economia", "conflitto",
+                                    "elezioni", "governo", "corrono", "giocano", "svolge",
+                                    "partita", "gara", "formula", "risultati",
+                                ]
+                                if any(kw in message_lower for kw in _news_rescue_kw):
+                                    log("WEATHER_RECLASSIFIED_NEWS", message=message[:50], score=score, user_id=user_id)
+                                    return ["news"]
+                                log("WEATHER_RECLASSIFIED_CHAT", message=message[:50], score=score, user_id=user_id)
+                                return ["chat_free"]
                             return ["ambiguous_weather"]
                         return ["ambiguous_tool"]
                     

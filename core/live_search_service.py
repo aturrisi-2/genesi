@@ -25,6 +25,9 @@ _TEMPORAL = {
     "questa settimana", "questo mese", "quest'anno",
     "ultimamente", "di recente", "in questi giorni",
     "nelle ultime ore", "nelle ultime settimane",
+    "questo weekend", "questo fine settimana", "fine settimana",
+    "questa domenica", "sabato prossimo", "domenica prossima",
+    "questo week", "nel weekend",
 }
 
 # Ambito medico / farmacologico
@@ -74,11 +77,15 @@ _CURRENT_EVENTS = {
     "guerra", "conflitto armato", "crisi diplomatica",
     "attacco missilistico", "bombardament", "cessate il fuoco",
     "sanctions", "sanzioni",
-    # Sport — risultati e classifiche
+    # Sport — risultati, classifiche ed eventi live
     "risultato di ieri", "risultato di oggi", "chi ha vinto",
     "classifica attuale", "classifica di serie", "champions league",
     "partita di ieri", "partita di oggi", "prossima partita",
     "trasferimento di mercato", "calciomercato",
+    "formula 1", "formula uno", "gran premio", "gara di formula",
+    "dove corrono", "dove si corre", "dove giocano", "dove si gioca",
+    "dove si svolge la gara", "dove si disputa", "calendario f1",
+    "piloti di formula", "circuito di", "gara di domenica",
     # Tecnologia / prodotti nuovi
     "nuovo modello di", "nuova versione di", "ultimo aggiornamento di",
     "ha appena lanciato", "ha presentato", "annunciato da",
