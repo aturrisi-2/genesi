@@ -154,91 +154,173 @@ def needs_live_data(message: str) -> bool:
     return False
 
 
-async def search_for_answer(query: str, max_results: int = 3) -> Optional[dict]:
+def _build_search_query(query: str) -> tuple[str, str]:
     """
-    Esegue una ricerca DuckDuckGo e ritorna il risultato più rilevante.
+    Ritorna (search_query, tbs) dove tbs è il filtro temporale Serper/DDG.
+    Per query temporali aggiunge l'anno e restringe il timelimit.
+    """
+    from datetime import datetime as _dt
+    q_lower = query.lower()
+    immediate_kw = [
+        "questo weekend", "questo fine settimana", "fine settimana",
+        "oggi", "adesso", "ora", "stanotte", "stasera", "stamattina",
+        "questa settimana", "settimana corrente",
+    ]
+    month_kw = ["questo mese", "mese corrente", "quest'anno", "questa stagione"]
+    year = _dt.now().year
+    if any(k in q_lower for k in immediate_kw):
+        return f"{query} {year}", "qdr:w"   # last week
+    elif any(k in q_lower for k in month_kw):
+        return f"{query} {year}", "qdr:m"   # last month
+    else:
+        return query, "qdr:y"               # last year
 
-    Returns:
-        dict con:
-          - snippet: testo estratto
-          - source_name: nome del sito
-          - source_url: URL
-          - all_results: lista grezza per il prompt
-        oppure None se nessun risultato.
+
+async def _search_serper(query: str, max_results: int = 5) -> Optional[list[dict]]:
     """
+    Ricerca via Serper.dev (Google backend).
+    Ritorna lista di {"title", "link", "snippet"} o None se fallisce.
+    """
+    import os, aiohttp
+    api_key = os.getenv("SERPER_API_KEY", "").strip()
+    if not api_key:
+        return None
+
+    search_query, tbs = _build_search_query(query)
+    payload = {
+        "q": search_query,
+        "gl": "it",
+        "hl": "it",
+        "num": max_results,
+        "tbs": tbs,
+    }
+    headers = {
+        "X-API-KEY": api_key,
+        "Content-Type": "application/json",
+    }
     try:
-        import asyncio
-        from datetime import datetime as _dt
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://google.serper.dev/search",
+                json=payload,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=8),
+            ) as resp:
+                if resp.status != 200:
+                    logger.warning("SERPER_HTTP_ERROR status=%d", resp.status)
+                    return None
+                data = await resp.json()
 
-        # Supporta sia ddgs (>=7) che duckduckgo_search (<7)
+        # Estrai risultati organici
+        results = []
+        # answerBox ha la risposta diretta (es. meteo, calcoli)
+        ab = data.get("answerBox", {})
+        if ab.get("answer") or ab.get("snippet"):
+            results.append({
+                "title": ab.get("title", "Google Answer"),
+                "link": ab.get("link", ""),
+                "snippet": ab.get("answer") or ab.get("snippet", ""),
+            })
+        for r in data.get("organic", []):
+            results.append({
+                "title": r.get("title", ""),
+                "link": r.get("link", ""),
+                "snippet": r.get("snippet", ""),
+            })
+            if len(results) >= max_results:
+                break
+        return results if results else None
+
+    except Exception as e:
+        logger.warning("SERPER_ERROR query=%s error=%s", query[:60], str(e)[:80])
+        return None
+
+
+async def _search_ddg(query: str, max_results: int = 3) -> Optional[list[dict]]:
+    """
+    Fallback DuckDuckGo.
+    """
+    import asyncio
+    search_query, tbs = _build_search_query(query)
+    # DDG usa "w"/"m"/"y" invece di "qdr:w"
+    ddg_timelimit = tbs.replace("qdr:", "") if ":" in tbs else tbs
+
+    try:
         try:
             from ddgs import DDGS
         except ImportError:
             from duckduckgo_search import DDGS
 
-        # Determina timelimit e query ottimizzata
-        _q_lower = query.lower()
-        _immediate_kw = [
-            "questo weekend", "questo fine settimana", "fine settimana",
-            "oggi", "adesso", "ora", "stanotte", "stasera", "stamattina",
-            "questa settimana", "settimana corrente",
-        ]
-        _month_kw = ["questo mese", "mese corrente", "quest'anno", "questa stagione"]
-        if any(k in _q_lower for k in _immediate_kw):
-            _timelimit = "w"   # last week — massima freschezza
-            _search_query = f"{query} {_dt.now().year}"
-        elif any(k in _q_lower for k in _month_kw):
-            _timelimit = "m"   # last month
-            _search_query = f"{query} {_dt.now().year}"
-        else:
-            _timelimit = "y"   # ultimi 12 mesi
-            _search_query = query
-
-        def _sync_search():
+        def _sync():
             with DDGS() as ddgs:
                 return list(ddgs.text(
-                    _search_query,
+                    search_query,
                     max_results=max_results,
                     region="it-it",
                     safesearch="moderate",
-                    timelimit=_timelimit,
+                    timelimit=ddg_timelimit,
                 ))
 
-        results = await asyncio.to_thread(_sync_search)
-
-        if not results:
-            logger.info("LIVE_SEARCH_NO_RESULTS query=%s", query[:60])
+        raw = await asyncio.to_thread(_sync)
+        if not raw:
             return None
-
-        # Prendi il primo risultato come fonte principale
-        best = results[0]
-        source_url = best.get("href", "")
-        source_name = _extract_domain(source_url)
-
-        # Aggrega snippets per il contesto LLM
-        context_parts = []
-        for r in results:
-            title = r.get("title", "")
-            body = r.get("body", "").strip()
-            url = r.get("href", "")
-            if body:
-                context_parts.append(f"[{_extract_domain(url)}] {title}: {body[:350]}")
-
-        logger.info(
-            "LIVE_SEARCH_OK query=%s results=%d source=%s",
-            query[:60], len(results), source_name,
-        )
-
-        return {
-            "snippet": best.get("body", "").strip()[:500],
-            "source_name": source_name,
-            "source_url": source_url,
-            "context_block": "\n\n".join(context_parts),
-        }
-
+        return [
+            {"title": r.get("title", ""), "link": r.get("href", ""), "snippet": r.get("body", "")}
+            for r in raw
+        ]
     except Exception as e:
-        logger.warning("LIVE_SEARCH_ERROR query=%s error=%s", query[:60], str(e)[:100])
+        logger.warning("DDG_SEARCH_ERROR query=%s error=%s", query[:60], str(e)[:80])
         return None
+
+
+async def search_for_answer(query: str, max_results: int = 5) -> Optional[dict]:
+    """
+    Cerca online: prova Serper (Google) prima, poi fallback DuckDuckGo.
+
+    Returns:
+        dict con:
+          - snippet: testo estratto dal risultato principale
+          - source_name: nome del sito
+          - source_url: URL
+          - context_block: tutti i risultati aggregati per il prompt LLM
+        oppure None se nessun risultato.
+    """
+    # Prova Serper prima
+    results = await _search_serper(query, max_results=max_results)
+    provider = "serper"
+
+    # Fallback DDG se Serper non configurato o fallisce
+    if not results:
+        results = await _search_ddg(query, max_results=min(max_results, 3))
+        provider = "ddg"
+
+    if not results:
+        logger.info("LIVE_SEARCH_NO_RESULTS query=%s", query[:60])
+        return None
+
+    best = results[0]
+    source_url = best.get("link", "")
+    source_name = _extract_domain(source_url)
+
+    context_parts = []
+    for r in results:
+        title = r.get("title", "")
+        snippet = r.get("snippet", "").strip()
+        url = r.get("link", "")
+        if snippet:
+            context_parts.append(f"[{_extract_domain(url)}] {title}: {snippet[:350]}")
+
+    logger.info(
+        "LIVE_SEARCH_OK provider=%s query=%s results=%d source=%s",
+        provider, query[:60], len(results), source_name,
+    )
+
+    return {
+        "snippet": best.get("snippet", "").strip()[:500],
+        "source_name": source_name,
+        "source_url": source_url,
+        "context_block": "\n\n".join(context_parts),
+    }
 
 
 def _extract_domain(url: str) -> str:
