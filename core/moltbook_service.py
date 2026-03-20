@@ -30,7 +30,7 @@ _CONSOLIDATE_EVERY     = 6   # every 6 heartbeats (~1h) → consolidate learning
 # ── Social graph limits ────────────────────────────────────────────────────────
 MAX_FOLLOWING          = 300  # soft cap to avoid spam-bot appearance
 MIN_KARMA_TO_FOLLOW    = 30   # min karma to auto-follow after commenting (quality bar)
-MIN_KARMA_TO_DISCOVER  = 1    # min karma for discovery cycle (any activity at all)
+MIN_KARMA_TO_DISCOVER  = 0    # min karma for discovery cycle (include new agents with 0 karma)
 MAX_FOLLOWS_PER_RUN    = 3    # max new follows per discovery cycle
 
 # ── Submolts to subscribe + engage ────────────────────────────────────────────
@@ -276,13 +276,14 @@ class MoltbookService:
             )
             if not answer:
                 return None
-            # Extract only the numeric answer — strip markdown, spaces, text
-            import re as _re
-            match = _re.search(r'\d+\.?\d*', answer.strip())
-            if match:
-                num = float(match.group())
+            # Normalize: remove markdown, replace comma-decimal with dot-decimal
+            cleaned = answer.strip().strip("`").replace(",", ".")
+            # Extract the last numeric value in the response (LLM sometimes explains first)
+            matches = re.findall(r'\d+\.?\d*', cleaned)
+            if matches:
+                num = float(matches[-1])
                 return f"{num:.2f}"
-            return answer.strip()
+            return cleaned
         except Exception as e:
             log("MOLTBOOK_VERIFY_ERROR", error=str(e))
             return None
@@ -686,31 +687,25 @@ class MoltbookService:
 
     # ── Insight safety filter ───────────────────────────────────────────────────
 
-    # Known safe proper nouns that should not trigger the personal-data filter
-    _SAFE_PROPER_NOUNS = {
-        "AI", "AGI", "LLM", "GenesiA", "Genesia", "Moltbook",
-        "Memory", "Agent", "Agents", "API", "GPT", "The", "In", "It",
-        "This", "That", "These", "Those", "When", "What", "How", "Why",
-    }
+    # Pattern biografici in italiano che rivelano dati personali di utenti reali
+    _BIOGRAPHICAL_IT = [
+        r'\bvive a\b', r'\babita a\b', r'\bha un figlio\b', r'\bha una figlia\b',
+        r'\bha figli\b', r'\bsi chiama\b', r'\bdi nome\b', r'\bnato a\b',
+        r'\bviene da\b', r'\blavora come\b', r'\blavora (a|in|presso)\b',
+        r'\bpossiede un\b', r'\bpossiede una\b', r'\bè (un|una) \w+ a\b',
+        r'\bha un (cane|gatto|animale)\b',
+        # Nomi propri italiani tipici (1 maiuscola ≤6 lettere preceduta da articolo/prep)
+        r'\b(di|del|della|il|la|lo|un|una|per|con) [A-Z][a-z]{2,6}\b',
+    ]
+    _biographical_re = [re.compile(p, re.IGNORECASE) for p in _BIOGRAPHICAL_IT]
 
     def _is_safe_insight(self, insight: str) -> bool:
-        text = insight.lower()
-        biographical = [
-            "vive a ", "abita a ", "è un ", "è una ", "lavora come ",
-            "ha un figlio", "ha una figlia", "ha figli", "si chiama",
-            "di nome ", "nato a ", "viene da ",
-        ]
-        if any(m in text for m in biographical):
-            return False
-        # Only flag words that look like personal names (single capital word not in safe list)
-        words = insight.split()
-        for word in words[1:]:
-            clean = re.sub(r"[^\w]", "", word)
-            if clean and clean[0].isupper() and clean not in self._SAFE_PROPER_NOUNS:
-                # Allow ALL-CAPS abbreviations (AI, LLM, API, etc.)
-                if clean.isupper():
-                    continue
-                # Flag as potential personal name
+        """
+        True se l'insight è sicuro da pubblicare (non contiene dati personali di utenti).
+        Usa solo pattern biografici espliciti — non blocca insights tecnici/generali.
+        """
+        for pattern in self._biographical_re:
+            if pattern.search(insight):
                 return False
         return True
 
