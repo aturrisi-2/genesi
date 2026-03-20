@@ -80,13 +80,18 @@ class TrainingEngine:
         return False
 
     async def toggle_lesson(self, correction_id: str, active: bool) -> bool:
-        """Attiva/disattiva una correction come few-shot lesson."""
+        """Attiva/disattiva una correction come few-shot lesson.
+        Le lessons attivate manualmente vengono pinnate (lesson_pinned=True)
+        e l'autopilot non le disattiverà nella rotazione automatica.
+        """
         corrections = await self._load()
         for c in corrections:
             if c.get("id") == correction_id:
                 c["lesson_active"] = active
+                # Pinning: attivazione manuale = protetta dall'autopilot
+                c["lesson_pinned"] = active
                 await storage.save(CORRECTIONS_KEY, corrections)
-                logger.info("LESSON_TOGGLED id=%s active=%s", correction_id, active)
+                logger.info("LESSON_TOGGLED id=%s active=%s pinned=%s", correction_id, active, active)
                 return True
         return False
 

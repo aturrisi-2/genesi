@@ -25,7 +25,7 @@ from core.training_engine import training_engine
 logger = logging.getLogger(__name__)
 
 # ── Configurazione ─────────────────────────────────────────────────────────────
-MAX_ACTIVE_LESSONS  = 8     # max lessons attive nel prompt contemporaneamente
+MAX_ACTIVE_LESSONS  = 25    # max lessons attive nel prompt contemporaneamente
 TRAIN_LESSON_RATIO  = 0.45  # se lessons/total < 45% → valuta training automatico
 MIN_UNRESOLVED      = 8     # min corrections irrisolte per avviare il training auto
 TRAINING_COOLDOWN_H = 22    # ore minime tra due training automatici consecutivi
@@ -121,13 +121,21 @@ class TrainingAutopilot:
                 age = 30
             return rank * 10 + min(age, 30)
 
-        sorted_corr = sorted(corrections, key=priority)
-        top_ids     = {c["id"] for c in sorted_corr[:MAX_ACTIVE_LESSONS]}
+        # Lessons pinnate manualmente dall'admin: non vengono mai toccate dall'autopilot
+        pinned_ids  = {c["id"] for c in corrections if c.get("lesson_pinned")}
+        # Slot liberi per la rotazione automatica
+        free_slots  = max(0, MAX_ACTIVE_LESSONS - len(pinned_ids))
+        # Considera solo le non-pinnate per la selezione automatica
+        unpinned    = [c for c in corrections if c["id"] not in pinned_ids]
+        sorted_corr = sorted(unpinned, key=priority)
+        top_ids     = pinned_ids | {c["id"] for c in sorted_corr[:free_slots]}
 
         # Calcola i cambiamenti necessari senza toccare il disco
         changes = {}
         for c in corrections:
             cid       = c["id"]
+            if cid in pinned_ids:
+                continue  # mai toccare le lessons pinnate
             is_active = c.get("lesson_active", False)
             should_be = cid in top_ids
             if should_be and not is_active:

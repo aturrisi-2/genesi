@@ -242,21 +242,19 @@ class CapabilityTracker:
 
     async def _correction_rate(self) -> float:
         """
-        Ratio-based: lessons_attive / total * (1/0.65).
-        Se il 65% delle corrections ha una lesson attiva → qualità 1.0.
-        Più robusto del conteggio assoluto: il marathon crea nuove corrections
-        ma ne attiva altrettante come lessons, mantenendo il ratio stabile.
+        Misura quante lessons attive ci sono rispetto al massimo supportato (25).
+        25 lessons attive = 100%. Scala linearmente, non penalizza per numero
+        totale di corrections accumulate nel tempo.
         """
         try:
+            from core.training_autopilot import MAX_ACTIVE_LESSONS
             corrections = await storage.load("admin/corrections", default=[])
             if not isinstance(corrections, list):
                 corrections = []
-            total   = len(corrections)
-            if total == 0:
+            if not corrections:
                 return 1.0
             lessons = sum(1 for c in corrections if c.get("lesson_active", False))
-            # 65% di lessons attive = qualità massima
-            quality = min(lessons / (total * 0.65), 1.0)
+            quality = min(lessons / MAX_ACTIVE_LESSONS, 1.0)
             return round(quality, 3)
         except Exception:
             return 1.0
