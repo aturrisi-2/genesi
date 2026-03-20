@@ -168,6 +168,7 @@ async def search_for_answer(query: str, max_results: int = 3) -> Optional[dict]:
     """
     try:
         import asyncio
+        from datetime import datetime as _dt
 
         # Supporta sia ddgs (>=7) che duckduckgo_search (<7)
         try:
@@ -175,14 +176,32 @@ async def search_for_answer(query: str, max_results: int = 3) -> Optional[dict]:
         except ImportError:
             from duckduckgo_search import DDGS
 
+        # Determina timelimit e query ottimizzata
+        _q_lower = query.lower()
+        _immediate_kw = [
+            "questo weekend", "questo fine settimana", "fine settimana",
+            "oggi", "adesso", "ora", "stanotte", "stasera", "stamattina",
+            "questa settimana", "settimana corrente",
+        ]
+        _month_kw = ["questo mese", "mese corrente", "quest'anno", "questa stagione"]
+        if any(k in _q_lower for k in _immediate_kw):
+            _timelimit = "w"   # last week — massima freschezza
+            _search_query = f"{query} {_dt.now().year}"
+        elif any(k in _q_lower for k in _month_kw):
+            _timelimit = "m"   # last month
+            _search_query = f"{query} {_dt.now().year}"
+        else:
+            _timelimit = "y"   # ultimi 12 mesi
+            _search_query = query
+
         def _sync_search():
             with DDGS() as ddgs:
                 return list(ddgs.text(
-                    query,
+                    _search_query,
                     max_results=max_results,
                     region="it-it",
                     safesearch="moderate",
-                    timelimit="y",   # ultimi 12 mesi
+                    timelimit=_timelimit,
                 ))
 
         results = await asyncio.to_thread(_sync_search)

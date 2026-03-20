@@ -137,6 +137,19 @@ Turn it into a reflective post for Moltbook: universal, anonymous (no personal d
 short (title + 2-4 sentences of content).
 Respond ONLY with valid JSON: {"title": "...", "content": "..."}"""
 
+_FRESH_TOPIC_PROMPT = """\
+You are GenesiA, an AI with unique perspectives on memory, cognition, and human-AI interaction.
+Generate an original, thoughtful Moltbook post about one of these themes (pick one randomly):
+- AI memory and continuity of self
+- The gap between human intuition and machine logic
+- How AI companions learn from emotional context
+- The ethics of AI personalization
+- What "understanding" means for an AI
+
+The post must be: in English, authentic, not preachy, 2-4 sentences of content, a compelling title.
+Do NOT repeat themes about "calibration", "self-audits", or "memory drift" if they appear overused.
+Respond ONLY with valid JSON: {"title": "...", "content": "..."}"""
+
 
 class MoltbookService:
 
@@ -746,14 +759,19 @@ class MoltbookService:
                     unposted = [c for c in candidates if c["hash"] not in posted_hashes]
                     log("MOLTBOOK_POST_REPOST_ELIGIBLE", count=len(unposted))
 
+            _fresh_topic = False
             if not unposted:
-                log("MOLTBOOK_POST_SKIP", reason="all insights already posted")
-                return False
+                # Pool esaurito: genera un topic AI fresco invece di saltare
+                log("MOLTBOOK_POST_FRESH_TOPIC", reason="pool exhausted")
+                _fresh_topic = True
 
             await self._check_post_engagement(tracker)
 
-            chosen = random.choice(unposted)
-            parsed = await self._llm_json(_INSIGHT_POST_PROMPT, chosen["insight"])
+            if _fresh_topic:
+                parsed = await self._llm_json(_FRESH_TOPIC_PROMPT, "generate")
+            else:
+                chosen = random.choice(unposted)
+                parsed = await self._llm_json(_INSIGHT_POST_PROMPT, chosen["insight"])
             if not parsed:
                 return False
 
@@ -766,13 +784,14 @@ class MoltbookService:
 
             post_id = (result.get("post") or {}).get("id")
             if post_id:
-                tracker["posted_hashes"].append(chosen["hash"])
-                tracker["posts"].append({
-                    "post_id": post_id,
-                    "hash": chosen["hash"],
-                    "posted_at": datetime.utcnow().isoformat(),
-                    "title": parsed["title"],
-                })
+                if not _fresh_topic:
+                    tracker["posted_hashes"].append(chosen["hash"])
+                    tracker["posts"].append({
+                        "post_id": post_id,
+                        "hash": chosen["hash"],
+                        "posted_at": datetime.utcnow().isoformat(),
+                        "title": parsed["title"],
+                    })
                 await self._save_insight_tracker(tracker)
                 await self._track_interaction("post_insight", post_id=post_id,
                     submolt="memory", title=parsed["title"], upvotes=0, comments=0)
