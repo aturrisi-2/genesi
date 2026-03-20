@@ -248,6 +248,25 @@ class LabFeedbackCycle:
 
         return cycle_result
 
+    def record_observation(self, category: str, observation: str, source: str = "") -> None:
+        """
+        Aggiunge un'osservazione esterna (es. da Moltbook) come evento pending
+        nel ciclo feedback, poi triggera il ciclo se la soglia è raggiunta.
+        """
+        events = self._load_json(FALLBACK_LOG_PATH, [])
+        if not isinstance(events, list):
+            events = []
+        events.append({
+            "timestamp": datetime.utcnow().isoformat(),
+            "fallback_type": category,
+            "user_message": f"[{source}]" if source else "[external]",
+            "response_given": "",
+            "possible_solution": observation,
+            "status": "pending",
+        })
+        self._save_json(FALLBACK_LOG_PATH, events)
+        self.trigger_if_needed()
+
     def get_status(self) -> dict:
         """Restituisce lo stato dell'ultimo ciclo eseguito."""
         state = self._load_json(CYCLE_STATE_PATH, {})

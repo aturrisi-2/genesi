@@ -25,7 +25,7 @@ _BROWSE_SUBMOLT_EVERY  = 2   # every 2 heartbeats (~1h) → browse & engage subm
 _SHOWCASE_EVERY        = 6   # every 6 heartbeats (~3h) → post memory showcase
 _DISCOVER_EVERY        = 4   # every 4 heartbeats (~2h) → discover & follow agents
 _FOLLOWBACK_EVERY      = 4   # every 4 heartbeats (~2h) → follow back new followers
-_CONSOLIDATE_EVERY     = 12  # every 12 heartbeats (~6h) → consolidate learnings
+_CONSOLIDATE_EVERY     = 6   # every 6 heartbeats (~1h) → consolidate learnings
 
 # ── Social graph limits ────────────────────────────────────────────────────────
 MAX_FOLLOWING          = 300  # soft cap to avoid spam-bot appearance
@@ -521,28 +521,46 @@ class MoltbookService:
                 technical_feedback=len(result["technical_feedback"]),
                 top_topics=str(result["top_topics"])[:80])
 
-            # Feed ALL meaningful content into lab cycle
+            # 1. Feed ALL meaningful content into lab feedback cycle (fix: correct import path)
             try:
-                from core.lab.feedback_cycle import feedback_cycle
-                # General engagement insights
+                from core.lab_feedback_cycle import lab_feedback_cycle
                 for insight in result["insights"]:
-                    await feedback_cycle.record_observation(
+                    lab_feedback_cycle.record_observation(
                         category="moltbook_social",
                         observation=insight,
                         source="moltbook_interaction_log",
                     )
-                # Technical feedback from other AI agents — higher priority signal
                 for fb in result["technical_feedback"]:
-                    await feedback_cycle.record_observation(
+                    lab_feedback_cycle.record_observation(
                         category="moltbook_technical_feedback",
                         observation=fb,
                         source="moltbook_agent_comment",
                     )
-            except Exception:
-                pass
+            except Exception as _lfe:
+                log("MOLTBOOK_LAB_CYCLE_ERROR", error=str(_lfe)[:80])
 
-            # Push technical_feedback into admin/corrections so training autopilot
-            # can track and trigger targeted training on moltbook weaknesses
+            # 2. Push insights into global memory service (system-level knowledge)
+            try:
+                from core.global_memory_service import global_memory_service
+                from core.storage import storage as _stor
+                _system_key = "global_insights:moltbook_system"
+                _existing = await _stor.load(_system_key, default={})
+                _prev = _existing.get("insights", [])
+                _new = result["insights"] + result["technical_feedback"]
+                # Merge: mantieni gli ultimi 12 insight unici
+                _merged = list(dict.fromkeys(_prev + _new))[-12:]
+                await _stor.save(_system_key, {
+                    "insights": _merged,
+                    "last_consolidated_at": datetime.utcnow().isoformat(),
+                    "source": "moltbook_consolidation",
+                })
+                log("MOLTBOOK_GLOBAL_MEMORY_UPDATED", insights=len(_merged))
+            except Exception as _gme:
+                log("MOLTBOOK_GLOBAL_MEMORY_ERROR", error=str(_gme)[:80])
+
+            # 3. Push technical_feedback into admin/corrections
+            #    lesson_active=True: feedback da peer AI è già validato, il curatore LLM
+            #    può disattivarla se non più rilevante nella prossima rotazione
             try:
                 corrections = await storage.load("admin/corrections", default=[])
                 if not isinstance(corrections, list):
@@ -551,7 +569,7 @@ class MoltbookService:
                 added = 0
                 for fb in result["technical_feedback"]:
                     if fb in existing_notes:
-                        continue  # già presente
+                        continue
                     import uuid
                     corrections.append({
                         "id": str(uuid.uuid4()),
@@ -561,13 +579,14 @@ class MoltbookService:
                         "genesi_response": "",
                         "correct_response": fb,
                         "admin_note": fb,
-                        "lesson_active": False,
+                        "lesson_active": True,   # auto-attivata: peer AI feedback è segnale forte
+                        "lesson_pinned": False,  # non pinnata: il curatore LLM può ruotarla
                         "source": "moltbook_agent_comment",
                     })
                     added += 1
                 if added:
                     await storage.save("admin/corrections", corrections)
-                    log("MOLTBOOK_CORRECTIONS_ADDED", count=added)
+                    log("MOLTBOOK_CORRECTIONS_ADDED", count=added, auto_active=True)
             except Exception:
                 pass
 
