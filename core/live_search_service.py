@@ -157,9 +157,16 @@ def needs_live_data(message: str) -> bool:
 def _build_search_query(query: str) -> tuple[str, str]:
     """
     Ritorna (search_query, tbs) dove tbs è il filtro temporale Serper/DDG.
-    Per query temporali aggiunge l'anno e restringe il timelimit.
+    Inietta data/anno nella query per forzare risultati del 2026.
     """
     from datetime import datetime as _dt
+    now = _dt.now()
+    year = now.year
+    # Data completa tipo "20 marzo 2026" per massima precisione
+    months_it = ["gennaio","febbraio","marzo","aprile","maggio","giugno",
+                 "luglio","agosto","settembre","ottobre","novembre","dicembre"]
+    date_str = f"{now.day} {months_it[now.month - 1]} {year}"
+
     q_lower = query.lower()
     immediate_kw = [
         "questo weekend", "questo fine settimana", "fine settimana",
@@ -167,13 +174,17 @@ def _build_search_query(query: str) -> tuple[str, str]:
         "questa settimana", "settimana corrente",
     ]
     month_kw = ["questo mese", "mese corrente", "quest'anno", "questa stagione"]
-    year = _dt.now().year
+
     if any(k in q_lower for k in immediate_kw):
-        return f"{query} {year}", "qdr:w"   # last week
+        # Data completa + timelimit last week → forza 2026
+        return f"{query} {date_str}", "qdr:w"
     elif any(k in q_lower for k in month_kw):
-        return f"{query} {year}", "qdr:m"   # last month
+        return f"{query} {year}", "qdr:m"
     else:
-        return query, "qdr:y"               # last year
+        # Sempre aggiunge l'anno per evitare risultati del 2025
+        if str(year) not in query:
+            return f"{query} {year}", "qdr:y"
+        return query, "qdr:y"
 
 
 async def _search_serper(query: str, max_results: int = 5) -> Optional[list[dict]]:
