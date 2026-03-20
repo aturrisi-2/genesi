@@ -11,6 +11,10 @@ import time
 import sys
 import os
 
+# Fix Windows encoding per caratteri speciali (°, à, è, ecc.)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 BASE_URL = "https://genesi.lucadigitale.eu"
 EMAIL = "alfio.turrisi@gmail.com"
 PASSWORD = "ZOEennio0810"

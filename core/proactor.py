@@ -3708,10 +3708,10 @@ Messaggio: "{message}" """
             "suggerisco di verificare", "suggerisco di controllare",
             "non sono aggiornato", "potrebbe non essere accurata",
             "non ho la certezza", "non sono in grado di confermare",
-            # Varianti "non dispongo"
-            "non dispongo di informazioni aggiornate", "non dispongo di dati aggiornati",
-            "non dispongo di informazioni recenti", "non dispongo di notizie",
-            "non dispongo di dati recenti", "non dispongo di informazioni precise",
+            # Varianti "non dispongo" (di/delle/del/degli)
+            "non dispongo di informazioni", "non dispongo delle informazioni",
+            "non dispongo di dati", "non dispongo dei dati",
+            "non dispongo di notizie", "non dispongo delle notizie",
             # Weather tool: risposta ambigua/clarification
             "sarebbe utile sapere quale", "diverse località chiamate",
             "potresti specificare di quale", "potrebbe riferirsi a diverse",
