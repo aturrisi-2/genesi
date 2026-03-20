@@ -19,6 +19,7 @@ from auth.models import AuthUser
 from core.capability_tracker import capability_tracker
 from core.training_engine import training_engine
 from core.training_autopilot import autopilot as training_autopilot
+from core.improvement_health import improvement_health
 from core.storage import storage
 
 logger = logging.getLogger(__name__)
@@ -362,3 +363,22 @@ async def _run_adaptive_subprocess(cmd: list, status_doc: dict):
             "completed_at": datetime.utcnow().isoformat(),
         })
         await storage.save(_ADAPTIVE_STATUS_KEY, status_doc)
+
+
+# ── Improvement Health ────────────────────────────────────────────────────────
+
+@router.get("/improvement-health")
+async def get_improvement_health(user: AuthUser = Depends(require_admin)):
+    """
+    Report di salute di tutti i sistemi di auto-miglioramento:
+    moltbook, lab cycle, autopilot, lessons, global memory, corrections flow.
+    """
+    report = await improvement_health.get_report()
+    return report
+
+
+@router.post("/improvement-health/run-now")
+async def trigger_improvement_health_log(user: AuthUser = Depends(require_admin)):
+    """Forza un health check immediato e lo logga in genesi.log."""
+    report = await improvement_health.log_report()
+    return {"ok": True, "overall": report["overall"], "score": report["score"]}

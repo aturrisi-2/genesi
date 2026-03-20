@@ -48,6 +48,7 @@ from core.log import log
 from core.reminder_engine import reminder_engine
 from core.training_autopilot import autopilot as training_autopilot
 from core.moltbook_service import moltbook_service
+from core.improvement_health import improvement_health
 from lab.supervisor import SupervisorEngine
 from calendar_manager import calendar_manager
 
@@ -71,6 +72,7 @@ async def lifespan(app: FastAPI):
         (evolution_scheduler(),                "EVOLUTION_SCHEDULER"),
         (training_autopilot.run_background_loop(), "TRAINING_AUTOPILOT"),
         (moltbook_heartbeat_background(),      "MOLTBOOK_HEARTBEAT"),
+        (improvement_health.run_background_loop(), "IMPROVEMENT_HEALTH"),
     ]:
         t = asyncio.create_task(coro)
         _bg_tasks.add(t)
