@@ -721,17 +721,21 @@ class Proactor:
             # Safety: only redirect factual questions (? or question words), not emotional statements.
             try:
                 from core.live_search_service import needs_live_data as _needs_live
-                _actual_news_kw = ("ultime notizie", "cosa succede", "novità di", "notizie su", "aggiornamento politico")
                 _redirectable_intents = ("news", "chat_free", "relational", "general")
                 _question_starters = ("chi ", "cosa ", "come ", "dove ", "quando ", "quale ",
                                       "qual ", "quanto ", "quanti ", "dimmi ", "spiega ",
-                                      "parlami ", "descrivi ", "raccontami ")
+                                      "parlami ", "descrivi ", "raccontami ", "quali ", "cerca ")
                 _is_factual_q = ("?" in message or
                                  any(msg_lower.startswith(q) for q in _question_starters))
+                # Explicit search requests always redirect regardless of question form
+                _explicit_search_kw = ("cerca sul web", "cerca online", "cerca su internet",
+                                       "cerca per me", "trovami informazioni", "trovami notizie",
+                                       "cerca informazioni su", "cerca notizie su",
+                                       "fai una ricerca")
+                _is_explicit_search = any(kw in msg_lower for kw in _explicit_search_kw)
                 if (intents and intents[0] in _redirectable_intents
                         and _needs_live(message)
-                        and _is_factual_q
-                        and not any(kw in msg_lower for kw in _actual_news_kw)):
+                        and (_is_factual_q or _is_explicit_search)):
                     logger.info("LIVE_SEARCH_INTENT_OVERRIDE user=%s from=%s to=tecnica", user_id, intents[0])
                     intents = ["tecnica"]
             except Exception:
@@ -3703,6 +3707,16 @@ Messaggio: "{message}" """
             logger.info("AUTO_SEARCH_TRIGGERED user=%s query=%s", user_id, message[:60])
             live_result = await search_for_answer(message)
             if not live_result:
+                # Fallback: try get_news() when DuckDuckGo fails
+                logger.info("AUTO_SEARCH_DDG_FAIL_FALLBACK_NEWS user=%s", user_id)
+                try:
+                    from core.tool_services import tool_service as _ts
+                    news_fallback = await _ts.get_news(message)
+                    if news_fallback and len(news_fallback.strip()) > 20:
+                        log("AUTO_SEARCH_NEWS_FALLBACK_OK", user_id=user_id, query=message[:50])
+                        return news_fallback
+                except Exception as _nfe:
+                    logger.debug("AUTO_SEARCH_NEWS_FALLBACK_FAIL user=%s reason=%s", user_id, str(_nfe)[:80])
                 return response
             web_block = (
                 f"[DATI TROVATI ONLINE — fonte: {live_result.get('source_name', 'web')}]\n"

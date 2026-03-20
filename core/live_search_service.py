@@ -62,6 +62,15 @@ _REGULATORY = {
     "tasso di", "incidenza",
 }
 
+# Richieste esplicite di ricerca web
+_EXPLICIT_SEARCH = {
+    "cerca sul web", "cerca online", "cerca su internet", "cerca in rete",
+    "cerca su google", "cerca su bing", "cerca su duckduckgo",
+    "fai una ricerca", "fai una ricerca su", "fai una ricerca online",
+    "cerca per me", "trovami informazioni", "trovami notizie",
+    "cerca informazioni su", "cerca notizie su",
+}
+
 # Ambito eventi correnti — politica, economia, sport, conflitti, tech
 _CURRENT_EVENTS = {
     # Politica / governo
@@ -100,13 +109,17 @@ def needs_live_data(message: str) -> bool:
     Ritorna True se la domanda ha alta probabilità di richiedere
     informazioni aggiornate che il modello LLM potrebbe non avere.
     """
-    if len(message.strip()) < 15:
+    if len(message.strip()) < 10:
         return False
 
     msg = message.lower()
 
     def _hits(keyword_set: set) -> bool:
         return any(kw in msg for kw in keyword_set)
+
+    # Richiesta esplicita di ricerca web: sempre live
+    if _hits(_EXPLICIT_SEARCH):
+        return True
 
     has_temporal      = _hits(_TEMPORAL)
     has_medical       = _hits(_MEDICAL)
