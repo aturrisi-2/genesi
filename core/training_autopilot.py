@@ -25,15 +25,27 @@ from core.training_engine import training_engine
 logger = logging.getLogger(__name__)
 
 # ── Configurazione ─────────────────────────────────────────────────────────────
-MAX_ACTIVE_LESSONS  = 25    # max lessons attive nel prompt contemporaneamente
-TRAIN_LESSON_RATIO  = 0.45  # se lessons/total < 45% → valuta training automatico
-MIN_UNRESOLVED      = 8     # min corrections irrisolte per avviare il training auto
-TRAINING_COOLDOWN_H = 22    # ore minime tra due training automatici consecutivi
-CHECK_INTERVAL_S    = 3600  # controlla ogni ora
-STARTUP_DELAY_S     = 180   # attesa post-avvio (lascia stabilizzare il server)
+MAX_ACTIVE_LESSONS     = 25    # max lessons attive nel prompt contemporaneamente
+TRAIN_LESSON_RATIO     = 0.45  # se lessons/total < 45% → valuta training automatico
+MIN_UNRESOLVED         = 8     # min corrections irrisolte per avviare il training auto
+TRAINING_COOLDOWN_H    = 22    # ore minime tra due training automatici consecutivi
+LLM_CURATOR_INTERVAL_H = 6    # ore tra una curazione LLM e l'altra
+CHECK_INTERVAL_S       = 3600  # controlla ogni ora
+STARTUP_DELAY_S        = 180   # attesa post-avvio (lascia stabilizzare il server)
 
 AUTOPILOT_KEY       = "admin/autopilot_state"
 ADAPTIVE_STATUS_KEY = "admin/adaptive_training_status"
+
+
+def age_lbl(days) -> str:
+    """Etichetta leggibile per l'età di una correction."""
+    if days == "?":
+        return "[età?]"
+    if days == 0:
+        return "[oggi]"
+    if days <= 7:
+        return f"[{days}gg]"
+    return f"[{days}gg]"
 
 _SCRIPT_PATH         = Path(__file__).parent.parent / "scripts" / "training_marathon.py"
 TRAINING_USER_EMAIL  = os.getenv("TRAINING_USER_EMAIL",    "alfio.turrisi@gmail.com")
@@ -73,11 +85,31 @@ class TrainingAutopilot:
             actions.append("snapshot_saved")
             logger.info("AUTOPILOT_SNAPSHOT date=%s", today)
 
-        # 2. Rotazione lessons ottimale
-        activated, deactivated = await self._auto_manage_lessons()
-        if activated or deactivated:
-            actions.append(f"lessons +{activated} -{deactivated}")
-            logger.info("AUTOPILOT_LESSONS activated=%d deactivated=%d", activated, deactivated)
+        # 2. Curazione LLM (ogni LLM_CURATOR_INTERVAL_H) + fallback euristica
+        last_curated = state.get("last_llm_curation")
+        run_llm_curation = True
+        if last_curated:
+            try:
+                elapsed_h = (datetime.utcnow() - datetime.fromisoformat(last_curated)).total_seconds() / 3600
+                if elapsed_h < LLM_CURATOR_INTERVAL_H:
+                    run_llm_curation = False
+            except Exception:
+                pass
+
+        if run_llm_curation:
+            activated, deactivated, curation_reason = await self._llm_curate_lessons()
+            if activated or deactivated:
+                actions.append(f"llm_curator +{activated} -{deactivated}")
+                logger.info("AUTOPILOT_LLM_CURATOR activated=%d deactivated=%d reason=%s",
+                            activated, deactivated, curation_reason[:80] if curation_reason else "")
+            state["last_llm_curation"] = now.isoformat()
+            state["last_curation_reason"] = curation_reason or ""
+        else:
+            # Fallback euristica ogni ora per riempire slot vuoti
+            activated, deactivated = await self._auto_manage_lessons()
+            if activated or deactivated:
+                actions.append(f"lessons +{activated} -{deactivated}")
+                logger.info("AUTOPILOT_LESSONS activated=%d deactivated=%d", activated, deactivated)
 
         # 3. Training automatico se necessario
         should, reason = await self._should_train(state)
@@ -146,6 +178,144 @@ class TrainingAutopilot:
         # Un solo load+save per tutti i cambiamenti
         activated, deactivated = await training_engine.batch_toggle_lessons(changes)
         return activated, deactivated
+
+    # ── Curazione LLM autonoma delle lessons ──────────────────────────────────
+
+    async def _llm_curate_lessons(self) -> Tuple[int, int, str]:
+        """
+        Usa il LLM per scegliere autonomamente quali lessons attivare/disattivare.
+        Analizza l'intero pool di corrections e decide quali patterns sistemici
+        richiedono rinforzo attivo nel prompt.
+        Ritorna (activated, deactivated, reason_text).
+        """
+        try:
+            corrections = await storage.load("admin/corrections", default=[])
+            if not isinstance(corrections, list) or not corrections:
+                return 0, 0, ""
+
+            # Prepara riassunto compatto per il LLM (evita prompt troppo lunghi)
+            pinned_ids = {c["id"] for c in corrections if c.get("lesson_pinned")}
+            active_ids = {c["id"] for c in corrections if c.get("lesson_active")}
+
+            # Raggruppa per categoria con statistiche
+            from collections import defaultdict
+            cat_stats: dict = defaultdict(lambda: {"total": 0, "active": 0, "ids": [], "samples": []})
+            for c in corrections:
+                cat = c.get("category", "altro")
+                cat_stats[cat]["total"] += 1
+                if c.get("lesson_active"):
+                    cat_stats[cat]["active"] += 1
+                # Aggiungi sample (max 3 per categoria) con ID
+                if len(cat_stats[cat]["samples"]) < 3:
+                    try:
+                        age_d = (datetime.utcnow() - datetime.fromisoformat(c["timestamp"])).days
+                    except Exception:
+                        age_d = "?"
+                    cat_stats[cat]["samples"].append({
+                        "id": c["id"],
+                        "age_days": age_d,
+                        "msg": c.get("input_message", "")[:80],
+                        "fix": c.get("correct_response", "")[:60],
+                        "active": c.get("lesson_active", False),
+                        "pinned": c.get("lesson_pinned", False),
+                    })
+                cat_stats[cat]["ids"].append(c["id"])
+
+            # Formatta il contesto per il LLM
+            ctx_lines = []
+            for cat, stats in sorted(cat_stats.items(), key=lambda x: -x[1]["total"]):
+                ctx_lines.append(
+                    f"\nCategoria: {cat} | Totale: {stats['total']} | Attive: {stats['active']}"
+                )
+                for s in stats["samples"]:
+                    pin_flag = " [PINNATA]" if s["pinned"] else ""
+                    act_flag = " ✓" if s["active"] else ""
+                    ctx_lines.append(
+                        f"  id={s['id'][:8]}  {age_lbl(s['age_days'])} msg='{s['msg']}' fix='{s['fix']}'{act_flag}{pin_flag}"
+                    )
+
+            corrections_ctx = "\n".join(ctx_lines)
+
+            system_prompt = f"""\
+Sei il sistema di auto-miglioramento di Genesi, un assistente AI personale italiano.
+Il tuo compito: analizzare le corrections (errori identificati + fix) e decidere quali attivare come lessons attive nel prompt LLM per massimizzare il miglioramento.
+
+REGOLE:
+- Puoi attivare fino a {MAX_ACTIVE_LESSONS} lessons in totale (attualmente attive: {len(active_ids)})
+- Le lessons [PINNATE] sono protette: NON includerle in "deactivate"
+- Attiva corrections che rappresentano PATTERN RICORRENTI (categoria con molte corrections irrisolte)
+- Attiva corrections RECENTI (< 7 giorni) che correggono errori attivi
+- Disattiva lessons di categorie già risolte (pochi errori nuovi) per fare spazio
+- Massimizza la copertura su categorie deboli
+
+CORRECTIONS DISPONIBILI (raggruppate per categoria):
+{corrections_ctx}
+
+Rispondi SOLO con JSON valido (niente altro testo):
+{{
+  "activate": ["full_id_1", "full_id_2", ...],
+  "deactivate": ["full_id_3", ...],
+  "reason": "breve spiegazione (max 2 righe) della logica di selezione"
+}}"""
+
+            # Ricostruisci mappa id → correction per recuperare gli ID completi
+            id_map = {c["id"]: c for c in corrections}
+
+            from core.llm_service import llm_service
+            import json as _json
+            raw = await llm_service._call_model(
+                "openai/gpt-4o-mini",
+                system_prompt,
+                "Analizza le corrections e scegli le lessons ottimali.",
+                user_id="system",
+                route="memory",
+            )
+            if not raw:
+                raise ValueError("LLM no response")
+
+            # Estrai JSON dalla risposta
+            raw_strip = raw.strip()
+            if "```" in raw_strip:
+                raw_strip = raw_strip.split("```")[1]
+                if raw_strip.startswith("json"):
+                    raw_strip = raw_strip[4:]
+            data = _json.loads(raw_strip)
+
+            to_activate   = [i for i in data.get("activate", [])   if i in id_map and i not in pinned_ids]
+            to_deactivate = [i for i in data.get("deactivate", []) if i in id_map and i not in pinned_ids]
+            reason        = data.get("reason", "")
+
+            # Applica i cambiamenti rispettando il cap
+            current_active_non_pinned = [i for i in active_ids if i not in pinned_ids]
+            # Considera attivazioni entro il cap
+            free = MAX_ACTIVE_LESSONS - len(pinned_ids)
+            # Rimuovi prima quelli da disattivare, poi aggiungi quelli da attivare
+            will_active = set(current_active_non_pinned) - set(to_deactivate)
+            for aid in to_activate:
+                if len(will_active) < free:
+                    will_active.add(aid)
+
+            changes = {}
+            for cid, c in id_map.items():
+                if cid in pinned_ids:
+                    continue
+                is_active  = c.get("lesson_active", False)
+                should_be  = cid in will_active
+                if should_be and not is_active:
+                    changes[cid] = True
+                elif not should_be and is_active:
+                    changes[cid] = False
+
+            activated, deactivated = await training_engine.batch_toggle_lessons(changes)
+            logger.info("LLM_LESSON_CURATOR_OK activated=%d deactivated=%d reason=%s",
+                        activated, deactivated, reason[:100])
+            return activated, deactivated, reason
+
+        except Exception as e:
+            logger.warning("LLM_LESSON_CURATOR_FAIL err=%s — fallback to heuristic", str(e)[:80])
+            # Fallback all'euristica
+            act, deact = await self._auto_manage_lessons()
+            return act, deact, f"[fallback euristico: {str(e)[:60]}]"
 
     # ── Trigger automatico training ────────────────────────────────────────────
 
@@ -222,8 +392,8 @@ class TrainingAutopilot:
 
             logger.info("AUTOPILOT_TRAINING_DONE returncode=%d cats=%s", proc.returncode, cat_names)
 
-            # Dopo il training, ribilancia subito le lessons
-            await self._auto_manage_lessons()
+            # Dopo il training, il curatore LLM rivaluta subito le lessons
+            await self._llm_curate_lessons()
 
         except Exception as e:
             logger.error("AUTOPILOT_TRAINING_ERROR err=%s", e)
@@ -258,12 +428,15 @@ class TrainingAutopilot:
             "last_training_end":    state.get("last_auto_training_end"),
             "last_training_cats":   state.get("last_auto_training_cats", []),
             "last_training_code":   state.get("last_auto_training_code"),
+            "last_llm_curation":    state.get("last_llm_curation"),
+            "last_curation_reason": state.get("last_curation_reason", ""),
             "ticks_total":          state.get("ticks_total", 0),
             "next_check_min":       next_check_min,
             "config": {
-                "max_lessons":     MAX_ACTIVE_LESSONS,
-                "train_threshold": f"{int(TRAIN_LESSON_RATIO*100)}%",
-                "cooldown_h":      TRAINING_COOLDOWN_H,
+                "max_lessons":        MAX_ACTIVE_LESSONS,
+                "train_threshold":    f"{int(TRAIN_LESSON_RATIO*100)}%",
+                "cooldown_h":         TRAINING_COOLDOWN_H,
+                "llm_curator_every_h": LLM_CURATOR_INTERVAL_H,
             },
         }
 
