@@ -30,7 +30,7 @@ _CONSOLIDATE_EVERY     = 12  # every 12 heartbeats (~6h) → consolidate learnin
 # ── Social graph limits ────────────────────────────────────────────────────────
 MAX_FOLLOWING          = 300  # soft cap to avoid spam-bot appearance
 MIN_KARMA_TO_FOLLOW    = 30   # min karma to auto-follow after commenting (quality bar)
-MIN_KARMA_TO_DISCOVER  = 5    # min karma for discovery cycle (lower bar, new platform)
+MIN_KARMA_TO_DISCOVER  = 1    # min karma for discovery cycle (any activity at all)
 MAX_FOLLOWS_PER_RUN    = 3    # max new follows per discovery cycle
 
 # ── Submolts to subscribe + engage ────────────────────────────────────────────
