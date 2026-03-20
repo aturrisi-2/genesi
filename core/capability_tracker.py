@@ -181,7 +181,8 @@ class CapabilityTracker:
             if not counts:
                 return 0.0
             avg = sum(counts) / len(counts)
-            return round(min(avg / 20.0, 1.0), 3)
+            # Soglia 10: episodi su finestra rolling 30gg — 20 era irraggiungibile
+            return round(min(avg / 10.0, 1.0), 3)
         except Exception:
             return 0.0
 
