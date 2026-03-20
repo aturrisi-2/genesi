@@ -3693,11 +3693,21 @@ Messaggio: "{message}" """
             "non ho dati in tempo reale", "non ho accesso ai dati attuali",
             "non sono in grado di cercare", "non posso accedere a siti",
             "ti consiglio di cercare", "ti consiglio di verificare su",
-            "ti consiglio di controllare un sito", "ti suggerisco di cercare",
+            "ti consiglio di controllare un sito", "ti consiglio di controllare",
+            "ti suggerisco di cercare", "ti suggerisco di consultare",
             "puoi controllare su", "puoi verificare su",
             "non ho aggiornamenti recenti", "le mie informazioni potrebbero non essere",
             "potrebbero non essere aggiornate", "potrebbe non essere aggiornato",
             "non ho notizie recenti", "non ho accesso alle ultime notizie",
+            # Varianti comuni non catturate prima
+            "non ho informazioni aggiornate", "non ho informazioni precise",
+            "non riesco ad accedere", "al momento non riesco",
+            "non posso fornirti informazioni", "non posso fornire informazioni",
+            "non ho dati aggiornati", "non ho informazioni recenti",
+            "ti consiglio di visitare", "ti consiglio di consultare",
+            "suggerisco di verificare", "suggerisco di controllare",
+            "non sono aggiornato", "potrebbe non essere accurata",
+            "non ho la certezza", "non sono in grado di confermare",
         ]
         resp_lower = response.lower()
         if not any(p in resp_lower for p in _REFUSAL_PHRASES):

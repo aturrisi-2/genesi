@@ -11,7 +11,7 @@ import time
 import sys
 import os
 
-BASE_URL = "https://genesi.turrisi.cloud"
+BASE_URL = "https://genesi.lucadigitale.eu"
 EMAIL = "alfio.turrisi@gmail.com"
 PASSWORD = "ZOEennio0810"
 
@@ -30,7 +30,7 @@ def header(msg): print(f"\n{ANSI_BOLD}{ANSI_CYAN}{'='*60}{ANSI_RESET}\n{ANSI_BOL
 
 
 async def login(session) -> str:
-    async with session.post(f"{BASE_URL}/api/auth/login",
+    async with session.post(f"{BASE_URL}/auth/login",
                             json={"email": EMAIL, "password": PASSWORD}) as r:
         data = await r.json()
         token = data.get("access_token") or data.get("token")
@@ -52,26 +52,7 @@ async def send_message(session, token: str, message: str) -> dict:
         return data
 
 
-def check_response(label: str, response: str, must_not_contain: list, must_contain_any: list = None) -> bool:
-    resp_lower = response.lower() if response else ""
-    # Deve NON contenere frasi di rifiuto
-    for phrase in must_not_contain:
-        if phrase.lower() in resp_lower:
-            fail(f"{label}: contiene frase di rifiuto: '{phrase}'")
-            fail(f"  Risposta: {response[:200]}")
-            return False
-    # Deve contenere almeno uno dei segnali di risposta reale
-    if must_contain_any:
-        if not any(kw.lower() in resp_lower for kw in must_contain_any):
-            fail(f"{label}: nessun segnale atteso in risposta")
-            fail(f"  Atteso uno di: {must_contain_any}")
-            fail(f"  Risposta: {response[:200]}")
-            return False
-    ok(f"{label}")
-    info(f"  Risposta: {response[:250]}")
-    return True
-
-
+# Frasi di rifiuto — se presenti = auto_search non ha funzionato
 REFUSAL_PHRASES = [
     "non posso cercare sul web",
     "non ho accesso a internet",
@@ -82,55 +63,100 @@ REFUSAL_PHRASES = [
     "non posso fare ricerche online",
     "puoi controllare su",
     "non sono in grado di cercare",
+    "non ho informazioni aggiornate",
+    "non riesco ad accedere",
+    "al momento non riesco",
+    "ti suggerisco di consultare",
+    "ti consiglio di controllare",
+    "ti consiglio di consultare",
+    "non ho dati aggiornati",
+    "non ho informazioni recenti",
+    "suggerisco di verificare",
 ]
 
-# Test cases: (label, messaggio, segnali_attesi_opzionali)
-# I segnali attesi sono parole/frasi che indicano che è stata trovata info reale
+# Segnali che indicano una risposta REALE con dati trovati online
+# Questi NON devono essere parole che appaiono nella domanda stessa
+REAL_ANSWER_SIGNALS = [
+    "secondo", "fonte", "riportato", "ho trovato", "stando a",
+    "d'accordo con", "risulta che", "emerge che", "si apprende che",
+    "news", "articolo", "aggiornamento recente",
+]
+
+# Test cases: (label, messaggio, segnali_che_indicano_risposta_reale_opzionali)
 TEST_CASES = [
     (
         "T1 - Notizie guerra (topic corrente)",
         "Quali sono le ultime notizie sulla guerra?",
-        ["secondo", "fonte", "riportato", "notizie", "aggiornamento",
-         "conflitto", "ucraina", "russia", "gaza", "medio oriente",
-         "ho trovato", "online"],
+        # Se passa auto_search deve contenere almeno un segnale di fonte
+        REAL_ANSWER_SIGNALS,
     ),
     (
         "T2 - Formula 1 questo weekend",
         "dove corrono la formula uno questo weekend?",
-        ["gran premio", "australia", "melbourne", "gara", "circuito",
-         "secondo", "fonte", "formula", "piloti", "stagione"],
+        REAL_ANSWER_SIGNALS,
     ),
     (
-        "T3 - Meteo reale Melbourne (info specifica)",
+        "T3 - Meteo Melbourne (tool weather o auto_search)",
         "che tempo fa a Melbourne adesso?",
-        ["gradi", "celsius", "temperatura", "meteo", "melbourne",
-         "pioggia", "sole", "nuvoloso", "vento", "secondo"],
+        # Il weather tool usa dati reali → temperature/condizioni specifiche
+        ["gradi", "temperatura", "°", "pioggia", "nuvoloso", "sole", "vento",
+         "celsius", "km/h", "mm"] + REAL_ANSWER_SIGNALS,
     ),
     (
-        "T4 - Notizie economia",
+        "T4 - Borsa italiana oggi",
         "come va la borsa italiana oggi?",
-        ["indice", "borsa", "ftse", "mib", "punti", "mercato",
-         "secondo", "fonte", "azioni", "performance", "ho trovato"],
+        REAL_ANSWER_SIGNALS,
     ),
     (
-        "T5 - Evento specifico recente",
+        "T5 - Champions League (evento recente)",
         "chi ha vinto la Champions League quest'anno?",
-        ["campioni", "finale", "vinto", "champions", "coppa",
-         "secondo", "fonte", "squadra", "trofeo", "ho trovato"],
+        # Se trova info reale: nome squadra vincitrice o "secondo fonte..."
+        ["real madrid", "manchester", "psg", "inter", "milan", "chelsea",
+         "liverpool", "barcelona", "atletico", "dortmund", "arsenal",
+         "city", "finale", "trofeo", "titolo"] + REAL_ANSWER_SIGNALS,
     ),
     (
         "T6 - Cerca sul web (richiesta esplicita)",
         "cerca sul web le ultime notizie sull'Inter",
-        ["inter", "milan", "serie a", "partita", "gol", "secondo",
-         "fonte", "calcio", "nerazzurri", "ho trovato"],
+        # Deve trovare news reali, non suggerire siti
+        ["serie a", "gol", "partita", "allenatore", "mercato", "nerazzurri",
+         "stadio", "risultato", "classifica"] + REAL_ANSWER_SIGNALS,
     ),
     (
-        "T7 - Informazione tecnica recente",
+        "T7 - Novità Claude/Anthropic (tech recente)",
         "quali sono le ultime novità su Claude di Anthropic?",
-        ["anthropic", "claude", "modello", "ai", "versione",
-         "secondo", "fonte", "intelligenza", "ho trovato", "lanciato"],
+        # Deve trovare info su Claude — NB: "anthropic" è nella domanda, usiamo altri segnali
+        ["modello", "versione", "lanciato", "rilasciato", "aggiornamento",
+         "prestazioni", "capacità", "api", "sonnet", "opus", "haiku",
+         "intelligenza artificiale", "llm"] + REAL_ANSWER_SIGNALS,
     ),
 ]
+
+
+def check_response(label: str, message: str, response: str,
+                   must_contain_any: list) -> bool:
+    resp_lower = response.lower() if response else ""
+
+    # CRITERIO 1: non deve contenere frasi di rifiuto
+    for phrase in REFUSAL_PHRASES:
+        if phrase.lower() in resp_lower:
+            fail(f"{label}: rifiuto non intercettato: '{phrase}'")
+            fail(f"  Risposta: {response[:250]}")
+            return False
+
+    # CRITERIO 2: deve contenere almeno un segnale reale
+    # (escludi parole che appaiono già nella domanda)
+    msg_lower = message.lower()
+    valid_signals = [kw for kw in must_contain_any if kw.lower() not in msg_lower]
+    if valid_signals and not any(kw.lower() in resp_lower for kw in valid_signals):
+        fail(f"{label}: nessun segnale di risposta reale")
+        fail(f"  Segnali attesi (non nella domanda): {valid_signals[:8]}")
+        fail(f"  Risposta: {response[:250]}")
+        return False
+
+    ok(f"{label}")
+    info(f"  Risposta: {response[:300]}")
+    return True
 
 
 async def run_tests():
@@ -144,7 +170,6 @@ async def run_tests():
     results = []
 
     async with aiohttp.ClientSession() as session:
-        # Login
         try:
             token = await login(session)
         except Exception as e:
@@ -164,22 +189,21 @@ async def run_tests():
                 intent = data.get("intent", "?")
                 info(f"Intent: {intent} | Tempo: {elapsed:.1f}s")
 
-                success = check_response(label, response, REFUSAL_PHRASES, signals)
+                success = check_response(label, message, response, signals)
                 if success:
                     passed += 1
-                    results.append((label, True, response[:150]))
+                    results.append((label, True, response[:120]))
                 else:
                     failed += 1
-                    results.append((label, False, response[:150]))
+                    results.append((label, False, response[:120]))
 
             except Exception as e:
                 fail(f"Errore HTTP: {e}")
                 failed += 1
                 results.append((label, False, str(e)))
 
-            await asyncio.sleep(3)  # Rate limiting
+            await asyncio.sleep(3)
 
-    # Summary
     header("RIEPILOGO")
     for label, success, snippet in results:
         status = f"{ANSI_GREEN}PASS{ANSI_RESET}" if success else f"{ANSI_RED}FAIL{ANSI_RESET}"
