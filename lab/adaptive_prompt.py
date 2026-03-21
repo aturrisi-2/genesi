@@ -255,6 +255,14 @@ Obiettivo: Fornire assistenza di alta qualità che sia sia accurata che piacevol
                         "feedback_events_processed", "feedback_suggestions_processed"):
                 if key in existing:
                     merged[key] = existing[key]
+            # Inietta le feedback_rules nel system_prompt così vengono lette da _load_adaptive_prompt
+            rules = merged.get("feedback_rules", [])
+            if rules:
+                _MARKER = "\n\n[REGOLE APPRESE DALL'ESPERIENZA]\n"
+                base = merged.get("system_prompt", "")
+                if _MARKER in base:
+                    base = base.split(_MARKER)[0]
+                merged["system_prompt"] = base + _MARKER + "\n".join(f"- {r}" for r in rules)
             with open(self.prompt_file, 'w', encoding='utf-8') as f:
                 json.dump(merged, f, indent=2, ensure_ascii=False)
         except Exception as e:
