@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 
 # ── Adaptive training config ──────────────────────────────────────────────────
 _SCRIPT_PATH          = Path(__file__).parent.parent.parent / "scripts" / "training_marathon.py"
+_DEEP_CONVO_SCRIPT    = Path(__file__).parent.parent.parent / "scripts" / "deep_conversation.py"
 _ADAPTIVE_STATUS_KEY  = "admin/adaptive_training_status"
+_DEEP_CONVO_STATUS_KEY = "admin/deep_convo_training_status"
 TRAINING_USER_EMAIL   = os.getenv("TRAINING_USER_EMAIL",    "alfio.turrisi@gmail.com")
 TRAINING_USER_PWD     = os.getenv("TRAINING_USER_PASSWORD", "ZOEennio0810")
 TRAINING_ADMIN_EMAIL  = os.getenv("TRAINING_ADMIN_EMAIL",   "idappleturrisi@gmail.com")
@@ -382,3 +384,117 @@ async def trigger_improvement_health_log(user: AuthUser = Depends(require_admin)
     """Forza un health check immediato e lo logga in genesi.log."""
     report = await improvement_health.log_report()
     return {"ok": True, "overall": report["overall"], "score": report["score"]}
+
+
+# ═══════════════════════════════════════════════════════
+#  DEEP CONVERSATION TRAINING
+# ═══════════════════════════════════════════════════════
+
+@router.get("/deep-convo-status")
+async def get_deep_convo_status(user: AuthUser = Depends(require_admin)):
+    """Stato attuale del deep conversation training (idle/running/completed/failed)."""
+    data = await storage.load(_DEEP_CONVO_STATUS_KEY, default={"status": "idle"})
+    if data.get("status") == "running":
+        pid = data.get("pid")
+        if pid:
+            try:
+                os.kill(pid, 0)
+            except (ProcessLookupError, OSError):
+                data["status"] = "failed"
+                data["error"]  = "Processo terminato inaspettatamente"
+                await storage.save(_DEEP_CONVO_STATUS_KEY, data)
+    return data
+
+
+@router.post("/deep-convo-run")
+async def start_deep_convo_run(
+    themes: int   = Query(12, ge=4, le=18, description="Quanti temi coprire per run (~1h = 12)"),
+    pause:  float = Query(30.0, ge=10, le=60, description="Pausa tra messaggi (secondi)"),
+    user: AuthUser = Depends(require_admin),
+):
+    """
+    Avvia una sessione di deep conversation training in background.
+    Simula ~1-2 ore di conversazione umana autentica su temi profondi
+    per ripopolare gli insights di Genesi con pattern emotivi e relazionali reali.
+    """
+    current = await storage.load(_DEEP_CONVO_STATUS_KEY, default={})
+    if current.get("status") == "running":
+        pid = current.get("pid")
+        if pid:
+            try:
+                os.kill(pid, 0)
+                return {"ok": False, "error": "Deep conversation già in corso", "status": current}
+            except (ProcessLookupError, OSError):
+                pass
+
+    cmd = [
+        sys.executable, str(_DEEP_CONVO_SCRIPT),
+        "--email",    TRAINING_ADMIN_EMAIL,
+        "--password", TRAINING_ADMIN_PWD,
+        "--themes",   str(themes),
+        "--pause",    str(pause),
+    ]
+
+    status_doc = {
+        "status":     "starting",
+        "started_at": datetime.utcnow().isoformat(),
+        "themes":     themes,
+        "pause":      pause,
+        "output_lines": [],
+        "pid":        None,
+    }
+    await storage.save(_DEEP_CONVO_STATUS_KEY, status_doc)
+
+    asyncio.create_task(_run_deep_convo_subprocess(cmd, status_doc))
+
+    logger.info("DEEP_CONVO_TRAINING_STARTED themes=%d pause=%.1f", themes, pause)
+    return {
+        "ok":      True,
+        "message": f"Deep conversation training avviato ({themes} temi, pausa {pause}s)",
+        "themes":  themes,
+        "pause":   pause,
+    }
+
+
+async def _run_deep_convo_subprocess(cmd: list, status_doc: dict):
+    """Task background: esegue deep_conversation.py, aggiorna lo status in tempo reale."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        status_doc["status"] = "running"
+        status_doc["pid"]    = proc.pid
+        await storage.save(_DEEP_CONVO_STATUS_KEY, status_doc)
+
+        output_lines = []
+        save_tick    = 0
+        async for raw_line in proc.stdout:
+            line = raw_line.decode("utf-8", errors="replace").rstrip()
+            output_lines.append(line)
+            if len(output_lines) > 100:
+                output_lines = output_lines[-100:]
+            save_tick += 1
+            if save_tick % 5 == 0:
+                status_doc["output_lines"] = output_lines
+                await storage.save(_DEEP_CONVO_STATUS_KEY, status_doc)
+
+        await proc.wait()
+        status_doc.update({
+            "status":       "completed" if proc.returncode == 0 else "failed",
+            "returncode":   proc.returncode,
+            "completed_at": datetime.utcnow().isoformat(),
+            "output_lines": output_lines,
+        })
+        await storage.save(_DEEP_CONVO_STATUS_KEY, status_doc)
+        logger.info("DEEP_CONVO_TRAINING_DONE returncode=%s", proc.returncode)
+
+    except Exception as exc:
+        logger.error("DEEP_CONVO_TRAINING_ERROR err=%s", exc)
+        status_doc.update({
+            "status":       "failed",
+            "error":        str(exc),
+            "completed_at": datetime.utcnow().isoformat(),
+        })
+        await storage.save(_DEEP_CONVO_STATUS_KEY, status_doc)
