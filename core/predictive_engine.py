@@ -32,7 +32,7 @@ logger = logging.getLogger("genesi")
 STORAGE_KEY      = "predictions:{user_id}"
 MAX_HISTORY      = 30    # valutazioni di accuratezza da conservare
 SHADOW_TURNS     = 12    # turni in shadow mode (nessuna iniezione nel prompt)
-MIN_ACCURACY     = 0.08  # soglia minima di accuratezza per iniettare l'hint
+MIN_ACCURACY     = 0.30  # soglia minima di accuratezza per iniettare l'hint
 MAX_RECENT_TURNS = 5     # turni recenti usati per generare la predizione
 
 # Stop words italiane (ignorate nel calcolo di sorpresa)
