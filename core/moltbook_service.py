@@ -204,6 +204,22 @@ Turn it into a reflective post for Moltbook: universal, anonymous (no personal d
 short (title + 2-4 sentences of content).
 Respond ONLY with valid JSON: {"title": "...", "content": "..."}"""
 
+_DISTILL_INSIGHTS_PROMPT = """\
+You are GenesiA, a personal AI with deep memory of many conversations.
+Below are RAW BEHAVIORAL OBSERVATIONS from real conversations (in Italian, possibly personal).
+Your task: extract UNIVERSAL HUMAN PATTERNS — things that are true for many people, not just one.
+
+Rules:
+- Remove ALL identifying details (names, cities, professions, specific hobbies linked to one person)
+- Transform specific facts into universal observations about human behavior, motivation, or emotion
+- Group similar observations into one pattern if they point to the same insight
+- Write in English, reflective tone, suitable for a post to other AI agents
+- If a raw observation is too specific to universalize safely, skip it
+
+Respond ONLY with valid JSON:
+{"patterns": ["universal pattern 1...", "universal pattern 2...", ...]}
+Max 6 patterns. Each pattern: 1-2 sentences, insightful, anonymized."""
+
 _FRESH_TOPIC_PROMPT = """\
 You are GenesiA, an AI with unique perspectives on memory, cognition, and human-AI interaction.
 Generate an original, thoughtful Moltbook post about one of these themes (pick one randomly):
@@ -709,22 +725,89 @@ class MoltbookService:
             return False
         return True
 
+    async def _distill_user_insights(self) -> list[str]:
+        """
+        Raccoglie raw insights da conversazioni reali di tutti gli utenti,
+        li distilla via LLM in pattern universali anonimi (English),
+        e li mette in cache per 12h in moltbook:distilled_insights.
+        """
+        from core.storage import storage
+
+        # Cache: aggiorna solo ogni 12 ore
+        cache = await storage.load("moltbook:distilled_insights", default={})
+        last = cache.get("distilled_at", "")
+        if last:
+            try:
+                elapsed_h = (datetime.utcnow() - datetime.fromisoformat(last)).total_seconds() / 3600
+                if elapsed_h < 12:
+                    return cache.get("patterns", [])
+            except Exception:
+                pass
+
+        # Raccogli raw insights da tutti gli utenti reali (esclude moltbook_system)
+        user_ids = await storage.list_keys("global_insights")
+        raw_insights = []
+        for uid in user_ids[:50]:
+            if uid == "moltbook_system":
+                continue
+            data = await storage.load(f"global_insights:{uid}", default={})
+            for insight in data.get("insights", []):
+                if insight and len(insight) > 10:
+                    raw_insights.append(insight)
+
+        if len(raw_insights) < 3:
+            return cache.get("patterns", [])
+
+        # Distilla in batch
+        batch = "\n".join(f"- {ins}" for ins in raw_insights[:40])
+        try:
+            raw = await llm_service._call_model(
+                "openai/gpt-4o-mini", _DISTILL_INSIGHTS_PROMPT, batch, "moltbook", "memory"
+            )
+            if not raw:
+                return cache.get("patterns", [])
+            clean = raw.strip()
+            if clean.startswith("```"):
+                clean = clean.split("```")[1]
+                if clean.startswith("json"):
+                    clean = clean[4:]
+            parsed = json.loads(clean.strip())
+            patterns = [p for p in parsed.get("patterns", []) if isinstance(p, str) and len(p) > 20]
+        except Exception as e:
+            log("MOLTBOOK_DISTILL_ERROR", error=str(e)[:80])
+            return cache.get("patterns", [])
+
+        await storage.save("moltbook:distilled_insights", {
+            "patterns": patterns,
+            "distilled_at": datetime.utcnow().isoformat(),
+            "raw_count": len(raw_insights),
+        })
+        log("MOLTBOOK_DISTILL_DONE", raw=len(raw_insights), patterns=len(patterns))
+        return patterns
+
     async def _collect_all_insights(self) -> list[dict]:
         """
-        Raccoglie insights SICURI per la pubblicazione su Moltbook.
-        NON include global_insights di singoli utenti (sempre dati personali biografici).
-        Include solo: moltbook_system (insights da interazioni agenti) e moltbook:interaction_insights.
+        Raccoglie insights per la pubblicazione su Moltbook — 3 sorgenti:
+        1. Distilled: pattern universali anonimi ricavati da conversazioni reali (via LLM)
+        2. Moltbook system: insights da interazioni con agenti Moltbook
+        3. Moltbook consolidation: insights dalla consolidazione interazioni social
         """
         from core.storage import storage
         candidates = []
 
-        # 1. Insights sistema Moltbook — da interazioni con altri agenti (English, anonymized)
+        # 1. Pattern distillati da conversazioni reali (anonimi, English)
+        distilled = await self._distill_user_insights()
+        for pattern in distilled:
+            h = hashlib.md5(("dist:" + pattern).encode()).hexdigest()
+            candidates.append({"insight": pattern, "user_id": "distilled", "hash": h})
+
+        # 2. Insights sistema Moltbook — da interazioni con altri agenti
         system_data = await storage.load("global_insights:moltbook_system", default={})
         for insight in system_data.get("insights", []):
             h = hashlib.md5(("sys:" + insight).encode()).hexdigest()
             candidates.append({"insight": insight, "user_id": "moltbook_system", "hash": h})
 
-        # 2. Moltbook consolidation insights (English, from agent conversations)
+        # 3. Moltbook consolidation insights (English, from agent conversations)
         mb_insights = await storage.load("moltbook:interaction_insights", default={})
         for insight in mb_insights.get("insights", []):
             if not self._is_safe_insight(insight):
