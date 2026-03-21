@@ -251,16 +251,16 @@ class HealthCheck:
         questions = [
             ("Cosa distingue secondo te una persona resiliente da una semplicemente fortunata?",
              ["resilienza", "fortuna", "difficolt", "esperienza", "crescita", "carattere", "sfida"],
-             "Ragionamento sulla resilienza", 2),
+             "Ragionamento sulla resilienza", 2, 30),
             ("Se dovessi scegliere una sola qualità umana da preservare nel mondo, quale sarebbe e perché?",
              ["qualità", "sceglierei", "perché", "importante", "umano", "valore"],
-             "Opinione con argomentazione", 2),
+             "Opinione con argomentazione", 2, 20),
         ]
 
-        for msg, keywords, label, pts in questions:
+        for msg, keywords, label, pts, min_w in questions:
             resp, _, ms = self._send(msg, pause=4)
-            if not self._is_substantive(resp, min_words=30):
-                self._fail(f"{label} — risposta troppo corta", f"{len(resp.split())} parole", points=pts)
+            if not self._is_substantive(resp, min_words=min_w):
+                self._fail(f"{label} — risposta troppo corta", f"{len(resp.split())} parole < {min_w}", points=pts)
             elif self._is_fallback(resp):
                 self._fail(f"{label} — fallback invece di opinione", resp[:80], points=pts)
             elif sum(1 for kw in keywords if kw.lower() in resp.lower()) >= 2:

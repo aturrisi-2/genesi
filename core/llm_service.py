@@ -120,19 +120,37 @@ class LLMService:
         self.relational_engine = RelationalStateEngine()
     
     def _load_adaptive_prompt(self) -> str:
-        """Carica il prompt adattivo da lab/global_prompt.json."""
+        """Carica il prompt adattivo da lab/global_prompt.json + regole da lab_cycle_state."""
+        p = ""
         try:
             prompt_file = Path("lab/global_prompt.json")
             if prompt_file.exists():
                 with open(prompt_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     p = data.get("system_prompt", "") or data.get("prompt", "")
-                    if p:
-                        logger.info("LLM_ADAPTIVE_PROMPT_LOADED len=%d", len(p))
-                    return p
         except Exception as e:
             logger.error("LLM_SERVICE: Error loading prompt: %s", str(e))
-        return ""
+
+        # Inietta sempre le regole lab da lab_cycle_state.json (source of truth)
+        # Questo è robusto anche se AdaptivePromptBuilder sovrascrive global_prompt.json
+        _MARKER = "\n\n[REGOLE APPRESE DALL'ESPERIENZA]\n"
+        try:
+            state_file = Path("memory/admin/lab_cycle_state.json")
+            if state_file.exists():
+                with open(state_file, 'r', encoding='utf-8') as f:
+                    state = json.load(f)
+                rules = state.get("rules", [])
+                if rules:
+                    # Rimuovi eventuale blocco regole già presente nel prompt
+                    if _MARKER in p:
+                        p = p.split(_MARKER)[0]
+                    p += _MARKER + "\n".join(f"- {r}" for r in rules)
+        except Exception:
+            pass
+
+        if p:
+            logger.info("LLM_ADAPTIVE_PROMPT_LOADED len=%d", len(p))
+        return p
 
     async def generate_response(self, prompt: str, message: str, user_id: str = None, route: str = "general", messages: Optional[List[Dict[str, str]]] = None) -> str:
         """Genera una risposta usando il modello selezionato con fallback deterministico."""
