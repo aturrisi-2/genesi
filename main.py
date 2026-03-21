@@ -81,22 +81,12 @@ async def lifespan(app: FastAPI):
 
     yield  # ← app in esecuzione
 
-    # SHUTDOWN
-    reminder_task.cancel()
-    evolution_task.cancel()
-    calendar_task.cancel()
-    autopilot_task.cancel()
-    moltbook_task.cancel()
-    try:
-        await reminder_task
-        await evolution_task
-        await calendar_task
-        await autopilot_task
-        await moltbook_task
-    except asyncio.CancelledError:
-        pass
-    log("REMINDER_CHECKER_STOPPED", status="ok")
-    log("CALENDAR_CHECKER_STOPPED", status="ok")
+    # SHUTDOWN — cancella tutti i background task
+    for t in list(_bg_tasks):
+        t.cancel()
+    if _bg_tasks:
+        await asyncio.gather(*_bg_tasks, return_exceptions=True)
+    log("BACKGROUND_TASKS_STOPPED", count=len(_bg_tasks), status="ok")
 
 app = FastAPI(title="Genesi Core v2 - Proactor Architecture", redirect_slashes=False, lifespan=lifespan)
 
