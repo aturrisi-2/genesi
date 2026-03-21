@@ -46,10 +46,10 @@ async def _compute_score() -> dict:
     try:
         import json as _json
         from pathlib import Path as _Path
-        # Le regole sono in lab/global_prompt.json (feedback_rules) + stato ciclo
-        gp_path = _Path("lab/global_prompt.json")
-        gp_data = _json.loads(gp_path.read_text(encoding="utf-8")) if gp_path.exists() else {}
-        active_rules = len(gp_data.get("feedback_rules", []))
+        # Regole generate: source of truth è lab_cycle_state.json
+        state_path = _Path("memory/admin/lab_cycle_state.json")
+        state_data = _json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+        active_rules = len(state_data.get("rules", []))
         # Conteggio osservazioni da fallbacks
         fb_path = _Path("memory/admin/fallbacks.json")
         fb_data = _json.loads(fb_path.read_text(encoding="utf-8")) if fb_path.exists() else []
