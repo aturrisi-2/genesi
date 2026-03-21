@@ -334,17 +334,21 @@ class HealthCheck:
             # Controlla se il file ha feedback_rules — potrebbe essere un problema di route
             try:
                 import json as _j
-                gp = _j.load(open("lab/global_prompt.json"))
-                has_rules = len(gp.get("feedback_rules", [])) > 0
-                has_sp    = bool(gp.get("system_prompt", ""))
-                if has_rules and has_sp:
-                    self._warn("Prompt adattivo non loggato ma file OK — potrebbe essere route non-conversazionale")
+                # Source of truth: lab_cycle_state.json (mai sovrascritto da altri)
+                state = _j.load(open("memory/admin/lab_cycle_state.json"))
+                rules = state.get("rules", [])
+                gp    = _j.load(open("lab/global_prompt.json")) if os.path.exists("lab/global_prompt.json") else {}
+                has_sp = bool(gp.get("system_prompt", ""))
+                if len(rules) > 0 and has_sp:
+                    self._warn(f"Prompt adattivo non loggato ma {len(rules)} regole pronte in cycle_state — route ok")
                     self.score += 1; self.max_score += 2
+                elif len(rules) == 0:
+                    self._fail("Lab cycle non ha ancora generato regole",
+                               "avvia il ciclo dal pannello admin", points=2)
                 else:
-                    self._fail("Prompt adattivo NON caricato — lab/global_prompt.json vuoto o senza regole",
-                               f"rules={has_rules} system_prompt={has_sp}", points=2)
-            except Exception:
-                self._fail("Prompt adattivo NON caricato — controlla lab/global_prompt.json", points=2)
+                    self._fail("system_prompt assente in lab/global_prompt.json", points=2)
+            except Exception as e:
+                self._fail("Prompt adattivo — errore lettura file", str(e)[:60], points=2)
 
         # Intent classifier
         if log_contains(logs, "INTENT_CLASSIF|LLM_INTENT"):
