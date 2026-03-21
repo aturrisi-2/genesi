@@ -243,7 +243,7 @@
           <button class="btn btn-ghost btn-sm" onclick="forceAutopilotTick()">⚡ Esegui ora</button>
         </div>
       </div>
-      <div id="autopilotInfo" class="text-sm" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px"></div>
+      <div id="autopilotInfo" class="text-sm" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px"></div>
       <div id="autopilotLastActions" class="text-xs text-muted mt-8"></div>
     </div>
 
@@ -1009,6 +1009,13 @@ function renderAutopilotCard(ap) {
   const trainingCats = (ap.last_training_cats || []).join(', ') || '—';
   const snapshotDate = ap.last_snapshot || '—';
 
+  const dc = ap.deep_convo || {};
+  const dcCount = dc.auto_count ?? 0;
+  const dcLast = dc.last_end
+    ? new Date(dc.last_end).toLocaleString('it-IT')
+    : '—';
+  const dcCountColor = dcCount === 0 ? 'var(--text-muted)' : 'var(--cyan)';
+
   document.getElementById('autopilotInfo').innerHTML = `
     <div>
       <div class="text-xs text-muted" style="margin-bottom:4px">ULTIMO SNAPSHOT</div>
@@ -1018,6 +1025,11 @@ function renderAutopilotCard(ap) {
       <div class="text-xs text-muted" style="margin-bottom:4px">ULTIMO TRAINING AUTO</div>
       <div style="color:var(--text);font-size:.8rem">${trainingEnd}</div>
       ${trainingCats !== '—' ? `<div class="text-xs text-muted">${trainingCats}</div>` : ''}
+    </div>
+    <div>
+      <div class="text-xs text-muted" style="margin-bottom:4px">🧠 DEEP CONVO AUTO</div>
+      <div style="color:${dcCountColor};font-size:1.1rem;font-weight:700">${dcCount} sessioni</div>
+      <div class="text-xs text-muted">${dcLast !== '—' ? 'Ultima: ' + dcLast : 'Mai avviato'}</div>
     </div>
     <div>
       <div class="text-xs text-muted" style="margin-bottom:4px">CONFIG</div>
