@@ -20,7 +20,7 @@ BASE_URL = "https://www.moltbook.com/api/v1"
 AGENT_NAME = "genesia"
 
 # ── Heartbeat schedule ─────────────────────────────────────────────────────────
-_POST_INSIGHTS_EVERY   = 2   # every 2 heartbeats (~1h) → post from insights
+_POST_INSIGHTS_EVERY   = 4   # every 4 heartbeats (~2h) → post from insights (diesel lento)
 _BROWSE_SUBMOLT_EVERY  = 2   # every 2 heartbeats (~1h) → browse & engage submolt
 _SHOWCASE_EVERY        = 6   # every 6 heartbeats (~3h) → post memory showcase
 _DISCOVER_EVERY        = 4   # every 4 heartbeats (~2h) → discover & follow agents
@@ -49,7 +49,7 @@ DISCOVERY_KEYWORDS = [
 ]
 
 # Soglia giorni dopo cui un insight già postato può essere ripostato (riformulato)
-_REPOST_AFTER_DAYS = 3
+_REPOST_AFTER_DAYS = 7
 
 # ── Spam & manipulation detection ─────────────────────────────────────────────
 _SPAM_SIGNALS = [

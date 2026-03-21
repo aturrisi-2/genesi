@@ -48,10 +48,15 @@ def age_lbl(days) -> str:
     return f"[{days}gg]"
 
 _SCRIPT_PATH         = Path(__file__).parent.parent / "scripts" / "training_marathon.py"
+_DEEP_CONVO_SCRIPT   = Path(__file__).parent.parent / "scripts" / "deep_conversation.py"
 TRAINING_USER_EMAIL  = os.getenv("TRAINING_USER_EMAIL",    "alfio.turrisi@gmail.com")
 TRAINING_USER_PWD    = os.getenv("TRAINING_USER_PASSWORD", "ZOEennio0810")
 TRAINING_ADMIN_EMAIL = os.getenv("TRAINING_ADMIN_EMAIL",   "idappleturrisi@gmail.com")
 TRAINING_ADMIN_PWD   = os.getenv("TRAINING_ADMIN_PASSWORD","ZOEennio0810")
+
+DEEP_CONVO_STATUS_KEY   = "admin/deep_convo_training_status"
+DEEP_CONVO_MIN_PATTERNS = 4    # soglia: se patterns distillati < 4 → lancia deep convo
+DEEP_CONVO_COOLDOWN_H   = 8    # ore minime tra due deep convo automatici consecutivi
 
 
 class TrainingAutopilot:
@@ -117,6 +122,13 @@ class TrainingAutopilot:
             asyncio.create_task(self._run_auto_training(state))
             actions.append(f"training_triggered ({reason})")
             logger.info("AUTOPILOT_TRAINING_TRIGGERED reason=%s", reason)
+
+        # 4. Deep conversation auto se pool insights esaurito
+        dc_should, dc_reason = await self._should_deep_convo(state)
+        if dc_should:
+            asyncio.create_task(self._run_deep_convo_auto(state))
+            actions.append(f"deep_convo_triggered ({dc_reason})")
+            logger.info("AUTOPILOT_DEEP_CONVO_TRIGGERED reason=%s", dc_reason)
 
         # Persiste stato
         state["last_tick"]    = now.isoformat()
@@ -401,6 +413,93 @@ Rispondi SOLO con JSON valido (niente altro testo):
             state["last_auto_training_error"] = str(e)
             await storage.save(AUTOPILOT_KEY, state)
 
+    # ── Deep conversation auto-trigger ────────────────────────────────────────
+
+    async def _should_deep_convo(self, state: dict) -> Tuple[bool, str]:
+        """
+        Ritorna (True, motivo) se il pool di insights distillati è esaurito.
+        Condizioni: patterns < soglia + cooldown passato + nessun deep convo in corso.
+        """
+        # Nessun lancio se c'è già un deep convo in corso
+        dc_status = await storage.load(DEEP_CONVO_STATUS_KEY, default={})
+        if isinstance(dc_status, dict) and dc_status.get("status") in ("running", "starting"):
+            return False, ""
+
+        # Cooldown tra deep convo automatici
+        last_end = state.get("last_deep_convo_end")
+        if last_end:
+            try:
+                elapsed_h = (datetime.utcnow() - datetime.fromisoformat(last_end)).total_seconds() / 3600
+                if elapsed_h < DEEP_CONVO_COOLDOWN_H:
+                    return False, ""
+            except Exception:
+                pass
+
+        # Conta i pattern distillati disponibili
+        distilled = await storage.load("moltbook:distilled_insights", default={})
+        patterns = distilled.get("patterns", []) if isinstance(distilled, dict) else []
+        if len(patterns) < DEEP_CONVO_MIN_PATTERNS:
+            return True, f"patterns={len(patterns)}<{DEEP_CONVO_MIN_PATTERNS}"
+
+        return False, ""
+
+    async def _run_deep_convo_auto(self, state: dict):
+        """Lancia deep_conversation.py in background e aggiorna contatore."""
+        try:
+            cmd = [
+                sys.executable, str(_DEEP_CONVO_SCRIPT),
+                "--email",    TRAINING_ADMIN_EMAIL,
+                "--password", TRAINING_ADMIN_PWD,
+                "--themes",   "12",
+                "--pause",    "30",
+            ]
+
+            # Aggiorna status per il pannello admin
+            dc_status = {
+                "status":     "running",
+                "started_at": datetime.utcnow().isoformat(),
+                "triggered_by": "autopilot",
+                "themes": 12,
+                "pause": 30.0,
+                "output_lines": [],
+                "pid": None,
+            }
+            await storage.save(DEEP_CONVO_STATUS_KEY, dc_status)
+
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            dc_status["pid"] = proc.pid
+            await storage.save(DEEP_CONVO_STATUS_KEY, dc_status)
+
+            state["last_deep_convo_start"] = datetime.utcnow().isoformat()
+            state["deep_convo_auto_count"] = state.get("deep_convo_auto_count", 0) + 1
+            await storage.save(AUTOPILOT_KEY, state)
+
+            logger.info("AUTOPILOT_DEEP_CONVO_STARTED pid=%d count=%d",
+                        proc.pid, state["deep_convo_auto_count"])
+
+            await proc.wait()
+
+            state["last_deep_convo_end"]  = datetime.utcnow().isoformat()
+            state["last_deep_convo_code"] = proc.returncode
+            await storage.save(AUTOPILOT_KEY, state)
+
+            dc_status["status"]       = "completed" if proc.returncode == 0 else "failed"
+            dc_status["returncode"]   = proc.returncode
+            dc_status["completed_at"] = datetime.utcnow().isoformat()
+            await storage.save(DEEP_CONVO_STATUS_KEY, dc_status)
+
+            logger.info("AUTOPILOT_DEEP_CONVO_DONE returncode=%d", proc.returncode)
+
+        except Exception as e:
+            logger.error("AUTOPILOT_DEEP_CONVO_ERROR err=%s", e)
+            state["last_deep_convo_end"]   = datetime.utcnow().isoformat()
+            state["last_deep_convo_error"] = str(e)
+            await storage.save(AUTOPILOT_KEY, state)
+
     # ── Status per la dashboard ────────────────────────────────────────────────
 
     async def get_status(self) -> dict:
@@ -432,6 +531,14 @@ Rispondi SOLO con JSON valido (niente altro testo):
             "last_curation_reason": state.get("last_curation_reason", ""),
             "ticks_total":          state.get("ticks_total", 0),
             "next_check_min":       next_check_min,
+            "deep_convo": {
+                "auto_count":  state.get("deep_convo_auto_count", 0),
+                "last_start":  state.get("last_deep_convo_start"),
+                "last_end":    state.get("last_deep_convo_end"),
+                "last_code":   state.get("last_deep_convo_code"),
+                "min_patterns_threshold": DEEP_CONVO_MIN_PATTERNS,
+                "cooldown_h":            DEEP_CONVO_COOLDOWN_H,
+            },
             "config": {
                 "max_lessons":        MAX_ACTIVE_LESSONS,
                 "train_threshold":    f"{int(TRAIN_LESSON_RATIO*100)}%",
