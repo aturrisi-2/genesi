@@ -44,11 +44,16 @@ async def _compute_score() -> dict:
 
     # ── 1. Lab rules ───────────────────────────────────────────────────────
     try:
-        lab_events = await storage.load("lab:feedback_events", default={"events": []})
-        all_obs = lab_events.get("events", [])
-        lab_rules_data = await storage.load("lab:rules", default={"rules": []})
-        active_rules = len([r for r in lab_rules_data.get("rules", []) if r.get("active")])
-        total_obs = len(all_obs)
+        import json as _json
+        from pathlib import Path as _Path
+        # Le regole sono in lab/global_prompt.json (feedback_rules) + stato ciclo
+        gp_path = _Path("lab/global_prompt.json")
+        gp_data = _json.loads(gp_path.read_text(encoding="utf-8")) if gp_path.exists() else {}
+        active_rules = len(gp_data.get("feedback_rules", []))
+        # Conteggio osservazioni da fallbacks
+        fb_path = _Path("memory/admin/fallbacks.json")
+        fb_data = _json.loads(fb_path.read_text(encoding="utf-8")) if fb_path.exists() else []
+        total_obs = len(fb_data) if isinstance(fb_data, list) else 0
         rule_score = _pct(active_rules, _TARGET_LAB_RULES)
         components["lab_rules"] = {
             "score": rule_score,
@@ -98,8 +103,8 @@ async def _compute_score() -> dict:
     # ── 4. Training lessons ────────────────────────────────────────────────
     try:
         from core.training_engine import training_engine
-        summary = await training_engine.get_summary()
-        active_lessons = summary.get("active_lessons", 0)
+        stats = await training_engine.get_stats()
+        active_lessons = stats.get("active_lessons", 0)
         tr_score = _pct(active_lessons, _TARGET_LESSONS)
         components["training"] = {
             "score": tr_score,
