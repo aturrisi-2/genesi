@@ -221,14 +221,14 @@ class CapabilityTracker:
             user_ids = await storage.list_keys("global_insights")
             if not user_ids:
                 return 0.0
-            total = len(user_ids)
-            rich  = 0
-            for uid in user_ids[:100]:
+            sample   = user_ids[:100]   # campione — divide per la stessa dimensione
+            rich     = 0
+            for uid in sample:
                 data     = await storage.load(f"global_insights:{uid}", default={})
                 insights = data.get("insights", []) if isinstance(data, dict) else []
                 if len(insights) >= 3:
                     rich += 1
-            return round(rich / max(total, 1), 3)
+            return round(rich / max(len(sample), 1), 3)
         except Exception:
             return 0.0
 

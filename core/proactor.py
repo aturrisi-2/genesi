@@ -3802,7 +3802,7 @@ Messaggio: "{message}" """
                 sys_prompt,
                 message,
                 user_id=user_id or "system",
-                route="live_search"
+                route="memory"   # interno non-streaming: non deve andare nell'SSE queue
             )
             if new_response and len(new_response.strip()) > 20:
                 log("AUTO_SEARCH_OK", user_id=user_id,
