@@ -284,6 +284,31 @@
                 <div id="mb-error" style="display:none; font-size:0.82rem; color:#f87171;">Errore nel caricamento dati Moltbook.</div>
             </div>
 
+            <!-- ── DEEP CONVERSATION TRAINING ──────────────────────────── -->
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">🧠 Deep Conversation Training</h2>
+            <div id="dc-section"
+                style="background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:15px; margin-top:12px;">
+                <p style="font-size:0.82rem; color:#aaa; margin-bottom:12px;">
+                    Si attiva automaticamente quando i pattern distillati scendono sotto la soglia.
+                    Simula conversazioni umane profonde per rigenerare gli insights di Genesi.
+                </p>
+                <div id="dc-stats" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:12px;">
+                    <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:10px;">
+                        <div id="dc-count" style="font-size:1.5rem; font-weight:700; color:#818cf8;">—</div>
+                        <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Sessioni auto</div>
+                    </div>
+                    <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:10px;">
+                        <div id="dc-status-badge" style="font-size:0.9rem; font-weight:700; color:#6b7280;">—</div>
+                        <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Stato</div>
+                    </div>
+                    <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:10px;">
+                        <div id="dc-threshold" style="font-size:0.9rem; font-weight:700; color:#a5b4fc;">—</div>
+                        <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Soglia pattern</div>
+                    </div>
+                </div>
+                <div id="dc-last" style="font-size:0.75rem; color:#6b7280;"></div>
+            </div>
+
             <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Dettaglio Utenti</h2>
             <div class="user-table-container">
                 <table id="user-table">
@@ -374,6 +399,7 @@
             msg.className = 'msg error';
         } else {
             loadStats();
+            loadDeepConvoStatus();
             loadSuggestions();
             loadLabCycleStatus();
             loadMoltbookStatus();
@@ -725,6 +751,44 @@
 
             } catch(e) {
                 document.getElementById('gauge-loading').textContent = 'Indice non disponibile.';
+            }
+        }
+
+        async function loadDeepConvoStatus() {
+            try {
+                const res = await fetch('/api/admin/training/autopilot-status', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) return;
+                const ap = await res.json();
+                const dc = ap.deep_convo || {};
+
+                const count = dc.auto_count ?? 0;
+                document.getElementById('dc-count').textContent = count;
+                document.getElementById('dc-count').style.color = count > 0 ? '#818cf8' : '#6b7280';
+
+                // Stato corrente dal deep convo status
+                const res2 = await fetch('/api/admin/training/deep-convo-status', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const dcStatus = res2.ok ? await res2.json() : {};
+                const st = dcStatus.status || 'idle';
+                const stColors = { running: '#22c55e', starting: '#22c55e', completed: '#818cf8', failed: '#ef4444', idle: '#6b7280' };
+                const stLabels = { running: '● In corso', starting: '● Avvio...', completed: '✓ Completato', failed: '✗ Errore', idle: '○ Inattivo' };
+                const badge = document.getElementById('dc-status-badge');
+                badge.textContent = stLabels[st] || st;
+                badge.style.color = stColors[st] || '#6b7280';
+
+                document.getElementById('dc-threshold').textContent = `< ${dc.min_patterns_threshold ?? 4} pattern`;
+
+                const parts = [];
+                if (dc.last_end) parts.push('Ultima: ' + new Date(dc.last_end).toLocaleString('it-IT'));
+                if (dc.cooldown_h) parts.push(`Cooldown: ${dc.cooldown_h}h`);
+                if (dcStatus.triggered_by) parts.push('Trigger: ' + dcStatus.triggered_by);
+                document.getElementById('dc-last').textContent = parts.join('  ·  ');
+
+            } catch(e) {
+                // fail silently
             }
         }
 
