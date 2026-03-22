@@ -73,11 +73,23 @@
                 const data = await res.json();
 
                 if (res.ok) {
-                    msg.innerHTML = `<strong>Registrazione completata!</strong><br>${data.message || 'Controlla la tua email per verificare l\'account.'}`;
+                    const fromTelegram = new URLSearchParams(window.location.search).get('from') === 'telegram';
+                    let extraHtml = '';
+                    if (fromTelegram) {
+                        try {
+                            const bl = await fetch('/api/telegram/bot-link').then(r => r.json());
+                            if (bl.bot_link) {
+                                extraHtml = `<br><br><a href="${bl.bot_link}" class="btn" style="display:inline-block;margin-top:8px;text-decoration:none;">↩ Torna su Telegram</a>`;
+                            }
+                        } catch (_) {}
+                    }
+                    msg.innerHTML = `<strong>Registrazione completata!</strong><br>${data.message || 'Puoi ora accedere.'}${extraHtml}`;
                     msg.className = 'msg success';
                     form.reset();
-                    // Optional: redirect to login after 3 seconds
-                    setTimeout(() => { if (res.ok) window.location.href = '/login'; }, 3000);
+                    // Redirect automatico solo se non arriva da Telegram
+                    if (!fromTelegram) {
+                        setTimeout(() => { window.location.href = '/login'; }, 3000);
+                    }
                 } else {
                     let errorMsg = 'Errore durante la registrazione.';
                     if (typeof data.detail === 'string') {

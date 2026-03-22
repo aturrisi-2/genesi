@@ -132,7 +132,16 @@ async def download_file(file_id: str) -> bytes | None:
 
 
 async def set_webhook(webhook_url: str):
+    global _BOT_USERNAME
     async with httpx.AsyncClient(timeout=10) as client:
+        # Scopri username del bot
+        try:
+            me = await client.get(f"{TELEGRAM_API}/getMe")
+            _BOT_USERNAME = me.json().get("result", {}).get("username", "")
+            logger.info("TELEGRAM_BOT_USERNAME=%s", _BOT_USERNAME)
+        except Exception:
+            pass
+        # Registra webhook
         res = await client.post(f"{TELEGRAM_API}/setWebhook",
                                 json={"url": webhook_url,
                                       "allowed_updates": ["message"]})
@@ -242,7 +251,14 @@ async def _send_response(chat_id: int, reply: str):
         await send_message(chat_id, reply)
 
 
-_WEBAPP_LINK = "https://genesi.lucadigitale.eu/"
+_WEBAPP_LINK  = "https://genesi.lucadigitale.eu/"
+_WEBAPP_REG   = "https://genesi.lucadigitale.eu/register?from=telegram"
+_BOT_USERNAME = ""   # popolato da set_webhook via getMe
+
+
+def get_bot_link() -> str:
+    return f"https://t.me/{_BOT_USERNAME}" if _BOT_USERNAME else "https://t.me/"
+
 
 _WELCOME_MSG = (
     "✅ Collegato!\n\n"
@@ -308,11 +324,14 @@ async def handle_update(update: dict):
                     f"Scrivimi, mandami foto o vocali.\n"
                     f"Webapp completa: {webapp}")
             else:
-                session = {"state": STATE_AWAIT_EMAIL}
+                session = {"state": STATE_IDLE}
                 await storage.save(_session_key(chat_id), session)
                 await send_message(chat_id,
-                    f"Ciao {first_name}! 👋 Sono Genesi, il tuo assistente AI.\n\n"
-                    f"Inserisci la tua email:")
+                    f"Ciao {first_name}! 👋 Sono *Genesi*, il tuo assistente AI personale.\n\n"
+                    f"Per usarmi al massimo hai bisogno di un account.\n\n"
+                    f"• Hai già un account? Scrivi /login\n"
+                    f"• Nuovo? Registrati qui in Telegram: /registrati\n"
+                    f"  oppure sul sito: {_WEBAPP_REG}")
             return
 
         if text in ("/login", "/accedi"):
@@ -397,9 +416,11 @@ async def handle_update(update: dict):
         # ── Verifica login ─────────────────────────────────────────────────────
         token = session.get("token")
         if not token:
-            session = {"state": STATE_AWAIT_EMAIL}
-            await storage.save(_session_key(chat_id), session)
-            await send_message(chat_id, "Inserisci prima la tua email:")
+            await send_message(chat_id,
+                "Per chattare con me hai bisogno di un account.\n\n"
+                "• Già registrato? /login\n"
+                "• Nuovo? /registrati (qui in Telegram)\n"
+                f"  oppure: {_WEBAPP_REG}")
             return
 
         city = session.get("city", "")

@@ -7,7 +7,7 @@ import asyncio
 import logging
 from fastapi import APIRouter, Request
 
-from core.telegram_bot import handle_update
+from core.telegram_bot import handle_update, get_bot_link
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/telegram", tags=["telegram"])
@@ -22,3 +22,9 @@ async def telegram_webhook(request: Request):
     except Exception as e:
         logger.error("TELEGRAM_WEBHOOK_ERROR err=%s", e)
     return {"ok": True}
+
+
+@router.get("/bot-link")
+async def telegram_bot_link():
+    """Ritorna il link diretto al bot Telegram (usato dalla webapp dopo la registrazione)."""
+    return {"bot_link": get_bot_link()}
