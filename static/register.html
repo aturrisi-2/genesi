@@ -85,6 +85,7 @@
                     }
                     msg.innerHTML = `<strong>Registrazione completata!</strong><br>${data.message || 'Puoi ora accedere.'}${extraHtml}`;
                     msg.className = 'msg success';
+                    msg.style.display = 'block';
                     form.reset();
                     // Redirect automatico solo se non arriva da Telegram
                     if (!fromTelegram) {
@@ -99,6 +100,7 @@
                     }
                     msg.innerHTML = errorMsg;
                     msg.className = 'msg error';
+                    msg.style.display = 'block';
                 }
             } catch (err) {
                 msg.textContent = 'Errore di connessione.';
