@@ -163,6 +163,21 @@ async def _login(email: str, password: str) -> str | None:
     return None
 
 
+async def _auto_refresh(chat_id: int, session: dict) -> str | None:
+    """Rinnova silenziosamente il token usando le credenziali salvate in sessione.
+    Ritorna il nuovo token se ok, None se le credenziali non sono più valide."""
+    email    = session.get("email", "")
+    password = session.get("password", "")
+    if not email or not password:
+        return None
+    new_token = await _login(email, password)
+    if new_token:
+        session["token"] = new_token
+        await storage.save(_session_key(chat_id), session)
+        logger.info("TELEGRAM_TOKEN_REFRESHED chat_id=%s", chat_id)
+    return new_token
+
+
 async def _register(email: str, password: str) -> bool:
     async with httpx.AsyncClient(timeout=15) as client:
         res = await client.post(f"{GENESI_URL}/api/auth/register",
@@ -280,9 +295,9 @@ _WELCOME_CITY_PREAMBLE = (
 
 # ── Post-login ─────────────────────────────────────────────────────────────────
 
-async def _complete_login(chat_id: int, token: str, email: str):
+async def _complete_login(chat_id: int, token: str, email: str, password: str = ""):
     city = await _get_city(token)
-    session = {"token": token, "email": email, "city": city,
+    session = {"token": token, "email": email, "password": password, "city": city,
                "state": STATE_IDLE, "welcomed": False}
     if not city:
         session["state"] = STATE_AWAIT_CITY
@@ -370,7 +385,7 @@ async def handle_update(update: dict):
                     "Credenziali non valide. Reinserisci la tua email:")
                 return
             logger.info("TELEGRAM_LOGIN_OK telegram_id=%s email=%s", chat_id, email)
-            await _complete_login(chat_id, token, email)
+            await _complete_login(chat_id, token, email, password)
             return
 
         # ── Flusso REGISTRAZIONE ───────────────────────────────────────────────
@@ -394,7 +409,7 @@ async def handle_update(update: dict):
                 return
             token = await _login(email, password)
             logger.info("TELEGRAM_REGISTER_OK telegram_id=%s email=%s", chat_id, email)
-            await _complete_login(chat_id, token, email)
+            await _complete_login(chat_id, token, email, password)
             return
 
         # ── Città mancante ─────────────────────────────────────────────────────
@@ -425,6 +440,28 @@ async def handle_update(update: dict):
 
         city = session.get("city", "")
 
+        async def _do_chat(message: str) -> str:
+            """Chat con auto-refresh del token in caso di scadenza."""
+            nonlocal token, session
+            reply = await _chat(token, message, city=city)
+            if reply == "__TOKEN_EXPIRED__":
+                new_token = await _auto_refresh(chat_id, session)
+                if new_token:
+                    token = new_token
+                    reply = await _chat(token, message, city=city)
+                else:
+                    reply = "__AUTH_FAILED__"
+            return reply
+
+        async def _handle_reply(reply: str) -> bool:
+            """Invia la risposta; ritorna False se auth fallita definitivamente."""
+            if reply == "__AUTH_FAILED__" or reply == "__TOKEN_EXPIRED__":
+                await send_message(chat_id,
+                    "Non riesco ad autenticarti. Usa /login per riconnetterti.")
+                return False
+            await _send_response(chat_id, reply)
+            return True
+
         # ── FOTO ───────────────────────────────────────────────────────────────
         if photo:
             await send_typing(chat_id)
@@ -439,13 +476,9 @@ async def handle_update(update: dict):
             if analysis:
                 user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
 
-            reply = await _chat(token, user_msg, city=city)
-            if reply == "__TOKEN_EXPIRED__":
-                session = {"state": STATE_AWAIT_EMAIL}
-                await storage.save(_session_key(chat_id), session)
-                await send_message(chat_id, "Sessione scaduta. Reinserisci la tua email:")
+            reply = await _do_chat(user_msg)
+            if not await _handle_reply(reply):
                 return
-            await _send_response(chat_id, reply)
             logger.info("TELEGRAM_PHOTO_OK chat_id=%s", chat_id)
             return
 
@@ -464,13 +497,9 @@ async def handle_update(update: dict):
             if analysis:
                 user_msg = f"{user_msg}\n\n[Contenuto: {analysis[:500]}]"
 
-            reply = await _chat(token, user_msg, city=city)
-            if reply == "__TOKEN_EXPIRED__":
-                session = {"state": STATE_AWAIT_EMAIL}
-                await storage.save(_session_key(chat_id), session)
-                await send_message(chat_id, "Sessione scaduta. Reinserisci la tua email:")
+            reply = await _do_chat(user_msg)
+            if not await _handle_reply(reply):
                 return
-            await _send_response(chat_id, reply)
             logger.info("TELEGRAM_DOCUMENT_OK chat_id=%s filename=%s", chat_id, filename)
             return
 
@@ -491,13 +520,9 @@ async def handle_update(update: dict):
 
             # Mostra la trascrizione e rispondi
             await send_message(chat_id, f"🎤 {transcription}")
-            reply = await _chat(token, transcription, city=city)
-            if reply == "__TOKEN_EXPIRED__":
-                session = {"state": STATE_AWAIT_EMAIL}
-                await storage.save(_session_key(chat_id), session)
-                await send_message(chat_id, "Sessione scaduta. Reinserisci la tua email:")
+            reply = await _do_chat(transcription)
+            if not await _handle_reply(reply):
                 return
-            await _send_response(chat_id, reply)
             logger.info("TELEGRAM_VOICE_OK chat_id=%s transcription=%s",
                         chat_id, transcription[:50])
             return
@@ -516,15 +541,8 @@ async def handle_update(update: dict):
             return
 
         await send_typing(chat_id)
-        reply = await _chat(token, text, city=city)
-
-        if reply == "__TOKEN_EXPIRED__":
-            session = {"state": STATE_AWAIT_EMAIL}
-            await storage.save(_session_key(chat_id), session)
-            await send_message(chat_id, "Sessione scaduta. Reinserisci la tua email:")
-            return
-
-        await _send_response(chat_id, reply)
+        reply = await _do_chat(text)
+        await _handle_reply(reply)
 
     except Exception as e:
         logger.error("TELEGRAM_HANDLE_ERROR err=%s", e)
