@@ -242,23 +242,40 @@ async def _send_response(chat_id: int, reply: str):
         await send_message(chat_id, reply)
 
 
+_WEBAPP_LINK = "https://genesi.lucadigitale.eu/"
+
+_WELCOME_MSG = (
+    "✅ Collegato!\n\n"
+    "Sono *Genesi*, la tua assistente AI personale.\n\n"
+    "Puoi:\n"
+    "• 💬 Scrivermi in chat libera\n"
+    "• 🖼 Mandarmi foto da analizzare\n"
+    "• 🎤 Inviarmi messaggi vocali\n"
+    "• 📄 Condividere PDF e documenti\n"
+    "• ☀️ Chiedere meteo, notizie, ricerche web\n\n"
+    "Ogni nostra conversazione mi aiuta a conoscerti meglio e a migliorare.\n\n"
+    f"Trovi anche la versione completa su: {_WEBAPP_LINK}"
+)
+
+_WELCOME_CITY_PREAMBLE = (
+    "Per darti il meteo della tua zona, dimmi in quale città sei:"
+)
+
+
 # ── Post-login ─────────────────────────────────────────────────────────────────
 
 async def _complete_login(chat_id: int, token: str, email: str):
     city = await _get_city(token)
-    session = {"token": token, "email": email, "city": city, "state": STATE_IDLE}
+    session = {"token": token, "email": email, "city": city,
+               "state": STATE_IDLE, "welcomed": False}
     if not city:
         session["state"] = STATE_AWAIT_CITY
         await storage.save(_session_key(chat_id), session)
-        await send_message(chat_id,
-            "✅ Collegato!\n\n"
-            "Per darti il meteo della tua zona, dimmi in quale città sei:")
+        await send_message(chat_id, _WELCOME_MSG + "\n\n" + _WELCOME_CITY_PREAMBLE)
     else:
+        session["welcomed"] = True
         await storage.save(_session_key(chat_id), session)
-        await send_message(chat_id,
-            "✅ Collegato!\n\n"
-            "Sono Genesi. Puoi scrivermi, mandarmi foto o messaggi vocali. "
-            "Sono qui.")
+        await send_message(chat_id, _WELCOME_MSG)
 
 
 # ── Main update handler ────────────────────────────────────────────────────────
@@ -284,9 +301,12 @@ async def handle_update(update: dict):
         # ── Comandi globali ────────────────────────────────────────────────────
         if text == "/start":
             if session.get("token"):
+                name_part = f" {first_name}" if first_name else ""
+                webapp = _WEBAPP_LINK
                 await send_message(chat_id,
-                    f"Bentornato {first_name}! Sono qui.\n\n"
-                    f"Puoi scrivermi, mandarmi foto o messaggi vocali.")
+                    f"Bentornato{name_part}! Sono qui 👋\n\n"
+                    f"Scrivimi, mandami foto o vocali.\n"
+                    f"Webapp completa: {webapp}")
             else:
                 session = {"state": STATE_AWAIT_EMAIL}
                 await storage.save(_session_key(chat_id), session)
@@ -362,11 +382,16 @@ async def handle_update(update: dict):
         if state == STATE_AWAIT_CITY and text:
             city = text.strip().title()
             await _save_city(session["token"], city)
-            session.update({"city": city, "state": STATE_IDLE})
+            session.update({"city": city, "state": STATE_IDLE, "welcomed": True})
             await storage.save(_session_key(chat_id), session)
-            await send_message(chat_id,
-                f"Perfetto, ti ricordo a {city}!\n\n"
-                f"Scrivimi, mandami foto o vocali — sono qui.")
+            # Riprendi eventuale messaggio in coda (es. meteo chiesto prima della città)
+            pending = session.pop("pending_message", None)
+            if pending:
+                await send_message(chat_id, f"Perfetto! Rispondo subito...")
+                reply = await _chat(session["token"], pending, city=city)
+                await _send_response(chat_id, reply)
+            else:
+                await send_message(chat_id, f"Perfetto, ti ricordo a {city}! Scrivimi pure.")
             return
 
         # ── Verifica login ─────────────────────────────────────────────────────
