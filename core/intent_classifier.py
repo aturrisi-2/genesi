@@ -660,6 +660,19 @@ class IntentClassifier:
         """
         message_lower = (message or "").lower().strip()
 
+        # PRIORITÀ ASSOLUTA 0: saluti semplici — mai classificare come tool/weather per contesto
+        # Garantisce che "Ciao", "Salve", "Hey" non vengano mai misclassificati come weather
+        # anche quando l'ultimo intent era weather.
+        _bare_greeting = message_lower.rstrip("!?., ")
+        _simple_greetings = {
+            "ciao", "salve", "hey", "hello", "hi", "hola",
+            "buongiorno", "buonasera", "buon pomeriggio", "buonanotte",
+            "bello", "ehi",
+        }
+        if _bare_greeting in _simple_greetings:
+            log("INTENT_CLASSIFIED", intent="greeting", user_id=user_id, engine="regex_absolute", message=message[:50])
+            return ["greeting"]
+
         # PRIORITÀ ASSOLUTA: image generation deterministico (evita false chat_free dal classificatore LLM)
         image_keywords = self.gpt_patterns.get("image_generation", [])
         if any(keyword in message_lower for keyword in image_keywords):
@@ -856,6 +869,7 @@ REGOLE SPECIALI:
 - Se il messaggio contiene "cosa pensi", "cosa ne pensi", "ti piace", "ti sembra", "sei d'accordo" riguardo al meteo/temperatura/freddo/caldo, usa "relational" o "chat_free" — NON "weather".
 - Se l'utente chiede dove si trova un'altra città, luogo o persona (es. "dove si trova Sofia", "dove è mia figlia"), usa "chat_free" — NON "dove_sono".
 - Se il messaggio è un imperativo che chiede a Genesi di rispondere/decidere ("dimmelo tu", "dimmi tu", "scegli tu", "decidilo tu"), usa sempre "chat_free" — NON "news" o altri tool.
+- Se il messaggio è un semplice saluto (ciao, salve, hey, buongiorno, ecc.) usa SEMPRE "chat_free" indipendentemente dal contesto conversazionale precedente.
 - Se l'intenzione non è chiara, usa uno score basso.
 """
 
