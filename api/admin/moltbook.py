@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from auth.router import require_admin
 from auth.models import AuthUser
 from core.storage import storage
+from core.moltbook_service import moltbook_service
 
 router = APIRouter(prefix="/admin/moltbook", tags=["admin-moltbook"])
 
@@ -27,12 +28,19 @@ async def moltbook_status(_: AuthUser = Depends(require_admin)):
         t = rec.get("type", "unknown")
         by_type[t] = by_type.get(t, 0) + 1
 
-    # Engagement on published posts
+    # Engagement on published posts (upvotes/comments aggiornati da _check_post_engagement)
     insight_tracker = await storage.load("moltbook:insight_tracker",
                                          default={"posts": []})
     posts = insight_tracker.get("posts", [])
     total_upvotes = sum(p.get("upvotes", 0) for p in posts)
     total_comments = sum(p.get("comments", 0) for p in posts)
+
+    # Dati live dal profilo Moltbook (karma, post reali, commenti reali)
+    live_profile: dict = {}
+    try:
+        live_profile = await moltbook_service.get_my_activity()
+    except Exception:
+        pass
 
     # Latest consolidated insights
     insights_data = await storage.load("moltbook:interaction_insights", default={})
@@ -65,6 +73,13 @@ async def moltbook_status(_: AuthUser = Depends(require_admin)):
             "posts_published": len(posts),
             "total_upvotes": total_upvotes,
             "total_comments": total_comments,
+        },
+        # Dati live dal sito Moltbook (fonte autoritativa)
+        "live_profile": {
+            "karma": live_profile.get("karma", None),
+            "followers": live_profile.get("followers", None),
+            "posts_count": live_profile.get("posts_count", None),
+            "comments_count": live_profile.get("comments_count", None),
         },
         "agent_memory": {
             "agents_known": agents_known,

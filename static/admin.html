@@ -257,10 +257,12 @@
                             <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Obs. → Lab</div>
                         </div>
                     </div>
+                    <!-- Profilo live Moltbook -->
+                    <div id="mb-live-profile" style="font-size:0.85rem; color:#d1fae5; margin-bottom:10px; padding:6px 10px; background:rgba(110,231,183,0.07); border-radius:6px; border-left:3px solid #6ee7b7;">—</div>
                     <!-- Interaction breakdown -->
                     <div id="mb-breakdown" style="font-size:0.78rem; color:#9ca3af; margin-bottom:12px; display:flex; flex-wrap:wrap; gap:8px;"></div>
-                    <!-- Engagement -->
-                    <div id="mb-engagement" style="font-size:0.82rem; color:#d1fae5; margin-bottom:12px;"></div>
+                    <!-- Engagement locale -->
+                    <div id="mb-engagement" style="font-size:0.82rem; color:#9ca3af; margin-bottom:12px;"></div>
                     <!-- Last consolidation -->
                     <div id="mb-consolidation" style="font-size:0.8rem; color:#ccc;"></div>
                     <!-- Insights -->
@@ -816,10 +818,25 @@
                     .map(([k,v]) => `<span style="background:rgba(16,185,129,0.12);padding:2px 8px;border-radius:4px;">${typeLabels[k]||k}: <b>${v}</b></span>`)
                     .join('');
 
-                // Engagement
+                // Profilo live da Moltbook (fonte autoritativa)
+                const lp = d.live_profile || {};
+                const liveEl = document.getElementById('mb-live-profile');
+                if (liveEl) {
+                    const karma = lp.karma != null ? lp.karma : '—';
+                    const posts = lp.posts_count != null ? lp.posts_count : '—';
+                    const comms = lp.comments_count != null ? lp.comments_count : '—';
+                    const follows = lp.followers != null ? lp.followers : '—';
+                    liveEl.innerHTML =
+                        `<b style="color:#6ee7b7">${karma}</b> karma &nbsp;·&nbsp; ` +
+                        `<b>${posts}</b> post su Moltbook &nbsp;·&nbsp; ` +
+                        `<b>${comms}</b> commenti su Moltbook &nbsp;·&nbsp; ` +
+                        `<b>${follows}</b> follower`;
+                }
+
+                // Engagement locale (upvotes/commenti sui nostri post)
                 const eng = d.engagement;
                 document.getElementById('mb-engagement').innerHTML =
-                    `<b>${eng.posts_published}</b> post pubblicati · <b>${eng.total_upvotes}</b> upvote ricevuti · <b>${eng.total_comments}</b> commenti ricevuti`;
+                    `<b>${eng.posts_published}</b> post tracciati localmente · <b>${eng.total_upvotes}</b> upvote · <b>${eng.total_comments}</b> commenti ricevuti`;
 
                 // Last consolidation
                 const lc = d.last_consolidation;

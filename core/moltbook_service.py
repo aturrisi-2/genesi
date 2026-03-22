@@ -1127,7 +1127,8 @@ class MoltbookService:
     async def _check_post_engagement(self, tracker: dict) -> None:
         """Controlla engagement solo dei post recenti (ultimi 7gg, max 5 per heartbeat)."""
         ilog = await self._load_interaction_log()
-        changed = False
+        ilog_changed = False
+        tracker_changed = False
         cutoff = (datetime.utcnow() - timedelta(days=7)).isoformat()
         recent_posts = [
             e for e in tracker.get("posts", [])
@@ -1142,14 +1143,22 @@ class MoltbookService:
             comments = data.get("post", {}).get("comment_count", 0)
             log("MOLTBOOK_POST_ENGAGEMENT", post_id=post_id,
                 upvotes=upvotes, comments=comments)
+            # Aggiorna insight_tracker (letto dall'admin per i totali)
+            entry["upvotes"] = upvotes
+            entry["comments"] = comments
+            entry["engagement_checked_at"] = datetime.utcnow().isoformat()
+            tracker_changed = True
+            # Aggiorna anche interaction_log
             for rec in ilog["interactions"]:
                 if rec.get("post_id") == post_id and rec.get("type") in ("post_insight", "post_showcase"):
                     rec["upvotes"] = upvotes
                     rec["comments"] = comments
                     rec["engagement_checked_at"] = datetime.utcnow().isoformat()
-                    changed = True
-        if changed:
+                    ilog_changed = True
+        if ilog_changed:
             await self._save_interaction_log(ilog)
+        if tracker_changed:
+            await self._save_insight_tracker(tracker)
 
     # ── Post from insights → memory submolt ────────────────────────────────────
 
