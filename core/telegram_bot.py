@@ -2,11 +2,15 @@
 GENESI — Telegram Bot
 Gestisce le interazioni Telegram come canale alternativo alla webapp.
 Flusso login conversazionale: il bot chiede email e password separatamente.
+Se la città non è nel profilo, la chiede all'utente prima di procedere.
 """
 
 import asyncio
+import base64
+import json
 import logging
 import os
+import re
 import httpx
 from core.storage import storage
 
@@ -16,15 +20,55 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_API   = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 GENESI_URL     = "http://localhost:8000"
 
-# Stati conversazionali per il login
-STATE_IDLE              = "idle"
-STATE_AWAIT_EMAIL       = "await_email"
-STATE_AWAIT_PASSWORD    = "await_password"
-STATE_AWAIT_REG_EMAIL   = "await_reg_email"
+# Parole chiave meteo
+_WEATHER_RE = re.compile(
+    r'\b(meteo|tempo|temperatura|piogge?|sole|vento|previsioni?|forecast|'
+    r'caldo|freddo|nebbia|neve|nuvoloso|sereno|umidità)\b',
+    re.IGNORECASE
+)
+
+# Stati conversazionali
+STATE_IDLE               = "idle"
+STATE_AWAIT_EMAIL        = "await_email"
+STATE_AWAIT_PASSWORD     = "await_password"
+STATE_AWAIT_REG_EMAIL    = "await_reg_email"
 STATE_AWAIT_REG_PASSWORD = "await_reg_password"
+STATE_AWAIT_CITY         = "await_city"
+
 
 def _session_key(telegram_id: int) -> str:
     return f"telegram:session:{telegram_id}"
+
+
+def _decode_user_id(token: str) -> str | None:
+    """Estrae user_id dal JWT senza verifica (uso interno)."""
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (4 - len(payload) % 4)
+        data = json.loads(base64.b64decode(payload))
+        return data.get("sub") or data.get("user_id")
+    except Exception:
+        return None
+
+
+# ── Profilo ────────────────────────────────────────────────────────────────────
+
+async def _get_city(token: str) -> str:
+    user_id = _decode_user_id(token)
+    if not user_id:
+        return ""
+    profile = await storage.load(f"profile:{user_id}", default={})
+    return profile.get("city", "") or ""
+
+
+async def _save_city(token: str, city: str):
+    user_id = _decode_user_id(token)
+    if not user_id:
+        return
+    profile = await storage.load(f"profile:{user_id}", default={})
+    profile["city"] = city
+    await storage.save(f"profile:{user_id}", profile)
+    logger.info("TELEGRAM_CITY_SAVED user_id=%s city=%s", user_id, city)
 
 
 # ── Telegram API helpers ───────────────────────────────────────────────────────
@@ -77,7 +121,11 @@ async def _register(email: str, password: str) -> bool:
         return res.status_code in (200, 201)
 
 
-async def _chat(token: str, message: str) -> str:
+async def _chat(token: str, message: str, city: str = "") -> str:
+    # Se messaggio riguarda il meteo e conosce la città, iniettala se non già presente
+    if city and _WEATHER_RE.search(message) and city.lower() not in message.lower():
+        message = f"{message} (sono a {city})"
+
     async with httpx.AsyncClient(timeout=60) as client:
         res = await client.post(
             f"{GENESI_URL}/api/chat",
@@ -90,6 +138,27 @@ async def _chat(token: str, message: str) -> str:
             return "Genesi non è disponibile in questo momento. Riprova tra poco."
         data = res.json()
         return data.get("response") or data.get("message") or "Nessuna risposta."
+
+
+# ── Post-login: controlla città ────────────────────────────────────────────────
+
+async def _complete_login(chat_id: int, token: str, email: str):
+    """Dopo login: verifica la città nel profilo, se manca la chiede."""
+    city = await _get_city(token)
+    session = {"token": token, "email": email, "city": city, "state": STATE_IDLE}
+
+    if not city:
+        session["state"] = STATE_AWAIT_CITY
+        await storage.save(_session_key(chat_id), session)
+        await send_message(chat_id,
+            f"✅ Collegato!\n\n"
+            f"Per darti il meteo della tua zona, dimmi in quale città sei:")
+    else:
+        await storage.save(_session_key(chat_id), session)
+        await send_message(chat_id,
+            f"✅ Collegato!\n\n"
+            f"Sono Genesi. Ricordo tutto ciò che mi hai già raccontato. "
+            f"Scrivimi pure.")
 
 
 # ── Main update handler ────────────────────────────────────────────────────────
@@ -112,7 +181,7 @@ async def handle_update(update: dict):
         session = await storage.load(_session_key(chat_id)) or {}
         state   = session.get("state", STATE_IDLE)
 
-        # ── Comandi globali (sempre disponibili) ───────────────────────────────
+        # ── Comandi globali ────────────────────────────────────────────────────
         if text == "/start":
             if session.get("token"):
                 await send_message(chat_id,
@@ -122,7 +191,7 @@ async def handle_update(update: dict):
                 await storage.save(_session_key(chat_id), session)
                 await send_message(chat_id,
                     f"Ciao {first_name}! 👋 Sono Genesi, il tuo assistente AI personale.\n\n"
-                    f"Inserisci la tua email Genesi:")
+                    f"Inserisci la tua email:")
             return
 
         if text in ("/login", "/accedi"):
@@ -162,12 +231,8 @@ async def handle_update(update: dict):
                 await send_message(chat_id,
                     "Credenziali non valide. Reinserisci la tua email:")
                 return
-            session = {"token": token, "email": email, "state": STATE_IDLE}
-            await storage.save(_session_key(chat_id), session)
             logger.info("TELEGRAM_LOGIN_OK telegram_id=%s email=%s", chat_id, email)
-            await send_message(chat_id,
-                f"✅ Collegato!\n\nSono Genesi. Ricordo tutto ciò che mi hai "
-                f"già raccontato. Scrivimi pure.")
+            await _complete_login(chat_id, token, email)
             return
 
         # ── Flusso REGISTRAZIONE ───────────────────────────────────────────────
@@ -188,16 +253,23 @@ async def handle_update(update: dict):
                 await storage.save(_session_key(chat_id), session)
                 await send_message(chat_id,
                     "Registrazione non riuscita. Forse esiste già un account "
-                    "con questa email.\n\nInserisci un'altra email, oppure "
-                    "usa /login per accedere:")
+                    "con questa email.\n\nReinserisci un'email:")
                 return
             token = await _login(email, password)
-            session = {"token": token, "email": email, "state": STATE_IDLE}
-            await storage.save(_session_key(chat_id), session)
             logger.info("TELEGRAM_REGISTER_OK telegram_id=%s email=%s", chat_id, email)
+            await _complete_login(chat_id, token, email)
+            return
+
+        # ── Città mancante ─────────────────────────────────────────────────────
+        if state == STATE_AWAIT_CITY:
+            city = text.strip().title()
+            await _save_city(session["token"], city)
+            session["city"]  = city
+            session["state"] = STATE_IDLE
+            await storage.save(_session_key(chat_id), session)
             await send_message(chat_id,
-                f"✅ Account creato!\n\nSono Genesi, il tuo assistente AI "
-                f"personale. Scrivimi qualcosa per cominciare.")
+                f"Perfetto, ti ricordo che sei a {city}!\n\n"
+                f"Sono Genesi. Scrivimi pure.")
             return
 
         # ── Chat normale ───────────────────────────────────────────────────────
@@ -208,8 +280,19 @@ async def handle_update(update: dict):
                 "Per chattare con me inserisci prima la tua email:")
             return
 
+        # Se chiede meteo e non conosce la città, chiedigliela prima
+        city = session.get("city", "")
+        if _WEATHER_RE.search(text) and not city:
+            session["state"]            = STATE_AWAIT_CITY
+            session["pending_message"]  = text
+            await storage.save(_session_key(chat_id), session)
+            await send_message(chat_id,
+                "Per darti il meteo ho bisogno di sapere dove sei. "
+                "In quale città ti trovi?")
+            return
+
         await send_typing(chat_id)
-        reply = await _chat(session["token"], text)
+        reply = await _chat(session["token"], text, city=city)
 
         if reply == "__TOKEN_EXPIRED__":
             session = {"state": STATE_AWAIT_EMAIL}
@@ -218,7 +301,6 @@ async def handle_update(update: dict):
                 "Sessione scaduta. Inserisci di nuovo la tua email:")
             return
 
-        # Telegram: max 4096 caratteri per messaggio
         if len(reply) > 4000:
             for i in range(0, len(reply), 4000):
                 await send_message(chat_id, reply[i:i+4000])
