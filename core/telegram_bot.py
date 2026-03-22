@@ -12,7 +12,7 @@ from core.storage import storage
 
 logger = logging.getLogger(__name__)
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8419759132:AAE0t9nihYpvXxg7UKvaBmFwZIp2zb1obm8")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_API   = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 GENESI_URL     = "http://localhost:8000"
 
