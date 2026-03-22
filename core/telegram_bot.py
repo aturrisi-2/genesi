@@ -1,7 +1,7 @@
 """
 GENESI — Telegram Bot
 Gestisce le interazioni Telegram come canale alternativo alla webapp.
-Ogni utente Telegram si collega al proprio account Genesi via /login.
+Flusso login conversazionale: il bot chiede email e password separatamente.
 """
 
 import asyncio
@@ -16,17 +16,21 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_API   = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 GENESI_URL     = "http://localhost:8000"
 
-# ── Storage keys ───────────────────────────────────────────────────────────────
+# Stati conversazionali per il login
+STATE_IDLE              = "idle"
+STATE_AWAIT_EMAIL       = "await_email"
+STATE_AWAIT_PASSWORD    = "await_password"
+STATE_AWAIT_REG_EMAIL   = "await_reg_email"
+STATE_AWAIT_REG_PASSWORD = "await_reg_password"
+
 def _session_key(telegram_id: int) -> str:
     return f"telegram:session:{telegram_id}"
 
 
 # ── Telegram API helpers ───────────────────────────────────────────────────────
 
-async def send_message(chat_id: int, text: str, parse_mode: str = None):
+async def send_message(chat_id: int, text: str):
     payload = {"chat_id": chat_id, "text": text}
-    if parse_mode:
-        payload["parse_mode"] = parse_mode
     async with httpx.AsyncClient(timeout=10) as client:
         try:
             await client.post(f"{TELEGRAM_API}/sendMessage", json=payload)
@@ -58,7 +62,6 @@ async def set_webhook(webhook_url: str):
 # ── Auth helpers ───────────────────────────────────────────────────────────────
 
 async def _login(email: str, password: str) -> str | None:
-    """Chiama /auth/login e ritorna il token JWT o None."""
     async with httpx.AsyncClient(timeout=15) as client:
         res = await client.post(f"{GENESI_URL}/auth/login",
                                 json={"email": email, "password": password})
@@ -68,7 +71,6 @@ async def _login(email: str, password: str) -> str | None:
 
 
 async def _register(email: str, password: str) -> bool:
-    """Registra un nuovo account Genesi."""
     async with httpx.AsyncClient(timeout=15) as client:
         res = await client.post(f"{GENESI_URL}/api/auth/register",
                                 json={"email": email, "password": password})
@@ -76,7 +78,6 @@ async def _register(email: str, password: str) -> bool:
 
 
 async def _chat(token: str, message: str) -> str:
-    """Invia un messaggio a Genesi e ritorna la risposta."""
     async with httpx.AsyncClient(timeout=60) as client:
         res = await client.post(
             f"{GENESI_URL}/api/chat",
@@ -89,110 +90,6 @@ async def _chat(token: str, message: str) -> str:
             return "Genesi non è disponibile in questo momento. Riprova tra poco."
         data = res.json()
         return data.get("response") or data.get("message") or "Nessuna risposta."
-
-
-# ── Command handlers ───────────────────────────────────────────────────────────
-
-async def _handle_start(chat_id: int, first_name: str):
-    session = await storage.load(_session_key(chat_id))
-    if session and session.get("token"):
-        await send_message(chat_id,
-            f"Bentornato! Sei già collegato come {session.get('email')}.\n"
-            f"Scrivimi pure, sono qui.")
-    else:
-        await send_message(chat_id,
-            f"Ciao {first_name}! 👋 Sono Genesi, il tuo assistente AI personale.\n\n"
-            f"Per iniziare collegati al tuo account:\n"
-            f"  /login tua@email.com password\n\n"
-            f"Non hai ancora un account?\n"
-            f"  /registrati tua@email.com password\n\n"
-            f"Una volta collegato potrai chattare con me esattamente come dalla webapp, "
-            f"con tutta la tua memoria e i tuoi dati.")
-
-
-async def _handle_login(chat_id: int, parts: list[str]):
-    if len(parts) < 3:
-        await send_message(chat_id, "Uso: /login email password")
-        return
-
-    email, password = parts[1], parts[2]
-    await send_typing(chat_id)
-    token = await _login(email, password)
-
-    if not token:
-        await send_message(chat_id,
-            "Credenziali non valide. Controlla email e password e riprova.\n"
-            "Non hai un account? Usa /registrati email password")
-        return
-
-    await storage.save(_session_key(chat_id), {"token": token, "email": email})
-    logger.info("TELEGRAM_LOGIN_OK telegram_id=%s email=%s", chat_id, email)
-    await send_message(chat_id,
-        f"✅ Collegato come {email}!\n\n"
-        f"Da ora possiamo parlare. Ricordo tutto ciò che mi hai già detto "
-        f"dalla webapp. Scrivimi pure.")
-
-
-async def _handle_registrati(chat_id: int, parts: list[str]):
-    if len(parts) < 3:
-        await send_message(chat_id, "Uso: /registrati email password")
-        return
-
-    email, password = parts[1], parts[2]
-    await send_typing(chat_id)
-    ok = await _register(email, password)
-
-    if not ok:
-        await send_message(chat_id,
-            "Registrazione non riuscita. Forse esiste già un account con questa email.\n"
-            "Prova /login email password")
-        return
-
-    token = await _login(email, password)
-    if not token:
-        await send_message(chat_id,
-            "Account creato! Ora fai /login email password per collegarti.")
-        return
-
-    await storage.save(_session_key(chat_id), {"token": token, "email": email})
-    logger.info("TELEGRAM_REGISTER_OK telegram_id=%s email=%s", chat_id, email)
-    await send_message(chat_id,
-        f"✅ Account creato e collegato!\n\n"
-        f"Sono Genesi, il tuo assistente AI personale. "
-        f"Scrivimi qualcosa per cominciare.")
-
-
-async def _handle_logout(chat_id: int):
-    await storage.save(_session_key(chat_id), {})
-    await send_message(chat_id, "Disconnesso. Usa /login per ricollegarti.")
-
-
-async def _handle_message(chat_id: int, text: str):
-    session = await storage.load(_session_key(chat_id))
-    if not session or not session.get("token"):
-        await send_message(chat_id,
-            "Per chattare con me collegati prima:\n"
-            "/login email password\n\n"
-            "Non hai un account? /registrati email password")
-        return
-
-    await send_typing(chat_id)
-    reply = await _chat(session["token"], text)
-
-    if reply == "__TOKEN_EXPIRED__":
-        # Token scaduto: chiedi di fare login di nuovo
-        await storage.save(_session_key(chat_id), {})
-        await send_message(chat_id,
-            "La sessione è scaduta. Fai /login email password per ricollegarti.")
-        return
-
-    # Telegram ha un limite di 4096 caratteri per messaggio
-    if len(reply) > 4000:
-        for i in range(0, len(reply), 4000):
-            await send_message(chat_id, reply[i:i+4000])
-            await asyncio.sleep(0.3)
-    else:
-        await send_message(chat_id, reply)
 
 
 # ── Main update handler ────────────────────────────────────────────────────────
@@ -212,16 +109,122 @@ async def handle_update(update: dict):
 
         logger.info("TELEGRAM_MESSAGE chat_id=%s text=%s", chat_id, text[:60])
 
-        if text.startswith("/start"):
-            await _handle_start(chat_id, first_name)
-        elif text.startswith("/login"):
-            await _handle_login(chat_id, text.split())
-        elif text.startswith("/registrati"):
-            await _handle_registrati(chat_id, text.split())
-        elif text.startswith("/logout"):
-            await _handle_logout(chat_id)
+        session = await storage.load(_session_key(chat_id)) or {}
+        state   = session.get("state", STATE_IDLE)
+
+        # ── Comandi globali (sempre disponibili) ───────────────────────────────
+        if text == "/start":
+            if session.get("token"):
+                await send_message(chat_id,
+                    f"Bentornato {first_name}! Sono qui, scrivimi pure.")
+            else:
+                session = {"state": STATE_AWAIT_EMAIL}
+                await storage.save(_session_key(chat_id), session)
+                await send_message(chat_id,
+                    f"Ciao {first_name}! 👋 Sono Genesi, il tuo assistente AI personale.\n\n"
+                    f"Inserisci la tua email Genesi:")
+            return
+
+        if text in ("/login", "/accedi"):
+            session = {"state": STATE_AWAIT_EMAIL}
+            await storage.save(_session_key(chat_id), session)
+            await send_message(chat_id, "Inserisci la tua email:")
+            return
+
+        if text in ("/registrati", "/nuovo"):
+            session = {"state": STATE_AWAIT_REG_EMAIL}
+            await storage.save(_session_key(chat_id), session)
+            await send_message(chat_id, "Scegli un'email per il tuo account Genesi:")
+            return
+
+        if text == "/logout":
+            await storage.save(_session_key(chat_id), {"state": STATE_IDLE})
+            await send_message(chat_id, "Disconnesso. Usa /login per ricollegarti.")
+            return
+
+        # ── Flusso LOGIN ───────────────────────────────────────────────────────
+        if state == STATE_AWAIT_EMAIL:
+            session["pending_email"] = text
+            session["state"] = STATE_AWAIT_PASSWORD
+            await storage.save(_session_key(chat_id), session)
+            await send_message(chat_id, "Inserisci la tua password:")
+            return
+
+        if state == STATE_AWAIT_PASSWORD:
+            email    = session.get("pending_email", "")
+            password = text
+            await send_typing(chat_id)
+            token = await _login(email, password)
+            if not token:
+                session["state"] = STATE_AWAIT_EMAIL
+                session.pop("pending_email", None)
+                await storage.save(_session_key(chat_id), session)
+                await send_message(chat_id,
+                    "Credenziali non valide. Reinserisci la tua email:")
+                return
+            session = {"token": token, "email": email, "state": STATE_IDLE}
+            await storage.save(_session_key(chat_id), session)
+            logger.info("TELEGRAM_LOGIN_OK telegram_id=%s email=%s", chat_id, email)
+            await send_message(chat_id,
+                f"✅ Collegato!\n\nSono Genesi. Ricordo tutto ciò che mi hai "
+                f"già raccontato. Scrivimi pure.")
+            return
+
+        # ── Flusso REGISTRAZIONE ───────────────────────────────────────────────
+        if state == STATE_AWAIT_REG_EMAIL:
+            session["pending_email"] = text
+            session["state"] = STATE_AWAIT_REG_PASSWORD
+            await storage.save(_session_key(chat_id), session)
+            await send_message(chat_id, "Scegli una password (min 8 caratteri):")
+            return
+
+        if state == STATE_AWAIT_REG_PASSWORD:
+            email    = session.get("pending_email", "")
+            password = text
+            await send_typing(chat_id)
+            ok = await _register(email, password)
+            if not ok:
+                session["state"] = STATE_AWAIT_REG_EMAIL
+                await storage.save(_session_key(chat_id), session)
+                await send_message(chat_id,
+                    "Registrazione non riuscita. Forse esiste già un account "
+                    "con questa email.\n\nInserisci un'altra email, oppure "
+                    "usa /login per accedere:")
+                return
+            token = await _login(email, password)
+            session = {"token": token, "email": email, "state": STATE_IDLE}
+            await storage.save(_session_key(chat_id), session)
+            logger.info("TELEGRAM_REGISTER_OK telegram_id=%s email=%s", chat_id, email)
+            await send_message(chat_id,
+                f"✅ Account creato!\n\nSono Genesi, il tuo assistente AI "
+                f"personale. Scrivimi qualcosa per cominciare.")
+            return
+
+        # ── Chat normale ───────────────────────────────────────────────────────
+        if not session.get("token"):
+            session = {"state": STATE_AWAIT_EMAIL}
+            await storage.save(_session_key(chat_id), session)
+            await send_message(chat_id,
+                "Per chattare con me inserisci prima la tua email:")
+            return
+
+        await send_typing(chat_id)
+        reply = await _chat(session["token"], text)
+
+        if reply == "__TOKEN_EXPIRED__":
+            session = {"state": STATE_AWAIT_EMAIL}
+            await storage.save(_session_key(chat_id), session)
+            await send_message(chat_id,
+                "Sessione scaduta. Inserisci di nuovo la tua email:")
+            return
+
+        # Telegram: max 4096 caratteri per messaggio
+        if len(reply) > 4000:
+            for i in range(0, len(reply), 4000):
+                await send_message(chat_id, reply[i:i+4000])
+                await asyncio.sleep(0.3)
         else:
-            await _handle_message(chat_id, text)
+            await send_message(chat_id, reply)
 
     except Exception as e:
         logger.error("TELEGRAM_HANDLE_ERROR err=%s", e)
