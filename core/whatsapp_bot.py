@@ -29,7 +29,6 @@ WA_API_BASE        = f"https://graph.facebook.com/{WA_API_VERSION}"
 GENESI_URL         = "http://localhost:8000"
 
 _WEBAPP_LINK = "https://genesi.lucadigitale.eu/"
-_WEBAPP_REG  = "https://genesi.lucadigitale.eu/register?from=whatsapp"
 
 # Regex meteo
 _WEATHER_RE = re.compile(
@@ -388,10 +387,9 @@ async def _process_message(msg: dict, name_map: dict):
                 await storage.save(_session_key(wa_id), session)
                 await send_message(wa_id,
                     f"Ciao {first_name}! 👋 Sono *Genesi*, il tuo assistente AI personale.\n\n"
-                    f"Per usarmi al massimo hai bisogno di un account.\n\n"
-                    f"• Hai già un account? Scrivi /login\n"
-                    f"• Nuovo? Registrati qui: /registrati\n"
-                    f"  oppure sul sito: {_WEBAPP_REG}")
+                    f"Per usarmi scrivi direttamente qui:\n\n"
+                    f"• Hai già un account? Scrivi: *accedi*\n"
+                    f"• Nuovo? Scrivi: *registrati*")
             return
 
         if text in ("/login", "/accedi"):
@@ -476,9 +474,8 @@ async def _process_message(msg: dict, name_map: dict):
         if not token:
             await send_message(wa_id,
                 "Per chattare con me hai bisogno di un account.\n\n"
-                "• Già registrato? /login\n"
-                "• Nuovo? /registrati\n"
-                f"  oppure: {_WEBAPP_REG}")
+                "• Già registrato? Scrivi: *accedi*\n"
+                "• Nuovo? Scrivi: *registrati*")
             return
 
         city = session.get("city", "")
