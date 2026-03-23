@@ -43,6 +43,7 @@ from api.admin.improvement_score import router as admin_improvement_router
 from api.integrations import router as integrations_router
 from api.news import router as news_router
 from api.telegram import router as telegram_router
+from api.whatsapp import router as whatsapp_router
 from auth.database import init_db, async_session
 from auth.models import Visit
 from core.log import log
@@ -380,6 +381,7 @@ app.include_router(integrations_router, prefix="/api")
 app.include_router(news_router)
 app.include_router(coding_router)
 app.include_router(telegram_router)
+app.include_router(whatsapp_router)
 from api.weather_widget import router as weather_widget_router
 app.include_router(weather_widget_router)
 from api.push import router as push_router
