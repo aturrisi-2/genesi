@@ -222,14 +222,24 @@ async def _upload_file(token: str, data: bytes, filename: str,
 async def _transcribe(token: str, audio_data: bytes,
                       content_type: str = "audio/ogg") -> str:
     """Invia audio all'endpoint STT e ritorna il testo trascritto."""
-    async with httpx.AsyncClient(timeout=60) as client:
-        res = await client.post(
-            f"{GENESI_URL}/api/stt/",
-            files={"audio": ("voice.ogg", audio_data, content_type)},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        if res.status_code == 200:
-            return res.json().get("text", "")
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            res = await client.post(
+                f"{GENESI_URL}/api/stt/",
+                files={"audio": ("voice.ogg", audio_data, content_type)},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if res.status_code == 200:
+                data = res.json()
+                text = data.get("text", "")
+                logger.info("TELEGRAM_STT_OK status=200 text_len=%d stt_status=%s",
+                            len(text), data.get("stt_status", "ok"))
+                return text
+            else:
+                logger.warning("TELEGRAM_STT_HTTP_ERROR status=%d body=%s",
+                               res.status_code, res.text[:200])
+    except Exception as e:
+        logger.error("TELEGRAM_STT_EXCEPTION err=%s", e)
     return ""
 
 
