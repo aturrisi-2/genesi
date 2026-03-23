@@ -91,7 +91,7 @@
                                 await fetch('/api/whatsapp/link-session', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ wa_id: waId, token: data.access_token, email }),
+                                    body: JSON.stringify({ wa_id: waId, token: data.access_token, email, password }),
                                 });
                             }
                             const wl = await fetch('/api/whatsapp/wa-link').then(r => r.json());

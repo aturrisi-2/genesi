@@ -306,13 +306,14 @@ def get_wa_link() -> str:
     return f"https://wa.me/{WA_PHONE_NUMBER}"
 
 
-async def link_webapp_session(wa_id: str, token: str, email: str = ""):
+async def link_webapp_session(wa_id: str, token: str, email: str = "", password: str = ""):
     """Salva il token (ottenuto dalla webapp) nella sessione WhatsApp dell'utente."""
     city = await _get_city(token)
     session = await storage.load(_session_key(wa_id)) or {}
     session.update({
         "token": token,
         "email": email,
+        "password": password,
         "city": city,
         "state": STATE_IDLE,
         "welcomed": True,
@@ -521,7 +522,7 @@ async def _process_message(msg: dict, name_map: dict):
         async def _handle_reply(reply: str) -> bool:
             if reply in ("__AUTH_FAILED__", "__TOKEN_EXPIRED__"):
                 await send_message(wa_id,
-                    "Non riesco ad autenticarti. Usa /login per riconnetterti.")
+                    "Sessione scaduta. Scrivi *accedi* per riconnetterti.")
                 return False
             await _send_response(wa_id, reply)
             return True

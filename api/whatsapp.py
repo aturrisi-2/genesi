@@ -52,12 +52,13 @@ async def whatsapp_link_session(request: Request):
     """Collega il token webapp alla sessione WhatsApp identificata da wa_id."""
     try:
         body = await request.json()
-        wa_id = body.get("wa_id", "").strip()
-        token = body.get("token", "").strip()
-        email = body.get("email", "").strip()
+        wa_id    = body.get("wa_id", "").strip()
+        token    = body.get("token", "").strip()
+        email    = body.get("email", "").strip()
+        password = body.get("password", "").strip()
         if not wa_id or not token:
             return {"ok": False, "error": "wa_id e token richiesti"}
-        await link_webapp_session(wa_id, token, email)
+        await link_webapp_session(wa_id, token, email, password)
         return {"ok": True}
     except Exception as e:
         logger.error("WA_LINK_SESSION_ERROR err=%s", e)

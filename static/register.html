@@ -98,7 +98,7 @@
                                     await fetch('/api/whatsapp/link-session', {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ wa_id: waId, token: loginData.access_token, email }),
+                                        body: JSON.stringify({ wa_id: waId, token: loginData.access_token, email, password }),
                                     });
                                 }
                             }
