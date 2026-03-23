@@ -206,7 +206,8 @@ async def _chat(token: str, message: str, city: str = "") -> str:
 
 async def _upload_file(token: str, data: bytes, filename: str,
                        content_type: str) -> str:
-    """Carica un file su Genesi e ritorna il testo di analisi."""
+    """Carica un file su Genesi e ritorna il testo di analisi.
+    Ritorna '__TOKEN_EXPIRED__' se il token è scaduto (401)."""
     async with httpx.AsyncClient(timeout=60) as client:
         res = await client.post(
             f"{GENESI_URL}/api/upload/",
@@ -216,12 +217,15 @@ async def _upload_file(token: str, data: bytes, filename: str,
         if res.status_code == 200:
             d = res.json()
             return d.get("analysis") or d.get("summary") or d.get("message") or ""
+        elif res.status_code == 401:
+            return "__TOKEN_EXPIRED__"
         return ""
 
 
 async def _transcribe(token: str, audio_data: bytes,
                       content_type: str = "audio/ogg") -> str:
-    """Invia audio all'endpoint STT e ritorna il testo trascritto."""
+    """Invia audio all'endpoint STT e ritorna il testo trascritto.
+    Ritorna '__TOKEN_EXPIRED__' se il token è scaduto (401)."""
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             res = await client.post(
@@ -235,6 +239,8 @@ async def _transcribe(token: str, audio_data: bytes,
                 logger.info("TELEGRAM_STT_OK status=200 text_len=%d stt_status=%s",
                             len(text), data.get("stt_status", "ok"))
                 return text
+            elif res.status_code == 401:
+                return "__TOKEN_EXPIRED__"
             else:
                 logger.warning("TELEGRAM_STT_HTTP_ERROR status=%d body=%s",
                                res.status_code, res.text[:200])
@@ -482,8 +488,15 @@ async def handle_update(update: dict):
                 return
 
             analysis = await _upload_file(token, img_bytes, "photo.jpg", "image/jpeg")
+            if analysis == "__TOKEN_EXPIRED__":
+                new_token = await _auto_refresh(chat_id, session)
+                if new_token:
+                    token = new_token
+                    analysis = await _upload_file(token, img_bytes, "photo.jpg", "image/jpeg")
+                else:
+                    analysis = ""
             user_msg  = caption or "Analizza questa immagine che ti ho inviato."
-            if analysis:
+            if analysis and analysis != "__TOKEN_EXPIRED__":
                 user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
 
             reply = await _do_chat(user_msg)
@@ -503,8 +516,15 @@ async def handle_update(update: dict):
                 return
 
             analysis = await _upload_file(token, doc_bytes, filename, mime)
+            if analysis == "__TOKEN_EXPIRED__":
+                new_token = await _auto_refresh(chat_id, session)
+                if new_token:
+                    token = new_token
+                    analysis = await _upload_file(token, doc_bytes, filename, mime)
+                else:
+                    analysis = ""
             user_msg  = caption or f"Ho inviato il documento: {filename}."
-            if analysis:
+            if analysis and analysis != "__TOKEN_EXPIRED__":
                 user_msg = f"{user_msg}\n\n[Contenuto: {analysis[:500]}]"
 
             reply = await _do_chat(user_msg)
@@ -524,6 +544,13 @@ async def handle_update(update: dict):
 
             mime = (voice or audio).get("mime_type", "audio/ogg")
             transcription = await _transcribe(token, audio_bytes, mime)
+            if transcription == "__TOKEN_EXPIRED__":
+                new_token = await _auto_refresh(chat_id, session)
+                if new_token:
+                    token = new_token
+                    transcription = await _transcribe(token, audio_bytes, mime)
+                else:
+                    transcription = ""
             if not transcription:
                 await send_message(chat_id,
                     "Non sono riuscita a capire il vocale. Prova a scrivere.")
