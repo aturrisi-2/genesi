@@ -417,21 +417,21 @@ async def _process_message(msg: dict, name_map: dict):
                     f"  oppure: {_WEBAPP_LINK}register?from=whatsapp&wa_id={wa_id}")
             return
 
-        if text in ("/login", "/accedi"):
+        if text.lower() in ("/login", "/accedi", "accedi", "login"):
             session = {"state": STATE_AWAIT_EMAIL}
             await storage.save(_session_key(wa_id), session)
             await send_message(wa_id, "Inserisci la tua email:")
             return
 
-        if text in ("/registrati", "/nuovo"):
+        if text.lower() in ("/registrati", "/nuovo", "registrati", "nuovo"):
             session = {"state": STATE_AWAIT_REG_EMAIL}
             await storage.save(_session_key(wa_id), session)
             await send_message(wa_id, "Scegli un'email per il tuo account:")
             return
 
-        if text == "/logout":
+        if text.lower() in ("/logout", "logout", "esci"):
             await storage.save(_session_key(wa_id), {"state": STATE_IDLE})
-            await send_message(wa_id, "Disconnesso. Usa /login per ricollegarti.")
+            await send_message(wa_id, "Disconnesso. Scrivi *accedi* per rientrare.")
             return
 
         # ── Flusso LOGIN ──────────────────────────────────────────────────────
@@ -522,7 +522,9 @@ async def _process_message(msg: dict, name_map: dict):
         async def _handle_reply(reply: str) -> bool:
             if reply in ("__AUTH_FAILED__", "__TOKEN_EXPIRED__"):
                 await send_message(wa_id,
-                    "Sessione scaduta. Scrivi *accedi* per riconnetterti.")
+                    "Sessione scaduta. Puoi rientrare in due modi:\n\n"
+                    f"• Scrivi: *accedi*\n"
+                    f"• Oppure clicca: {_WEBAPP_LINK}login?from=whatsapp&wa_id={wa_id}")
                 return False
             await _send_response(wa_id, reply)
             return True
