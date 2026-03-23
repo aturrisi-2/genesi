@@ -1633,8 +1633,46 @@ function renderMessageContent(text) {
     return line;
   }).join('\n');
 
-  // 7. Newline -> <br> (only outside pre and li blocks)
-  html = html.replace(/(?<!<\/pre>|<\/li>)\n(?!<pre|<li)/g, '<br>');
+  // 7. Tables (before newline conversion)
+  {
+    const tableLineRe = /^\|(.+\|)+$/;
+    const sepLineRe   = /^\|([-| :]+\|)+$/;
+    const lines  = html.split('\n');
+    const result = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line    = lines[i].trim();
+      const nextLine = (lines[i + 1] || '').trim();
+      if (tableLineRe.test(line) && sepLineRe.test(nextLine)) {
+        // Header row
+        const headers = line.split('|').slice(1, -1).map(h => h.trim());
+        i += 2; // skip header + separator
+        // Data rows
+        const rows = [];
+        while (i < lines.length && tableLineRe.test(lines[i].trim())) {
+          rows.push(lines[i].trim().split('|').slice(1, -1).map(c => c.trim()));
+          i++;
+        }
+        let tbl = '<div class="md-table-wrap"><table class="md-table"><thead><tr>';
+        headers.forEach(h => { tbl += `<th>${h}</th>`; });
+        tbl += '</tr></thead><tbody>';
+        rows.forEach(row => {
+          tbl += '<tr>';
+          headers.forEach((_, j) => { tbl += `<td>${row[j] !== undefined ? row[j] : ''}</td>`; });
+          tbl += '</tr>';
+        });
+        tbl += '</tbody></table></div>';
+        result.push(tbl);
+      } else {
+        result.push(lines[i]);
+        i++;
+      }
+    }
+    html = result.join('\n');
+  }
+
+  // 8. Newline -> <br> (only outside pre, li and table blocks)
+  html = html.replace(/(?<!<\/pre>|<\/li>|<\/table>|<\/div>)\n(?!<pre|<li|<div|<table)/g, '<br>');
 
   return html;
 }
