@@ -73,13 +73,20 @@
                 const data = await res.json();
 
                 if (res.ok) {
-                    const fromTelegram = new URLSearchParams(window.location.search).get('from') === 'telegram';
+                    const from = new URLSearchParams(window.location.search).get('from');
                     let extraHtml = '';
-                    if (fromTelegram) {
+                    if (from === 'telegram') {
                         try {
                             const bl = await fetch('/api/telegram/bot-link').then(r => r.json());
                             if (bl.bot_link) {
                                 extraHtml = `<br><br><a href="${bl.bot_link}" class="btn" style="display:inline-block;margin-top:8px;text-decoration:none;">↩ Torna su Telegram</a>`;
+                            }
+                        } catch (_) {}
+                    } else if (from === 'whatsapp') {
+                        try {
+                            const wl = await fetch('/api/whatsapp/wa-link').then(r => r.json());
+                            if (wl.wa_link) {
+                                extraHtml = `<br><br><a href="${wl.wa_link}" class="btn" style="display:inline-block;margin-top:8px;text-decoration:none;">↩ Torna su WhatsApp</a>`;
                             }
                         } catch (_) {}
                     }
@@ -87,8 +94,8 @@
                     msg.className = 'msg success';
                     msg.style.display = 'block';
                     form.reset();
-                    // Redirect automatico solo se non arriva da Telegram
-                    if (!fromTelegram) {
+                    // Redirect automatico solo se non arriva da Telegram o WhatsApp
+                    if (!from) {
                         setTimeout(() => { window.location.href = '/login'; }, 3000);
                     }
                 } else {

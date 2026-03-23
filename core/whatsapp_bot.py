@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 WA_ACCESS_TOKEN    = os.getenv("WA_ACCESS_TOKEN", "")
 WA_PHONE_NUMBER_ID = os.getenv("WA_PHONE_NUMBER_ID", "")
 WA_VERIFY_TOKEN    = os.getenv("WA_VERIFY_TOKEN", "genesi_wa_verify")
+WA_PHONE_NUMBER    = os.getenv("WA_PHONE_NUMBER", "393313650671")   # senza +
 WA_API_VERSION     = "v19.0"
 WA_API_BASE        = f"https://graph.facebook.com/{WA_API_VERSION}"
 
@@ -301,6 +302,10 @@ async def _complete_login(wa_id: str, token: str, email: str, password: str = ""
 
 # ── Verifica webhook (richiesta Meta al setup) ───────────────────────────────
 
+def get_wa_link() -> str:
+    return f"https://wa.me/{WA_PHONE_NUMBER}"
+
+
 def verify_webhook(mode: str, token: str, challenge: str) -> str | None:
     """Verifica la challenge Meta. Ritorna la challenge se valida, None altrimenti."""
     if mode == "subscribe" and token == WA_VERIFY_TOKEN:
@@ -387,9 +392,11 @@ async def _process_message(msg: dict, name_map: dict):
                 await storage.save(_session_key(wa_id), session)
                 await send_message(wa_id,
                     f"Ciao {first_name}! 👋 Sono *Genesi*, il tuo assistente AI personale.\n\n"
-                    f"Per usarmi scrivi direttamente qui:\n\n"
+                    f"Per usarmi hai bisogno di un account:\n\n"
                     f"• Hai già un account? Scrivi: *accedi*\n"
-                    f"• Nuovo? Scrivi: *registrati*")
+                    f"  oppure: {_WEBAPP_LINK}login?from=whatsapp\n\n"
+                    f"• Nuovo? Scrivi: *registrati*\n"
+                    f"  oppure: {_WEBAPP_LINK}register?from=whatsapp")
             return
 
         if text in ("/login", "/accedi"):
@@ -474,8 +481,10 @@ async def _process_message(msg: dict, name_map: dict):
         if not token:
             await send_message(wa_id,
                 "Per chattare con me hai bisogno di un account.\n\n"
-                "• Già registrato? Scrivi: *accedi*\n"
-                "• Nuovo? Scrivi: *registrati*")
+                f"• Già registrato? Scrivi: *accedi*\n"
+                f"  oppure: {_WEBAPP_LINK}login?from=whatsapp\n\n"
+                f"• Nuovo? Scrivi: *registrati*\n"
+                f"  oppure: {_WEBAPP_LINK}register?from=whatsapp")
             return
 
         city = session.get("city", "")
