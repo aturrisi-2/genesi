@@ -11,7 +11,53 @@
         src="https://embeds.iubenda.com/widgets/c29c96b8-4972-4418-b50c-83741eaa22d4.js"></script>
 </head>
 
+<style>
+#platform-popup {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+#platform-popup.show { display: flex; }
+#platform-popup .popup-box {
+    background: #1e1e2e;
+    border-radius: 16px;
+    padding: 32px 28px;
+    text-align: center;
+    max-width: 320px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+#platform-popup .popup-box h2 { margin: 0 0 8px; font-size: 1.3rem; color: #fff; }
+#platform-popup .popup-box p  { margin: 0 0 24px; color: #aaa; font-size: 0.95rem; }
+#platform-popup .popup-btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: #fff;
+    cursor: pointer;
+}
+#platform-popup .popup-btn.whatsapp { background: #25D366; }
+#platform-popup .popup-btn.telegram  { background: #2AABEE; }
+</style>
+
 <body>
+<!-- Popup ritorno piattaforma -->
+<div id="platform-popup">
+    <div class="popup-box">
+        <h2>✅ Accesso effettuato!</h2>
+        <p id="popup-msg">Torna alla chat per continuare.</p>
+        <a id="popup-btn" href="#" class="popup-btn">Torna alla chat</a>
+    </div>
+</div>
+
     <div class="auth-card">
         <h1>Accedi a Genesi</h1>
         <p class="subtitle">Il tuo spazio ti aspetta.</p>
@@ -49,6 +95,23 @@
     </div>
 
     <script>
+        function showPlatformPopup(platform, link) {
+            const popup = document.getElementById('platform-popup');
+            const btn   = document.getElementById('popup-btn');
+            const msg   = document.getElementById('popup-msg');
+            btn.href = link;
+            if (platform === 'whatsapp') {
+                btn.textContent = '↩ Torna su WhatsApp';
+                btn.className   = 'popup-btn whatsapp';
+                msg.textContent = 'Torna alla chat WhatsApp per continuare.';
+            } else {
+                btn.textContent = '↩ Torna su Telegram';
+                btn.className   = 'popup-btn telegram';
+                msg.textContent = 'Torna alla chat Telegram per continuare.';
+            }
+            popup.classList.add('show');
+        }
+
         const form = document.getElementById('login-form');
         const msg = document.getElementById('msg');
         const btn = document.getElementById('submit-btn');
@@ -86,7 +149,6 @@
                     if (from === 'whatsapp') {
                         const waId = params.get('wa_id') || '';
                         try {
-                            // Collega il token alla sessione WhatsApp
                             if (waId) {
                                 await fetch('/api/whatsapp/link-session', {
                                     method: 'POST',
@@ -95,23 +157,15 @@
                                 });
                             }
                             const wl = await fetch('/api/whatsapp/wa-link').then(r => r.json());
-                            if (wl.wa_link) {
-                                msg.innerHTML = `Accesso effettuato! Torna su WhatsApp per continuare.<br><br><a href="${wl.wa_link}" class="btn" style="display:inline-block;margin-top:8px;text-decoration:none;">↩ Torna su WhatsApp</a>`;
-                                msg.className = 'msg success';
-                                msg.style.display = 'block';
-                                return;
-                            }
-                        } catch (_) {}
+                            showPlatformPopup('whatsapp', wl.wa_link || '#');
+                        } catch (_) { window.location.href = '/'; }
+                        return;
                     } else if (from === 'telegram') {
                         try {
                             const bl = await fetch('/api/telegram/bot-link').then(r => r.json());
-                            if (bl.bot_link) {
-                                msg.innerHTML = `Accesso effettuato! <br><br><a href="${bl.bot_link}" class="btn" style="display:inline-block;margin-top:8px;text-decoration:none;">↩ Torna su Telegram</a>`;
-                                msg.className = 'msg success';
-                                msg.style.display = 'block';
-                                return;
-                            }
-                        } catch (_) {}
+                            showPlatformPopup('telegram', bl.bot_link || '#');
+                        } catch (_) { window.location.href = '/'; }
+                        return;
                     }
                     window.location.href = '/';
                 } else if (res.status === 403 && data.detail && data.detail.includes('non verificato')) {

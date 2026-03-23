@@ -512,10 +512,13 @@ async def handle_update(update: dict):
                 await send_message(chat_id, "Non riuscito a scaricare il vocale.")
                 return
 
-            transcription = await _transcribe(token, audio_bytes, "audio/ogg")
+            mime = (voice or audio).get("mime_type", "audio/ogg")
+            transcription = await _transcribe(token, audio_bytes, mime)
             if not transcription:
                 await send_message(chat_id,
                     "Non sono riuscita a capire il vocale. Prova a scrivere.")
+                logger.warning("TELEGRAM_VOICE_STT_EMPTY chat_id=%s mime=%s size=%d",
+                               chat_id, mime, len(audio_bytes))
                 return
 
             # Mostra la trascrizione e rispondi
