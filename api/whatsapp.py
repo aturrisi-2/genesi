@@ -10,7 +10,7 @@ import logging
 from fastapi import APIRouter, Request, Response, Query
 from fastapi.responses import PlainTextResponse
 
-from core.whatsapp_bot import handle_update, verify_webhook, get_wa_link
+from core.whatsapp_bot import handle_update, verify_webhook, get_wa_link, link_webapp_session
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/whatsapp", tags=["whatsapp"])
@@ -45,3 +45,20 @@ async def whatsapp_webhook(request: Request):
 async def whatsapp_link():
     """Ritorna il link diretto alla chat WhatsApp (usato dalla webapp dopo login/registrazione)."""
     return {"wa_link": get_wa_link()}
+
+
+@router.post("/link-session")
+async def whatsapp_link_session(request: Request):
+    """Collega il token webapp alla sessione WhatsApp identificata da wa_id."""
+    try:
+        body = await request.json()
+        wa_id = body.get("wa_id", "").strip()
+        token = body.get("token", "").strip()
+        email = body.get("email", "").strip()
+        if not wa_id or not token:
+            return {"ok": False, "error": "wa_id e token richiesti"}
+        await link_webapp_session(wa_id, token, email)
+        return {"ok": True}
+    except Exception as e:
+        logger.error("WA_LINK_SESSION_ERROR err=%s", e)
+        return {"ok": False, "error": str(e)}

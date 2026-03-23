@@ -81,12 +81,22 @@
                     localStorage.setItem('genesi_refresh_token', data.refresh_token);
                     localStorage.setItem('genesi_user_id', data.user_id);
                     localStorage.setItem('genesi_is_admin', data.is_admin);
-                    const from = new URLSearchParams(window.location.search).get('from');
+                    const params = new URLSearchParams(window.location.search);
+                    const from = params.get('from');
                     if (from === 'whatsapp') {
+                        const waId = params.get('wa_id') || '';
                         try {
+                            // Collega il token alla sessione WhatsApp
+                            if (waId) {
+                                await fetch('/api/whatsapp/link-session', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ wa_id: waId, token: data.access_token, email }),
+                                });
+                            }
                             const wl = await fetch('/api/whatsapp/wa-link').then(r => r.json());
                             if (wl.wa_link) {
-                                msg.innerHTML = `Accesso effettuato! <br><br><a href="${wl.wa_link}" class="btn" style="display:inline-block;margin-top:8px;text-decoration:none;">↩ Torna su WhatsApp</a>`;
+                                msg.innerHTML = `Accesso effettuato! Torna su WhatsApp per continuare.<br><br><a href="${wl.wa_link}" class="btn" style="display:inline-block;margin-top:8px;text-decoration:none;">↩ Torna su WhatsApp</a>`;
                                 msg.className = 'msg success';
                                 msg.style.display = 'block';
                                 return;

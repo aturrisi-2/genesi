@@ -306,6 +306,23 @@ def get_wa_link() -> str:
     return f"https://wa.me/{WA_PHONE_NUMBER}"
 
 
+async def link_webapp_session(wa_id: str, token: str, email: str = ""):
+    """Salva il token (ottenuto dalla webapp) nella sessione WhatsApp dell'utente."""
+    city = await _get_city(token)
+    session = await storage.load(_session_key(wa_id)) or {}
+    session.update({
+        "token": token,
+        "email": email,
+        "city": city,
+        "state": STATE_IDLE,
+        "welcomed": True,
+    })
+    await storage.save(_session_key(wa_id), session)
+    logger.info("WA_SESSION_LINKED wa_id=%s email=%s", wa_id, email)
+    await send_message(wa_id,
+        "✅ Accesso effettuato! Sono pronta.\n\nScrivimi pure 💬")
+
+
 def verify_webhook(mode: str, token: str, challenge: str) -> str | None:
     """Verifica la challenge Meta. Ritorna la challenge se valida, None altrimenti."""
     if mode == "subscribe" and token == WA_VERIFY_TOKEN:
@@ -394,9 +411,9 @@ async def _process_message(msg: dict, name_map: dict):
                     f"Ciao {first_name}! 👋 Sono *Genesi*, il tuo assistente AI personale.\n\n"
                     f"Per usarmi hai bisogno di un account:\n\n"
                     f"• Hai già un account? Scrivi: *accedi*\n"
-                    f"  oppure: {_WEBAPP_LINK}login?from=whatsapp\n\n"
+                    f"  oppure: {_WEBAPP_LINK}login?from=whatsapp&wa_id={wa_id}\n\n"
                     f"• Nuovo? Scrivi: *registrati*\n"
-                    f"  oppure: {_WEBAPP_LINK}register?from=whatsapp")
+                    f"  oppure: {_WEBAPP_LINK}register?from=whatsapp&wa_id={wa_id}")
             return
 
         if text in ("/login", "/accedi"):
@@ -482,9 +499,9 @@ async def _process_message(msg: dict, name_map: dict):
             await send_message(wa_id,
                 "Per chattare con me hai bisogno di un account.\n\n"
                 f"• Già registrato? Scrivi: *accedi*\n"
-                f"  oppure: {_WEBAPP_LINK}login?from=whatsapp\n\n"
+                f"  oppure: {_WEBAPP_LINK}login?from=whatsapp&wa_id={wa_id}\n\n"
                 f"• Nuovo? Scrivi: *registrati*\n"
-                f"  oppure: {_WEBAPP_LINK}register?from=whatsapp")
+                f"  oppure: {_WEBAPP_LINK}register?from=whatsapp&wa_id={wa_id}")
             return
 
         city = session.get("city", "")
