@@ -25,9 +25,29 @@ from auth.router import require_auth
 from auth.models import AuthUser
 from datetime import datetime
 import json
+import re as _re
 import asyncio as _asyncio_mod
 
 router = APIRouter(prefix="/chat")
+
+
+def _strip_tables_for_tts(text: str) -> str:
+    """Rimuove la sintassi delle tabelle Markdown dal testo destinato al TTS."""
+    lines = text.split('\n')
+    result = []
+    for line in lines:
+        s = line.strip()
+        # Rimuovi righe separatore |---|---|
+        if s and _re.match(r'^\|([-| :]+\|)+$', s):
+            continue
+        # Converti righe tabella in testo leggibile
+        if s.startswith('|') and s.endswith('|'):
+            cells = [c.strip() for c in s.split('|')[1:-1] if c.strip()]
+            if cells:
+                result.append(', '.join(cells))
+                continue
+        result.append(line)
+    return '\n'.join(result)
 
 # Semaforo per limitare LLM calls in background (max 5 concurrent)
 _BACKGROUND_LLM_SEM = _asyncio_mod.Semaphore(5)
@@ -316,6 +336,9 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             except Exception:
                 pass
 
+        if tts_text:
+            tts_text = _strip_tables_for_tts(tts_text)
+
         return ChatResponse(
             response=response,
             status="ok",
@@ -478,7 +501,10 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                                 tts = parsed.get("tts_text") or parsed.get("text")
                         except Exception:
                             pass
-                            
+
+                    if tts:
+                        tts = _strip_tables_for_tts(tts)
+
                     yield f"data: {json.dumps({'done': True, 'tts_text': tts, 'response': full})}\n\n"
                     break
                 elif "error" in item:
