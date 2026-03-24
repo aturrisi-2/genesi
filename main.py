@@ -339,6 +339,18 @@ async def serve_brochure():
 async def serve_guida_icloud():
     return FileResponse(BASE_DIR / "static" / "guida-icloud.html")
 
+@app.get("/widget.js")
+async def serve_widget_js():
+    return FileResponse(
+        BASE_DIR / "static" / "widget.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+@app.get("/widget-demo")
+async def serve_widget_demo():
+    return FileResponse(BASE_DIR / "static" / "widget-demo.html")
+
 @app.get("/sw.js")
 async def serve_sw():
     return FileResponse(
