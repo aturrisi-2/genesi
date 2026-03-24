@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Salute, Sicurezza e Ambiente — C-Place</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f4f4; color: #222; font-size: 14px; }
+    a { text-decoration: none; color: inherit; }
+
+    .topbar {
+      background: #fff; border-bottom: 1px solid #e0e0e0;
+      padding: 0 20px; display: flex; align-items: center;
+      height: 56px; gap: 16px; position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    .logo { display:flex; align-items:center; gap:6px; font-size:22px; font-weight:800; letter-spacing:-1px; color:#222; }
+    .logo-c { background:#c41230; color:#fff; width:32px; height:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900; }
+    .topbar-actions { margin-left:auto; display:flex; align-items:center; gap:18px; }
+    .avatar { width:32px; height:32px; border-radius:50%; background:#c41230; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+
+    .navbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; gap:2px; height:40px; }
+    .navbar a { padding:0 12px; height:40px; display:flex; align-items:center; font-size:12.5px; font-weight:600; color:#444; letter-spacing:.2px; border-bottom:2px solid transparent; white-space:nowrap; }
+    .navbar a:hover { color:#c41230; border-bottom-color:#c41230; }
+    .navbar a.active { color:#c41230; border-bottom-color:#c41230; }
+
+    .breadcrumb { background:#fff; border-bottom:1px solid #eee; padding:8px 20px; font-size:12px; color:#888; }
+    .breadcrumb a { color:#c41230; }
+    .breadcrumb span { margin:0 6px; }
+
+    .page { max-width:1100px; margin:24px auto; padding:0 16px; display:flex; flex-direction:column; gap:24px; }
+
+    .sec-title { font-size:16px; font-weight:700; color:#c41230; padding-bottom:10px; border-bottom:2px solid #c41230; margin-bottom:16px; }
+
+    /* KPI cards */
+    .kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+    .kpi-card { background:#fff; border-radius:6px; padding:20px 16px; box-shadow:0 1px 4px rgba(0,0,0,.07); text-align:center; }
+    .kpi-num { font-size:32px; font-weight:900; color:#c41230; }
+    .kpi-num.green { color:#2e7d32; }
+    .kpi-num.orange { color:#e65100; }
+    .kpi-label { font-size:12px; color:#666; margin-top:4px; }
+    .kpi-trend { font-size:11px; margin-top:6px; padding:2px 8px; border-radius:99px; display:inline-block; }
+    .trend-up { background:#fce4e4; color:#c41230; }
+    .trend-down { background:#e8f5e9; color:#2e7d32; }
+    .trend-eq { background:#f5f5f5; color:#666; }
+
+    /* Tabella statistiche */
+    .table-wrap { background:#fff; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,.07); overflow:hidden; }
+    table { width:100%; border-collapse:collapse; }
+    thead th { background:#c41230; color:#fff; padding:11px 14px; text-align:left; font-size:13px; font-weight:600; }
+    tbody tr:nth-child(even) { background:#fafafa; }
+    tbody tr:hover { background:#fff3f3; }
+    td { padding:10px 14px; border-bottom:1px solid #f0f0f0; font-size:13px; color:#333; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:600; }
+    .badge-red { background:#fce4e4; color:#c41230; }
+    .badge-yellow { background:#fff8e1; color:#e65100; }
+    .badge-green { background:#e8f5e9; color:#2e7d32; }
+    .badge-blue { background:#e3f2fd; color:#1565c0; }
+
+    /* Grafici simulati con CSS */
+    .chart-section { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    .chart-card { background:#fff; border-radius:6px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+    .chart-title { font-size:13px; font-weight:700; margin-bottom:16px; color:#333; }
+    .bar-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; font-size:12px; }
+    .bar-label { width:90px; color:#555; flex-shrink:0; text-align:right; }
+    .bar-track { flex:1; background:#f0f0f0; border-radius:4px; height:18px; overflow:hidden; }
+    .bar-fill { height:100%; border-radius:4px; display:flex; align-items:center; padding-left:6px; color:#fff; font-size:11px; font-weight:700; }
+    .bar-val { width:30px; color:#333; font-weight:700; }
+
+    /* Documenti */
+    .doc-list { display:flex; flex-direction:column; gap:8px; }
+    .doc-item { background:#fff; border-radius:6px; padding:12px 16px; box-shadow:0 1px 4px rgba(0,0,0,.07); display:flex; align-items:center; gap:12px; cursor:pointer; }
+    .doc-item:hover { background:#fff3f3; }
+    .doc-icon { font-size:24px; flex-shrink:0; }
+    .doc-info { flex:1; }
+    .doc-name { font-size:13px; font-weight:600; color:#222; }
+    .doc-meta { font-size:11px; color:#999; margin-top:2px; }
+    .doc-dl { background:#c41230; color:#fff; padding:5px 12px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; }
+
+    footer { background:#c41230; color:#fff; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; margin-top:32px; }
+    footer .footer-logo { display:flex; align-items:center; gap:10px; font-size:13px; }
+    footer .footer-btn { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.4); color:#fff; padding:8px 16px; border-radius:4px; font-size:12px; cursor:pointer; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="/widget-demo" class="logo">
+      <div class="logo-c">C</div>Place
+    </a>
+    <div class="topbar-actions">
+      <div class="avatar">AT</div>
+    </div>
+  </div>
+
+  <div class="navbar">
+    <a href="/widget-demo">ULTIME NEWS ▾</a>
+    <a href="#">AZIENDA ▾</a>
+    <a href="/widget-demo-aree">AREE ▾</a>
+    <a href="#">ATTIVITÀ E TEMPO LIBERO ▾</a>
+    <a href="#">AZIONI VELOCI ▾</a>
+    <a href="#">RUBRICA ▾</a>
+    <a href="#" class="active">BU ▾</a>
+  </div>
+
+  <div class="breadcrumb">
+    <a href="/widget-demo">Home</a>
+    <span>›</span>
+    <a href="#">Aree</a>
+    <span>›</span>
+    <strong style="color:#333">Salute, Sicurezza e Ambiente</strong>
+  </div>
+
+  <div class="page">
+
+    <!-- KPI -->
+    <div>
+      <div class="sec-title">📊 Statistiche Infortuni — Febbraio 2026</div>
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-num">7</div>
+          <div class="kpi-label">Infortuni totali YTD 2026</div>
+          <div class="kpi-trend trend-down">▼ −3 vs 2025</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-num orange">142</div>
+          <div class="kpi-label">Giorni di assenza totali</div>
+          <div class="kpi-trend trend-down">▼ −28 vs 2025</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-num green">0</div>
+          <div class="kpi-label">Infortuni gravi (invalidità)</div>
+          <div class="kpi-trend trend-eq">= invariato</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-num" style="color:#1565c0">20.3</div>
+          <div class="kpi-label">Indice di frequenza (IF)</div>
+          <div class="kpi-trend trend-down">▼ −8% vs 2025</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grafico per BU -->
+    <div class="chart-section">
+      <div class="chart-card">
+        <div class="chart-title">Infortuni per Business Unit — YTD 2026</div>
+        <div class="bar-row">
+          <div class="bar-label">ENGINEERING</div>
+          <div class="bar-track"><div class="bar-fill" style="width:60%;background:#c41230">3</div></div>
+          <div class="bar-val">3</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">DENTAL</div>
+          <div class="bar-track"><div class="bar-fill" style="width:40%;background:#e65100">2</div></div>
+          <div class="bar-val">2</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">RETAIL</div>
+          <div class="bar-track"><div class="bar-fill" style="width:20%;background:#1565c0">1</div></div>
+          <div class="bar-val">1</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">HEALTHCARE</div>
+          <div class="bar-track"><div class="bar-fill" style="width:20%;background:#2e7d32">1</div></div>
+          <div class="bar-val">1</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">SEDE</div>
+          <div class="bar-track"><div class="bar-fill" style="width:5%;background:#888">0</div></div>
+          <div class="bar-val">0</div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-title">Infortuni per tipo — YTD 2026</div>
+        <div class="bar-row">
+          <div class="bar-label">In itinere</div>
+          <div class="bar-track"><div class="bar-fill" style="width:43%;background:#c41230">3</div></div>
+          <div class="bar-val">3</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">Scivolamento</div>
+          <div class="bar-track"><div class="bar-fill" style="width:29%;background:#e65100">2</div></div>
+          <div class="bar-val">2</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">Movimentazione</div>
+          <div class="bar-track"><div class="bar-fill" style="width:14%;background:#1565c0">1</div></div>
+          <div class="bar-val">1</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">Altro</div>
+          <div class="bar-track"><div class="bar-fill" style="width:14%;background:#888">1</div></div>
+          <div class="bar-val">1</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabella dettaglio -->
+    <div>
+      <div class="sec-title">Dettaglio infortuni Gen–Feb 2026</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>Data</th><th>BU / Sede</th><th>Tipo</th><th>Giorni assenza</th><th>Stato</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>001</td><td>08/01/2026</td><td>Engineering — Imola</td><td>In itinere (auto)</td><td>22</td><td><span class="badge badge-green">Chiuso</span></td></tr>
+            <tr><td>002</td><td>14/01/2026</td><td>Dental — Bologna</td><td>Scivolamento pavimento</td><td>18</td><td><span class="badge badge-green">Chiuso</span></td></tr>
+            <tr><td>003</td><td>21/01/2026</td><td>Engineering — Imola</td><td>Movimentazione manuale</td><td>35</td><td><span class="badge badge-yellow">In corso</span></td></tr>
+            <tr><td>004</td><td>03/02/2026</td><td>Retail — Milano</td><td>In itinere (bicicletta)</td><td>12</td><td><span class="badge badge-green">Chiuso</span></td></tr>
+            <tr><td>005</td><td>07/02/2026</td><td>Healthcare — Roma</td><td>Scivolamento scale</td><td>28</td><td><span class="badge badge-yellow">In corso</span></td></tr>
+            <tr><td>006</td><td>17/02/2026</td><td>Dental — Bologna</td><td>Altro (taglio)</td><td>15</td><td><span class="badge badge-green">Chiuso</span></td></tr>
+            <tr><td>007</td><td>25/02/2026</td><td>Engineering — Imola</td><td>In itinere (moto)</td><td>12</td><td><span class="badge badge-red">Aperto</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Documenti e procedure -->
+    <div>
+      <div class="sec-title">📄 Procedure e documenti SSA</div>
+      <div class="doc-list">
+        <div class="doc-item">
+          <div class="doc-icon">📋</div>
+          <div class="doc-info">
+            <div class="doc-name">Procedura segnalazione infortuni e quasi-infortuni</div>
+            <div class="doc-meta">Rev. 5 — Aggiornato: gennaio 2026 — PROC-SSA-001</div>
+          </div>
+          <div class="doc-dl">Scarica PDF</div>
+        </div>
+        <div class="doc-item">
+          <div class="doc-icon">🦺</div>
+          <div class="doc-info">
+            <div class="doc-name">Piano annuale sicurezza 2026 — Obiettivi e KPI</div>
+            <div class="doc-meta">Rev. 1 — Aggiornato: gennaio 2026 — PLAN-SSA-2026</div>
+          </div>
+          <div class="doc-dl">Scarica PDF</div>
+        </div>
+        <div class="doc-item">
+          <div class="doc-icon">🚨</div>
+          <div class="doc-info">
+            <div class="doc-name">Gestione emergenze e primo soccorso — Istruzioni operative</div>
+            <div class="doc-meta">Rev. 3 — Aggiornato: settembre 2025 — IO-SSA-012</div>
+          </div>
+          <div class="doc-dl">Scarica PDF</div>
+        </div>
+        <div class="doc-item">
+          <div class="doc-icon">📊</div>
+          <div class="doc-info">
+            <div class="doc-name">Report statistiche infortuni — Febbraio 2026 (completo)</div>
+            <div class="doc-meta">Pubblicato: 11 marzo 2026 — RPT-SSA-FEB2026</div>
+          </div>
+          <div class="doc-dl">Scarica PDF</div>
+        </div>
+        <div class="doc-item">
+          <div class="doc-icon">🎓</div>
+          <div class="doc-info">
+            <div class="doc-name">Calendario corsi di formazione sicurezza 2026</div>
+            <div class="doc-meta">Aggiornato: febbraio 2026 — CAL-SSA-2026</div>
+          </div>
+          <div class="doc-dl">Scarica PDF</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contatti referenti -->
+    <div>
+      <div class="sec-title">👤 Referenti Salute, Sicurezza e Ambiente</div>
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+        <div style="background:#fff; border-radius:6px; padding:16px; box-shadow:0 1px 4px rgba(0,0,0,.07);">
+          <div style="font-weight:700; font-size:14px;">Marco Ferretti</div>
+          <div style="color:#c41230; font-size:12px; margin:2px 0;">RSPP — Responsabile SPP</div>
+          <div style="font-size:12px; color:#666;">📞 int. 2310</div>
+          <div style="font-size:12px; color:#666;">✉️ m.ferretti@cefla.it</div>
+        </div>
+        <div style="background:#fff; border-radius:6px; padding:16px; box-shadow:0 1px 4px rgba(0,0,0,.07);">
+          <div style="font-weight:700; font-size:14px;">Silvia Montanari</div>
+          <div style="color:#c41230; font-size:12px; margin:2px 0;">Addetta SSA — Engineering</div>
+          <div style="font-size:12px; color:#666;">📞 int. 2312</div>
+          <div style="font-size:12px; color:#666;">✉️ s.montanari@cefla.it</div>
+        </div>
+        <div style="background:#fff; border-radius:6px; padding:16px; box-shadow:0 1px 4px rgba(0,0,0,.07);">
+          <div style="font-weight:700; font-size:14px;">Pronto Soccorso</div>
+          <div style="color:#c41230; font-size:12px; margin:2px 0;">Emergenze aziendali</div>
+          <div style="font-size:12px; color:#666;">📞 int. 2300 (h24)</div>
+          <div style="font-size:12px; color:#666;">🚨 Esterno: 118</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    <div class="footer-logo">
+      <div style="background:#fff;color:#c41230;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;">C</div>
+      <div><strong>cefla.</strong><br><small style="opacity:.7">Making Your Life Better.</small></div>
+    </div>
+    <a href="/widget-demo" class="footer-btn">← Torna alla Home</a>
+  </footer>
+
+  <script
+    src="/widget.js"
+    data-api-url=""
+    data-api-key="demo_cplace_2026"
+    data-name="Assistente C-Place"
+    data-color="#c41230"
+    data-welcome="Sei nella sezione Salute, Sicurezza e Ambiente. Posso aiutarti a trovare statistiche, procedure, documenti o contatti. Come posso aiutarti?"
+    data-placeholder="Es: chi è il responsabile sicurezza?"
+    data-page-context="true">
+  </script>
+
+</body>
+</html>

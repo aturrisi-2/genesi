@@ -351,6 +351,10 @@ async def serve_widget_js():
 async def serve_widget_demo():
     return FileResponse(BASE_DIR / "static" / "widget-demo.html")
 
+@app.get("/widget-demo-salute")
+async def serve_widget_demo_salute():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-salute.html")
+
 @app.get("/sw.js")
 async def serve_sw():
     return FileResponse(
