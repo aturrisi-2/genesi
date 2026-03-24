@@ -28,6 +28,8 @@
     pageCtx:     _s.getAttribute('data-page-context') !== 'false',
     avatarUrl:   _s.getAttribute('data-avatar')     || null,
     placeholder: _s.getAttribute('data-placeholder')|| 'Scrivi un messaggio...',
+    userName:    _s.getAttribute('data-user-name')  || '',
+    userRole:    _s.getAttribute('data-user-role')  || '',
   };
 
   if (!cfg.apiKey) { console.warn('[GenesiWidget] data-api-key mancante'); return; }
@@ -252,7 +254,10 @@
   let isBusy       = false;
   let sendPageCtx  = cfg.pageCtx;
   let unread       = 0;
-  let conversationId = null;
+
+  // conversation_id persistente per utente (localStorage, chiave = apiKey + userName)
+  const _convKey = 'gw_conv_' + cfg.apiKey + (cfg.userName ? '_' + cfg.userName.replace(/\s+/g,'_') : '');
+  let conversationId = localStorage.getItem(_convKey) || null;
 
   // ── Apertura / chiusura ───────────────────────────────────────────────────
   function open() {
@@ -261,7 +266,13 @@
     btn.style.transform = 'scale(.9)';
     input.focus();
     clearUnread();
-    if (messages.children.length === 0) addBotMessage(cfg.welcome);
+    if (messages.children.length === 0) {
+      const firstName = cfg.userName ? cfg.userName.split(' ')[0] : '';
+      const welcomeMsg = firstName
+        ? cfg.welcome.replace(/^(Ciao|Salve|Hello)!?/i, `Ciao ${firstName}!`)
+        : cfg.welcome;
+      addBotMessage(welcomeMsg);
+    }
   }
   function close() {
     isOpen = false;
@@ -388,6 +399,8 @@
         ...getPageContext(),
       };
       if (conversationId) body.conversation_id = conversationId;
+      if (cfg.userName) body.user_name = cfg.userName;
+      if (cfg.userRole) body.user_role = cfg.userRole;
 
       const res = await fetch(`${cfg.apiUrl}/api/widget/chat`, {
         method:  'POST',
@@ -406,7 +419,10 @@
       }
 
       const data = await res.json();
-      if (data.conversation_id) conversationId = data.conversation_id;
+      if (data.conversation_id) {
+        conversationId = data.conversation_id;
+        localStorage.setItem(_convKey, conversationId);
+      }
       addBotMessage(data.response || '...');
 
     } catch (err) {

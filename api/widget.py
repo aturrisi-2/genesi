@@ -156,6 +156,8 @@ class WidgetChatRequest(BaseModel):
     page_title:   Optional[str] = None
     page_context: Optional[str] = None   # testo visibile della pagina (troncato)
     conversation_id: Optional[str] = None
+    user_name:    Optional[str] = None   # nome dell'utente loggato nella intranet
+    user_role:    Optional[str] = None   # ruolo/reparto dell'utente
 
 
 # ── Endpoint chat ─────────────────────────────────────────────────────────────
@@ -181,6 +183,14 @@ async def widget_chat(
             if subpage_text:
                 logger.info("WIDGET_SUBPAGE_FETCHED url=%s chars=%d", subpage_url, len(subpage_text))
 
+    # Blocco identità utente (se disponibile)
+    user_identity_block = ""
+    if req.user_name:
+        user_identity_block = f"\n[UTENTE LOGGATO]\nNome: {req.user_name}"
+        if req.user_role:
+            user_identity_block += f"\nRuolo: {req.user_role}"
+        user_identity_block += "\nRivolgerti sempre a questa persona per nome nelle risposte.\n"
+
     # Istruzione comportamentale (in coda, dopo il contesto)
     WIDGET_INSTRUCTION = (
         "\n\n[ISTRUZIONE WIDGET]\n"
@@ -204,9 +214,9 @@ async def widget_chat(
         parts.append(f"CONTENUTO PAGINA DI DETTAGLIO ({subpage_url}):\n{subpage_text}")
 
     if parts:
-        message = req.message + "\n\n[CONTESTO PAGINA]\n" + "\n".join(parts) + WIDGET_INSTRUCTION
+        message = req.message + "\n\n[CONTESTO PAGINA]\n" + "\n".join(parts) + user_identity_block + WIDGET_INSTRUCTION
     else:
-        message = req.message + WIDGET_INSTRUCTION
+        message = req.message + user_identity_block + WIDGET_INSTRUCTION
 
     payload = {"message": message, "platform": "widget"}
     if req.conversation_id:
