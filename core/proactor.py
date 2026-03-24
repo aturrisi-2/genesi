@@ -3758,14 +3758,16 @@ Messaggio: "{message}" """
             return response
         try:
             from core.live_search_service import search_for_answer
-            logger.info("AUTO_SEARCH_TRIGGERED user=%s query=%s", user_id, message[:60])
-            live_result = await search_for_answer(message)
+            _auto_query = message.split("\n\n[CONTESTO PAGINA]")[0].strip()
+            _auto_query = _auto_query.split("\n\n[ISTRUZIONE WIDGET]")[0].strip()
+            logger.info("AUTO_SEARCH_TRIGGERED user=%s query=%s", user_id, _auto_query[:60])
+            live_result = await search_for_answer(_auto_query)
             if not live_result:
                 # Fallback: try get_news() when DuckDuckGo fails
                 logger.info("AUTO_SEARCH_DDG_FAIL_FALLBACK_NEWS user=%s", user_id)
                 try:
                     from core.tool_services import tool_service as _ts
-                    news_fallback = await _ts.get_news(message)
+                    news_fallback = await _ts.get_news(_auto_query)
                     if news_fallback and len(news_fallback.strip()) > 20:
                         log("AUTO_SEARCH_NEWS_FALLBACK_OK", user_id=user_id, query=message[:50])
                         return news_fallback
@@ -4149,13 +4151,17 @@ Messaggio utente: {message}"""
         conversation_ctx = build_conversation_context(user_id, message, profile, conversation_id)
 
         # ── LIVE SEARCH: solo per domande che richiedono dati aggiornati ──
+        # Strip contesto pagina (widget) per non usarlo come query di ricerca
+        _search_query = message.split("\n\n[CONTESTO PAGINA]")[0].strip()
+        _search_query = _search_query.split("\n\n[ISTRUZIONE WIDGET]")[0].strip()
+
         live_context_block = ""
         live_source_instruction = ""
         try:
             from core.live_search_service import needs_live_data, search_for_answer
-            if needs_live_data(message):
-                logger.info("LIVE_SEARCH_TRIGGERED user=%s query=%s", user_id, message[:60])
-                live_result = await search_for_answer(message)
+            if needs_live_data(_search_query):
+                logger.info("LIVE_SEARCH_TRIGGERED user=%s query=%s", user_id, _search_query[:60])
+                live_result = await search_for_answer(_search_query)
                 if live_result:
                     live_context_block = (
                         f"\n[DATI AGGIORNATI DAL WEB]\n"
