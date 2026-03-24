@@ -41,7 +41,7 @@ _GEO_FOLLOWUP_COMPILED = [re.compile(p, re.UNICODE) for p in _GEO_FOLLOWUP_PATTE
 INHERITABLE_INTENTS = {"weather", "news", "image_search"}
 
 # Strong intents that must NOT be overridden by inheritance
-_STRONG_INTENTS = {"identity", "time", "date", "tecnica", "debug", "spiegazione"}
+_STRONG_INTENTS = {"identity", "time", "date", "tecnica", "debug", "spiegazione", "greeting", "emotional", "how_are_you"}
 
 # Elliptical follow-up patterns (Italian)
 ELLIPTICAL_NEWS = [
@@ -186,7 +186,9 @@ def is_geo_followup(message: str) -> bool:
         return False
     
     # Exclude common short conversational words that are definitely NOT cities
-    conversational_stops = {"no", "si", "sì", "ok", "okay", "grazie", "grazie mille", "va bene", "perfetto", "ottimo", "grazie!", "no."}
+    conversational_stops = {"no", "si", "sì", "ok", "okay", "grazie", "grazie mille", "va bene", "perfetto", "ottimo", "grazie!", "no.",
+                            "ciao", "salve", "hey", "hello", "hi", "hola", "ehi",
+                            "buongiorno", "buonasera", "buonanotte", "buon pomeriggio"}
     if msg.lower().strip() in conversational_stops:
         return False
 
