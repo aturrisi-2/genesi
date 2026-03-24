@@ -87,13 +87,15 @@ async def widget_chat(
     token = await _get_token(x_widget_key)
 
     # Istruzione comportamentale fissa per il widget
-    WIDGET_INSTRUCTION = (
-        "[ISTRUZIONE WIDGET] Sei un assistente integrato nel portale intranet aziendale. "
-        "REGOLE OBBLIGATORIE: "
-        "1) Quando menzioni una sezione, una news o un contenuto del portale, fornisci SEMPRE il link diretto in formato Markdown [testo](url). "
-        "2) Se il link è disponibile nel contesto pagina usalo; altrimenti indica il percorso di navigazione. "
-        "3) Risposte brevi e concrete: massimo 3-4 righe + link. "
-        "4) Non dire mai 'non posso fornire link' — se il contenuto è nel contesto, il link c'è."
+    WIDGET_INSTRUCTION_PRE = (
+        "[SISTEMA WIDGET INTRANET - LEGGI PRIMA DI RISPONDERE]\n"
+        "Sei un assistente integrato nel portale intranet aziendale C-Place.\n"
+        "REGOLA ASSOLUTA SUI LINK: nel contesto pagina trovi una sezione 'LINK DISPONIBILI NELLA PAGINA'.\n"
+        "Ogni volta che menzioni un contenuto che ha un link in quella sezione, DEVI scrivere il link "
+        "nel formato ESATTO: [testo](URL_COMPLETO)\n"
+        "ESEMPIO CORRETTO: [Statistiche infortuni Febbraio 2026](https://portale.esempio.it/salute)\n"
+        "VIETATO ASSOLUTO: scrivere [testo] senza URL — è un errore grave.\n"
+        "Risposte brevi: 2-3 frasi + link diretto.\n"
     )
 
     # Costruisce il messaggio arricchito col contesto pagina
@@ -106,9 +108,15 @@ async def widget_chat(
             parts.append(f"Titolo: {req.page_title}")
         if req.page_context:
             parts.append(f"Contenuto pagina (estratto):\n{req.page_context[:3000]}")
-        message = req.message + "\n\n[CONTESTO PAGINA]\n" + "\n".join(parts) + f"\n\n{WIDGET_INSTRUCTION}"
+        message = (
+            WIDGET_INSTRUCTION_PRE
+            + "\n[CONTESTO PAGINA]\n"
+            + "\n".join(parts)
+            + "\n\n[DOMANDA UTENTE]\n"
+            + req.message
+        )
     else:
-        message = req.message + f"\n\n{WIDGET_INSTRUCTION}"
+        message = WIDGET_INSTRUCTION_PRE + "\n[DOMANDA UTENTE]\n" + req.message
 
     payload = {"message": message, "platform": "widget"}
     if req.conversation_id:
