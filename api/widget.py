@@ -103,23 +103,26 @@ def _find_best_link(user_message: str, link_map: dict[str, str]) -> Optional[tup
     return best_item if best_score >= 1 else None
 
 
-async def _fetch_subpage_text(url: str) -> str:
-    """Scarica una sottopagina e restituisce il testo pulito (max 4000 char)."""
+async def _fetch_subpage_text(url: str) -> tuple[str, str]:
+    """Scarica una sottopagina. Ritorna (page_title, testo_pulito max 4000 char)."""
     try:
         async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
             res = await client.get(url)
         if res.status_code != 200:
-            return ""
+            return "", ""
         html = res.text
+        # Estrai <title>
+        title_m = _re.search(r"<title[^>]*>([^<]+)</title>", html, _re.IGNORECASE)
+        page_title = title_m.group(1).strip() if title_m else ""
         # Rimuovi script, style, widget stesso
         html = _re.sub(r"<script[\s\S]*?</script>", " ", html, flags=_re.IGNORECASE)
         html = _re.sub(r"<style[\s\S]*?</style>", " ", html, flags=_re.IGNORECASE)
         html = _re.sub(r"<[^>]+>", " ", html)
         text = _re.sub(r"\s+", " ", html).strip()
-        return text[:4000]
+        return page_title, text[:4000]
     except Exception as exc:
         logger.debug("WIDGET_FETCH_SUBPAGE_ERROR url=%s err=%s", url, exc)
-        return ""
+        return "", ""
 
 
 def _inject_bare_links(response: str, link_map: dict[str, str]) -> str:
@@ -174,14 +177,15 @@ async def widget_chat(
 
     # Auto-fetch: se la query matcha una sottopagina, scaricane il contenuto
     subpage_text = ""
+    subpage_title = ""
     matched_link: Optional[tuple[str, str]] = None
     if link_map:
         matched_link = _find_best_link(req.message, link_map)
         if matched_link:
             _, subpage_url = matched_link
-            subpage_text = await _fetch_subpage_text(subpage_url)
+            subpage_title, subpage_text = await _fetch_subpage_text(subpage_url)
             if subpage_text:
-                logger.info("WIDGET_SUBPAGE_FETCHED url=%s chars=%d", subpage_url, len(subpage_text))
+                logger.info("WIDGET_SUBPAGE_FETCHED url=%s title=%r chars=%d", subpage_url, subpage_title, len(subpage_text))
 
     # Blocco identità utente (se disponibile)
     user_identity_block = ""
@@ -244,16 +248,19 @@ async def widget_chat(
     data = res.json()
     response_text = data.get("response") or data.get("message") or ""
 
-    # Post-processing deterministico: inietta URL nei [link] senza parentesi
+    # Post-processing deterministico
+    # 1) Prova a iniettare URL nei [link] senza parentesi tramite keyword match
     response_text = _inject_bare_links(response_text, link_map)
 
-    # Se ancora nessun link Markdown nella risposta ma abbiamo una sottopagina, appendila
-    if matched_link and not _re.search(r"\[.+\]\(http", response_text):
-        link_label, link_url = matched_link
-        # Estrai testo pulito del label (rimuovi emoji e tag multipli)
-        clean_label = _re.sub(r"[^\w\s\-àèéìíòóùú]", "", link_label).strip()
-        clean_label = _re.sub(r"\s+", " ", clean_label)[:60]
-        response_text += f"\n\n[{clean_label}]({link_url})"
+    # 2) Se abbiamo fetchato una sottopagina, garantisci sempre il link in fondo
+    if matched_link:
+        _, matched_url = matched_link
+        if not _re.search(r"\[.+\]\(http", response_text):
+            # Rimuovi i [link vuoti] rimasti dal LLM (es. [Leggi di più])
+            response_text = _re.sub(r"\[([^\]]+)\](?!\()", r"\1", response_text).strip()
+            # Usa il <title> della pagina come label del link
+            link_label = subpage_title or "Approfondisci"
+            response_text += f"\n\n[{link_label}]({matched_url})"
 
     return {
         "response": response_text,
