@@ -86,6 +86,16 @@ async def widget_chat(
 ):
     token = await _get_token(x_widget_key)
 
+    # Istruzione comportamentale fissa per il widget
+    WIDGET_INSTRUCTION = (
+        "[ISTRUZIONE WIDGET] Sei un assistente integrato nel portale intranet aziendale. "
+        "REGOLE OBBLIGATORIE: "
+        "1) Quando menzioni una sezione, una news o un contenuto del portale, fornisci SEMPRE il link diretto in formato Markdown [testo](url). "
+        "2) Se il link è disponibile nel contesto pagina usalo; altrimenti indica il percorso di navigazione. "
+        "3) Risposte brevi e concrete: massimo 3-4 righe + link. "
+        "4) Non dire mai 'non posso fornire link' — se il contenuto è nel contesto, il link c'è."
+    )
+
     # Costruisce il messaggio arricchito col contesto pagina
     message = req.message
     if req.page_url or req.page_context:
@@ -95,8 +105,10 @@ async def widget_chat(
         if req.page_title:
             parts.append(f"Titolo: {req.page_title}")
         if req.page_context:
-            parts.append(f"Contenuto pagina (estratto):\n{req.page_context[:2000]}")
-        message = req.message + "\n\n[CONTESTO PAGINA]\n" + "\n".join(parts)
+            parts.append(f"Contenuto pagina (estratto):\n{req.page_context[:3000]}")
+        message = req.message + "\n\n[CONTESTO PAGINA]\n" + "\n".join(parts) + f"\n\n{WIDGET_INSTRUCTION}"
+    else:
+        message = req.message + f"\n\n{WIDGET_INSTRUCTION}"
 
     payload = {"message": message, "platform": "widget"}
     if req.conversation_id:

@@ -293,11 +293,23 @@
 
   function getPageContext() {
     if (!sendPageCtx) return {};
-    const bodyText = (document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 2500);
+    const bodyText = (document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 2000);
+
+    // Estrae tutti i link visibili della pagina (testo → URL)
+    const links = Array.from(document.querySelectorAll('a[href]'))
+      .filter(a => {
+        const href = a.getAttribute('href') || '';
+        const txt  = (a.textContent || '').trim();
+        return txt.length > 1 && !href.startsWith('javascript:') && !href.startsWith('#');
+      })
+      .map(a => `- ${(a.textContent || '').trim().replace(/\s+/g,' ')}: ${a.href}`)
+      .slice(0, 40)
+      .join('\n');
+
     return {
       page_url:     window.location.href,
       page_title:   document.title,
-      page_context: bodyText,
+      page_context: bodyText + (links ? `\n\nLINK DISPONIBILI NELLA PAGINA:\n${links}` : ''),
     };
   }
 
