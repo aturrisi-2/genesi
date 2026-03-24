@@ -347,6 +347,8 @@ function _startTypewriterChunk(text, durationMs) {
     _twBubble.innerHTML = _twShown + _twPrev +
       '<span class="char-appear">' + _twLast + '</span>' +
       '<span class="stream-cursor"></span>';
+    // Scroll ogni 15 caratteri per seguire la crescita del bubble
+    if (i % 15 === 0) scrollToBottom();
     _twTimeout = setTimeout(typeNext, Math.max(1, getWeight(ch) * msPerWeight));
   };
   typeNext();

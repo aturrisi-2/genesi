@@ -246,6 +246,8 @@ async def _upload_file(token: str, data: bytes, filename: str,
         if res.status_code == 200:
             d = res.json()
             return d.get("analysis") or d.get("summary") or d.get("message") or ""
+        if res.status_code == 401:
+            return "__TOKEN_EXPIRED__"
         return ""
 
 
@@ -259,6 +261,8 @@ async def _transcribe(token: str, audio_data: bytes,
         )
         if res.status_code == 200:
             return res.json().get("text", "")
+        if res.status_code == 401:
+            return "__TOKEN_EXPIRED__"
     return ""
 
 
@@ -521,10 +525,19 @@ async def _process_message(msg: dict, name_map: dict):
 
         async def _handle_reply(reply: str) -> bool:
             if reply in ("__AUTH_FAILED__", "__TOKEN_EXPIRED__"):
-                await send_message(wa_id,
-                    "Sessione scaduta. Puoi rientrare in due modi:\n\n"
-                    f"• Scrivi: *accedi*\n"
-                    f"• Oppure clicca: {_WEBAPP_LINK}login?from=whatsapp&wa_id={wa_id}")
+                saved_email = session.get("email", "")
+                if saved_email:
+                    # Abbiamo l'email: chiediamo solo la password
+                    session["pending_email"] = saved_email
+                    session["state"] = STATE_AWAIT_PASSWORD
+                    await storage.save(_session_key(wa_id), session)
+                    await send_message(wa_id,
+                        f"Sessione scaduta. Inserisci la tua password per rientrare:")
+                else:
+                    session["state"] = STATE_AWAIT_EMAIL
+                    await storage.save(_session_key(wa_id), session)
+                    await send_message(wa_id,
+                        "Sessione scaduta. Inserisci la tua email:")
                 return False
             await _send_response(wa_id, reply)
             return True
@@ -537,6 +550,14 @@ async def _process_message(msg: dict, name_map: dict):
                 return
             ext = "jpg" if "jpeg" in mime else mime.split("/")[-1]
             analysis = await _upload_file(token, img_bytes, f"photo.{ext}", mime)
+            if analysis == "__TOKEN_EXPIRED__":
+                new_token = await _auto_refresh(wa_id, session)
+                if new_token:
+                    token = new_token
+                    analysis = await _upload_file(token, img_bytes, f"photo.{ext}", mime)
+                else:
+                    await _handle_reply("__AUTH_FAILED__")
+                    return
             user_msg  = caption or "Analizza questa immagine che ti ho inviato."
             if analysis:
                 user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
@@ -553,6 +574,14 @@ async def _process_message(msg: dict, name_map: dict):
                 await send_message(wa_id, "Non riuscito a scaricare il documento.")
                 return
             analysis = await _upload_file(token, doc_bytes, doc_name, mime)
+            if analysis == "__TOKEN_EXPIRED__":
+                new_token = await _auto_refresh(wa_id, session)
+                if new_token:
+                    token = new_token
+                    analysis = await _upload_file(token, doc_bytes, doc_name, mime)
+                else:
+                    await _handle_reply("__AUTH_FAILED__")
+                    return
             user_msg  = caption or f"Ho inviato il documento: {doc_name}."
             if analysis:
                 user_msg = f"{user_msg}\n\n[Contenuto: {analysis[:500]}]"
@@ -570,6 +599,14 @@ async def _process_message(msg: dict, name_map: dict):
                     "Non riuscito a scaricare il vocale.")
                 return
             transcription = await _transcribe(token, audio_bytes, mime or "audio/ogg")
+            if transcription == "__TOKEN_EXPIRED__":
+                new_token = await _auto_refresh(wa_id, session)
+                if new_token:
+                    token = new_token
+                    transcription = await _transcribe(token, audio_bytes, mime or "audio/ogg")
+                else:
+                    await _handle_reply("__AUTH_FAILED__")
+                    return
             if not transcription:
                 await send_message(wa_id,
                     "Non sono riuscita a capire il vocale. Prova a scrivere.")
