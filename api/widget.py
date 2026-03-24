@@ -87,18 +87,17 @@ async def widget_chat(
     token = await _get_token(x_widget_key)
 
     # Istruzione comportamentale fissa per il widget
-    WIDGET_INSTRUCTION_PRE = (
-        "[SISTEMA WIDGET INTRANET - LEGGI PRIMA DI RISPONDERE]\n"
-        "Sei un assistente integrato nel portale intranet aziendale C-Place.\n"
-        "REGOLA ASSOLUTA SUI LINK: nel contesto pagina trovi una sezione 'LINK DISPONIBILI NELLA PAGINA'.\n"
-        "Ogni volta che menzioni un contenuto che ha un link in quella sezione, DEVI scrivere il link "
-        "nel formato ESATTO: [testo](URL_COMPLETO)\n"
-        "ESEMPIO CORRETTO: [Statistiche infortuni Febbraio 2026](https://portale.esempio.it/salute)\n"
-        "VIETATO ASSOLUTO: scrivere [testo] senza URL — è un errore grave.\n"
-        "Risposte brevi: 2-3 frasi + link diretto.\n"
+    WIDGET_INSTRUCTION = (
+        "\n\n[ISTRUZIONE WIDGET - OBBLIGATORIA]\n"
+        "Sei un assistente del portale intranet aziendale C-Place.\n"
+        "Sopra trovi 'LINK DISPONIBILI NELLA PAGINA' con URL reali.\n"
+        "REGOLA: usa SEMPRE il formato [testo](URL_COMPLETO) — esempio: [Statistiche infortuni](https://portale.it/salute)\n"
+        "VIETATO: scrivere [testo] senza URL in parentesi.\n"
+        "Risposta breve: 2-3 frasi + link diretto dall'elenco sopra."
     )
 
     # Costruisce il messaggio arricchito col contesto pagina
+    # IMPORTANTE: req.message DEVE restare all'inizio per la classificazione intent
     message = req.message
     if req.page_url or req.page_context:
         parts = []
@@ -108,15 +107,9 @@ async def widget_chat(
             parts.append(f"Titolo: {req.page_title}")
         if req.page_context:
             parts.append(f"Contenuto pagina (estratto):\n{req.page_context[:3000]}")
-        message = (
-            WIDGET_INSTRUCTION_PRE
-            + "\n[CONTESTO PAGINA]\n"
-            + "\n".join(parts)
-            + "\n\n[DOMANDA UTENTE]\n"
-            + req.message
-        )
+        message = req.message + "\n\n[CONTESTO PAGINA]\n" + "\n".join(parts) + WIDGET_INSTRUCTION
     else:
-        message = WIDGET_INSTRUCTION_PRE + "\n[DOMANDA UTENTE]\n" + req.message
+        message = req.message + WIDGET_INSTRUCTION
 
     payload = {"message": message, "platform": "widget"}
     if req.conversation_id:
