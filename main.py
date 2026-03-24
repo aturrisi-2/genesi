@@ -355,6 +355,38 @@ async def serve_widget_demo():
 async def serve_widget_demo_salute():
     return FileResponse(BASE_DIR / "static" / "widget-demo-salute.html")
 
+@app.get("/widget-demo-welfare")
+async def serve_widget_demo_welfare():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-welfare.html")
+
+@app.get("/widget-demo-engineering")
+async def serve_widget_demo_engineering():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-engineering.html")
+
+@app.get("/widget-demo-attivita")
+async def serve_widget_demo_attivita():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-attivita.html")
+
+@app.get("/widget-demo-organigrammi")
+async def serve_widget_demo_organigrammi():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-organigrammi.html")
+
+@app.get("/widget-demo-comefareper")
+async def serve_widget_demo_comefareper():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-comefareper.html")
+
+@app.get("/widget-demo-menu")
+async def serve_widget_demo_menu():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-menu.html")
+
+@app.get("/widget-demo-rubrica")
+async def serve_widget_demo_rubrica():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-rubrica.html")
+
+@app.get("/widget-demo-rassegna")
+async def serve_widget_demo_rassegna():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-rassegna.html")
+
 @app.get("/sw.js")
 async def serve_sw():
     return FileResponse(

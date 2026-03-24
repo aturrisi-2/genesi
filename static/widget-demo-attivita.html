@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Attività e Tempo Libero — C-Place</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f4f4; color: #222; font-size: 14px; }
+    a { text-decoration: none; color: inherit; }
+    .topbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; height:56px; gap:16px; position:sticky; top:0; z-index:100; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+    .logo { display:flex; align-items:center; gap:6px; font-size:22px; font-weight:800; letter-spacing:-1px; color:#222; }
+    .logo-c { background:#c41230; color:#fff; width:32px; height:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900; }
+    .topbar-actions { margin-left:auto; display:flex; align-items:center; gap:18px; }
+    .avatar { width:32px; height:32px; border-radius:50%; background:#c41230; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+    .navbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; gap:2px; height:40px; }
+    .navbar a { padding:0 12px; height:40px; display:flex; align-items:center; font-size:12.5px; font-weight:600; color:#444; border-bottom:2px solid transparent; white-space:nowrap; }
+    .navbar a:hover, .navbar a.active { color:#c41230; border-bottom-color:#c41230; }
+    .breadcrumb { background:#fff; border-bottom:1px solid #eee; padding:8px 20px; font-size:12px; color:#888; }
+    .breadcrumb a { color:#c41230; }
+    .breadcrumb span { margin:0 6px; }
+    .page { max-width:1100px; margin:24px auto; padding:0 16px; display:flex; flex-direction:column; gap:24px; }
+    .sec-title { font-size:16px; font-weight:700; color:#c41230; padding-bottom:10px; border-bottom:2px solid #c41230; margin-bottom:16px; }
+    .card { background:#fff; border-radius:6px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+    .grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+    table { width:100%; border-collapse:collapse; }
+    thead th { background:#c41230; color:#fff; padding:11px 14px; text-align:left; font-size:13px; font-weight:600; }
+    tbody tr:nth-child(even) { background:#fafafa; }
+    tbody tr:hover { background:#fff3f3; }
+    td { padding:10px 14px; border-bottom:1px solid #f0f0f0; font-size:13px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:600; }
+    .badge-red { background:#fce4e4; color:#c41230; }
+    .badge-green { background:#e8f5e9; color:#2e7d32; }
+    .badge-blue { background:#e3f2fd; color:#1565c0; }
+    .badge-yellow { background:#fff8e1; color:#e65100; }
+    footer { background:#c41230; color:#fff; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; margin-top:32px; }
+    .footer-btn { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.4); color:#fff; padding:8px 16px; border-radius:4px; font-size:12px; cursor:pointer; text-decoration:none; display:inline-block; }
+    .link-red { color:#c41230; font-weight:600; }
+
+    .steps { display:flex; flex-direction:column; gap:12px; }
+    .step { display:flex; align-items:flex-start; gap:14px; }
+    .step-num { background:#c41230; color:#fff; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex-shrink:0; margin-top:1px; }
+    .step-content { flex:1; }
+    .step-title { font-weight:600; font-size:13px; margin-bottom:3px; }
+    .step-desc { color:#666; font-size:12.5px; line-height:1.5; }
+
+    .event-card { background:#f9f2f2; border-left:4px solid #c41230; border-radius:4px; padding:14px 16px; }
+    .event-date { font-size:11px; font-weight:700; color:#c41230; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+    .event-title { font-size:14px; font-weight:700; margin-bottom:4px; }
+    .event-desc { font-size:12.5px; color:#555; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/widget-demo" class="logo"><div class="logo-c">C</div>Place</a>
+  <div class="topbar-actions"><div class="avatar">AT</div></div>
+</div>
+<div class="navbar">
+  <a href="/widget-demo">ULTIME NEWS ▾</a>
+  <a href="#">AZIENDA ▾</a>
+  <a href="#">AREE ▾</a>
+  <a href="/widget-demo-attivita" class="active">ATTIVITÀ E TEMPO LIBERO ▾</a>
+  <a href="#">AZIONI VELOCI ▾</a>
+  <a href="/widget-demo-rubrica">RUBRICA ▾</a>
+  <a href="#">BU ▾</a>
+</div>
+
+<div class="breadcrumb">
+  <a href="/widget-demo">Home</a><span>›</span>
+  Attività e Tempo Libero
+</div>
+
+<div class="page">
+
+  <!-- CORSI SPORTIVI -->
+  <div class="card">
+    <div class="sec-title">Corsi sportivi attivi — Stagione 2025/2026</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Sport</th>
+          <th>Giorno / Orario</th>
+          <th>Luogo</th>
+          <th>Costo dipendente</th>
+          <th>Posti disponibili</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Nordic Walking</strong></td>
+          <td>Mercoledì 07:00</td>
+          <td>Parco Villa Angeletti</td>
+          <td><span class="badge badge-green">Gratuito</span></td>
+          <td>8 posti</td>
+        </tr>
+        <tr>
+          <td><strong>Yoga</strong></td>
+          <td>Lunedì e Giovedì 13:00</td>
+          <td>Sala polivalente — Edificio B</td>
+          <td>€5/mese</td>
+          <td><span class="badge badge-red">3 posti</span></td>
+        </tr>
+        <tr>
+          <td><strong>Calcio a 5</strong></td>
+          <td>Venerdì 18:30</td>
+          <td>Palestra Imola — Via Roma</td>
+          <td>€10/mese</td>
+          <td>12 posti</td>
+        </tr>
+        <tr>
+          <td><strong>Tennis</strong></td>
+          <td>Sabato 09:00</td>
+          <td>Tennis Club Imola</td>
+          <td>€15/mese</td>
+          <td>5 posti</td>
+        </tr>
+        <tr>
+          <td><strong>Running</strong></td>
+          <td>Martedì e Giovedì 07:15</td>
+          <td>Parco fluviale — ritrovo ingresso C</td>
+          <td><span class="badge badge-green">Gratuito</span></td>
+          <td>Illimitati</td>
+        </tr>
+        <tr>
+          <td><strong>Tiro con l'arco</strong></td>
+          <td>Domenica 10:00</td>
+          <td>Circolo Arcieri Imola</td>
+          <td>€8/mese</td>
+          <td>6 posti</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- COME ISCRIVERSI -->
+  <div class="card">
+    <div class="sec-title">Come iscriversi ai corsi</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">Scegli il corso e verifica i posti</div>
+          <div class="step-desc">Controlla la tabella sopra per verificare i posti disponibili. I posti si aggiornano ogni lunedì mattina.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">Invia la richiesta di iscrizione</div>
+          <div class="step-desc">Scrivi a <a href="mailto:sport@cefla.it" class="link-red">sport@cefla.it</a> indicando nome, matricola e corso scelto. In alternativa compila il modulo cartaceo disponibile in Reception (piano terra Edificio A).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">Ricevi conferma e inizia</div>
+          <div class="step-desc">Riceverai una email di conferma entro 2 giorni lavorativi con tutti i dettagli del corso. Il pagamento mensile avviene tramite trattenuta in busta paga.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONVENZIONI ALBERGHI -->
+  <div class="card">
+    <div class="sec-title">Convenzioni alberghi — uso personale dipendenti</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Hotel</th>
+          <th>Città</th>
+          <th>Sconto dipendenti</th>
+          <th>Note prenotazione</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Una Hotels</strong></td>
+          <td>Bologna, Milano</td>
+          <td><span class="badge badge-green">-20%</span></td>
+          <td>Prenotazione diretta con badge aziendale</td>
+        </tr>
+        <tr>
+          <td><strong>Zanhotel</strong></td>
+          <td>Bologna</td>
+          <td><span class="badge badge-green">-25%</span></td>
+          <td>Codice sconto: <strong>CEFLA26</strong></td>
+        </tr>
+        <tr>
+          <td><strong>Starhotels</strong></td>
+          <td>Milano, Roma</td>
+          <td><span class="badge badge-blue">-18%</span></td>
+          <td>Prenotazione tramite app corporate Starhotels</td>
+        </tr>
+        <tr>
+          <td><strong>Best Western</strong></td>
+          <td>Varie sedi Italia</td>
+          <td><span class="badge badge-blue">-15%</span></td>
+          <td>Portale dedicato — accesso da intranet</td>
+        </tr>
+        <tr>
+          <td><strong>NH Hotels</strong></td>
+          <td>Italia (tutte le sedi)</td>
+          <td><span class="badge badge-yellow">-12%</span></td>
+          <td>Prenotazione tramite HR — int. 2100</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px; font-size:12px; color:#888;">* Le convenzioni sono riservate all'uso personale dei dipendenti Cefla. Non applicabili a trasferte di lavoro (usare procedure trasferte aziendali).</p>
+  </div>
+
+  <!-- PROSSIMI EVENTI -->
+  <div class="card">
+    <div class="sec-title">Prossimi eventi</div>
+    <div class="grid-3">
+      <div class="event-card">
+        <div class="event-date">5 Aprile 2026</div>
+        <div class="event-title">Torneo aziendale di tiro con l'arco</div>
+        <div class="event-desc">Circolo Arcieri Imola — ore 10:00. Aperto a tutti i dipendenti, anche non iscritti al corso. Iscrizioni entro il 1 aprile a sport@cefla.it</div>
+      </div>
+      <div class="event-card">
+        <div class="event-date">18 Aprile 2026</div>
+        <div class="event-title">Camminata solidale "Insieme per i bambini"</div>
+        <div class="event-desc">Parco fluviale Imola — ore 09:00. Evento in collaborazione con UNICEF. Iscrizione libera, quota di partecipazione €5 a scopo benefico.</div>
+      </div>
+      <div class="event-card">
+        <div class="event-date">10 Maggio 2026</div>
+        <div class="event-title">Torneo calcio a 5 — Cefla Cup 2026</div>
+        <div class="event-desc">Palestra Imola — dalle 14:00. 8 squadre ammesse. Iscrizioni entro il 30 aprile. Premi per le prime 3 squadre classificate.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <a href="/widget-demo" class="footer-btn">← Torna alla Home</a>
+  <span style="font-size:12px; opacity:.8;">C-Place © 2026 — Cefla S.C. — Tutti i diritti riservati</span>
+</footer>
+
+<script src="/widget.js"
+  data-api-url=""
+  data-api-key="demo_cplace_2026"
+  data-name="Assistente C-Place"
+  data-color="#c41230"
+  data-welcome="Sei nella sezione Attività e Tempo Libero. Posso aiutarti con corsi sportivi, convenzioni hotel, iscrizioni e prenotazioni. Come posso aiutarti?"
+  data-placeholder="Come posso aiutarti?"
+  data-page-context="true">
+</script>
+</body>
+</html>

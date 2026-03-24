@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welfare e Benefit — C-Place</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f4f4; color: #222; font-size: 14px; }
+    a { text-decoration: none; color: inherit; }
+    .topbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; height:56px; gap:16px; position:sticky; top:0; z-index:100; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+    .logo { display:flex; align-items:center; gap:6px; font-size:22px; font-weight:800; letter-spacing:-1px; color:#222; }
+    .logo-c { background:#c41230; color:#fff; width:32px; height:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900; }
+    .topbar-actions { margin-left:auto; display:flex; align-items:center; gap:18px; }
+    .avatar { width:32px; height:32px; border-radius:50%; background:#c41230; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+    .navbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; gap:2px; height:40px; }
+    .navbar a { padding:0 12px; height:40px; display:flex; align-items:center; font-size:12.5px; font-weight:600; color:#444; border-bottom:2px solid transparent; white-space:nowrap; }
+    .navbar a:hover, .navbar a.active { color:#c41230; border-bottom-color:#c41230; }
+    .breadcrumb { background:#fff; border-bottom:1px solid #eee; padding:8px 20px; font-size:12px; color:#888; }
+    .breadcrumb a { color:#c41230; }
+    .breadcrumb span { margin:0 6px; }
+    .page { max-width:1100px; margin:24px auto; padding:0 16px; display:flex; flex-direction:column; gap:24px; }
+    .sec-title { font-size:16px; font-weight:700; color:#c41230; padding-bottom:10px; border-bottom:2px solid #c41230; margin-bottom:16px; }
+    .card { background:#fff; border-radius:6px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+    .grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+    .grid-2 { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+    table { width:100%; border-collapse:collapse; }
+    thead th { background:#c41230; color:#fff; padding:11px 14px; text-align:left; font-size:13px; font-weight:600; }
+    tbody tr:nth-child(even) { background:#fafafa; }
+    tbody tr:hover { background:#fff3f3; }
+    td { padding:10px 14px; border-bottom:1px solid #f0f0f0; font-size:13px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:600; }
+    .badge-red { background:#fce4e4; color:#c41230; }
+    .badge-green { background:#e8f5e9; color:#2e7d32; }
+    .badge-blue { background:#e3f2fd; color:#1565c0; }
+    .badge-yellow { background:#fff8e1; color:#e65100; }
+    footer { background:#c41230; color:#fff; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; margin-top:32px; }
+    .footer-btn { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.4); color:#fff; padding:8px 16px; border-radius:4px; font-size:12px; cursor:pointer; text-decoration:none; display:inline-block; }
+
+    .steps { counter-reset: step; display:flex; flex-direction:column; gap:12px; }
+    .step { display:flex; align-items:flex-start; gap:14px; }
+    .step-num { counter-increment:step; background:#c41230; color:#fff; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex-shrink:0; margin-top:1px; }
+    .step-content { flex:1; }
+    .step-title { font-weight:600; font-size:13px; margin-bottom:3px; }
+    .step-desc { color:#666; font-size:12.5px; line-height:1.5; }
+    .info-banner { background:#e3f2fd; border-left:4px solid #1565c0; padding:12px 16px; border-radius:4px; font-size:13px; color:#1a237e; display:flex; align-items:center; gap:10px; }
+    .info-icon { font-size:18px; }
+    .link-red { color:#c41230; font-weight:600; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/widget-demo" class="logo"><div class="logo-c">C</div>Place</a>
+  <div class="topbar-actions"><div class="avatar">AT</div></div>
+</div>
+<div class="navbar">
+  <a href="/widget-demo">ULTIME NEWS ▾</a>
+  <a href="#">AZIENDA ▾</a>
+  <a href="#">AREE ▾</a>
+  <a href="/widget-demo-attivita">ATTIVITÀ E TEMPO LIBERO ▾</a>
+  <a href="#">AZIONI VELOCI ▾</a>
+  <a href="/widget-demo-rubrica">RUBRICA ▾</a>
+  <a href="#">BU ▾</a>
+</div>
+
+<div class="breadcrumb">
+  <a href="/widget-demo">Home</a><span>›</span>
+  <a href="#">People &amp; Organization</a><span>›</span>
+  Welfare e Benefit
+</div>
+
+<div class="page">
+
+  <!-- PACCHETTO WELFARE -->
+  <div class="card">
+    <div class="sec-title">Il tuo pacchetto welfare 2026</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Voce welfare</th>
+          <th>Valore annuo</th>
+          <th>Note</th>
+          <th>Stato</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Previdenza complementare</strong></td>
+          <td>€1.200/anno</td>
+          <td>Contributo aziendale al Fondo Cometa</td>
+          <td><span class="badge badge-green">Attiva</span></td>
+        </tr>
+        <tr>
+          <td><strong>Rimborso spese mediche</strong></td>
+          <td>€800/anno</td>
+          <td>Rimborso su presentazione documentazione</td>
+          <td><span class="badge badge-green">Attiva</span></td>
+        </tr>
+        <tr>
+          <td><strong>Buoni pasto</strong></td>
+          <td>€8/giorno lavorativo</td>
+          <td>Erogati tramite carta elettronica Sodexo</td>
+          <td><span class="badge badge-green">Attiva</span></td>
+        </tr>
+        <tr>
+          <td><strong>Assicurazione sanitaria integrativa</strong></td>
+          <td>Inclusa nel pacchetto</td>
+          <td>Polizza UniSalute — estendibile ai familiari</td>
+          <td><span class="badge badge-green">Attiva</span></td>
+        </tr>
+        <tr>
+          <td><strong>Borse di studio figli</strong></td>
+          <td>€500/figlio</td>
+          <td>Per percorsi scolastici e universitari</td>
+          <td><span class="badge badge-blue">Su richiesta</span></td>
+        </tr>
+        <tr>
+          <td><strong>Flexible benefit</strong></td>
+          <td>€650/anno</td>
+          <td>Sceglibili tramite portale AON entro il 31/03</td>
+          <td><span class="badge badge-yellow">Scadenza: 31/03</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- PORTALE AON -->
+  <div class="card">
+    <div class="sec-title">Come accedere al portale AON</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">Vai al portale welfare AON</div>
+          <div class="step-desc">Accedi a <a href="https://welfare.aon.it" target="_blank" class="link-red">https://welfare.aon.it</a> dal browser aziendale o da casa. Il portale è accessibile 24/7.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">Effettua il login con le credenziali Cefla</div>
+          <div class="step-desc">Usa la tua email aziendale (@cefla.it) come username. La password è quella comunicata dall'HR al momento dell'onboarding. In caso di smarrimento, contatta l'int. 2100.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">Scegli e configura i tuoi benefit</div>
+          <div class="step-desc">Dalla dashboard seleziona le voci del flexible benefit che desideri attivare. Le modifiche devono essere confermate entro il 31 marzo 2026. Per supporto chiama il <strong>int. 2100</strong>.</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:16px;" class="info-banner">
+      <span class="info-icon">ℹ️</span>
+      <span>Per assistenza telefonica sul portale AON chiama il supporto interno al <strong>int. 2100</strong> oppure scrivi a <a href="mailto:helpdesk-welfare@cefla.it" class="link-red">helpdesk-welfare@cefla.it</a></span>
+    </div>
+  </div>
+
+  <!-- MFA AON -->
+  <div class="card">
+    <div class="sec-title">Autenticazione multi-fattore (MFA) su AON</div>
+    <p style="margin-bottom:16px; color:#555; font-size:13px;">Da marzo 2026 il portale AON richiede l'autenticazione a due fattori per accedere ai dati personali e previdenziali. Segui questi passaggi per attivare il nuovo MFA.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">Scarica l'app Microsoft Authenticator</div>
+          <div class="step-desc">Disponibile su App Store (iOS) e Google Play (Android). L'app è gratuita e già in uso per i sistemi aziendali Microsoft 365.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">Accedi al portale AON e vai su "Impostazioni account"</div>
+          <div class="step-desc">Clicca sul tuo nome in alto a destra → Sicurezza → Attiva autenticazione a due fattori.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">Scansiona il codice QR con l'app</div>
+          <div class="step-desc">Apri Microsoft Authenticator → "Aggiungi account" → "Account aziendale" → inquadra il QR mostrato sul portale AON.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <div class="step-title">Verifica e salva i codici di emergenza</div>
+          <div class="step-desc">Inserisci il codice a 6 cifre generato dall'app per confermare. Salva in un luogo sicuro i codici di recupero forniti dal sistema. In caso di problemi: <strong>int. 2105</strong>.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTATTI HR -->
+  <div class="card">
+    <div class="sec-title">Contatti HR — Welfare</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Ruolo</th>
+          <th>Nominativo</th>
+          <th>Interno</th>
+          <th>Email</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Responsabile Welfare</td>
+          <td><strong>Laura Bianchi</strong></td>
+          <td>int. 2105</td>
+          <td><a href="mailto:l.bianchi@cefla.it" class="link-red">l.bianchi@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>Previdenza complementare</td>
+          <td><strong>Giovanni Rossi</strong></td>
+          <td>int. 2108</td>
+          <td><a href="mailto:g.rossi@cefla.it" class="link-red">g.rossi@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>Supporto portale welfare</td>
+          <td>Helpdesk Welfare</td>
+          <td>int. 2100</td>
+          <td><a href="mailto:helpdesk-welfare@cefla.it" class="link-red">helpdesk-welfare@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>Assicurazione sanitaria</td>
+          <td><strong>Marta Conti</strong></td>
+          <td>int. 2112</td>
+          <td><a href="mailto:m.conti@cefla.it" class="link-red">m.conti@cefla.it</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<footer>
+  <a href="/widget-demo" class="footer-btn">← Torna alla Home</a>
+  <span style="font-size:12px; opacity:.8;">C-Place © 2026 — Cefla S.C. — Tutti i diritti riservati</span>
+</footer>
+
+<script src="/widget.js"
+  data-api-url=""
+  data-api-key="demo_cplace_2026"
+  data-name="Assistente C-Place"
+  data-color="#c41230"
+  data-welcome="Sei nella sezione Welfare. Posso aiutarti con rimborsi, benefit, previdenza complementare e convenzioni AON. Come posso aiutarti?"
+  data-placeholder="Come posso aiutarti?"
+  data-page-context="true">
+</script>
+</body>
+</html>
