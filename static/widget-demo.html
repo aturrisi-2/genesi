@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Intranet Aziendale — Demo Widget Genesi</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f1f5f9; color: #1e293b; }
+
+    .topbar {
+      background: #1e40af;
+      color: #fff;
+      padding: 14px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    }
+    .topbar .logo { font-size: 20px; font-weight: 700; letter-spacing: -.5px; }
+    .topbar nav { margin-left: auto; display: flex; gap: 24px; }
+    .topbar nav a { color: rgba(255,255,255,.8); text-decoration: none; font-size: 14px; }
+    .topbar nav a:hover { color: #fff; }
+
+    .hero {
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      color: #fff;
+      padding: 48px 32px;
+      text-align: center;
+    }
+    .hero h1 { font-size: 28px; margin-bottom: 8px; }
+    .hero p  { font-size: 15px; opacity: .8; }
+
+    .container { max-width: 960px; margin: 0 auto; padding: 32px; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    .card h3 { font-size: 16px; margin-bottom: 8px; color: #1e40af; }
+    .card p  { font-size: 14px; color: #64748b; line-height: 1.6; }
+
+    .table-card { grid-column: 1 / -1; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+    th { background: #f8fafc; padding: 10px 14px; text-align: left; color: #475569; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
+    td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+    tr:hover td { background: #f8fafc; }
+
+    .badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:600; }
+    .badge-green { background:#dcfce7; color:#16a34a; }
+    .badge-yellow { background:#fef9c3; color:#ca8a04; }
+    .badge-red { background:#fee2e2; color:#dc2626; }
+
+    .form-demo { display:flex; flex-direction:column; gap:12px; margin-top:12px; }
+    .form-demo label { font-size:13px; color:#475569; }
+    .form-demo input, .form-demo select {
+      padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px;
+      font-size:14px; color:#1e293b; width:100%;
+    }
+    .form-demo .hint { font-size:11px; color:#94a3b8; }
+    .form-demo button {
+      background:#1e40af; color:#fff; border:none; border-radius:8px;
+      padding:10px; cursor:pointer; font-size:14px; font-weight:600;
+    }
+
+    footer { text-align:center; padding:32px; color:#94a3b8; font-size:13px; }
+  </style>
+</head>
+<body>
+
+  <!-- Intranet simulata -->
+  <div class="topbar">
+    <span class="logo">🏢 MioTech Intranet</span>
+    <nav>
+      <a href="#">Dashboard</a>
+      <a href="#">Risorse Umane</a>
+      <a href="#">IT Support</a>
+      <a href="#">Documenti</a>
+      <a href="#">Richieste</a>
+    </nav>
+  </div>
+
+  <div class="hero">
+    <h1>Benvenuto nel portale aziendale</h1>
+    <p>Gestisci le tue richieste, consulta documenti e accedi ai servizi IT</p>
+  </div>
+
+  <div class="container">
+    <div class="grid">
+
+      <div class="card">
+        <h3>📋 Richieste aperte</h3>
+        <p>Hai <strong>3 richieste</strong> in attesa di approvazione. Clicca per visualizzare i dettagli e verificare lo stato di avanzamento.</p>
+      </div>
+
+      <div class="card">
+        <h3>📅 Ferie e permessi</h3>
+        <p>Il modulo per richiedere ferie va compilato almeno <strong>5 giorni lavorativi</strong> prima. Residuo attuale: <strong>12 giorni</strong>.</p>
+      </div>
+
+      <div class="card">
+        <h3>🖥️ IT Support</h3>
+        <p>Per guasti hardware aprire un ticket tramite il portale. Per problemi software urgenti chiamare il <strong>int. 2200</strong>.</p>
+      </div>
+
+      <!-- Tabella richieste -->
+      <div class="card table-card">
+        <h3>📊 Ultime richieste</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Tipo</th>
+              <th>Descrizione</th>
+              <th>Data</th>
+              <th>Stato</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>1042</td><td>IT</td><td>Sostituzione monitor ufficio 3B</td><td>20/03/2026</td><td><span class="badge badge-yellow">In lavorazione</span></td></tr>
+            <tr><td>1039</td><td>HR</td><td>Richiesta ferie 1–5 aprile</td><td>18/03/2026</td><td><span class="badge badge-green">Approvata</span></td></tr>
+            <tr><td>1035</td><td>Acquisti</td><td>Ordine materiale ufficio</td><td>15/03/2026</td><td><span class="badge badge-red">Rifiutata</span></td></tr>
+            <tr><td>1031</td><td>IT</td><td>Accesso VPN remoto</td><td>12/03/2026</td><td><span class="badge badge-green">Completata</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Form demo -->
+      <div class="card">
+        <h3>📝 Nuova richiesta IT</h3>
+        <div class="form-demo">
+          <div>
+            <label>Tipo problema</label>
+            <select><option>Hardware</option><option>Software</option><option>Rete / VPN</option><option>Account / Accessi</option></select>
+          </div>
+          <div>
+            <label>Descrizione breve</label>
+            <input type="text" placeholder="es. Non riesco ad aprire Outlook">
+            <div class="hint">Vuoi aiuto? Chiedi all'assistente in basso a destra 👉</div>
+          </div>
+          <div>
+            <label>Priorità</label>
+            <select><option>Normale</option><option>Alta</option><option>Urgente</option></select>
+          </div>
+          <button>Invia richiesta</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>📞 Rubrica rapida</h3>
+        <p style="margin-bottom:12px;">Contatti interni principali:</p>
+        <table>
+          <tr><td>IT Helpdesk</td><td><strong>int. 2200</strong></td></tr>
+          <tr><td>HR / Risorse Umane</td><td><strong>int. 2100</strong></td></tr>
+          <tr><td>Amministrazione</td><td><strong>int. 2050</strong></td></tr>
+          <tr><td>Sicurezza</td><td><strong>int. 2300</strong></td></tr>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>© 2026 MioTech S.r.l. — Portale Intranet Aziendale</footer>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       WIDGET GENESI — una sola riga da aggiungere alla intranet
+       ════════════════════════════════════════════════════════ -->
+  <script
+    src="/widget.js"
+    data-api-url=""
+    data-api-key="DEMO_KEY"
+    data-name="Assistente Aziendale"
+    data-color="#1e40af"
+    data-welcome="Ciao! Sono l'assistente virtuale di MioTech. Posso aiutarti con richieste IT, ferie, procedure aziendali e molto altro. Come posso aiutarti?"
+    data-placeholder="Es: come faccio a richiedere le ferie?"
+    data-page-context="true">
+  </script>
+
+</body>
+</html>
