@@ -14,7 +14,10 @@
   'use strict';
 
   // ── Configurazione da attributi del tag <script> ──────────────────────────
-  const _s = document.currentScript;
+  const _s = document.currentScript
+          || document.querySelector('script[data-api-key]')
+          || document.querySelector('script[src*="widget.js"]');
+  if (!_s) { console.warn('[GenesiWidget] impossibile trovare il tag <script>'); return; }
   const cfg = {
     apiUrl:      (_s.getAttribute('data-api-url')   || '').replace(/\/$/, ''),
     apiKey:      _s.getAttribute('data-api-key')    || '',
@@ -28,78 +31,75 @@
   };
 
   if (!cfg.apiKey) { console.warn('[GenesiWidget] data-api-key mancante'); return; }
+  console.log('[GenesiWidget] init', cfg.name, cfg.apiUrl || '(same-origin)');
 
   // ── Colori derivati ───────────────────────────────────────────────────────
   function hexToRgb(hex) {
     const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return r ? `${parseInt(r[1],16)},${parseInt(r[2],16)},${parseInt(r[3],16)}` : '124,58,237';
   }
-  const rgb = hexToRgb(cfg.color);
+  const rgb   = hexToRgb(cfg.color);
+  const side  = cfg.position.includes('right') ? 'right' : 'left';
+  const color = cfg.color;
 
-  // ── CSS ───────────────────────────────────────────────────────────────────
+  // ── CSS (valori inline, nessuna CSS variable per massima compatibilità) ───
   const css = `
-    :root {
-      --gw-color: ${cfg.color};
-      --gw-rgb: ${rgb};
-      --gw-radius: 16px;
-      --gw-shadow: 0 8px 32px rgba(0,0,0,0.28);
-    }
     #gw-btn {
-      position: fixed;
-      ${cfg.position.includes('right') ? 'right:24px' : 'left:24px'};
-      bottom: 24px;
-      width: 56px; height: 56px;
-      border-radius: 50%;
-      background: var(--gw-color);
-      box-shadow: 0 4px 20px rgba(var(--gw-rgb),.55);
-      border: none; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
+      position: fixed !important;
+      ${side}: 24px !important;
+      bottom: 24px !important;
+      width: 56px !important; height: 56px !important;
+      border-radius: 50% !important;
+      background: ${color} !important;
+      box-shadow: 0 4px 20px rgba(${rgb},.55) !important;
+      border: none !important; cursor: pointer !important;
+      display: flex !important; align-items: center !important; justify-content: center !important;
       transition: transform .2s, box-shadow .2s;
-      z-index: 2147483640;
+      z-index: 2147483640 !important;
+      padding: 0 !important; margin: 0 !important;
     }
-    #gw-btn:hover { transform: scale(1.08); box-shadow: 0 6px 28px rgba(var(--gw-rgb),.7); }
-    #gw-btn svg { width:26px; height:26px; fill:#fff; }
+    #gw-btn:hover { transform: scale(1.08) !important; }
+    #gw-btn svg { width:26px; height:26px; fill:#fff; flex-shrink:0; }
     #gw-badge {
-      position:absolute; top:-3px; right:-3px;
+      position:absolute; top:-3px; ${side === 'right' ? 'right' : 'left'}:-3px;
       width:14px; height:14px;
       background:#ef4444; border-radius:50%;
       border:2px solid #fff; display:none;
     }
-
     #gw-panel {
-      position: fixed;
-      ${cfg.position.includes('right') ? 'right:16px' : 'left:16px'};
-      bottom: 92px;
+      position: fixed !important;
+      ${side}: 16px !important;
+      bottom: 92px !important;
       width: 360px; max-width: calc(100vw - 32px);
       height: 520px; max-height: calc(100vh - 120px);
-      background: #0f0f17;
+      background: #0f0f17 !important;
       border: 1px solid rgba(255,255,255,0.08);
-      border-radius: var(--gw-radius);
-      box-shadow: var(--gw-shadow);
-      display: flex; flex-direction: column;
-      z-index: 2147483639;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.28);
+      display: flex !important; flex-direction: column;
+      z-index: 2147483639 !important;
       overflow: hidden;
       transform: translateY(16px) scale(.97);
       opacity: 0;
       pointer-events: none;
       transition: transform .22s cubic-bezier(.4,0,.2,1), opacity .22s;
+      margin: 0 !important; padding: 0 !important;
     }
     #gw-panel.gw-open {
-      transform: translateY(0) scale(1);
-      opacity: 1;
-      pointer-events: all;
+      transform: translateY(0) scale(1) !important;
+      opacity: 1 !important;
+      pointer-events: all !important;
     }
-
     #gw-header {
       display: flex; align-items: center; gap: 10px;
       padding: 14px 16px;
-      background: linear-gradient(135deg, rgba(var(--gw-rgb),.18) 0%, rgba(var(--gw-rgb),.06) 100%);
+      background: linear-gradient(135deg, rgba(${rgb},.18) 0%, rgba(${rgb},.06) 100%);
       border-bottom: 1px solid rgba(255,255,255,0.07);
       flex-shrink: 0;
     }
     #gw-avatar {
       width:36px; height:36px; border-radius:50%;
-      background: var(--gw-color);
+      background: ${color};
       display:flex; align-items:center; justify-content:center;
       font-size:18px; flex-shrink:0; overflow:hidden;
     }
@@ -107,27 +107,23 @@
     #gw-title { font-family:system-ui,sans-serif; color:#fff; font-size:15px; font-weight:600; }
     #gw-subtitle { font-family:system-ui,sans-serif; color:rgba(255,255,255,.45); font-size:11px; }
     #gw-close {
-      margin-left:auto; background:none; border:none; cursor:pointer;
+      margin-left:auto !important; background:none !important; border:none !important; cursor:pointer;
       color:rgba(255,255,255,.4); font-size:20px; line-height:1; padding:4px;
-      transition:color .15s;
     }
     #gw-close:hover { color:#fff; }
-
     #gw-messages {
       flex:1; overflow-y:auto; padding:14px 12px;
       display:flex; flex-direction:column; gap:10px;
-      scroll-behavior:smooth;
     }
     #gw-messages::-webkit-scrollbar { width:4px; }
     #gw-messages::-webkit-scrollbar-thumb { background:rgba(255,255,255,.12); border-radius:4px; }
-
     .gw-msg {
       max-width:82%; font-family:system-ui,sans-serif; font-size:13.5px;
       line-height:1.5; padding:9px 12px; border-radius:12px; word-break:break-word;
     }
     .gw-msg.gw-user {
       align-self:flex-end;
-      background: var(--gw-color);
+      background: ${color};
       color:#fff; border-bottom-right-radius:4px;
     }
     .gw-msg.gw-bot {
@@ -135,13 +131,9 @@
       background:rgba(255,255,255,.07);
       color:rgba(255,255,255,.88); border-bottom-left-radius:4px;
     }
-    .gw-msg.gw-bot a { color:var(--gw-color); }
+    .gw-msg.gw-bot a { color:${color}; }
     .gw-msg.gw-bot strong { color:#fff; }
-    .gw-msg.gw-bot code {
-      background:rgba(255,255,255,.1); padding:1px 5px;
-      border-radius:4px; font-size:12px;
-    }
-
+    .gw-msg.gw-bot code { background:rgba(255,255,255,.1); padding:1px 5px; border-radius:4px; font-size:12px; }
     .gw-typing {
       align-self:flex-start; padding:10px 14px;
       background:rgba(255,255,255,.07); border-radius:12px; border-bottom-left-radius:4px;
@@ -158,59 +150,42 @@
       0%,60%,100% { transform:translateY(0); }
       30%          { transform:translateY(-5px); }
     }
-
     #gw-ctx-bar {
-      display:flex; align-items:center; gap:6px;
-      padding:5px 12px;
-      background:rgba(var(--gw-rgb),.08);
-      border-top:1px solid rgba(255,255,255,.05);
-      flex-shrink:0;
+      display:flex; align-items:center; gap:6px; padding:5px 12px;
+      background:rgba(${rgb},.08); border-top:1px solid rgba(255,255,255,.05); flex-shrink:0;
     }
     #gw-ctx-bar span {
-      font-family:system-ui,sans-serif; font-size:11px;
-      color:rgba(255,255,255,.4); flex:1;
+      font-family:system-ui,sans-serif; font-size:11px; color:rgba(255,255,255,.4); flex:1;
       overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     }
     #gw-ctx-toggle {
-      background:none; border:none; cursor:pointer;
-      font-size:10px; color:var(--gw-color); padding:2px 6px;
-      border:1px solid rgba(var(--gw-rgb),.4); border-radius:4px;
+      background:none; border:1px solid rgba(${rgb},.4); cursor:pointer;
+      font-size:10px; color:${color}; padding:2px 6px; border-radius:4px;
       font-family:system-ui,sans-serif;
     }
-
     #gw-footer {
-      display:flex; gap:8px; align-items:flex-end;
-      padding:10px 10px;
-      border-top:1px solid rgba(255,255,255,.07);
-      flex-shrink:0;
+      display:flex; gap:8px; align-items:flex-end; padding:10px;
+      border-top:1px solid rgba(255,255,255,.07); flex-shrink:0;
     }
     #gw-input {
       flex:1; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.1);
       border-radius:10px; padding:9px 12px; color:#fff;
       font-family:system-ui,sans-serif; font-size:13.5px; outline:none; resize:none;
       max-height:100px; min-height:38px; line-height:1.4;
-      transition:border-color .15s;
     }
     #gw-input::placeholder { color:rgba(255,255,255,.25); }
-    #gw-input:focus { border-color:rgba(var(--gw-rgb),.6); }
     #gw-send {
       width:36px; height:36px; border-radius:50%; flex-shrink:0;
-      background:var(--gw-color); border:none; cursor:pointer;
+      background:${color}; border:none; cursor:pointer;
       display:flex; align-items:center; justify-content:center;
-      transition:background .15s, transform .1s;
     }
-    #gw-send:hover { background:rgba(var(--gw-rgb),.85); }
-    #gw-send:active { transform:scale(.93); }
     #gw-send svg { width:16px; height:16px; fill:#fff; }
     #gw-send:disabled { opacity:.4; cursor:default; }
-
     #gw-powered {
       text-align:center; padding:4px 0 8px;
-      font-family:system-ui,sans-serif; font-size:10px;
-      color:rgba(255,255,255,.2); flex-shrink:0;
+      font-family:system-ui,sans-serif; font-size:10px; color:rgba(255,255,255,.2); flex-shrink:0;
     }
     #gw-powered a { color:rgba(255,255,255,.3); text-decoration:none; }
-    #gw-powered a:hover { color:rgba(255,255,255,.5); }
   `;
 
   // ── Iniezione CSS ─────────────────────────────────────────────────────────
