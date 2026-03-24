@@ -52,7 +52,7 @@ def _strip_tables_for_tts(text: str) -> str:
 # Semaforo per limitare LLM calls in background (max 5 concurrent)
 _BACKGROUND_LLM_SEM = _asyncio_mod.Semaphore(5)
 
-MAX_MESSAGE_LENGTH = 4000  # caratteri massimi per messaggio
+MAX_MESSAGE_LENGTH = 12000  # caratteri massimi per messaggio (widget invia contesto pagina + subpage ~5k char)
 
 class ChatRequest(BaseModel):
     message: str
