@@ -24,7 +24,7 @@ if JWT_SECRET == _JWT_DEFAULT:
         "JWT_SECRET non configurato — uso valore di default NON SICURO"
     )
 JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 43200  # 30 giorni
 REFRESH_TOKEN_EXPIRE_DAYS = 365
 
 # ===============================
