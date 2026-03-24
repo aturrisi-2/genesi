@@ -132,6 +132,27 @@ async def send_message(wa_id: str, text: str):
                 await asyncio.sleep(0.3)
 
 
+async def send_typing(wa_id: str):
+    """Mostra l'indicatore di digitazione all'utente WhatsApp."""
+    if not WA_ACCESS_TOKEN or not WA_PHONE_NUMBER_ID:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(
+                f"{WA_API_BASE}/{WA_PHONE_NUMBER_ID}/messages",
+                json={
+                    "messaging_product": "whatsapp",
+                    "to": wa_id,
+                    "recipient_type": "individual",
+                    "type": "action",
+                    "action": {"type": "typing"},
+                },
+                headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"},
+            )
+    except Exception:
+        pass
+
+
 async def send_image(wa_id: str, image_url: str, caption: str = "") -> bool:
     """Invia un'immagine da URL pubblico."""
     if not WA_ACCESS_TOKEN or not WA_PHONE_NUMBER_ID:
@@ -448,6 +469,7 @@ async def _process_message(msg: dict, name_map: dict):
 
         if state == STATE_AWAIT_PASSWORD:
             email, password = session.get("pending_email", ""), text
+            await send_typing(wa_id)
             token = await _login(email, password)
             if not token:
                 session.update({"state": STATE_AWAIT_EMAIL, "pending_email": None})
@@ -469,6 +491,7 @@ async def _process_message(msg: dict, name_map: dict):
 
         if state == STATE_AWAIT_REG_PASSWORD:
             email, password = session.get("pending_email", ""), text
+            await send_typing(wa_id)
             ok = await _register(email, password)
             if not ok:
                 session["state"] = STATE_AWAIT_REG_EMAIL
@@ -544,6 +567,7 @@ async def _process_message(msg: dict, name_map: dict):
 
         # ── FOTO ──────────────────────────────────────────────────────────────
         if photo_id:
+            await send_typing(wa_id)
             img_bytes, mime = await download_media(photo_id)
             if not img_bytes:
                 await send_message(wa_id, "Non riuscito a scaricare la foto.")
@@ -569,6 +593,7 @@ async def _process_message(msg: dict, name_map: dict):
 
         # ── DOCUMENTO ─────────────────────────────────────────────────────────
         if doc_id:
+            await send_typing(wa_id)
             doc_bytes, mime = await download_media(doc_id)
             if not doc_bytes:
                 await send_message(wa_id, "Non riuscito a scaricare il documento.")
@@ -593,6 +618,7 @@ async def _process_message(msg: dict, name_map: dict):
 
         # ── VOCALE ────────────────────────────────────────────────────────────
         if voice_id:
+            await send_typing(wa_id)
             audio_bytes, mime = await download_media(voice_id)
             if not audio_bytes:
                 await send_message(wa_id,
@@ -632,6 +658,7 @@ async def _process_message(msg: dict, name_map: dict):
                 "In quale città ti trovi?")
             return
 
+        await send_typing(wa_id)
         reply = await _do_chat(text)
         await _handle_reply(reply)
 
