@@ -281,12 +281,39 @@
   // Cronologia messaggi persistente — ripristinata ad ogni navigazione
   const _msgsKey = 'gw_msgs_' + cfg.apiKey + (cfg.userName ? '_' + cfg.userName.replace(/\s+/g,'_') : '');
   const MAX_STORED_MSGS = 40;
+  const MAX_MSG_AGE_MS  = 8 * 60 * 60 * 1000;  // 8 ore — scadenza automatica fine giornata lavorativa
   let _msgHistory = [];
-  try { _msgHistory = JSON.parse(localStorage.getItem(_msgsKey) || '[]'); } catch(e) { _msgHistory = []; }
+  try {
+    const raw = JSON.parse(localStorage.getItem(_msgsKey) || '[]');
+    const cutoff = Date.now() - MAX_MSG_AGE_MS;
+    // Scarta messaggi vecchi; se tutti scaduti reset anche conversationId
+    const fresh = raw.filter(m => (m.ts || 0) > cutoff);
+    if (fresh.length === 0 && raw.length > 0) {
+      // Sessione scaduta: pulisci anche conversation_id
+      localStorage.removeItem(_convKey);
+      conversationId = null;
+    }
+    _msgHistory = fresh;
+  } catch(e) { _msgHistory = []; }
 
   function _saveHistory() {
-    try { localStorage.setItem(_msgsKey, JSON.stringify(_msgHistory.slice(-MAX_STORED_MSGS))); } catch(e) {}
+    try {
+      const withTs = _msgHistory.slice(-MAX_STORED_MSGS).map(m => m.ts ? m : { ...m, ts: Date.now() });
+      localStorage.setItem(_msgsKey, JSON.stringify(withTs));
+    } catch(e) {}
   }
+
+  // ── API pubblica: GenesisWidget.logout() / .clearChat() ──────────────────
+  // Il CMS può chiamare window.GenesisWidget.logout() al logout utente
+  window.GenesisWidget = window.GenesisWidget || {};
+  window.GenesisWidget.clearChat = function() {
+    _msgHistory = [];
+    conversationId = null;
+    localStorage.removeItem(_convKey);
+    localStorage.removeItem(_msgsKey);
+    if (messages) messages.innerHTML = '';
+  };
+  window.GenesisWidget.logout = window.GenesisWidget.clearChat;
 
   // ── Apertura / chiusura ───────────────────────────────────────────────────
   function open() {
@@ -374,7 +401,7 @@
     messages.appendChild(el);
     scrollBottom();
     addUnread();
-    if (!skipSave) { _msgHistory.push({r:'b', t:text}); _saveHistory(); }
+    if (!skipSave) { _msgHistory.push({r:'b', t:text, ts:Date.now()}); _saveHistory(); }
     return el;
   }
 
@@ -384,7 +411,7 @@
     el.textContent = text;
     messages.appendChild(el);
     scrollBottom();
-    if (!skipSave) { _msgHistory.push({r:'u', t:text}); _saveHistory(); }
+    if (!skipSave) { _msgHistory.push({r:'u', t:text, ts:Date.now()}); _saveHistory(); }
     return el;
   }
 
