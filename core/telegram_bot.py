@@ -334,6 +334,9 @@ async def handle_update(update: dict):
             return
 
         chat_id    = msg["chat"]["id"]
+        chat_type  = msg["chat"].get("type", "private")
+        is_group   = chat_type in ("group", "supergroup")
+        from_id    = msg.get("from", {}).get("id", chat_id)
         first_name = msg.get("from", {}).get("first_name", "")
         text       = msg.get("text", "").strip()
         photo      = msg.get("photo")       # lista di dimensioni
@@ -342,7 +345,30 @@ async def handle_update(update: dict):
         document   = msg.get("document")    # documento (pdf, txt, ecc.)
         caption    = msg.get("caption", "").strip()
 
-        session = await storage.load(_session_key(chat_id)) or {}
+        # ── Logica gruppi ──────────────────────────────────────────────────────
+        if is_group:
+            # Rispondi solo se @menzionato o reply diretto al bot
+            bot_mention = f"@{_BOT_USERNAME}" if _BOT_USERNAME else None
+            is_mentioned    = bool(bot_mention and bot_mention.lower() in text.lower())
+            is_reply_to_bot = bool((msg.get("reply_to_message") or {}).get("from", {}).get("is_bot"))
+            if not is_mentioned and not is_reply_to_bot:
+                return  # ignora messaggi non rivolti al bot
+            # Pulisci il @mention dal testo
+            if bot_mention:
+                text = text.replace(bot_mention, "").replace(bot_mention.lower(), "").strip()
+            # Login/registrazione: reindirizza alla chat privata (sicurezza)
+            if text.startswith("/login") or text.startswith("/accedi") \
+                    or text.startswith("/registrati") or text.startswith("/start") \
+                    or text.startswith("/logout"):
+                bot_link = get_bot_link()
+                await send_message(chat_id,
+                    f"👋 {first_name}, per collegarti a Genesi scrivi in privato:\n{bot_link}")
+                return
+
+        # Sessione: in gruppi usa from_id (sessione individuale), in privato chat_id
+        session_uid = from_id if is_group else chat_id
+
+        session = await storage.load(_session_key(session_uid)) or {}
         state   = session.get("state", STATE_IDLE)
 
         # ── Comandi globali ────────────────────────────────────────────────────
@@ -356,7 +382,7 @@ async def handle_update(update: dict):
                     f"Webapp completa: {webapp}")
             else:
                 session = {"state": STATE_IDLE}
-                await storage.save(_session_key(chat_id), session)
+                await storage.save(_session_key(session_uid), session)
                 await send_message(chat_id,
                     f"Ciao {first_name}! 👋 Sono *Genesi*, il tuo assistente AI personale.\n\n"
                     f"Per usarmi al massimo hai bisogno di un account.\n\n"
@@ -367,18 +393,18 @@ async def handle_update(update: dict):
 
         if text in ("/login", "/accedi"):
             session = {"state": STATE_AWAIT_EMAIL}
-            await storage.save(_session_key(chat_id), session)
+            await storage.save(_session_key(session_uid), session)
             await send_message(chat_id, "Inserisci la tua email:")
             return
 
         if text in ("/registrati", "/nuovo"):
             session = {"state": STATE_AWAIT_REG_EMAIL}
-            await storage.save(_session_key(chat_id), session)
+            await storage.save(_session_key(session_uid), session)
             await send_message(chat_id, "Scegli un'email per il tuo account:")
             return
 
         if text == "/logout":
-            await storage.save(_session_key(chat_id), {"state": STATE_IDLE})
+            await storage.save(_session_key(session_uid), {"state": STATE_IDLE})
             await send_message(chat_id, "Disconnesso. Usa /login per ricollegarti.")
             return
 
@@ -386,7 +412,7 @@ async def handle_update(update: dict):
         if state == STATE_AWAIT_EMAIL:
             session["pending_email"] = text
             session["state"] = STATE_AWAIT_PASSWORD
-            await storage.save(_session_key(chat_id), session)
+            await storage.save(_session_key(session_uid), session)
             await send_message(chat_id, "Inserisci la tua password:")
             return
 
@@ -396,19 +422,19 @@ async def handle_update(update: dict):
             token = await _login(email, password)
             if not token:
                 session.update({"state": STATE_AWAIT_EMAIL, "pending_email": None})
-                await storage.save(_session_key(chat_id), session)
+                await storage.save(_session_key(session_uid), session)
                 await send_message(chat_id,
                     "Credenziali non valide. Reinserisci la tua email:")
                 return
             logger.info("TELEGRAM_LOGIN_OK telegram_id=%s email=%s", chat_id, email)
-            await _complete_login(chat_id, token, email, password)
+            await _complete_login(session_uid, token, email, password)
             return
 
         # ── Flusso REGISTRAZIONE ───────────────────────────────────────────────
         if state == STATE_AWAIT_REG_EMAIL:
             session["pending_email"] = text
             session["state"] = STATE_AWAIT_REG_PASSWORD
-            await storage.save(_session_key(chat_id), session)
+            await storage.save(_session_key(session_uid), session)
             await send_message(chat_id, "Scegli una password (min 8 caratteri):")
             return
 
@@ -418,14 +444,14 @@ async def handle_update(update: dict):
             ok = await _register(email, password)
             if not ok:
                 session["state"] = STATE_AWAIT_REG_EMAIL
-                await storage.save(_session_key(chat_id), session)
+                await storage.save(_session_key(session_uid), session)
                 await send_message(chat_id,
                     "Registrazione non riuscita. Forse l'email è già in uso.\n"
                     "Inserisci un'altra email:")
                 return
             token = await _login(email, password)
             logger.info("TELEGRAM_REGISTER_OK telegram_id=%s email=%s", chat_id, email)
-            await _complete_login(chat_id, token, email, password)
+            await _complete_login(session_uid, token, email, password)
             return
 
         # ── Città mancante ─────────────────────────────────────────────────────
@@ -433,7 +459,7 @@ async def handle_update(update: dict):
             city = text.strip().title()
             await _save_city(session["token"], city)
             session.update({"city": city, "state": STATE_IDLE, "welcomed": True})
-            await storage.save(_session_key(chat_id), session)
+            await storage.save(_session_key(session_uid), session)
             # Riprendi eventuale messaggio in coda (es. meteo chiesto prima della città)
             pending = session.pop("pending_message", None)
             if pending:
@@ -447,11 +473,17 @@ async def handle_update(update: dict):
         # ── Verifica login ─────────────────────────────────────────────────────
         token = session.get("token")
         if not token:
-            await send_message(chat_id,
-                "Per chattare con me hai bisogno di un account.\n\n"
-                "• Già registrato? /login\n"
-                "• Nuovo? /registrati (qui in Telegram)\n"
-                f"  oppure: {_WEBAPP_REG}")
+            if is_group:
+                bot_link = get_bot_link()
+                name_part = f" {first_name}" if first_name else ""
+                await send_message(chat_id,
+                    f"👋{name_part}, per usarmi nel gruppo collegati prima in privato:\n{bot_link}")
+            else:
+                await send_message(chat_id,
+                    "Per chattare con me hai bisogno di un account.\n\n"
+                    "• Già registrato? /login\n"
+                    "• Nuovo? /registrati (qui in Telegram)\n"
+                    f"  oppure: {_WEBAPP_REG}")
             return
 
         city = session.get("city", "")
@@ -461,7 +493,7 @@ async def handle_update(update: dict):
             nonlocal token, session
             reply = await _chat(token, message, city=city)
             if reply == "__TOKEN_EXPIRED__":
-                new_token = await _auto_refresh(chat_id, session)
+                new_token = await _auto_refresh(session_uid, session)
                 if new_token:
                     token = new_token
                     reply = await _chat(token, message, city=city)
@@ -489,7 +521,7 @@ async def handle_update(update: dict):
 
             analysis = await _upload_file(token, img_bytes, "photo.jpg", "image/jpeg")
             if analysis == "__TOKEN_EXPIRED__":
-                new_token = await _auto_refresh(chat_id, session)
+                new_token = await _auto_refresh(session_uid, session)
                 if new_token:
                     token = new_token
                     analysis = await _upload_file(token, img_bytes, "photo.jpg", "image/jpeg")
@@ -517,7 +549,7 @@ async def handle_update(update: dict):
 
             analysis = await _upload_file(token, doc_bytes, filename, mime)
             if analysis == "__TOKEN_EXPIRED__":
-                new_token = await _auto_refresh(chat_id, session)
+                new_token = await _auto_refresh(session_uid, session)
                 if new_token:
                     token = new_token
                     analysis = await _upload_file(token, doc_bytes, filename, mime)
@@ -545,7 +577,7 @@ async def handle_update(update: dict):
             mime = (voice or audio).get("mime_type", "audio/ogg")
             transcription = await _transcribe(token, audio_bytes, mime)
             if transcription == "__TOKEN_EXPIRED__":
-                new_token = await _auto_refresh(chat_id, session)
+                new_token = await _auto_refresh(session_uid, session)
                 if new_token:
                     token = new_token
                     transcription = await _transcribe(token, audio_bytes, mime)
@@ -574,7 +606,7 @@ async def handle_update(update: dict):
         if _WEATHER_RE.search(text) and not city:
             session["state"]           = STATE_AWAIT_CITY
             session["pending_message"] = text
-            await storage.save(_session_key(chat_id), session)
+            await storage.save(_session_key(session_uid), session)
             await send_message(chat_id,
                 "Per il meteo ho bisogno di sapere dove sei. "
                 "In quale città ti trovi?")
