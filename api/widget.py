@@ -44,6 +44,9 @@ _JWT_SECRET         = os.getenv("JWT_SECRET", "")
 
 
 def _load_configs():
+    """Popola _WIDGET_CONFIGS da env. Può essere chiamata più volte (idempotente)."""
+    _WIDGET_CONFIGS.clear()
+
     key  = os.getenv("WIDGET_API_KEY", "")
     mail = os.getenv("WIDGET_EMAIL", "")
     pw   = os.getenv("WIDGET_PASSWORD", "")
@@ -409,6 +412,8 @@ async def widget_chat(
 @router.get("/ping")
 async def widget_ping(x_widget_key: str = Header(..., alias="X-Widget-Key")):
     if x_widget_key not in _WIDGET_CONFIGS:
+        _load_configs()  # fallback: ricarica se configs vuoti al momento dell'import
+    if x_widget_key not in _WIDGET_CONFIGS:
         raise HTTPException(status_code=401, detail="API key non valida")
     return {"ok": True}
 
@@ -448,6 +453,9 @@ async def admin_list_keys(
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     _require_admin(x_admin_token, authorization)
+    # Ricarica da env (gestisce import anticipato prima di load_dotenv)
+    if not _WIDGET_CONFIGS:
+        _load_configs()
     result = []
     for key, cfg in _WIDGET_CONFIGS.items():
         usage = _WIDGET_USAGE.get(key, {})
