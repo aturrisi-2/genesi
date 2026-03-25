@@ -27,10 +27,10 @@ print(f"  pets:       {profile.get('pets')}")
 changes = []
 
 # 0. Reset campi artefatti di test (Marco Ferrara, Laura) per non influenzare il prossimo test
-_TEST_NAMES = {"marco ferrara", "marco", "ferrara"}
+_TEST_NAMES = {"marco ferrara", "marco", "ferrara", "mariella"}
 if (profile.get("name") or "").lower() in _TEST_NAMES:
-    profile["name"] = None
-    changes.append("name rimosso (artefatto test Marco)")
+    profile["name"] = "Alfio"
+    changes.append(f"name ripristinato ad Alfio (era artefatto test: '{profile.get('name')}')")
 # Reset se name == città (bug: city salvata come name)
 _current_name = (profile.get("name") or "").lower().strip()
 _current_city = (profile.get("city") or "").lower().strip()
