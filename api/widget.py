@@ -6,6 +6,7 @@ import os
 import re as _re
 import time
 import logging
+from collections import defaultdict
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
@@ -24,6 +25,17 @@ _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 _WIDGET_CONFIGS: dict[str, dict] = {}
 
+# ── Usage tracking: api_key → {calls, last_call, created_at, label} ──────────
+_WIDGET_USAGE: dict[str, dict] = {}
+
+# ── Rate limiting per demo key: ip → [timestamp, ...] ────────────────────────
+_RATE_BUCKETS: dict[str, list] = defaultdict(list)
+_RATE_LIMIT_KEYS: set[str] = set()   # chiavi soggette a rate limit (caricate da env)
+_RATE_MAX    = int(os.getenv("WIDGET_RATE_MAX", "20"))    # max messaggi
+_RATE_WINDOW = int(os.getenv("WIDGET_RATE_WINDOW", "86400"))  # finestra secondi (default 24h)
+
+_WIDGET_ADMIN_TOKEN = os.getenv("WIDGET_ADMIN_TOKEN", "")
+
 
 def _load_configs():
     key  = os.getenv("WIDGET_API_KEY", "")
@@ -31,15 +43,41 @@ def _load_configs():
     pw   = os.getenv("WIDGET_PASSWORD", "")
     if key and mail and pw:
         _WIDGET_CONFIGS[key] = {"email": mail, "password": pw}
+        _WIDGET_USAGE.setdefault(key, {"calls": 0, "last_call": None, "created_at": time.time(), "label": key})
 
     for entry in os.getenv("WIDGET_KEYS", "").split(","):
         parts = entry.strip().split(":")
         if len(parts) == 3:
             k, e, p = parts
-            _WIDGET_CONFIGS[k.strip()] = {"email": e.strip(), "password": p.strip()}
+            k = k.strip()
+            _WIDGET_CONFIGS[k] = {"email": e.strip(), "password": p.strip()}
+            _WIDGET_USAGE.setdefault(k, {"calls": 0, "last_call": None, "created_at": time.time(), "label": k})
+
+    # Chiavi soggette a rate limit (es. chiavi demo)
+    for k in os.getenv("WIDGET_RATE_LIMITED_KEYS", "").split(","):
+        k = k.strip()
+        if k:
+            _RATE_LIMIT_KEYS.add(k)
 
 
 _load_configs()
+
+
+def _check_rate_limit(api_key: str, client_ip: str):
+    """Blocca richieste in eccesso per chiavi demo (rate-limited)."""
+    if api_key not in _RATE_LIMIT_KEYS:
+        return
+    now = time.time()
+    bucket_key = f"{api_key}:{client_ip}"
+    timestamps = _RATE_BUCKETS[bucket_key]
+    # Rimuovi timestamp fuori finestra
+    _RATE_BUCKETS[bucket_key] = [t for t in timestamps if now - t < _RATE_WINDOW]
+    if len(_RATE_BUCKETS[bucket_key]) >= _RATE_MAX:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Limite demo raggiunto ({_RATE_MAX} messaggi/giorno). Contattaci per l'accesso completo."
+        )
+    _RATE_BUCKETS[bucket_key].append(now)
 
 # JWT cache: api_key → {token, expires_at}
 _token_cache: dict[str, dict] = {}
@@ -236,7 +274,12 @@ async def _fetch_workspace_context(workspace_token: str, user_message: str) -> s
 async def widget_chat(
     req: WidgetChatRequest,
     x_widget_key: str = Header(..., alias="X-Widget-Key"),
+    x_forwarded_for: Optional[str] = Header(None, alias="X-Forwarded-For"),
+    x_real_ip: Optional[str] = Header(None, alias="X-Real-IP"),
 ):
+    client_ip = x_real_ip or (x_forwarded_for or "").split(",")[0].strip() or "unknown"
+    _check_rate_limit(x_widget_key, client_ip)
+
     token = await _get_token(x_widget_key)
 
     # Estrai link dalla pagina corrente
@@ -344,6 +387,11 @@ async def widget_chat(
             link_label = subpage_title or "Approfondisci"
             response_text += f"\n\n[{link_label}]({matched_url})"
 
+    # Aggiorna usage stats
+    usage = _WIDGET_USAGE.setdefault(x_widget_key, {"calls": 0, "last_call": None, "created_at": time.time(), "label": x_widget_key})
+    usage["calls"] += 1
+    usage["last_call"] = time.time()
+
     return {
         "response": response_text,
         "intent":   data.get("intent", ""),
@@ -357,3 +405,73 @@ async def widget_ping(x_widget_key: str = Header(..., alias="X-Widget-Key")):
     if x_widget_key not in _WIDGET_CONFIGS:
         raise HTTPException(status_code=401, detail="API key non valida")
     return {"ok": True}
+
+
+# ── Admin endpoints ────────────────────────────────────────────────────────────
+
+def _require_admin(x_admin_token: str):
+    if not _WIDGET_ADMIN_TOKEN or x_admin_token != _WIDGET_ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Token admin non valido")
+
+
+class AdminKeyCreate(BaseModel):
+    key:      str
+    email:    str
+    password: str
+    label:    Optional[str] = None
+    rate_limited: bool = False
+
+
+@router.get("/admin/keys")
+async def admin_list_keys(
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+):
+    _require_admin(x_admin_token)
+    result = []
+    for key, cfg in _WIDGET_CONFIGS.items():
+        usage = _WIDGET_USAGE.get(key, {})
+        result.append({
+            "key":          key,
+            "label":        usage.get("label", key),
+            "email":        cfg["email"],
+            "calls":        usage.get("calls", 0),
+            "last_call":    usage.get("last_call"),
+            "created_at":   usage.get("created_at"),
+            "rate_limited": key in _RATE_LIMIT_KEYS,
+        })
+    return {"keys": result}
+
+
+@router.post("/admin/keys", status_code=201)
+async def admin_create_key(
+    body: AdminKeyCreate,
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+):
+    _require_admin(x_admin_token)
+    if body.key in _WIDGET_CONFIGS:
+        raise HTTPException(status_code=409, detail="Chiave già esistente")
+    _WIDGET_CONFIGS[body.key] = {"email": body.email, "password": body.password}
+    _WIDGET_USAGE[body.key] = {
+        "calls": 0, "last_call": None,
+        "created_at": time.time(),
+        "label": body.label or body.key,
+    }
+    if body.rate_limited:
+        _RATE_LIMIT_KEYS.add(body.key)
+    logger.info("WIDGET_KEY_CREATED key=%s label=%s rate_limited=%s", body.key, body.label, body.rate_limited)
+    return {"ok": True, "key": body.key}
+
+
+@router.delete("/admin/keys/{key}")
+async def admin_revoke_key(
+    key: str,
+    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+):
+    _require_admin(x_admin_token)
+    if key not in _WIDGET_CONFIGS:
+        raise HTTPException(status_code=404, detail="Chiave non trovata")
+    _WIDGET_CONFIGS.pop(key, None)
+    _token_cache.pop(key, None)
+    _RATE_LIMIT_KEYS.discard(key)
+    logger.info("WIDGET_KEY_REVOKED key=%s", key)
+    return {"ok": True, "revoked": key}

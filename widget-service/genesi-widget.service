@@ -1,0 +1,15 @@
+[Unit]
+Description=Genesi Widget Service
+After=network.target
+
+[Service]
+Type=simple
+User=luca
+WorkingDirectory=/home/luca/widget-service
+ExecStart=/usr/local/bin/uvicorn main:app --host 0.0.0.0 --port 8001
+EnvironmentFile=/home/luca/widget-service/.env
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
