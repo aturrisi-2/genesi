@@ -238,24 +238,25 @@ class Proactor:
         else:
             response = result
             
-            # PROACTIVE CLOUD SUGGESTION (Fluid Onboarding)
-            try:
+            # PROACTIVE CLOUD SUGGESTION (Fluid Onboarding) — disabilitato per widget
+            if self._current_platform != "widget":
+              try:
                 profile = await storage.load(f"profile:{user_id}", default={})
                 rel_sum = await memory_brain.relational.get_state_summary(user_id)
                 total_msgs = rel_sum.get("total_messages", 0)
-                
+
                 # Check if is admin for global credentials fallback
                 from auth.config import ADMIN_EMAILS
                 user_email = profile.get("email", "")
                 is_admin = user_email in ADMIN_EMAILS
-                
-                # Suggest only if: 
+
+                # Suggest only if:
                 # 1. Early in the relationship (0 to 10 messages)
                 # 2. No cloud user (for admin, check env too)
                 has_icloud = profile.get("icloud_user") or (is_admin and os.environ.get("ICLOUD_USER"))
                 from calendar_manager import calendar_manager
                 has_google = profile.get("google_token") or (is_admin and calendar_manager._admin_google_service is not None)
-                
+
                 if total_msgs < 1 and not has_icloud and not has_google:
                     if not any(kw in response.lower() for kw in ["cloud", "icloud", "google", "calendar", "sincronizza", "collega"]):
                         # Suggest only on the very first message
@@ -264,11 +265,12 @@ class Proactor:
                         else:
                             tip = "\n\n✨ *Benvenuto! Posso gestire i tuoi promemoria internamente o collegare il tuo account iCloud. Basta dirmi 'imposta iCloud' se vuoi sincronizzarli.*"
                         response += tip
-            except Exception as e:
+              except Exception as e:
                 logger.error(f"ONBOARDING_ERROR: {e}")
 
         # Post-processing deterministico: applica regole critiche indipendentemente dall'handler
-        if response and message:
+        # Saltato per platform="widget" — le regole emotive/personali non hanno senso in contesto aziendale
+        if response and message and self._current_platform != "widget":
             _pp_user_name = ""
             try:
                 _pp_profile = await storage.load(f"profile:{user_id}", default={})
