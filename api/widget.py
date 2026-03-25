@@ -196,29 +196,39 @@ async def widget_chat(
             user_identity_block += f"\nRuolo: {req.user_role}"
         user_identity_block += "\nRivolgerti sempre a questa persona per nome nelle risposte.\n"
 
-    # Istruzione comportamentale (in coda, dopo il contesto)
-    WIDGET_INSTRUCTION = (
-        "\n\n[ISTRUZIONE WIDGET]\n"
-        "Sei un assistente del portale intranet aziendale C-Place.\n"
-        "Usa i dati del CONTENUTO PAGINA DI DETTAGLIO per fornire un breve riassunto con dati/trend.\n"
-        "Termina SEMPRE con il link diretto nel formato esatto: [testo](URL_COMPLETO)\n"
-        "Esempio: [Statistiche infortuni Febbraio 2026](https://portale.it/salute)\n"
-        "Risposta: 3-5 righe di riassunto + 1 link."
-    )
+    # Istruzione comportamentale — condizionale
+    if subpage_text and matched_link:
+        # Subpage recuperata: chiedi riassunto + link
+        WIDGET_INSTRUCTION = (
+            "\n\n[ISTRUZIONE WIDGET]\n"
+            "Sei un assistente del portale intranet aziendale C-Place.\n"
+            "Usa i dati del CONTENUTO PAGINA DI DETTAGLIO per fornire un breve riassunto con dati/trend.\n"
+            "Termina SEMPRE con il link diretto nel formato esatto: [testo](URL_COMPLETO)\n"
+            "Esempio: [Statistiche infortuni Febbraio 2026](https://portale.it/salute)\n"
+            "Risposta: 3-5 righe di riassunto + 1 link."
+        )
+    else:
+        # Messaggio conversazionale: rispondi naturalmente, niente riassunti non richiesti
+        WIDGET_INSTRUCTION = (
+            "\n\n[ISTRUZIONE WIDGET]\n"
+            "Sei un assistente del portale intranet aziendale C-Place.\n"
+            "Rispondi in modo naturale alla domanda dell'utente.\n"
+            "NON elencare contenuti della pagina se non esplicitamente chiesto."
+        )
 
     # Costruisce il messaggio — req.message DEVE restare in testa (classificazione intent)
-    parts = []
-    if req.page_url:
-        parts.append(f"Pagina attuale: {req.page_url}")
-    if req.page_title:
-        parts.append(f"Titolo: {req.page_title}")
-    if req.page_context:
-        parts.append(f"Contenuto pagina home (estratto):\n{req.page_context[:2000]}")
+    # Il blocco [CONTESTO PAGINA] viene aggiunto SOLO se c'è contenuto di una subpage fetchata,
+    # altrimenti disturba il fast-track intent (greeting, how_are_you, ecc.)
     if subpage_text and matched_link:
         _, subpage_url = matched_link
+        parts = []
+        if req.page_url:
+            parts.append(f"Pagina attuale: {req.page_url}")
+        if req.page_title:
+            parts.append(f"Titolo: {req.page_title}")
+        if req.page_context:
+            parts.append(f"Contenuto pagina home (estratto):\n{req.page_context[:2000]}")
         parts.append(f"CONTENUTO PAGINA DI DETTAGLIO ({subpage_url}):\n{subpage_text}")
-
-    if parts:
         message = req.message + "\n\n[CONTESTO PAGINA]\n" + "\n".join(parts) + user_identity_block + WIDGET_INSTRUCTION
     else:
         message = req.message + user_identity_block + WIDGET_INSTRUCTION
