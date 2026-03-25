@@ -45,6 +45,8 @@ DEFAULT_POSITION = "bottom-right"
 # Admin credentials (solo per generare la chiave — il cliente non le vede)
 ADMIN_EMAIL    = os.getenv("GENESI_ADMIN_EMAIL",    "alfio.turrisi@gmail.com")
 ADMIN_PASSWORD = os.getenv("GENESI_ADMIN_PASSWORD", "ZOEennio0810")
+# Token admin widget (per reset sito demo)
+WIDGET_ADMIN_TOKEN = os.getenv("WIDGET_ADMIN_TOKEN", "1f0d01ce48a9f7e2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8")
 
 # ─── Colori terminale ─────────────────────────────────────────────────────────
 GREEN  = "\033[92m"
@@ -68,7 +70,7 @@ def sep():       print(f"\n{DIM}{'-'*60}{RESET}")
 
 class WidgetInstaller:
 
-    def __init__(self, base_url: str, company: str, color: str, welcome: str, position: str, key_override: str = None):
+    def __init__(self, base_url: str, company: str, color: str, welcome: str, position: str, key_override: str = None, admin_token: str = None):
         self.base_url      = base_url.rstrip("/")
         self.company       = company
         self.color         = color
@@ -76,6 +78,7 @@ class WidgetInstaller:
         self.position      = position
         self.key_override  = key_override   # se impostato, salta creazione account/key
         self.api_key       = self._make_key(company, key_override)
+        self.admin_token   = admin_token or WIDGET_ADMIN_TOKEN
         self.token         = None
         self.session       = None
 
@@ -126,6 +129,31 @@ class WidgetInstaller:
             try:    data = await r.json()
             except: data = {"_raw": await r.text()}
             return r.status, data
+
+    # ── Step 0: Reset sito demo ───────────────────────────────────────────────
+
+    async def step0_reset_demo(self) -> bool:
+        step(0, "Reset sito intranet di demo (stato pulito, senza widget)")
+        try:
+            async with self.session.post(
+                f"{self.base_url}/api/widget/admin/demo/reset",
+                headers={"X-Admin-Token": self.admin_token},
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as r:
+                if r.status == 200:
+                    data = await r.json()
+                    n = len(data.get("restored", []))
+                    ok(f"{n} file HTML ripristinati allo stato pulito")
+                    return True
+                else:
+                    body = await r.text()
+                    err(f"Reset fallito (HTTP {r.status}): {body[:80]}")
+                    info("Continuando comunque — il sito potrebbe già essere pulito")
+                    return True  # non blocca la demo
+        except Exception as e:
+            err(f"Errore reset: {e}")
+            info("Continuando comunque")
+            return True  # non blocca la demo
 
     # ── Step 1: Ping ──────────────────────────────────────────────────────────
 
@@ -366,6 +394,7 @@ class WidgetInstaller:
         steps_ok = []
 
         try:
+            steps_ok.append(await self.step0_reset_demo())
             steps_ok.append(await self.step1_ping())
             if not steps_ok[-1]:
                 print(f"\n{RED}Server non raggiungibile. Verifica URL e riprova.{RESET}\n")
@@ -410,6 +439,8 @@ async def main():
                         help="Posizione widget")
     parser.add_argument("--key", default=None,
                         help="Usa chiave esistente (salta creazione account/key)")
+    parser.add_argument("--admin-token", default=None,
+                        help="Token admin widget per reset demo (default: env WIDGET_ADMIN_TOKEN)")
     args = parser.parse_args()
 
     installer = WidgetInstaller(
@@ -419,6 +450,7 @@ async def main():
         welcome=args.welcome,
         position=args.position,
         key_override=args.key,
+        admin_token=args.admin_token,
     )
     await installer.run()
 
