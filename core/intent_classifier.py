@@ -520,8 +520,10 @@ class IntentClassifier:
         Returns:
             Intent normalizzato (reminder_*, chat_free, o intent originale)
         """
-        message_lower = message.lower().strip()
-        
+        # Usa solo il testo dell'utente, senza il contesto pagina iniettato dal widget
+        _user_part = message.split("[CONTESTO PAGINA]")[0].split("[PAGE CONTEXT]")[0]
+        message_lower = _user_part.lower().strip()
+
         # 0️⃣ Parole chiave iCloud → forza icloud_sync / icloud_setup
         if any(kw in message_lower for kw in ["icloud", "apple"]):
             if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "importa", "scarica"]):
