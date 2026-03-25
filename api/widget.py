@@ -564,6 +564,8 @@ async def admin_get_config(
 ):
     _require_admin(x_admin_token, authorization)
     if key not in _WIDGET_CONFIGS:
+        _load_configs()
+    if key not in _WIDGET_CONFIGS:
         raise HTTPException(status_code=404, detail="Chiave non trovata")
     config = _WIDGET_VISUAL.get(key, {
         "name": "Assistente",
@@ -584,6 +586,8 @@ async def admin_update_config(
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     _require_admin(x_admin_token, authorization)
+    if key not in _WIDGET_CONFIGS:
+        _load_configs()
     if key not in _WIDGET_CONFIGS:
         raise HTTPException(status_code=404, detail="Chiave non trovata")
     current = _WIDGET_VISUAL.setdefault(key, {
