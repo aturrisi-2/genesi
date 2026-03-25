@@ -330,6 +330,11 @@ async def serve_admin_widget():
 
 @app.get("/intranet-test")
 async def serve_intranet_test():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/intranet-test/index.html", status_code=301)
+
+@app.get("/intranet-test/")
+async def serve_intranet_test_slash():
     return FileResponse(BASE_DIR / "static" / "intranet" / "index.html")
 
 @app.get("/intranet-test/{page}")
