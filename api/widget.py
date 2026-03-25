@@ -206,12 +206,28 @@ def _inject_bare_links(response: str, link_map: dict[str, str]) -> str:
 
 class WidgetChatRequest(BaseModel):
     message: str
-    page_url:     Optional[str] = None
-    page_title:   Optional[str] = None
-    page_context: Optional[str] = None   # testo visibile della pagina (troncato)
+    page_url:        Optional[str] = None
+    page_title:      Optional[str] = None
+    page_context:    Optional[str] = None   # testo visibile della pagina (troncato)
     conversation_id: Optional[str] = None
-    user_name:    Optional[str] = None   # nome dell'utente loggato nella intranet
-    user_role:    Optional[str] = None   # ruolo/reparto dell'utente
+    user_name:       Optional[str] = None   # nome dell'utente loggato nella intranet
+    user_role:       Optional[str] = None   # ruolo/reparto dell'utente
+    workspace_token: Optional[str] = None   # Google OAuth token — riservato per integrazione futura
+
+
+# ── Google Workspace integration (placeholder) ────────────────────────────────
+# Per attivare: implementare _fetch_workspace_context() con le Google API
+# (Gmail, Calendar, Drive) usando req.workspace_token come Bearer token.
+# Il contesto restituito va iniettato nel messaggio prima di WIDGET_INSTRUCTION.
+
+async def _fetch_workspace_context(workspace_token: str, user_message: str) -> str:
+    """
+    Recupera contesto Google Workspace (mail, calendario, drive) rilevante
+    per il messaggio utente. Ritorna stringa da iniettare nel contesto.
+
+    TODO: implementare con Google API (gmail.readonly, calendar.readonly).
+    """
+    return ""  # placeholder — non attivo
 
 
 # ── Endpoint chat ─────────────────────────────────────────────────────────────
@@ -237,6 +253,11 @@ async def widget_chat(
             subpage_title, subpage_text = await _fetch_subpage_text(subpage_url)
             if subpage_text:
                 logger.info("WIDGET_SUBPAGE_FETCHED url=%s title=%r chars=%d", subpage_url, subpage_title, len(subpage_text))
+
+    # Google Workspace context (placeholder — attivare quando integrazione pronta)
+    # workspace_block = ""
+    # if req.workspace_token:
+    #     workspace_block = await _fetch_workspace_context(req.workspace_token, req.message)
 
     # Blocco identità utente (se disponibile)
     user_identity_block = ""

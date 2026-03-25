@@ -7,7 +7,10 @@
  *        data-color="#7c3aed"
  *        data-welcome="Ciao! Come posso aiutarti?"
  *        data-position="bottom-right"
- *        data-page-context="true">
+ *        data-page-context="true"
+ *        data-user-name="Nome Cognome"        (opz. — dal backend C-Place)
+ *        data-user-role="Reparto"             (opz.)
+ *        data-workspace-token="oauth_token">  (opz. — Google Workspace, riservato)
  *      </script>
  */
 (function () {
@@ -28,8 +31,9 @@
     pageCtx:     _s.getAttribute('data-page-context') !== 'false',
     avatarUrl:   _s.getAttribute('data-avatar')     || null,
     placeholder: _s.getAttribute('data-placeholder')|| 'Scrivi un messaggio...',
-    userName:    _s.getAttribute('data-user-name')  || '',
-    userRole:    _s.getAttribute('data-user-role')  || '',
+    userName:       _s.getAttribute('data-user-name')       || '',
+    userRole:       _s.getAttribute('data-user-role')       || '',
+    workspaceToken: _s.getAttribute('data-workspace-token') || '',  // Google Workspace (riservato)
   };
 
   if (!cfg.apiKey) { console.warn('[GenesiWidget] data-api-key mancante'); return; }
@@ -406,8 +410,9 @@
         ...getPageContext(),
       };
       if (conversationId) body.conversation_id = conversationId;
-      if (cfg.userName) body.user_name = cfg.userName;
-      if (cfg.userRole) body.user_role = cfg.userRole;
+      if (cfg.userName)       body.user_name        = cfg.userName;
+      if (cfg.userRole)       body.user_role        = cfg.userRole;
+      if (cfg.workspaceToken) body.workspace_token  = cfg.workspaceToken;
 
       const res = await fetch(`${cfg.apiUrl}/api/widget/chat`, {
         method:  'POST',
