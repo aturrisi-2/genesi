@@ -660,7 +660,9 @@ class IntentClassifier:
         Classificazione tramite LLM con valutazione score e contesto.
         Sostituisce le keyword statiche come logica primaria.
         """
-        message_lower = (message or "").lower().strip()
+        # Per la classificazione intent usa solo il testo utente, non il contesto pagina del widget
+        _classify_msg = (message or "").split("[CONTESTO PAGINA]")[0].split("[PAGE CONTEXT]")[0].strip()
+        message_lower = _classify_msg.lower().strip()
 
         # PRIORITÀ ASSOLUTA 0: saluti semplici — mai classificare come tool/weather per contesto
         # Garantisce che "Ciao", "Salve", "Hey" non vengano mai misclassificati come weather
@@ -879,7 +881,7 @@ REGOLE SPECIALI:
             f"Conversazione recente:\n{history_text}" if history_text else "",
             _prof_ctx,
             _last_intent_ctx,
-            f"\nUltimo messaggio utente:\n{message}",
+            f"\nUltimo messaggio utente:\n{_classify_msg}",
         ]
         user_prompt = "\n".join(p for p in _user_prompt_parts if p)
 

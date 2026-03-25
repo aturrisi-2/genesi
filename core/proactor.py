@@ -495,6 +495,17 @@ class Proactor:
 
             msg_lower = message.lower().strip()
 
+            # STEP 0.1: WIDGET INTENT GUARD
+            # Per il widget aziendale, reminder/iCloud/Google non hanno senso.
+            # Blocca qui prima di qualsiasi routing per evitare risposte fuori contesto.
+            _WIDGET_BLOCKED_INTENTS = {
+                "reminder_create", "reminder_list", "reminder_update", "reminder_delete",
+                "icloud_sync", "icloud_setup", "google_sync", "google_setup",
+            }
+            if self._current_platform == "widget" and intent in _WIDGET_BLOCKED_INTENTS:
+                log("WIDGET_INTENT_BLOCKED", original_intent=intent, user_id=user_id)
+                intent = "chat_free"
+
             logger.info("PROACTOR_HANDLE_ENTRY user=%s intent=%s", user_id, intent)
 
             # STEP 0.5: IMAGE SEARCH ROUTE (web images) — priorità su richieste esplicite "cerca/mostra immagini"
