@@ -274,6 +274,90 @@
   let sendPageCtx  = cfg.pageCtx;
   let unread       = 0;
 
+  // ── Indice del sito (crawl background) ───────────────────────────────────
+  // Mappa url → {title, text} per rispondere su qualsiasi sezione del sito
+  const _siteIndex = {};
+  const _CRAWL_MAX_PAGES   = 20;    // max pagine da indicizzare
+  const _CRAWL_CHARS_PAGE  = 600;   // caratteri per pagina nell'indice
+  const _CRAWL_CACHE_KEY   = 'gw_idx_' + cfg.apiKey;
+
+  function _parseDomText(html) {
+    try {
+      const dp  = new DOMParser();
+      const doc = dp.parseFromString(html, 'text/html');
+      // rimuovi script, style, nav, header, footer per estrarre solo il contenuto
+      ['script','style','nav','header','footer','aside'].forEach(t =>
+        doc.querySelectorAll(t).forEach(el => el.remove())
+      );
+      return (doc.body ? doc.body.innerText || doc.body.textContent : '')
+               .replace(/\s+/g, ' ').trim();
+    } catch (e) { return ''; }
+  }
+
+  function _crawlSite() {
+    if (!sendPageCtx) return;
+    // Ricarica da sessionStorage se già crawlato in questa sessione
+    try {
+      const cached = sessionStorage.getItem(_CRAWL_CACHE_KEY);
+      if (cached) {
+        Object.assign(_siteIndex, JSON.parse(cached));
+        return;
+      }
+    } catch(e) {}
+
+    // Trova tutti i link interni della pagina corrente
+    const origin = window.location.origin;
+    const seen   = new Set([window.location.href]);
+    const queue  = Array.from(document.querySelectorAll('a[href]'))
+      .map(a => a.href)
+      .filter(href => href.startsWith(origin) && !seen.has(href) && !href.includes('#'))
+      .filter((href, i, arr) => arr.indexOf(href) === i)  // dedup
+      .slice(0, _CRAWL_MAX_PAGES);
+
+    if (queue.length === 0) return;
+
+    // Aggiungi pagina corrente all'indice
+    const curText = (document.body.innerText || '').replace(/\s+/g,' ').trim();
+    _siteIndex[window.location.href] = {
+      title: document.title,
+      text:  curText.slice(0, _CRAWL_CHARS_PAGE),
+    };
+
+    // Crawl asincrono con concurrency 3
+    let pending = 0;
+    const MAX_CONCURRENT = 3;
+
+    function _fetchNext() {
+      while (queue.length > 0 && pending < MAX_CONCURRENT) {
+        const url = queue.shift();
+        if (seen.has(url)) { _fetchNext(); return; }
+        seen.add(url);
+        pending++;
+        fetch(url, { credentials: 'same-origin' })
+          .then(r => r.ok ? r.text() : null)
+          .then(html => {
+            if (html) {
+              const text = _parseDomText(html);
+              // Estrai titolo dalla pagina
+              const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+              const title = titleMatch ? titleMatch[1].trim() : url.split('/').pop();
+              _siteIndex[url] = { title, text: text.slice(0, _CRAWL_CHARS_PAGE) };
+            }
+          })
+          .catch(() => {})
+          .finally(() => {
+            pending--;
+            _fetchNext();
+            // Salva in sessionStorage quando finito
+            if (pending === 0 && queue.length === 0) {
+              try { sessionStorage.setItem(_CRAWL_CACHE_KEY, JSON.stringify(_siteIndex)); } catch(e) {}
+            }
+          });
+      }
+    }
+    _fetchNext();
+  }
+
   // conversation_id persistente per utente (localStorage, chiave = apiKey + userName)
   const _convKey = 'gw_conv_' + cfg.apiKey + (cfg.userName ? '_' + cfg.userName.replace(/\s+/g,'_') : '');
   let conversationId = localStorage.getItem(_convKey) || null;
@@ -356,6 +440,9 @@
   btn.addEventListener('click', () => isOpen ? close() : open());
   closeBtn.addEventListener('click', close);
 
+  // Avvia crawl background delle pagine del sito (dopo breve ritardo per non bloccare il caricamento)
+  if (sendPageCtx) setTimeout(_crawlSite, 1500);
+
   // Contesto pagina sempre attivo — barra nascosta, nessun toggle
 
   function getPageContext() {
@@ -373,10 +460,22 @@
       .slice(0, 40)
       .join('\n');
 
+    // Indice del sito (pagine già crawlate in background)
+    const indexEntries = Object.entries(_siteIndex)
+      .filter(([url]) => url !== window.location.href)  // escludi pagina corrente (già in bodyText)
+      .map(([url, {title, text}]) => `[${title}] ${text}`)
+      .join('\n');
+
+    const siteIndexSection = indexEntries
+      ? `\n\nINDICE SITO AZIENDALE (altre sezioni disponibili):\n${indexEntries.slice(0, 3000)}`
+      : '';
+
     return {
       page_url:     window.location.href,
       page_title:   document.title,
-      page_context: bodyText + (links ? `\n\nLINK DISPONIBILI NELLA PAGINA:\n${links}` : ''),
+      page_context: bodyText
+        + (links ? `\n\nLINK DISPONIBILI NELLA PAGINA:\n${links}` : '')
+        + siteIndexSection,
     };
   }
 
