@@ -710,7 +710,23 @@ class Proactor:
                     pass
 
             logger.debug(f"[PROACTOR] INTENTI FINALI: {intents}")
-            
+
+            # STEP 4.05: WIDGET INTENT GUARD (post-classificazione)
+            # Rimappa intents personali/servizi a chat_free per platform=widget
+            if self._current_platform == "widget":
+                _WIDGET_BLOCKED = {
+                    "reminder_create", "reminder_list", "reminder_update", "reminder_delete",
+                    "icloud_sync", "icloud_setup", "google_sync", "google_setup",
+                    "gmail_setup", "gmail_read", "gmail_send",
+                    "whatsapp_send", "whatsapp_setup",
+                    "telegram_send", "telegram_setup",
+                    "social_read", "social_setup", "moltbook_activity",
+                }
+                new_intents = ["chat_free" if i in _WIDGET_BLOCKED else i for i in intents]
+                if new_intents != intents:
+                    log("WIDGET_INTENT_BLOCKED", original=intents, replaced=new_intents, user_id=user_id)
+                    intents = new_intents
+
             # STEP 4.1: CONVERSATIONAL INTEGRATION FORCE
             # Ensures tool/technical responses are wrapped in Genesi's voice via Relational synthesis
             if intents and not any(i in ["chat_free", "relational", "emotional"] for i in intents):
