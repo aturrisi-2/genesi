@@ -613,9 +613,10 @@ async def admin_demo_reset(
 ):
     """Ripristina i file HTML dell'intranet di demo allo stato pulito (senza widget)."""
     _require_admin(x_admin_token, authorization)
-    base_dir = Path(__file__).resolve().parent.parent
-    templates_dir = base_dir / "static" / "intranet" / "templates"
-    intranet_dir  = base_dir / "static" / "intranet"
+    # INTRANET_DEMO_DIR permette al widget-service di puntare alla dir di Genesi
+    _demo_root = os.getenv("INTRANET_DEMO_DIR") or str(Path(__file__).resolve().parent.parent / "static" / "intranet")
+    intranet_dir  = Path(_demo_root)
+    templates_dir = intranet_dir / "templates"
     if not templates_dir.exists():
         raise HTTPException(status_code=500, detail="Directory templates non trovata")
     restored = []
