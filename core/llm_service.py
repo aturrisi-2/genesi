@@ -27,9 +27,9 @@ _STREAMING_ROUTES = frozenset({
     'tecnica', 'spiegazione', 'emotional', 'debug', 'synthesis',
 })
 
-MAX_LLM_INPUT_CHARS = int(os.environ.get("LLM_MAX_INPUT_CHARS", "45000"))
-MAX_LLM_SYSTEM_CHARS = int(os.environ.get("LLM_MAX_SYSTEM_CHARS", "12000"))
-MAX_LLM_MESSAGE_CHARS = int(os.environ.get("LLM_MAX_MESSAGE_CHARS", "4000"))
+MAX_LLM_INPUT_CHARS = int(os.environ.get("LLM_MAX_INPUT_CHARS", "120000"))
+MAX_LLM_SYSTEM_CHARS = int(os.environ.get("LLM_MAX_SYSTEM_CHARS", "32000"))
+MAX_LLM_MESSAGE_CHARS = int(os.environ.get("LLM_MAX_MESSAGE_CHARS", "32000"))
 MAX_LLM_HISTORY_MESSAGES = int(os.environ.get("LLM_MAX_HISTORY_MESSAGES", "12"))
 
 # ═══════════════════════════════════════════════════════════
@@ -220,7 +220,7 @@ class LLMService:
                 messages=msg_list,
                 temperature=0.7,
                 extra_headers=extra_headers,
-                timeout=15.0
+                timeout=90.0
             )
 
         # ── SSE streaming path ───────────────────────────────────────────────
@@ -234,7 +234,7 @@ class LLMService:
                     temperature=0.7,
                     stream=True,
                     extra_headers=extra_headers,
-                    timeout=15.0
+                    timeout=90.0
                 )
                 llm_response = ""
                 async for chunk in api_stream:
