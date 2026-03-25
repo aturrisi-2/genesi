@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/widget", tags=["widget"])
 
 GENESI_URL = os.getenv("BASE_URL", "http://localhost:8000")
+_OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY", "")
+_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # ── Caricamento configurazioni widget da env ──────────────────────────────────
 # Singola chiave: WIDGET_API_KEY / WIDGET_EMAIL / WIDGET_PASSWORD
@@ -87,25 +89,58 @@ def _extract_page_links(page_context: str) -> dict[str, str]:
     return link_map
 
 
-def _find_best_link(user_message: str, link_map: dict[str, str]) -> Optional[tuple[str, str]]:
-    """Restituisce (testo, url) del link più rilevante per il messaggio utente, o None."""
+async def _find_best_link(user_message: str, link_map: dict[str, str]) -> Optional[tuple[str, str]]:
+    """
+    Usa il LLM per trovare il link più pertinente al messaggio utente.
+    Restituisce (testo, url) oppure None se nessun link è rilevante.
+    """
     if not link_map:
         return None
-    # Parole intere del messaggio (NON substring: evita "giorno" in "buongiorno")
+
+    # Costruisce lista numerata per parsing deterministico
+    items = list(link_map.items())
+    links_list = "\n".join(f"{i+1}. {text}" for i, (text, _) in enumerate(items))
+    prompt = (
+        f"Messaggio utente: \"{user_message}\"\n\n"
+        f"Quale di questi link del portale intranet è più pertinente alla domanda?\n"
+        f"Rispondi SOLO con il numero (1-{len(items)}) oppure 0 se nessuno è pertinente.\n\n"
+        f"{links_list}"
+    )
+
+    if _OPENROUTER_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                res = await client.post(
+                    _OPENROUTER_URL,
+                    headers={"Authorization": f"Bearer {_OPENROUTER_KEY}"},
+                    json={
+                        "model": "openai/gpt-4o-mini",
+                        "messages": [{"role": "user", "content": prompt}],
+                        "max_tokens": 5,
+                        "temperature": 0,
+                    },
+                )
+            if res.status_code == 200:
+                raw = res.json()["choices"][0]["message"]["content"].strip()
+                # Estrai primo numero dalla risposta
+                m = _re.search(r"\d+", raw)
+                if m:
+                    idx = int(m.group()) - 1
+                    if 0 <= idx < len(items):
+                        logger.info("WIDGET_LLM_LINK_MATCH idx=%d text=%r", idx + 1, items[idx][0])
+                        return items[idx]
+                logger.info("WIDGET_LLM_LINK_MATCH none (raw=%r)", raw)
+                return None
+        except Exception as exc:
+            logger.debug("WIDGET_LLM_LINK_ERROR: %s", exc)
+
+    # Fallback keyword se OpenRouter non disponibile
     msg_words = set(_re.sub(r"[^\w\s]", " ", user_message.lower()).split())
     best_score = 0
     best_item: Optional[tuple[str, str]] = None
-    for text, url in link_map.items():
+    for text, url in items:
         words = [w for w in _re.sub(r"[^\w\s]", " ", text.lower()).split() if len(w) > 3]
-        # Match esatto oppure stem (last-1 char) per singolare/plurale italiano
-        def _word_matches(w: str) -> bool:
-            if w in msg_words:
-                return True
-            if len(w) >= 6:
-                stem = w[:-1]
-                return any(len(m) >= 6 and m[:-1] == stem for m in msg_words)
-            return False
-        score = sum(1 for w in words if _word_matches(w))
+        score = sum(1 for w in words if w in msg_words)
         if score > best_score:
             best_score = score
             best_item = (text, url)
@@ -196,7 +231,7 @@ async def widget_chat(
     subpage_title = ""
     matched_link: Optional[tuple[str, str]] = None
     if link_map:
-        matched_link = _find_best_link(req.message, link_map)
+        matched_link = await _find_best_link(req.message, link_map)
         if matched_link:
             _, subpage_url = matched_link
             subpage_title, subpage_text = await _fetch_subpage_text(subpage_url)
