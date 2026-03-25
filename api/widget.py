@@ -12,6 +12,11 @@ from pydantic import BaseModel
 from typing import Optional
 import httpx
 
+try:
+    import jwt as _jwt
+except ImportError:
+    _jwt = None  # type: ignore
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/widget", tags=["widget"])
 
@@ -35,6 +40,7 @@ _RATE_MAX    = int(os.getenv("WIDGET_RATE_MAX", "20"))    # max messaggi
 _RATE_WINDOW = int(os.getenv("WIDGET_RATE_WINDOW", "86400"))  # finestra secondi (default 24h)
 
 _WIDGET_ADMIN_TOKEN = os.getenv("WIDGET_ADMIN_TOKEN", "")
+_JWT_SECRET         = os.getenv("JWT_SECRET", "")
 
 
 def _load_configs():
@@ -409,9 +415,23 @@ async def widget_ping(x_widget_key: str = Header(..., alias="X-Widget-Key")):
 
 # ── Admin endpoints ────────────────────────────────────────────────────────────
 
-def _require_admin(x_admin_token: str):
-    if not _WIDGET_ADMIN_TOKEN or x_admin_token != _WIDGET_ADMIN_TOKEN:
-        raise HTTPException(status_code=403, detail="Token admin non valido")
+def _require_admin(
+    x_admin_token: Optional[str] = None,
+    authorization: Optional[str] = None,
+):
+    """Accetta X-Admin-Token diretto OPPURE JWT admin di Genesi (stesso JWT_SECRET)."""
+    if _WIDGET_ADMIN_TOKEN and x_admin_token == _WIDGET_ADMIN_TOKEN:
+        return
+    if authorization and authorization.startswith("Bearer ") and _JWT_SECRET and _jwt:
+        try:
+            payload = _jwt.decode(
+                authorization[7:], _JWT_SECRET, algorithms=["HS256"]
+            )
+            if payload.get("admin"):
+                return
+        except Exception:
+            pass
+    raise HTTPException(status_code=403, detail="Accesso non autorizzato")
 
 
 class AdminKeyCreate(BaseModel):
@@ -424,9 +444,10 @@ class AdminKeyCreate(BaseModel):
 
 @router.get("/admin/keys")
 async def admin_list_keys(
-    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
-    _require_admin(x_admin_token)
+    _require_admin(x_admin_token, authorization)
     result = []
     for key, cfg in _WIDGET_CONFIGS.items():
         usage = _WIDGET_USAGE.get(key, {})
@@ -445,9 +466,10 @@ async def admin_list_keys(
 @router.post("/admin/keys", status_code=201)
 async def admin_create_key(
     body: AdminKeyCreate,
-    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
-    _require_admin(x_admin_token)
+    _require_admin(x_admin_token, authorization)
     if body.key in _WIDGET_CONFIGS:
         raise HTTPException(status_code=409, detail="Chiave già esistente")
     _WIDGET_CONFIGS[body.key] = {"email": body.email, "password": body.password}
@@ -465,9 +487,10 @@ async def admin_create_key(
 @router.delete("/admin/keys/{key}")
 async def admin_revoke_key(
     key: str,
-    x_admin_token: str = Header(..., alias="X-Admin-Token"),
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
-    _require_admin(x_admin_token)
+    _require_admin(x_admin_token, authorization)
     if key not in _WIDGET_CONFIGS:
         raise HTTPException(status_code=404, detail="Chiave non trovata")
     _WIDGET_CONFIGS.pop(key, None)

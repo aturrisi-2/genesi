@@ -324,6 +324,10 @@ async def serve_training_admin():
 async def serve_admin_logs():
     return FileResponse(BASE_DIR / "static" / "admin-logs.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
+@app.get("/admin-widget")
+async def serve_admin_widget():
+    return FileResponse(BASE_DIR / "static" / "admin-widget.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
 @app.get("/brochure")
 async def serve_brochure():
     return FileResponse(
