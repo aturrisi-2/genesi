@@ -328,6 +328,17 @@ async def serve_admin_logs():
 async def serve_admin_widget():
     return FileResponse(BASE_DIR / "static" / "admin-widget.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
+@app.get("/intranet-test")
+async def serve_intranet_test():
+    return FileResponse(BASE_DIR / "static" / "intranet" / "index.html")
+
+@app.get("/intranet-test/{page}")
+async def serve_intranet_page(page: str):
+    path = BASE_DIR / "static" / "intranet" / page
+    if not path.exists() or path.suffix != ".html":
+        raise HTTPException(status_code=404)
+    return FileResponse(path)
+
 @app.get("/brochure")
 async def serve_brochure():
     return FileResponse(

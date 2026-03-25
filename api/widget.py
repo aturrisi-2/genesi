@@ -30,6 +30,9 @@ _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 _WIDGET_CONFIGS: dict[str, dict] = {}
 
+# ── Visual config per chiave: api_key → {name, color, welcome, position, placeholder, allowed_domains} ──
+_WIDGET_VISUAL: dict[str, dict] = {}
+
 # ── Usage tracking: api_key → {calls, last_call, created_at, label} ──────────
 _WIDGET_USAGE: dict[str, dict] = {}
 
@@ -67,6 +70,17 @@ def _load_configs():
         k = k.strip()
         if k:
             _RATE_LIMIT_KEYS.add(k)
+
+    # Inizializza _WIDGET_VISUAL con defaults per ogni chiave (se non già presente)
+    for key in list(_WIDGET_CONFIGS.keys()):
+        _WIDGET_VISUAL.setdefault(key, {
+            "name": "Assistente",
+            "color": "#7c3aed",
+            "welcome": "Ciao! Come posso aiutarti oggi?",
+            "position": "bottom-right",
+            "placeholder": "Scrivi un messaggio...",
+            "allowed_domains": [],
+        })
 
 
 _load_configs()
@@ -506,3 +520,77 @@ async def admin_revoke_key(
     _RATE_LIMIT_KEYS.discard(key)
     logger.info("WIDGET_KEY_REVOKED key=%s", key)
     return {"ok": True, "revoked": key}
+
+
+# ── Endpoint config visuale (pubblico) ────────────────────────────────────────
+
+@router.get("/config")
+async def widget_config(x_widget_key: str = Header(..., alias="X-Widget-Key")):
+    """Ritorna la configurazione visuale del widget per una data chiave (pubblico)."""
+    if x_widget_key not in _WIDGET_CONFIGS:
+        _load_configs()
+    if x_widget_key not in _WIDGET_CONFIGS:
+        raise HTTPException(status_code=401, detail="API key non valida")
+    visual = _WIDGET_VISUAL.get(x_widget_key, {})
+    return {
+        "name":        visual.get("name", "Assistente"),
+        "color":       visual.get("color", "#7c3aed"),
+        "welcome":     visual.get("welcome", "Ciao! Come posso aiutarti oggi?"),
+        "position":    visual.get("position", "bottom-right"),
+        "placeholder": visual.get("placeholder", "Scrivi un messaggio..."),
+    }
+
+
+# ── Endpoint aggiornamento config visuale (admin) ─────────────────────────────
+
+class AdminConfigUpdate(BaseModel):
+    name:            Optional[str]       = None
+    color:           Optional[str]       = None
+    welcome:         Optional[str]       = None
+    position:        Optional[str]       = None
+    placeholder:     Optional[str]       = None
+    allowed_domains: Optional[list[str]] = None
+
+
+@router.get("/admin/config/{key}")
+async def admin_get_config(
+    key: str,
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    _require_admin(x_admin_token, authorization)
+    if key not in _WIDGET_CONFIGS:
+        raise HTTPException(status_code=404, detail="Chiave non trovata")
+    config = _WIDGET_VISUAL.get(key, {
+        "name": "Assistente",
+        "color": "#7c3aed",
+        "welcome": "Ciao! Come posso aiutarti oggi?",
+        "position": "bottom-right",
+        "placeholder": "Scrivi un messaggio...",
+        "allowed_domains": [],
+    })
+    return {"ok": True, "config": config}
+
+
+@router.patch("/admin/config/{key}")
+async def admin_update_config(
+    key: str,
+    body: AdminConfigUpdate,
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    _require_admin(x_admin_token, authorization)
+    if key not in _WIDGET_CONFIGS:
+        raise HTTPException(status_code=404, detail="Chiave non trovata")
+    current = _WIDGET_VISUAL.setdefault(key, {
+        "name": "Assistente",
+        "color": "#7c3aed",
+        "welcome": "Ciao! Come posso aiutarti oggi?",
+        "position": "bottom-right",
+        "placeholder": "Scrivi un messaggio...",
+        "allowed_domains": [],
+    })
+    for field, val in body.model_dump(exclude_none=True).items():
+        current[field] = val
+    logger.info("WIDGET_CONFIG_UPDATED key=%s fields=%s", key, list(body.model_dump(exclude_none=True).keys()))
+    return {"ok": True, "config": current}

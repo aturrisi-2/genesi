@@ -315,6 +315,52 @@
     </div>
   </div>
 
+  <!-- ── CONFIGURA WIDGET ── -->
+  <div class="card">
+    <div class="card-title" style="color:var(--purple);">⚙ Configura Widget</div>
+    <p style="font-size:.8rem;color:var(--dim);margin-bottom:14px;">
+      Personalizza l'aspetto del widget per ogni cliente. Le impostazioni sono caricate dal server dal widget via <code style="font-size:.78rem;background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;">GET /api/widget/config</code>.
+    </p>
+    <div style="margin-bottom:14px;">
+      <label>Chiave da configurare</label>
+      <select id="cfg-key" onchange="loadWidgetConfig()">
+        <option value="">— scegli —</option>
+      </select>
+    </div>
+    <div class="form-grid">
+      <div>
+        <label>Nome assistente</label>
+        <input type="text" id="cfg-name" placeholder="Assistente">
+      </div>
+      <div>
+        <label>Colore brand</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="cfg-color" placeholder="#7c3aed" style="max-width:120px;" oninput="updateColorPreview()">
+          <div id="cfg-color-preview" style="width:36px;height:36px;border-radius:6px;border:1px solid var(--border);background:#7c3aed;flex-shrink:0;"></div>
+        </div>
+      </div>
+      <div>
+        <label>Messaggio di benvenuto</label>
+        <input type="text" id="cfg-welcome" placeholder="Ciao! Come posso aiutarti oggi?">
+      </div>
+      <div>
+        <label>Posizione</label>
+        <select id="cfg-position">
+          <option value="bottom-right">Bottom right</option>
+          <option value="bottom-left">Bottom left</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <label>Placeholder input</label>
+      <input type="text" id="cfg-placeholder" placeholder="Scrivi un messaggio...">
+    </div>
+    <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button class="btn btn-green" onclick="saveWidgetConfig()">💾 Salva configurazione</button>
+      <span id="cfg-status" style="font-size:.78rem;color:var(--dim);"></span>
+    </div>
+  </div>
+
   <!-- ── URL DEMO ── -->
   <div class="card">
     <div class="card-title" style="color:var(--cyan);">🌐 URL pubblici</div>
@@ -523,6 +569,63 @@ function updateSnippetSelect(keys) {
     keys.map(k => `<option value="${esc(k.key)}">${esc(k.label || k.key)}</option>`).join('');
   if (prev) sel.value = prev;
   updateSnippet();
+
+  // Popola anche la select "Configura Widget"
+  const cfgSel = document.getElementById('cfg-key');
+  const cfgPrev = cfgSel.value;
+  cfgSel.innerHTML = '<option value="">— scegli —</option>' +
+    keys.map(k => `<option value="${esc(k.key)}">${esc(k.label || k.key)}</option>`).join('');
+  if (cfgPrev) cfgSel.value = cfgPrev;
+}
+
+// ── Widget Config ──────────────────────────────────────────────────────────────
+function updateColorPreview() {
+  const color = document.getElementById('cfg-color').value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(color)) {
+    document.getElementById('cfg-color-preview').style.background = color;
+  }
+}
+
+async function loadWidgetConfig() {
+  const key = document.getElementById('cfg-key').value;
+  if (!key) return;
+  try {
+    const data = await api('GET', `/api/widget/admin/config/${encodeURIComponent(key)}`);
+    const cfg = data.config || {};
+    document.getElementById('cfg-name').value        = cfg.name        || '';
+    document.getElementById('cfg-color').value       = cfg.color       || '#7c3aed';
+    document.getElementById('cfg-welcome').value     = cfg.welcome     || '';
+    document.getElementById('cfg-position').value    = cfg.position    || 'bottom-right';
+    document.getElementById('cfg-placeholder').value = cfg.placeholder || '';
+    updateColorPreview();
+    document.getElementById('cfg-status').textContent = '';
+  } catch(e) {
+    // Se 404 o errore, usa defaults silenziosi
+    document.getElementById('cfg-name').value        = 'Assistente';
+    document.getElementById('cfg-color').value       = '#7c3aed';
+    document.getElementById('cfg-welcome').value     = 'Ciao! Come posso aiutarti oggi?';
+    document.getElementById('cfg-position').value    = 'bottom-right';
+    document.getElementById('cfg-placeholder').value = 'Scrivi un messaggio...';
+    updateColorPreview();
+  }
+}
+
+async function saveWidgetConfig() {
+  const key = document.getElementById('cfg-key').value;
+  if (!key) return toast('Seleziona una chiave', 'err');
+  const body = {
+    name:        document.getElementById('cfg-name').value,
+    color:       document.getElementById('cfg-color').value,
+    welcome:     document.getElementById('cfg-welcome').value,
+    position:    document.getElementById('cfg-position').value,
+    placeholder: document.getElementById('cfg-placeholder').value,
+  };
+  try {
+    await api('PATCH', `/api/widget/admin/config/${encodeURIComponent(key)}`, body);
+    toast('✓ Configurazione salvata', 'ok');
+    document.getElementById('cfg-status').textContent = 'Salvato ✓';
+    setTimeout(() => { document.getElementById('cfg-status').textContent = ''; }, 3000);
+  } catch(e) { toast('Errore: ' + e.message, 'err'); }
 }
 
 function updateSnippet() {

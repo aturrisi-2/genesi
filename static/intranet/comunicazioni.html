@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Intranet Aziendale — Comunicazioni</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --accent:   #1a56db;
+      --accent-h: #1648c0;
+      --bg:       #f3f4f6;
+      --surface:  #ffffff;
+      --border:   #e5e7eb;
+      --text:     #111827;
+      --muted:    #6b7280;
+      --sidebar-w: 220px;
+      --header-h:  56px;
+    }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+    .site-header {
+      position: fixed; top: 0; left: 0; right: 0; height: var(--header-h);
+      background: var(--accent); color: #fff; display: flex; align-items: center;
+      padding: 0 20px; gap: 16px; z-index: 100; box-shadow: 0 2px 6px rgba(0,0,0,.18);
+    }
+    .site-header .logo { font-size: 1.1rem; font-weight: 700; letter-spacing: .01em; white-space: nowrap; }
+    .site-header .logo span { opacity: .65; font-weight: 400; }
+    .header-search { flex: 1; max-width: 360px; margin-left: 12px; }
+    .header-search input {
+      width: 100%; padding: 6px 12px; border-radius: 6px; border: none;
+      background: rgba(255,255,255,.18); color: #fff; font-size: .85rem; outline: none;
+    }
+    .header-search input::placeholder { color: rgba(255,255,255,.6); }
+    .header-user { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: .85rem; }
+    .header-user .avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: rgba(255,255,255,.25); display: flex; align-items: center;
+      justify-content: center; font-weight: 700; font-size: .9rem;
+    }
+    .header-user .user-name { font-weight: 600; }
+    .header-user .user-role { font-size: .72rem; opacity: .7; }
+    .layout { display: flex; padding-top: var(--header-h); min-height: 100vh; }
+    .sidebar {
+      width: var(--sidebar-w); flex-shrink: 0;
+      background: var(--surface); border-right: 1px solid var(--border);
+      position: fixed; top: var(--header-h); bottom: 0; overflow-y: auto; padding: 16px 0;
+    }
+    .sidebar-section { padding: 0 12px; margin-bottom: 8px; }
+    .sidebar-label {
+      font-size: .68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--muted); padding: 8px 8px 4px;
+    }
+    .sidebar a {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 12px; border-radius: 6px; text-decoration: none;
+      color: var(--text); font-size: .85rem; transition: background .12s;
+    }
+    .sidebar a:hover { background: var(--bg); }
+    .sidebar a.active { background: #eff6ff; color: var(--accent); font-weight: 600; }
+    .sidebar a .icon { font-size: 1rem; width: 20px; text-align: center; flex-shrink: 0; }
+    .main { margin-left: var(--sidebar-w); flex: 1; padding: 28px 28px 40px; }
+    .page-header { margin-bottom: 24px; }
+    .page-header h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
+    .page-header .breadcrumb { font-size: .8rem; color: var(--muted); }
+    .page-header .breadcrumb a { color: var(--accent); text-decoration: none; }
+    .section-title { font-size: 1rem; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+    .comm-list { display: flex; flex-direction: column; gap: 14px; }
+    .comm-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 20px 24px;
+    }
+    .comm-meta {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+    }
+    .comm-date { font-size: .75rem; color: var(--muted); }
+    .comm-category {
+      font-size: .68rem; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+    }
+    .cat-dir   { background: #eff6ff; color: #1d4ed8; }
+    .cat-hr    { background: #f0fdf4; color: #15803d; }
+    .cat-it    { background: #faf5ff; color: #7c3aed; }
+    .cat-ops   { background: #fff7ed; color: #c2410c; }
+    .cat-alert { background: #fef2f2; color: #dc2626; }
+    .comm-title { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
+    .comm-body  { font-size: .86rem; color: #374151; line-height: 1.7; }
+    .comm-author { font-size: .75rem; color: var(--muted); margin-top: 12px; }
+    .badge-new { background: #eff6ff; color: var(--accent); font-size: .65rem; font-weight: 700; padding: 2px 7px; border-radius: 20px; }
+    .filter-bar {
+      display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .filter-btn {
+      padding: 5px 14px; border-radius: 20px; font-size: .78rem; font-weight: 600;
+      cursor: pointer; border: 1px solid var(--border); background: var(--surface);
+      color: var(--muted); transition: all .12s;
+    }
+    .filter-btn.active, .filter-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="logo">Intranet <span>Aziendale</span></div>
+  <div class="header-search">
+    <input type="text" placeholder="Cerca nella intranet...">
+  </div>
+  <div class="header-user">
+    <div class="avatar">AT</div>
+    <div class="user-info">
+      <div class="user-name">Alfio Turrisi</div>
+      <div class="user-role">Direzione</div>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Menu principale</div>
+      <a href="./index.html"><span class="icon">🏠</span> Dashboard</a>
+      <a href="./comunicazioni.html" class="active"><span class="icon">📢</span> Comunicazioni</a>
+      <a href="./welfare.html"><span class="icon">🎁</span> Welfare</a>
+      <a href="./salute.html"><span class="icon">🏥</span> Salute &amp; Sicurezza</a>
+      <a href="./organigrammi.html"><span class="icon">🏢</span> Organigrammi</a>
+      <a href="./mensa.html"><span class="icon">🍽</span> Mensa</a>
+      <a href="./rubrica.html"><span class="icon">📒</span> Rubrica</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Strumenti</div>
+      <a href="#"><span class="icon">📅</span> Calendario</a>
+      <a href="#"><span class="icon">📁</span> Documenti</a>
+      <a href="#"><span class="icon">🎓</span> Formazione</a>
+      <a href="#"><span class="icon">⚙</span> Il mio profilo</a>
+    </div>
+  </nav>
+
+  <main class="main">
+    <div class="page-header">
+      <h1>📢 Bacheca Comunicazioni</h1>
+      <div class="breadcrumb"><a href="./index.html">Dashboard</a> › Comunicazioni</div>
+    </div>
+
+    <div class="filter-bar">
+      <button class="filter-btn active">Tutte</button>
+      <button class="filter-btn">Direzione</button>
+      <button class="filter-btn">HR</button>
+      <button class="filter-btn">IT</button>
+      <button class="filter-btn">Operations</button>
+    </div>
+
+    <div class="comm-list">
+
+      <div class="comm-card">
+        <div class="comm-meta">
+          <span class="comm-date">24 marzo 2026</span>
+          <span class="comm-category cat-dir">Direzione</span>
+          <span class="badge-new">NUOVO</span>
+        </div>
+        <div class="comm-title">Piano strategico 2026–2028: presentazione ai responsabili</div>
+        <div class="comm-body">
+          Si comunica che in data <strong>8 aprile 2026</strong> si terrà la presentazione del Piano Strategico
+          triennale 2026–2028 alla presenza del Consiglio di Amministrazione e di tutti i responsabili di area.
+          L'incontro si svolgerà presso la Sala Conferenze A al piano terra, dalle ore 10:00 alle 13:00.
+          È previsto un light lunch di lavoro al termine della sessione. Si prega di confermare la presenza
+          entro il 31 marzo tramite il modulo disponibile nella sezione Documenti.
+        </div>
+        <div class="comm-author">— Direzione Generale</div>
+      </div>
+
+      <div class="comm-card">
+        <div class="comm-meta">
+          <span class="comm-date">21 marzo 2026</span>
+          <span class="comm-category cat-hr">Risorse Umane</span>
+          <span class="badge-new">NUOVO</span>
+        </div>
+        <div class="comm-title">Aggiornamento policy Smart Working: nuove linee guida operative</div>
+        <div class="comm-body">
+          A partire dal <strong>1° aprile 2026</strong> entra in vigore la nuova policy Smart Working aziendale,
+          approvata dal CdA nella seduta del 18 marzo. Le principali novità riguardano: estensione a 3 giorni
+          settimanali per le figure impiegatizie, obbligo di presenza in sede il martedì per i team meeting
+          di reparto, e introduzione del "venerdì flessibile" con chiusura anticipata alle 16:00.
+          La policy completa è disponibile nella sezione Documenti > HR > Policy 2026.
+          Per chiarimenti contattare l'ufficio HR all'interno 150.
+        </div>
+        <div class="comm-author">— Ufficio Risorse Umane</div>
+      </div>
+
+      <div class="comm-card">
+        <div class="comm-meta">
+          <span class="comm-date">18 marzo 2026</span>
+          <span class="comm-category cat-it">IT</span>
+        </div>
+        <div class="comm-title">Migrazione email aziendale a Microsoft 365: istruzioni per gli utenti</div>
+        <div class="comm-body">
+          L'ufficio IT comunica che il completamento della migrazione di tutti gli account email
+          aziendali su piattaforma <strong>Microsoft 365</strong> è previsto per il weekend del 28–29 marzo 2026.
+          Durante il fine settimana il servizio email sarà temporaneamente non disponibile dalle ore 20:00
+          di sabato 28 alle ore 8:00 di lunedì 30. Si raccomanda di salvare localmente i messaggi importanti
+          prima di venerdì 27. Le credenziali di accesso rimarranno invariate. Per supporto tecnico
+          contattare l'helpdesk IT all'interno 300 o via ticket su helpdesk.intranet.local.
+        </div>
+        <div class="comm-author">— Ufficio IT</div>
+      </div>
+
+      <div class="comm-card">
+        <div class="comm-meta">
+          <span class="comm-date">14 marzo 2026</span>
+          <span class="comm-category cat-ops">Operations</span>
+        </div>
+        <div class="comm-title">Chiusura parcheggio P2 per lavori di manutenzione straordinaria</div>
+        <div class="comm-body">
+          Si avvisa che il parcheggio P2 (ingresso laterale via Montello) sarà chiuso per lavori di
+          rifacimento della pavimentazione dal <strong>25 marzo al 10 aprile 2026</strong>.
+          Durante il periodo di chiusura i dipendenti potranno utilizzare il parcheggio P1 (ingresso principale)
+          e il parcheggio convenzionato "AutoSosta" in via Rossini 12 (tariffa agevolata con badge aziendale).
+          Per informazioni logistiche contattare l'ufficio Facility Management all'interno 180.
+        </div>
+        <div class="comm-author">— Ufficio Operations</div>
+      </div>
+
+      <div class="comm-card">
+        <div class="comm-meta">
+          <span class="comm-date">10 marzo 2026</span>
+          <span class="comm-category cat-hr">Risorse Umane</span>
+        </div>
+        <div class="comm-title">Rilevazione clima aziendale 2026: partecipa al sondaggio</div>
+        <div class="comm-body">
+          Come ogni anno, HR avvia la rilevazione annuale del clima aziendale in collaborazione con
+          la società di consulenza Mercer. Il sondaggio è completamente <strong>anonimo</strong> e richiede
+          circa 15 minuti di tempo. La partecipazione è volontaria ma fortemente incoraggiata: i risultati
+          serviranno a orientare le iniziative di benessere organizzativo per il 2026–2027.
+          Il sondaggio è disponibile all'indirizzo clima2026.intranet.local fino al <strong>31 marzo 2026</strong>.
+          L'anno scorso ha partecipato il 78% dei dipendenti: punta al 90%!
+        </div>
+        <div class="comm-author">— Ufficio Risorse Umane</div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script
+  src="https://genesi.lucadigitale.eu/widget.js"
+  data-api-key="demo_cplace_2026"
+  data-user-name="Alfio Turrisi"
+  data-user-role="Direzione"
+  data-page-context="true">
+</script>
+</body>
+</html>

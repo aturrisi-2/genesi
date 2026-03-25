@@ -39,6 +39,26 @@
   if (!cfg.apiKey) { console.warn('[GenesiWidget] data-api-key mancante'); return; }
   console.log('[GenesiWidget] init', cfg.name, cfg.apiUrl || '(same-origin)');
 
+  // ── Fetch server-side config (merge con data-* locali) ────────────────────
+  const _cfgUrl = (cfg.apiUrl || '') + '/api/widget/config';
+  fetch(_cfgUrl, { headers: { 'X-Widget-Key': cfg.apiKey } })
+    .then(r => r.ok ? r.json() : null)
+    .then(remote => {
+      if (remote) {
+        // data-* attributes override server config se esplicitamente specificati
+        if (!_s.hasAttribute('data-name'))        cfg.name        = remote.name;
+        if (!_s.hasAttribute('data-color'))       cfg.color       = remote.color;
+        if (!_s.hasAttribute('data-welcome'))     cfg.welcome     = remote.welcome;
+        if (!_s.hasAttribute('data-position'))    cfg.position    = remote.position;
+        if (!_s.hasAttribute('data-placeholder')) cfg.placeholder = remote.placeholder;
+      }
+      _init(cfg);
+    })
+    .catch(() => _init(cfg));  // fallback: usa config locale se server non risponde
+
+  // ── Funzione di inizializzazione UI ──────────────────────────────────────
+  function _init(cfg) {
+
   // ── Colori derivati ───────────────────────────────────────────────────────
   function hexToRgb(hex) {
     const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -452,5 +472,7 @@
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   });
+
+  } // end _init
 
 })();
