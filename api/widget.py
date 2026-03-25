@@ -91,12 +91,13 @@ def _find_best_link(user_message: str, link_map: dict[str, str]) -> Optional[tup
     """Restituisce (testo, url) del link più rilevante per il messaggio utente, o None."""
     if not link_map:
         return None
-    msg_lower = user_message.lower()
+    # Parole intere del messaggio (NON substring: evita "giorno" in "buongiorno")
+    msg_words = set(_re.sub(r"[^\w\s]", " ", user_message.lower()).split())
     best_score = 0
     best_item: Optional[tuple[str, str]] = None
     for text, url in link_map.items():
         words = [w for w in _re.sub(r"[^\w\s]", " ", text.lower()).split() if len(w) > 3]
-        score = sum(1 for w in words if w in msg_lower)
+        score = sum(1 for w in words if w in msg_words)
         if score > best_score:
             best_score = score
             best_item = (text, url)
@@ -135,12 +136,12 @@ def _inject_bare_links(response: str, link_map: dict[str, str]) -> str:
 
     def replacer(m: _re.Match) -> str:
         text = m.group(1)
-        text_lower = text.lower()
+        text_words = set(_re.sub(r"[^\w\s]", " ", text.lower()).split())
         best_url: Optional[str] = None
         best_score = 0
         for link_text, url in link_map.items():
             words = [w for w in _re.sub(r"[^\w\s]", " ", link_text.lower()).split() if len(w) > 3]
-            score = sum(1 for w in words if w in text_lower)
+            score = sum(1 for w in words if w in text_words)
             if score > best_score:
                 best_score = score
                 best_url = url
