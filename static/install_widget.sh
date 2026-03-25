@@ -150,7 +150,7 @@ PYEOF
 while IFS= read -r FILE; do
   if grep -q "widget.js" "$FILE" 2>/dev/null; then
     info "Saltato (già installato): $(basename "$FILE")"
-    ((SKIPPED++))
+    SKIPPED=$((SKIPPED + 1))
     continue
   fi
 
@@ -159,16 +159,16 @@ while IFS= read -r FILE; do
     python3 "$INJECT_PY" "$FILE" "$SNIPPET"
     if [[ $? -eq 0 ]]; then
       ok "Installato: $(basename "$FILE")"
-      ((INSTALLED++))
+      INSTALLED=$((INSTALLED + 1))
       rm -f "${FILE}.bak"
     else
       err "Errore su: $(basename "$FILE")"
       mv "${FILE}.bak" "$FILE"
-      ((ERRORS++))
+      ERRORS=$((ERRORS + 1))
     fi
   else
     info "Saltato (no </body>): $(basename "$FILE")"
-    ((SKIPPED++))
+    SKIPPED=$((SKIPPED + 1))
   fi
 done <<< "$HTML_FILES"
 
