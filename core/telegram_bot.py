@@ -23,6 +23,10 @@ TELEGRAM_API   = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 TELEGRAM_FILES = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}"
 GENESI_URL     = "http://localhost:8000"
 
+# Credenziali pre-configurate per i gruppi (auto-login senza /login manuale)
+_GROUP_EMAIL    = os.getenv("TELEGRAM_GROUP_EMAIL", "")
+_GROUP_PASSWORD = os.getenv("TELEGRAM_GROUP_PASSWORD", "")
+
 # Regex meteo
 _WEATHER_RE = re.compile(
     r'\b(meteo|tempo|temperatura|piogge?|sole|vento|previsioni?|forecast|'
@@ -334,9 +338,21 @@ async def handle_update(update: dict):
             mcm = update["my_chat_member"]
             if mcm.get("new_chat_member", {}).get("status") == "member":
                 gid = mcm["chat"]["id"]
+                # Auto-login con credenziali pre-configurate
+                if _GROUP_EMAIL and _GROUP_PASSWORD:
+                    token = await _login(_GROUP_EMAIL, _GROUP_PASSWORD)
+                    if token:
+                        city = await _get_city(token)
+                        session = {"token": token, "email": _GROUP_EMAIL,
+                                   "password": _GROUP_PASSWORD, "city": city,
+                                   "state": STATE_IDLE, "welcomed": True}
+                        await storage.save(_session_key(gid), session)
                 await send_message(gid,
-                    "👋 Ciao a tutti! Sono *Genesi*, la vostra assistente AI.\n\n"
-                    "Per attivarmi nel gruppo, chi ha l'account deve scrivere /login")
+                    "🎉 Eccomi qui! Sono *Genesi*, la vostra assistente AI!\n\n"
+                    "Chiedete pure qualsiasi cosa — sono qui per tutti voi, "
+                    "pronti a rispondere a ogni messaggio! 🚀\n\n"
+                    "Chi sono? Sono un'AI che conosce ognuno di voi e si ricorda "
+                    "di tutto quello che condividete con me. Parlatemi liberamente! 😊")
             return
 
         msg = update.get("message")
@@ -470,9 +486,21 @@ async def handle_update(update: dict):
         # ── Verifica login ─────────────────────────────────────────────────────
         token = session.get("token")
         if not token:
-            if is_group:
+            if is_group and _GROUP_EMAIL and _GROUP_PASSWORD:
+                # Auto-login silenzioso con credenziali pre-configurate
+                new_token = await _login(_GROUP_EMAIL, _GROUP_PASSWORD)
+                if new_token:
+                    await _complete_login(session_uid, new_token, _GROUP_EMAIL, _GROUP_PASSWORD)
+                    session = await storage.load(_session_key(session_uid)) or {}
+                    token = session.get("token")
+                    # Continua normalmente sotto (non fare return)
+                else:
+                    await send_message(chat_id, "Non riesco ad autenticarmi. Contatta l'amministratore.")
+                    return
+            elif is_group:
                 await send_message(chat_id,
                     "Per attivarmi nel gruppo scrivi /login e segui le istruzioni.")
+                return
             else:
                 await send_message(chat_id,
                     "Per chattare con me hai bisogno di un account.\n\n"
@@ -483,10 +511,16 @@ async def handle_update(update: dict):
 
         city = session.get("city", "")
 
+        # In gruppi: prefisso con nome mittente so che Genesi si rivolga alla persona giusta
+        def _group_msg(message: str) -> str:
+            if is_group and first_name:
+                return f"[Gruppo - messaggio di {first_name}]: {message}"
+            return message
+
         async def _do_chat(message: str) -> str:
             """Chat con auto-refresh del token in caso di scadenza."""
             nonlocal token, session
-            reply = await _chat(token, message, city=city)
+            reply = await _chat(token, _group_msg(message), city=city)
             if reply == "__TOKEN_EXPIRED__":
                 new_token = await _auto_refresh(session_uid, session)
                 if new_token:
