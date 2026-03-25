@@ -339,6 +339,14 @@ async def serve_intranet_page(page: str):
         raise HTTPException(status_code=404)
     return FileResponse(path)
 
+@app.get("/install-widget.sh")
+async def serve_install_script():
+    return FileResponse(
+        BASE_DIR / "static" / "install_widget.sh",
+        media_type="text/plain",
+        headers={"Content-Disposition": "inline; filename=install_widget.sh"},
+    )
+
 @app.get("/brochure")
 async def serve_brochure():
     return FileResponse(
