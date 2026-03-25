@@ -144,7 +144,7 @@ async def set_webhook(webhook_url: str):
         # Registra webhook
         res = await client.post(f"{TELEGRAM_API}/setWebhook",
                                 json={"url": webhook_url,
-                                      "allowed_updates": ["message"]})
+                                      "allowed_updates": ["message", "my_chat_member"]})
         data = res.json()
         if data.get("ok"):
             logger.info("TELEGRAM_WEBHOOK_SET url=%s", webhook_url)
@@ -329,6 +329,16 @@ async def _complete_login(chat_id: int, token: str, email: str, password: str = 
 
 async def handle_update(update: dict):
     try:
+        # Gestisci aggiunta del bot al gruppo
+        if update.get("my_chat_member"):
+            mcm = update["my_chat_member"]
+            if mcm.get("new_chat_member", {}).get("status") == "member":
+                gid = mcm["chat"]["id"]
+                await send_message(gid,
+                    "👋 Ciao a tutti! Sono *Genesi*, la vostra assistente AI.\n\n"
+                    "Per attivarmi nel gruppo, chi ha l'account deve scrivere /login")
+            return
+
         msg = update.get("message")
         if not msg:
             return
@@ -347,21 +357,13 @@ async def handle_update(update: dict):
 
         # ── Logica gruppi ──────────────────────────────────────────────────────
         if is_group:
-            # Pulisci eventuale @mention dal testo (se qualcuno taglia il bot)
+            # Pulisci eventuale @mention dal testo
             bot_mention = f"@{_BOT_USERNAME}" if _BOT_USERNAME else None
             if bot_mention:
                 text = text.replace(bot_mention, "").replace(bot_mention.lower(), "").strip()
-            # Login/registrazione: reindirizza alla chat privata (sicurezza)
-            if text.startswith("/login") or text.startswith("/accedi") \
-                    or text.startswith("/registrati") or text.startswith("/start") \
-                    or text.startswith("/logout"):
-                bot_link = get_bot_link()
-                await send_message(chat_id,
-                    f"👋 {first_name}, per collegarti a Genesi scrivi in privato:\n{bot_link}")
-                return
 
-        # Sessione: in gruppi usa from_id (sessione individuale), in privato chat_id
-        session_uid = from_id if is_group else chat_id
+        # Sessione condivisa per chat (chat_id sia in privato che in gruppo)
+        session_uid = chat_id
 
         session = await storage.load(_session_key(session_uid)) or {}
         state   = session.get("state", STATE_IDLE)
@@ -469,10 +471,8 @@ async def handle_update(update: dict):
         token = session.get("token")
         if not token:
             if is_group:
-                bot_link = get_bot_link()
-                name_part = f" {first_name}" if first_name else ""
                 await send_message(chat_id,
-                    f"👋{name_part}, per usarmi nel gruppo collegati prima in privato:\n{bot_link}")
+                    "Per attivarmi nel gruppo scrivi /login e segui le istruzioni.")
             else:
                 await send_message(chat_id,
                     "Per chattare con me hai bisogno di un account.\n\n"
