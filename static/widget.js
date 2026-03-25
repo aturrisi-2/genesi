@@ -254,6 +254,16 @@
   const _convKey = 'gw_conv_' + cfg.apiKey + (cfg.userName ? '_' + cfg.userName.replace(/\s+/g,'_') : '');
   let conversationId = localStorage.getItem(_convKey) || null;
 
+  // Cronologia messaggi persistente — ripristinata ad ogni navigazione
+  const _msgsKey = 'gw_msgs_' + cfg.apiKey + (cfg.userName ? '_' + cfg.userName.replace(/\s+/g,'_') : '');
+  const MAX_STORED_MSGS = 40;
+  let _msgHistory = [];
+  try { _msgHistory = JSON.parse(localStorage.getItem(_msgsKey) || '[]'); } catch(e) { _msgHistory = []; }
+
+  function _saveHistory() {
+    try { localStorage.setItem(_msgsKey, JSON.stringify(_msgHistory.slice(-MAX_STORED_MSGS))); } catch(e) {}
+  }
+
   // ── Apertura / chiusura ───────────────────────────────────────────────────
   function open() {
     isOpen = true;
@@ -262,11 +272,19 @@
     input.focus();
     clearUnread();
     if (messages.children.length === 0) {
-      const firstName = cfg.userName ? cfg.userName.split(' ')[0] : '';
-      const welcomeMsg = firstName
-        ? cfg.welcome.replace(/^(Ciao|Salve|Hello)!?/i, `Ciao ${firstName}!`)
-        : cfg.welcome;
-      addBotMessage(welcomeMsg);
+      if (_msgHistory.length > 0) {
+        // Ripristina conversazione precedente senza ri-salvare
+        _msgHistory.forEach(m => {
+          if (m.r === 'b') addBotMessage(m.t, true);
+          else addUserMessage(m.t, true);
+        });
+      } else {
+        const firstName = cfg.userName ? cfg.userName.split(' ')[0] : '';
+        const welcomeMsg = firstName
+          ? cfg.welcome.replace(/^(Ciao|Salve|Hello)!?/i, `Ciao ${firstName}!`)
+          : cfg.welcome;
+        addBotMessage(welcomeMsg);
+      }
     }
   }
   function close() {
@@ -325,22 +343,24 @@
     return h;
   }
 
-  function addBotMessage(text) {
+  function addBotMessage(text, skipSave) {
     const el = document.createElement('div');
     el.className = 'gw-msg gw-bot';
     el.innerHTML = renderMd(text);
     messages.appendChild(el);
     scrollBottom();
     addUnread();
+    if (!skipSave) { _msgHistory.push({r:'b', t:text}); _saveHistory(); }
     return el;
   }
 
-  function addUserMessage(text) {
+  function addUserMessage(text, skipSave) {
     const el = document.createElement('div');
     el.className = 'gw-msg gw-user';
     el.textContent = text;
     messages.appendChild(el);
     scrollBottom();
+    if (!skipSave) { _msgHistory.push({r:'u', t:text}); _saveHistory(); }
     return el;
   }
 
