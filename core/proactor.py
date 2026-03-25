@@ -278,6 +278,30 @@ class Proactor:
             except Exception:
                 pass
             response = self._post_process_response(response, message, user_name=_pp_user_name)
+
+        # Widget: rimuovi emoji e suggerimenti di servizi personali dalle risposte
+        if response and self._current_platform == "widget":
+            import re as _re_w
+            # Strip emoji Unicode (tutto il range emoji + simboli comuni)
+            response = _re_w.sub(
+                r'[\U0001F300-\U0001FFFF\U00002600-\U000027BF\U0000FE00-\U0000FE0F'
+                r'\U0001F900-\U0001F9FF\U00002702-\U000027B0]+',
+                '', response
+            ).strip()
+            # Rimuovi frasi di onboarding servizi personali
+            _WIDGET_ONBOARDING_PATTERNS = [
+                r'Gmail non è ancora collegat\w+[^.]*\.',
+                r'Collega Gmail\b[^.]*\.',
+                r'Collega il tuo account Google[^.]*\.',
+                r'iCloud non è ancora configurato[^.]*\.',
+                r'Collega iCloud[^.]*\.',
+                r'autorizza l\'accesso[^.]*\.',
+                r'Clicca il pulsante[^.]*\.',
+            ]
+            for pat in _WIDGET_ONBOARDING_PATTERNS:
+                response = _re_w.sub(pat, '', response, flags=_re_w.IGNORECASE)
+            response = _re_w.sub(r'\n{3,}', '\n\n', response).strip()
+
         return response
 
     def _post_process_response(self, response: str, user_message: str, user_name: str = "") -> str:
@@ -496,11 +520,16 @@ class Proactor:
             msg_lower = message.lower().strip()
 
             # STEP 0.1: WIDGET INTENT GUARD
-            # Per il widget aziendale, reminder/iCloud/Google non hanno senso.
-            # Blocca qui prima di qualsiasi routing per evitare risposte fuori contesto.
+            # Per il widget aziendale i servizi personali (calendario, email, ecc.) non hanno senso.
+            # Blocca tutti gli intent personali: risposta generica chat_free.
             _WIDGET_BLOCKED_INTENTS = {
                 "reminder_create", "reminder_list", "reminder_update", "reminder_delete",
                 "icloud_sync", "icloud_setup", "google_sync", "google_setup",
+                "gmail_setup", "gmail_read", "gmail_send",
+                "whatsapp_send", "whatsapp_setup",
+                "telegram_send", "telegram_setup",
+                "social_read", "social_setup",
+                "moltbook_activity",
             }
             if self._current_platform == "widget":
                 _intent_str = (intent[0] if isinstance(intent, list) and intent else intent) or ""
