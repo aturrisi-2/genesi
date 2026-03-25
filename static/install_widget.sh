@@ -134,45 +134,45 @@ INSTALLED=0
 SKIPPED=0
 ERRORS=0
 
-while IFS= read -r FILE; do
-  if grep -q "widget.js" "$FILE" 2>/dev/null; then
-    info "Saltato (già installato): $(basename $FILE)"
-    ((SKIPPED++))
-    continue
-  fi
-
-  # Inietta prima di </body>
-  if grep -qi "</body>" "$FILE"; then
-    # Crea backup
-    cp "$FILE" "${FILE}.bak"
-    # Sostituisce </body> con snippet + </body>
-    python3 - "$FILE" "$SNIPPET" << 'PYEOF'
+# Scrivi script Python in file temporaneo (evita heredoc dentro while loop che consuma stdin)
+INJECT_PY=$(mktemp /tmp/widget_inject_XXXXXX.py)
+cat > "$INJECT_PY" << 'PYEOF'
 import sys, re
 filepath = sys.argv[1]
 snippet  = sys.argv[2]
 with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
     content = f.read()
-# Inserisce prima di </body> (case-insensitive)
 new_content = re.sub(r'(</body>)', snippet + '\n\\1', content, count=1, flags=re.IGNORECASE)
 with open(filepath, 'w', encoding='utf-8') as f:
     f.write(new_content)
 PYEOF
+
+while IFS= read -r FILE; do
+  if grep -q "widget.js" "$FILE" 2>/dev/null; then
+    info "Saltato (già installato): $(basename "$FILE")"
+    ((SKIPPED++))
+    continue
+  fi
+
+  if grep -qi "</body>" "$FILE"; then
+    cp "$FILE" "${FILE}.bak"
+    python3 "$INJECT_PY" "$FILE" "$SNIPPET"
     if [[ $? -eq 0 ]]; then
-      ok "Installato: $(basename $FILE)"
+      ok "Installato: $(basename "$FILE")"
       ((INSTALLED++))
+      rm -f "${FILE}.bak"
     else
-      err "Errore su: $(basename $FILE)"
-      # Ripristina backup
+      err "Errore su: $(basename "$FILE")"
       mv "${FILE}.bak" "$FILE"
       ((ERRORS++))
     fi
-    # Rimuovi backup se tutto ok
-    rm -f "${FILE}.bak"
   else
-    info "Saltato (no </body>): $(basename $FILE)"
+    info "Saltato (no </body>): $(basename "$FILE")"
     ((SKIPPED++))
   fi
 done <<< "$HTML_FILES"
+
+rm -f "$INJECT_PY"
 
 # ── Step 5: Riepilogo ─────────────────────────────────────────
 echo ""
