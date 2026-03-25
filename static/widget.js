@@ -218,10 +218,7 @@
 
       <div id="gw-messages"></div>
 
-      <div id="gw-ctx-bar">
-        <span id="gw-ctx-label">📄 Contesto pagina attivo</span>
-        <button id="gw-ctx-toggle">disattiva</button>
-      </div>
+      <div id="gw-ctx-bar" style="display:none !important"></div>
 
       <div id="gw-footer">
         <textarea id="gw-input" rows="1" placeholder="${cfg.placeholder}"></textarea>
