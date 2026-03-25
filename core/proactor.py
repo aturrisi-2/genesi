@@ -212,7 +212,9 @@ class Proactor:
     # HANDLE — Entry point, routing obbligatorio
     # ═══════════════════════════════════════════════════════════════
 
-    async def handle(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None, skip_document_mode: bool = False) -> str:
+    async def handle(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None, skip_document_mode: bool = False, platform: str = None) -> str:
+        # Memorizza platform per i sub-handler (es. _handle_relational → context_assembler)
+        self._current_platform = platform or ""
         """
         Orchestrazione centrale v4.
         Returns: response_text (SOLO stringa - nessuna tupla, nessun dict)
@@ -3524,7 +3526,7 @@ Messaggio: "{message}" """
     # RELATIONAL ROUTER — GPT controllato con contesto limitato
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_relational(self, user_id: str, message: str, brain_state: Dict[str, Any], conversation_id: str = None) -> str:
+    async def _handle_relational(self, user_id: str, message: str, brain_state: Dict[str, Any], conversation_id: str = None, platform: str = None) -> str:
         """
         Pipeline relazionale con GPT controllato.
         GPT riceve: conversation thread, identity summary, topic, latent state.
@@ -3532,8 +3534,9 @@ Messaggio: "{message}" """
         Returns: (response_text: str, source: str)
         """
         # 1. Context Assembler — structured context from memory
-        context = await self.context_assembler.build(user_id, message)
-        logger.info("CONTEXT_ASSEMBLED user=%s summary_len=%d", user_id, len(context.get('summary', '')))
+        _platform = getattr(self, '_current_platform', '') or platform or ""
+        context = await self.context_assembler.build(user_id, message, platform=_platform)
+        logger.info("CONTEXT_ASSEMBLED user=%s summary_len=%d platform=%s", user_id, len(context.get('summary', '')), _platform)
 
         # Inject into brain_state for backward compatibility
         brain_state["relational_context"] = context["summary"]

@@ -11,7 +11,7 @@ from core.chat_memory import chat_memory
 from core.log import log
 from core.fallback_engine import fallback_engine
 
-async def simple_chat_handler(user_id: str, message: str, conversation_id: str = None):
+async def simple_chat_handler(user_id: str, message: str, conversation_id: str = None, platform: str = None):
     """
     Chat handler — Proactor orchestrator centrale.
     Identity filtering avviene dentro evolution_engine (no doppio filtro).
@@ -40,7 +40,8 @@ async def simple_chat_handler(user_id: str, message: str, conversation_id: str =
             user_id=user_id,
             message=message,
             intent=intents,
-            conversation_id=conversation_id
+            conversation_id=conversation_id,
+            platform=platform,
         )
 
         # Ensure we return only the response string, not the tuple

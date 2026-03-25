@@ -28,14 +28,18 @@ class ContextAssembler:
         self.memory_brain = memory_brain
         self.latent_state_engine = latent_state_engine
 
-    async def build(self, user_id: str, user_message: str) -> Dict[str, Any]:
+    async def build(self, user_id: str, user_message: str, platform: str = "") -> Dict[str, Any]:
         """
         Costruisce contesto completo per LLM.
         NON chiama update_brain — quello e' gia' fatto dal proactor.
 
+        platform="widget" → esclude storico conversazioni personali (past_conversations,
+        emotional_trend) per evitare contaminazione di nomi da altre piattaforme (Telegram ecc.)
+
         Returns:
             dict con: summary, long_term_profile, relational_state, recent_episodes, memory_v2, current_message
         """
+        is_widget = (platform == "widget")
         import asyncio
         
         # Load from persistent storage - use asyncio.run for sync wrapper
@@ -189,24 +193,28 @@ class ContextAssembler:
             pass
 
         # Past conversation summaries: cosa è stato discusso nelle sessioni precedenti (fail-silent)
-        try:
-            from core.conversation_summary_service import conv_summary_service
-            past_block = await conv_summary_service.get_context_block(user_id)
-            if past_block:
-                context["past_conversations"] = past_block
-                summary += f"\n[CONVERSAZIONI PRECEDENTI]\n{past_block}"
-        except Exception:
-            pass
+        # WIDGET: escluso — lo storico può contenere nomi da Telegram/WhatsApp e altri canali personali
+        if not is_widget:
+            try:
+                from core.conversation_summary_service import conv_summary_service
+                past_block = await conv_summary_service.get_context_block(user_id)
+                if past_block:
+                    context["past_conversations"] = past_block
+                    summary += f"\n[CONVERSAZIONI PRECEDENTI]\n{past_block}"
+            except Exception:
+                pass
 
         # Emotional history: andamento emotivo recente (fail-silent)
-        try:
-            from core.emotional_memory import get_emotion_trend_summary as _get_trend
-            trend = await _get_trend(user_id)
-            if trend:
-                context["emotional_trend"] = trend
-                summary += f"\n[ANDAMENTO EMOTIVO RECENTE]\n{trend}"
-        except Exception:
-            pass
+        # WIDGET: escluso — il trend può essere influenzato da conversazioni di gruppo con altri utenti
+        if not is_widget:
+            try:
+                from core.emotional_memory import get_emotion_trend_summary as _get_trend
+                trend = await _get_trend(user_id)
+                if trend:
+                    context["emotional_trend"] = trend
+                    summary += f"\n[ANDAMENTO EMOTIVO RECENTE]\n{trend}"
+            except Exception:
+                pass
 
         # Behavioral memory: stile interazione appreso (fail-silent)
         try:

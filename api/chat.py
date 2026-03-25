@@ -57,6 +57,7 @@ MAX_MESSAGE_LENGTH = 12000  # caratteri massimi per messaggio (widget invia cont
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
+    platform: Optional[str] = None   # "widget" → blocca iniezione storico conversazioni personali
 
 class ChatResponse(BaseModel):
     response: str
@@ -222,7 +223,7 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         _asyncio.create_task(_extract_and_save_episode())
 
         # 2. Pipeline Relazionale / Tecnico (Orchestrata dal Proactor)
-        _handler_result = await simple_chat_handler(user_id, request.message, request.conversation_id)
+        _handler_result = await simple_chat_handler(user_id, request.message, request.conversation_id, platform=request.platform)
         if isinstance(_handler_result, tuple):
             response, classified_intent = _handler_result[0], _handler_result[1]
         else:
@@ -379,7 +380,7 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                     pass
             _aio.create_task(_stream_assess_prediction())
 
-            resp = await _sch(user_id, request.message, request.conversation_id)
+            resp = await _sch(user_id, request.message, request.conversation_id, platform=request.platform)
             if isinstance(resp, tuple):
                 resp = resp[0]
             if not isinstance(resp, str):
