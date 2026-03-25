@@ -97,7 +97,15 @@ def _find_best_link(user_message: str, link_map: dict[str, str]) -> Optional[tup
     best_item: Optional[tuple[str, str]] = None
     for text, url in link_map.items():
         words = [w for w in _re.sub(r"[^\w\s]", " ", text.lower()).split() if len(w) > 3]
-        score = sum(1 for w in words if w in msg_words)
+        # Match esatto oppure stem (last-1 char) per singolare/plurale italiano
+        def _word_matches(w: str) -> bool:
+            if w in msg_words:
+                return True
+            if len(w) >= 6:
+                stem = w[:-1]
+                return any(len(m) >= 6 and m[:-1] == stem for m in msg_words)
+            return False
+        score = sum(1 for w in words if _word_matches(w))
         if score > best_score:
             best_score = score
             best_item = (text, url)
@@ -141,7 +149,14 @@ def _inject_bare_links(response: str, link_map: dict[str, str]) -> str:
         best_score = 0
         for link_text, url in link_map.items():
             words = [w for w in _re.sub(r"[^\w\s]", " ", link_text.lower()).split() if len(w) > 3]
-            score = sum(1 for w in words if w in text_words)
+            def _wm(w: str) -> bool:
+                if w in text_words:
+                    return True
+                if len(w) >= 6:
+                    stem = w[:-1]
+                    return any(len(m) >= 6 and m[:-1] == stem for m in text_words)
+                return False
+            score = sum(1 for w in words if _wm(w))
             if score > best_score:
                 best_score = score
                 best_url = url
