@@ -517,11 +517,28 @@ async def handle_update(update: dict):
 
         city = session.get("city", "")
 
-        # In gruppi: prefisso con nome mittente so che Genesi si rivolga alla persona giusta
+        # In gruppi: appende il nome del mittente DOPO il messaggio per evitare
+        # che il LLM mescoli il nome dell'account con quello del mittente.
+        # Se il messaggio è solo emoji/reazione, segnala di rispondere brevemente.
         def _group_msg(message: str) -> str:
-            if is_group and first_name:
-                return f"[Gruppo - messaggio di {first_name}]: {message}"
-            return message
+            if not is_group or not first_name:
+                return message
+            only_emoji = all(
+                ord(c) > 127 or c in (' ', '\n') for c in message.strip()
+            )
+            if only_emoji:
+                return (
+                    f"{message}\n\n"
+                    f"[GRUPPO: chi scrive è {first_name}. "
+                    f"È una reazione/emoji — rispondi in modo brevissimo e leggero, "
+                    f"senza fare domande. Rivolgiti a {first_name}.]"
+                )
+            return (
+                f"{message}\n\n"
+                f"[GRUPPO: chi ha scritto questo messaggio è {first_name}. "
+                f"Rivolgiti a {first_name} per nome nella risposta. "
+                f"NON usare altri nomi.]"
+            )
 
         async def _do_chat(message: str) -> str:
             """Chat con auto-refresh del token in caso di scadenza."""
