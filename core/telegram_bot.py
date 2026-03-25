@@ -382,6 +382,12 @@ async def handle_update(update: dict):
         session_uid = chat_id
 
         session = await storage.load(_session_key(session_uid)) or {}
+
+        # Nei gruppi con credenziali pre-configurate: ignora stati login pendenti
+        # (evita che vecchie sessioni STATE_AWAIT_PASSWORD trattino i messaggi come password)
+        if is_group and _GROUP_EMAIL and not session.get("token"):
+            session = {"state": STATE_IDLE}
+
         state   = session.get("state", STATE_IDLE)
 
         # ── Comandi globali ────────────────────────────────────────────────────
