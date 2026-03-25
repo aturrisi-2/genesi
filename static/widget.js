@@ -243,8 +243,6 @@
   const input     = document.getElementById('gw-input');
   const sendBtn   = document.getElementById('gw-send');
   const ctxBar    = document.getElementById('gw-ctx-bar');
-  const ctxLabel  = document.getElementById('gw-ctx-label');
-  const ctxToggle = document.getElementById('gw-ctx-toggle');
 
   // ── Stato ─────────────────────────────────────────────────────────────────
   let isOpen       = false;
@@ -289,15 +287,7 @@
   btn.addEventListener('click', () => isOpen ? close() : open());
   closeBtn.addEventListener('click', close);
 
-  // ── Contesto pagina ───────────────────────────────────────────────────────
-  if (!cfg.pageCtx) ctxBar.style.display = 'none';
-
-  ctxToggle.addEventListener('click', () => {
-    sendPageCtx = !sendPageCtx;
-    ctxToggle.textContent  = sendPageCtx ? 'disattiva' : 'attiva';
-    ctxLabel.textContent   = sendPageCtx ? '📄 Contesto pagina attivo' : '📄 Contesto pagina disattivato';
-    ctxLabel.style.opacity = sendPageCtx ? '1' : '.5';
-  });
+  // Contesto pagina sempre attivo — barra nascosta, nessun toggle
 
   function getPageContext() {
     if (!sendPageCtx) return {};
