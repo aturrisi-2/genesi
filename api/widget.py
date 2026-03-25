@@ -4,9 +4,11 @@ Autenticazione tramite API key aziendale (X-Widget-Key header).
 """
 import os
 import re as _re
+import shutil
 import time
 import logging
 from collections import defaultdict
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
@@ -602,3 +604,23 @@ async def admin_update_config(
         current[field] = val
     logger.info("WIDGET_CONFIG_UPDATED key=%s fields=%s", key, list(body.model_dump(exclude_none=True).keys()))
     return {"ok": True, "config": current}
+
+
+@router.post("/admin/demo/reset")
+async def admin_demo_reset(
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """Ripristina i file HTML dell'intranet di demo allo stato pulito (senza widget)."""
+    _require_admin(x_admin_token, authorization)
+    base_dir = Path(__file__).resolve().parent.parent
+    templates_dir = base_dir / "static" / "intranet" / "templates"
+    intranet_dir  = base_dir / "static" / "intranet"
+    if not templates_dir.exists():
+        raise HTTPException(status_code=500, detail="Directory templates non trovata")
+    restored = []
+    for tmpl in templates_dir.glob("*.html"):
+        shutil.copy(tmpl, intranet_dir / tmpl.name)
+        restored.append(tmpl.name)
+    logger.info("DEMO_RESET restored=%s", restored)
+    return {"ok": True, "restored": sorted(restored)}

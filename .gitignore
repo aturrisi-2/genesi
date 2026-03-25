@@ -65,3 +65,9 @@ data/tts_cache/
 *.log
 nohup.out
 _cestino_/
+
+# ===============================
+# Intranet demo — file modificati dall'installer (non tracciati)
+# I template puliti rimangono in static/intranet/templates/
+# ===============================
+static/intranet/*.html
