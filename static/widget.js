@@ -556,7 +556,7 @@
         ...getPageContext(),
       };
       if (conversationId) body.conversation_id = conversationId;
-      if (cfg.userName)       body.user_name        = cfg.userName;
+      if (cfg.userName)       body.user_name        = cfg.userName.split(' ')[0];
       if (cfg.userRole)       body.user_role        = cfg.userRole;
       if (cfg.workspaceToken) body.workspace_token  = cfg.workspaceToken;
 
