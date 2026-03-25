@@ -347,13 +347,8 @@ async def handle_update(update: dict):
 
         # ── Logica gruppi ──────────────────────────────────────────────────────
         if is_group:
-            # Rispondi solo se @menzionato o reply diretto al bot
+            # Pulisci eventuale @mention dal testo (se qualcuno taglia il bot)
             bot_mention = f"@{_BOT_USERNAME}" if _BOT_USERNAME else None
-            is_mentioned    = bool(bot_mention and bot_mention.lower() in text.lower())
-            is_reply_to_bot = bool((msg.get("reply_to_message") or {}).get("from", {}).get("is_bot"))
-            if not is_mentioned and not is_reply_to_bot:
-                return  # ignora messaggi non rivolti al bot
-            # Pulisci il @mention dal testo
             if bot_mention:
                 text = text.replace(bot_mention, "").replace(bot_mention.lower(), "").strip()
             # Login/registrazione: reindirizza alla chat privata (sicurezza)
