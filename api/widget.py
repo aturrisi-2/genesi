@@ -328,10 +328,14 @@ async def widget_chat(
     # Blocco identità utente (se disponibile)
     user_identity_block = ""
     if req.user_name:
-        user_identity_block = f"\n[UTENTE LOGGATO]\nNome: {req.user_name}"
+        user_identity_block = f"\n[UTENTE LOGGATO — IDENTITÀ CERTA]\nL'utente con cui stai parlando ORA si chiama: {req.user_name}"
         if req.user_role:
             user_identity_block += f"\nRuolo: {req.user_role}"
-        user_identity_block += "\nRivolgerti sempre a questa persona per nome nelle risposte.\n"
+        user_identity_block += (
+            f"\nUSA SEMPRE questo nome ({req.user_name}) quando ti rivolgi all'utente."
+            f"\nIGNORA qualsiasi altro nome che compare nel contesto storico (es. nomi di altri partecipanti a conversazioni precedenti)."
+            f"\nSe hai dubbi su chi sia l'utente, la risposta è: {req.user_name}.\n"
+        )
 
     # Istruzione comportamentale — condizionale
     if subpage_text and matched_link:
