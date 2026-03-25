@@ -502,9 +502,11 @@ class Proactor:
                 "reminder_create", "reminder_list", "reminder_update", "reminder_delete",
                 "icloud_sync", "icloud_setup", "google_sync", "google_setup",
             }
-            if self._current_platform == "widget" and intent in _WIDGET_BLOCKED_INTENTS:
-                log("WIDGET_INTENT_BLOCKED", original_intent=intent, user_id=user_id)
-                intent = "chat_free"
+            if self._current_platform == "widget":
+                _intent_str = (intent[0] if isinstance(intent, list) and intent else intent) or ""
+                if _intent_str in _WIDGET_BLOCKED_INTENTS:
+                    log("WIDGET_INTENT_BLOCKED", original_intent=_intent_str, user_id=user_id)
+                    intent = "chat_free"
 
             logger.info("PROACTOR_HANDLE_ENTRY user=%s intent=%s", user_id, intent)
 
