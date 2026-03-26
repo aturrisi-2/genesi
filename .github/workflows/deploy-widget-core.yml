@@ -1,0 +1,31 @@
+name: Deploy Widget Core (cplace-stable)
+
+on:
+  push:
+    branches:
+      - cplace-stable
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-widget-core
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy Widget Core over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST || secrets.SSH_HOST || secrets.SERVER_IP }}
+          username: ${{ secrets.VPS_USER || secrets.SSH_USER }}
+          key: ${{ secrets.VPS_SSH_KEY || secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script_stop: true
+          request_pty: true
+          command_timeout: 30m
+          script: |
+            set -euxo pipefail
+            echo "INFO: deploying widget-core on host=$(hostname) user=$(id -un)"
+            cd /opt/genesi-widget
+            APP_DIR=/opt/genesi-widget BRANCH=cplace-stable SERVICE_NAME=genesi-widget-core VENV_DIR=/opt/genesi-widget/.venv AUTO_FIX_OWNERSHIP=1 bash scripts/vps_autodeploy.sh
