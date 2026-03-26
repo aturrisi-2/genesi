@@ -34,6 +34,28 @@ _WEATHER_RE = re.compile(
     re.IGNORECASE
 )
 
+# Filtro gruppi: risponde solo se menzionato o saluto
+_GREETING_RE = re.compile(
+    r'\b(ciao|salve|buongiorno|buonasera|buonanotte|hey|hei|ehilà|'
+    r'hello|hi|buon\s*giorno|buona\s*sera)\b',
+    re.IGNORECASE
+)
+_GENESI_RE = re.compile(r'\bgenesi\b', re.IGNORECASE)
+
+
+def _group_should_respond(text: str, caption: str = "", bot_username: str = "") -> bool:
+    """In un gruppo risponde solo se: @mention diretta, nome 'Genesi', o saluto."""
+    combined = f"{text} {caption}".strip()
+    if not combined:
+        return False
+    if bot_username and f"@{bot_username.lower()}" in combined.lower():
+        return True
+    if _GENESI_RE.search(combined):
+        return True
+    if _GREETING_RE.search(combined):
+        return True
+    return False
+
 # Regex per trovare URL immagini nelle risposte di Genesi
 _IMG_URL_RE = re.compile(
     r'https?://[^\s\)\"\']+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s\)\"\']*)?',
@@ -516,6 +538,14 @@ async def handle_update(update: dict):
             return
 
         city = session.get("city", "")
+
+        # ── FILTRO GRUPPI ──────────────────────────────────────────────────────
+        # In chat di gruppo risponde solo a: @mention, "Genesi", o saluto.
+        # Tutto il resto viene ignorato silenziosamente.
+        if is_group and not _group_should_respond(text, caption=caption, bot_username=_BOT_USERNAME):
+            logger.info("TELEGRAM_GROUP_SKIP chat_id=%s from=%s msg=%.60s",
+                        chat_id, first_name, f"{text} {caption}".strip())
+            return
 
         # In gruppi: appende il nome del mittente DOPO il messaggio per evitare
         # che il LLM mescoli il nome dell'account con quello del mittente.

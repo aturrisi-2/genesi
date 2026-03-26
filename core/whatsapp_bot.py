@@ -38,6 +38,26 @@ _WEATHER_RE = re.compile(
     re.IGNORECASE
 )
 
+# Filtro gruppi: risponde solo se menzionato o saluto
+_GREETING_RE = re.compile(
+    r'\b(ciao|salve|buongiorno|buonasera|buonanotte|hey|hei|ehilà|'
+    r'hello|hi|buon\s*giorno|buona\s*sera)\b',
+    re.IGNORECASE
+)
+_GENESI_RE = re.compile(r'\bgenesi\b', re.IGNORECASE)
+
+
+def _group_should_respond(text: str, caption: str = "") -> bool:
+    """In un gruppo risponde solo se: nome 'Genesi' o saluto."""
+    combined = f"{text} {caption}".strip()
+    if not combined:
+        return False
+    if _GENESI_RE.search(combined):
+        return True
+    if _GREETING_RE.search(combined):
+        return True
+    return False
+
 # Regex per trovare URL immagini nelle risposte
 _IMG_URL_RE = re.compile(
     r'https?://[^\s\)\"\']+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s\)\"\']*)?',
@@ -372,14 +392,22 @@ async def handle_update(payload: dict):
                 name_map = {c["wa_id"]: c.get("profile", {}).get("name", "")
                             for c in contacts}
 
+                # Rileva se siamo in un gruppo (group_id presente nei metadati WA)
+                is_group = bool(value.get("metadata", {}).get("group_id"))
+
                 for msg in messages:
-                    await _process_message(msg, name_map)
+                    # In alternativa: il messaggio stesso può avere conversation_id gruppo
+                    msg_is_group = is_group or bool(
+                        msg.get("context", {}).get("id", "").endswith("@g.us")
+                        or msg.get("group", {})
+                    )
+                    await _process_message(msg, name_map, is_group=msg_is_group)
 
     except Exception as e:
         logger.error("WA_HANDLE_UPDATE_ERROR err=%s", e)
 
 
-async def _process_message(msg: dict, name_map: dict):
+async def _process_message(msg: dict, name_map: dict, is_group: bool = False):
     try:
         wa_id      = msg.get("from", "")
         msg_type   = msg.get("type", "")
@@ -533,6 +561,13 @@ async def _process_message(msg: dict, name_map: dict):
             return
 
         city = session.get("city", "")
+
+        # ── FILTRO GRUPPI ─────────────────────────────────────────────────────
+        # Nei gruppi risponde solo a: "Genesi" nel testo o saluto.
+        if is_group and not _group_should_respond(text, caption=caption):
+            logger.info("WA_GROUP_SKIP wa_id=%s msg=%.60s",
+                        wa_id, f"{text} {caption}".strip())
+            return
 
         async def _do_chat(message: str) -> str:
             nonlocal token, session
