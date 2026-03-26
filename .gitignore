@@ -71,3 +71,8 @@ _cestino_/
 # I template puliti rimangono in static/intranet/templates/
 # ===============================
 static/intranet/*.html
+
+# ===============================
+# Widget Service — progetto separato in genesi-widget/
+# ===============================
+widget-service/
