@@ -27,5 +27,5 @@ jobs:
           script: |
             set -euxo pipefail
             echo "INFO: deploying widget-core on host=$(hostname) user=$(id -un)"
-            cd /opt/genesi-widget
-            APP_DIR=/opt/genesi-widget BRANCH=cplace-stable SERVICE_NAME=genesi-widget-core VENV_DIR=/opt/genesi-widget/.venv AUTO_FIX_OWNERSHIP=1 bash scripts/vps_autodeploy.sh
+            cd /opt/genesi-cplace
+            APP_DIR=/opt/genesi-cplace BRANCH=cplace-stable SERVICE_NAME=genesi-cplace VENV_DIR=/opt/genesi/venv AUTO_FIX_OWNERSHIP=1 bash scripts/vps_autodeploy.sh
