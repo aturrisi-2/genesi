@@ -15,6 +15,10 @@ import os
 import re
 import httpx
 from core.storage import storage
+from core.telegram_group_memory import (
+    update_member_seen, get_member_city, save_member_city,
+    build_group_context, append_group_history, extract_member_facts_background,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -405,6 +409,10 @@ async def handle_update(update: dict):
         document   = msg.get("document")    # documento (pdf, txt, ecc.)
         caption    = msg.get("caption", "").strip()
 
+        # Aggiorna profilo membro del gruppo ad ogni messaggio
+        if is_group and first_name:
+            asyncio.create_task(update_member_seen(from_id, first_name))
+
         # ── Logica gruppi ──────────────────────────────────────────────────────
         if is_group:
             # Pulisci eventuale @mention dal testo
@@ -516,7 +524,7 @@ async def handle_update(update: dict):
             else:
                 city = text.strip().title()
                 if is_group:
-                    await _save_group_user_city(from_id, city)
+                    await save_member_city(from_id, city)
                 else:
                     await _save_city(session["token"], city)
                     session["city"] = city
@@ -561,7 +569,7 @@ async def handle_update(update: dict):
 
         # In gruppi la city è per-utente (from_id), non condivisa sull'intera chat
         if is_group:
-            city = await _get_group_user_city(from_id)
+            city = await get_member_city(from_id)
         else:
             city = session.get("city", "")
 
@@ -576,7 +584,16 @@ async def handle_update(update: dict):
         # In gruppi: appende il nome del mittente DOPO il messaggio per evitare
         # che il LLM mescoli il nome dell'account con quello del mittente.
         # Se il messaggio è solo emoji/reazione, segnala di rispondere brevemente.
-        def _group_msg(message: str) -> str:
+        # Costruisce il contesto di gruppo arricchito (asincrono, cached per questo turno)
+        _group_ctx_cache: list[str] = []
+
+        async def _load_group_ctx() -> str:
+            if not _group_ctx_cache:
+                ctx = await build_group_context(chat_id, from_id, first_name)
+                _group_ctx_cache.append(ctx)
+            return _group_ctx_cache[0]
+
+        def _group_msg(message: str, group_ctx: str = "") -> str:
             if not is_group or not first_name:
                 return message
             only_emoji = all(
@@ -586,27 +603,42 @@ async def handle_update(update: dict):
                 return (
                     f"{message}\n\n"
                     f"[GRUPPO: chi scrive è {first_name}. "
-                    f"È una reazione/emoji — rispondi in modo brevissimo e leggero, "
-                    f"senza fare domande. Rivolgiti a {first_name}.]"
+                    f"È una reazione/emoji — rispondi brevissimamente e con leggerezza, "
+                    f"senza fare domande. Rivolgiti a {first_name}.]\n"
+                    f"{group_ctx}"
                 )
             return (
                 f"{message}\n\n"
-                f"[GRUPPO: chi ha scritto questo messaggio è {first_name}. "
-                f"Rivolgiti a {first_name} per nome nella risposta. "
-                f"NON usare altri nomi.]"
+                f"[GRUPPO: chi ha scritto è {first_name}. "
+                f"Rivolgiti a {first_name} per nome nella risposta.]\n"
+                f"{group_ctx}"
             )
 
         async def _do_chat(message: str) -> str:
             """Chat con auto-refresh del token in caso di scadenza."""
             nonlocal token, session
-            reply = await _chat(token, _group_msg(message), city=city)
+            # Per i gruppi: arricchisce il messaggio con contesto memoria di gruppo
+            if is_group:
+                group_ctx = await _load_group_ctx()
+                enriched = _group_msg(message, group_ctx)
+            else:
+                enriched = _group_msg(message)
+            reply = await _chat(token, enriched, city=city)
             if reply == "__TOKEN_EXPIRED__":
                 new_token = await _auto_refresh(session_uid, session)
                 if new_token:
                     token = new_token
-                    reply = await _chat(token, message, city=city)
+                    reply = await _chat(token, enriched, city=city)
                 else:
                     reply = "__AUTH_FAILED__"
+            # Salva storia e avvia estrazione fatti in background
+            if is_group and reply not in ("__TOKEN_EXPIRED__", "__AUTH_FAILED__"):
+                asyncio.create_task(
+                    append_group_history(chat_id, from_id, first_name, message, reply)
+                )
+                asyncio.create_task(
+                    extract_member_facts_background(from_id, first_name, message, reply)
+                )
             return reply
 
         async def _handle_reply(reply: str) -> bool:
