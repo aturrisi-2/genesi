@@ -229,7 +229,7 @@ async def _auto_refresh(chat_id: int, session: dict) -> str | None:
 
 async def _register(email: str, password: str) -> bool:
     async with httpx.AsyncClient(timeout=15) as client:
-        res = await client.post(f"{GENESI_URL}/api/auth/register",
+        res = await client.post(f"{GENESI_URL}/auth/register",
                                 json={"email": email, "password": password})
         return res.status_code in (200, 201)
 

@@ -128,8 +128,8 @@ async def register(req: RegisterRequest, http_request: Request, db: AsyncSession
 
     # Crea utente
     is_admin = email in ADMIN_EMAILS
-    # In DEV_MODE auto-verifichiamo l'utente
-    auto_verify = DEV_MODE
+    # Auto-verifica: DEV_MODE oppure account virtuali del gruppo Telegram
+    auto_verify = DEV_MODE or email.endswith("@genesi.group")
     
     user = AuthUser(
         email=email,
