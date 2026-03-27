@@ -270,14 +270,14 @@ async def _get_or_create_member_token(from_id: int, first_name: str) -> str | No
         # Imposta il nome nel profilo
         token = await _login(email, password)
         if token:
-            # Salva il nome nel profilo Genesi del membro
+            # Salva il nome nel profilo Genesi del membro direttamente sullo storage
             try:
-                async with httpx.AsyncClient(timeout=10) as client:
-                    await client.patch(
-                        f"{GENESI_URL}/api/profile",
-                        json={"name": first_name},
-                        headers={"Authorization": f"Bearer {token}"},
-                    )
+                user_id = _decode_user_id(token)
+                if user_id:
+                    profile = await storage.load(f"profile:{user_id}", default={})
+                    if not profile.get("name"):
+                        profile["name"] = first_name
+                        await storage.save(f"profile:{user_id}", profile)
             except Exception:
                 pass
             logger.info("GROUP_MEMBER_ACCOUNT_CREATED from_id=%s name=%s email=%s",
