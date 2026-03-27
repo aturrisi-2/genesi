@@ -20,6 +20,8 @@ from core.storage import storage
 from core.telegram_group_memory import (
     update_member_seen, get_member_city, save_member_city,
     build_group_context, append_group_history,
+    record_group_observation, consolidate_group_insights_if_needed,
+    sync_family_to_owner,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,6 +39,8 @@ _GROUP_MEMBER_SECRET = os.getenv("TELEGRAM_GROUP_MEMBER_SECRET", "genesi-family-
 
 # Cache token per-membro (in memoria, si rinnova automaticamente)
 _MEMBER_TOKENS: dict[int, str] = {}
+# user_id del proprietario del gruppo (decodificato dal GROUP_EMAIL token, cached)
+_OWNER_USER_ID: str = ""
 
 # Regex meteo
 _WEATHER_RE = re.compile(
@@ -294,6 +298,28 @@ async def _refresh_member_token(from_id: int) -> str | None:
     member = await get_member(from_id)
     first_name = member.get("first_name", "")
     return await _get_or_create_member_token(from_id, first_name)
+
+
+async def _get_owner_user_id() -> str:
+    """Restituisce il user_id del proprietario del gruppo (da GROUP_EMAIL), con cache."""
+    global _OWNER_USER_ID
+    if _OWNER_USER_ID:
+        return _OWNER_USER_ID
+    if not _GROUP_EMAIL or not _GROUP_PASSWORD:
+        return ""
+    token = await _login(_GROUP_EMAIL, _GROUP_PASSWORD)
+    if token:
+        uid = _decode_user_id(token)
+        if uid:
+            _OWNER_USER_ID = uid
+    return _OWNER_USER_ID
+
+
+async def _sync_family_background(chat_id: int):
+    """Task background: sincronizza profili famiglia nel contesto privato del proprietario."""
+    owner_uid = await _get_owner_user_id()
+    if owner_uid:
+        await sync_family_to_owner(chat_id, owner_uid)
 
 
 # ── Genesi API calls ───────────────────────────────────────────────────────────
@@ -695,12 +721,21 @@ async def handle_update(update: dict):
                     reply = await _chat(token, enriched, city=city)
                 else:
                     reply = "__AUTH_FAILED__"
-            # Salva storia di gruppo in background (il resto — personal_facts, episodes —
-            # viene già gestito automaticamente da Genesi per ogni account membro)
+            # Automiglioramento + storia di gruppo in background
             if is_group and reply not in ("__TOKEN_EXPIRED__", "__AUTH_FAILED__"):
                 asyncio.create_task(
                     append_group_history(chat_id, from_id, first_name, message, reply)
                 )
+                # Livello 1: osservazione lab_feedback_cycle ogni N messaggi
+                asyncio.create_task(
+                    record_group_observation(chat_id, from_id, first_name, message, reply)
+                )
+                # Livello 2: consolidazione insights gruppo ogni 24h
+                asyncio.create_task(
+                    consolidate_group_insights_if_needed(chat_id)
+                )
+                # Livello 3: cross-awareness — sincronizza profili famiglia verso il proprietario
+                asyncio.create_task(_sync_family_background(chat_id))
             return reply
 
         async def _handle_reply(reply: str) -> bool:

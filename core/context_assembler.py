@@ -246,6 +246,16 @@ class ContextAssembler:
         except Exception:
             pass
 
+        # Famiglia dal gruppo Telegram: iniettato nel contesto privato del proprietario (fail-silent)
+        try:
+            from core.telegram_group_memory import get_family_context_block
+            family_block = await get_family_context_block(user_id)
+            if family_block:
+                context["family_group"] = family_block
+                summary += f"\n{family_block}"
+        except Exception:
+            pass
+
         # Giorni speciali italiani: iniezione fail-silent (presente in tutti i route)
         try:
             from datetime import datetime as _dt
