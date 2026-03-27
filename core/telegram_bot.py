@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import re
+import time
 import httpx
 from core.storage import storage
 from core.telegram_group_memory import (
@@ -49,27 +50,101 @@ _WEATHER_RE = re.compile(
     re.IGNORECASE
 )
 
-# Filtro gruppi: risponde solo se menzionato o saluto
-_GREETING_RE = re.compile(
-    r'\b(ciao|salve|buongiorno|buonasera|buonanotte|hey|hei|ehilà|'
-    r'hello|hi|buon\s*giorno|buona\s*sera)\b',
-    re.IGNORECASE
-)
 _GENESI_RE = re.compile(r'\bgenesi\b', re.IGNORECASE)
 
+# Stato conversazione per gruppo: traccia con chi Genesi stava parlando di recente
+# { chat_id: {"from_id": int, "ts": float, "count": int} }
+_GROUP_CONV_STATE: dict[int, dict] = {}
 
-def _group_should_respond(text: str, caption: str = "", bot_username: str = "") -> bool:
-    """In un gruppo risponde solo se: @mention diretta, nome 'Genesi', o saluto."""
+_GROUP_INTERVENE_PROMPT = """\
+Sei il filtro di intervento di Genesi in un gruppo familiare su Telegram.
+Genesi è un membro della famiglia: discreta, calda, utile — ma NON si intromette a caso.
+
+Leggi il messaggio corrente e il contesto recente del gruppo. Decidi se Genesi deve rispondere.
+
+RISPONDI "SI" solo se ALMENO UNO di questi è vero:
+1. DOMANDA: qualcuno pone una domanda che richiede conoscenza o consiglio (non rivolta a un altro membro specifico)
+2. CONTINUAZIONE: è un follow-up diretto a una risposta di Genesi nelle ultime battute
+3. BUONA NOTIZIA: qualcuno condivide un successo, evento felice, traguardo → Genesi può gioire con loro (UNA VOLTA sola per evento)
+4. MOMENTO DIFFICILE: qualcuno esprime dolore, preoccupazione, tristezza → Genesi può essere discreta e calorosa
+5. MENZIONATA: il messaggio cita esplicitamente Genesi o le chiede qualcosa
+
+RISPONDI "NO" se:
+- È una conversazione privata tra due o più membri (discussioni, battute, aggiornamenti tra loro)
+- Non aggiunge valore reale che Genesi possa offrire
+- Genesi è già intervenuta di recente sullo stesso argomento senza essere seguita
+- È gossip, ironia, battute familiari tra loro
+
+Rispondi SOLO con JSON valido: {"intervieni": true, "motivo": "ragione breve"} oppure {"intervieni": false, "motivo": "ragione breve"}
+"""
+
+
+async def _group_should_intervene(
+    text: str, caption: str, chat_id: int, from_id: int, first_name: str,
+    bot_username: str = ""
+) -> bool:
+    """
+    Decide con LLM se Genesi deve intervenire nel gruppo.
+    Fast-path per mention/nome diretti. LLM per tutto il resto.
+    """
     combined = f"{text} {caption}".strip()
     if not combined:
         return False
+
+    # Fast-path: menzione diretta → sempre sì
     if bot_username and f"@{bot_username.lower()}" in combined.lower():
         return True
     if _GENESI_RE.search(combined):
         return True
-    if _GREETING_RE.search(combined):
+
+    # Fast-path: messaggio troppo corto e senza punto interrogativo → probabile scambio tra membri
+    if len(combined) < 8 and "?" not in combined:
+        return False
+
+    # Fast-path: continuazione di conversazione attiva con questo utente (< 3 min)
+    state = _GROUP_CONV_STATE.get(chat_id, {})
+    if state.get("from_id") == from_id and time.time() - state.get("ts", 0) < 180:
         return True
-    return False
+
+    # LLM decision
+    try:
+        from core.llm_service import llm_service
+        history = await get_group_history(chat_id, limit=5)
+        history_text = ""
+        if history:
+            history_text = "Scambi recenti nel gruppo:\n" + "\n".join(
+                f"  {h.get('first_name','?')}: {h.get('text','')[:80]}\n"
+                f"  → Genesi: {h.get('response','')[:60]}"
+                for h in history[-4:]
+            ) + "\n\n"
+
+        user_msg = (
+            f"{history_text}"
+            f"Messaggio attuale di {first_name}: {combined}"
+        )
+        raw = await llm_service._call_model(
+            "openai/gpt-4o-mini",
+            _GROUP_INTERVENE_PROMPT,
+            user_msg,
+            user_id="group-filter",
+            route="memory",
+        )
+        if not raw:
+            return False
+        clean = raw.strip()
+        if clean.startswith("```"):
+            clean = clean.split("```")[1]
+            if clean.startswith("json"):
+                clean = clean[4:]
+        parsed = json.loads(clean.strip())
+        intervieni = parsed.get("intervieni", False)
+        motivo     = parsed.get("motivo", "")
+        logger.info("GROUP_INTERVENE_DECISION chat_id=%s from=%s intervieni=%s motivo=%s",
+                    chat_id, first_name, intervieni, motivo)
+        return bool(intervieni)
+    except Exception as exc:
+        logger.debug("GROUP_INTERVENE_ERROR err=%s", exc)
+        return False
 
 # Regex per trovare URL immagini nelle risposte di Genesi
 _IMG_URL_RE = re.compile(
@@ -660,13 +735,16 @@ async def handle_update(update: dict):
         else:
             city = session.get("city", "")
 
-        # ── FILTRO GRUPPI ──────────────────────────────────────────────────────
-        # In chat di gruppo risponde solo a: @mention, "Genesi", o saluto.
-        # Tutto il resto viene ignorato silenziosamente.
-        if is_group and not _group_should_respond(text, caption=caption, bot_username=_BOT_USERNAME):
-            logger.info("TELEGRAM_GROUP_SKIP chat_id=%s from=%s msg=%.60s",
-                        chat_id, first_name, f"{text} {caption}".strip())
-            return
+        # ── FILTRO GRUPPI (LLM-based) ──────────────────────────────────────────
+        # Genesi decide autonomamente se e quando intervenire nel gruppo.
+        if is_group:
+            should = await _group_should_intervene(
+                text, caption, chat_id, from_id, first_name, bot_username=_BOT_USERNAME
+            )
+            if not should:
+                logger.info("TELEGRAM_GROUP_SILENT chat_id=%s from=%s msg=%.60s",
+                            chat_id, first_name, f"{text} {caption}".strip())
+                return
 
         # In gruppi: appende il nome del mittente DOPO il messaggio per evitare
         # che il LLM mescoli il nome dell'account con quello del mittente.
@@ -745,6 +823,12 @@ async def handle_update(update: dict):
                     "Non riesco ad autenticarti. Usa /login per riconnetterti.")
                 return False
             await _send_response(chat_id, reply)
+            # Traccia con chi Genesi stava conversando (per il fast-path del filtro)
+            if is_group:
+                _GROUP_CONV_STATE[chat_id] = {
+                    "from_id": from_id,
+                    "ts":      time.time(),
+                }
             return True
 
         # ── FOTO ───────────────────────────────────────────────────────────────
