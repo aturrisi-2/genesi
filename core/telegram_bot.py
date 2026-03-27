@@ -9,6 +9,8 @@ Parità completa con la webapp:
 
 import asyncio
 import base64
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -17,7 +19,7 @@ import httpx
 from core.storage import storage
 from core.telegram_group_memory import (
     update_member_seen, get_member_city, save_member_city,
-    build_group_context, append_group_history, extract_member_facts_background,
+    build_group_context, append_group_history,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,11 @@ GENESI_URL     = "http://localhost:8000"
 # Credenziali pre-configurate per i gruppi (auto-login senza /login manuale)
 _GROUP_EMAIL    = os.getenv("TELEGRAM_GROUP_EMAIL", "")
 _GROUP_PASSWORD = os.getenv("TELEGRAM_GROUP_PASSWORD", "")
+# Segreto per derivare le password degli account virtuali dei membri del gruppo
+_GROUP_MEMBER_SECRET = os.getenv("TELEGRAM_GROUP_MEMBER_SECRET", "genesi-family-group-2026")
+
+# Cache token per-membro (in memoria, si rinnova automaticamente)
+_MEMBER_TOKENS: dict[int, str] = {}
 
 # Regex meteo
 _WEATHER_RE = re.compile(
@@ -225,6 +232,68 @@ async def _register(email: str, password: str) -> bool:
         res = await client.post(f"{GENESI_URL}/api/auth/register",
                                 json={"email": email, "password": password})
         return res.status_code in (200, 201)
+
+
+def _member_email(from_id: int) -> str:
+    """Email virtuale deterministica per un membro del gruppo Telegram."""
+    return f"telegram_{from_id}@genesi.group"
+
+
+def _member_password(from_id: int) -> str:
+    """Password deterministica derivata da from_id + segreto condiviso."""
+    sig = hmac.new(
+        _GROUP_MEMBER_SECRET.encode(),
+        str(from_id).encode(),
+        hashlib.sha256
+    ).hexdigest()[:24]
+    return f"Gm{sig}"
+
+
+async def _get_or_create_member_token(from_id: int, first_name: str) -> str | None:
+    """
+    Restituisce un token JWT valido per il membro del gruppo.
+    Se l'account non esiste lo crea automaticamente (silent registration).
+    Usa la cache in-memory _MEMBER_TOKENS per evitare login ripetuti.
+    """
+    # Cache hit
+    if from_id in _MEMBER_TOKENS:
+        return _MEMBER_TOKENS[from_id]
+
+    email    = _member_email(from_id)
+    password = _member_password(from_id)
+
+    # Prova login
+    token = await _login(email, password)
+    if not token:
+        # Account non esiste: crealo
+        await _register(email, password)
+        # Imposta il nome nel profilo
+        token = await _login(email, password)
+        if token:
+            # Salva il nome nel profilo Genesi del membro
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    await client.patch(
+                        f"{GENESI_URL}/api/profile",
+                        json={"name": first_name},
+                        headers={"Authorization": f"Bearer {token}"},
+                    )
+            except Exception:
+                pass
+            logger.info("GROUP_MEMBER_ACCOUNT_CREATED from_id=%s name=%s email=%s",
+                        from_id, first_name, email)
+
+    if token:
+        _MEMBER_TOKENS[from_id] = token
+    return token
+
+
+async def _refresh_member_token(from_id: int) -> str | None:
+    """Rinnova il token del membro rimuovendolo dalla cache e ri-autenticando."""
+    _MEMBER_TOKENS.pop(from_id, None)
+    member = await get_member(from_id)
+    first_name = member.get("first_name", "")
+    return await _get_or_create_member_token(from_id, first_name)
 
 
 # ── Genesi API calls ───────────────────────────────────────────────────────────
@@ -542,30 +611,22 @@ async def handle_update(update: dict):
                 return
 
         # ── Verifica login ─────────────────────────────────────────────────────
-        token = session.get("token")
-        if not token:
-            if is_group and _GROUP_EMAIL and _GROUP_PASSWORD:
-                # Auto-login silenzioso con credenziali pre-configurate
-                new_token = await _login(_GROUP_EMAIL, _GROUP_PASSWORD)
-                if new_token:
-                    await _complete_login(session_uid, new_token, _GROUP_EMAIL, _GROUP_PASSWORD)
-                    session = await storage.load(_session_key(session_uid)) or {}
-                    token = session.get("token")
-                    # Continua normalmente sotto (non fare return)
-                else:
-                    await send_message(chat_id, "Non riesco ad autenticarmi. Contatta l'amministratore.")
-                    return
-            elif is_group:
-                await send_message(chat_id,
-                    "Per attivarmi nel gruppo scrivi /login e segui le istruzioni.")
+        if is_group:
+            # In gruppo ogni membro ha il proprio account virtuale Genesi
+            # con memoria, fatti personali ed episodi propri — come un utente reale.
+            token = await _get_or_create_member_token(from_id, first_name)
+            if not token:
+                logger.error("GROUP_MEMBER_TOKEN_FAIL from_id=%s", from_id)
                 return
-            else:
+        else:
+            token = session.get("token")
+            if not token:
                 await send_message(chat_id,
                     "Per chattare con me hai bisogno di un account.\n\n"
                     "• Già registrato? /login\n"
                     "• Nuovo? /registrati (qui in Telegram)\n"
                     f"  oppure: {_WEBAPP_REG}")
-            return
+                return
 
         # In gruppi la city è per-utente (from_id), non condivisa sull'intera chat
         if is_group:
@@ -616,8 +677,8 @@ async def handle_update(update: dict):
 
         async def _do_chat(message: str) -> str:
             """Chat con auto-refresh del token in caso di scadenza."""
-            nonlocal token, session
-            # Per i gruppi: arricchisce il messaggio con contesto memoria di gruppo
+            nonlocal token
+            # Per i gruppi: arricchisce il messaggio con contesto di gruppo
             if is_group:
                 group_ctx = await _load_group_ctx()
                 enriched = _group_msg(message, group_ctx)
@@ -625,19 +686,20 @@ async def handle_update(update: dict):
                 enriched = _group_msg(message)
             reply = await _chat(token, enriched, city=city)
             if reply == "__TOKEN_EXPIRED__":
-                new_token = await _auto_refresh(session_uid, session)
+                if is_group:
+                    new_token = await _refresh_member_token(from_id)
+                else:
+                    new_token = await _auto_refresh(session_uid, session)
                 if new_token:
                     token = new_token
                     reply = await _chat(token, enriched, city=city)
                 else:
                     reply = "__AUTH_FAILED__"
-            # Salva storia e avvia estrazione fatti in background
+            # Salva storia di gruppo in background (il resto — personal_facts, episodes —
+            # viene già gestito automaticamente da Genesi per ogni account membro)
             if is_group and reply not in ("__TOKEN_EXPIRED__", "__AUTH_FAILED__"):
                 asyncio.create_task(
                     append_group_history(chat_id, from_id, first_name, message, reply)
-                )
-                asyncio.create_task(
-                    extract_member_facts_background(from_id, first_name, message, reply)
                 )
             return reply
 
