@@ -77,6 +77,18 @@ def _session_key(telegram_id: int) -> str:
     return f"telegram:session:{telegram_id}"
 
 
+def _group_user_city_key(from_id: int) -> str:
+    return f"telegram:group_user:{from_id}:city"
+
+
+async def _get_group_user_city(from_id: int) -> str:
+    return await storage.load(_group_user_city_key(from_id), default="") or ""
+
+
+async def _save_group_user_city(from_id: int, city: str):
+    await storage.save(_group_user_city_key(from_id), city)
+
+
 def _decode_user_id(token: str) -> str | None:
     try:
         payload = token.split(".")[1]
@@ -497,19 +509,29 @@ async def handle_update(update: dict):
 
         # ── Città mancante ─────────────────────────────────────────────────────
         if state == STATE_AWAIT_CITY and text:
-            city = text.strip().title()
-            await _save_city(session["token"], city)
-            session.update({"city": city, "state": STATE_IDLE, "welcomed": True})
-            await storage.save(_session_key(session_uid), session)
-            # Riprendi eventuale messaggio in coda (es. meteo chiesto prima della città)
-            pending = session.pop("pending_message", None)
-            if pending:
-                await send_message(chat_id, f"Perfetto! Rispondo subito...")
-                reply = await _chat(session["token"], pending, city=city)
-                await _send_response(chat_id, reply)
+            # In gruppo: accetta la risposta solo dall'utente che ha triggerato la domanda
+            pending_from = session.get("pending_city_from_id")
+            if is_group and pending_from and pending_from != from_id:
+                pass  # ignora risposta da altro utente, aspetta quello giusto
             else:
-                await send_message(chat_id, f"Perfetto, ti ricordo a {city}! Scrivimi pure.")
-            return
+                city = text.strip().title()
+                if is_group:
+                    await _save_group_user_city(from_id, city)
+                else:
+                    await _save_city(session["token"], city)
+                    session["city"] = city
+                session.update({"state": STATE_IDLE, "welcomed": True})
+                session.pop("pending_city_from_id", None)
+                await storage.save(_session_key(session_uid), session)
+                pending = session.pop("pending_message", None)
+                if pending:
+                    await send_message(chat_id, f"Perfetto! Rispondo subito...")
+                    reply = await _chat(session["token"], pending, city=city)
+                    await _send_response(chat_id, reply)
+                else:
+                    name_part = f" {first_name}" if first_name else ""
+                    await send_message(chat_id, f"Perfetto{name_part}, ti ricordo a {city}! Scrivimi pure.")
+                return
 
         # ── Verifica login ─────────────────────────────────────────────────────
         token = session.get("token")
@@ -537,7 +559,11 @@ async def handle_update(update: dict):
                     f"  oppure: {_WEBAPP_REG}")
             return
 
-        city = session.get("city", "")
+        # In gruppi la city è per-utente (from_id), non condivisa sull'intera chat
+        if is_group:
+            city = await _get_group_user_city(from_id)
+        else:
+            city = session.get("city", "")
 
         # ── FILTRO GRUPPI ──────────────────────────────────────────────────────
         # In chat di gruppo risponde solo a: @mention, "Genesi", o saluto.
@@ -686,11 +712,13 @@ async def handle_update(update: dict):
             return
 
         if _WEATHER_RE.search(text) and not city:
-            session["state"]           = STATE_AWAIT_CITY
-            session["pending_message"] = text
+            session["state"]               = STATE_AWAIT_CITY
+            session["pending_message"]     = text
+            session["pending_city_from_id"] = from_id
             await storage.save(_session_key(session_uid), session)
+            name_part = f" {first_name}" if first_name else ""
             await send_message(chat_id,
-                "Per il meteo ho bisogno di sapere dove sei. "
+                f"Per il meteo ho bisogno di sapere dove sei{name_part}. "
                 "In quale città ti trovi?")
             return
 
