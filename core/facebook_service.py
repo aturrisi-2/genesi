@@ -383,7 +383,7 @@ class FacebookService:
     def _is_night_window(self) -> bool:
         """Ritorna True se siamo nella finestra notturna (00-07)."""
         h = datetime.now().hour
-        return h < _NIGHT_END or h >= 23
+        return h < _NIGHT_END or h >= 24
 
     def _reset_daily_counter(self) -> None:
         today = datetime.utcnow().date()
