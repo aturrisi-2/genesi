@@ -757,8 +757,26 @@ class FacebookService:
                     if (!box) return {ok: false, step: 'no_textbox'};
                     box.focus();
                     box.click();
+                    // Posiziona cursore nel textbox (necessario per insertText)
+                    const sel = window.getSelection();
+                    const range = document.createRange();
+                    range.selectNodeContents(box);
+                    range.collapse(false);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
                     const typed = document.execCommand('insertText', false, text);
-                    if (!typed) return {ok: false, step: 'execCommand_failed'};
+                    if (!typed) {
+                        // Fallback: imposta innerHTML direttamente e triggera React
+                        box.innerHTML = '';
+                        box.focus();
+                        const r2 = document.createRange();
+                        r2.selectNodeContents(box);
+                        r2.collapse(false);
+                        sel.removeAllRanges();
+                        sel.addRange(r2);
+                        const typed2 = document.execCommand('insertText', false, text);
+                        if (!typed2) return {ok: false, step: 'execCommand_failed_twice'};
+                    }
                     // Cerca pulsante Pubblica
                     const labels = ['Pubblica', 'Posta'];
                     let pubBtn = document.querySelector('[aria-label="Pubblica"]')
