@@ -582,6 +582,7 @@ class FacebookService:
         try:
             if group_name.startswith("http") or group_name.startswith("/groups/"):
                 group_url = group_name if group_name.startswith("http") else f"https://www.facebook.com{group_name}"
+                _slog("FACEBOOK_GROUP_NAVIGATE", url=group_url[:80])
                 await self._page.goto(group_url, timeout=20000)
                 await self._human_delay(2, 5)
             else:
@@ -608,27 +609,47 @@ class FacebookService:
                 await links[0].click()
                 await self._human_delay(3, 6)
 
-            # Trova il box "Scrivi qualcosa"
-            write_box = await self._page.query_selector('[aria-label*="Scrivi qualcosa"]')
+            _slog("FACEBOOK_GROUP_POST_FIND_BOX", url=self._page.url[:80])
+            # Prova prima a cliccare il pulsante "Scrivi qualcosa" (apre dialog)
+            open_btn = await self._page.query_selector('[aria-label*="Scrivi qualcosa"][role="button"]')
+            if not open_btn:
+                open_btn = await self._page.query_selector('[data-testid="status-attachment-mentions-input"]')
+            if open_btn:
+                await self._page.evaluate('el => el.click()', open_btn)
+                await self._human_delay(1.5, 2.5)
+                _slog("FACEBOOK_GROUP_POST_OPENED_DIALOG")
+
+            # Trova il textbox (dentro il dialog o inline)
+            write_box = await self._page.query_selector('[role="textbox"][contenteditable="true"]')
             if not write_box:
-                write_box = await self._page.query_selector('[data-testid="status-attachment-mentions-input"]')
-            if not write_box:
-                write_box = await self._page.query_selector('[role="textbox"]')
+                write_box = await self._page.query_selector('[aria-label*="Scrivi qualcosa"]')
             if not write_box:
                 result["error"] = "Box post non trovato"
+                _slog("FACEBOOK_GROUP_POST_BOX_NOT_FOUND", url=self._page.url[:80])
                 return result
 
-            await write_box.click()
-            await self._human_delay(1, 2)
+            _slog("FACEBOOK_GROUP_POST_TYPING", chars=len(content))
+            await self._page.evaluate('el => el.focus()', write_box)
+            await self._human_delay(0.5, 1)
             await self._type_humanlike(write_box, content)
             await self._human_delay(2, 4)
+
+            # Chiudi popup se appaiono
+            for dismiss_label in ("Non ora", "Ok", "Chiudi"):
+                d = await self._page.query_selector(f'[aria-label="{dismiss_label}"]')
+                if d:
+                    await self._page.evaluate('el => el.click()', d)
+                    await asyncio.sleep(0.8)
+                    break
 
             # Clicca Pubblica
             publish_btn = await self._page.query_selector('[aria-label="Pubblica"]')
             if not publish_btn:
+                publish_btn = await self._page.query_selector('[aria-label="Posta"]')
+            if not publish_btn:
                 publish_btn = await self._page.query_selector('button[type="submit"]')
             if publish_btn:
-                await publish_btn.click()
+                await self._page.evaluate('el => el.click()', publish_btn)
                 await self._human_delay(3, 5)
                 result["success"] = True
                 result["post_url"] = self._page.url
