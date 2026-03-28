@@ -665,11 +665,24 @@ class FacebookService:
 
             _slog("FACEBOOK_GROUP_OPEN_BTN_FOUND", found=bool(open_btn))
             if not open_btn:
-                # Screenshot diagnostico
+                # Screenshot + DOM dump diagnostico
                 try:
                     await self._page.screenshot(path="/tmp/fb_debug.png")
                 except Exception:
                     pass
+                try:
+                    dom_info = await self._page.evaluate("""() => {
+                        const all = Array.from(document.querySelectorAll('*'));
+                        const labels = all.map(e => e.getAttribute('aria-label')).filter(Boolean);
+                        const placeholders = all.map(e => e.getAttribute('aria-placeholder') || e.getAttribute('placeholder')).filter(Boolean);
+                        const roles = all.filter(e => e.getAttribute('role')).map(e => e.getAttribute('role') + '(' + (e.getAttribute('aria-label')||e.getAttribute('aria-placeholder')||'').substring(0,30) + ')');
+                        return {title: document.title, labels: [...new Set(labels)].slice(0, 30), placeholders: [...new Set(placeholders)].slice(0, 20), roles: [...new Set(roles)].slice(0, 20)};
+                    }""")
+                    _slog("FACEBOOK_DOM_DUMP", title=dom_info.get('title','')[:60],
+                          labels=dom_info.get('labels', [])[:20],
+                          placeholders=dom_info.get('placeholders', [])[:10])
+                except Exception as e:
+                    _slog("FACEBOOK_DOM_DUMP_FAIL", err=str(e)[:100])
                 result["error"] = "Pulsante Scrivi qualcosa non trovato"
                 _slog("FACEBOOK_GROUP_POST_BOX_NOT_FOUND", url=self._page.url[:80])
                 return result
