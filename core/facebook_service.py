@@ -70,6 +70,13 @@ _POST_PROMPTS = {
         "Sei Giada, una persona empatica e curiosa. "
         "Scrivi un post che inviti alla conversazione, in italiano colloquiale."
     ),
+    "timeline": (
+        "Sei Giada, una ragazza di Imola con una vita normale. "
+        "Scrivi un post per la tua bacheca Facebook personale (1-3 righe), "
+        "come se stessi condividendo un pensiero, un'esperienza della giornata, "
+        "o una domanda per i tuoi amici. Tono spontaneo, colloquiale, autentico. "
+        "Puoi usare emoji con moderazione. NON sembrare un bot o un sito di notizie."
+    ),
 }
 
 _COMMENT_PROMPT = (
@@ -491,6 +498,105 @@ class FacebookService:
             logger.warning("FACEBOOK_POST_FAIL err=%s", result["error"])
         return result
 
+    async def post_to_timeline(self, content: str, mention: str = "") -> dict:
+        """
+        Posta sulla bacheca personale di Giada.
+        Se mention è specificato (es. 'Alfio Turrisi'), tenta di taggare la persona.
+        """
+        result = {"success": False, "post_url": "", "error": ""}
+        try:
+            await self._page.goto("https://www.facebook.com/", timeout=20000)
+            await self._human_delay(2, 4)
+
+            # Trova il box "Cosa stai pensando?" sulla home
+            write_box = await self._page.query_selector('[aria-label*="Cosa stai pensando"]')
+            if not write_box:
+                write_box = await self._page.query_selector('[data-testid="status-attachment-mentions-input"]')
+            if not write_box:
+                # Prova a cliccare il placeholder che apre il dialog
+                placeholder = await self._page.query_selector('[role="button"][tabindex="0"]')
+                if placeholder:
+                    await placeholder.click()
+                    await self._human_delay(1, 2)
+                    write_box = await self._page.query_selector('[role="textbox"][contenteditable="true"]')
+
+            if not write_box:
+                result["error"] = "Box bacheca non trovato"
+                return result
+
+            await write_box.click()
+            await self._human_delay(0.5, 1.5)
+
+            # Se c'è una menzione, inserisci @nome per attivare il tag
+            if mention:
+                full_content = f"@{mention} {content}"
+                # Digita @ + nome per far apparire i suggerimenti di tag
+                await self._type_humanlike(write_box, f"@{mention}")
+                await self._human_delay(1.5, 3)
+                # Cerca il suggerimento nella dropdown e cliccalo
+                suggestion = await self._page.query_selector('[role="option"]')
+                if suggestion:
+                    await suggestion.click()
+                    await self._human_delay(0.5, 1)
+                    # Aggiungi il resto del testo
+                    await self._type_humanlike(write_box, f" {content}")
+                else:
+                    # Nessun suggerimento trovato, scrivi tutto senza tag
+                    await self._type_humanlike(write_box, f" {content}")
+            else:
+                await self._type_humanlike(write_box, content)
+
+            await self._human_delay(2, 4)
+
+            # Pubblica
+            publish_btn = await self._page.query_selector('[aria-label="Pubblica"]')
+            if not publish_btn:
+                publish_btn = await self._page.query_selector('button[type="submit"]')
+            if publish_btn:
+                await publish_btn.click()
+                await self._human_delay(3, 5)
+                result["success"] = True
+                result["post_url"] = self._page.url
+                _slog("FACEBOOK_TIMELINE_POSTED", chars=len(content), mention=mention or "none")
+            else:
+                result["error"] = "Bottone Pubblica non trovato"
+        except Exception as e:
+            result["error"] = f"{type(e).__name__}: {e}"
+            logger.warning("FACEBOOK_TIMELINE_POST_FAIL err=%s", result["error"])
+        return result
+
+    async def read_timeline_feed(self, max_posts: int = 5) -> list:
+        """
+        Legge i post recenti dal feed personale di Giada (home Facebook).
+        Utile come contesto per generare post sulla bacheca.
+        """
+        posts = []
+        try:
+            await self._page.goto("https://www.facebook.com/", timeout=20000)
+            await self._human_delay(2, 4)
+            # Scrolla un po' per caricare i post
+            await self._page.mouse.wheel(0, 800)
+            await self._human_delay(1, 2)
+
+            post_elements = await self._page.query_selector_all('[role="article"]')
+            for el in post_elements[:max_posts]:
+                try:
+                    text_el = await el.query_selector('[dir="auto"]')
+                    text = await text_el.inner_text() if text_el else ""
+                    author_el = await el.query_selector('h2 a, strong a')
+                    author = await author_el.inner_text() if author_el else ""
+                    if text.strip() and len(text.strip()) > 10:
+                        posts.append({
+                            "author": author.strip()[:60],
+                            "text":   text.strip()[:300],
+                            "group":  "timeline",
+                        })
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.debug("FACEBOOK_TIMELINE_FEED_FAIL err=%s", e)
+        return posts
+
     async def comment_on_post(self, post_url: str, comment: str) -> bool:
         """Naviga al post e pubblica un commento."""
         try:
@@ -522,7 +628,7 @@ class FacebookService:
     # Pending posts (semi-auto flow)
     # ════════════════════════════════════════════════════════════════════════
 
-    async def queue_pending_post(self, content: str, group: str) -> str:
+    async def queue_pending_post(self, content: str, group: str, mention: str = "") -> str:
         """Accoda un post in attesa di approvazione. Ritorna l'id generato."""
         try:
             data = await storage.load(FB_PENDING_KEY, default={"posts": []})
@@ -532,6 +638,7 @@ class FacebookService:
                 "id":         post_id,
                 "content":    content,
                 "group":      group,
+                "mention":    mention,
                 "status":     "pending",
                 "created_at": datetime.utcnow().isoformat(),
             })
@@ -554,7 +661,10 @@ class FacebookService:
                     if not ok:
                         return {"success": False, "error": "Browser non disponibile"}
                     await self.load_session()
-                    result = await self.post_to_group(p["group"], p["content"])
+                    if p.get("group") == "timeline":
+                        result = await self.post_to_timeline(p["content"], mention=p.get("mention", ""))
+                    else:
+                        result = await self.post_to_group(p["group"], p["content"])
                     p["status"]      = "published" if result["success"] else "failed"
                     p["published_at"] = datetime.utcnow().isoformat()
                     p["post_url"]    = result.get("post_url", "")
@@ -651,6 +761,7 @@ class FacebookService:
             "enabled":          cfg.get("enabled", False),
             "mode":             cfg.get("mode", "semi"),
             "groups":           cfg.get("groups", []),
+            "mentions":         cfg.get("mentions", []),
             "heartbeat_count":  self._hb_count,
             "session_saved_at": sess.get("saved_at"),
             "has_session":      bool(sess.get("cookies")),
@@ -714,24 +825,39 @@ class FacebookService:
 
             for group in groups:
                 await self._human_delay(3, 7)
+                is_timeline = (group == "timeline")
 
                 # 1. Leggi il feed
-                feed = await self.read_group_feed(group, max_posts=8)
+                if is_timeline:
+                    feed = await self.read_timeline_feed(max_posts=5)
+                    post_style = "timeline"
+                else:
+                    feed = await self.read_group_feed(group, max_posts=8)
+                    post_style = style
                 result["actions"].append(f"feed_read:{group}({len(feed)})")
 
                 # 2. Genera post
-                content = await self._generate_post_content(group, feed, style)
+                target_label = "bacheca personale" if is_timeline else group
+                content = await self._generate_post_content(target_label, feed, post_style)
                 if not content:
                     continue
 
+                # Menzioni: se configurate, passale al post bacheca
+                mentions = cfg.get("mentions", [])
+                mention = random.choice(mentions) if mentions and is_timeline else ""
+
                 if mode == "semi":
                     # Accoda per approvazione admin
-                    post_id = await self.queue_pending_post(content, group)
+                    display_group = group
+                    post_id = await self.queue_pending_post(content, display_group, mention=mention)
                     result["actions"].append(f"post_queued:{post_id}")
-                    _slog("FACEBOOK_POST_QUEUED_HB", group=group, id=post_id)
+                    _slog("FACEBOOK_POST_QUEUED_HB", group=display_group, id=post_id)
                 elif mode == "full":
                     # Posta direttamente
-                    post_result = await self.post_to_group(group, content)
+                    if is_timeline:
+                        post_result = await self.post_to_timeline(content, mention=mention)
+                    else:
+                        post_result = await self.post_to_group(group, content)
                     if post_result["success"]:
                         self._posts_today += 1
                         await self._record_interaction("post_published",
@@ -739,22 +865,23 @@ class FacebookService:
                         result["actions"].append(f"posted:{group}")
                     await self._human_delay(30, 60)  # pausa tra post e commenti
 
-                    # 3. Commenta su post rilevanti (full-auto)
-                    max_comments = cfg.get("max_comments_per_hb", 5)
-                    commented = 0
-                    for post in feed[:max_comments]:
-                        if not post.get("url"):
-                            continue
-                        await self._human_delay(10, 30)
-                        comment = await self._generate_comment(post["text"], [])
-                        if comment:
-                            ok = await self.comment_on_post(post["url"], comment)
-                            if ok:
-                                commented += 1
-                                await self._record_interaction("comment_posted",
-                                    group=group, content_preview=comment[:200])
-                    if commented:
-                        result["actions"].append(f"comments:{group}({commented})")
+                    # 3. Commenta su post rilevanti (full-auto, solo gruppi non bacheca)
+                    if not is_timeline:
+                        max_comments = cfg.get("max_comments_per_hb", 5)
+                        commented = 0
+                        for post in feed[:max_comments]:
+                            if not post.get("url"):
+                                continue
+                            await self._human_delay(10, 30)
+                            comment = await self._generate_comment(post["text"], [])
+                            if comment:
+                                ok = await self.comment_on_post(post["url"], comment)
+                                if ok:
+                                    commented += 1
+                                    await self._record_interaction("comment_posted",
+                                        group=group, content_preview=comment[:200])
+                        if commented:
+                            result["actions"].append(f"comments:{group}({commented})")
 
             # Aggiorna sessione
             await self.save_session()

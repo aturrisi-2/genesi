@@ -388,6 +388,28 @@
                     </button>
                 </div>
 
+                <!-- Bacheca + menzioni -->
+                <div style="margin-bottom:14px; padding:10px; background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.2); border-radius:6px;">
+                    <div style="font-size:0.78rem; font-weight:600; color:#c4b5fd; margin-bottom:8px;">Bacheca personale + Menzioni</div>
+                    <div style="font-size:0.78rem; color:#9ca3af; margin-bottom:8px;">
+                        Aggiungi <b style="color:#e5e7eb;">timeline</b> come gruppo per postare sulla bacheca di Giada.
+                        Le menzioni sono persone che verranno taggate nei post bacheca.
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <input id="fb-mention-input" type="text" placeholder="Nome su Facebook (es. Alfio Turrisi)..."
+                            style="flex:1; min-width:180px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); color:#fff; border-radius:6px; padding:6px 10px; font-size:0.8rem;">
+                        <button id="fb-add-mention"
+                            style="padding:6px 12px; border-radius:6px; border:1px solid rgba(167,139,250,0.4); color:#c4b5fd; background:rgba(167,139,250,0.08); font-size:0.8rem; cursor:pointer;">
+                            + Menzione
+                        </button>
+                        <button id="fb-remove-mention"
+                            style="padding:6px 12px; border-radius:6px; border:1px solid rgba(248,113,113,0.4); color:#f87171; background:rgba(248,113,113,0.05); font-size:0.8rem; cursor:pointer;">
+                            - Rimuovi
+                        </button>
+                    </div>
+                    <div id="fb-mentions-list" style="margin-top:8px; font-size:0.78rem; color:#d1d5db;"></div>
+                </div>
+
                 <!-- Import sessione (VPS senza display) -->
                 <details style="margin-bottom:14px;">
                     <summary style="font-size:0.8rem; color:#6b7280; cursor:pointer;">
@@ -1040,6 +1062,12 @@
                     ? groups.map(g => `<span style="background:rgba(59,130,246,0.12);padding:2px 8px;border-radius:4px;margin-right:4px;">${g}</span>`).join('')
                     : '<span style="color:#6b7280;">nessuno</span>');
 
+                // Menzioni configurate
+                const mentionsEl = document.getElementById('fb-mentions-list');
+                if (mentionsEl && d.mentions && d.mentions.length > 0) {
+                    mentionsEl.innerHTML = 'Menzioni: ' + d.mentions.map(m => `<span style="background:rgba(167,139,250,0.12);padding:2px 8px;border-radius:4px;margin-right:4px;">${m}</span>`).join('');
+                }
+
                 // Post pending
                 if (d.pending_count > 0) {
                     loadFacebookPending();
@@ -1141,6 +1169,28 @@
             const d = await res.json();
             msg.textContent = d.skipped ? `Skip: ${d.reason}` : `✓ Heartbeat OK — ${(d.actions||[]).join(', ')||'nessuna azione'}`;
             setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 4000);
+        });
+        document.getElementById('fb-add-mention').addEventListener('click', async () => {
+            const name = document.getElementById('fb-mention-input').value.trim();
+            if (!name) return;
+            const msg = document.getElementById('fb-action-msg');
+            const res = await fetch('/api/admin/facebook/mentions', { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body: JSON.stringify({action:'add',mention:name}) });
+            const d = await res.json();
+            document.getElementById('fb-mention-input').value = '';
+            document.getElementById('fb-mentions-list').innerHTML = 'Menzioni: ' + (d.mentions.length ? d.mentions.map(m => `<span style="background:rgba(167,139,250,0.12);padding:2px 8px;border-radius:4px;margin-right:4px;">${m}</span>`).join('') : 'nessuna');
+            msg.textContent = `✓ Menzione aggiunta: ${name}`;
+            setTimeout(() => { msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-remove-mention').addEventListener('click', async () => {
+            const name = document.getElementById('fb-mention-input').value.trim();
+            if (!name) return;
+            const msg = document.getElementById('fb-action-msg');
+            const res = await fetch('/api/admin/facebook/mentions', { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body: JSON.stringify({action:'remove',mention:name}) });
+            const d = await res.json();
+            document.getElementById('fb-mention-input').value = '';
+            document.getElementById('fb-mentions-list').innerHTML = 'Menzioni: ' + (d.mentions.length ? d.mentions.map(m => `<span style="background:rgba(167,139,250,0.12);padding:2px 8px;border-radius:4px;margin-right:4px;">${m}</span>`).join('') : 'nessuna');
+            msg.textContent = `✓ Menzione rimossa`;
+            setTimeout(() => { msg.textContent = ''; }, 1500);
         });
         document.getElementById('fb-add-group').addEventListener('click', async () => {
             const name = document.getElementById('fb-group-input').value.trim();

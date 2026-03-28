@@ -24,6 +24,10 @@ class GroupPayload(BaseModel):
 class ImportSessionPayload(BaseModel):
     cookies: list   # lista cookie da Cookie-Editor / EditThisCookie
 
+class MentionPayload(BaseModel):
+    action:  str   # "add" | "remove"
+    mention: str   # nome come appare su Facebook (es. "Alfio Turrisi")
+
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
@@ -153,6 +157,24 @@ async def fb_login_status(_: AuthUser = Depends(require_admin)):
         "saved_at":    sess.get("saved_at"),
         "source":      sess.get("source", "browser"),
     }
+
+
+@router.post("/mentions")
+async def fb_mentions(payload: MentionPayload, _: AuthUser = Depends(require_admin)):
+    """
+    Gestisce la lista delle menzioni (persone da taggare nei post bacheca).
+    Usa il nome completo come appare su Facebook (es. 'Alfio Turrisi').
+    """
+    from core.storage import storage
+    cfg = await storage.load("facebook:config", default={})
+    mentions = cfg.get("mentions", [])
+    if payload.action == "add" and payload.mention not in mentions:
+        mentions.append(payload.mention)
+    elif payload.action == "remove":
+        mentions = [m for m in mentions if m != payload.mention]
+    cfg["mentions"] = mentions
+    await storage.save("facebook:config", cfg)
+    return {"ok": True, "mentions": mentions}
 
 
 @router.post("/import-session")
