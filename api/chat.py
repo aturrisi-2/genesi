@@ -223,7 +223,19 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         _asyncio.create_task(_extract_and_save_episode())
 
         # 2. Pipeline Relazionale / Tecnico (Orchestrata dal Proactor)
-        _handler_result = await simple_chat_handler(user_id, request.message, request.conversation_id, platform=request.platform)
+        # Capability context: se l'utente chiede cosa Genesi sa fare, inietta la mappa capacità
+        _chat_message = request.message
+        try:
+            from core.capability_awareness import is_meta_query, load_capability_map, build_capability_context_block
+            if is_meta_query(request.message):
+                _cap_map = load_capability_map()
+                _cap_block = build_capability_context_block(_cap_map)
+                if _cap_block:
+                    _chat_message = f"{request.message}\n\n{_cap_block}"
+                    log("CAPABILITY_CONTEXT_INJECTED", user_id=user_id, msg_len=len(_chat_message))
+        except Exception:
+            pass
+        _handler_result = await simple_chat_handler(user_id, _chat_message, request.conversation_id, platform=request.platform)
         if isinstance(_handler_result, tuple):
             response, classified_intent = _handler_result[0], _handler_result[1]
         else:
@@ -305,6 +317,22 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                 pass
         _asyncio.create_task(_maybe_audit())
 
+        # Capability gap detection in background (fail-silent, nessun impatto sul flusso)
+        _gap_msg  = request.message
+        _gap_resp = _raw_response
+        _gap_intent = classified_intent
+        async def _detect_capability_gap():
+            try:
+                from core.capability_awareness import detect_gap, log_gap
+                is_gap, gap_type = detect_gap(_gap_msg, _gap_resp, _gap_intent)
+                if is_gap and gap_type:
+                    await log_gap(_gap_msg, _gap_resp, _gap_intent,
+                                  platform=request.platform or "web",
+                                  user_id=user_id, gap_type=gap_type)
+            except Exception:
+                pass
+        _asyncio.create_task(_detect_capability_gap())
+
         # Usa il vero intent classificato (surfacato da simple_chat_handler)
         intent = classified_intent
         
@@ -380,7 +408,19 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                     pass
             _aio.create_task(_stream_assess_prediction())
 
-            resp = await _sch(user_id, request.message, request.conversation_id, platform=request.platform)
+            # Capability context injection (meta-query: "cosa sai fare?")
+            _stream_chat_message = request.message
+            try:
+                from core.capability_awareness import is_meta_query as _is_meta, load_capability_map as _lcm, build_capability_context_block as _bccb
+                if _is_meta(request.message):
+                    _cap_map = _lcm()
+                    _cap_block = _bccb(_cap_map)
+                    if _cap_block:
+                        _stream_chat_message = f"{request.message}\n\n{_cap_block}"
+                        log("CAPABILITY_CONTEXT_INJECTED", user_id=user_id, msg_len=len(_stream_chat_message))
+            except Exception:
+                pass
+            resp = await _sch(user_id, _stream_chat_message, request.conversation_id, platform=request.platform)
             if isinstance(resp, tuple):
                 resp = resp[0]
             if not isinstance(resp, str):
@@ -444,6 +484,20 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                 except Exception:
                     pass
             _aio.create_task(_stream_update_behavioral())
+
+            # Capability gap detection in background (fail-silent)
+            _stream_gap_resp = resp
+            async def _stream_detect_gap():
+                try:
+                    from core.capability_awareness import detect_gap, log_gap
+                    is_gap, gap_type = detect_gap(request.message, _stream_gap_resp, "stream")
+                    if is_gap and gap_type:
+                        await log_gap(request.message, _stream_gap_resp, "stream",
+                                      platform=request.platform or "web",
+                                      user_id=user_id, gap_type=gap_type)
+                except Exception:
+                    pass
+            _aio.create_task(_stream_detect_gap())
 
             # Audit automatico ogni 25 turni di chat (background, silenzioso)
             async def _stream_maybe_audit():
