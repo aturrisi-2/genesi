@@ -473,8 +473,10 @@ async def extract_family_relationship(
         # 3. Aggiunge fatto personale in personal_facts di Alfio
         pf_key = f"personal_facts:{_OWNER_USER_ID_FOR_TREE}"
         pf_list = await s.load(pf_key, default=[]) or []
+        if not isinstance(pf_list, list):
+            pf_list = []
         fact_key = f"famiglia_{relationship}_{platform}_{member_id}"
-        pf_list = [f for f in pf_list if f.get("key") != fact_key]
+        pf_list = [f for f in pf_list if isinstance(f, dict) and f.get("key") != fact_key]
         pf_list.append({
             "key":    fact_key,
             "value":  f"{name} ({relationship})" + (f" — {notes}" if notes else ""),
