@@ -699,7 +699,24 @@ class FacebookService:
                 _slog("FACEBOOK_GROUP_POST_BOX_NOT_FOUND", url=self._page.url[:80])
                 return result
 
-            await self._page.evaluate('el => el.click()', open_btn)
+            # Click via JS puro (evita problemi con ElementHandle cross-evaluate)
+            _slog("FACEBOOK_GROUP_CLICKING_OPEN_BTN")
+            clicked = await self._page.evaluate("""() => {
+                const kw = ['Scrivi qualcosa', 'Crea un post', 'Write something'];
+                const selectors = ['[contenteditable]', '[role="button"]', '[role="textbox"]', '[tabindex="0"]'];
+                for (const sel of selectors) {
+                    for (const el of document.querySelectorAll(sel)) {
+                        const attrs = (el.getAttribute('aria-label')||'') + (el.getAttribute('aria-placeholder')||'') + (el.getAttribute('placeholder')||'');
+                        const text = (el.innerText||'').trim().substring(0, 60);
+                        if (kw.some(k => (attrs + text).includes(k))) {
+                            el.click();
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }""")
+            _slog("FACEBOOK_GROUP_OPEN_BTN_CLICKED", ok=clicked)
 
             # Aspetta che il dialog si apra (appare il pulsante Pubblica)
             try:
@@ -712,7 +729,8 @@ class FacebookService:
 
             await self._human_delay(1, 2)
 
-            # Trova il textbox dentro il dialog
+            # Trova il textbox dentro il dialog — cerca per innerText del placeholder
+            _slog("FACEBOOK_GROUP_FIND_TEXTBOX")
             write_box = await self._page.query_selector('[role="dialog"] [role="textbox"][contenteditable="true"]')
             if not write_box:
                 write_box = await self._page.query_selector('[role="dialog"] [contenteditable="true"]')
@@ -720,62 +738,58 @@ class FacebookService:
                 write_box = await self._page.query_selector('[role="textbox"][contenteditable="true"]')
             if not write_box:
                 write_box = await self._page.query_selector('[aria-placeholder*="Crea un post"]')
+            _slog("FACEBOOK_GROUP_TEXTBOX_FOUND", found=bool(write_box))
             if not write_box:
                 result["error"] = "Box testo non trovato nel dialog"
                 _slog("FACEBOOK_GROUP_POST_BOX_NOT_FOUND", url=self._page.url[:80])
                 return result
 
+            # Tutto in un singolo evaluate JS per evitare hang su ElementHandle cross-call
             _slog("FACEBOOK_GROUP_POST_TYPING", chars=len(content))
-            await self._page.evaluate('el => el.click()', write_box)
-            await self._human_delay(0.5, 1)
-            # execCommand('insertText') triggera gli eventi React (input/change) senza hang
             import json as _json
-            typed = await self._page.evaluate(
-                '([el, text]) => { el.focus(); return document.execCommand("insertText", false, text); }',
-                [write_box, content]
-            )
-            _slog("FACEBOOK_GROUP_POST_TYPED", ok=typed, chars=len(content))
-            await self._human_delay(1, 2)
-
-            # Chiudi popup se appaiono
-            for dismiss_label in ("Non ora", "Ok", "Chiudi"):
-                d = await self._page.query_selector(f'[aria-label="{dismiss_label}"]')
-                if d:
-                    await self._page.evaluate('el => el.click()', d)
-                    await asyncio.sleep(0.8)
-                    break
-
-            # Log diagnostico: quali pulsanti esistono dopo il typing?
-            btn_labels = await self._page.evaluate("""() => {
-                return Array.from(document.querySelectorAll('button, [role="button"]'))
-                    .map(b => b.getAttribute('aria-label') || b.innerText?.trim().substring(0, 30))
-                    .filter(Boolean).slice(0, 20);
-            }""")
-            _slog("FACEBOOK_BUTTONS_AFTER_TYPING", labels=btn_labels[:20])
-
-            # Clicca Pubblica — prova più selettori incluso testo visibile
-            publish_btn = await self._page.query_selector('[aria-label="Pubblica"]')
-            if not publish_btn:
-                publish_btn = await self._page.query_selector('[aria-label="Posta"]')
-            if not publish_btn:
-                # Cerca per testo visibile "Pubblica" o "Posta"
-                publish_btn = await self._page.evaluate("""() => {
-                    for (const btn of document.querySelectorAll('button, [role="button"]')) {
-                        const txt = (btn.innerText || '').trim();
-                        if (txt === 'Pubblica' || txt === 'Posta') return btn;
+            post_result_js = await self._page.evaluate(
+                """(text) => {
+                    // Trova textbox nel dialog
+                    const box = document.querySelector('[role="dialog"] [role="textbox"][contenteditable="true"]')
+                           || document.querySelector('[role="dialog"] [contenteditable="true"]')
+                           || document.querySelector('[role="textbox"][contenteditable="true"]')
+                           || document.querySelector('[aria-placeholder*="Crea un post"]');
+                    if (!box) return {ok: false, step: 'no_textbox'};
+                    box.focus();
+                    box.click();
+                    const typed = document.execCommand('insertText', false, text);
+                    if (!typed) return {ok: false, step: 'execCommand_failed'};
+                    // Cerca pulsante Pubblica
+                    const labels = ['Pubblica', 'Posta'];
+                    let pubBtn = document.querySelector('[aria-label="Pubblica"]')
+                              || document.querySelector('[aria-label="Posta"]');
+                    if (!pubBtn) {
+                        for (const btn of document.querySelectorAll('button, [role="button"]')) {
+                            const txt = (btn.innerText||'').trim();
+                            if (labels.includes(txt)) { pubBtn = btn; break; }
+                        }
                     }
-                    return null;
-                }""")
-            _slog("FACEBOOK_PUBLISH_BTN", found=bool(publish_btn))
-            if publish_btn:
-                await self._page.evaluate('el => el.click()', publish_btn)
+                    const btnLabels = Array.from(document.querySelectorAll('button,[role="button"]'))
+                        .map(b => b.getAttribute('aria-label') || (b.innerText||'').trim().substring(0,20))
+                        .filter(Boolean).slice(0,15);
+                    if (!pubBtn) return {ok: false, step: 'no_publish_btn', buttons: btnLabels};
+                    pubBtn.click();
+                    return {ok: true, step: 'clicked_publish', buttons: btnLabels};
+                }""",
+                content
+            )
+            _slog("FACEBOOK_GROUP_POST_JS_RESULT", **{k: v for k, v in post_result_js.items() if k != 'buttons'})
+            if post_result_js.get("buttons"):
+                _slog("FACEBOOK_BUTTONS_AFTER_TYPING", labels=post_result_js["buttons"])
+
+            if post_result_js.get("ok"):
                 await self._human_delay(3, 5)
                 result["success"] = True
                 result["post_url"] = self._page.url
                 _slog("FACEBOOK_POSTED", group=group_name, chars=len(content))
             else:
-                result["error"] = "Bottone Pubblica non trovato"
-                _slog("FACEBOOK_PUBLISH_BTN_NOT_FOUND", group=group_name)
+                result["error"] = f"post_js: {post_result_js.get('step', 'unknown')}"
+                _slog("FACEBOOK_PUBLISH_BTN_NOT_FOUND", group=group_name, step=post_result_js.get("step"))
         except Exception as e:
             result["error"] = f"{type(e).__name__}: {e}"
             logger.warning("FACEBOOK_POST_FAIL err=%s", result["error"])
