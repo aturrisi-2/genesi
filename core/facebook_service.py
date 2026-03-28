@@ -696,31 +696,46 @@ class FacebookService:
 
     async def approve_pending_post(self, post_id: str) -> dict:
         """Recupera, posta e aggiorna il status del post pending."""
+        _slog("FACEBOOK_APPROVE_START", post_id=post_id)
         try:
             data = await storage.load(FB_PENDING_KEY, default={"posts": []})
             posts = data.get("posts", [])
-            for p in posts:
-                if p.get("id") == post_id and p.get("status") == "pending":
-                    ok = await self._ensure_browser()
-                    if not ok:
-                        return {"success": False, "error": "Browser non disponibile"}
-                    await self.load_session()
-                    if p.get("group") == "timeline":
-                        result = await self.post_to_timeline(p["content"], mention=p.get("mention", ""))
-                    else:
-                        result = await self.post_to_group(p["group"], p["content"])
-                    p["status"]      = "published" if result["success"] else "failed"
-                    p["published_at"] = datetime.utcnow().isoformat()
-                    p["post_url"]    = result.get("post_url", "")
-                    p["error"]       = result.get("error", "")
-                    await storage.save(FB_PENDING_KEY, data)
-                    if result["success"]:
-                        await self._record_interaction("post_published",
-                            group=p["group"], content_preview=p["content"][:200])
-                        await self.save_session()
-                    return result
-            return {"success": False, "error": "Post non trovato o già processato"}
+            target = next((p for p in posts if p.get("id") == post_id and p.get("status") == "pending"), None)
+            if not target:
+                _slog("FACEBOOK_APPROVE_NOT_FOUND", post_id=post_id,
+                      total_posts=len(posts))
+                return {"success": False, "error": "Post non trovato o già processato"}
+
+            group = target.get("group", "")
+            _slog("FACEBOOK_APPROVE_POSTING", post_id=post_id, group=group,
+                  chars=len(target.get("content", "")))
+
+            ok = await self._ensure_browser()
+            if not ok:
+                return {"success": False, "error": "Browser non disponibile"}
+            await self.load_session()
+
+            if group == "timeline":
+                result = await self.post_to_timeline(target["content"], mention=target.get("mention", ""))
+            else:
+                result = await self.post_to_group(group, target["content"])
+
+            _slog("FACEBOOK_APPROVE_RESULT", post_id=post_id, group=group,
+                  success=result.get("success"), error=result.get("error", "")[:100])
+
+            target["status"]       = "published" if result["success"] else "failed"
+            target["published_at"] = datetime.utcnow().isoformat()
+            target["post_url"]     = result.get("post_url", "")
+            target["error"]        = result.get("error", "")
+            await storage.save(FB_PENDING_KEY, data)
+            if result["success"]:
+                await self._record_interaction("post_published",
+                    group=group, content_preview=target["content"][:200])
+                await self.save_session()
+            return result
         except Exception as e:
+            _slog("FACEBOOK_APPROVE_EXCEPTION", post_id=post_id,
+                  err_type=type(e).__name__, err=str(e)[:200])
             logger.warning("FACEBOOK_APPROVE_FAIL err=%s", e)
             return {"success": False, "error": str(e)}
 
