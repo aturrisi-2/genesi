@@ -105,6 +105,19 @@ async def _group_should_intervene(
     if any(g in combined_lower for g in _GREETINGS):
         return True
 
+    # Fast-path: celebrazione/buona notizia → sempre sì (emoji festive o keyword di traguardo)
+    _CELEBRATION_EMOJIS = ("🎉", "🎊", "🥳", "🎈", "🥂", "🍾", "🎂", "🏆", "🎁")
+    _GOOD_NEWS_KW = (
+        "habemus", "ce l'ho fatta", "ce la fatta", "ho preso", "ho comprato",
+        "è arrivat", "arrivata la", "arrivato il", "finalmente", "ho trovato",
+        "ho vinto", "abbiamo vinto", "promozione", "promosso", "promossa",
+        "laurea", "diploma", "compleanno", "auguri",
+    )
+    if any(e in combined for e in _CELEBRATION_EMOJIS):
+        return True
+    if any(kw in combined_lower for kw in _GOOD_NEWS_KW):
+        return True
+
     # Fast-path: messaggio troppo corto e senza punto interrogativo → probabile scambio tra membri
     if len(combined) < 8 and "?" not in combined:
         return False
