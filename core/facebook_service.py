@@ -629,10 +629,11 @@ class FacebookService:
                 return result
 
             _slog("FACEBOOK_GROUP_POST_TYPING", chars=len(content))
-            await self._page.evaluate('el => el.focus()', write_box)
+            await self._page.evaluate('el => el.click()', write_box)
             await self._human_delay(0.5, 1)
-            await self._type_humanlike(write_box, content)
-            await self._human_delay(2, 4)
+            # Usa page.keyboard.type per contenteditable React (più affidabile di locator.type)
+            await self._page.keyboard.type(content, delay=random.randint(30, 80))
+            await self._human_delay(1, 2)
 
             # Chiudi popup se appaiono
             for dismiss_label in ("Non ora", "Ok", "Chiudi"):
