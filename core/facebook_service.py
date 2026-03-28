@@ -644,8 +644,16 @@ class FacebookService:
                     await asyncio.sleep(1)
                     break
 
+            # Scorri leggermente per triggerare il lazy rendering del composer
+            await self._page.evaluate("window.scrollTo(0, 300)")
+            await asyncio.sleep(1)
+            await self._page.evaluate("window.scrollTo(0, 0)")
+            await asyncio.sleep(1)
+
             # Clicca per aprire il dialog composer — prova più selettori
-            open_btn = await self._page.query_selector('[aria-label*="Scrivi qualcosa"]')
+            open_btn = await self._page.query_selector('[data-pagelet="GroupComposer"]')
+            if not open_btn:
+                open_btn = await self._page.query_selector('[aria-label*="Scrivi qualcosa"]')
             if not open_btn:
                 open_btn = await self._page.query_selector('[aria-placeholder*="Scrivi qualcosa"]')
             if not open_btn:
@@ -653,12 +661,16 @@ class FacebookService:
             if not open_btn:
                 open_btn = await self._page.query_selector('[data-testid="status-attachment-mentions-input"]')
             if not open_btn:
-                # JS fallback: cerca per testo placeholder visibile
+                # JS fallback: cerca per innerText + attributi
                 open_btn = await self._page.evaluate("""() => {
                     const kw = ['Scrivi qualcosa', 'Crea un post', 'Write something'];
-                    for (const el of document.querySelectorAll('[contenteditable],[role="button"],[role="textbox"]')) {
-                        const lbl = (el.getAttribute('aria-label')||'') + (el.getAttribute('aria-placeholder')||'') + (el.getAttribute('placeholder')||'');
-                        if (kw.some(k => lbl.includes(k))) return el;
+                    const selectors = ['[contenteditable]', '[role="button"]', '[role="textbox"]', '[tabindex="0"]'];
+                    for (const sel of selectors) {
+                        for (const el of document.querySelectorAll(sel)) {
+                            const attrs = (el.getAttribute('aria-label')||'') + (el.getAttribute('aria-placeholder')||'') + (el.getAttribute('placeholder')||'');
+                            const text = (el.innerText||'').trim().substring(0, 60);
+                            if (kw.some(k => (attrs + text).includes(k))) return el;
+                        }
                     }
                     return null;
                 }""")
