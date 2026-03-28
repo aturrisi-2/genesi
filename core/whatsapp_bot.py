@@ -46,15 +46,28 @@ _GREETING_RE = re.compile(
 )
 _GENESI_RE = re.compile(r'\bgenesi\b', re.IGNORECASE)
 
+_CELEBRATION_EMOJIS = ("🎉", "🎊", "🥳", "🎈", "🥂", "🍾", "🎂", "🏆", "🎁")
+_GOOD_NEWS_KW = (
+    "habemus", "ce l'ho fatta", "ce la fatta", "ho preso", "ho comprato",
+    "è arrivat", "arrivata la", "arrivato il", "finalmente", "ho trovato",
+    "ho vinto", "abbiamo vinto", "promozione", "promosso", "promossa",
+    "laurea", "diploma", "compleanno", "auguri",
+)
+
 
 def _group_should_respond(text: str, caption: str = "") -> bool:
-    """In un gruppo risponde solo se: nome 'Genesi' o saluto."""
+    """In un gruppo risponde solo se: nome 'Genesi', saluto, o buona notizia/celebrazione."""
     combined = f"{text} {caption}".strip()
     if not combined:
         return False
     if _GENESI_RE.search(combined):
         return True
     if _GREETING_RE.search(combined):
+        return True
+    if any(e in combined for e in _CELEBRATION_EMOJIS):
+        return True
+    combined_lower = combined.lower()
+    if any(kw in combined_lower for kw in _GOOD_NEWS_KW):
         return True
     return False
 
