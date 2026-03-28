@@ -1478,11 +1478,18 @@ class FacebookService:
                     post_style = "timeline"
                 else:
                     feed = await self.read_group_feed(group, max_posts=8)
-                    post_style = style
+                    # Stile per gruppo: tech se URL (gruppo AI/tech), altrimenti stile globale
+                    group_labels = cfg.get("group_labels", {})
+                    label_lower = group_labels.get(group, group).lower()
+                    if any(k in label_lower for k in ("intelligenza", "ai", "tech", "chatgpt", "digitale")):
+                        post_style = "tech"
+                    else:
+                        post_style = style
                 result["actions"].append(f"feed_read:{group}({len(feed)})")
 
                 # 2. Genera post
-                target_label = "bacheca personale" if is_timeline else group
+                group_labels = cfg.get("group_labels", {})
+                target_label = "bacheca personale" if is_timeline else group_labels.get(group, group)
                 content = await self._generate_post_content(target_label, feed, post_style)
                 if not content:
                     continue
