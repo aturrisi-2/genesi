@@ -220,7 +220,8 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                 except Exception as _ep_e:
                     log("EPISODE_SAVE_ERROR", user_id=user_id, error=str(_ep_e))
 
-        _asyncio.create_task(_extract_and_save_episode())
+        if request.platform != "telegram_group":
+            _asyncio.create_task(_extract_and_save_episode())
 
         # 2. Pipeline Relazionale / Tecnico (Orchestrata dal Proactor)
         # Capability context: se l'utente chiede cosa Genesi sa fare, inietta la mappa capacità
@@ -243,7 +244,8 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
 
         # Identity extractor: gira DOPO simple_chat_handler per evitare race condition
         # con _handle_memory_correction (che salva il profilo dentro simple_chat_handler).
-        _asyncio.create_task(_extract_and_save_identity())
+        if request.platform != "telegram_group":
+            _asyncio.create_task(_extract_and_save_identity())
 
         # Defensive normalization: ensure response is always a string
         if not isinstance(response, str):
@@ -268,7 +270,8 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                     await _pfs.extract_and_save(request.message, _raw_response, user_id)
                 except Exception as _pf_e:
                     log("PERSONAL_FACTS_SAVE_ERROR", user_id=user_id, error=str(_pf_e))
-        _asyncio.create_task(_extract_and_save_personal_facts())
+        if request.platform != "telegram_group":
+            _asyncio.create_task(_extract_and_save_personal_facts())
 
         # Predictive engine: aggiorna predizione prossimo turno (background)
         _pred_msg  = request.message
@@ -446,7 +449,8 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                             log("EPISODE_SAVED", user_id=user_id, text=ep['text'][:60])
                     except Exception as _ep_e:
                         log("EPISODE_SAVE_ERROR", user_id=user_id, error=str(_ep_e))
-            _aio.create_task(_stream_extract_episode())
+            if request.platform != "telegram_group":
+                _aio.create_task(_stream_extract_episode())
             # Personal facts extraction in background (abitudini, preferenze, familiari...)
             _stream_resp = resp
             async def _stream_extract_personal_facts():
@@ -456,7 +460,8 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                         await _pfs.extract_and_save(request.message, _stream_resp, user_id)
                     except Exception as _pf_e:
                         log("PERSONAL_FACTS_SAVE_ERROR", user_id=user_id, error=str(_pf_e))
-            _aio.create_task(_stream_extract_personal_facts())
+            if request.platform != "telegram_group":
+                _aio.create_task(_stream_extract_personal_facts())
 
             # Predictive engine: aggiorna predizione prossimo turno (background)
             _stream_pred_msg  = request.message
