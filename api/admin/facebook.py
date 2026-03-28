@@ -59,6 +59,27 @@ async def fb_reject(post_id: str, _: AuthUser = Depends(require_admin)):
     return {"ok": ok}
 
 
+@router.get("/pending-replies")
+async def fb_pending_replies(_: AuthUser = Depends(require_admin)):
+    """Lista delle risposte ai commenti in attesa di approvazione."""
+    replies = await facebook_service.get_pending_replies()
+    return {"replies": replies, "count": len(replies)}
+
+
+@router.post("/pending-replies/{reply_id}/approve")
+async def fb_approve_reply(reply_id: str, _: AuthUser = Depends(require_admin)):
+    """Approva e pubblica una risposta a un commento."""
+    result = await facebook_service.approve_pending_reply(reply_id)
+    return result
+
+
+@router.post("/pending-replies/{reply_id}/reject")
+async def fb_reject_reply(reply_id: str, _: AuthUser = Depends(require_admin)):
+    """Rifiuta una risposta (non viene pubblicata)."""
+    ok = await facebook_service.reject_pending_reply(reply_id)
+    return {"ok": ok}
+
+
 @router.post("/mode")
 async def fb_set_mode(payload: ModePayload, _: AuthUser = Depends(require_admin)):
     """

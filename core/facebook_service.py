@@ -29,10 +29,12 @@ from core.storage import storage
 logger = logging.getLogger("genesi")
 
 # ── Configurazione ─────────────────────────────────────────────────────────────
-FB_CONFIG_KEY  = "facebook:config"
-FB_SESSION_KEY = "facebook:session"
-FB_PENDING_KEY = "facebook:pending_posts"
-FB_LOG_KEY     = "facebook:interaction_log"
+FB_CONFIG_KEY   = "facebook:config"
+FB_SESSION_KEY  = "facebook:session"
+FB_PENDING_KEY  = "facebook:pending_posts"
+FB_REPLIES_KEY  = "facebook:pending_replies"   # risposte in attesa approvazione
+FB_LOG_KEY      = "facebook:interaction_log"
+FB_LIKES_KEY    = "facebook:seen_likes"        # like già visti per post
 
 MAX_LOG_ENTRIES   = 300
 MAX_PENDING       = 50
@@ -483,6 +485,25 @@ class FacebookService:
             logger.debug("FACEBOOK_GENERATE_REPLY_FAIL err=%s", e)
             return ""
 
+    async def _generate_like_thanks(self, new_likes: int) -> str:
+        """Genera un commento di ringraziamento per i nuovi mi piace ricevuti."""
+        try:
+            from core.llm_service import llm_service
+            system = (
+                "Sei Giada, una ragazza di Imola. Il tuo post ha ricevuto dei mi piace. "
+                "Scrivi UN commento di ringraziamento breve (1 riga), genuino, in italiano colloquiale. "
+                "NON dire 'grazie per il mi piace'. Sii naturale, come farebbe una persona vera. "
+                "Puoi usare un emoji con moderazione."
+            )
+            user_msg = f"Hai ricevuto {new_likes} nuovi mi piace sul post. Ringrazia in modo spontaneo."
+            result = await llm_service._call_model(
+                "openai/gpt-4o-mini", system, user_msg,
+                user_id="facebook_system", route="memory",
+            )
+            return (result or "").strip()
+        except Exception:
+            return ""
+
     async def _generate_comment(self, post_text: str, existing_comments: list) -> str:
         """Genera commento rilevante per un post."""
         try:
@@ -866,14 +887,15 @@ class FacebookService:
             logger.debug("FACEBOOK_READ_COMMENTS_FAIL url=%s err=%s", post_url[:60], e)
         return comments
 
-    async def reply_to_comments_on_own_posts(self, max_replies: int = 3) -> int:
+    async def reply_to_comments_on_own_posts(self, mode: str = "semi", max_replies: int = 3) -> int:
         """
-        Legge i post recenti di Giada, trova commenti senza risposta, risponde.
-        Ritorna il numero di risposte inviate.
+        Legge i post recenti di Giada, trova commenti senza risposta.
+        semi → accoda per approvazione admin
+        full → risponde direttamente
+        Ritorna il numero di risposte inviate/accodate.
         """
-        replied = 0
+        count = 0
         try:
-            # Carica set di commenti già risposti (chiave = "author|post_url")
             replied_log = await storage.load("facebook:replied_comments", default={"ids": []})
             replied_ids = set(replied_log.get("ids", []))
 
@@ -883,10 +905,28 @@ class FacebookService:
                 return 0
 
             for post_url in post_urls:
-                if replied >= max_replies:
+                if count >= max_replies:
                     break
+
+                # Like detection: controlla nuovi mi piace
+                post_id = post_url.split("story_fbid=")[-1][:20] if "story_fbid=" in post_url else post_url[-20:]
+                new_likes = await self.check_new_likes(post_url, post_id)
+                if new_likes > 0:
+                    like_reply = await self._generate_like_thanks(new_likes)
+                    if like_reply:
+                        if mode == "semi":
+                            await self.queue_pending_reply(
+                                post_url, "__likes__",
+                                f"{new_likes} nuovi mi piace", like_reply
+                            )
+                        else:
+                            ok = await self._post_reply_to_comment(post_url, "__likes__", like_reply)
+                            if ok:
+                                _slog("FACEBOOK_LIKE_THANKS_SENT", post=post_url[:60],
+                                      new_likes=new_likes, chars=len(like_reply))
+
+                # Commenti senza risposta
                 comments = await self.read_post_comments(post_url)
-                # Testo del post (per contesto LLM)
                 post_text = ""
                 try:
                     post_text_el = await self._page.query_selector('[dir="auto"]')
@@ -896,7 +936,7 @@ class FacebookService:
                     pass
 
                 for comment in comments:
-                    if replied >= max_replies:
+                    if count >= max_replies:
                         break
                     comment_id = f"{comment['author']}|{post_url}"
                     if comment_id in replied_ids:
@@ -906,23 +946,28 @@ class FacebookService:
                     if not reply_text:
                         continue
 
-                    # Naviga al post e trova il campo commento
-                    ok = await self._post_reply_to_comment(post_url, comment["author"], reply_text)
-                    if ok:
-                        replied += 1
-                        replied_ids.add(comment_id)
-                        await self._record_interaction("comment_replied",
-                            author=comment["author"], content_preview=reply_text[:100])
-                        _slog("FACEBOOK_REPLY_SENT", author=comment["author"],
-                              post=post_url[:60], chars=len(reply_text))
-                        await self._human_delay(10, 25)
+                    if mode == "semi":
+                        rid = await self.queue_pending_reply(
+                            post_url, comment["author"], comment["text"], reply_text
+                        )
+                        if rid:
+                            count += 1
+                            replied_ids.add(comment_id)
+                    else:
+                        ok = await self._post_reply_to_comment(post_url, comment["author"], reply_text)
+                        if ok:
+                            count += 1
+                            replied_ids.add(comment_id)
+                            await self._record_interaction("comment_replied",
+                                author=comment["author"], content_preview=reply_text[:100])
+                            _slog("FACEBOOK_REPLY_SENT", author=comment["author"],
+                                  post=post_url[:60], chars=len(reply_text))
+                            await self._human_delay(10, 25)
 
-            # Salva i commentID già risposti (max 500)
-            ids_list = list(replied_ids)[-500:]
-            await storage.save("facebook:replied_comments", {"ids": ids_list})
+            await storage.save("facebook:replied_comments", {"ids": list(replied_ids)[-500:]})
         except Exception as e:
             logger.warning("FACEBOOK_REPLY_ERROR err=%s(%s)", type(e).__name__, e)
-        return replied
+        return count
 
     async def _post_reply_to_comment(self, post_url: str, target_author: str, reply_text: str) -> bool:
         """
@@ -966,6 +1011,145 @@ class FacebookService:
         except Exception as e:
             _slog("FACEBOOK_POST_REPLY_FAIL", err_type=type(e).__name__, err=str(e)[:150])
             return False
+
+    # ════════════════════════════════════════════════════════════════════════
+    # Like detection
+    # ════════════════════════════════════════════════════════════════════════
+
+    async def read_post_like_count(self, post_url: str) -> int:
+        """Legge il numero totale di reazioni (mi piace + altri) su un post."""
+        try:
+            full_url = post_url if post_url.startswith("http") else f"https://www.facebook.com{post_url}"
+            await self._page.goto(full_url, timeout=20000)
+            await self._human_delay(1, 2)
+            count = await self._page.evaluate("""() => {
+                // aria-label tipo "Mi piace: 5 persone" o "Tutte le reazioni: 5 905"
+                const btn = document.querySelector('[aria-label*=\"Mi piace:\"], [aria-label*=\"Tutte le reazioni:\"], [aria-label*=\"reazioni\"]');
+                if (!btn) return 0;
+                const m = btn.getAttribute('aria-label').match(/\\d+/);
+                return m ? parseInt(m[0]) : 0;
+            }""")
+            return count
+        except Exception:
+            return 0
+
+    async def check_new_likes(self, post_url: str, post_id: str) -> int:
+        """
+        Confronta il like count attuale con quello visto l'ultima volta.
+        Ritorna il numero di NUOVI like (delta). Aggiorna il contatore salvato.
+        """
+        try:
+            data = await storage.load(FB_LIKES_KEY, default={})
+            prev = data.get(post_id, 0)
+            current = await self.read_post_like_count(post_url)
+            delta = max(0, current - prev)
+            data[post_id] = current
+            # Tieni max 200 post tracciati
+            if len(data) > 200:
+                keys = list(data.keys())
+                for k in keys[:len(data) - 200]:
+                    del data[k]
+            await storage.save(FB_LIKES_KEY, data)
+            if delta > 0:
+                _slog("FACEBOOK_NEW_LIKES", post_id=post_id, delta=delta, total=current)
+            return delta
+        except Exception:
+            return 0
+
+    # ════════════════════════════════════════════════════════════════════════
+    # Pending replies (semi-auto)
+    # ════════════════════════════════════════════════════════════════════════
+
+    async def queue_pending_reply(self, post_url: str, comment_author: str,
+                                   comment_text: str, reply_text: str) -> str:
+        """Accoda una risposta a un commento per approvazione admin."""
+        try:
+            data = await storage.load(FB_REPLIES_KEY, default={"replies": []})
+            replies = data.get("replies", [])
+            reply_id = str(uuid.uuid4())[:8]
+            replies.append({
+                "id":             reply_id,
+                "post_url":       post_url,
+                "comment_author": comment_author,
+                "comment_text":   comment_text[:200],
+                "reply_text":     reply_text,
+                "status":         "pending",
+                "created_at":     datetime.utcnow().isoformat(),
+            })
+            data["replies"] = replies[-MAX_PENDING:]
+            await storage.save(FB_REPLIES_KEY, data)
+            _slog("FACEBOOK_REPLY_QUEUED", id=reply_id, author=comment_author)
+            return reply_id
+        except Exception as e:
+            logger.debug("FACEBOOK_QUEUE_REPLY_FAIL err=%s", e)
+            return ""
+
+    async def approve_pending_reply(self, reply_id: str) -> dict:
+        """Approva e pubblica una risposta pending."""
+        _slog("FACEBOOK_APPROVE_REPLY_START", reply_id=reply_id)
+        try:
+            data = await storage.load(FB_REPLIES_KEY, default={"replies": []})
+            target = next((r for r in data.get("replies", [])
+                           if r.get("id") == reply_id and r.get("status") == "pending"), None)
+            if not target:
+                return {"success": False, "error": "Risposta non trovata o già processata"}
+
+            ok = await self._ensure_browser()
+            if not ok:
+                return {"success": False, "error": "Browser non disponibile"}
+            await self.load_session()
+
+            sent = await self._post_reply_to_comment(
+                target["post_url"], target["comment_author"], target["reply_text"]
+            )
+            target["status"]       = "sent" if sent else "failed"
+            target["processed_at"] = datetime.utcnow().isoformat()
+            await storage.save(FB_REPLIES_KEY, data)
+
+            _slog("FACEBOOK_APPROVE_REPLY_RESULT", reply_id=reply_id, sent=sent)
+            if sent:
+                # Marca il commento come già risposto
+                replied_log = await storage.load("facebook:replied_comments", default={"ids": []})
+                cid = f"{target['comment_author']}|{target['post_url']}"
+                ids = replied_log.get("ids", [])
+                if cid not in ids:
+                    ids.append(cid)
+                await storage.save("facebook:replied_comments", {"ids": ids[-500:]})
+                await self._record_interaction("comment_replied",
+                    author=target["comment_author"], content_preview=target["reply_text"][:100])
+            return {"success": sent, "error": "" if sent else "Impossibile postare"}
+        except Exception as e:
+            _slog("FACEBOOK_APPROVE_REPLY_EXCEPTION", reply_id=reply_id, err=str(e)[:150])
+            return {"success": False, "error": str(e)}
+
+    async def reject_pending_reply(self, reply_id: str) -> bool:
+        """Rifiuta una risposta pending."""
+        try:
+            data = await storage.load(FB_REPLIES_KEY, default={"replies": []})
+            for r in data.get("replies", []):
+                if r.get("id") == reply_id:
+                    r["status"] = "rejected"
+                    r["processed_at"] = datetime.utcnow().isoformat()
+                    await storage.save(FB_REPLIES_KEY, data)
+                    # Marca come già "gestito" per non riproporre
+                    replied_log = await storage.load("facebook:replied_comments", default={"ids": []})
+                    cid = f"{r['comment_author']}|{r['post_url']}"
+                    ids = replied_log.get("ids", [])
+                    if cid not in ids:
+                        ids.append(cid)
+                    await storage.save("facebook:replied_comments", {"ids": ids[-500:]})
+                    return True
+            return False
+        except Exception:
+            return False
+
+    async def get_pending_replies(self) -> list:
+        """Ritorna le risposte in stato pending."""
+        try:
+            data = await storage.load(FB_REPLIES_KEY, default={"replies": []})
+            return [r for r in data.get("replies", []) if r.get("status") == "pending"]
+        except Exception:
+            return []
 
     # ════════════════════════════════════════════════════════════════════════
 
@@ -1244,11 +1428,12 @@ class FacebookService:
                         if commented:
                             result["actions"].append(f"comments:{group}({commented})")
 
-            # Rispondi ai commenti sui propri post (entrambe le modalità)
+            # Rispondi ai commenti + controlla like (rispetta modalità)
             await self._human_delay(5, 10)
-            n_replies = await self.reply_to_comments_on_own_posts(max_replies=3)
+            n_replies = await self.reply_to_comments_on_own_posts(mode=mode, max_replies=3)
             if n_replies:
-                result["actions"].append(f"replies_sent:{n_replies}")
+                action_label = "replies_queued" if mode == "semi" else "replies_sent"
+                result["actions"].append(f"{action_label}:{n_replies}")
 
             # Aggiorna sessione
             await self.save_session()
