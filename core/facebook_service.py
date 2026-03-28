@@ -458,6 +458,31 @@ class FacebookService:
             logger.debug("FACEBOOK_GENERATE_POST_FAIL err=%s", e)
             return ""
 
+    async def _generate_reply(self, post_text: str, comment_author: str, comment_text: str) -> str:
+        """Genera risposta a un commento ricevuto su un post di Giada."""
+        try:
+            from core.llm_service import llm_service
+            system = (
+                "Sei Giada, una ragazza di Imola. Qualcuno ha commentato un tuo post su Facebook. "
+                "Rispondi al commento in modo naturale, caldo, in italiano colloquiale (1-2 righe max). "
+                "Sii autentica: ringrazia se è un complimento, rispondi con curiosità se è una domanda, "
+                "continua la conversazione se è un'opinione. "
+                "Niente emoji eccessivi. Non presentarti mai come AI."
+            )
+            user_msg = (
+                f"Tuo post:\n{post_text[:200]}\n\n"
+                f"Commento di {comment_author}:\n{comment_text[:200]}\n\n"
+                "Scrivi UNA risposta breve e naturale."
+            )
+            result = await llm_service._call_model(
+                "openai/gpt-4o-mini", system, user_msg,
+                user_id="facebook_system", route="memory",
+            )
+            return (result or "").strip()
+        except Exception as e:
+            logger.debug("FACEBOOK_GENERATE_REPLY_FAIL err=%s", e)
+            return ""
+
     async def _generate_comment(self, post_text: str, existing_comments: list) -> str:
         """Genera commento rilevante per un post."""
         try:
@@ -715,6 +740,217 @@ class FacebookService:
 
     # ════════════════════════════════════════════════════════════════════════
     # Pending posts (semi-auto flow)
+    # ════════════════════════════════════════════════════════════════════════
+    # Risposta ai commenti sui propri post
+    # ════════════════════════════════════════════════════════════════════════
+
+    async def _get_own_user_id(self) -> str:
+        """Legge l'ID utente Facebook dai cookie salvati (c_user)."""
+        try:
+            sess = await storage.load(FB_SESSION_KEY, default={})
+            for c in sess.get("cookies", []):
+                if c.get("name") == "c_user":
+                    return str(c.get("value", ""))
+        except Exception:
+            pass
+        return ""
+
+    @staticmethod
+    def _clean_post_url(url: str) -> str:
+        """Rimuove parametri extra dall'URL del post (comment_id, __cft__, __tn__, ecc.)."""
+        import urllib.parse as up
+        try:
+            p = up.urlparse(url)
+            qs = up.parse_qs(p.query, keep_blank_values=True)
+            # Tieni solo i parametri rilevanti per identificare il post
+            keep = {k: v for k, v in qs.items() if k in ("story_fbid", "id", "v")}
+            clean_query = up.urlencode(keep, doseq=True)
+            return up.urlunparse((p.scheme, p.netloc, p.path, "", clean_query, ""))
+        except Exception:
+            return url
+
+    async def read_own_recent_post_urls(self, max_posts: int = 5) -> list:
+        """
+        Naviga al profilo di Giada e restituisce gli URL dei post recenti (senza comment_id).
+        """
+        urls = []
+        try:
+            user_id = await self._get_own_user_id()
+            profile_url = (
+                f"https://www.facebook.com/profile.php?id={user_id}"
+                if user_id else "https://www.facebook.com/"
+            )
+            await self._page.goto(profile_url, timeout=20000)
+            await self._human_delay(2, 4)
+
+            # Trova link ai singoli post (permalink o /posts/)
+            links = await self._page.evaluate('''() => {
+                const anchors = document.querySelectorAll('a[href*="/posts/"], a[href*="story_fbid="]');
+                return [...anchors].map(a => a.href);
+            }''')
+            seen = set()
+            for url in links:
+                if not url or "facebook.com" not in url:
+                    continue
+                clean = self._clean_post_url(url)
+                if clean not in seen:
+                    seen.add(clean)
+                    urls.append(clean)
+                if len(urls) >= max_posts:
+                    break
+            _slog("FACEBOOK_OWN_POSTS_FOUND", count=len(urls))
+        except Exception as e:
+            logger.debug("FACEBOOK_OWN_POSTS_FAIL err=%s", e)
+        return urls
+
+    async def read_post_comments(self, post_url: str) -> list:
+        """
+        Naviga a un post e restituisce i commenti: [{author, text, element_id}].
+        Esclude i commenti già di Giada (risposte già date).
+        """
+        comments = []
+        try:
+            full_url = post_url if post_url.startswith("http") else f"https://www.facebook.com{post_url}"
+            await self._page.goto(full_url, timeout=20000)
+            await self._human_delay(2, 4)
+
+            # Espandi commenti se c'è un pulsante "Visualizza altri commenti"
+            for _ in range(2):
+                more_btn = await self._page.query_selector(
+                    '[aria-label*="Visualizza altri commenti"], [aria-label*="commenti precedenti"]'
+                )
+                if more_btn:
+                    await self._page.evaluate('b => b.click()', more_btn)
+                    await asyncio.sleep(1)
+                else:
+                    break
+
+            # Facebook: i commenti sono [role="article"] con aria-label "Commento di X"
+            raw = await self._page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('[role="article"]'))
+                    .filter(a => {
+                        const lbl = a.getAttribute('aria-label') || '';
+                        return lbl.startsWith('Commento di') || lbl.startsWith('Comment by');
+                    })
+                    .map(a => {
+                        // Autore dall'aria-label: "Commento di Alfio Turrisi 11 minuti fa"
+                        const lbl = a.getAttribute('aria-label') || '';
+                        const authorMatch = lbl.match(/^(?:Commento di|Comment by)\\s+(.+?)\\s+\\d/);
+                        const author = authorMatch ? authorMatch[1] : '';
+                        // Testo: cerca dir=auto nel commento, prendi il più lungo
+                        const dirEls = Array.from(a.querySelectorAll('[dir="auto"]'));
+                        const texts = dirEls.map(e => e.textContent.trim()).filter(t => t.length > 1);
+                        const text = texts.sort((a,b) => b.length-a.length)[0] || '';
+                        return { author, text: text.substring(0, 300) };
+                    })
+                    .filter(c => c.author && c.text);
+            }""")
+
+            # Filtra: tieni solo commenti non di Giada (non già risposti da lei)
+            giada_names = {"giada genesi", "giada", "g.genesi"}
+            replied_authors = set()
+            result_list = []
+            for c in raw:
+                author_lower = c["author"].lower()
+                if any(g in author_lower for g in giada_names):
+                    # Questo è un commento di Giada: segna l'autore precedente come già risposto
+                    if result_list:
+                        replied_authors.add(result_list[-1]["author"].lower())
+                else:
+                    result_list.append({"author": c["author"], "text": c["text"], "post_url": full_url})
+
+            # Rimuovi chi ha già ricevuto una risposta
+            comments = [c for c in result_list if c["author"].lower() not in replied_authors]
+            _slog("FACEBOOK_POST_COMMENTS", url=post_url[:80], total=len(raw), unreplied=len(comments))
+        except Exception as e:
+            logger.debug("FACEBOOK_READ_COMMENTS_FAIL url=%s err=%s", post_url[:60], e)
+        return comments
+
+    async def reply_to_comments_on_own_posts(self, max_replies: int = 3) -> int:
+        """
+        Legge i post recenti di Giada, trova commenti senza risposta, risponde.
+        Ritorna il numero di risposte inviate.
+        """
+        replied = 0
+        try:
+            # Carica set di commenti già risposti (chiave = "author|post_url")
+            replied_log = await storage.load("facebook:replied_comments", default={"ids": []})
+            replied_ids = set(replied_log.get("ids", []))
+
+            post_urls = await self.read_own_recent_post_urls(max_posts=4)
+            if not post_urls:
+                _slog("FACEBOOK_REPLY_SKIP", reason="no_own_posts_found")
+                return 0
+
+            for post_url in post_urls:
+                if replied >= max_replies:
+                    break
+                comments = await self.read_post_comments(post_url)
+                # Testo del post (per contesto LLM)
+                post_text = ""
+                try:
+                    post_text_el = await self._page.query_selector('[dir="auto"]')
+                    if post_text_el:
+                        post_text = (await post_text_el.inner_text())[:200]
+                except Exception:
+                    pass
+
+                for comment in comments:
+                    if replied >= max_replies:
+                        break
+                    comment_id = f"{comment['author']}|{post_url}"
+                    if comment_id in replied_ids:
+                        continue
+
+                    reply_text = await self._generate_reply(post_text, comment["author"], comment["text"])
+                    if not reply_text:
+                        continue
+
+                    # Naviga al post e trova il campo commento
+                    ok = await self._post_reply_to_comment(post_url, comment["author"], reply_text)
+                    if ok:
+                        replied += 1
+                        replied_ids.add(comment_id)
+                        await self._record_interaction("comment_replied",
+                            author=comment["author"], content_preview=reply_text[:100])
+                        _slog("FACEBOOK_REPLY_SENT", author=comment["author"],
+                              post=post_url[:60], chars=len(reply_text))
+                        await self._human_delay(10, 25)
+
+            # Salva i commentID già risposti (max 500)
+            ids_list = list(replied_ids)[-500:]
+            await storage.save("facebook:replied_comments", {"ids": ids_list})
+        except Exception as e:
+            logger.warning("FACEBOOK_REPLY_ERROR err=%s(%s)", type(e).__name__, e)
+        return replied
+
+    async def _post_reply_to_comment(self, post_url: str, target_author: str, reply_text: str) -> bool:
+        """
+        Naviga al post e inserisce una risposta nel campo commenti.
+        """
+        try:
+            full_url = post_url if post_url.startswith("http") else f"https://www.facebook.com{post_url}"
+            await self._page.goto(full_url, timeout=20000)
+            await self._human_delay(2, 3)
+
+            # Clicca il box commento principale
+            comment_box = await self._page.query_selector('[aria-label*="Lascia un commento"]')
+            if not comment_box:
+                comment_box = await self._page.query_selector('[role="textbox"][contenteditable="true"]')
+            if not comment_box:
+                return False
+
+            await self._page.evaluate('el => el.click()', comment_box)
+            await self._human_delay(0.5, 1)
+            await self._type_humanlike(comment_box, reply_text)
+            await self._human_delay(1, 2)
+            await self._page.keyboard.press("Enter")
+            await self._human_delay(2, 3)
+            return True
+        except Exception as e:
+            logger.debug("FACEBOOK_POST_REPLY_FAIL err=%s", e)
+            return False
+
     # ════════════════════════════════════════════════════════════════════════
 
     async def queue_pending_post(self, content: str, group: str, mention: str = "") -> str:
@@ -991,6 +1227,12 @@ class FacebookService:
                                         group=group, content_preview=comment[:200])
                         if commented:
                             result["actions"].append(f"comments:{group}({commented})")
+
+            # Rispondi ai commenti sui propri post (entrambe le modalità)
+            await self._human_delay(5, 10)
+            n_replies = await self.reply_to_comments_on_own_posts(max_replies=3)
+            if n_replies:
+                result["actions"].append(f"replies_sent:{n_replies}")
 
             # Aggiorna sessione
             await self.save_session()
