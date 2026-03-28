@@ -610,10 +610,38 @@ class FacebookService:
                 await self._human_delay(3, 6)
 
             _slog("FACEBOOK_GROUP_POST_FIND_BOX", url=self._page.url[:80])
+
+            # Aspetta che la pagina carichi davvero (il composer è lazy)
+            await asyncio.sleep(3)
+
+            # Dismetti popup/overlay prima di cercare il composer
+            for dismiss_label in ("Non ora", "Chiudi", "Ok", "Continua", "Ignora"):
+                d = await self._page.query_selector(f'[aria-label="{dismiss_label}"]')
+                if d:
+                    await self._page.evaluate('el => el.click()', d)
+                    await asyncio.sleep(1)
+                    break
+
+            # Scroll to top per assicurarsi che il composer sia visibile
+            await self._page.evaluate("window.scrollTo(0, 0)")
+            await asyncio.sleep(1)
+
+            # Aspetta che appaia il pulsante "Scrivi qualcosa" (o il textbox diretto)
+            try:
+                await self._page.wait_for_selector(
+                    '[aria-label*="Scrivi qualcosa"], [role="textbox"][contenteditable="true"]',
+                    timeout=10000
+                )
+            except Exception:
+                pass
+
             # Prova prima a cliccare il pulsante "Scrivi qualcosa" (apre dialog)
             open_btn = await self._page.query_selector('[aria-label*="Scrivi qualcosa"][role="button"]')
             if not open_btn:
                 open_btn = await self._page.query_selector('[data-testid="status-attachment-mentions-input"]')
+            if not open_btn:
+                # Fallback: qualsiasi div con placeholder "Scrivi qualcosa"
+                open_btn = await self._page.query_selector('[aria-placeholder*="Scrivi qualcosa"]')
             if open_btn:
                 await self._page.evaluate('el => el.click()', open_btn)
                 await self._human_delay(1.5, 2.5)
@@ -623,6 +651,8 @@ class FacebookService:
             write_box = await self._page.query_selector('[role="textbox"][contenteditable="true"]')
             if not write_box:
                 write_box = await self._page.query_selector('[aria-label*="Scrivi qualcosa"]')
+            if not write_box:
+                write_box = await self._page.query_selector('[aria-placeholder*="Scrivi qualcosa"]')
             if not write_box:
                 result["error"] = "Box post non trovato"
                 _slog("FACEBOOK_GROUP_POST_BOX_NOT_FOUND", url=self._page.url[:80])
