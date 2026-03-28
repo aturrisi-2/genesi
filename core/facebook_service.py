@@ -48,8 +48,8 @@ _DEFAULT_CONFIG = {
     "groups":                 ["Sei di Imola se..."],
     "heartbeat_interval_min": 7200,        # 2 ore
     "heartbeat_interval_max": 14400,       # 4 ore
-    "max_posts_per_day":      2,
-    "max_comments_per_hb":    5,
+    "max_posts_per_day":      1,           # 1 post al giorno per gruppo (pochi ma buoni)
+    "max_comments_per_hb":    10,          # 10 commenti per heartbeat (tante interazioni)
     "post_prompt_style":      "locale",    # "locale" | "tech" | "relazionale"
 }
 
@@ -1663,7 +1663,7 @@ class FacebookService:
                     feed = await self.read_timeline_feed(max_posts=5)
                     post_style = "timeline"
                 else:
-                    feed = await self.read_group_feed(group, max_posts=8)
+                    feed = await self.read_group_feed(group, max_posts=15)
                     # Stile per gruppo: tech se URL (gruppo AI/tech), altrimenti stile globale
                     group_labels = cfg.get("group_labels", {})
                     label_lower = group_labels.get(group, group).lower()
