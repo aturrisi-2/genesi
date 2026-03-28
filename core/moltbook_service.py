@@ -1563,6 +1563,20 @@ class MoltbookService:
             if self._heartbeat_count % _SPAM_CHECK_EVERY == 0:
                 await self._periodic_spam_check()
 
+            # 10. Lab feedback cycle esplicito ogni 12 heartbeat (~6h)
+            #     Garantisce che le regole apprese vengano iniettate nel prompt
+            #     anche se trigger_if_needed fallisce nel contesto async
+            if self._heartbeat_count % 12 == 0:
+                try:
+                    from core.lab_feedback_cycle import lab_feedback_cycle
+                    if lab_feedback_cycle._count_pending_events() >= 5:
+                        result = await lab_feedback_cycle.run(force=False)
+                        log("MOLTBOOK_LAB_CYCLE_TRIGGERED",
+                            events=result.get("events_processed", 0),
+                            rules=result.get("rules_generated", 0))
+                except Exception as _lce:
+                    log("MOLTBOOK_LAB_CYCLE_ERROR", error=str(_lce)[:80])
+
             log("MOLTBOOK_HEARTBEAT_DONE", replied=replied, upvoted=upvoted)
 
         except Exception as e:
