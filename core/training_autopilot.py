@@ -55,7 +55,7 @@ TRAINING_ADMIN_EMAIL = os.getenv("TRAINING_ADMIN_EMAIL",   "idappleturrisi@gmail
 TRAINING_ADMIN_PWD   = os.getenv("TRAINING_ADMIN_PASSWORD","ZOEennio0810")
 
 DEEP_CONVO_STATUS_KEY   = "admin/deep_convo_training_status"
-DEEP_CONVO_MIN_PATTERNS = 4    # soglia: se patterns distillati < 4 → lancia deep convo
+DEEP_CONVO_MIN_PATTERNS = 0    # 0 = disabilitato (trigger automatico spento — lancia solo manualmente)
 DEEP_CONVO_COOLDOWN_H   = 8    # ore minime tra due deep convo automatici consecutivi
 
 
