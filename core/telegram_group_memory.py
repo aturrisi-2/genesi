@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import time
+from datetime import datetime
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -471,8 +472,12 @@ async def extract_family_relationship(
         await s.save(profile_key, profile)
 
         # 3. Aggiunge fatto personale in personal_facts di Alfio
+        # Formato canonico: {"facts": [...], "updated_at": "..."} — compatibile con personal_facts_service
         pf_key = f"personal_facts:{_OWNER_USER_ID_FOR_TREE}"
-        pf_list = await s.load(pf_key, default=[]) or []
+        pf_data = await s.load(pf_key, default={"facts": []}) or {"facts": []}
+        if isinstance(pf_data, list):
+            pf_data = {"facts": pf_data}  # migra vecchio formato lista
+        pf_list = pf_data.get("facts", [])
         if not isinstance(pf_list, list):
             pf_list = []
         fact_key = f"famiglia_{relationship}_{platform}_{member_id}"
@@ -483,7 +488,9 @@ async def extract_family_relationship(
             "source": f"{platform}_group",
         })
         pf_list = pf_list[-100:]
-        await s.save(pf_key, pf_list)
+        pf_data["facts"] = pf_list
+        pf_data["updated_at"] = datetime.utcnow().isoformat()
+        await s.save(pf_key, pf_data)
 
         logger.info(
             "FAMILY_RELATIONSHIP_EXTRACTED platform=%s member_id=%s name=%s relationship=%s",

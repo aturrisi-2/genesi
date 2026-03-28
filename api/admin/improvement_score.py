@@ -115,26 +115,43 @@ async def _compute_score() -> dict:
     except Exception:
         components["training"] = {"score": 0, "label": "Training", "detail": "N/D", "value": 0}
 
-    # ── 5. Memory depth (episodes + personal facts) ────────────────────────
+    # ── 5. Memory depth (episodes + personal facts + family tree) ─────────
     try:
         ep_ids  = await storage.list_keys("episodes")
         pf_ids  = await storage.list_keys("personal_facts")
         ep_counts, pf_counts = [], []
         for uid in ep_ids:
+            # skip test keys
+            if uid.startswith("test_") or uid.startswith("_test"):
+                continue
             d = await storage.load(f"episodes:{uid}", default=[])
             ep_counts.append(len(d) if isinstance(d, list) else 0)
         for uid in pf_ids:
-            d = await storage.load(f"personal_facts:{uid}", default={})
-            pf_counts.append(len(d.get("facts", [])))
+            d = await storage.load(f"personal_facts:{uid}", default={"facts": []})
+            # supporta sia formato lista (legacy) che dict {"facts": [...]}
+            if isinstance(d, list):
+                pf_counts.append(len(d))
+            elif isinstance(d, dict):
+                pf_counts.append(len(d.get("facts", [])))
+        # Bonus: family tree entries dell'owner
+        try:
+            owner_ids = await storage.list_keys("profile")
+            ft_total = 0
+            for oid in owner_ids:
+                p = await storage.load(f"profile:{oid}", default={})
+                ft_total += len(p.get("family_tree", {}))
+        except Exception:
+            ft_total = 0
         avg_ep = sum(ep_counts) / max(len(ep_counts), 1)
         avg_pf = sum(pf_counts) / max(len(pf_counts), 1)
         ep_score = _pct(avg_ep, _TARGET_EPISODES_PER_U)
         pf_score = _pct(avg_pf, _TARGET_FACTS_PER_U)
-        mem_score = (ep_score + pf_score) / 2
+        ft_score = _pct(ft_total, 10)   # target: 10 membri famiglia mappati
+        mem_score = (ep_score + pf_score + ft_score) / 3
         components["memory_depth"] = {
             "score": mem_score,
             "label": "Memoria",
-            "detail": f"media {avg_ep:.0f} episodi · {avg_pf:.0f} fatti/utente",
+            "detail": f"media {avg_ep:.0f} ep · {avg_pf:.0f} fatti/utente · {ft_total} fam.tree",
             "value": (avg_ep + avg_pf) / 2,
         }
     except Exception:

@@ -158,15 +158,78 @@ class PredictiveEngine:
                 for t in data["recent_turns"]
             )
 
+            # Arricchisce il contesto con profilo, fatti personali e insights
+            context_parts: list[str] = []
+            try:
+                profile = await storage.load(f"profile:{user_id}", default={})
+                name       = profile.get("name", "")
+                profession = profile.get("profession", "")
+                interests  = ", ".join(profile.get("interests", [])[:5])
+                spouse     = profile.get("spouse", "")
+                city       = profile.get("city", "")
+                ft         = profile.get("family_tree", {})
+                ft_members = ", ".join(
+                    f"{v.get('name')} ({v.get('relationship')})"
+                    for v in ft.values() if v.get("name")
+                )[:120] if ft else ""
+                profile_lines = []
+                if name:       profile_lines.append(f"Nome: {name}")
+                if profession: profile_lines.append(f"Professione: {profession}")
+                if city:       profile_lines.append(f"Città: {city}")
+                if interests:  profile_lines.append(f"Interessi: {interests}")
+                if spouse:     profile_lines.append(f"Partner: {spouse}")
+                if ft_members: profile_lines.append(f"Famiglia conosciuta: {ft_members}")
+                if profile_lines:
+                    context_parts.append("PROFILO UTENTE:\n" + "\n".join(profile_lines))
+            except Exception:
+                pass
+            try:
+                pf_raw = await storage.load(f"personal_facts:{user_id}", default={"facts": []})
+                pf_list = pf_raw if isinstance(pf_raw, list) else pf_raw.get("facts", [])
+                if pf_list:
+                    facts_text = "; ".join(
+                        f"{f['key'].replace('_',' ')}: {f['value']}"
+                        for f in pf_list[-10:]
+                        if isinstance(f, dict)
+                    )
+                    context_parts.append(f"FATTI PERSONALI RECENTI:\n{facts_text}")
+            except Exception:
+                pass
+            try:
+                gi = await storage.load(f"global_insights:{user_id}", default={})
+                insights = gi.get("insights", [])
+                if insights:
+                    ins_text = "; ".join(
+                        i.get("insight", "") for i in insights[-5:] if isinstance(i, dict)
+                    )
+                    context_parts.append(f"PATTERN COMPORTAMENTALI:\n{ins_text}")
+            except Exception:
+                pass
+            try:
+                episodes = await storage.load(f"episodes:{user_id}", default=[])
+                if isinstance(episodes, list) and episodes:
+                    recent_ep = "; ".join(
+                        ep.get("summary", ep.get("title", ""))
+                        for ep in episodes[-3:]
+                        if isinstance(ep, dict)
+                    )
+                    context_parts.append(f"EPISODI RECENTI:\n{recent_ep}")
+            except Exception:
+                pass
+
+            context_block = ("\n\n".join(context_parts) + "\n\n") if context_parts else ""
+
             prediction = await llm_service._call_model(
                 "openai/gpt-4o-mini",
                 (
                     "Sei un sistema predittivo integrato in un assistente personale. "
-                    "Analizza la conversazione e prevedi in UNA frase breve e specifica "
+                    "Hai accesso al profilo completo dell'utente: fatti personali, pattern comportamentali, "
+                    "episodi vissuti e famiglia. Usa tutto questo per prevedere con precisione "
                     "cosa dirà o chiederà l'utente nel prossimo messaggio. "
-                    "Rispondi SOLO con la previsione, nessuna altra parola."
+                    "Rispondi SOLO con la previsione in UNA frase breve e specifica, nessuna altra parola."
                 ),
                 (
+                    f"{context_block}"
                     f"Conversazione recente:\n{turns_text}\n\n"
                     "Cosa dirà probabilmente l'utente nel prossimo messaggio?"
                 ),
