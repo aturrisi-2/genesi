@@ -899,21 +899,22 @@ class FacebookService:
                     .filter(c => c.author && c.text);
             }""")
 
-            # Filtra: tieni solo commenti non di Giada (non già risposti da lei)
+            # Filtra: tieni solo commenti non di Giada, marca quelli già risposti per commento specifico
             giada_names = {"giada genesi", "giada", "g.genesi"}
-            replied_authors = set()
+            replied_keys = set()   # chiave = author|text[:50] — per commento specifico, non per autore
             result_list = []
             for c in raw:
                 author_lower = c["author"].lower()
                 if any(g in author_lower for g in giada_names):
-                    # Questo è un commento di Giada: segna l'autore precedente come già risposto
+                    # Commento di Giada → segna il commento PRECEDENTE come già risposto
                     if result_list:
-                        replied_authors.add(result_list[-1]["author"].lower())
+                        prev = result_list[-1]
+                        replied_keys.add(f"{prev['author']}|{prev['text'][:50]}")
                 else:
                     result_list.append({"author": c["author"], "text": c["text"], "post_url": full_url})
 
-            # Rimuovi chi ha già ricevuto una risposta
-            comments = [c for c in result_list if c["author"].lower() not in replied_authors]
+            # Rimuovi solo i commenti specifici già risposti (altri dello stesso autore passano)
+            comments = [c for c in result_list if f"{c['author']}|{c['text'][:50]}" not in replied_keys]
             _slog("FACEBOOK_POST_COMMENTS", url=post_url[:80], total=len(raw), unreplied=len(comments))
         except Exception as e:
             logger.debug("FACEBOOK_READ_COMMENTS_FAIL url=%s err=%s", post_url[:60], e)
@@ -963,7 +964,7 @@ class FacebookService:
                 for comment in comments:
                     if count >= max_replies:
                         break
-                    comment_id = f"{comment['author']}|{post_url}"
+                    comment_id = f"{comment['author']}|{comment['text'][:50]}|{post_url}"
                     if comment_id in replied_ids:
                         continue
 
