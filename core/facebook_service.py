@@ -889,10 +889,9 @@ class FacebookService:
 
     async def reply_to_comments_on_own_posts(self, mode: str = "semi", max_replies: int = 3) -> int:
         """
-        Legge i post recenti di Giada, trova commenti senza risposta.
-        semi → accoda per approvazione admin
-        full → risponde direttamente
-        Ritorna il numero di risposte inviate/accodate.
+        Legge i post recenti di Giada, trova commenti senza risposta e risponde in auto.
+        Le risposte ai commenti sono sempre automatiche (sia semi che full).
+        I nuovi mi piace vengono ringraziati automaticamente.
         """
         count = 0
         try:
@@ -908,24 +907,18 @@ class FacebookService:
                 if count >= max_replies:
                     break
 
-                # Like detection: controlla nuovi mi piace
+                # Like detection: ringrazia i nuovi mi piace in auto
                 post_id = post_url.split("story_fbid=")[-1][:20] if "story_fbid=" in post_url else post_url[-20:]
                 new_likes = await self.check_new_likes(post_url, post_id)
                 if new_likes > 0:
                     like_reply = await self._generate_like_thanks(new_likes)
                     if like_reply:
-                        if mode == "semi":
-                            await self.queue_pending_reply(
-                                post_url, "__likes__",
-                                f"{new_likes} nuovi mi piace", like_reply
-                            )
-                        else:
-                            ok = await self._post_reply_to_comment(post_url, "__likes__", like_reply)
-                            if ok:
-                                _slog("FACEBOOK_LIKE_THANKS_SENT", post=post_url[:60],
-                                      new_likes=new_likes, chars=len(like_reply))
+                        ok = await self._post_reply_to_comment(post_url, "__likes__", like_reply)
+                        if ok:
+                            _slog("FACEBOOK_LIKE_THANKS_SENT", post=post_url[:60],
+                                  new_likes=new_likes, chars=len(like_reply))
 
-                # Commenti senza risposta
+                # Risposte ai commenti — sempre automatiche
                 comments = await self.read_post_comments(post_url)
                 post_text = ""
                 try:
@@ -946,23 +939,15 @@ class FacebookService:
                     if not reply_text:
                         continue
 
-                    if mode == "semi":
-                        rid = await self.queue_pending_reply(
-                            post_url, comment["author"], comment["text"], reply_text
-                        )
-                        if rid:
-                            count += 1
-                            replied_ids.add(comment_id)
-                    else:
-                        ok = await self._post_reply_to_comment(post_url, comment["author"], reply_text)
-                        if ok:
-                            count += 1
-                            replied_ids.add(comment_id)
-                            await self._record_interaction("comment_replied",
-                                author=comment["author"], content_preview=reply_text[:100])
-                            _slog("FACEBOOK_REPLY_SENT", author=comment["author"],
-                                  post=post_url[:60], chars=len(reply_text))
-                            await self._human_delay(10, 25)
+                    ok = await self._post_reply_to_comment(post_url, comment["author"], reply_text)
+                    if ok:
+                        count += 1
+                        replied_ids.add(comment_id)
+                        await self._record_interaction("comment_replied",
+                            author=comment["author"], content_preview=reply_text[:100])
+                        _slog("FACEBOOK_REPLY_SENT", author=comment["author"],
+                              post=post_url[:60], chars=len(reply_text))
+                        await self._human_delay(10, 25)
 
             await storage.save("facebook:replied_comments", {"ids": list(replied_ids)[-500:]})
         except Exception as e:
