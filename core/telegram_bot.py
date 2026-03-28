@@ -591,7 +591,7 @@ async def handle_update(update: dict):
         if is_group and first_name:
             asyncio.create_task(update_member_seen(from_id, first_name))
             # Estrai relazioni familiari e aggiorna albero genealogico di Alfio
-            asyncio.create_task(extract_family_relationship(from_id, first_name, message))
+            asyncio.create_task(extract_family_relationship(str(from_id), first_name, message, "telegram"))
 
         # ── Logica gruppi ──────────────────────────────────────────────────────
         if is_group:

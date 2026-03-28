@@ -562,6 +562,16 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False):
 
         city = session.get("city", "")
 
+        # Estrai relazioni familiari da messaggi di gruppo (sempre, anche se Genesi tace)
+        if is_group and first_name and (text or caption):
+            try:
+                from core.telegram_group_memory import extract_family_relationship
+                asyncio.create_task(
+                    extract_family_relationship(wa_id, first_name, (text or caption), "whatsapp")
+                )
+            except Exception:
+                pass
+
         # ── FILTRO GRUPPI ─────────────────────────────────────────────────────
         # Nei gruppi risponde solo a: "Genesi" nel testo o saluto.
         if is_group and not _group_should_respond(text, caption=caption):

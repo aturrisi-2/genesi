@@ -385,11 +385,13 @@ async def get_family_context_block(owner_user_id: str) -> str:
 
 _OWNER_USER_ID_FOR_TREE = "6028d92a-94f2-4e2f-bcb7-012c861e3ab2"  # Alfio
 
-async def extract_family_relationship(from_id: int, first_name: str, text: str) -> None:
+async def extract_family_relationship(
+    member_id: str, first_name: str, text: str, platform: str = "telegram"
+) -> None:
     """
-    Analizza ogni messaggio del gruppo con LLM leggero.
+    Analizza ogni messaggio del gruppo con LLM leggero (qualsiasi piattaforma).
     Se il mittente dichiara una relazione con Alfio (sorella, madre, figlio, ecc.):
-      1. Salva la relazione nel profilo del membro del gruppo
+      1. Salva la relazione nel profilo del membro (Telegram) o in storage generico
       2. Aggiorna l'albero genealogico di Alfio (family_tree nel suo profilo)
       3. Aggiunge un fatto personale in personal_facts di Alfio
     Fail-silent. Non blocca il flusso principale.
@@ -398,7 +400,6 @@ async def extract_family_relationship(from_id: int, first_name: str, text: str) 
         return
     try:
         from core.llm_service import llm_service
-        from core.storage import storage
 
         raw = await llm_service._call_model(
             "openai/gpt-4o-mini",
@@ -427,28 +428,44 @@ async def extract_family_relationship(from_id: int, first_name: str, text: str) 
         if not relationship:
             return
 
-        # 1. Salva nel profilo del membro del gruppo
         s = await _storage()
-        member = await get_member(from_id)
-        member["relationship_to_owner"] = relationship
-        member["display_name"] = name
-        facts = member.get("facts", {})
-        facts["relazione_con_alfio"] = relationship
-        member["facts"] = facts
-        await s.save(_member_key(from_id), member)
+
+        # 1. Salva nel profilo del membro (solo Telegram ha _member_key int-based)
+        if platform == "telegram":
+            try:
+                from_id_int = int(member_id)
+                member = await get_member(from_id_int)
+                member["relationship_to_owner"] = relationship
+                member["display_name"] = name
+                facts = member.get("facts", {})
+                facts["relazione_con_alfio"] = relationship
+                member["facts"] = facts
+                await s.save(_member_key(from_id_int), member)
+            except Exception:
+                pass
+        else:
+            # Profilo generico per altre piattaforme
+            generic_key = f"group_member:{platform}:{member_id}"
+            member = await s.load(generic_key, default={}) or {}
+            member["relationship_to_owner"] = relationship
+            member["display_name"] = name
+            member["platform"] = platform
+            member["first_name"] = first_name
+            await s.save(generic_key, member)
 
         # 2. Aggiorna albero genealogico nel profilo di Alfio
         profile_key = f"profile:{_OWNER_USER_ID_FOR_TREE}"
         profile = await s.load(profile_key, default={}) or {}
         family_tree = profile.get("family_tree", {})
-        tree_key = f"telegram_{from_id}"
+        tree_key = f"{platform}_{member_id}"
         family_tree[tree_key] = {
             "name":         name,
             "relationship": relationship,
-            "from_id":      from_id,
-            "telegram_name": first_name,
+            "member_id":    member_id,
+            "display_name": first_name,
             "notes":        notes,
-            "source":       "telegram_group",
+            "platform":     platform,
+            "source":       f"{platform}_group",
         }
         profile["family_tree"] = family_tree
         await s.save(profile_key, profile)
@@ -456,21 +473,21 @@ async def extract_family_relationship(from_id: int, first_name: str, text: str) 
         # 3. Aggiunge fatto personale in personal_facts di Alfio
         pf_key = f"personal_facts:{_OWNER_USER_ID_FOR_TREE}"
         pf_list = await s.load(pf_key, default=[]) or []
-        # Rimuovi eventuale voce precedente per la stessa chiave
-        fact_key = f"famiglia_{relationship}_{from_id}"
+        fact_key = f"famiglia_{relationship}_{platform}_{member_id}"
         pf_list = [f for f in pf_list if f.get("key") != fact_key]
         pf_list.append({
             "key":    fact_key,
             "value":  f"{name} ({relationship})" + (f" — {notes}" if notes else ""),
-            "source": "telegram_group",
+            "source": f"{platform}_group",
         })
-        pf_list = pf_list[-100:]  # max 100 fatti
+        pf_list = pf_list[-100:]
         await s.save(pf_key, pf_list)
 
         logger.info(
-            "FAMILY_RELATIONSHIP_EXTRACTED from_id=%s name=%s relationship=%s",
-            from_id, name, relationship
+            "FAMILY_RELATIONSHIP_EXTRACTED platform=%s member_id=%s name=%s relationship=%s",
+            platform, member_id, name, relationship
         )
 
     except Exception as exc:
-        logger.debug("FAMILY_RELATIONSHIP_ERROR from_id=%s err=%s", from_id, exc)
+        logger.debug("FAMILY_RELATIONSHIP_ERROR platform=%s member_id=%s err=%s",
+                     platform, member_id, exc)
