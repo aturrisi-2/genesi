@@ -65,10 +65,17 @@ async def moltbook_status(_: AuthUser = Depends(require_admin)):
     total_exchanges = sum(p.get("exchange_count", 0) for p in agent_profiles.values())
 
     # Lab feedback cycle observations from Moltbook
-    lab_data = await storage.load("lab:feedback_events", default={"events": []})
+    # Le osservazioni vengono scritte in memory/admin/fallbacks.json da record_observation()
+    import json as _json
+    from pathlib import Path as _Path
+    _fallbacks_path = _Path("memory/admin/fallbacks.json")
+    try:
+        _fallbacks = _json.loads(_fallbacks_path.read_text(encoding="utf-8")) if _fallbacks_path.exists() else []
+    except Exception:
+        _fallbacks = []
     moltbook_obs = [
-        e for e in lab_data.get("events", [])
-        if e.get("source") == "moltbook_interaction_log"
+        e for e in (_fallbacks if isinstance(_fallbacks, list) else [])
+        if "moltbook" in e.get("user_message", "") or "moltbook" in e.get("fallback_type", "")
     ]
 
     return {
