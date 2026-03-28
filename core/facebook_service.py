@@ -678,12 +678,28 @@ class FacebookService:
                     await asyncio.sleep(0.8)
                     break
 
-            # Clicca Pubblica
+            # Log diagnostico: quali pulsanti esistono dopo il typing?
+            btn_labels = await self._page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('button, [role="button"]'))
+                    .map(b => b.getAttribute('aria-label') || b.innerText?.trim().substring(0, 30))
+                    .filter(Boolean).slice(0, 20);
+            }""")
+            _slog("FACEBOOK_BUTTONS_AFTER_TYPING", labels=btn_labels[:20])
+
+            # Clicca Pubblica — prova più selettori incluso testo visibile
             publish_btn = await self._page.query_selector('[aria-label="Pubblica"]')
             if not publish_btn:
                 publish_btn = await self._page.query_selector('[aria-label="Posta"]')
             if not publish_btn:
-                publish_btn = await self._page.query_selector('button[type="submit"]')
+                # Cerca per testo visibile "Pubblica" o "Posta"
+                publish_btn = await self._page.evaluate("""() => {
+                    for (const btn of document.querySelectorAll('button, [role="button"]')) {
+                        const txt = (btn.innerText || '').trim();
+                        if (txt === 'Pubblica' || txt === 'Posta') return btn;
+                    }
+                    return null;
+                }""")
+            _slog("FACEBOOK_PUBLISH_BTN", found=bool(publish_btn))
             if publish_btn:
                 await self._page.evaluate('el => el.click()', publish_btn)
                 await self._human_delay(3, 5)
@@ -692,6 +708,7 @@ class FacebookService:
                 _slog("FACEBOOK_POSTED", group=group_name, chars=len(content))
             else:
                 result["error"] = "Bottone Pubblica non trovato"
+                _slog("FACEBOOK_PUBLISH_BTN_NOT_FOUND", group=group_name)
         except Exception as e:
             result["error"] = f"{type(e).__name__}: {e}"
             logger.warning("FACEBOOK_POST_FAIL err=%s", result["error"])
