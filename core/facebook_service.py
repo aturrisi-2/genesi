@@ -1021,19 +1021,38 @@ class FacebookService:
     # ════════════════════════════════════════════════════════════════════════
 
     async def read_post_like_count(self, post_url: str) -> int:
-        """Legge il numero totale di reazioni (mi piace + altri) su un post."""
+        """
+        Legge il totale di reazioni sul post principale + sui commenti interni.
+        Naviga al post se necessario (riusa la pagina se già caricata).
+        """
         try:
             full_url = post_url if post_url.startswith("http") else f"https://www.facebook.com{post_url}"
-            await self._page.goto(full_url, timeout=20000)
-            await self._human_delay(1, 2)
-            count = await self._page.evaluate("""() => {
-                // aria-label tipo "Mi piace: 5 persone" o "Tutte le reazioni: 5 905"
-                const btn = document.querySelector('[aria-label*=\"Mi piace:\"], [aria-label*=\"Tutte le reazioni:\"], [aria-label*=\"reazioni\"]');
-                if (!btn) return 0;
-                const m = btn.getAttribute('aria-label').match(/\\d+/);
-                return m ? parseInt(m[0]) : 0;
+            if self._page.url.rstrip("/") != full_url.rstrip("/"):
+                await self._page.goto(full_url, timeout=20000)
+                await self._human_delay(1, 2)
+
+            total = await self._page.evaluate("""() => {
+                let count = 0;
+                // Reazioni sul post principale
+                document.querySelectorAll(
+                    '[aria-label*=\"Mi piace:\"], [aria-label*=\"Tutte le reazioni:\"], ' +
+                    '[aria-label*=\"reazioni\"], [aria-label*=\"reaction\"]'
+                ).forEach(btn => {
+                    const m = (btn.getAttribute('aria-label') || '').match(/\\d+/);
+                    if (m) count += parseInt(m[0]);
+                });
+                // Reazioni sui singoli commenti (articles interni)
+                document.querySelectorAll('[role="article"]').forEach(art => {
+                    art.querySelectorAll(
+                        '[aria-label*=\"Mi piace:\"], [aria-label*=\"reazioni\"], [aria-label*=\"reaction\"]'
+                    ).forEach(btn => {
+                        const m = (btn.getAttribute('aria-label') || '').match(/\\d+/);
+                        if (m) count += parseInt(m[0]);
+                    });
+                });
+                return count;
             }""")
-            return count
+            return total
         except Exception:
             return 0
 
