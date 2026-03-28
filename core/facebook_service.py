@@ -197,6 +197,38 @@ class FacebookService:
             logger.warning("FACEBOOK_BROWSER_START_FAIL err=%s(%s)", type(e).__name__, e)
             return False
 
+    async def _reset_browser_context(self) -> None:
+        """
+        Chiude il context corrente e ne apre uno nuovo (stesso browser).
+        Usato prima di ogni approvazione manuale per avere un context pulito
+        senza cookie residui accumulati dalla sessione precedente.
+        """
+        try:
+            if self._context:
+                await self._context.close()
+        except Exception:
+            pass
+        try:
+            self._context = await self._browser.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
+                viewport={"width": 1366, "height": 768},
+                locale="it-IT",
+                timezone_id="Europe/Rome",
+            )
+            await self._context.add_init_script(
+                "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"
+            )
+            self._page = await self._context.new_page()
+            if self._stealth:
+                await self._stealth(self._page)
+            _slog("FACEBOOK_CONTEXT_RESET")
+        except Exception as e:
+            _slog("FACEBOOK_CONTEXT_RESET_FAIL", err=str(e)[:200])
+
     async def close_browser(self) -> None:
         """Chiude browser e libera risorse. Chiamato allo shutdown."""
         try:
@@ -1217,7 +1249,16 @@ class FacebookService:
             ok = await self._ensure_browser()
             if not ok:
                 return {"success": False, "error": "Browser non disponibile"}
+
+            # Ricrea sempre il context per avere un browser pulito con la sessione originale
+            await self._reset_browser_context()
             await self.load_session()
+
+            # Verifica login prima di tentare il post
+            logged = await self.is_logged_in()
+            if not logged:
+                _slog("FACEBOOK_APPROVE_NOT_LOGGED_IN", post_id=post_id)
+                return {"success": False, "error": "Sessione Facebook scaduta — reimporta i cookie dall'admin panel"}
 
             if group == "timeline":
                 result = await self.post_to_timeline(target["content"], mention=target.get("mention", ""))
@@ -1235,7 +1276,8 @@ class FacebookService:
             if result["success"]:
                 await self._record_interaction("post_published",
                     group=group, content_preview=target["content"][:200])
-                await self.save_session()
+                # NON salvare la sessione qui: Facebook riduce i cookie durante il posting
+                # e save_session() sovrascriverebbe la sessione originale con una incompleta
             return result
         except Exception as e:
             _slog("FACEBOOK_APPROVE_EXCEPTION", post_id=post_id,
