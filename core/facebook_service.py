@@ -439,28 +439,41 @@ class FacebookService:
                             await links[0].click()
                             await self._human_delay(3, 5)
 
-            # Raccogli i post visibili
-            post_elements = await self._page.query_selector_all('[data-pagelet*="FeedUnit"]')
-            if not post_elements:
-                post_elements = await self._page.query_selector_all('[role="article"]')
+            # Scroll per triggerare il lazy loading dei post di gruppo
+            for _ in range(3):
+                await self._page.mouse.wheel(0, 600)
+                await asyncio.sleep(1)
 
-            for el in post_elements[:max_posts]:
-                try:
-                    text_el = await el.query_selector('[data-ad-comet-preview="message"], [dir="auto"]')
-                    text = await text_el.inner_text() if text_el else ""
-                    author_el = await el.query_selector('a[href*="/profile"], strong a, h2 a')
-                    author = await author_el.inner_text() if author_el else "Anonimo"
-                    link_el = await el.query_selector('a[href*="/posts/"], a[href*="/permalink/"]')
-                    url = await link_el.get_attribute("href") if link_el else ""
-                    if text.strip():
-                        posts.append({
-                            "author": author.strip()[:60],
-                            "text":   text.strip()[:400],
-                            "url":    url or "",
-                            "group":  group_name,
-                        })
-                except Exception:
+            # Estrai post via JS (più robusto del query_selector su elementi lazy)
+            raw_posts = await self._page.evaluate("""(maxPosts) => {
+                var results = [];
+                var articles = Array.from(document.querySelectorAll("[role=article]"));
+                for (var i = 0; i < Math.min(articles.length, maxPosts + 5); i++) {
+                    var a = articles[i];
+                    var text = a.innerText || "";
+                    if (text.trim().length < 15) continue;
+                    // URL del post
+                    var linkEl = a.querySelector("a[href*='/posts/'], a[href*='/permalink/'], a[href*='/groups/'][href*='?id=']");
+                    var url = linkEl ? linkEl.getAttribute("href") : "";
+                    // Autore
+                    var authorEl = a.querySelector("a[href*='/profile'], strong a, h2 a, h3 a");
+                    var author = authorEl ? (authorEl.innerText || "").trim() : "";
+                    results.push({text: text.substring(0, 500), url: url, author: author});
+                    if (results.length >= maxPosts) break;
+                }
+                return results;
+            }""", max_posts)
+
+            for item in raw_posts:
+                text = item.get("text", "").strip()
+                if len(text) < 15:
                     continue
+                posts.append({
+                    "author": item.get("author", "")[:60],
+                    "text":   text[:400],
+                    "url":    item.get("url", "") or "",
+                    "group":  group_name,
+                })
 
             _slog("FACEBOOK_FEED_READ", group=group_name, posts_found=len(posts))
         except Exception as e:
