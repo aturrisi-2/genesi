@@ -191,6 +191,7 @@ class FacebookService:
                 await self._stealth(self._page)
             return True
         except Exception as e:
+            _slog("FACEBOOK_BROWSER_START_FAIL", err_type=type(e).__name__, err=str(e)[:200])
             logger.warning("FACEBOOK_BROWSER_START_FAIL err=%s(%s)", type(e).__name__, e)
             return False
 
@@ -256,16 +257,24 @@ class FacebookService:
     async def is_logged_in(self) -> bool:
         """Verifica se la sessione è autenticata navigando su facebook.com."""
         try:
+            if self._page is None:
+                _slog("FACEBOOK_IS_LOGGED_IN_FAIL", reason="page_is_None")
+                return False
             await self._page.goto("https://www.facebook.com/", timeout=20000)
             await asyncio.sleep(2)
             url = self._page.url
+            _slog("FACEBOOK_IS_LOGGED_IN_URL", url=url[:120])
             # Se redirect a /login → non loggato
             if "/login" in url or "/checkpoint" in url:
+                _slog("FACEBOOK_IS_LOGGED_IN_FAIL", reason="redirect_login", url=url[:120])
                 return False
             # Controlla presenza nav bar (indicatore login)
             nav = await self._page.query_selector('[aria-label="Facebook"]')
-            return nav is not None
-        except Exception:
+            logged = nav is not None
+            _slog("FACEBOOK_IS_LOGGED_IN_RESULT", logged=logged, nav_found=(nav is not None))
+            return logged
+        except Exception as e:
+            _slog("FACEBOOK_IS_LOGGED_IN_EXCEPTION", err_type=type(e).__name__, err=str(e)[:200])
             return False
 
     async def manual_login_session(self) -> dict:
@@ -805,13 +814,18 @@ class FacebookService:
                 return result
 
             # Avvia browser e carica sessione
+            _slog("FACEBOOK_HB_BROWSER_START")
             ok = await self._ensure_browser(headless=True)
+            _slog("FACEBOOK_HB_BROWSER_RESULT", ok=ok,
+                  browser_connected=(self._browser.is_connected() if self._browser else False),
+                  page_is_none=(self._page is None))
             if not ok:
                 result["skipped"] = True
                 result["reason"]  = "browser_unavailable"
                 return result
 
-            await self.load_session()
+            sess_ok = await self.load_session()
+            _slog("FACEBOOK_HB_SESSION_LOADED", session_ok=sess_ok)
             if not await self.is_logged_in():
                 result["skipped"] = True
                 result["reason"]  = "not_logged_in"
