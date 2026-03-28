@@ -420,13 +420,14 @@ async def _sync_family_background(chat_id: int):
 
 # ── Genesi API calls ───────────────────────────────────────────────────────────
 
-async def _chat(token: str, message: str, city: str = "") -> str:
+async def _chat(token: str, message: str, city: str = "", is_group: bool = False) -> str:
     if city and _WEATHER_RE.search(message) and city.lower() not in message.lower():
         message = f"{message} (sono a {city})"
+    platform = "telegram_group" if is_group else "telegram"
     async with httpx.AsyncClient(timeout=60) as client:
         res = await client.post(
             f"{GENESI_URL}/api/chat",
-            json={"message": message, "platform": "telegram"},
+            json={"message": message, "platform": platform},
             headers={"Authorization": f"Bearer {token}"},
         )
         if res.status_code == 401:
@@ -811,7 +812,7 @@ async def handle_update(update: dict):
                 enriched = _group_msg(message, group_ctx)
             else:
                 enriched = _group_msg(message)
-            reply = await _chat(token, enriched, city=city)
+            reply = await _chat(token, enriched, city=city, is_group=is_group)
             if reply == "__TOKEN_EXPIRED__":
                 if is_group:
                     new_token = await _refresh_member_token(from_id)
@@ -819,7 +820,7 @@ async def handle_update(update: dict):
                     new_token = await _auto_refresh(session_uid, session)
                 if new_token:
                     token = new_token
-                    reply = await _chat(token, enriched, city=city)
+                    reply = await _chat(token, enriched, city=city, is_group=is_group)
                 else:
                     reply = "__AUTH_FAILED__"
             # Automiglioramento + storia di gruppo in background

@@ -257,7 +257,7 @@ class Proactor:
                 from calendar_manager import calendar_manager
                 has_google = profile.get("google_token") or (is_admin and calendar_manager._admin_google_service is not None)
 
-                if total_msgs < 1 and not has_icloud and not has_google:
+                if total_msgs < 1 and not has_icloud and not has_google and self._current_platform != "telegram_group":
                     if not any(kw in response.lower() for kw in ["cloud", "icloud", "google", "calendar", "sincronizza", "collega"]):
                         # Suggest only on the very first message
                         if is_admin:
@@ -862,7 +862,9 @@ class Proactor:
 
                 # DISPATCHER
                 # ── Pre-check: flusso OpenClaw multi-turno globale (priorità massima) ──────────
-                _openclaw_state = await storage.load(f"openclaw_session:{user_id}", default=None)
+                # Non attivare OpenClaw nei gruppi Telegram — non è un contesto appropriato
+                _openclaw_state = None if self._current_platform == "telegram_group" else \
+                    await storage.load(f"openclaw_session:{user_id}", default=None)
                 if _openclaw_state:
                     if processed_message.lower() in ("annulla", "stop", "esci", "cancel", "no", "interrompi"):
                         await storage.delete(f"openclaw_session:{user_id}")
@@ -913,11 +915,17 @@ class Proactor:
                     current_response = await self._handle_calendar_sync_all(user_id, processed_message)
                     final_source = "tool"
                     
+                elif current_intent in ("icloud_setup", "icloud_sync", "google_setup", "google_sync") \
+                        and self._current_platform == "telegram_group":
+                    # Nei gruppi Telegram i servizi personali non sono disponibili — ignora
+                    log("ROUTING_DECISION", route="group_service_blocked", intent=current_intent, user_id=user_id)
+                    current_intent = "relational"
+
                 elif current_intent == "icloud_setup":
                     log("ROUTING_DECISION", route="icloud_setup", user_id=user_id)
                     current_response = await self._handle_integration_setup(user_id, "icloud")
                     final_source = "tool"
-                
+
                 elif current_intent == "icloud_sync":
                     log("ROUTING_DECISION", route="icloud_sync", user_id=user_id)
                     current_response = await self._handle_icloud_sync(user_id, processed_message)
@@ -1024,7 +1032,7 @@ class Proactor:
                     current_response = await self._handle_location(user_id, processed_message, brain_state)
                     final_source = "tool"
                     
-                elif current_intent == "openclaw":
+                elif current_intent == "openclaw" and self._current_platform != "telegram_group":
                     log("ROUTING_DECISION", route="openclaw", user_id=user_id)
                     self._emit_status("Navigo il web per te...")
                     current_response = await self._handle_openclaw(user_id, processed_message)
