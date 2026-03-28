@@ -542,6 +542,37 @@ class FacebookService:
             logger.warning("FACEBOOK_POST_FAIL err=%s", result["error"])
         return result
 
+    async def _dismiss_blocking_dialogs(self) -> None:
+        """
+        Chiude popup bloccanti di Facebook (es. 'unione pubblico', cookie consent, ecc.)
+        prima di interagire con la pagina. Fail-silent.
+        """
+        try:
+            # Prova prima Escape — chiude la maggior parte dei dialog
+            await self._page.keyboard.press("Escape")
+            await asyncio.sleep(0.5)
+
+            # Cerca pulsanti di chiusura comuni nei dialog
+            close_selectors = [
+                '[aria-label="Chiudi"]',
+                '[aria-label="Close"]',
+                '[aria-label="Non ora"]',
+                '[aria-label="Ignora"]',
+                'div[role="dialog"] [role="button"][aria-label]',  # primo button con label nel dialog
+            ]
+            for sel in close_selectors:
+                try:
+                    btn = await self._page.query_selector(sel)
+                    if btn:
+                        await btn.click(timeout=3000)
+                        await asyncio.sleep(0.5)
+                        _slog("FACEBOOK_DIALOG_DISMISSED", selector=sel)
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
     async def post_to_timeline(self, content: str, mention: str = "") -> dict:
         """
         Posta sulla bacheca personale di Giada.
@@ -552,58 +583,72 @@ class FacebookService:
             await self._page.goto("https://www.facebook.com/", timeout=20000)
             await self._human_delay(2, 4)
 
-            # Trova il box "Cosa stai pensando?" sulla home
-            write_box = await self._page.query_selector('[aria-label*="Cosa stai pensando"]')
-            if not write_box:
-                write_box = await self._page.query_selector('[data-testid="status-attachment-mentions-input"]')
-            if not write_box:
-                # Prova a cliccare il placeholder che apre il dialog
-                placeholder = await self._page.query_selector('[role="button"][tabindex="0"]')
-                if placeholder:
-                    await placeholder.click()
-                    await self._human_delay(1, 2)
-                    write_box = await self._page.query_selector('[role="textbox"][contenteditable="true"]')
-
-            if not write_box:
-                result["error"] = "Box bacheca non trovato"
+            # 1. Clicca il pulsante "A cosa stai pensando?" via JS per bypassare overlay
+            open_btn = await self._page.query_selector(
+                '[aria-label="Crea un post"] [role="button"]:not([aria-label])'
+            )
+            if not open_btn:
+                open_btn = await self._page.query_selector('[aria-label="Crea un post"] [role="button"]')
+            if not open_btn:
+                result["error"] = "Pulsante apertura post non trovato"
                 return result
 
-            await write_box.click()
+            # Usa JS click per bypassare overlay che intercetta eventi pointer
+            await self._page.evaluate('btn => btn.click()', open_btn)
+            await self._human_delay(1.5, 2.5)
+
+            # 2. Chiudi popup "unione pubblico" (aria-label="Non ora" o "Ok")
+            for dismiss_label in ('Non ora', 'Ok'):
+                dismiss_btn = await self._page.query_selector(f'[aria-label="{dismiss_label}"]')
+                if dismiss_btn:
+                    try:
+                        await self._page.evaluate('b => b.click()', dismiss_btn)
+                        await asyncio.sleep(0.8)
+                        _slog("FACEBOOK_POPUP_DISMISSED", label=dismiss_label)
+                    except Exception:
+                        pass
+                    break
+
             await self._human_delay(0.5, 1.5)
 
-            # Se c'è una menzione, inserisci @nome per attivare il tag
+            # 3. Trova il textbox nel dialog di composizione
+            write_box = await self._page.query_selector('[role="textbox"][contenteditable="true"]')
+            if not write_box:
+                result["error"] = "Textbox composizione non trovato"
+                return result
+
+            await self._page.evaluate('el => el.focus()', write_box)
+            await self._human_delay(0.5, 1)
+
+            # 4. Testo (con menzione opzionale)
             if mention:
-                full_content = f"@{mention} {content}"
-                # Digita @ + nome per far apparire i suggerimenti di tag
                 await self._type_humanlike(write_box, f"@{mention}")
                 await self._human_delay(1.5, 3)
-                # Cerca il suggerimento nella dropdown e cliccalo
                 suggestion = await self._page.query_selector('[role="option"]')
                 if suggestion:
-                    await suggestion.click()
+                    await self._page.evaluate('el => el.click()', suggestion)
                     await self._human_delay(0.5, 1)
-                    # Aggiungi il resto del testo
                     await self._type_humanlike(write_box, f" {content}")
                 else:
-                    # Nessun suggerimento trovato, scrivi tutto senza tag
                     await self._type_humanlike(write_box, f" {content}")
             else:
                 await self._type_humanlike(write_box, content)
 
             await self._human_delay(2, 4)
 
-            # Pubblica
+            # 5. Pubblica
             publish_btn = await self._page.query_selector('[aria-label="Pubblica"]')
             if not publish_btn:
-                publish_btn = await self._page.query_selector('button[type="submit"]')
-            if publish_btn:
-                await publish_btn.click()
-                await self._human_delay(3, 5)
-                result["success"] = True
-                result["post_url"] = self._page.url
-                _slog("FACEBOOK_TIMELINE_POSTED", chars=len(content), mention=mention or "none")
-            else:
+                publish_btn = await self._page.query_selector('[aria-label="Posta"]')
+            if not publish_btn:
                 result["error"] = "Bottone Pubblica non trovato"
+                return result
+
+            await self._page.evaluate('btn => btn.click()', publish_btn)
+            await self._human_delay(3, 5)
+            result["success"] = True
+            result["post_url"] = self._page.url
+            _slog("FACEBOOK_TIMELINE_POSTED", chars=len(content), mention=mention or "none")
         except Exception as e:
             result["error"] = f"{type(e).__name__}: {e}"
             logger.warning("FACEBOOK_TIMELINE_POST_FAIL err=%s", result["error"])
