@@ -626,35 +626,43 @@ class FacebookService:
             await self._page.evaluate("window.scrollTo(0, 0)")
             await asyncio.sleep(1)
 
-            # Aspetta che appaia il pulsante "Scrivi qualcosa" (o il textbox diretto)
+            # Aspetta il pulsante "Scrivi qualcosa" (placeholder del composer)
             try:
-                await self._page.wait_for_selector(
-                    '[aria-label*="Scrivi qualcosa"], [role="textbox"][contenteditable="true"]',
-                    timeout=10000
-                )
+                await self._page.wait_for_selector('[aria-label*="Scrivi qualcosa"]', timeout=10000)
             except Exception:
                 pass
 
-            # Prova prima a cliccare il pulsante "Scrivi qualcosa" (apre dialog)
-            open_btn = await self._page.query_selector('[aria-label*="Scrivi qualcosa"][role="button"]')
+            # Clicca il pulsante "Scrivi qualcosa" per aprire il dialog composer
+            # NOTA: su FB gruppi NON ha role="button" — cerchiamo solo per aria-label
+            open_btn = await self._page.query_selector('[aria-label*="Scrivi qualcosa"]')
             if not open_btn:
                 open_btn = await self._page.query_selector('[data-testid="status-attachment-mentions-input"]')
             if not open_btn:
-                # Fallback: qualsiasi div con placeholder "Scrivi qualcosa"
                 open_btn = await self._page.query_selector('[aria-placeholder*="Scrivi qualcosa"]')
-            if open_btn:
-                await self._page.evaluate('el => el.click()', open_btn)
-                await self._human_delay(1.5, 2.5)
-                _slog("FACEBOOK_GROUP_POST_OPENED_DIALOG")
 
-            # Trova il textbox (dentro il dialog o inline)
-            write_box = await self._page.query_selector('[role="textbox"][contenteditable="true"]')
+            if not open_btn:
+                result["error"] = "Pulsante Scrivi qualcosa non trovato"
+                _slog("FACEBOOK_GROUP_POST_BOX_NOT_FOUND", url=self._page.url[:80])
+                return result
+
+            _slog("FACEBOOK_GROUP_OPEN_BTN_FOUND")
+            await self._page.evaluate('el => el.click()', open_btn)
+
+            # Aspetta che il dialog si apra — indicatore: appare il pulsante Pubblica
+            try:
+                await self._page.wait_for_selector('[aria-label="Pubblica"], [aria-label="Posta"]', timeout=8000)
+                _slog("FACEBOOK_GROUP_POST_DIALOG_OPEN")
+            except Exception:
+                _slog("FACEBOOK_GROUP_POST_DIALOG_TIMEOUT")
+
+            await self._human_delay(1, 2)
+
+            # Trova il textbox dentro il dialog
+            write_box = await self._page.query_selector('[role="dialog"] [role="textbox"][contenteditable="true"]')
             if not write_box:
-                write_box = await self._page.query_selector('[aria-label*="Scrivi qualcosa"]')
+                write_box = await self._page.query_selector('[role="textbox"][contenteditable="true"]')
             if not write_box:
-                write_box = await self._page.query_selector('[aria-placeholder*="Scrivi qualcosa"]')
-            if not write_box:
-                result["error"] = "Box post non trovato"
+                result["error"] = "Box testo non trovato nel dialog"
                 _slog("FACEBOOK_GROUP_POST_BOX_NOT_FOUND", url=self._page.url[:80])
                 return result
 
