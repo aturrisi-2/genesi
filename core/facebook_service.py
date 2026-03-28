@@ -956,34 +956,53 @@ class FacebookService:
 
     async def _post_reply_to_comment(self, post_url: str, target_author: str, reply_text: str) -> bool:
         """
-        Naviga al post e inserisce una risposta nel campo commenti.
+        Naviga al post e inserisce una risposta DIRETTA al commento di target_author
+        (usa il pulsante 'Rispondi' sul commento specifico).
+        Se target_author è '__likes__' posta come commento generico.
         """
         try:
             full_url = post_url if post_url.startswith("http") else f"https://www.facebook.com{post_url}"
             await self._page.goto(full_url, timeout=20000)
             await self._human_delay(2, 3)
 
-            # 1. Clicca il pulsante "Lascia un commento" per attivare il textbox
-            activate_btn = await self._page.query_selector('[aria-label="Lascia un commento"][role="button"]')
-            if activate_btn:
-                await self._page.evaluate('el => el.click()', activate_btn)
-                await self._human_delay(0.8, 1.5)
+            reply_box = None
 
-            # 2. Il textbox reale: aria-label="Scrivi un commento…" o role=textbox contenteditable
-            comment_box = await self._page.query_selector('[aria-label="Scrivi un commento…"]')
-            if not comment_box:
-                comment_box = await self._page.query_selector('[role="textbox"][contenteditable="true"]')
-            if not comment_box:
-                _slog("FACEBOOK_REPLY_BOX_NOT_FOUND", post_url=post_url[:60])
+            if target_author != "__likes__":
+                # Trova il commento specifico di target_author e clicca "Rispondi"
+                articles = await self._page.query_selector_all('[role="article"]')
+                for art in articles:
+                    lbl = await art.get_attribute("aria-label") or ""
+                    if target_author.lower() in lbl.lower() and "Commento di" in lbl:
+                        # Clicca "Rispondi" dentro questo article
+                        rispondi = await art.query_selector('[aria-label="Rispondi al commento"]')
+                        if not rispondi:
+                            rispondi = await art.query_selector('[aria-label*="Rispondi"]')
+                        if rispondi:
+                            await self._page.evaluate('el => el.click()', rispondi)
+                            await self._human_delay(0.8, 1.5)
+                            # Il textbox di risposta appare dentro o sotto l'article
+                            reply_box = await self._page.query_selector('[role="textbox"][contenteditable="true"]')
+                        break
+
+            if not reply_box:
+                # Fallback: usa il box commento principale (per __likes__ o se non trova Rispondi)
+                activate_btn = await self._page.query_selector('[aria-label="Lascia un commento"][role="button"]')
+                if activate_btn:
+                    await self._page.evaluate('el => el.click()', activate_btn)
+                    await self._human_delay(0.8, 1.5)
+                reply_box = await self._page.query_selector('[aria-label="Scrivi un commento…"]')
+                if not reply_box:
+                    reply_box = await self._page.query_selector('[role="textbox"][contenteditable="true"]')
+
+            if not reply_box:
+                _slog("FACEBOOK_REPLY_BOX_NOT_FOUND", post_url=post_url[:60], author=target_author)
                 return False
 
-            await self._page.evaluate('el => el.focus()', comment_box)
+            await self._page.evaluate('el => el.focus()', reply_box)
             await self._human_delay(0.5, 1)
-            await self._type_humanlike(comment_box, reply_text)
+            await self._type_humanlike(reply_box, reply_text)
             await self._human_delay(1, 2)
 
-            # 3. Invia: prima cerca pulsante Pubblica/Invia nel contesto commenti,
-            #    altrimenti Enter
             submit_btn = await self._page.query_selector('[aria-label="Pubblica commento"]')
             if not submit_btn:
                 submit_btn = await self._page.query_selector('[aria-label="Invia commento"]')
