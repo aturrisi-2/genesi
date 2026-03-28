@@ -219,11 +219,15 @@ class FacebookService:
             sess = await storage.load(FB_SESSION_KEY, default={})
             cookies = sess.get("cookies", [])
             if not cookies:
+                _slog("FACEBOOK_LOAD_SESSION_EMPTY")
                 return False
-            await self._context.add_cookies(cookies)
+            # Normalizza in caso siano stati salvati in vecchio formato Firefox
+            normalized = [self._normalize_cookie(c) for c in cookies]
+            await self._context.add_cookies(normalized)
+            _slog("FACEBOOK_LOAD_SESSION_OK", count=len(normalized))
             return True
         except Exception as e:
-            logger.debug("FACEBOOK_LOAD_SESSION_FAIL err=%s", e)
+            _slog("FACEBOOK_LOAD_SESSION_FAIL", err_type=type(e).__name__, err=str(e)[:200])
             return False
 
     async def save_session(self) -> None:
@@ -237,18 +241,49 @@ class FacebookService:
         except Exception as e:
             logger.debug("FACEBOOK_SAVE_SESSION_FAIL err=%s", e)
 
+    @staticmethod
+    def _normalize_cookie(c: dict) -> dict:
+        """
+        Converte un cookie da formato Firefox/Cookie-Editor a formato Playwright.
+        Firefox:   expirationDate (float), sameSite "no_restriction", campi extra
+        Playwright: expires (float), sameSite "None"|"Lax"|"Strict", solo campi noti
+        """
+        _sameSite_map = {
+            "no_restriction": "None",
+            "lax":            "Lax",
+            "strict":         "Strict",
+            "none":           "None",
+        }
+        result: dict = {
+            "name":     c.get("name", ""),
+            "value":    c.get("value", ""),
+            "domain":   c.get("domain", ""),
+            "path":     c.get("path", "/"),
+            "secure":   bool(c.get("secure", False)),
+            "httpOnly": bool(c.get("httpOnly", False)),
+        }
+        # expires: Playwright vuole Unix timestamp float
+        exp = c.get("expires") or c.get("expirationDate")
+        if exp is not None:
+            result["expires"] = float(exp)
+        # sameSite
+        ss_raw = str(c.get("sameSite", "None")).lower()
+        result["sameSite"] = _sameSite_map.get(ss_raw, "None")
+        return result
+
     async def import_session_from_json(self, cookies: list) -> bool:
         """
         Importa cookies da JSON esterno (es. da estensione Cookie-Editor).
-        Utile per il seeding iniziale da VPS senza display.
+        Normalizza automaticamente dal formato Firefox a quello Playwright.
         """
         try:
+            normalized = [self._normalize_cookie(c) for c in cookies]
             await storage.save(FB_SESSION_KEY, {
-                "cookies":  cookies,
+                "cookies":  normalized,
                 "saved_at": datetime.utcnow().isoformat(),
                 "source":   "manual_import",
             })
-            _slog("FACEBOOK_SESSION_IMPORTED", count=len(cookies))
+            _slog("FACEBOOK_SESSION_IMPORTED", count=len(normalized))
             return True
         except Exception as e:
             logger.warning("FACEBOOK_IMPORT_SESSION_FAIL err=%s", e)
