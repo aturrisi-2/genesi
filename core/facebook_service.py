@@ -1498,13 +1498,17 @@ class FacebookService:
                 mentions = cfg.get("mentions", [])
                 mention = random.choice(mentions) if mentions and is_timeline else ""
 
-                if mode == "semi":
+                # Modalità per-gruppo: group_modes sovrascrive la modalità globale
+                group_modes = cfg.get("group_modes", {})
+                effective_mode = group_modes.get(group, mode)
+
+                if effective_mode == "semi":
                     # Accoda per approvazione admin
                     display_group = group
                     post_id = await self.queue_pending_post(content, display_group, mention=mention)
                     result["actions"].append(f"post_queued:{post_id}")
                     _slog("FACEBOOK_POST_QUEUED_HB", group=display_group, id=post_id)
-                elif mode == "full":
+                elif effective_mode == "full":
                     # Posta direttamente
                     if is_timeline:
                         post_result = await self.post_to_timeline(content, mention=mention)
