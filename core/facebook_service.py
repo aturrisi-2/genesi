@@ -980,6 +980,9 @@ class FacebookService:
                             author=comment["author"], content_preview=reply_text[:100])
                         _slog("FACEBOOK_REPLY_SENT", author=comment["author"],
                               post=post_url[:60], chars=len(reply_text))
+                        # Metti mi piace al commento (pagina già aperta)
+                        await self._human_delay(1, 2)
+                        await self._like_comment(comment["author"])
                         await self._human_delay(10, 25)
 
             await storage.save("facebook:replied_comments", {"ids": list(replied_ids)[-500:]})
@@ -1047,6 +1050,30 @@ class FacebookService:
             return True
         except Exception as e:
             _slog("FACEBOOK_POST_REPLY_FAIL", err_type=type(e).__name__, err=str(e)[:150])
+            return False
+
+    async def _like_comment(self, target_author: str) -> bool:
+        """
+        Mette mi piace al commento di target_author sulla pagina corrente.
+        Presuppone che la pagina sia già caricata sul post.
+        """
+        try:
+            articles = await self._page.query_selector_all('[role="article"]')
+            for art in articles:
+                lbl = await art.get_attribute("aria-label") or ""
+                if target_author.lower() in lbl.lower() and "Commento di" in lbl:
+                    # Cerca il pulsante Mi piace dentro questo commento
+                    like_btn = await art.query_selector('[aria-label="Mi piace al commento"]')
+                    if not like_btn:
+                        like_btn = await art.query_selector('[aria-label*="Mi piace"]')
+                    if like_btn:
+                        await self._page.evaluate('el => el.click()', like_btn)
+                        await self._human_delay(0.5, 1.2)
+                        _slog("FACEBOOK_COMMENT_LIKED", author=target_author)
+                        return True
+            return False
+        except Exception as e:
+            logger.debug("FACEBOOK_LIKE_COMMENT_FAIL author=%s err=%s", target_author, e)
             return False
 
     # ════════════════════════════════════════════════════════════════════════
