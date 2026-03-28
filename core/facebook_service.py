@@ -933,22 +933,38 @@ class FacebookService:
             await self._page.goto(full_url, timeout=20000)
             await self._human_delay(2, 3)
 
-            # Clicca il box commento principale
-            comment_box = await self._page.query_selector('[aria-label*="Lascia un commento"]')
+            # 1. Clicca il pulsante "Lascia un commento" per attivare il textbox
+            activate_btn = await self._page.query_selector('[aria-label="Lascia un commento"][role="button"]')
+            if activate_btn:
+                await self._page.evaluate('el => el.click()', activate_btn)
+                await self._human_delay(0.8, 1.5)
+
+            # 2. Il textbox reale: aria-label="Scrivi un commento…" o role=textbox contenteditable
+            comment_box = await self._page.query_selector('[aria-label="Scrivi un commento…"]')
             if not comment_box:
                 comment_box = await self._page.query_selector('[role="textbox"][contenteditable="true"]')
             if not comment_box:
+                _slog("FACEBOOK_REPLY_BOX_NOT_FOUND", post_url=post_url[:60])
                 return False
 
-            await self._page.evaluate('el => el.click()', comment_box)
+            await self._page.evaluate('el => el.focus()', comment_box)
             await self._human_delay(0.5, 1)
             await self._type_humanlike(comment_box, reply_text)
             await self._human_delay(1, 2)
-            await self._page.keyboard.press("Enter")
+
+            # 3. Invia: prima cerca pulsante Pubblica/Invia nel contesto commenti,
+            #    altrimenti Enter
+            submit_btn = await self._page.query_selector('[aria-label="Pubblica commento"]')
+            if not submit_btn:
+                submit_btn = await self._page.query_selector('[aria-label="Invia commento"]')
+            if submit_btn:
+                await self._page.evaluate('el => el.click()', submit_btn)
+            else:
+                await self._page.keyboard.press("Enter")
             await self._human_delay(2, 3)
             return True
         except Exception as e:
-            logger.debug("FACEBOOK_POST_REPLY_FAIL err=%s", e)
+            _slog("FACEBOOK_POST_REPLY_FAIL", err_type=type(e).__name__, err=str(e)[:150])
             return False
 
     # ════════════════════════════════════════════════════════════════════════
