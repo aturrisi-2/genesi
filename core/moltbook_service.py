@@ -264,7 +264,7 @@ class MoltbookService:
                 if r.status_code == 200:
                     return r.json()
         except Exception as e:
-            log("MOLTBOOK_GET_ERROR", path=path, error=str(e))
+            log("MOLTBOOK_GET_ERROR", path=path, error=f"{type(e).__name__}: {e}")
         return {}
 
     async def _post(self, path: str, data: dict) -> dict:
@@ -1420,7 +1420,23 @@ class MoltbookService:
 
             self._heartbeat_count += 1
             from core.storage import storage as _storage
-            await _storage.save("moltbook:state", {"heartbeat_count": self._heartbeat_count})
+            # Aggiorna stato base + salva profilo live per il pannello admin
+            state_update = {"heartbeat_count": self._heartbeat_count}
+            try:
+                me = await self._get("/agents/me")
+                agent = me.get("agent", {})
+                if agent:
+                    state_update["live_profile"] = {
+                        "karma":          agent.get("karma", 0),
+                        "followers":      agent.get("follower_count", 0),
+                        "following":      agent.get("following_count", 0),
+                        "posts_count":    agent.get("posts_count", 0),
+                        "comments_count": agent.get("comments_count", 0),
+                        "cached_at":      datetime.utcnow().isoformat(),
+                    }
+            except Exception:
+                pass
+            await _storage.save("moltbook:state", state_update)
             log("MOLTBOOK_HEARTBEAT_START", count=self._heartbeat_count)
 
             # 0. First-time setup: create community + subscribe to submolts

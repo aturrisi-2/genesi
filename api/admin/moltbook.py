@@ -36,11 +36,20 @@ async def moltbook_status(_: AuthUser = Depends(require_admin)):
     total_comments = sum(p.get("comments", 0) for p in posts)
 
     # Dati live dal profilo Moltbook (karma, post reali, commenti reali)
+    # Prima prova la chiamata live, poi fallback sulla cache del heartbeat
     live_profile: dict = {}
     try:
         live_profile = await moltbook_service.get_my_activity()
-    except Exception:
-        pass
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger("genesi").warning("MOLTBOOK_LIVE_PROFILE_FAIL err=%s(%s)",
+                                              type(e).__name__, e)
+    # Fallback: usa cache aggiornata durante l'ultimo heartbeat
+    if not any(live_profile.get(k) for k in ("karma", "posts_count", "comments_count")):
+        cached = state.get("live_profile", {})
+        if cached:
+            live_profile = cached
+            live_profile["_from_cache"] = True
 
     # Latest consolidated insights
     insights_data = await storage.load("moltbook:interaction_insights", default={})
