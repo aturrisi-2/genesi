@@ -320,6 +320,99 @@
                 <div id="gaps-error" style="display:none; font-size:0.82rem; color:#f87171;">Errore nel caricamento taccuino gap.</div>
             </div>
 
+            <!-- ── FACEBOOK ────────────────────────────────────────────── -->
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Facebook — Partecipazione Gruppi</h2>
+            <div id="fb-section"
+                style="background:rgba(59,130,246,0.05); border:1px solid rgba(59,130,246,0.22); border-radius:8px; padding:15px; margin-top:12px;">
+
+                <!-- Controlli modalità -->
+                <div style="display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
+                    <button id="fb-btn-semi"
+                        style="padding:7px 16px; border-radius:6px; border:1px solid rgba(59,130,246,0.5); font-size:0.82rem; cursor:pointer; background:rgba(59,130,246,0.18); color:#93c5fd;">
+                        Semi-auto
+                    </button>
+                    <button id="fb-btn-full"
+                        style="padding:7px 16px; border-radius:6px; border:1px solid rgba(251,191,36,0.5); font-size:0.82rem; cursor:pointer; background:rgba(251,191,36,0.1); color:#fbbf24;">
+                        Full-auto
+                    </button>
+                    <button id="fb-btn-enable"
+                        style="padding:7px 16px; border-radius:6px; border:1px solid rgba(52,211,153,0.5); font-size:0.82rem; cursor:pointer; background:rgba(52,211,153,0.1); color:#6ee7b7;">
+                        Abilita
+                    </button>
+                    <button id="fb-btn-disable"
+                        style="padding:7px 16px; border-radius:6px; border:1px solid rgba(248,113,113,0.5); font-size:0.82rem; cursor:pointer; background:rgba(248,113,113,0.08); color:#f87171;">
+                        Disabilita
+                    </button>
+                    <button id="fb-btn-hb"
+                        style="padding:7px 16px; border-radius:6px; border:1px solid rgba(167,139,250,0.5); font-size:0.82rem; cursor:pointer; background:rgba(167,139,250,0.08); color:#c4b5fd;">
+                        Heartbeat manuale
+                    </button>
+                    <span id="fb-action-msg" style="font-size:0.78rem; color:#9ca3af;"></span>
+                </div>
+
+                <!-- Stato corrente -->
+                <div id="fb-status-row" style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px;">
+                    <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                        <div id="fb-mode-badge" style="font-size:1rem; font-weight:700; color:#93c5fd;">—</div>
+                        <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Modalità</div>
+                    </div>
+                    <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                        <div id="fb-enabled-badge" style="font-size:1rem; font-weight:700; color:#6b7280;">—</div>
+                        <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Stato</div>
+                    </div>
+                    <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                        <div id="fb-pending-count" style="font-size:1.3rem; font-weight:700; color:#fbbf24;">—</div>
+                        <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Post da approvare</div>
+                    </div>
+                    <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                        <div id="fb-hb-count" style="font-size:1.3rem; font-weight:700; color:#c4b5fd;">—</div>
+                        <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Heartbeat</div>
+                    </div>
+                </div>
+
+                <!-- Sessione + gruppi -->
+                <div id="fb-session-row" style="font-size:0.8rem; color:#9ca3af; margin-bottom:10px;"></div>
+                <div id="fb-groups-row" style="font-size:0.8rem; color:#d1d5db; margin-bottom:14px;"></div>
+
+                <!-- Aggiungi gruppo -->
+                <div style="display:flex; gap:8px; margin-bottom:14px; align-items:center;">
+                    <input id="fb-group-input" type="text" placeholder="Nome gruppo Facebook..."
+                        style="flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); color:#fff; border-radius:6px; padding:6px 10px; font-size:0.8rem;">
+                    <button id="fb-add-group"
+                        style="padding:6px 12px; border-radius:6px; border:1px solid rgba(59,130,246,0.4); color:#93c5fd; background:rgba(59,130,246,0.1); font-size:0.8rem; cursor:pointer;">
+                        + Aggiungi
+                    </button>
+                    <button id="fb-remove-group"
+                        style="padding:6px 12px; border-radius:6px; border:1px solid rgba(248,113,113,0.4); color:#f87171; background:rgba(248,113,113,0.05); font-size:0.8rem; cursor:pointer;">
+                        - Rimuovi
+                    </button>
+                </div>
+
+                <!-- Import sessione (VPS senza display) -->
+                <details style="margin-bottom:14px;">
+                    <summary style="font-size:0.8rem; color:#6b7280; cursor:pointer;">
+                        Importa sessione da Cookie-Editor (VPS senza display)
+                    </summary>
+                    <div style="margin-top:8px;">
+                        <textarea id="fb-cookies-json" rows="4" placeholder='Incolla qui il JSON dei cookie di facebook.com...'
+                            style="width:100%; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); color:#ccc; border-radius:6px; padding:8px; font-size:0.75rem; font-family:monospace; box-sizing:border-box;"></textarea>
+                        <button id="fb-import-session"
+                            style="margin-top:6px; padding:6px 14px; border-radius:6px; border:1px solid rgba(59,130,246,0.4); color:#93c5fd; background:rgba(59,130,246,0.1); font-size:0.8rem; cursor:pointer;">
+                            Importa Cookie
+                        </button>
+                        <div id="fb-import-msg" style="font-size:0.75rem; color:#9ca3af; margin-top:4px;"></div>
+                    </div>
+                </details>
+
+                <!-- Post in attesa approvazione -->
+                <div id="fb-pending-section" style="display:none; margin-top:4px;">
+                    <div style="font-size:0.8rem; font-weight:600; color:#fbbf24; margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em;">
+                        Post in attesa di approvazione
+                    </div>
+                    <div id="fb-pending-list"></div>
+                </div>
+            </div>
+
             <!-- ── DEEP CONVERSATION TRAINING ──────────────────────────── -->
             <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">🧠 Deep Conversation Training</h2>
             <div id="dc-section"
@@ -441,6 +534,7 @@
             loadMoltbookStatus();
             loadImprovementScore();
             loadCapabilityGaps();
+            loadFacebookStatus();
         }
 
         async function loadStats() {
@@ -911,6 +1005,180 @@
                 document.getElementById('mb-error').style.display = 'block';
             }
         }
+
+        // ── Facebook ────────────────────────────────────────────────────────
+        async function loadFacebookStatus() {
+            try {
+                const res = await fetch('/api/admin/facebook/status', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error(res.status);
+                const d = await res.json();
+
+                const modeEl   = document.getElementById('fb-mode-badge');
+                const enableEl = document.getElementById('fb-enabled-badge');
+                modeEl.textContent = d.mode === 'full' ? 'FULL AUTO' : 'SEMI AUTO';
+                modeEl.style.color = d.mode === 'full' ? '#fbbf24' : '#93c5fd';
+
+                enableEl.textContent = d.enabled ? 'ATTIVO' : 'DISABILITATO';
+                enableEl.style.color = d.enabled ? '#6ee7b7' : '#f87171';
+
+                document.getElementById('fb-pending-count').textContent = d.pending_count || 0;
+                document.getElementById('fb-hb-count').textContent = d.heartbeat_count || 0;
+
+                const sessEl = document.getElementById('fb-session-row');
+                if (d.has_session) {
+                    const ts = d.session_saved_at ? new Date(d.session_saved_at).toLocaleString('it-IT') : '?';
+                    sessEl.innerHTML = `<span style="color:#6ee7b7;">✓ Sessione salvata</span> — ultima: ${ts}`;
+                } else {
+                    sessEl.innerHTML = '<span style="color:#f87171;">✗ Nessuna sessione — usa Importa Cookie o Login manuale</span>';
+                }
+
+                const grpEl = document.getElementById('fb-groups-row');
+                const groups = d.groups || [];
+                grpEl.innerHTML = 'Gruppi monitorati: ' + (groups.length
+                    ? groups.map(g => `<span style="background:rgba(59,130,246,0.12);padding:2px 8px;border-radius:4px;margin-right:4px;">${g}</span>`).join('')
+                    : '<span style="color:#6b7280;">nessuno</span>');
+
+                // Post pending
+                if (d.pending_count > 0) {
+                    loadFacebookPending();
+                }
+            } catch(e) {
+                // fail silently
+            }
+        }
+
+        async function loadFacebookPending() {
+            try {
+                const res = await fetch('/api/admin/facebook/pending', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const d = await res.json();
+                const pendingSection = document.getElementById('fb-pending-section');
+                const pendingList    = document.getElementById('fb-pending-list');
+                if (d.count > 0) {
+                    pendingSection.style.display = 'block';
+                    pendingList.innerHTML = d.pending.map(p => `
+                        <div style="background:rgba(0,0,0,0.2); border:1px solid rgba(251,191,36,0.2); border-radius:6px; padding:10px; margin-bottom:8px;">
+                            <div style="font-size:0.72rem; color:#9ca3af; margin-bottom:4px;">
+                                Gruppo: <b style="color:#fbbf24">${p.group}</b> &nbsp;·&nbsp; ${new Date(p.created_at).toLocaleString('it-IT')}
+                            </div>
+                            <div style="font-size:0.85rem; color:#e5e7eb; margin-bottom:8px; white-space:pre-wrap;">${p.content}</div>
+                            <div style="display:flex; gap:8px;">
+                                <button onclick="fbApprove('${p.id}')"
+                                    style="padding:5px 14px; border-radius:5px; border:1px solid rgba(52,211,153,0.5); color:#6ee7b7; background:rgba(52,211,153,0.1); font-size:0.78rem; cursor:pointer;">
+                                    Approva e Pubblica
+                                </button>
+                                <button onclick="fbReject('${p.id}')"
+                                    style="padding:5px 14px; border-radius:5px; border:1px solid rgba(248,113,113,0.4); color:#f87171; background:rgba(248,113,113,0.05); font-size:0.78rem; cursor:pointer;">
+                                    Rifiuta
+                                </button>
+                            </div>
+                        </div>`).join('');
+                } else {
+                    pendingSection.style.display = 'none';
+                }
+            } catch(e) {}
+        }
+
+        async function fbApprove(id) {
+            const msg = document.getElementById('fb-action-msg');
+            msg.textContent = 'Pubblicazione in corso...';
+            try {
+                const res = await fetch(`/api/admin/facebook/pending/${id}/approve`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const d = await res.json();
+                msg.textContent = d.success ? '✓ Pubblicato!' : `✗ ${d.error}`;
+                setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 2000);
+            } catch(e) { msg.textContent = 'Errore'; }
+        }
+
+        async function fbReject(id) {
+            const msg = document.getElementById('fb-action-msg');
+            try {
+                await fetch(`/api/admin/facebook/pending/${id}/reject`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                msg.textContent = '✓ Rifiutato';
+                setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 1500);
+            } catch(e) {}
+        }
+
+        // Bottoni controllo
+        document.getElementById('fb-btn-semi').addEventListener('click', async () => {
+            const msg = document.getElementById('fb-action-msg');
+            await fetch('/api/admin/facebook/mode', { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body: JSON.stringify({mode:'semi'}) });
+            msg.textContent = '✓ Modalità semi-auto attivata';
+            setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-btn-full').addEventListener('click', async () => {
+            if (!confirm('Attivare FULL AUTO? Genesi pubblicherà e commenterà senza approvazione.')) return;
+            const msg = document.getElementById('fb-action-msg');
+            await fetch('/api/admin/facebook/mode', { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body: JSON.stringify({mode:'full'}) });
+            msg.textContent = '✓ Modalità full-auto attivata';
+            setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-btn-enable').addEventListener('click', async () => {
+            const msg = document.getElementById('fb-action-msg');
+            await fetch('/api/admin/facebook/enable', { method:'POST', headers:{'Authorization':'Bearer '+token} });
+            msg.textContent = '✓ Servizio abilitato';
+            setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-btn-disable').addEventListener('click', async () => {
+            const msg = document.getElementById('fb-action-msg');
+            await fetch('/api/admin/facebook/disable', { method:'POST', headers:{'Authorization':'Bearer '+token} });
+            msg.textContent = '✓ Servizio disabilitato';
+            setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-btn-hb').addEventListener('click', async () => {
+            const msg = document.getElementById('fb-action-msg');
+            msg.textContent = 'Heartbeat in corso...';
+            const res = await fetch('/api/admin/facebook/heartbeat', { method:'POST', headers:{'Authorization':'Bearer '+token} });
+            const d = await res.json();
+            msg.textContent = d.skipped ? `Skip: ${d.reason}` : `✓ Heartbeat OK — ${(d.actions||[]).join(', ')||'nessuna azione'}`;
+            setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 4000);
+        });
+        document.getElementById('fb-add-group').addEventListener('click', async () => {
+            const name = document.getElementById('fb-group-input').value.trim();
+            if (!name) return;
+            const msg = document.getElementById('fb-action-msg');
+            await fetch('/api/admin/facebook/groups', { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body: JSON.stringify({action:'add',group:name}) });
+            document.getElementById('fb-group-input').value = '';
+            msg.textContent = `✓ Gruppo aggiunto: ${name}`;
+            setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-remove-group').addEventListener('click', async () => {
+            const name = document.getElementById('fb-group-input').value.trim();
+            if (!name) return;
+            const msg = document.getElementById('fb-action-msg');
+            await fetch('/api/admin/facebook/groups', { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body: JSON.stringify({action:'remove',group:name}) });
+            document.getElementById('fb-group-input').value = '';
+            msg.textContent = `✓ Gruppo rimosso: ${name}`;
+            setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-import-session').addEventListener('click', async () => {
+            const raw  = document.getElementById('fb-cookies-json').value.trim();
+            const msgEl = document.getElementById('fb-import-msg');
+            try {
+                const cookies = JSON.parse(raw);
+                const res = await fetch('/api/admin/facebook/import-session', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cookies })
+                });
+                const d = await res.json();
+                msgEl.style.color = d.ok ? '#6ee7b7' : '#f87171';
+                msgEl.textContent = d.ok ? `✓ ${d.cookies_imported} cookie importati` : '✗ Errore importazione';
+                if (d.ok) setTimeout(() => loadFacebookStatus(), 1500);
+            } catch(e) {
+                msgEl.style.color = '#f87171';
+                msgEl.textContent = '✗ JSON non valido';
+            }
+        });
 
         async function loadCapabilityGaps() {
             try {

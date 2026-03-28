@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 import uvicorn
 import asyncio
+import random
 import time
 from datetime import datetime, timedelta
 
@@ -41,6 +42,7 @@ from api.admin.logs import router as admin_logs_router
 from api.admin.moltbook import router as admin_moltbook_router
 from api.admin.improvement_score import router as admin_improvement_router
 from api.admin.capability_gaps import router as admin_capability_gaps_router
+from api.admin.facebook import router as admin_facebook_router
 from api.integrations import router as integrations_router
 from api.news import router as news_router
 from api.telegram import router as telegram_router
@@ -77,6 +79,7 @@ async def lifespan(app: FastAPI):
         (training_autopilot.run_background_loop(), "TRAINING_AUTOPILOT"),
         (moltbook_heartbeat_background(),      "MOLTBOOK_HEARTBEAT"),
         (improvement_health.run_background_loop(), "IMPROVEMENT_HEALTH"),
+        (facebook_heartbeat_background(),      "FACEBOOK_HEARTBEAT"),
     ]:
         t = asyncio.create_task(coro)
         _bg_tasks.add(t)
@@ -246,6 +249,19 @@ async def calendar_checker_background():
         except Exception as e:
             log("CALENDAR_CHECKER_ERROR", error=str(e))
             await asyncio.sleep(60)
+
+
+async def facebook_heartbeat_background():
+    """Facebook heartbeat ogni 2-4 ore con jitter casuale. Fail-silent."""
+    await asyncio.sleep(120)   # attendi 2 min dopo startup
+    while True:
+        try:
+            from core.facebook_service import facebook_service as _fb
+            await _fb.heartbeat()
+        except Exception as e:
+            log("FACEBOOK_LOOP_ERROR", error=str(e))
+        interval = random.randint(7200, 14400)   # 2-4 ore
+        await asyncio.sleep(interval)
 
 
 async def moltbook_heartbeat_background():
@@ -456,6 +472,7 @@ app.include_router(admin_logs_router, prefix="/api")
 app.include_router(admin_moltbook_router, prefix="/api")
 app.include_router(admin_improvement_router, prefix="/api")
 app.include_router(admin_capability_gaps_router, prefix="/api")
+app.include_router(admin_facebook_router, prefix="/api")
 app.include_router(integrations_router, prefix="/api")
 app.include_router(news_router)
 app.include_router(coding_router)

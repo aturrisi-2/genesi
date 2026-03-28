@@ -32,3 +32,5 @@ google-auth-oauthlib>=1.0.0
 reminder.py>=1.0.0
 icalendar>=5.0.0
 pyremindkit @ git+https://github.com/namuan/pyremindkit
+playwright>=1.44.0
+playwright-stealth>=1.0.6
