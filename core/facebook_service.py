@@ -661,8 +661,13 @@ class FacebookService:
             _slog("FACEBOOK_GROUP_POST_TYPING", chars=len(content))
             await self._page.evaluate('el => el.click()', write_box)
             await self._human_delay(0.5, 1)
-            # Usa page.keyboard.type per contenteditable React (più affidabile di locator.type)
-            await self._page.keyboard.type(content, delay=random.randint(30, 80))
+            # execCommand('insertText') triggera gli eventi React (input/change) senza hang
+            import json as _json
+            typed = await self._page.evaluate(
+                '([el, text]) => { el.focus(); return document.execCommand("insertText", false, text); }',
+                [write_box, content]
+            )
+            _slog("FACEBOOK_GROUP_POST_TYPED", ok=typed, chars=len(content))
             await self._human_delay(1, 2)
 
             # Chiudi popup se appaiono
