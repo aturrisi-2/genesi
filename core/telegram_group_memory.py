@@ -24,6 +24,27 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+_RELATIONSHIP_PROMPT = """\
+Sei un estrattore di relazioni familiari. Leggi questo messaggio inviato in un gruppo Telegram familiare.
+Il proprietario del gruppo si chiama Alfio (è il creatore di Genesi, l'AI del gruppo).
+
+Determina SE il mittente sta dichiarando una relazione con Alfio o con la sua famiglia, anche implicitamente.
+Esempi: "sono la sorella", "sono la figlia di Alfio", "sono sua madre", "sono il fratello",
+"mi chiamo Rita, la moglie", "sono la cugina", "io sono Ennio il figlio" ecc.
+Anche relazioni indirette: "sono il marito di tua sorella" → cognato di Alfio.
+
+Se c'è una relazione, ritorna:
+{
+  "found": true,
+  "relationship": "sorella",           // ruolo in italiano, singolare (sorella/fratello/figlia/figlio/moglie/madre/padre/cugina/nipote/cognata ecc.)
+  "name": "Maria",                     // nome della persona se menzionato, altrimenti null
+  "notes": "frase breve opzionale"     // max 10 parole di contesto
+}
+
+Se NON c'è nessuna dichiarazione di relazione: {"found": false}
+Rispondi SOLO con JSON valido.
+"""
+
 MAX_HISTORY    = 20   # turni conservati per gruppo
 MAX_FACTS      = 40   # fatti per membro
 HISTORY_INJECT = 8    # turni iniettati nel prompt
@@ -311,10 +332,16 @@ async def sync_family_to_owner(chat_id: int, owner_user_id: str):
             member = await get_member(fid)
             facts  = member.get("facts", {})
             city   = member.get("city") or facts.get("city", "")
-            parts  = [f"{k.replace('_',' ')}: {v}" for k, v in facts.items() if k != "city"]
+            relationship = member.get("relationship_to_owner", "")
+            parts  = []
+            if relationship:
+                parts.append(f"relazione: {relationship}")
             if city:
-                parts.insert(0, f"città: {city}")
-            desc = f"{name}" + (f" ({'; '.join(parts[:4])})" if parts else "")
+                parts.append(f"città: {city}")
+            for k, v in facts.items():
+                if k not in ("city", "relazione_con_alfio"):
+                    parts.append(f"{k.replace('_',' ')}: {v}")
+            desc = f"{name}" + (f" ({'; '.join(parts[:5])})" if parts else "")
             members_summary.append(desc)
 
         group_insights = await _get_group_insights(chat_id)
@@ -352,3 +379,98 @@ async def get_family_context_block(owner_user_id: str) -> str:
         return "\n".join(lines)
     except Exception:
         return ""
+
+
+# ── Estrazione relazioni familiari e albero genealogico ────────────────────────
+
+_OWNER_USER_ID_FOR_TREE = "6028d92a-94f2-4e2f-bcb7-012c861e3ab2"  # Alfio
+
+async def extract_family_relationship(from_id: int, first_name: str, text: str) -> None:
+    """
+    Analizza ogni messaggio del gruppo con LLM leggero.
+    Se il mittente dichiara una relazione con Alfio (sorella, madre, figlio, ecc.):
+      1. Salva la relazione nel profilo del membro del gruppo
+      2. Aggiorna l'albero genealogico di Alfio (family_tree nel suo profilo)
+      3. Aggiunge un fatto personale in personal_facts di Alfio
+    Fail-silent. Non blocca il flusso principale.
+    """
+    if not text or len(text.strip()) < 3:
+        return
+    try:
+        from core.llm_service import llm_service
+        from core.storage import storage
+
+        raw = await llm_service._call_model(
+            "openai/gpt-4o-mini",
+            _RELATIONSHIP_PROMPT,
+            f"Mittente: {first_name}\nMessaggio: {text[:300]}",
+            user_id="group-relation-extractor",
+            route="memory",
+        )
+        if not raw:
+            return
+
+        clean = raw.strip()
+        if clean.startswith("```"):
+            clean = clean.split("```")[1]
+            if clean.startswith("json"):
+                clean = clean[4:]
+        parsed = json.loads(clean.strip())
+
+        if not parsed.get("found"):
+            return
+
+        relationship = parsed.get("relationship", "").strip().lower()
+        name         = parsed.get("name") or first_name
+        notes        = parsed.get("notes", "")
+
+        if not relationship:
+            return
+
+        # 1. Salva nel profilo del membro del gruppo
+        s = await _storage()
+        member = await get_member(from_id)
+        member["relationship_to_owner"] = relationship
+        member["display_name"] = name
+        facts = member.get("facts", {})
+        facts["relazione_con_alfio"] = relationship
+        member["facts"] = facts
+        await s.save(_member_key(from_id), member)
+
+        # 2. Aggiorna albero genealogico nel profilo di Alfio
+        profile_key = f"profile:{_OWNER_USER_ID_FOR_TREE}"
+        profile = await s.load(profile_key, default={}) or {}
+        family_tree = profile.get("family_tree", {})
+        tree_key = f"telegram_{from_id}"
+        family_tree[tree_key] = {
+            "name":         name,
+            "relationship": relationship,
+            "from_id":      from_id,
+            "telegram_name": first_name,
+            "notes":        notes,
+            "source":       "telegram_group",
+        }
+        profile["family_tree"] = family_tree
+        await s.save(profile_key, profile)
+
+        # 3. Aggiunge fatto personale in personal_facts di Alfio
+        pf_key = f"personal_facts:{_OWNER_USER_ID_FOR_TREE}"
+        pf_list = await s.load(pf_key, default=[]) or []
+        # Rimuovi eventuale voce precedente per la stessa chiave
+        fact_key = f"famiglia_{relationship}_{from_id}"
+        pf_list = [f for f in pf_list if f.get("key") != fact_key]
+        pf_list.append({
+            "key":    fact_key,
+            "value":  f"{name} ({relationship})" + (f" — {notes}" if notes else ""),
+            "source": "telegram_group",
+        })
+        pf_list = pf_list[-100:]  # max 100 fatti
+        await s.save(pf_key, pf_list)
+
+        logger.info(
+            "FAMILY_RELATIONSHIP_EXTRACTED from_id=%s name=%s relationship=%s",
+            from_id, name, relationship
+        )
+
+    except Exception as exc:
+        logger.debug("FAMILY_RELATIONSHIP_ERROR from_id=%s err=%s", from_id, exc)

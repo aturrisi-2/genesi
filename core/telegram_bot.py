@@ -22,6 +22,7 @@ from core.telegram_group_memory import (
     update_member_seen, get_member_city, save_member_city,
     build_group_context, append_group_history,
     record_group_observation, consolidate_group_insights_if_needed,
+    extract_family_relationship,
     sync_family_to_owner,
 )
 
@@ -589,6 +590,8 @@ async def handle_update(update: dict):
         # Aggiorna profilo membro del gruppo ad ogni messaggio
         if is_group and first_name:
             asyncio.create_task(update_member_seen(from_id, first_name))
+            # Estrai relazioni familiari e aggiorna albero genealogico di Alfio
+            asyncio.create_task(extract_family_relationship(from_id, first_name, message))
 
         # ── Logica gruppi ──────────────────────────────────────────────────────
         if is_group:
