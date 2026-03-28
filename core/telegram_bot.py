@@ -68,6 +68,7 @@ RISPONDI "SI" solo se ALMENO UNO di questi è vero:
 3. BUONA NOTIZIA: qualcuno condivide un successo, evento felice, traguardo → Genesi può gioire con loro (UNA VOLTA sola per evento)
 4. MOMENTO DIFFICILE: qualcuno esprime dolore, preoccupazione, tristezza → Genesi può essere discreta e calorosa
 5. MENZIONATA: il messaggio cita esplicitamente Genesi o le chiede qualcosa
+6. SALUTO: il messaggio è un saluto al gruppo (buongiorno, buonasera, ciao, ecc.) → Genesi risponde con calore
 
 RISPONDI "NO" se:
 - È una conversazione privata tra due o più membri (discussioni, battute, aggiornamenti tra loro)
@@ -95,6 +96,12 @@ async def _group_should_intervene(
     if bot_username and f"@{bot_username.lower()}" in combined.lower():
         return True
     if _GENESI_RE.search(combined):
+        return True
+
+    # Fast-path: saluto al gruppo → sempre sì
+    _GREETINGS = ("buongiorno", "buonasera", "buonanotte", "ciao a tutti", "salve", "hey")
+    combined_lower = combined.lower()
+    if any(g in combined_lower for g in _GREETINGS):
         return True
 
     # Fast-path: messaggio troppo corto e senza punto interrogativo → probabile scambio tra membri
