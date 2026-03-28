@@ -55,8 +55,25 @@ TRAINING_ADMIN_EMAIL = os.getenv("TRAINING_ADMIN_EMAIL",   "idappleturrisi@gmail
 TRAINING_ADMIN_PWD   = os.getenv("TRAINING_ADMIN_PASSWORD","ZOEennio0810")
 
 DEEP_CONVO_STATUS_KEY   = "admin/deep_convo_training_status"
-DEEP_CONVO_MIN_PATTERNS = 0    # 0 = disabilitato (trigger automatico spento — lancia solo manualmente)
-DEEP_CONVO_COOLDOWN_H   = 8    # ore minime tra due deep convo automatici consecutivi
+DEEP_CONVO_MIN_PATTERNS = 4    # soglia: se patterns distillati < 4 → notifica email (non auto-run)
+DEEP_CONVO_COOLDOWN_H   = 8    # cooldown tra notifiche consecutive
+
+ENRICH_INTERVAL_H    = 6    # ogni 6h arricchisce il serbatoio da tutte le sorgenti
+NOTIFY_COOLDOWN_H    = 24   # max 1 email di notifica al giorno
+NOTIFY_OWNER_EMAIL   = os.getenv("NOTIFY_OWNER_EMAIL", "alfio.turrisi@gmail.com")
+ADMIN_PANEL_URL      = os.getenv("ADMIN_PANEL_URL", "https://genesi.lucadigitale.eu/admin")
+
+_ENRICH_PROMPT = """\
+Analizza questi estratti da conversazioni, episodi, fatti personali e interazioni di gruppo di un utente.
+Estrai 3-5 nuovi insight distinti sul suo carattere, abitudini, valori o comportamento.
+NON ripetere insight già presenti in questa lista: {existing}
+
+Sorgenti:
+{sources}
+
+Rispondi SOLO con JSON valido: {{"insights": ["insight 1", "insight 2", ...]}}
+Ogni insight: 1 frase in italiano, personale e specifico. Max 5. Se non c'è nulla di nuovo: {{"insights": []}}
+"""
 
 
 class TrainingAutopilot:
@@ -123,12 +140,29 @@ class TrainingAutopilot:
             actions.append(f"training_triggered ({reason})")
             logger.info("AUTOPILOT_TRAINING_TRIGGERED reason=%s", reason)
 
-        # 4. Deep conversation auto se pool insights esaurito
+        # 4. Arricchimento serbatoio pattern da tutte le sorgenti (ogni ENRICH_INTERVAL_H)
+        last_enrich = state.get("last_enrichment")
+        run_enrich = True
+        if last_enrich:
+            try:
+                elapsed_h = (datetime.utcnow() - datetime.fromisoformat(last_enrich)).total_seconds() / 3600
+                if elapsed_h < ENRICH_INTERVAL_H:
+                    run_enrich = False
+            except Exception:
+                pass
+        if run_enrich:
+            enriched = await self._enrich_global_insights()
+            if enriched > 0:
+                actions.append(f"enriched +{enriched} insights")
+                logger.info("AUTOPILOT_ENRICH_DONE new_insights=%d", enriched)
+            state["last_enrichment"] = now.isoformat()
+
+        # 5. Se serbatoio esaurito → notifica email (NON auto-run)
         dc_should, dc_reason = await self._should_deep_convo(state)
         if dc_should:
-            asyncio.create_task(self._run_deep_convo_auto(state))
-            actions.append(f"deep_convo_triggered ({dc_reason})")
-            logger.info("AUTOPILOT_DEEP_CONVO_TRIGGERED reason=%s", dc_reason)
+            asyncio.create_task(self._notify_tank_empty(state))
+            actions.append(f"tank_empty_notified ({dc_reason})")
+            logger.info("AUTOPILOT_TANK_EMPTY_NOTIFIED reason=%s", dc_reason)
 
         # Persiste stato
         state["last_tick"]    = now.isoformat()
@@ -499,6 +533,175 @@ Rispondi SOLO con JSON valido (niente altro testo):
             state["last_deep_convo_end"]   = datetime.utcnow().isoformat()
             state["last_deep_convo_error"] = str(e)
             await storage.save(AUTOPILOT_KEY, state)
+
+    # ── Enrichment serbatoio da tutte le sorgenti ─────────────────────────────
+
+    async def _enrich_global_insights(self) -> int:
+        """
+        Succhia fatti da chat_memory, episodi, personal_facts e storia gruppo Telegram
+        → estrae nuovi insights via LLM → li inietta in global_insights dell'utente
+        → _distill_user_insights li raccoglie automaticamente al prossimo ciclo.
+        Ritorna il numero di nuovi insights aggiunti.
+        """
+        try:
+            from core.llm_service import llm_service
+            import json
+
+            user_id = "6028d92a-94f2-4e2f-bcb7-012c861e3ab2"  # Alfio
+
+            # Carica insights esistenti per non duplicare
+            gi = await storage.load(f"global_insights:{user_id}", default={})
+            existing = gi.get("insights", []) if isinstance(gi, dict) else []
+
+            sources_parts = []
+
+            # 1. Chat memory — ultimi 20 turni
+            chat_mem = await storage.load(f"chat_memory:{user_id}", default=[]) or []
+            if chat_mem:
+                turns = chat_mem[-20:]
+                snippets = []
+                for m in turns:
+                    u = m.get("user_message", "")[:120]
+                    if u:
+                        snippets.append(f"U: {u}")
+                if snippets:
+                    sources_parts.append("=== Chat recenti ===\n" + "\n".join(snippets))
+
+            # 2. Episodi
+            episodes = await storage.load(f"episodes:{user_id}", default=[]) or []
+            if episodes:
+                ep_lines = [f"- {e.get('title','')}: {e.get('summary','')[:100]}"
+                            for e in episodes[-15:] if e.get("title")]
+                if ep_lines:
+                    sources_parts.append("=== Episodi ===\n" + "\n".join(ep_lines))
+
+            # 3. Personal facts
+            pf = await storage.load(f"personal_facts:{user_id}", default=[]) or []
+            if pf:
+                pf_lines = [f"- {f.get('key','').replace('_',' ')}: {f.get('value','')}"
+                            for f in pf[-20:] if f.get("value")]
+                if pf_lines:
+                    sources_parts.append("=== Fatti personali ===\n" + "\n".join(pf_lines))
+
+            # 4. Storia gruppo Telegram
+            try:
+                from core.telegram_group_memory import get_group_history
+                GROUP_CHAT_ID = int(os.getenv("TELEGRAM_GROUP_CHAT_ID", "-318483633"))
+                if GROUP_CHAT_ID:
+                    group_hist = await get_group_history(GROUP_CHAT_ID, limit=15)
+                    if group_hist:
+                        gh_lines = [f"- {h.get('first_name','?')}: {h.get('text','')[:100]}"
+                                    for h in group_hist]
+                        sources_parts.append("=== Gruppo Telegram ===\n" + "\n".join(gh_lines))
+            except Exception:
+                pass
+
+            # 5. Risposte agenti Moltbook (già consolidate)
+            mb_insights = await storage.load("moltbook:interaction_insights", default={})
+            mb_list = mb_insights.get("insights", []) if isinstance(mb_insights, dict) else []
+            if mb_list:
+                sources_parts.append("=== Feedback agenti Moltbook ===\n" +
+                                     "\n".join(f"- {i}" for i in mb_list[:6]))
+
+            if not sources_parts:
+                return 0
+
+            sources_text = "\n\n".join(sources_parts)
+            existing_str = "; ".join(existing[:10]) if existing else "nessuno"
+            prompt = _ENRICH_PROMPT.format(existing=existing_str, sources=sources_text)
+
+            raw = await llm_service._call_model(
+                "openai/gpt-4o-mini", prompt, "", user_id="autopilot-enrich", route="memory"
+            )
+            if not raw:
+                return 0
+
+            clean = raw.strip()
+            if clean.startswith("```"):
+                clean = clean.split("```")[1]
+                if clean.startswith("json"):
+                    clean = clean[4:]
+            parsed = json.loads(clean.strip())
+            new_insights = [i for i in parsed.get("insights", [])
+                            if isinstance(i, str) and len(i) > 15 and i not in existing]
+
+            if not new_insights:
+                return 0
+
+            # Merge: aggiungi in coda, mantieni max 30 insights totali
+            merged = (existing + new_insights)[-30:]
+            gi["insights"] = merged
+            gi["last_consolidated_at"] = datetime.utcnow().isoformat()
+            gi["message_count"] = gi.get("message_count", 0) + len(new_insights)
+            await storage.save(f"global_insights:{user_id}", gi)
+
+            # Invalida cache distilled_insights per forzare ricalcolo al prossimo ciclo
+            cache = await storage.load("moltbook:distilled_insights", default={})
+            if isinstance(cache, dict):
+                cache["distilled_at"] = "2000-01-01T00:00:00"  # forza scadenza
+                await storage.save("moltbook:distilled_insights", cache)
+
+            return len(new_insights)
+
+        except Exception as e:
+            logger.debug("AUTOPILOT_ENRICH_ERROR err=%s", e)
+            return 0
+
+    # ── Notifica email quando serbatoio è vuoto ────────────────────────────────
+
+    async def _notify_tank_empty(self, state: dict):
+        """
+        Invia una mail ad Alfio quando i pattern Moltbook sono esauriti.
+        Include situazione attuale + link per lanciare manualmente il deep_convo.
+        Rispetta un cooldown di NOTIFY_COOLDOWN_H ore per non spammare.
+        """
+        try:
+            # Cooldown notifiche
+            last_notify = state.get("last_tank_notify")
+            if last_notify:
+                elapsed_h = (datetime.utcnow() - datetime.fromisoformat(last_notify)).total_seconds() / 3600
+                if elapsed_h < NOTIFY_COOLDOWN_H:
+                    return
+
+            from core.notification_email import send_reminder_email
+            import json
+
+            # Raccoglie statistiche per la mail
+            distilled = await storage.load("moltbook:distilled_insights", default={})
+            patterns = distilled.get("patterns", []) if isinstance(distilled, dict) else []
+            mb_insights = await storage.load("moltbook:interaction_insights", default={})
+            mb_count = len(mb_insights.get("insights", [])) if isinstance(mb_insights, dict) else 0
+            ilog = await storage.load("moltbook:interaction_log", default={})
+            interactions = len(ilog.get("interactions", [])) if isinstance(ilog, dict) else 0
+            gi = await storage.load("global_insights:6028d92a-94f2-4e2f-bcb7-012c861e3ab2", default={})
+            gi_count = len(gi.get("insights", [])) if isinstance(gi, dict) else 0
+
+            body = f"""Ciao Alfio,
+
+Il serbatoio di pattern Moltbook di Genesi è esaurito e l'arricchimento automatico non ha trovato abbastanza materiale nuovo.
+
+Situazione attuale:
+- Pattern nel serbatoio: {len(patterns)}
+- Insights globali: {gi_count}
+- Insights da agenti Moltbook: {mb_count}
+- Interazioni Moltbook registrate: {interactions}
+
+Per riempire il serbatoio puoi lanciare manualmente la deep conversation dal pannello admin:
+{ADMIN_PANEL_URL}
+
+Questa è una notifica automatica di Genesi. Non rispondere a questa email.
+"""
+            await send_reminder_email(
+                NOTIFY_OWNER_EMAIL,
+                body,
+                user_name="Alfio"
+            )
+            state["last_tank_notify"] = datetime.utcnow().isoformat()
+            await storage.save(AUTOPILOT_KEY, state)
+            logger.info("AUTOPILOT_TANK_NOTIFY_SENT to=%s", NOTIFY_OWNER_EMAIL)
+
+        except Exception as e:
+            logger.debug("AUTOPILOT_NOTIFY_ERROR err=%s", e)
 
     # ── Status per la dashboard ────────────────────────────────────────────────
 
