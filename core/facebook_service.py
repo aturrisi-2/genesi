@@ -397,43 +397,47 @@ class FacebookService:
 
     async def read_group_feed(self, group_name: str, max_posts: int = 8) -> list:
         """
-        Cerca il gruppo su Facebook, legge i post recenti.
+        Legge i post recenti di un gruppo.
+        group_name può essere un URL diretto (https://www.facebook.com/groups/ID)
+        oppure un nome da cercare.
         Ritorna lista di dict: {author, text, timestamp, url}.
         """
         posts = []
         try:
-            # Cerca il gruppo tramite la barra di ricerca
-            await self._page.goto("https://www.facebook.com/", timeout=20000)
-            await self._human_delay(2, 4)
-
-            # Usa la search bar
-            search_box = await self._page.query_selector('input[placeholder*="Cerca"]')
-            if not search_box:
-                search_box = await self._page.query_selector('[aria-label*="Cerca"]')
-            if search_box:
-                await search_box.click()
-                await self._type_humanlike(search_box, group_name)
-                await self._human_delay(1, 2)
-                await self._page.keyboard.press("Enter")
+            # Naviga direttamente se è un URL
+            if group_name.startswith("http") or group_name.startswith("/groups/"):
+                group_url = group_name if group_name.startswith("http") else f"https://www.facebook.com{group_name}"
+                await self._page.goto(group_url, timeout=20000)
+                await self._human_delay(2, 4)
+            else:
+                # Cerca il gruppo tramite la barra di ricerca
+                await self._page.goto("https://www.facebook.com/", timeout=20000)
                 await self._human_delay(2, 4)
 
-                # Clicca su "Gruppi" nei risultati
-                groups_tab = await self._page.query_selector('[data-key="groups"]')
-                if groups_tab:
-                    await groups_tab.click()
-                    await self._human_delay(1.5, 3)
+                search_box = await self._page.query_selector('input[placeholder*="Cerca"]')
+                if not search_box:
+                    search_box = await self._page.query_selector('[aria-label*="Cerca"]')
+                if search_box:
+                    await search_box.click()
+                    await self._type_humanlike(search_box, group_name)
+                    await self._human_delay(1, 2)
+                    await self._page.keyboard.press("Enter")
+                    await self._human_delay(2, 4)
 
-                # Clicca sul primo risultato
-                first_result = await self._page.query_selector('[data-testid="search_result"] a')
-                if first_result:
-                    await first_result.click()
-                    await self._human_delay(3, 5)
-                else:
-                    # Fallback: cerca nell'href
-                    links = await self._page.query_selector_all("a[href*='/groups/']")
-                    if links:
-                        await links[0].click()
+                    groups_tab = await self._page.query_selector('[data-key="groups"]')
+                    if groups_tab:
+                        await groups_tab.click()
+                        await self._human_delay(1.5, 3)
+
+                    first_result = await self._page.query_selector('[data-testid="search_result"] a')
+                    if first_result:
+                        await first_result.click()
                         await self._human_delay(3, 5)
+                    else:
+                        links = await self._page.query_selector_all("a[href*='/groups/']")
+                        if links:
+                            await links[0].click()
+                            await self._human_delay(3, 5)
 
             # Raccogli i post visibili
             post_elements = await self._page.query_selector_all('[data-pagelet*="FeedUnit"]')
@@ -560,33 +564,36 @@ class FacebookService:
     # ════════════════════════════════════════════════════════════════════════
 
     async def post_to_group(self, group_name: str, content: str) -> dict:
-        """Naviga al gruppo e posta il contenuto."""
+        """Naviga al gruppo e posta il contenuto. group_name può essere URL o nome."""
         result = {"success": False, "post_url": "", "error": ""}
         try:
-            # Naviga al gruppo (stessa logica di read_group_feed)
-            await self._page.goto("https://www.facebook.com/", timeout=20000)
-            await self._human_delay(2, 5)
+            if group_name.startswith("http") or group_name.startswith("/groups/"):
+                group_url = group_name if group_name.startswith("http") else f"https://www.facebook.com{group_name}"
+                await self._page.goto(group_url, timeout=20000)
+                await self._human_delay(2, 5)
+            else:
+                await self._page.goto("https://www.facebook.com/", timeout=20000)
+                await self._human_delay(2, 5)
 
-            # Cerca il gruppo
-            search_box = await self._page.query_selector('input[placeholder*="Cerca"]')
-            if not search_box:
-                search_box = await self._page.query_selector('[aria-label*="Cerca"]')
-            if not search_box:
-                result["error"] = "Search box non trovata"
-                return result
+                search_box = await self._page.query_selector('input[placeholder*="Cerca"]')
+                if not search_box:
+                    search_box = await self._page.query_selector('[aria-label*="Cerca"]')
+                if not search_box:
+                    result["error"] = "Search box non trovata"
+                    return result
 
-            await search_box.click()
-            await self._type_humanlike(search_box, group_name)
-            await self._human_delay(1, 2)
-            await self._page.keyboard.press("Enter")
-            await self._human_delay(2, 4)
+                await search_box.click()
+                await self._type_humanlike(search_box, group_name)
+                await self._human_delay(1, 2)
+                await self._page.keyboard.press("Enter")
+                await self._human_delay(2, 4)
 
-            links = await self._page.query_selector_all("a[href*='/groups/']")
-            if not links:
-                result["error"] = "Gruppo non trovato"
-                return result
-            await links[0].click()
-            await self._human_delay(3, 6)
+                links = await self._page.query_selector_all("a[href*='/groups/']")
+                if not links:
+                    result["error"] = "Gruppo non trovato"
+                    return result
+                await links[0].click()
+                await self._human_delay(3, 6)
 
             # Trova il box "Scrivi qualcosa"
             write_box = await self._page.query_selector('[aria-label*="Scrivi qualcosa"]')
