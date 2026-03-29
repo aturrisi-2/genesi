@@ -20,7 +20,7 @@ import httpx
 from core.storage import storage
 from core.telegram_group_memory import (
     update_member_seen, get_member_city, save_member_city,
-    build_group_context, append_group_history, append_raw_message,
+    build_group_context, append_group_history, append_raw_message, get_raw_messages,
     record_group_observation, consolidate_group_insights_if_needed,
     extract_family_relationship,
     sync_family_to_owner,
@@ -59,25 +59,24 @@ _GROUP_CONV_STATE: dict[int, dict] = {}
 
 _GROUP_INTERVENE_PROMPT = """\
 Sei il filtro di intervento di Genesi in un gruppo familiare su Telegram.
-Genesi è un membro della famiglia: discreta, calda, utile — ma NON si intromette a caso.
+Genesi è discreta: ascolta tutto in silenzio e interviene RARAMENTE, solo nelle situazioni indicate.
 
-Leggi il messaggio corrente e il contesto recente del gruppo. Decidi se Genesi deve rispondere.
+Leggi i messaggi recenti del gruppo e il messaggio attuale. Decidi se Genesi deve rispondere.
 
-RISPONDI "SI" solo se ALMENO UNO di questi è vero:
-1. DOMANDA: qualcuno pone una domanda che richiede conoscenza o consiglio (non rivolta a un altro membro specifico)
-2. CONTINUAZIONE: è un follow-up diretto a una risposta di Genesi nelle ultime battute
-3. BUONA NOTIZIA: qualcuno condivide un successo, evento felice, traguardo → Genesi può gioire con loro (UNA VOLTA sola per evento)
-4. MOMENTO DIFFICILE: qualcuno esprime dolore, preoccupazione, tristezza → Genesi può essere discreta e calorosa
-5. MENZIONATA: il messaggio cita esplicitamente Genesi o le chiede qualcosa
-6. SALUTO: il messaggio è un saluto al gruppo (buongiorno, buonasera, ciao, ecc.) → Genesi risponde con calore
+RISPONDI "SI" SOLO se il messaggio attuale rientra in UNO di questi casi:
+1. INVOCATA: qualcuno cita Genesi per nome, la taglia o le pone una domanda diretta
+2. BUONA NOTIZIA: qualcuno condivide una notizia bella, un successo, un traguardo, qualcosa di speciale da celebrare (UNA VOLTA per evento)
+3. CONTINUAZIONE: è un follow-up diretto a una risposta appena data da Genesi (stessa conversazione, < 5 min)
 
-RISPONDI "NO" se:
-- È una conversazione privata tra due o più membri (discussioni, battute, aggiornamenti tra loro)
-- Non aggiunge valore reale che Genesi possa offrire
-- Genesi è già intervenuta di recente sullo stesso argomento senza essere seguita
-- È gossip, ironia, battute familiari tra loro
+RISPONDI "NO" in tutti gli altri casi, incluso:
+- Conversazioni, aggiornamenti, discussioni, battute tra i membri
+- Domande rivolte ad altri membri
+- Momenti difficili o sfogo (Genesi resta in silenzio — non si intromette nel dolore altrui senza essere chiamata)
+- Qualsiasi cosa che sia chiaramente uno scambio privato tra persone della famiglia
 
-Rispondi SOLO con JSON valido: {"intervieni": true, "motivo": "ragione breve"} oppure {"intervieni": false, "motivo": "ragione breve"}
+Il dubbio va verso NO. Genesi non deve partecipare a ogni cosa.
+
+Rispondi SOLO con JSON: {"intervieni": true, "motivo": "ragione breve"} oppure {"intervieni": false, "motivo": "ragione breve"}
 """
 
 
@@ -130,13 +129,12 @@ async def _group_should_intervene(
     # LLM decision
     try:
         from core.llm_service import llm_service
-        history = await get_group_history(chat_id, limit=5)
+        raw_msgs = await get_raw_messages(chat_id, limit=12)
         history_text = ""
-        if history:
-            history_text = "Scambi recenti nel gruppo:\n" + "\n".join(
-                f"  {h.get('first_name','?')}: {h.get('text','')[:80]}\n"
-                f"  → Genesi: {h.get('response','')[:60]}"
-                for h in history[-4:]
+        if raw_msgs:
+            history_text = "Messaggi recenti nel gruppo (tutti, non solo quelli con Genesi):\n" + "\n".join(
+                f"  {m.get('first_name','?')}: {m.get('text','')[:100]}"
+                for m in raw_msgs[:-1]  # escludi l'ultimo che è il messaggio attuale
             ) + "\n\n"
 
         user_msg = (
