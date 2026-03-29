@@ -818,25 +818,28 @@ class FacebookService:
                     if (!box) return {ok: false, step: 'no_textbox'};
                     box.focus();
                     box.click();
-                    const sel = window.getSelection();
-                    const range = document.createRange();
-                    range.selectNodeContents(box);
-                    range.collapse(false);
-                    sel.removeAllRanges();
-                    sel.addRange(range);
-                    const typed = document.execCommand('insertText', false, text);
-                    if (!typed) {
-                        box.innerHTML = '';
-                        box.focus();
-                        const r2 = document.createRange();
-                        r2.selectNodeContents(box);
-                        r2.collapse(false);
+                    // Metodo 1: paste event (più affidabile con React contenteditable)
+                    try {
+                        const dt = new DataTransfer();
+                        dt.setData('text/plain', text);
+                        box.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true}));
+                    } catch(e) {}
+                    await new Promise(r => setTimeout(r, 300));
+                    let textLen = (box.innerText||'').replace(/^\n+|\n+$/g,'').length;
+                    // Metodo 2: execCommand con selection se paste non ha funzionato
+                    if (textLen < 5) {
+                        const sel = window.getSelection();
+                        const range = document.createRange();
+                        range.selectNodeContents(box);
+                        range.collapse(false);
                         sel.removeAllRanges();
-                        sel.addRange(r2);
-                        const typed2 = document.execCommand('insertText', false, text);
-                        if (!typed2) return {ok: false, step: 'execCommand_failed_twice'};
+                        sel.addRange(range);
+                        document.execCommand('insertText', false, text);
+                        await new Promise(r => setTimeout(r, 300));
+                        textLen = (box.innerText||'').replace(/^\n+|\n+$/g,'').length;
                     }
-                    return {ok: true, text_len: (box.innerText||'').length};
+                    if (textLen < 5) return {ok: false, step: 'text_not_inserted', text_len: textLen};
+                    return {ok: true, text_len: textLen};
                 }""",
                 content
             )
