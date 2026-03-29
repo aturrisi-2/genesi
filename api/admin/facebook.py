@@ -24,6 +24,10 @@ class GroupPayload(BaseModel):
 class ImportSessionPayload(BaseModel):
     cookies: list   # lista cookie da Cookie-Editor / EditThisCookie
 
+class CredentialsPayload(BaseModel):
+    email:    str
+    password: str
+
 class MentionPayload(BaseModel):
     action:  str   # "add" | "remove"
     mention: str   # nome come appare su Facebook (es. "Alfio Turrisi")
@@ -196,6 +200,20 @@ async def fb_mentions(payload: MentionPayload, _: AuthUser = Depends(require_adm
     cfg["mentions"] = mentions
     await storage.save("facebook:config", cfg)
     return {"ok": True, "mentions": mentions}
+
+
+@router.post("/credentials")
+async def fb_save_credentials(payload: CredentialsPayload, _: AuthUser = Depends(require_admin)):
+    """
+    Salva email e password di Facebook per auto-login quando la sessione scade.
+    Le credenziali vengono usate automaticamente dal heartbeat.
+    """
+    from core.storage import storage
+    await storage.save("facebook:credentials", {
+        "email":    payload.email,
+        "password": payload.password,
+    })
+    return {"ok": True, "email": payload.email}
 
 
 @router.post("/import-session")

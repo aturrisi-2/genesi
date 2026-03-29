@@ -346,6 +346,62 @@ class FacebookService:
             _slog("FACEBOOK_IS_LOGGED_IN_EXCEPTION", err_type=type(e).__name__, err=str(e)[:200])
             return False
 
+    async def auto_login(self) -> bool:
+        """
+        Login automatico con le credenziali salvate in storage.
+        Usato quando la sessione scade. Fail-silent.
+        """
+        try:
+            creds = await storage.load("facebook:credentials", default={})
+            email = creds.get("email", "")
+            password = creds.get("password", "")
+            if not email or not password:
+                _slog("FACEBOOK_AUTO_LOGIN_NO_CREDS")
+                return False
+            _slog("FACEBOOK_AUTO_LOGIN_START", email=email[:20])
+            await self._page.goto("https://www.facebook.com/login", timeout=20000)
+            await asyncio.sleep(2)
+            # Compila email
+            email_field = await self._page.query_selector('#email')
+            if not email_field:
+                email_field = await self._page.query_selector('[name="email"]')
+            if not email_field:
+                _slog("FACEBOOK_AUTO_LOGIN_FAIL", reason="no_email_field")
+                return False
+            await email_field.click()
+            await self._type_humanlike(email_field, email)
+            await asyncio.sleep(0.5)
+            # Compila password
+            pass_field = await self._page.query_selector('#pass')
+            if not pass_field:
+                pass_field = await self._page.query_selector('[name="pass"]')
+            if not pass_field:
+                _slog("FACEBOOK_AUTO_LOGIN_FAIL", reason="no_pass_field")
+                return False
+            await pass_field.click()
+            await self._type_humanlike(pass_field, password)
+            await asyncio.sleep(0.5)
+            # Click login
+            login_btn = await self._page.query_selector('[name="login"]')
+            if not login_btn:
+                login_btn = await self._page.query_selector('[type="submit"]')
+            if login_btn:
+                await login_btn.click()
+            else:
+                await self._page.keyboard.press("Enter")
+            await asyncio.sleep(5)
+            # Verifica login
+            if await self.is_logged_in():
+                await self.save_session()
+                _slog("FACEBOOK_AUTO_LOGIN_OK")
+                return True
+            else:
+                _slog("FACEBOOK_AUTO_LOGIN_FAIL", reason="still_not_logged_in")
+                return False
+        except Exception as e:
+            _slog("FACEBOOK_AUTO_LOGIN_EXCEPTION", err=str(e)[:200])
+            return False
+
     async def manual_login_session(self) -> dict:
         """
         Avvia browser headful per login manuale dell'admin.
@@ -1648,10 +1704,14 @@ class FacebookService:
             sess_ok = await self.load_session()
             _slog("FACEBOOK_HB_SESSION_LOADED", session_ok=sess_ok)
             if not await self.is_logged_in():
-                result["skipped"] = True
-                result["reason"]  = "not_logged_in"
+                # Tenta auto-login con credenziali salvate
                 _slog("FACEBOOK_NOT_LOGGED_IN")
-                return result
+                relogged = await self.auto_login()
+                if not relogged:
+                    result["skipped"] = True
+                    result["reason"]  = "not_logged_in"
+                    return result
+                _slog("FACEBOOK_AUTO_LOGIN_RECOVERED")
 
             self._hb_count += 1
             mode   = cfg.get("mode", "semi")
