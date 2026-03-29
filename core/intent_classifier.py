@@ -520,8 +520,9 @@ class IntentClassifier:
         Returns:
             Intent normalizzato (reminder_*, chat_free, o intent originale)
         """
-        # Usa solo il testo dell'utente, senza il contesto pagina iniettato dal widget
+        # Usa solo il testo dell'utente, senza contesto pagina (widget) né annotazioni gruppo (Telegram)
         _user_part = message.split("[CONTESTO PAGINA]")[0].split("[PAGE CONTEXT]")[0]
+        _user_part = _user_part.split("[GRUPPO:")[0].split("[DISCUSSIONE IN CORSO")[0]
         message_lower = _user_part.lower().strip()
 
         # 0️⃣ Parole chiave iCloud → forza icloud_sync / icloud_setup
@@ -660,8 +661,9 @@ class IntentClassifier:
         Classificazione tramite LLM con valutazione score e contesto.
         Sostituisce le keyword statiche come logica primaria.
         """
-        # Per la classificazione intent usa solo il testo utente, non il contesto pagina del widget
-        _classify_msg = (message or "").split("[CONTESTO PAGINA]")[0].split("[PAGE CONTEXT]")[0].strip()
+        # Per la classificazione intent usa solo il testo utente, senza contesto pagina né annotazioni gruppo
+        _classify_msg = (message or "").split("[CONTESTO PAGINA]")[0].split("[PAGE CONTEXT]")[0]
+        _classify_msg = _classify_msg.split("[GRUPPO:")[0].split("[DISCUSSIONE IN CORSO")[0].strip()
         message_lower = _classify_msg.lower().strip()
 
         # PRIORITÀ ASSOLUTA 0: saluti semplici — mai classificare come tool/weather per contesto
