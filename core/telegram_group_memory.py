@@ -227,12 +227,21 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
             lines.append(f"  → Genesi: {resp}")
         lines.append("[FINE STORIA]")
 
+    # Albero familiare completo (per inferenze sui gradi di parentela)
+    s = await _storage()
+    fdata = await s.load(_family_key(_OWNER_USER_ID_FOR_TREE), default={}) or {}
+    family_chain = fdata.get("family_chain", "")
+    if family_chain:
+        lines.append(family_chain)
+
     # Nota famiglia
+    rel = member.get("relationship_to_owner", "")
+    rel_note = f" È {rel} di {owner_name}." if rel and rel != "owner" else ""
     lines.append(
-        f"[CONTESTO FAMIGLIA: {first_name} è un membro della famiglia di {owner_name}. "
-        f"Trattalo/a con calore, familiarità e affetto. "
-        f"Ricorda le conversazioni precedenti. "
-        f"Puoi fare riferimento a quello che altri membri hanno detto.]"
+        f"[CONTESTO FAMIGLIA:{rel_note} "
+        f"Trattalo/a con calore e familiarità, come un parente. "
+        f"Usa i gradi di parentela corretti quando parli di altri membri. "
+        f"Puoi fare riferimento a quello che altri hanno detto.]"
     )
 
     return "\n".join(lines)
