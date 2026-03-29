@@ -744,12 +744,10 @@ class FacebookService:
                 _slog("FACEBOOK_GROUP_POST_BOX_NOT_FOUND", url=self._page.url[:80])
                 return result
 
-            # Tutto in un singolo evaluate JS per evitare hang su ElementHandle cross-call
+            # Step 1: inserisci testo nel dialog (senza cliccare Pubblica)
             _slog("FACEBOOK_GROUP_POST_TYPING", chars=len(content))
-            import json as _json
-            post_result_js = await self._page.evaluate(
+            type_result = await self._page.evaluate(
                 """(text) => {
-                    // Trova textbox nel dialog
                     const box = document.querySelector('[role="dialog"] [role="textbox"][contenteditable="true"]')
                            || document.querySelector('[role="dialog"] [contenteditable="true"]')
                            || document.querySelector('[role="textbox"][contenteditable="true"]')
@@ -757,7 +755,6 @@ class FacebookService:
                     if (!box) return {ok: false, step: 'no_textbox'};
                     box.focus();
                     box.click();
-                    // Posiziona cursore nel textbox (necessario per insertText)
                     const sel = window.getSelection();
                     const range = document.createRange();
                     range.selectNodeContents(box);
@@ -766,7 +763,6 @@ class FacebookService:
                     sel.addRange(range);
                     const typed = document.execCommand('insertText', false, text);
                     if (!typed) {
-                        // Fallback: imposta innerHTML direttamente e triggera React
                         box.innerHTML = '';
                         box.focus();
                         const r2 = document.createRange();
@@ -777,37 +773,45 @@ class FacebookService:
                         const typed2 = document.execCommand('insertText', false, text);
                         if (!typed2) return {ok: false, step: 'execCommand_failed_twice'};
                     }
-                    // Cerca pulsante Pubblica
+                    return {ok: true, text_len: (box.innerText||'').length};
+                }""",
+                content
+            )
+            _slog("FACEBOOK_GROUP_POST_TYPED", **type_result)
+            if not type_result.get("ok"):
+                result["error"] = f"typing: {type_result.get('step')}"
+                _slog("FACEBOOK_PUBLISH_BTN_NOT_FOUND", group=group_name, step=type_result.get("step"))
+            else:
+                # Step 2: aspetta che React abiliti il pulsante Pubblica, poi clicca
+                await asyncio.sleep(1.5)
+                publish_result = await self._page.evaluate("""() => {
                     const labels = ['Pubblica', 'Posta'];
                     let pubBtn = document.querySelector('[aria-label="Pubblica"]')
                               || document.querySelector('[aria-label="Posta"]');
                     if (!pubBtn) {
                         for (const btn of document.querySelectorAll('button, [role="button"]')) {
-                            const txt = (btn.innerText||'').trim();
-                            if (labels.includes(txt)) { pubBtn = btn; break; }
+                            if (labels.includes((btn.innerText||'').trim())) { pubBtn = btn; break; }
                         }
                     }
                     const btnLabels = Array.from(document.querySelectorAll('button,[role="button"]'))
                         .map(b => b.getAttribute('aria-label') || (b.innerText||'').trim().substring(0,20))
                         .filter(Boolean).slice(0,15);
-                    if (!pubBtn) return {ok: false, step: 'no_publish_btn', buttons: btnLabels};
+                    const disabled = pubBtn ? pubBtn.hasAttribute('disabled') || pubBtn.getAttribute('aria-disabled') === 'true' : true;
+                    if (!pubBtn || disabled) return {ok: false, step: 'btn_disabled_or_missing', buttons: btnLabels};
                     pubBtn.click();
                     return {ok: true, step: 'clicked_publish', buttons: btnLabels};
-                }""",
-                content
-            )
-            _slog("FACEBOOK_GROUP_POST_JS_RESULT", **{k: v for k, v in post_result_js.items() if k != 'buttons'})
-            if post_result_js.get("buttons"):
-                _slog("FACEBOOK_BUTTONS_AFTER_TYPING", labels=post_result_js["buttons"])
-
-            if post_result_js.get("ok"):
-                await self._human_delay(3, 5)
-                result["success"] = True
-                result["post_url"] = self._page.url
-                _slog("FACEBOOK_POSTED", group=group_name, chars=len(content))
-            else:
-                result["error"] = f"post_js: {post_result_js.get('step', 'unknown')}"
-                _slog("FACEBOOK_PUBLISH_BTN_NOT_FOUND", group=group_name, step=post_result_js.get("step"))
+                }""")
+                _slog("FACEBOOK_GROUP_POST_JS_RESULT", **{k: v for k, v in publish_result.items() if k != 'buttons'})
+                if publish_result.get("buttons"):
+                    _slog("FACEBOOK_BUTTONS_AFTER_TYPING", labels=publish_result["buttons"])
+                if publish_result.get("ok"):
+                    await self._human_delay(3, 5)
+                    result["success"] = True
+                    result["post_url"] = self._page.url
+                    _slog("FACEBOOK_POSTED", group=group_name, chars=len(content))
+                else:
+                    result["error"] = f"publish: {publish_result.get('step')}"
+                    _slog("FACEBOOK_PUBLISH_BTN_NOT_FOUND", group=group_name, step=publish_result.get("step"))
         except Exception as e:
             result["error"] = f"{type(e).__name__}: {e}"
             logger.warning("FACEBOOK_POST_FAIL err=%s", result["error"])
