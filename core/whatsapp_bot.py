@@ -166,47 +166,27 @@ async def send_message(wa_id: str, text: str):
 
 
 async def send_typing(wa_id: str, msg_id: str = ""):
-    """Mostra l'indicatore di digitazione all'utente WhatsApp.
+    """Segna il messaggio come letto (doppie spunte blu) su WhatsApp.
 
-    WhatsApp Cloud API: prima segna il messaggio come letto (blue ticks),
-    poi invia il typing indicator con il formato corretto per Cloud API.
+    La WhatsApp Cloud API non supporta typing indicator nativi.
+    L'unico feedback visivo disponibile è il mark-as-read.
     """
-    if not WA_ACCESS_TOKEN or not WA_PHONE_NUMBER_ID:
+    if not WA_ACCESS_TOKEN or not WA_PHONE_NUMBER_ID or not msg_id:
         return
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            # 1. Mark as read — ufficialmente supportato, mostra le spunte blu
-            if msg_id:
-                r = await client.post(
-                    f"{WA_API_BASE}/{WA_PHONE_NUMBER_ID}/messages",
-                    json={
-                        "messaging_product": "whatsapp",
-                        "status": "read",
-                        "message_id": msg_id,
-                    },
-                    headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"},
-                )
-                logger.info("WA_MARK_READ msg_id=%s status=%d", msg_id, r.status_code)
-
-            # 2. Typing indicator — formato corretto Cloud API
-            r2 = await client.post(
+            r = await client.post(
                 f"{WA_API_BASE}/{WA_PHONE_NUMBER_ID}/messages",
                 json={
                     "messaging_product": "whatsapp",
-                    "recipient_type": "individual",
-                    "to": wa_id,
-                    "type": "action",
-                    "action": {
-                        "type": "typing",
-                        "typing": {"is_typing": True},
-                    },
+                    "status": "read",
+                    "message_id": msg_id,
                 },
                 headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"},
             )
-            logger.info("WA_TYPING_SENT wa_id=%s status=%d body=%s",
-                        wa_id, r2.status_code, r2.text[:200])
+            logger.info("WA_MARK_READ msg_id=%s status=%d", msg_id, r.status_code)
     except Exception as e:
-        logger.warning("WA_TYPING_ERROR wa_id=%s err=%s", wa_id, e)
+        logger.warning("WA_MARK_READ_ERROR wa_id=%s err=%s", wa_id, e)
 
 
 async def send_image(wa_id: str, image_url: str, caption: str = "") -> bool:
