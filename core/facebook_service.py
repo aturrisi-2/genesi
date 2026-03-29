@@ -810,7 +810,7 @@ class FacebookService:
             # Step 1: inserisci testo nel dialog (senza cliccare Pubblica)
             _slog("FACEBOOK_GROUP_POST_TYPING", chars=len(content))
             type_result = await self._page.evaluate(
-                """(text) => {
+                """async (text) => {
                     const box = document.querySelector('[role="dialog"] [role="textbox"][contenteditable="true"]')
                            || document.querySelector('[role="dialog"] [contenteditable="true"]')
                            || document.querySelector('[role="textbox"][contenteditable="true"]')
