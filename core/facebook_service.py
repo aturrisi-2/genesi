@@ -366,50 +366,45 @@ class FacebookService:
                 _slog("FACEBOOK_AUTO_LOGIN_NO_CREDS")
                 return False
             _slog("FACEBOOK_AUTO_LOGIN_START", email=email[:20])
-            await self._page.goto("https://www.facebook.com/login", timeout=20000)
-            # Aspetta che il form sia pronto
+            # Usa mbasic.facebook.com — versione HTML semplice, meno anti-bot
+            await self._page.goto("https://mbasic.facebook.com/login", timeout=20000)
             try:
-                await self._page.wait_for_selector('#email, [name="email"]', timeout=10000)
+                await self._page.wait_for_selector('[name="email"], #email', timeout=10000)
             except Exception:
                 _slog("FACEBOOK_AUTO_LOGIN_FAIL", reason="login_form_timeout", url=self._page.url[:80])
                 return False
             # Compila email
-            email_field = await self._page.query_selector('#email')
-            if not email_field:
-                email_field = await self._page.query_selector('[name="email"]')
+            email_field = await self._page.query_selector('[name="email"]')
             if not email_field:
                 _slog("FACEBOOK_AUTO_LOGIN_FAIL", reason="no_email_field")
                 return False
-            await email_field.click()
-            await self._type_humanlike(email_field, email)
+            await email_field.fill(email)
             await asyncio.sleep(0.5)
             # Compila password
-            pass_field = await self._page.query_selector('#pass')
-            if not pass_field:
-                pass_field = await self._page.query_selector('[name="pass"]')
+            pass_field = await self._page.query_selector('[name="pass"]')
             if not pass_field:
                 _slog("FACEBOOK_AUTO_LOGIN_FAIL", reason="no_pass_field")
                 return False
-            await pass_field.click()
-            await self._type_humanlike(pass_field, password)
+            await pass_field.fill(password)
             await asyncio.sleep(0.5)
-            # Click login
-            login_btn = await self._page.query_selector('[name="login"]')
-            if not login_btn:
-                login_btn = await self._page.query_selector('[type="submit"]')
-            if login_btn:
-                await login_btn.click()
-            else:
-                await self._page.keyboard.press("Enter")
+            # Submit form
+            await self._page.keyboard.press("Enter")
             await asyncio.sleep(5)
-            # Verifica login
-            if await self.is_logged_in():
-                await self.save_session()
-                _slog("FACEBOOK_AUTO_LOGIN_OK")
-                return True
-            else:
-                _slog("FACEBOOK_AUTO_LOGIN_FAIL", reason="still_not_logged_in")
+            _slog("FACEBOOK_AUTO_LOGIN_SUBMITTED", url=self._page.url[:80])
+            # Verifica: se siamo su mbasic/www.facebook.com senza /login → OK
+            url_after = self._page.url
+            if "/login" in url_after or "/checkpoint" in url_after:
+                _slog("FACEBOOK_AUTO_LOGIN_FAIL", reason="still_on_login", url=url_after[:80])
                 return False
+            # Trasferisci cookies al context principale e salva
+            ctx_cookies = await self._context.cookies()
+            has_cuser = any(c.get("name") == "c_user" for c in ctx_cookies)
+            if not has_cuser:
+                _slog("FACEBOOK_AUTO_LOGIN_FAIL", reason="no_cuser_after_login")
+                return False
+            await self.save_session()
+            _slog("FACEBOOK_AUTO_LOGIN_OK", cookies=len(ctx_cookies))
+            return True
         except Exception as e:
             _slog("FACEBOOK_AUTO_LOGIN_EXCEPTION", err=str(e)[:200])
             return False
