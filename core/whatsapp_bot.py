@@ -165,25 +165,48 @@ async def send_message(wa_id: str, text: str):
                 await asyncio.sleep(0.3)
 
 
-async def send_typing(wa_id: str):
-    """Mostra l'indicatore di digitazione all'utente WhatsApp."""
+async def send_typing(wa_id: str, msg_id: str = ""):
+    """Mostra l'indicatore di digitazione all'utente WhatsApp.
+
+    WhatsApp Cloud API: prima segna il messaggio come letto (blue ticks),
+    poi invia il typing indicator con il formato corretto per Cloud API.
+    """
     if not WA_ACCESS_TOKEN or not WA_PHONE_NUMBER_ID:
         return
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            await client.post(
+            # 1. Mark as read — ufficialmente supportato, mostra le spunte blu
+            if msg_id:
+                r = await client.post(
+                    f"{WA_API_BASE}/{WA_PHONE_NUMBER_ID}/messages",
+                    json={
+                        "messaging_product": "whatsapp",
+                        "status": "read",
+                        "message_id": msg_id,
+                    },
+                    headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"},
+                )
+                logger.info("WA_MARK_READ msg_id=%s status=%d", msg_id, r.status_code)
+
+            # 2. Typing indicator — formato corretto Cloud API
+            r2 = await client.post(
                 f"{WA_API_BASE}/{WA_PHONE_NUMBER_ID}/messages",
                 json={
                     "messaging_product": "whatsapp",
-                    "to": wa_id,
                     "recipient_type": "individual",
+                    "to": wa_id,
                     "type": "action",
-                    "action": {"type": "typing"},
+                    "action": {
+                        "type": "typing",
+                        "typing": {"is_typing": True},
+                    },
                 },
                 headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"},
             )
-    except Exception:
-        pass
+            logger.info("WA_TYPING_SENT wa_id=%s status=%d body=%s",
+                        wa_id, r2.status_code, r2.text[:200])
+    except Exception as e:
+        logger.warning("WA_TYPING_ERROR wa_id=%s err=%s", wa_id, e)
 
 
 async def send_image(wa_id: str, image_url: str, caption: str = "") -> bool:
@@ -426,6 +449,7 @@ async def handle_update(payload: dict):
 async def _process_message(msg: dict, name_map: dict, is_group: bool = False, chat_id: int = 0):
     try:
         wa_id      = msg.get("from", "")
+        msg_id     = msg.get("id", "")   # ID messaggio per typing + mark-as-read
         msg_type   = msg.get("type", "")
         first_name = name_map.get(wa_id, "").split()[0] if name_map.get(wa_id) else ""
 
@@ -513,7 +537,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
 
         if state == STATE_AWAIT_PASSWORD:
             email, password = session.get("pending_email", ""), text
-            await send_typing(wa_id)
+            await send_typing(wa_id, msg_id)
             token = await _login(email, password)
             if not token:
                 session.update({"state": STATE_AWAIT_EMAIL, "pending_email": None})
@@ -535,7 +559,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
 
         if state == STATE_AWAIT_REG_PASSWORD:
             email, password = session.get("pending_email", ""), text
-            await send_typing(wa_id)
+            await send_typing(wa_id, msg_id)
             ok = await _register(email, password)
             if not ok:
                 session["state"] = STATE_AWAIT_REG_EMAIL
@@ -658,7 +682,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
 
         # ── FOTO ──────────────────────────────────────────────────────────────
         if photo_id:
-            await send_typing(wa_id)
+            await send_typing(wa_id, msg_id)
             img_bytes, mime = await download_media(photo_id)
             if not img_bytes:
                 await send_message(wa_id, "Non riuscito a scaricare la foto.")
@@ -684,7 +708,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
 
         # ── DOCUMENTO ─────────────────────────────────────────────────────────
         if doc_id:
-            await send_typing(wa_id)
+            await send_typing(wa_id, msg_id)
             doc_bytes, mime = await download_media(doc_id)
             if not doc_bytes:
                 await send_message(wa_id, "Non riuscito a scaricare il documento.")
@@ -709,7 +733,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
 
         # ── VOCALE ────────────────────────────────────────────────────────────
         if voice_id:
-            await send_typing(wa_id)
+            await send_typing(wa_id, msg_id)
             audio_bytes, mime = await download_media(voice_id)
             if not audio_bytes:
                 await send_message(wa_id,
@@ -749,7 +773,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 "In quale città ti trovi?")
             return
 
-        await send_typing(wa_id)
+        await send_typing(wa_id, msg_id)
         reply = await _do_chat(text)
         await _handle_reply(reply)
 
