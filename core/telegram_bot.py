@@ -798,15 +798,15 @@ async def handle_update(update: dict):
             if only_emoji:
                 return (
                     f"{message}\n\n"
-                    f"[GRUPPO: chi scrive è {first_name}. "
-                    f"È una reazione/emoji — rispondi brevissimamente e con leggerezza, "
-                    f"senza fare domande. Rivolgiti a {first_name}.]\n"
+                    f"[GRUPPO FAMILIARE: scrive {first_name}. "
+                    f"Reazione/emoji — risposta brevissima, calore familiare, zero domande.]\n"
                     f"{group_ctx}"
                 )
             return (
                 f"{message}\n\n"
-                f"[GRUPPO: chi ha scritto è {first_name}. "
-                f"Rivolgiti a {first_name} per nome nella risposta.]\n"
+                f"[GRUPPO FAMILIARE: scrive {first_name}. "
+                f"Sei un membro della famiglia — rispondi con calore e concretezza, "
+                f"senza domande superflue. Usa il nome {first_name}.]\n"
                 f"{group_ctx}"
             )
 

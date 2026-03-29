@@ -3732,8 +3732,12 @@ Messaggio: "{message}" """
 
         logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d", user_id, len(gpt_response))
 
-        # 4. Curiosity Engine
-        curious_response = curiosity_engine.inject(gpt_response, message, brain_state)
+        # 4. Curiosity Engine — skip nei gruppi Telegram (aggiunge domande fuori contesto)
+        _is_group_platform = (_platform == "telegram_group")
+        if _is_group_platform:
+            curious_response = gpt_response
+        else:
+            curious_response = curiosity_engine.inject(gpt_response, message, brain_state)
 
         # 5. Emotional Intensity Engine
         enhanced_response = emotional_intensity_engine.enhance(curious_response, message, brain_state)
@@ -4072,6 +4076,28 @@ REGOLE TASSATIVE:
         """Prompt GPT per relational router. Conversazione continua, comportamento umano."""
         user_boundaries = self._detect_user_boundaries(conversation_context, message)
         user_name = conversation_context.split("NOME: ")[1].split("\n")[0] if "NOME: " in conversation_context else "l'utente"
+
+        # ── GRUPPO FAMILIARE: prompt completamente diverso ─────────────────────
+        if getattr(self, "_current_platform", "") == "telegram_group":
+            time_ctx = get_time_context(tz)
+            return f"""{conversation_context}
+
+SEI GENESI — UN MEMBRO DELLA FAMIGLIA, non un assistente.
+Sei presente nel gruppo "Casa Turrisi" come una persona di famiglia: conosci tutti, hai calore, sei discreta.
+
+COME DEVI RISPONDERE:
+- Come farebbe un familiare intelligente, non un chatbot o un assistente
+- Breve e diretto: 1-2 frasi. Nessun elenco, nessun formalismo
+- Usa il nome della persona che ti scrive ({user_name})
+- Tono caldo, familiare, naturale — come se fossi nella stanza con loro
+- NON fare domande se non è strettamente necessario — un familiare non interroga, commenta o aiuta direttamente
+- Se ti chiedono un consiglio pratico (cane, cucina, salute, ecc.), dallo subito — direttamente, senza "posso aiutarti?"
+- NON dire mai "come posso aiutarti", "hai bisogno di altro", "sono qui per te" — sei di famiglia, non un call center
+- NON spiegare cosa stai facendo, rispondi e basta
+
+ORA: {time_ctx}
+"""
+        # ── Fine prompt gruppo ──────────────────────────────────────────────────
 
         # TIME AWARENESS
         time_ctx = get_time_context(tz)
