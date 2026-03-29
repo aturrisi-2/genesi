@@ -82,7 +82,7 @@ Rispondi SOLO con JSON: {"intervieni": true, "motivo": "ragione breve"} oppure {
 
 async def _group_should_intervene(
     text: str, caption: str, chat_id: int, from_id: int, first_name: str,
-    bot_username: str = ""
+    bot_username: str = "", bot_mentioned: bool = False
 ) -> bool:
     """
     Decide con LLM se Genesi deve intervenire nel gruppo.
@@ -92,7 +92,9 @@ async def _group_should_intervene(
     if not combined:
         return False
 
-    # Fast-path: menzione diretta → sempre sì
+    # Fast-path: menzione diretta (@bot o nome) → sempre sì
+    if bot_mentioned:
+        return True
     if bot_username and f"@{bot_username.lower()}" in combined.lower():
         return True
     if _GENESI_RE.search(combined):
@@ -606,9 +608,12 @@ async def handle_update(update: dict):
             asyncio.create_task(extract_family_relationship(str(from_id), first_name, text or caption, "telegram"))
 
         # ── Logica gruppi ──────────────────────────────────────────────────────
+        _bot_mentioned = False  # True se il messaggio menzionava direttamente il bot
         if is_group:
-            # Pulisci eventuale @mention dal testo
+            # Rileva menzione PRIMA di rimuoverla dal testo
             bot_mention = f"@{_BOT_USERNAME}" if _BOT_USERNAME else None
+            if bot_mention and (bot_mention.lower() in (text or "").lower() or bot_mention.lower() in (caption or "").lower()):
+                _bot_mentioned = True
             if bot_mention:
                 text = text.replace(bot_mention, "").replace(bot_mention.lower(), "").strip()
 
@@ -770,7 +775,8 @@ async def handle_update(update: dict):
         # Genesi decide autonomamente se e quando intervenire nel gruppo.
         if is_group:
             should = await _group_should_intervene(
-                text, caption, chat_id, from_id, first_name, bot_username=_BOT_USERNAME
+                text, caption, chat_id, from_id, first_name,
+                bot_username=_BOT_USERNAME, bot_mentioned=_bot_mentioned
             )
             if not should:
                 logger.info("TELEGRAM_GROUP_SILENT chat_id=%s from=%s msg=%.60s",
