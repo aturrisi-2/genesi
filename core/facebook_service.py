@@ -360,7 +360,12 @@ class FacebookService:
                 return False
             _slog("FACEBOOK_AUTO_LOGIN_START", email=email[:20])
             await self._page.goto("https://www.facebook.com/login", timeout=20000)
-            await asyncio.sleep(2)
+            # Aspetta che il form sia pronto
+            try:
+                await self._page.wait_for_selector('#email, [name="email"]', timeout=10000)
+            except Exception:
+                _slog("FACEBOOK_AUTO_LOGIN_FAIL", reason="login_form_timeout", url=self._page.url[:80])
+                return False
             # Compila email
             email_field = await self._page.query_selector('#email')
             if not email_field:
