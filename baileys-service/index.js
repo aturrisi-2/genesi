@@ -12,11 +12,12 @@ const {
     DisconnectReason,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
-    makeInMemoryStore,
 } = require("@whiskeysockets/baileys");
 const { Boom } = require("@hapi/boom");
 const axios = require("axios");
 const pino = require("pino");
+const qrcode = require("qrcode-terminal");
+const fs = require("fs");
 require("dotenv").config();
 
 const GENESI_URL       = process.env.GENESI_URL || "http://localhost:8000";
@@ -121,7 +122,7 @@ async function startBaileys() {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, logger),
         },
-        printQRInTerminal: true,
+        printQRInTerminal: false,
         browser: ["Genesi", "Chrome", "1.0.0"],
         generateHighQualityLinkPreview: false,
         getMessage: async () => undefined,
@@ -131,7 +132,12 @@ async function startBaileys() {
 
     sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
         if (qr) {
-            console.log("\n[Baileys] Scansiona il QR code con WhatsApp:\n");
+            console.log("\n========== QR CODE WHATSAPP ==========");
+            qrcode.generate(qr, { small: true });
+            // Salva anche su file per recupero remoto
+            fs.writeFileSync("./qr-latest.txt", qr);
+            console.log("=======================================\n");
+            console.log("[Baileys] Apri WhatsApp → Impostazioni → Dispositivi collegati → Collega un dispositivo");
         }
         if (connection === "close") {
             const code = lastDisconnect?.error?.output?.statusCode;
