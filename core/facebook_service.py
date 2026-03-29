@@ -367,20 +367,24 @@ class FacebookService:
                 _slog("FACEBOOK_AUTO_LOGIN_NO_CREDS")
                 return False
             _slog("FACEBOOK_AUTO_LOGIN_START", email=email[:20])
-            # Pulisce i cookie vecchi — impediscono la visualizzazione del form login
-            await self._context.clear_cookies()
-            # Prova mbasic prima (HTML semplice), poi fallback su www
-            for login_url in [
-                "https://mbasic.facebook.com/login",
-                "https://www.facebook.com/login",
-            ]:
+            # Prova prima con i cookie esistenti (dispositivo fidato, salta 2FA).
+            # Se il form non appare, pulisce i cookie e riprova (cookie corrotti).
+            found_form = False
+            for attempt, (clear, login_url) in enumerate([
+                (False, "https://www.facebook.com/login"),
+                (True,  "https://www.facebook.com/login"),
+            ]):
+                if clear:
+                    await self._context.clear_cookies()
+                    _slog("FACEBOOK_AUTO_LOGIN_COOKIES_CLEARED")
                 await self._page.goto(login_url, timeout=20000)
                 try:
                     await self._page.wait_for_selector('[name="email"], #email', timeout=12000)
-                    break  # trovato
+                    found_form = True
+                    break
                 except Exception:
-                    _slog("FACEBOOK_AUTO_LOGIN_TRY_NEXT", url=self._page.url[:80])
-            else:
+                    _slog("FACEBOOK_AUTO_LOGIN_TRY_NEXT", attempt=attempt, url=self._page.url[:80])
+            if not found_form:
                 _slog("FACEBOOK_AUTO_LOGIN_FAIL", reason="login_form_timeout", url=self._page.url[:80])
                 return False
             # Compila email
