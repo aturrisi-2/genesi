@@ -272,13 +272,13 @@ async def _register(email: str, password: str) -> bool:
 
 # ── Genesi API calls ─────────────────────────────────────────────────────────
 
-async def _chat(token: str, message: str, city: str = "") -> str:
+async def _chat(token: str, message: str, city: str = "", platform: str = "whatsapp") -> str:
     if city and _WEATHER_RE.search(message) and city.lower() not in message.lower():
         message = f"{message} (sono a {city})"
     async with httpx.AsyncClient(timeout=60) as client:
         res = await client.post(
             f"{GENESI_URL}/api/chat",
-            json={"message": message, "platform": "whatsapp"},
+            json={"message": message, "platform": platform},
             headers={"Authorization": f"Bearer {token}"},
         )
         if res.status_code == 401:
@@ -406,21 +406,24 @@ async def handle_update(payload: dict):
                             for c in contacts}
 
                 # Rileva se siamo in un gruppo (group_id presente nei metadati WA)
-                is_group = bool(value.get("metadata", {}).get("group_id"))
+                raw_group_id = value.get("metadata", {}).get("group_id", "")
+                is_group = bool(raw_group_id)
 
                 for msg in messages:
-                    # In alternativa: il messaggio stesso può avere conversation_id gruppo
                     msg_is_group = is_group or bool(
                         msg.get("context", {}).get("id", "").endswith("@g.us")
                         or msg.get("group", {})
                     )
-                    await _process_message(msg, name_map, is_group=msg_is_group)
+                    # Usa group_id come chat_id (hash stabile in int per storage)
+                    gid = raw_group_id or msg.get("context", {}).get("id", "")
+                    chat_id = abs(hash(gid)) % (10**9) if gid else 0
+                    await _process_message(msg, name_map, is_group=msg_is_group, chat_id=chat_id)
 
     except Exception as e:
         logger.error("WA_HANDLE_UPDATE_ERROR err=%s", e)
 
 
-async def _process_message(msg: dict, name_map: dict, is_group: bool = False):
+async def _process_message(msg: dict, name_map: dict, is_group: bool = False, chat_id: int = 0):
     try:
         wa_id      = msg.get("from", "")
         msg_type   = msg.get("type", "")
@@ -575,18 +578,24 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False):
 
         city = session.get("city", "")
 
-        # Estrai relazioni familiari da messaggi di gruppo (sempre, anche se Genesi tace)
-        if is_group and first_name and (text or caption):
-            try:
-                from core.telegram_group_memory import extract_family_relationship
-                asyncio.create_task(
-                    extract_family_relationship(wa_id, first_name, (text or caption), "whatsapp")
-                )
-            except Exception:
-                pass
+        # ── LOGICA GRUPPO ─────────────────────────────────────────────────────
+        if is_group and first_name:
+            from core.telegram_group_memory import (
+                update_member_seen, append_raw_message, build_group_context,
+                append_group_history, record_group_observation,
+                consolidate_group_insights_if_needed, extract_family_relationship,
+                sync_family_to_owner,
+            )
+            # Aggiorna profilo membro ad ogni messaggio
+            asyncio.create_task(update_member_seen(abs(hash(wa_id)) % (10**9), first_name))
+            # Estrai relazioni familiari
+            asyncio.create_task(extract_family_relationship(wa_id, first_name, (text or caption), "whatsapp"))
+            # Salva nel buffer grezzo (tutti i messaggi, anche quelli ignorati)
+            msg_text = (text or caption or "").strip()
+            if msg_text and chat_id:
+                asyncio.create_task(append_raw_message(chat_id, abs(hash(wa_id)) % (10**9), first_name, msg_text))
 
         # ── FILTRO GRUPPI ─────────────────────────────────────────────────────
-        # Nei gruppi risponde solo a: "Genesi" nel testo o saluto.
         if is_group and not _group_should_respond(text, caption=caption):
             logger.info("WA_GROUP_SKIP wa_id=%s msg=%.60s",
                         wa_id, f"{text} {caption}".strip())
@@ -594,14 +603,38 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False):
 
         async def _do_chat(message: str) -> str:
             nonlocal token, session
-            reply = await _chat(token, message, city=city)
+            # Gruppi WhatsApp: inietta contesto famiglia e usa platform whatsapp_group
+            if is_group and chat_id and first_name:
+                try:
+                    from core.telegram_group_memory import build_group_context
+                    group_ctx = await build_group_context(chat_id, abs(hash(wa_id)) % (10**9), first_name)
+                    message = (
+                        f"{message}\n\n"
+                        f"[GRUPPO FAMILIARE: scrive {first_name}. "
+                        f"Sei un membro della famiglia. Usa il nome {first_name}.]\n"
+                        f"{group_ctx}"
+                    )
+                except Exception:
+                    pass
+            platform = "whatsapp_group" if is_group else "whatsapp"
+            reply = await _chat(token, message, city=city, platform=platform)
             if reply == "__TOKEN_EXPIRED__":
                 new_token = await _auto_refresh(wa_id, session)
                 if new_token:
                     token = new_token
-                    reply = await _chat(token, message, city=city)
+                    reply = await _chat(token, message, city=city, platform=platform)
                 else:
                     reply = "__AUTH_FAILED__"
+            # Apprendimento di gruppo in background
+            if is_group and reply not in ("__TOKEN_EXPIRED__", "__AUTH_FAILED__") and chat_id:
+                from core.telegram_group_memory import (
+                    append_group_history, record_group_observation,
+                    consolidate_group_insights_if_needed,
+                )
+                orig_text = (text or caption or "").strip()
+                asyncio.create_task(append_group_history(chat_id, abs(hash(wa_id)) % (10**9), first_name, orig_text, reply))
+                asyncio.create_task(record_group_observation(chat_id, abs(hash(wa_id)) % (10**9), first_name, orig_text, reply))
+                asyncio.create_task(consolidate_group_insights_if_needed(chat_id))
             return reply
 
         async def _handle_reply(reply: str) -> bool:

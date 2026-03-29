@@ -257,7 +257,7 @@ class Proactor:
                 from calendar_manager import calendar_manager
                 has_google = profile.get("google_token") or (is_admin and calendar_manager._admin_google_service is not None)
 
-                if total_msgs < 1 and not has_icloud and not has_google and self._current_platform != "telegram_group":
+                if total_msgs < 1 and not has_icloud and not has_google and self._current_platform not in ("telegram_group", "whatsapp_group"):
                     if not any(kw in response.lower() for kw in ["cloud", "icloud", "google", "calendar", "sincronizza", "collega"]):
                         # Suggest only on the very first message
                         if is_admin:
@@ -863,7 +863,7 @@ class Proactor:
                 # DISPATCHER
                 # ── Pre-check: flusso OpenClaw multi-turno globale (priorità massima) ──────────
                 # Non attivare OpenClaw nei gruppi Telegram — non è un contesto appropriato
-                _openclaw_state = None if self._current_platform == "telegram_group" else \
+                _openclaw_state = None if self._current_platform in ("telegram_group", "whatsapp_group") else \
                     await storage.load(f"openclaw_session:{user_id}", default=None)
                 if _openclaw_state:
                     if processed_message.lower() in ("annulla", "stop", "esci", "cancel", "no", "interrompi"):
@@ -916,7 +916,7 @@ class Proactor:
                     final_source = "tool"
                     
                 elif current_intent in ("icloud_setup", "icloud_sync", "google_setup", "google_sync") \
-                        and self._current_platform == "telegram_group":
+                        and self._current_platform in ("telegram_group", "whatsapp_group"):
                     # Nei gruppi Telegram i servizi personali non sono disponibili — ignora
                     log("ROUTING_DECISION", route="group_service_blocked", intent=current_intent, user_id=user_id)
                     current_intent = "relational"
@@ -1032,7 +1032,7 @@ class Proactor:
                     current_response = await self._handle_location(user_id, processed_message, brain_state)
                     final_source = "tool"
                     
-                elif current_intent == "openclaw" and self._current_platform != "telegram_group":
+                elif current_intent == "openclaw" and self._current_platform not in ("telegram_group", "whatsapp_group"):
                     log("ROUTING_DECISION", route="openclaw", user_id=user_id)
                     self._emit_status("Navigo il web per te...")
                     current_response = await self._handle_openclaw(user_id, processed_message)
@@ -3733,7 +3733,7 @@ Messaggio: "{message}" """
         logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d", user_id, len(gpt_response))
 
         # 4. Curiosity Engine — skip nei gruppi Telegram (aggiunge domande fuori contesto)
-        _is_group_platform = (_platform == "telegram_group")
+        _is_group_platform = (_platform in ("telegram_group", "whatsapp_group"))
         if _is_group_platform:
             curious_response = gpt_response
         else:
@@ -4078,7 +4078,7 @@ REGOLE TASSATIVE:
         user_name = conversation_context.split("NOME: ")[1].split("\n")[0] if "NOME: " in conversation_context else "l'utente"
 
         # ── GRUPPO FAMILIARE: prompt completamente diverso ─────────────────────
-        if getattr(self, "_current_platform", "") == "telegram_group":
+        if getattr(self, "_current_platform", "") in ("telegram_group", "whatsapp_group"):
             time_ctx = get_time_context(tz)
             return f"""{conversation_context}
 
