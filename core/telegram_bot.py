@@ -20,7 +20,7 @@ import httpx
 from core.storage import storage
 from core.telegram_group_memory import (
     update_member_seen, get_member_city, save_member_city,
-    build_group_context, append_group_history,
+    build_group_context, append_group_history, append_raw_message,
     record_group_observation, consolidate_group_insights_if_needed,
     extract_family_relationship,
     sync_family_to_owner,
@@ -760,6 +760,15 @@ async def handle_update(update: dict):
             city = session.get("city", "")
 
         # ── FILTRO GRUPPI (LLM-based) ──────────────────────────────────────────
+        # Salva ogni messaggio nel buffer grezzo PRIMA di decidere se intervenire,
+        # così il contesto includerà anche i messaggi a cui Genesi non ha risposto.
+        if is_group:
+            msg_text = (text or caption or "").strip()
+            if msg_text:
+                asyncio.create_task(
+                    append_raw_message(chat_id, from_id, first_name, msg_text)
+                )
+
         # Genesi decide autonomamente se e quando intervenire nel gruppo.
         if is_group:
             should = await _group_should_intervene(

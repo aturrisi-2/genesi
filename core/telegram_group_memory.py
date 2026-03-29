@@ -49,6 +49,8 @@ Rispondi SOLO con JSON valido.
 MAX_HISTORY    = 20   # turni conservati per gruppo
 MAX_FACTS      = 40   # fatti per membro
 HISTORY_INJECT = 8    # turni iniettati nel prompt
+MAX_RAW_MSGS   = 30   # messaggi grezzi conservati per gruppo (tutti, anche senza risposta)
+RAW_INJECT     = 15   # ultimi N messaggi grezzi iniettati nel contesto
 CONSOLIDATION_INTERVAL = 86400  # 24h in secondi
 OBSERVATION_EVERY_N    = 5      # ogni N messaggi di gruppo → 1 osservazione lab
 
@@ -82,6 +84,9 @@ def _history_key(chat_id: int) -> str:
 
 def _insights_key(chat_id: int) -> str:
     return f"telegram:group_insights:{chat_id}"
+
+def _raw_key(chat_id: int) -> str:
+    return f"telegram:group_raw:{chat_id}"
 
 def _family_key(owner_user_id: str) -> str:
     return f"telegram:family_members:{owner_user_id}"
@@ -149,6 +154,28 @@ async def append_group_history(chat_id: int, from_id: int, first_name: str,
     await s.save(_history_key(chat_id), history)
 
 
+# ── Raw message buffer (tutti i messaggi, non solo quelli a cui Genesi risponde) ─
+
+async def append_raw_message(chat_id: int, from_id: int, first_name: str, text: str):
+    """Salva ogni messaggio del gruppo, anche quelli ignorati da Genesi."""
+    s = await _storage()
+    msgs = await s.load(_raw_key(chat_id), default=[]) or []
+    msgs.append({
+        "from_id":    from_id,
+        "first_name": first_name,
+        "text":       text[:200],
+        "ts":         int(time.time()),
+    })
+    msgs = msgs[-MAX_RAW_MSGS:]
+    await s.save(_raw_key(chat_id), msgs)
+
+
+async def get_raw_messages(chat_id: int, limit: int = RAW_INJECT) -> list:
+    s = await _storage()
+    msgs = await s.load(_raw_key(chat_id), default=[]) or []
+    return msgs[-limit:]
+
+
 # ── Context builder ────────────────────────────────────────────────────────────
 
 async def build_group_context(chat_id: int, from_id: int, first_name: str,
@@ -156,6 +183,7 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
     member   = await get_member(from_id)
     history  = await get_group_history(chat_id, limit=HISTORY_INJECT)
     insights = await _get_group_insights(chat_id)
+    raw_msgs = await get_raw_messages(chat_id, limit=RAW_INJECT)
 
     lines = []
 
@@ -180,8 +208,16 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
         for ins in insights:
             lines.append(f"  • {ins}")
 
-    # Storia recente del gruppo
-    if history:
+    # Discussione in corso (tutti i messaggi recenti, anche quelli a cui Genesi non ha risposto)
+    if raw_msgs:
+        lines.append("[DISCUSSIONE IN CORSO — messaggi recenti del gruppo:]")
+        for m in raw_msgs:
+            name = m.get("first_name", "?")
+            msg  = m.get("text", "")[:150]
+            lines.append(f"  {name}: {msg}")
+        lines.append("[FINE DISCUSSIONE]")
+    elif history:
+        # Fallback: storia vecchia se non ci sono messaggi raw
         lines.append("[STORIA RECENTE DEL GRUPPO:]")
         for h in history:
             name = h.get("first_name", "?")
