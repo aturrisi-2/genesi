@@ -35,6 +35,7 @@ FB_PENDING_KEY  = "facebook:pending_posts"
 FB_REPLIES_KEY  = "facebook:pending_replies"   # risposte in attesa approvazione
 FB_LOG_KEY      = "facebook:interaction_log"
 FB_LIKES_KEY    = "facebook:seen_likes"        # like già visti per post
+FB_GROUP_POSTS_KEY = "facebook:group_post_urls"  # URL post pubblicati nei gruppi
 
 MAX_LOG_ENTRIES   = 300
 MAX_PENDING       = 50
@@ -875,6 +876,19 @@ class FacebookService:
                     result["success"] = True
                     result["post_url"] = self._page.url
                     _slog("FACEBOOK_POSTED", group=group_name, chars=len(content))
+                    # Salva URL per monitoraggio commenti futuro
+                    try:
+                        gp = await storage.load(FB_GROUP_POSTS_KEY, default={"posts": []})
+                        gp["posts"].append({
+                            "url":   self._page.url,
+                            "group": group_name,
+                            "date":  datetime.utcnow().isoformat(),
+                        })
+                        # Tieni solo ultimi 50 post
+                        gp["posts"] = gp["posts"][-50:]
+                        await storage.save(FB_GROUP_POSTS_KEY, gp)
+                    except Exception:
+                        pass
                 else:
                     result["error"] = f"publish: {publish_result.get('step')}"
                     _slog("FACEBOOK_PUBLISH_BTN_NOT_FOUND", group=group_name, step=publish_result.get("step"))
@@ -1195,6 +1209,19 @@ class FacebookService:
             replied_ids = set(replied_log.get("ids", []))
 
             post_urls = await self.read_own_recent_post_urls(max_posts=4)
+            # Aggiungi URL dei post nei gruppi (salvati al momento della pubblicazione)
+            try:
+                gp = await storage.load(FB_GROUP_POSTS_KEY, default={"posts": []})
+                cutoff = datetime.utcnow().isoformat()[:10]  # oggi - 30gg
+                from datetime import timedelta
+                cutoff_dt = (datetime.utcnow() - timedelta(days=30)).isoformat()
+                for entry in gp["posts"]:
+                    url = entry.get("url", "")
+                    date = entry.get("date", "")
+                    if url and date >= cutoff_dt and url not in post_urls:
+                        post_urls.append(url)
+            except Exception:
+                pass
             if not post_urls:
                 _slog("FACEBOOK_REPLY_SKIP", reason="no_own_posts_found")
                 return 0
