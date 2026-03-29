@@ -337,10 +337,17 @@ class FacebookService:
             if "/login" in url or "/checkpoint" in url:
                 _slog("FACEBOOK_IS_LOGGED_IN_FAIL", reason="redirect_login", url=url[:120])
                 return False
-            # Controlla presenza nav bar (indicatore login)
-            nav = await self._page.query_selector('[aria-label="Facebook"]')
-            logged = nav is not None
-            _slog("FACEBOOK_IS_LOGGED_IN_RESULT", logged=logged, nav_found=(nav is not None))
+            # Se siamo rimasti su facebook.com senza redirect → loggati
+            # Prova anche a cercare elementi del nav come conferma aggiuntiva
+            nav = (await self._page.query_selector('[aria-label="Facebook"]')
+                   or await self._page.query_selector('[data-pagelet="LeftRail"]')
+                   or await self._page.query_selector('[aria-label="Il tuo profilo"]')
+                   or await self._page.query_selector('[data-testid="royal_login_button"]'))
+            # Se c_user cookie è nei cookie del context → loggati
+            ctx_cookies = await self._context.cookies()
+            has_cuser = any(c.get("name") == "c_user" for c in ctx_cookies)
+            logged = "facebook.com" in url and has_cuser
+            _slog("FACEBOOK_IS_LOGGED_IN_RESULT", logged=logged, nav_found=(nav is not None), has_cuser=has_cuser)
             return logged
         except Exception as e:
             _slog("FACEBOOK_IS_LOGGED_IN_EXCEPTION", err_type=type(e).__name__, err=str(e)[:200])
