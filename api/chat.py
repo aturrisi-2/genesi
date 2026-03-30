@@ -721,6 +721,78 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
         log("GROUP_CHAT_ERROR", error=str(e))
         raise HTTPException(status_code=500, detail="Group chat error")
 
+
+# ── Endpoint: LLM decide se Genesi deve intervenire nel gruppo ────────────────
+
+_GROUP_INTERVENE_PROMPT = """\
+Sei il filtro di intervento di Genesi in un gruppo familiare su WhatsApp.
+Genesi è discreta: ascolta in silenzio e interviene solo nelle situazioni indicate.
+
+Leggi il messaggio attuale (e i messaggi recenti se presenti). Decidi se Genesi deve rispondere.
+
+RISPONDI "SI" SOLO se il messaggio rientra in UNO di questi casi:
+1. INVOCATA: qualcuno cita Genesi per nome o le pone una domanda diretta
+2. SALUTO: qualcuno saluta il gruppo (ciao, buongiorno, buonasera, buonanotte, salve, hey, ecc. — in qualsiasi lingua o forma)
+3. BUONA NOTIZIA: qualcuno condivide una notizia bella, un successo, un traguardo, qualcosa da celebrare
+4. CONTINUAZIONE: è un follow-up diretto a una risposta appena data da Genesi (< 5 min)
+
+RISPONDI "NO" in tutti gli altri casi:
+- Conversazioni, discussioni, battute tra i membri
+- Domande rivolte ad altri
+- Sfogo o momento difficile (Genesi resta in silenzio)
+
+Il dubbio va verso NO.
+Rispondi SOLO con JSON: {"intervieni": true, "motivo": "breve"} oppure {"intervieni": false, "motivo": "breve"}
+"""
+
+class ShouldRespondRequest(BaseModel):
+    text: str
+    recent_messages: Optional[list] = None  # [{name, text}]
+
+class ShouldRespondResponse(BaseModel):
+    intervieni: bool
+    motivo: str
+
+@router.post("/group/should_respond", response_model=ShouldRespondResponse)
+async def group_should_respond(request: ShouldRespondRequest, user: AuthUser = Depends(require_auth)):
+    """LLM decide se Genesi deve intervenire nel gruppo WhatsApp."""
+    try:
+        from core.llm_service import llm_service
+        import json as _json
+
+        recent = ""
+        if request.recent_messages:
+            recent = "\nMessaggi recenti:\n" + "\n".join(
+                f"  {m.get('name','?')}: {m.get('text','')[:100]}"
+                for m in request.recent_messages[-8:]
+            )
+
+        user_content = f"Messaggio attuale: {request.text[:300]}{recent}"
+
+        raw = await llm_service._call_model(
+            "openai/gpt-4o-mini",
+            _GROUP_INTERVENE_PROMPT,
+            user_content,
+            user_id="group-intervene-filter",
+            route="memory",
+        )
+        if not raw:
+            return ShouldRespondResponse(intervieni=False, motivo="no response")
+
+        clean = raw.strip().strip("```").strip()
+        if clean.startswith("json"):
+            clean = clean[4:]
+        parsed = _json.loads(clean)
+        return ShouldRespondResponse(
+            intervieni=bool(parsed.get("intervieni", False)),
+            motivo=parsed.get("motivo", ""),
+        )
+    except Exception as e:
+        log("GROUP_SHOULD_RESPOND_ERROR", error=str(e))
+        # Fallback: non intervenire in caso di errore
+        return ShouldRespondResponse(intervieni=False, motivo="error")
+
+
 @router.get("/user/messages")
 async def get_user_messages(user: AuthUser = Depends(require_auth), limit: Optional[int] = 10):
     """

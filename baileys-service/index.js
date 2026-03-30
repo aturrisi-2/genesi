@@ -47,19 +47,27 @@ function getRecentMessages(groupId, limit = 15) {
 }
 
 // ── Filtro: quando Genesi interviene ─────────────────────────────────────────
-const GREETINGS_RE    = /\b(ciao|ciao a tutti|buongiorno|buonasera|buonanotte|salve|hey a tutti)\b/i;
-const GENESI_RE       = /\bgenesi\b/i;
-const CELEBRATION_EMO = ["🎉","🎊","🥳","🎈","🥂","🍾","🎂","🏆","🎁"];
-const GOOD_NEWS_KW    = ["ce l'ho fatta","ho preso","ho comprato","ho vinto","abbiamo vinto",
-                         "promozione","promosso","promossa","laurea","diploma","compleanno","auguri","finalmente"];
+// Fast-path locale solo per menzione diretta — tutto il resto decide l'LLM
+const GENESI_RE = /\bgenesi\b/i;
 
-function shouldRespond(text) {
+async function shouldRespond(text, recentMessages, token) {
+    // Fast-path: menzione diretta → sempre sì senza chiamare LLM
     if (GENESI_RE.test(text)) return true;
-    if (GREETINGS_RE.test(text)) return true;
-    if (CELEBRATION_EMO.some(e => text.includes(e))) return true;
-    const lower = text.toLowerCase();
-    if (GOOD_NEWS_KW.some(kw => lower.includes(kw))) return true;
-    return false;
+
+    // LLM decide per tutto il resto (saluti, buone notizie, ecc.)
+    try {
+        const res = await axios.post(`${GENESI_URL}/api/chat/group/should_respond`, {
+            text,
+            recent_messages: recentMessages,
+        }, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 8000,
+        });
+        return res.data.intervieni === true;
+    } catch (e) {
+        // In caso di errore, non intervenire
+        return false;
+    }
 }
 
 // ── Auth Genesi API ───────────────────────────────────────────────────────────
@@ -76,9 +84,9 @@ async function getToken(type = "group") {
 }
 
 // ── Chiamata a Genesi — gruppo ────────────────────────────────────────────────
-async function askGenesiGroup(text, senderName, senderId, groupId) {
+async function askGenesiGroup(text, senderName, senderId, groupId, token = null) {
     try {
-        const token = await getToken("group");
+        if (!token) token = await getToken("group");
         const res = await axios.post(`${GENESI_URL}/api/chat/group`, {
             text,
             sender_name: senderName,
@@ -196,13 +204,15 @@ async function startBaileys() {
                 addToBuffer(groupId, senderName, text);
                 console.log(`[${senderName}@${groupId.slice(0,10)}] ${text.slice(0, 60)}`);
 
-                // Filtra: risponde solo se invocata/saluto/buona notizia
-                if (!shouldRespond(text)) continue;
+                // Filtra: LLM decide se intervenire
+                const token = await getToken("group");
+                const recentMsgs = getRecentMessages(groupId);
+                if (!await shouldRespond(text, recentMsgs, token)) continue;
 
                 console.log(`[Baileys] Intervengo per: "${text.slice(0, 50)}"`);
 
                 await sock.sendPresenceUpdate("composing", groupId);
-                const reply = await askGenesiGroup(text, senderName, senderJid, groupId);
+                const reply = await askGenesiGroup(text, senderName, senderJid, groupId, token);
                 await sock.sendPresenceUpdate("paused", groupId);
 
                 if (reply) {
