@@ -1,8 +1,14 @@
 /**
- * Registrazione una-tantum del numero WhatsApp via SMS.
- * Eseguire una sola volta: node register.js +393313650671
+ * Collegamento Baileys a WhatsApp via pairing code.
  *
- * Dopo la registrazione, avviare il servizio normale: node index.js
+ * PREREQUISITO: WhatsApp installato sul telefono con il numero target.
+ *
+ * Passi:
+ *   1. node register.js +393313650671
+ *   2. Apri WhatsApp sul telefono → Impostazioni → Dispositivi collegati
+ *      → Collega dispositivo → Collega con numero di telefono
+ *   3. Inserisci il codice mostrato qui
+ *   4. Dopo il collegamento puoi avviare: node index.js
  */
 
 const {
@@ -12,14 +18,10 @@ const {
     makeCacheableSignalKeyStore,
     DisconnectReason,
 } = require("@whiskeysockets/baileys");
-const pino   = require("pino");
-const readline = require("readline");
+const pino = require("pino");
 require("dotenv").config();
 
 const AUTH_DIR = "./baileys-auth";
-
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-const ask = (q) => new Promise(resolve => rl.question(q, resolve));
 
 async function main() {
     const phoneNumber = process.argv[2] || process.env.WA_PHONE_NUMBER_FULL;
@@ -29,11 +31,19 @@ async function main() {
     }
 
     const clean = phoneNumber.replace(/[^0-9]/g, "");
-    console.log(`\n=== Registrazione WhatsApp per +${clean} ===\n`);
+    console.log(`\n=== Collegamento WhatsApp Baileys per +${clean} ===`);
+    console.log("Assicurati che WhatsApp sia installato sul telefono con questo numero.\n");
 
     const { version } = await fetchLatestBaileysVersion();
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
     const logger = pino({ level: "silent" });
+
+    // Se già collegato, esci
+    if (state.creds.me) {
+        console.log("✅ Già collegato come:", state.creds.me.id);
+        console.log("Avvia il servizio: node index.js");
+        process.exit(0);
+    }
 
     const sock = makeWASocket({
         version,
@@ -49,55 +59,57 @@ async function main() {
 
     sock.ev.on("creds.update", saveCreds);
 
-    sock.ev.on("connection.update", async ({ connection, lastDisconnect }) => {
+    sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
+        if (qr) {
+            // QR code come fallback (non dovrebbe apparire con pairing code)
+            console.log("\n[QR CODE disponibile ma usa il pairing code sopra]");
+        }
         if (connection === "open") {
-            console.log("\n✅ Registrazione completata! WhatsApp connesso.");
-            console.log("Ora puoi avviare il servizio: node index.js\n");
-            rl.close();
+            console.log("\n✅ Collegamento completato! WhatsApp connesso.");
+            console.log("Puoi avviare il servizio: node index.js\n");
             process.exit(0);
         }
         if (connection === "close") {
-            const code = lastDisconnect?.error?.output?.statusCode;
-            if (code === DisconnectReason.loggedOut) {
-                console.log("Sessione non valida. Cancella la cartella baileys-auth/ e riprova.");
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            console.log("Connessione chiusa, codice:", statusCode);
+            if (statusCode === DisconnectReason.loggedOut) {
+                console.log("Sessione non valida. Cancella baileys-auth/ e riprova.");
+                process.exit(1);
+            }
+            if (statusCode === DisconnectReason.timedOut) {
+                console.log("Timeout — riprova tra qualche secondo.");
                 process.exit(1);
             }
         }
     });
 
-    // Se già registrato, non serve fare nulla
-    if (state.creds.registered) {
-        console.log("Numero già registrato. Avvia direttamente: node index.js");
-        rl.close();
-        process.exit(0);
-    }
+    // Aspetta che la connessione sia aperta prima di richiedere il pairing code
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
-    // Richiedi pairing code (viene inviato come SMS o notifica WhatsApp)
+    console.log("Richiedo il codice di abbinamento...");
     try {
-        console.log("Richiedo il codice di abbinamento a WhatsApp...");
         const pairingCode = await sock.requestPairingCode(clean);
-        console.log("\n╔══════════════════════════════════════╗");
-        console.log(`║  CODICE PAIRING:  ${pairingCode}  ║`);
-        console.log("╚══════════════════════════════════════╝\n");
-        console.log("Apri WhatsApp sul tuo telefono:");
-        console.log("  Impostazioni → Dispositivi collegati → Collega dispositivo");
-        console.log("  Scegli 'Collega con numero di telefono'");
-        console.log("  Inserisci il codice sopra\n");
-        console.log("In attesa che tu inserisca il codice...\n");
+        const formatted = pairingCode.match(/.{1,4}/g)?.join("-") || pairingCode;
+        console.log("\n┌─────────────────────────────────┐");
+        console.log(`│   CODICE PAIRING:  ${formatted.padEnd(13)}│`);
+        console.log("└─────────────────────────────────┘\n");
+        console.log("Sul telefono con WhatsApp:");
+        console.log("  → Impostazioni → Dispositivi collegati");
+        console.log("  → Collega dispositivo → Collega con numero di telefono");
+        console.log(`  → Inserisci: ${formatted}\n`);
+        console.log("In attesa conferma... (max 5 minuti)\n");
     } catch (e) {
-        console.error("Errore richiesta pairing code:", e.message);
-
-        // Fallback: registrazione via SMS
-        console.log("\nTento registrazione via SMS...");
-        try {
-            await sock.register(clean, "sms");
-            const code = await ask("Inserisci il codice SMS ricevuto su +"+clean+": ");
-            await sock.register(clean, undefined, code.trim());
-        } catch (e2) {
-            console.error("Errore SMS:", e2.message);
-            process.exit(1);
-        }
+        console.error("\nErrore pairing code:", e.message);
+        console.log("\nSoluzione: assicurati che WhatsApp sia aperto e connesso");
+        console.log("sul telefono con il numero +"+clean);
+        process.exit(1);
     }
+
+    // Timeout 5 minuti
+    setTimeout(() => {
+        console.log("\nTimeout — il codice è scaduto. Riavvia lo script.");
+        process.exit(1);
+    }, 5 * 60 * 1000);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
