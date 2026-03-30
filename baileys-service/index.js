@@ -146,12 +146,14 @@ async function startBaileys() {
         }
         if (connection === "close") {
             const code = lastDisconnect?.error?.output?.statusCode;
-            const loggedOut = code === DisconnectReason.loggedOut;
-            console.log(`[Baileys] Connessione chiusa (code=${code}). Reconnect: ${!loggedOut}`);
-            if (!loggedOut) {
-                setTimeout(startBaileys, 5000);
+            const loggedOut  = code === DisconnectReason.loggedOut;
+            const replaced   = code === 440; // sessione sostituita da altro client
+            console.log(`[Baileys] Connessione chiusa (code=${code}). Reconnect: ${!loggedOut && !replaced}`);
+            if (loggedOut || replaced) {
+                console.log("[Baileys] Sessione non valida (logout o sostituita). Uscita — systemd riavvierà.");
+                process.exit(1);
             } else {
-                console.log("[Baileys] Logout — cancella baileys-auth/ e riscansiona il QR.");
+                setTimeout(startBaileys, 5000);
             }
         } else if (connection === "open") {
             console.log("[Baileys] ✅ Connesso a WhatsApp. In ascolto su gruppi e messaggi diretti...");
