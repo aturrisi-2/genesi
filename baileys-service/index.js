@@ -47,7 +47,7 @@ function getRecentMessages(groupId, limit = 15) {
 }
 
 // ── Filtro: quando Genesi interviene ─────────────────────────────────────────
-const GREETINGS_RE    = /\b(ciao a tutti|buongiorno|buonasera|buonanotte|salve|hey a tutti)\b/i;
+const GREETINGS_RE    = /\b(ciao|ciao a tutti|buongiorno|buonasera|buonanotte|salve|hey a tutti)\b/i;
 const GENESI_RE       = /\bgenesi\b/i;
 const CELEBRATION_EMO = ["🎉","🎊","🥳","🎈","🥂","🍾","🎂","🏆","🎁"];
 const GOOD_NEWS_KW    = ["ce l'ho fatta","ho preso","ho comprato","ho vinto","abbiamo vinto",
