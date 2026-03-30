@@ -650,6 +650,27 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
             sender_int = 0
             group_int  = 0
 
+        # 0. Auto-match nome → parentela dal family_tree di Alfio
+        #    Se il nome corrisponde a un membro noto, pre-popola la relazione subito
+        try:
+            from core.telegram_group_memory import _member_key, _storage as _tgm_storage
+            _tgm_s = await _tgm_storage()
+            member = await _tgm_s.load(_member_key(sender_int), default={}) or {}
+            if not member.get("relationship_to_owner"):
+                owner_profile = await storage.load(f"profile:{user.id}", default={})
+                ft = owner_profile.get("family_tree", {})
+                sender_name_lower = request.sender_name.lower()
+                for _v in ft.values():
+                    if _v.get("name", "").lower() == sender_name_lower:
+                        member["relationship_to_owner"] = _v.get("relationship", "")
+                        member["display_name"] = _v.get("name", request.sender_name)
+                        member.setdefault("first_name", request.sender_name)
+                        await _tgm_s.save(_member_key(sender_int), member)
+                        log("WA_GROUP_MEMBER_AUTOLINKED", name=request.sender_name, rel=member["relationship_to_owner"])
+                        break
+        except Exception:
+            pass
+
         # 1. Salva nel buffer grezzo (sempre, prima di decidere se rispondere)
         _aio.create_task(append_raw_message(group_int, sender_int, request.sender_name, request.text))
 
