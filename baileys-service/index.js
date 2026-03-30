@@ -23,6 +23,9 @@ require("dotenv").config();
 const GENESI_URL       = process.env.GENESI_URL || "http://localhost:8000";
 const GROUP_EMAIL      = process.env.GENESI_GROUP_EMAIL || "whatsapp_group@genesi.group";
 const GROUP_PASSWORD   = process.env.GENESI_GROUP_PASSWORD || "changeme";
+// Account per messaggi diretti (1:1) — di default usa l'account principale di Alfio
+const DIRECT_EMAIL     = process.env.GENESI_DIRECT_EMAIL || "alfio.turrisi@gmail.com";
+const DIRECT_PASSWORD  = process.env.GENESI_DIRECT_PASSWORD || "ZOEennio0810";
 const ALLOWED_GROUPS   = (process.env.ALLOWED_GROUPS || "").split(",").map(s => s.trim()).filter(Boolean);
 const AUTH_DIR         = "./baileys-auth";
 
@@ -60,26 +63,22 @@ function shouldRespond(text) {
 }
 
 // ── Auth Genesi API ───────────────────────────────────────────────────────────
-let authToken = null;
+const tokens = { group: null, direct: null };
 
-async function getToken() {
-    if (authToken) return authToken;
-    const res = await axios.post(`${GENESI_URL}/auth/login`, {
-        email: GROUP_EMAIL,
-        password: GROUP_PASSWORD,
-    }, { timeout: 10000 });
-    authToken = res.data.access_token;
-    console.log("[Genesi] Token ottenuto");
-    return authToken;
+async function getToken(type = "group") {
+    if (tokens[type]) return tokens[type];
+    const email    = type === "direct" ? DIRECT_EMAIL    : GROUP_EMAIL;
+    const password = type === "direct" ? DIRECT_PASSWORD : GROUP_PASSWORD;
+    const res = await axios.post(`${GENESI_URL}/auth/login`, { email, password }, { timeout: 10000 });
+    tokens[type] = res.data.access_token;
+    console.log(`[Genesi] Token ${type} ottenuto`);
+    return tokens[type];
 }
 
-// ── Chiamata a Genesi ─────────────────────────────────────────────────────────
-async function askGenesi(text, senderName, senderId, groupId) {
+// ── Chiamata a Genesi — gruppo ────────────────────────────────────────────────
+async function askGenesiGroup(text, senderName, senderId, groupId) {
     try {
-        const token = await getToken();
-
-        // Usa l'endpoint /api/chat/group — gestisce tutta la logica memoria/contesto
-        // come il gruppo Telegram (build_group_context, append_raw_message, ecc.)
+        const token = await getToken("group");
         const res = await axios.post(`${GENESI_URL}/api/chat/group`, {
             text,
             sender_name: senderName,
@@ -89,13 +88,29 @@ async function askGenesi(text, senderName, senderId, groupId) {
             headers: { Authorization: `Bearer ${token}` },
             timeout: 35000,
         });
-
         return res.data.response || null;
     } catch (e) {
-        if (e.response?.status === 401) {
-            authToken = null;
-        }
-        console.error("[Genesi] API error:", e.message, e.response?.data);
+        if (e.response?.status === 401) tokens.group = null;
+        console.error("[Genesi] Group API error:", e.message, e.response?.data);
+        return null;
+    }
+}
+
+// ── Chiamata a Genesi — diretto 1:1 ──────────────────────────────────────────
+async function askGenesiDirect(text) {
+    try {
+        const token = await getToken("direct");
+        const res = await axios.post(`${GENESI_URL}/api/chat`, {
+            message:  text,
+            platform: "whatsapp",
+        }, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 35000,
+        });
+        return res.data.response || null;
+    } catch (e) {
+        if (e.response?.status === 401) tokens.direct = null;
+        console.error("[Genesi] Direct API error:", e.message, e.response?.data);
         return null;
     }
 }
@@ -139,7 +154,7 @@ async function startBaileys() {
                 console.log("[Baileys] Logout — cancella baileys-auth/ e riscansiona il QR.");
             }
         } else if (connection === "open") {
-            console.log("[Baileys] ✅ Connesso a WhatsApp. In ascolto sui gruppi...");
+            console.log("[Baileys] ✅ Connesso a WhatsApp. In ascolto su gruppi e messaggi diretti...");
         }
     });
 
@@ -150,11 +165,11 @@ async function startBaileys() {
             try {
                 if (msg.key.fromMe) continue;
 
-                const groupId = msg.key.remoteJid;
-                if (!groupId?.endsWith("@g.us")) continue; // solo gruppi
+                const remoteJid = msg.key.remoteJid;
+                const isGroup   = remoteJid?.endsWith("@g.us");
+                const isDirect  = remoteJid?.endsWith("@s.whatsapp.net");
 
-                // Filtro per gruppi specifici (se configurato)
-                if (ALLOWED_GROUPS.length && !ALLOWED_GROUPS.includes(groupId)) continue;
+                if (!isGroup && !isDirect) continue;
 
                 const text = (
                     msg.message?.conversation
@@ -166,37 +181,49 @@ async function startBaileys() {
 
                 if (!text) continue;
 
-                // Nome mittente
-                const senderJid = msg.key.participant || groupId;
-                let senderName = senderJid.replace("@s.whatsapp.net", "").replace("@g.us", "");
-                try {
-                    const meta = await sock.groupMetadata(groupId);
-                    const p = meta?.participants?.find(x => x.id === senderJid);
-                    if (p?.name) senderName = p.name.split(" ")[0];
-                    else if (msg.pushName) senderName = msg.pushName.split(" ")[0];
-                } catch (_) {
-                    if (msg.pushName) senderName = msg.pushName.split(" ")[0];
+                const senderName = (msg.pushName || remoteJid).split(" ")[0];
+
+                // ── MESSAGGIO DIRETTO 1:1 ────────────────────────────────────
+                if (isDirect) {
+                    console.log(`[DM:${senderName}] ${text.slice(0, 60)}`);
+                    await sock.sendPresenceUpdate("composing", remoteJid);
+                    const reply = await askGenesiDirect(text);
+                    await sock.sendPresenceUpdate("paused", remoteJid);
+                    if (reply) {
+                        await sock.sendMessage(remoteJid, { text: reply });
+                        console.log(`[Genesi → ${senderName}] ${reply.slice(0, 80)}`);
+                    }
+                    continue;
                 }
 
-                // Salva nel buffer grezzo locale (fallback se backend non disponibile)
-                addToBuffer(groupId, senderName, text);
-                console.log(`[${senderName}@${groupId.slice(0,10)}] ${text.slice(0, 60)}`);
+                // ── MESSAGGIO DI GRUPPO ──────────────────────────────────────
+                // Filtro per gruppi specifici (se configurato)
+                if (ALLOWED_GROUPS.length && !ALLOWED_GROUPS.includes(remoteJid)) continue;
+
+                const senderJid = msg.key.participant || remoteJid;
+                let groupSenderName = senderName;
+                try {
+                    const meta = await sock.groupMetadata(remoteJid);
+                    const p = meta?.participants?.find(x => x.id === senderJid);
+                    if (p?.name) groupSenderName = p.name.split(" ")[0];
+                } catch (_) {}
+
+                // Salva nel buffer grezzo locale
+                addToBuffer(remoteJid, groupSenderName, text);
+                console.log(`[${groupSenderName}@${remoteJid.slice(0,10)}] ${text.slice(0, 60)}`);
 
                 // Filtra: risponde solo se invocata/saluto/buona notizia
                 if (!shouldRespond(text)) continue;
 
                 console.log(`[Baileys] Intervengo per: "${text.slice(0, 50)}"`);
 
-                // Typing indicator
-                await sock.sendPresenceUpdate("composing", groupId);
-
-                const reply = await askGenesi(text, senderName, senderJid, groupId);
-
-                await sock.sendPresenceUpdate("paused", groupId);
+                await sock.sendPresenceUpdate("composing", remoteJid);
+                const reply = await askGenesiGroup(text, groupSenderName, senderJid, remoteJid);
+                await sock.sendPresenceUpdate("paused", remoteJid);
 
                 if (reply) {
-                    await sock.sendMessage(groupId, { text: reply });
-                    console.log(`[Genesi → ${senderName}] ${reply.slice(0, 80)}`);
+                    await sock.sendMessage(remoteJid, { text: reply });
+                    console.log(`[Genesi → ${groupSenderName}] ${reply.slice(0, 80)}`);
                 }
             } catch (e) {
                 console.error("[Baileys] Errore messaggio:", e.message);
