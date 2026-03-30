@@ -168,10 +168,11 @@ async function startBaileys() {
                 if (msg.key.fromMe) continue;
 
                 const remoteJid = msg.key.remoteJid;
-                const isGroup   = remoteJid?.endsWith("@g.us");
-                const isDirect  = remoteJid?.endsWith("@s.whatsapp.net");
+                const groupId = msg.key.remoteJid;
+                if (!groupId?.endsWith("@g.us")) continue; // solo gruppi
 
-                if (!isGroup && !isDirect) continue;
+                // Filtro per gruppi specifici (se configurato)
+                if (ALLOWED_GROUPS.length && !ALLOWED_GROUPS.includes(groupId)) continue;
 
                 const text = (
                     msg.message?.conversation
@@ -183,49 +184,30 @@ async function startBaileys() {
 
                 if (!text) continue;
 
-                const senderName = (msg.pushName || remoteJid).split(" ")[0];
-
-                // ── MESSAGGIO DIRETTO 1:1 ────────────────────────────────────
-                if (isDirect) {
-                    console.log(`[DM:${senderName}] ${text.slice(0, 60)}`);
-                    await sock.sendPresenceUpdate("composing", remoteJid);
-                    const reply = await askGenesiDirect(text);
-                    await sock.sendPresenceUpdate("paused", remoteJid);
-                    if (reply) {
-                        await sock.sendMessage(remoteJid, { text: reply });
-                        console.log(`[Genesi → ${senderName}] ${reply.slice(0, 80)}`);
-                    }
-                    continue;
-                }
-
-                // ── MESSAGGIO DI GRUPPO ──────────────────────────────────────
-                // Filtro per gruppi specifici (se configurato)
-                if (ALLOWED_GROUPS.length && !ALLOWED_GROUPS.includes(remoteJid)) continue;
-
-                const senderJid = msg.key.participant || remoteJid;
-                let groupSenderName = senderName;
+                const senderJid = msg.key.participant || groupId;
+                let senderName = (msg.pushName || senderJid).split(" ")[0];
                 try {
-                    const meta = await sock.groupMetadata(remoteJid);
+                    const meta = await sock.groupMetadata(groupId);
                     const p = meta?.participants?.find(x => x.id === senderJid);
-                    if (p?.name) groupSenderName = p.name.split(" ")[0];
+                    if (p?.name) senderName = p.name.split(" ")[0];
                 } catch (_) {}
 
                 // Salva nel buffer grezzo locale
-                addToBuffer(remoteJid, groupSenderName, text);
-                console.log(`[${groupSenderName}@${remoteJid.slice(0,10)}] ${text.slice(0, 60)}`);
+                addToBuffer(groupId, senderName, text);
+                console.log(`[${senderName}@${groupId.slice(0,10)}] ${text.slice(0, 60)}`);
 
                 // Filtra: risponde solo se invocata/saluto/buona notizia
                 if (!shouldRespond(text)) continue;
 
                 console.log(`[Baileys] Intervengo per: "${text.slice(0, 50)}"`);
 
-                await sock.sendPresenceUpdate("composing", remoteJid);
-                const reply = await askGenesiGroup(text, groupSenderName, senderJid, remoteJid);
-                await sock.sendPresenceUpdate("paused", remoteJid);
+                await sock.sendPresenceUpdate("composing", groupId);
+                const reply = await askGenesiGroup(text, senderName, senderJid, groupId);
+                await sock.sendPresenceUpdate("paused", groupId);
 
                 if (reply) {
-                    await sock.sendMessage(remoteJid, { text: reply });
-                    console.log(`[Genesi → ${groupSenderName}] ${reply.slice(0, 80)}`);
+                    await sock.sendMessage(groupId, { text: reply });
+                    console.log(`[Genesi → ${senderName}] ${reply.slice(0, 80)}`);
                 }
             } catch (e) {
                 console.error("[Baileys] Errore messaggio:", e.message);
