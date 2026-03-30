@@ -425,10 +425,15 @@ def build_conversation_context(user_id: str, current_message: str,
     topic = detect_topic(current_message, history)
     sections.append(f"TEMA CORRENTE DELLA CONVERSAZIONE: {topic}")
 
-    # --- D) Narrative continuity: link last 2 user messages if related ---
-    continuity = _detect_narrative_continuity(current_message, history)
-    if continuity:
-        sections.append(continuity)
+    # --- D) Collegamento Neurale: se è una continuazione esplicita, inietta FILO DIRETTO ---
+    neural_link = _detect_continuation(current_message, history)
+    if neural_link:
+        sections.append(neural_link)
+    else:
+        # --- D2) Narrative continuity: link last 2 user messages if related ---
+        continuity = _detect_narrative_continuity(current_message, history)
+        if continuity:
+            sections.append(continuity)
 
     # --- E) Active document context ---
     doc_section = _inject_document_context(user_id, current_message, profile)
@@ -436,6 +441,61 @@ def build_conversation_context(user_id: str, current_message: str,
         sections.append(doc_section)
 
     return "\n\n".join(sections)
+
+
+# ═══════════════════════════════════════════════════════════════
+# COLLEGAMENTO NEURALE — rileva continuazione esplicita e inietta
+# l'ultima risposta come FILO DIRETTO nel contesto LLM
+# ═══════════════════════════════════════════════════════════════
+
+import re as _re_cont
+
+# Messaggi che sono esplicitamente una richiesta di continuazione
+_CONTINUATION_PATTERNS = _re_cont.compile(
+    r"^(continua\.?|puoi approfondire\??|approfondisci\.?|spiega(mi)? meglio\.?|"
+    r"dimmi di più\.?|e (poi|quindi|allora)\??|come arrivi a (questa |questa )?conclusione\??|"
+    r"perché\??|e come\??|e quindi\??|ma quindi\??|e poi\??|interessante\.?\s*(puoi)?\s*(approfondire|continuare|spiegare)?\??|"
+    r"non (mi è|è) chiaro\.?|puoi chiarire\??|chiariscimi\.?|spiegami\.?|"
+    r"sì,?\s*(ma)?\s*(come|perché|cosa intendi)\??|va bene,?\s*ma\s*(quindi|poi)\??|"
+    r"mi stai dicendo che\??|quindi stai dicendo\??|in che senso\??|"
+    r"questo mi fa pensare\.?\s*(continua\.?)?)$",
+    _re_cont.IGNORECASE
+)
+
+
+def _detect_continuation(current_message: str, history: List[Dict]) -> str:
+    """
+    Se il messaggio è una continuazione esplicita, inietta l'ultima risposta
+    di Genesi come FILO DIRETTO — istruisce l'LLM a non perdere il filo.
+    """
+    if not _CONTINUATION_PATTERNS.match(current_message.strip()):
+        return ""
+    if not history:
+        return ""
+
+    # Cerca l'ultima risposta di Genesi
+    last_genesi = ""
+    for entry in reversed(history):
+        resp = entry.get("system_response", "")
+        if resp and len(resp) > 20:
+            last_genesi = resp
+            break
+
+    if not last_genesi:
+        return ""
+
+    # Tronca se troppo lunga
+    preview = last_genesi[:400] + ("..." if len(last_genesi) > 400 else "")
+
+    return (
+        f"COLLEGAMENTO NEURALE — FILO DIRETTO OBBLIGATORIO:\n"
+        f"Stavi dicendo: \"{preview}\"\n"
+        f"L'utente dice: \"{current_message}\"\n"
+        f"DEVI continuare ESATTAMENTE da dove ti eri fermata — stessa conversazione, stesso argomento, stessa profondità.\n"
+        f"NON ricominciare da capo. NON cambiare tema. NON rispondere con frasi generiche.\n"
+        f"Se l'utente dice 'continua' → sviluppa il punto precedente ulteriormente.\n"
+        f"Se chiede 'perché/come' → spiega il ragionamento che ha portato a quella risposta."
+    )
 
 
 # ═══════════════════════════════════════════════════════════════

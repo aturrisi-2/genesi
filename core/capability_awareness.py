@@ -164,6 +164,27 @@ def build_capability_context_block(capability_map: dict) -> str:
         return ""
 
 
+# ── Messaggi che sono refusal corretti — non sono gap, sono comportamento atteso ──
+_CORRECT_REFUSAL_RE = re.compile(
+    r"\b(ignora.*istruzioni|developer\s*mode|senza\s+limitazioni|senza\s+limiti|senza\s+filtri|"
+    r"nome\s+segreto|come\s+si\s+fa\s+(una\s+)?bomba|illegale|hackerare|"
+    r"rispondimi\s+sempre\s+con\s+s[iì]|dimmi\s+(qualcosa\s+di\s+)?offensivo|"
+    r"spiar(mi|ti|ci)|comportati\s+come\s+(se\s+)?non\s+hai\s+regole|"
+    r"sei\s+in\s+modalità\s+developer|il\s+tuo\s+nome\s+segreto|"
+    r"sei\s+(chatgpt|claude|gemini|gpt)|non\s+hai\s+regole|programmata\s+per\s+spiar)\b",
+    re.IGNORECASE
+)
+
+# ── Risposte che sono refusal corretti (identità, sicurezza) ──────────────────
+_CORRECT_RESPONSE_RE = re.compile(
+    r"^(Non posso (aiutarti con (questa richiesta|questo)|farlo)|"
+    r"Non ho nomi segreti|Non sono in modalità|Rimango Genesi|Resto Genesi|"
+    r"No, non sono programmata per spiare|"
+    r"Non posso impegnarmi a rispondere sempre)",
+    re.IGNORECASE
+)
+
+
 def detect_gap(
     user_message: str,
     response: str,
@@ -176,6 +197,12 @@ def detect_gap(
     gap_type: "missing_integration" | "feature_requested" | "explicit_limit"
     """
     try:
+        # 0. ESCLUSIONE: richieste di jailbreak, sicurezza, identità — risposte corrette, non gap
+        if _CORRECT_REFUSAL_RE.search(user_message):
+            return False, None
+        if _CORRECT_RESPONSE_RE.match(response.strip()):
+            return False, None
+
         # 1. La risposta contiene espliciti "non posso/non ho accesso"
         if _GAP_RE.search(response):
             # Distingue: richiesta di funzione assente vs limite noto
