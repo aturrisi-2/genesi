@@ -607,6 +607,99 @@ async def get_user_info(user: AuthUser = Depends(require_auth)):
         log("USER_INFO_ERROR", user_id=user.id, error=str(e))
         raise HTTPException(status_code=500, detail="User info error")
 
+
+# ── Endpoint gruppo WhatsApp (Baileys) ────────────────────────────────────────
+
+class GroupChatRequest(BaseModel):
+    text: str
+    sender_name: str
+    sender_id: str   # numero telefono o JID
+    group_id: str    # JID gruppo WhatsApp
+
+class GroupChatResponse(BaseModel):
+    response: str
+    status: str
+
+@router.post("/group", response_model=GroupChatResponse)
+async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depends(require_auth)):
+    """
+    Endpoint dedicato ai gruppi WhatsApp (Baileys).
+    Usa la stessa logica memoria/contesto del gruppo Telegram:
+    - append_raw_message (buffer discussione)
+    - build_group_context (contesto famiglia, fatti, dinamiche)
+    - update_member_seen (presenza membro)
+    - extract_family_relationship (aggiorna albero familiare)
+    - append_group_history / record_group_observation (memoria post-risposta)
+    """
+    import asyncio as _aio
+    try:
+        from core.telegram_group_memory import (
+            append_raw_message, build_group_context,
+            update_member_seen, extract_family_relationship,
+            append_group_history, record_group_observation,
+            consolidate_group_insights_if_needed,
+        )
+
+        # Normalizza group_id e sender_id a interi (come fa whatsapp_bot.py)
+        clean_sender = request.sender_id.replace("@s.whatsapp.net", "").replace("+", "")
+        clean_group  = request.group_id.replace("@g.us", "").replace("-", "")
+        try:
+            sender_int = abs(hash(clean_sender)) % (10**9)
+            group_int  = abs(hash(clean_group))  % (10**9)
+        except Exception:
+            sender_int = 0
+            group_int  = 0
+
+        # 1. Salva nel buffer grezzo (sempre, prima di decidere se rispondere)
+        _aio.create_task(append_raw_message(group_int, sender_int, request.sender_name, request.text))
+
+        # 2. Aggiorna presenza membro
+        _aio.create_task(update_member_seen(sender_int, request.sender_name))
+
+        # 3. Estrai parentela in background
+        _aio.create_task(extract_family_relationship(clean_sender, request.sender_name, request.text, "whatsapp"))
+
+        # 4. Costruisci contesto gruppo (sincrono — serve per la risposta)
+        group_ctx = await build_group_context(group_int, sender_int, request.sender_name)
+
+        # 5. Costruisci messaggio arricchito (stesso formato di telegram_bot.py)
+        only_emoji = all(ord(c) > 127 or c in (' ', '\n') for c in request.text.strip())
+        if only_emoji:
+            enriched = (
+                f"{request.text}\n\n"
+                f"[GRUPPO FAMILIARE: scrive {request.sender_name}. "
+                f"Reazione/emoji — risposta brevissima, calore familiare, zero domande.]\n"
+                f"{group_ctx}"
+            )
+        else:
+            enriched = (
+                f"{request.text}\n\n"
+                f"[GRUPPO FAMILIARE: scrive {request.sender_name}. "
+                f"Sei un membro della famiglia — rispondi con calore e concretezza, "
+                f"senza domande superflue. Usa il nome {request.sender_name}.]\n"
+                f"{group_ctx}"
+            )
+
+        log("GROUP_CHAT_WA", sender=request.sender_name, group=request.group_id[:20], msg=request.text[:60])
+
+        # 6. Chiama simple_chat_handler con platform=whatsapp_group
+        response, _intent = await simple_chat_handler(
+            user_id=user.id,
+            message=enriched,
+            platform="whatsapp_group",
+        )
+
+        # 7. Post-risposta in background
+        _aio.create_task(append_group_history(group_int, sender_int, request.sender_name, request.text, response))
+        _aio.create_task(record_group_observation(group_int, sender_int, request.sender_name, request.text, response))
+        _aio.create_task(consolidate_group_insights_if_needed(group_int))
+
+        return GroupChatResponse(response=response, status="ok")
+
+    except Exception as e:
+        log("GROUP_CHAT_ERROR", error=str(e))
+        raise HTTPException(status_code=500, detail="Group chat error")
+
 @router.get("/user/messages")
 async def get_user_messages(user: AuthUser = Depends(require_auth), limit: Optional[int] = 10):
     """

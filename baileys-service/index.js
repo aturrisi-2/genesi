@@ -74,27 +74,17 @@ async function getToken() {
 }
 
 // ── Chiamata a Genesi ─────────────────────────────────────────────────────────
-async function askGenesi(text, senderName, groupId) {
+async function askGenesi(text, senderName, senderId, groupId) {
     try {
         const token = await getToken();
 
-        // Costruisce il contesto discussione (come fa Telegram)
-        const recentMsgs = getRecentMessages(groupId);
-        let discussion = "";
-        if (recentMsgs.length) {
-            discussion = "[DISCUSSIONE IN CORSO — messaggi recenti del gruppo:]\n"
-                + recentMsgs.map(m => `  ${m.name}: ${m.text}`).join("\n")
-                + "\n[FINE DISCUSSIONE]\n";
-        }
-
-        const enriched = `${text}\n\n[GRUPPO FAMILIARE: scrive ${senderName}. `
-            + `Sei un membro della famiglia. Usa il nome ${senderName}.]\n`
-            + discussion
-            + `[CONTESTO FAMIGLIA: ${senderName} è un membro della famiglia di Alfio.]`;
-
-        const res = await axios.post(`${GENESI_URL}/api/chat`, {
-            message: enriched,
-            platform: "whatsapp_group",
+        // Usa l'endpoint /api/chat/group — gestisce tutta la logica memoria/contesto
+        // come il gruppo Telegram (build_group_context, append_raw_message, ecc.)
+        const res = await axios.post(`${GENESI_URL}/api/chat/group`, {
+            text,
+            sender_name: senderName,
+            sender_id:   senderId,
+            group_id:    groupId,
         }, {
             headers: { Authorization: `Bearer ${token}` },
             timeout: 35000,
@@ -103,9 +93,9 @@ async function askGenesi(text, senderName, groupId) {
         return res.data.response || null;
     } catch (e) {
         if (e.response?.status === 401) {
-            authToken = null; // forza re-login al prossimo messaggio
+            authToken = null;
         }
-        console.error("[Genesi] API error:", e.message);
+        console.error("[Genesi] API error:", e.message, e.response?.data);
         return null;
     }
 }
@@ -188,7 +178,7 @@ async function startBaileys() {
                     if (msg.pushName) senderName = msg.pushName.split(" ")[0];
                 }
 
-                // Salva nel buffer grezzo (sempre, anche se Genesi non risponde)
+                // Salva nel buffer grezzo locale (fallback se backend non disponibile)
                 addToBuffer(groupId, senderName, text);
                 console.log(`[${senderName}@${groupId.slice(0,10)}] ${text.slice(0, 60)}`);
 
@@ -200,7 +190,7 @@ async function startBaileys() {
                 // Typing indicator
                 await sock.sendPresenceUpdate("composing", groupId);
 
-                const reply = await askGenesi(text, senderName, groupId);
+                const reply = await askGenesi(text, senderName, senderJid, groupId);
 
                 await sock.sendPresenceUpdate("paused", groupId);
 
