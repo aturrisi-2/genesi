@@ -10,7 +10,7 @@ SICUREZZA: user_id estratto SOLO dal JWT. Mai dal body/client.
 from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
 from typing import Dict, Optional
-from core.simple_chat import simple_chat_handler
+from core.simple_chat import simple_chat_handler, strip_group_ctx
 from core.user_manager import user_manager
 from core.chat_memory import chat_memory
 from core.log import log
