@@ -1955,10 +1955,18 @@ class Proactor:
         """
         try:
             if intent == "weather":
-                result = await tool_service.get_weather(message, user_id)
-                # Save tool context for follow-up
                 from core.location_resolver import extract_city_from_message
-                city = extract_city_from_message(message) or "Roma"
+                _is_group_platform = self._current_platform in ("telegram_group", "whatsapp_group")
+                # In contesti di gruppo, se non c'è città esplicita nella richiesta,
+                # usa Imola come posizione fissa di Genesi (es. "da voi / da te / da quelle parti")
+                weather_message = message
+                if _is_group_platform and not extract_city_from_message(message):
+                    GENESI_HOME_CITY = os.getenv("GENESI_HOME_CITY", "Imola")
+                    weather_message = f"meteo a {GENESI_HOME_CITY}"
+                    logger.info("WEATHER_GROUP_HOME_CITY city=%s platform=%s", GENESI_HOME_CITY, self._current_platform)
+                result = await tool_service.get_weather(weather_message, user_id)
+                # Save tool context for follow-up
+                city = extract_city_from_message(weather_message) or "Imola"
                 save_tool_context(user_id, "weather", city=city)
                 logger.info("TOOL_ROUTER_OK intent=weather user=%s city=%s", user_id, city)
                 return result, "tool"
@@ -2072,6 +2080,8 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         """
         Handle OpenClaw integration requests (multi-turn).
         """
+        if not os.getenv("OPENCLAW_ENABLED", "true").lower() in ("true", "1", "yes"):
+            return "OpenClaw è attualmente disabilitato. Riattivalo impostando OPENCLAW_ENABLED=true nel file .env."
         try:
             logger.info("OPENCLAW_REQUEST user=%s message=%s", user_id, message[:50])
             # Passa solo il task all'agente OpenClaw — il suo system prompt interno

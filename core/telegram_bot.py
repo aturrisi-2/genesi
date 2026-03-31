@@ -68,7 +68,9 @@ Leggi i messaggi recenti del gruppo e il messaggio attuale. Decidi se Genesi dev
 RISPONDI "SI" SOLO se il messaggio attuale rientra in UNO di questi casi:
 1. INVOCATA: qualcuno cita Genesi per nome, la taglia o le pone una domanda diretta
 2. BUONA NOTIZIA: qualcuno condivide una notizia bella, un successo, un traguardo, qualcosa di speciale da celebrare (UNA VOLTA per evento)
-3. CONTINUAZIONE: è un follow-up diretto a una risposta appena data da Genesi (stessa conversazione, < 5 min)
+3. CONTINUAZIONE: è un follow-up diretto a una risposta appena data da Genesi (stessa conversazione, < 5 min). Se nei messaggi recenti appare "Genesi: ..." allora il dubbio va verso SI — potrebbe essere una domanda di chiarimento o approfondimento.
+
+Esempi di CONTINUAZIONE → SI: "e voi?", "ma voi dove siete?", "perché?", "e quindi?", "quant'è?", "sicuro?", "e domani?", "quanto fa freddo da voi?"
 
 RISPONDI "NO" in tutti gli altri casi, incluso:
 - Conversazioni, aggiornamenti, discussioni, battute tra i membri
@@ -140,6 +142,12 @@ async def _group_should_intervene(
                 f"  {m.get('first_name','?')}: {m.get('text','')[:100]}"
                 for m in raw_msgs[:-1]  # escludi l'ultimo che è il messaggio attuale
             ) + "\n\n"
+        # Aggiungi l'ultima risposta di Genesi al contesto — così l'LLM può riconoscere follow-up
+        state = _GROUP_CONV_STATE.get(chat_id, {})
+        last_reply = state.get("last_reply")
+        last_reply_ts = state.get("ts", 0)
+        if last_reply and time.time() - last_reply_ts < 300:  # 5 minuti
+            history_text += f"Ultima risposta di Genesi in questo gruppo: Genesi: {last_reply[:200]}\n\n"
 
         user_msg = (
             f"{history_text}"
@@ -919,8 +927,9 @@ async def handle_update(update: dict):
             # Traccia con chi Genesi stava conversando (per il fast-path del filtro)
             if is_group:
                 _GROUP_CONV_STATE[chat_id] = {
-                    "from_id": from_id,
-                    "ts":      time.time(),
+                    "from_id":    from_id,
+                    "ts":         time.time(),
+                    "last_reply": reply[:300],
                 }
             return True
 
