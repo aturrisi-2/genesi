@@ -35,8 +35,10 @@ lab/*history*
 lab/*metrics*.json
 lab/supervisor_logs.json
 
-# Allow stable global prompt
-!lab/global_prompt.json
+# global_prompt.json è un file RUNTIME modificato dal lab_feedback_cycle
+# Non va tracciato — viene creato da core/lab_feedback_cycle.py al primo ciclo
+# o dal template lab/global_prompt.template.json al primo avvio
+lab/global_prompt.json
 
 
 storage/
