@@ -792,29 +792,38 @@ class Proactor:
             # misclassified as 'news', 'chat_free', 'relational', or 'general'.
             # Redirect to 'tecnica' so _handle_knowledge runs with live web context.
             # Safety: only redirect factual questions (? or question words), not emotional statements.
-            try:
+            # GRUPPO: skip sempre — il group_ctx appeso al messaggio contiene conversazioni precedenti
+            # con "?" e keyword temporali (stamattina, oggi...) che falsano needs_live_data e _is_factual_q
+            # portando chat_free → tecnica → knowledge_strict su messaggi come "Buongiorno" o "Grazie".
+            _is_group_platform = self._current_platform in ("telegram_group", "whatsapp_group")
+            if not _is_group_platform:
+              try:
                 from core.live_search_service import needs_live_data as _needs_live
                 _redirectable_intents = ("news", "chat_free", "relational", "general")
                 _question_starters = ("chi ", "cosa ", "come ", "dove ", "quando ", "quale ",
                                       "qual ", "quanto ", "quanti ", "dimmi ", "spiega ",
                                       "parlami ", "descrivi ", "raccontami ", "quali ", "cerca ")
-                _is_factual_q = ("?" in message or
-                                 any(msg_lower.startswith(q) for q in _question_starters))
+                # Per i controlli usiamo SOLO il testo dell'utente (prima del blocco [GRUPPO...])
+                # per evitare che il context block contamine la rilevazione
+                _raw_user_msg = message.split("[GRUPPO")[0].split("[GRUPPO FAMILIARE")[0].strip()
+                _raw_lower = _raw_user_msg.lower()
+                _is_factual_q = ("?" in _raw_user_msg or
+                                 any(_raw_lower.startswith(q) for q in _question_starters))
                 # Explicit search requests always redirect regardless of question form
                 _explicit_search_kw = ("cerca sul web", "cerca online", "cerca su internet",
                                        "cerca per me", "trovami informazioni", "trovami notizie",
                                        "cerca informazioni su", "cerca notizie su",
                                        "fai una ricerca")
-                _is_explicit_search = any(kw in msg_lower for kw in _explicit_search_kw)
+                _is_explicit_search = any(kw in _raw_lower for kw in _explicit_search_kw)
                 if (intents and intents[0] in _redirectable_intents
-                        and _needs_live(message)
+                        and _needs_live(_raw_user_msg)
                         and (_is_factual_q or _is_explicit_search)):
                     logger.info("LIVE_SEARCH_INTENT_OVERRIDE user=%s from=%s to=tecnica", user_id, intents[0])
                     intents = ["tecnica"]
                 # Follow-up sport/eventi: messaggi brevi senza keyword live ma con storia recente F1/sport
                 elif (intents and intents[0] in _redirectable_intents
                         and _is_factual_q
-                        and len(message.strip().split()) <= 8):
+                        and len(_raw_user_msg.strip().split()) <= 8):
                     _SPORT_CTX_KW = {
                         "formula 1", "formula uno", "f1", "gran premio", "motogp",
                         "champions league", "serie a", "classifica", "calciomercato",
@@ -828,7 +837,7 @@ class Proactor:
                     if any(kw in _hist_text for kw in _SPORT_CTX_KW):
                         logger.info("LIVE_SEARCH_FOLLOWUP_OVERRIDE user=%s from=%s to=tecnica", user_id, intents[0])
                         intents = ["tecnica"]
-            except Exception:
+              except Exception:
                 pass
 
             # STEP 4.5: LOOP THROUGH INTENTS
