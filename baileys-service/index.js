@@ -272,7 +272,7 @@ function startHttpServer() {
 // ── Avvio ─────────────────────────────────────────────────────────────────────
 console.log("[Genesi Baileys] Avvio servizio WhatsApp gruppi...");
 startHttpServer();
-startBaileys().then(sock => { _activeSock = sock; }).catch(e => {
+startBaileys().catch(e => {
     console.error("[Baileys] Errore fatale:", e);
     process.exit(1);
 });
