@@ -3,6 +3,7 @@ Proactor orchestrator centrale - intent classification + routing.
 Identity filtering handled internally by evolution_engine.
 """
 
+import re as _re
 from typing import Optional
 from core.intent_classifier import intent_classifier
 from core.proactor import proactor
@@ -10,6 +11,22 @@ from core.user_manager import user_manager
 from core.chat_memory import chat_memory
 from core.log import log
 from core.fallback_engine import fallback_engine
+
+# ── Helper condiviso ───────────────────────────────────────────────────────────
+_GROUP_CTX_RE = _re.compile(
+    r"\s*\[GRUPPO(?:\s+FAMILIARE)?:.*",
+    _re.DOTALL | _re.IGNORECASE,
+)
+
+def strip_group_ctx(message: str) -> str:
+    """
+    Rimuove il blocco [GRUPPO FAMILIARE: ...] / [GRUPPO: ...]
+    lasciando solo il testo scritto dall'utente.
+    Usato da tutti i sistemi di memoria per evitare contaminazione
+    del group_ctx (storico messaggi del gruppo, istruzioni di prompt)
+    nei log di chat_memory, episodi, personal_facts, behavioral.
+    """
+    return _GROUP_CTX_RE.sub("", message).strip()
 
 async def simple_chat_handler(user_id: str, message: str, conversation_id: str = None, platform: str = None):
     """
@@ -49,10 +66,12 @@ async def simple_chat_handler(user_id: str, message: str, conversation_id: str =
             response = response[0]
 
         # 3. Chat memory logging (volatile, per UI history)
+        # strip_group_ctx: evita che il group_ctx (storico gruppo + istruzioni prompt)
+        # venga salvato come testo utente e inquini behavioral, global_insights, topic_map
         if not user_manager.get_user(user_id):
             user_manager.create_user(user_id)
         user_manager.increment_messages(user_id)
-        chat_memory.add_message(user_id, message, response, primary_intent)
+        chat_memory.add_message(user_id, strip_group_ctx(message), response, primary_intent)
 
         log("CHAT_OUTPUT", response=response[:100], intent=primary_intent, user_id=user_id)
         return response, primary_intent

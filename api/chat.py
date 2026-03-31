@@ -196,9 +196,13 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
 
         import asyncio as _asyncio
 
+        # Testo utente pulito (senza group_ctx) — usato da tutti i sistemi di memoria.
+        # Il messaggio completo (con group_ctx) serve solo al proactor per rispondere.
+        _clean_msg = strip_group_ctx(request.message)
+
         # Predictive engine: assess sorpresa dell'input rispetto alla predizione attesa
         # (lightweight: storage read + Jaccard, nessuna chiamata LLM)
-        _assess_input = request.message
+        _assess_input = _clean_msg
         async def _assess_prediction_input():
             try:
                 from core.predictive_engine import predictive_engine as _pe
@@ -208,19 +212,22 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         _asyncio.create_task(_assess_prediction_input())
 
         # Episode extractor: estrae eventi personali temporali in BACKGROUND
+        # Usa _clean_msg (senza group_ctx) per evitare che lo storico gruppo inquini gli episodi
+        _ep_msg = _clean_msg
         async def _extract_and_save_episode():
             async with _BACKGROUND_LLM_SEM:
                 try:
                     from core.episode_extractor import extract_episodes
                     from core.episode_memory import episode_memory as _em
-                    episodes = await extract_episodes(request.message, user_id)
+                    episodes = await extract_episodes(_ep_msg, user_id)
                     for ep in episodes:
                         await _em.add(user_id, ep)
                         log("EPISODE_SAVED", user_id=user_id, text=ep['text'][:60])
                 except Exception as _ep_e:
                     log("EPISODE_SAVE_ERROR", user_id=user_id, error=str(_ep_e))
 
-        if request.platform != "telegram_group":
+        # Gruppi: episodi attivi ma solo se il testo ha contenuto semantico (>10 chars)
+        if _clean_msg and len(_clean_msg) > 10:
             _asyncio.create_task(_extract_and_save_episode())
 
         # 2. Pipeline Relazionale / Tecnico (Orchestrata dal Proactor)
@@ -262,19 +269,22 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             pass
 
         # Personal facts extraction: fatti rivelati in conversazione (abitudini, preferenze, familiari...)
+        # Usa _clean_msg per evitare che il group_ctx (contiene nomi di tutti i membri) inquini i fatti
         _raw_response = response
+        _pf_msg = _clean_msg
         async def _extract_and_save_personal_facts():
             async with _BACKGROUND_LLM_SEM:
                 try:
                     from core.personal_facts_service import personal_facts_service as _pfs
-                    await _pfs.extract_and_save(request.message, _raw_response, user_id)
+                    await _pfs.extract_and_save(_pf_msg, _raw_response, user_id)
                 except Exception as _pf_e:
                     log("PERSONAL_FACTS_SAVE_ERROR", user_id=user_id, error=str(_pf_e))
-        if request.platform != "telegram_group":
+        # Gruppi: personal facts attivi su testo pulito (>10 chars)
+        if _clean_msg and len(_clean_msg) > 10:
             _asyncio.create_task(_extract_and_save_personal_facts())
 
         # Predictive engine: aggiorna predizione prossimo turno (background)
-        _pred_msg  = request.message
+        _pred_msg  = _clean_msg
         _pred_resp = _raw_response
         async def _update_prediction():
             async with _BACKGROUND_LLM_SEM:
@@ -286,7 +296,7 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         _asyncio.create_task(_update_prediction())
 
         # Behavioral memory update in background (zero-cost, no LLM)
-        _beh_msg = request.message
+        _beh_msg = _clean_msg
         _beh_resp = _raw_response
         async def _update_behavioral_memory():
             try:
@@ -321,7 +331,7 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         _asyncio.create_task(_maybe_audit())
 
         # Capability gap detection in background (fail-silent, nessun impatto sul flusso)
-        _gap_msg  = request.message
+        _gap_msg  = _clean_msg
         _gap_resp = _raw_response
         _gap_intent = classified_intent
         async def _detect_capability_gap():
@@ -394,15 +404,18 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
     import asyncio as _aio
     from fastapi.responses import StreamingResponse as _SR
     from core.llm_service import _STREAM_QUEUE
-    from core.simple_chat import simple_chat_handler as _sch
+    from core.simple_chat import simple_chat_handler as _sch, strip_group_ctx as _sgc
 
     user_id = user.id
     queue: _aio.Queue = _aio.Queue()
 
     async def _run_pipeline():
         try:
+            # Testo pulito dal group_ctx — usato da tutti i sistemi di memoria dello stream
+            _stream_clean_msg = _sgc(request.message)
+
             # Predictive engine: assess sorpresa input (lightweight, prima del processing)
-            _stream_assess_msg = request.message
+            _stream_assess_msg = _stream_clean_msg
             async def _stream_assess_prediction():
                 try:
                     from core.predictive_engine import predictive_engine as _pe
@@ -438,33 +451,36 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
             except Exception:
                 pass
             # Episode extractor in background (eventi personali temporali)
+            # Usa _stream_clean_msg (senza group_ctx) per episodi puliti
+            _stream_ep_msg = _stream_clean_msg
             async def _stream_extract_episode():
                 async with _BACKGROUND_LLM_SEM:
                     try:
                         from core.episode_extractor import extract_episodes
                         from core.episode_memory import episode_memory as _em
-                        episodes = await extract_episodes(request.message, user_id)
+                        episodes = await extract_episodes(_stream_ep_msg, user_id)
                         for ep in episodes:
                             await _em.add(user_id, ep)
                             log("EPISODE_SAVED", user_id=user_id, text=ep['text'][:60])
                     except Exception as _ep_e:
                         log("EPISODE_SAVE_ERROR", user_id=user_id, error=str(_ep_e))
-            if request.platform != "telegram_group":
+            if _stream_clean_msg and len(_stream_clean_msg) > 10:
                 _aio.create_task(_stream_extract_episode())
             # Personal facts extraction in background (abitudini, preferenze, familiari...)
             _stream_resp = resp
+            _stream_pf_msg = _stream_clean_msg
             async def _stream_extract_personal_facts():
                 async with _BACKGROUND_LLM_SEM:
                     try:
                         from core.personal_facts_service import personal_facts_service as _pfs
-                        await _pfs.extract_and_save(request.message, _stream_resp, user_id)
+                        await _pfs.extract_and_save(_stream_pf_msg, _stream_resp, user_id)
                     except Exception as _pf_e:
                         log("PERSONAL_FACTS_SAVE_ERROR", user_id=user_id, error=str(_pf_e))
-            if request.platform != "telegram_group":
+            if _stream_clean_msg and len(_stream_clean_msg) > 10:
                 _aio.create_task(_stream_extract_personal_facts())
 
             # Predictive engine: aggiorna predizione prossimo turno (background)
-            _stream_pred_msg  = request.message
+            _stream_pred_msg  = _stream_clean_msg
             _stream_pred_resp = resp
             async def _stream_update_prediction():
                 async with _BACKGROUND_LLM_SEM:
@@ -476,7 +492,7 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
             _aio.create_task(_stream_update_prediction())
 
             # Behavioral memory update in background (zero-cost, no LLM)
-            _stream_beh_msg = request.message
+            _stream_beh_msg = _stream_clean_msg
             _stream_beh_resp = resp
             async def _stream_update_behavioral():
                 try:
@@ -491,13 +507,14 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
             _aio.create_task(_stream_update_behavioral())
 
             # Capability gap detection in background (fail-silent)
+            _stream_gap_msg  = _stream_clean_msg
             _stream_gap_resp = resp
             async def _stream_detect_gap():
                 try:
                     from core.capability_awareness import detect_gap, log_gap
-                    is_gap, gap_type = detect_gap(request.message, _stream_gap_resp, "stream")
+                    is_gap, gap_type = detect_gap(_stream_gap_msg, _stream_gap_resp, "stream")
                     if is_gap and gap_type:
-                        await log_gap(request.message, _stream_gap_resp, "stream",
+                        await log_gap(_stream_gap_msg, _stream_gap_resp, "stream",
                                       platform=request.platform or "web",
                                       user_id=user_id, gap_type=gap_type)
                 except Exception:
@@ -714,6 +731,45 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
         _aio.create_task(append_group_history(group_int, sender_int, request.sender_name, request.text, response))
         _aio.create_task(record_group_observation(group_int, sender_int, request.sender_name, request.text, response))
         _aio.create_task(consolidate_group_insights_if_needed(group_int))
+
+        # 8. Memoria personale del mittente — episodi e fatti su request.text (già pulito)
+        if request.text and len(request.text.strip()) > 10:
+            _wa_text = request.text
+            _wa_resp = response
+            _wa_uid  = user.id
+
+            async def _wa_extract_episode():
+                async with _BACKGROUND_LLM_SEM:
+                    try:
+                        from core.episode_extractor import extract_episodes
+                        from core.episode_memory import episode_memory as _em
+                        # Prefissa il nome per contestualizzare l'episodio
+                        _ctx_msg = f"{request.sender_name}: {_wa_text}"
+                        for ep in await extract_episodes(_ctx_msg, _wa_uid):
+                            await _em.add(_wa_uid, ep)
+                            log("EPISODE_SAVED_GROUP", sender=request.sender_name, text=ep['text'][:60])
+                    except Exception:
+                        pass
+            _aio.create_task(_wa_extract_episode())
+
+            async def _wa_extract_personal_facts():
+                async with _BACKGROUND_LLM_SEM:
+                    try:
+                        from core.personal_facts_service import personal_facts_service as _pfs
+                        _ctx_msg = f"{request.sender_name}: {_wa_text}"
+                        await _pfs.extract_and_save(_ctx_msg, _wa_resp, _wa_uid)
+                    except Exception:
+                        pass
+            _aio.create_task(_wa_extract_personal_facts())
+
+            async def _wa_global_memory():
+                async with _BACKGROUND_LLM_SEM:
+                    try:
+                        from core.global_memory_service import global_memory_service as _gms
+                        await _gms.consolidate_if_needed(_wa_uid)
+                    except Exception:
+                        pass
+            _aio.create_task(_wa_global_memory())
 
         return GroupChatResponse(response=response, status="ok")
 
