@@ -801,14 +801,18 @@ RISPONDI "SI" SOLO se il messaggio rientra in UNO di questi casi:
 1. INVOCATA: qualcuno cita Genesi per nome o le pone una domanda diretta
 2. SALUTO: qualcuno saluta il gruppo (ciao, buongiorno, buonasera, buonanotte, salve, hey, ecc. — in qualsiasi lingua o forma)
 3. BUONA NOTIZIA: qualcuno condivide una notizia bella, un successo, un traguardo, qualcosa da celebrare
-4. CONTINUAZIONE: è un follow-up diretto a una risposta appena data da Genesi (< 5 min)
+4. CONTINUAZIONE: è un follow-up diretto a una risposta appena data da Genesi (< 5 min).
+   Se nei messaggi recenti vedi "Genesi: ..." seguito da una domanda breve (dove?, come?, perché?, e voi?, ma voi?,
+   da dove rispondete?, dove siete?, ecc.) → è quasi certamente un follow-up per Genesi → INTERVIENI.
 
 RISPONDI "NO" in tutti gli altri casi:
-- Conversazioni, discussioni, battute tra i membri
-- Domande rivolte ad altri
+- Conversazioni, discussioni, battute solo tra i membri (senza risposta recente di Genesi)
+- Domande chiaramente rivolte a un membro specifico del gruppo
 - Sfogo o momento difficile (Genesi resta in silenzio)
 
-Il dubbio va verso NO.
+ATTENZIONE: se nell'elenco dei messaggi recenti compare "Genesi: <risposta>", il messaggio attuale
+è probabilmente una reazione o domanda a Genesi → il dubbio va verso SI.
+Negli altri casi il dubbio va verso NO.
 Rispondi SOLO con JSON: {"intervieni": true, "motivo": "breve"} oppure {"intervieni": false, "motivo": "breve"}
 """
 

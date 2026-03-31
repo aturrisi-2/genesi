@@ -36,6 +36,11 @@ const logger = pino({ level: "silent" }); // silenzia i log interni di Baileys
 const rawBuffers = {};
 const MAX_RAW = 25;
 
+// ── Ultima risposta di Genesi per gruppo (per CONTINUAZIONE) ──────────────────
+// { groupId: { text, ts } }
+const lastGenesiReply = {};
+const GENESI_REPLY_TTL = 5 * 60 * 1000; // 5 minuti
+
 function addToBuffer(groupId, name, text) {
     if (!rawBuffers[groupId]) rawBuffers[groupId] = [];
     rawBuffers[groupId].push({ name, text: text.slice(0, 200), ts: Date.now() });
@@ -43,7 +48,14 @@ function addToBuffer(groupId, name, text) {
 }
 
 function getRecentMessages(groupId, limit = 15) {
-    return (rawBuffers[groupId] || []).slice(-limit);
+    const msgs = (rawBuffers[groupId] || []).slice(-limit);
+    // Inserisce l'ultima risposta di Genesi se recente (< 5 min) —
+    // così shouldRespond sa che Genesi ha già parlato e può riconoscere follow-up
+    const last = lastGenesiReply[groupId];
+    if (last && Date.now() - last.ts < GENESI_REPLY_TTL) {
+        return [...msgs, { name: "Genesi", text: last.text.slice(0, 200) }];
+    }
+    return msgs;
 }
 
 // ── Filtro: quando Genesi interviene ─────────────────────────────────────────
@@ -218,6 +230,7 @@ async function startBaileys() {
 
                 if (reply) {
                     await sock.sendMessage(groupId, { text: reply });
+                    lastGenesiReply[groupId] = { text: reply, ts: Date.now() };
                     console.log(`[Genesi → ${senderName}] ${reply.slice(0, 80)}`);
                 }
             } catch (e) {

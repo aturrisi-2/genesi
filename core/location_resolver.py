@@ -188,6 +188,20 @@ def _clean_stt_input(message: str) -> str:
     return ""
 
 
+# Rileva "qui a X" / "io sono a X" — indica la città del mittente, NON quella richiesta
+_QUI_CITY_RE = re.compile(
+    r"\b(?:qui|qua|io\s+sono|io\s+sto|mi\s+trovo|siamo)\s+(?:a|ad|in)\s+([A-ZÀ-Ú][a-zà-ú]+)",
+    re.IGNORECASE
+)
+# Rileva domande su "dove siete/sei voi" — il mittente chiede la posizione di chi legge
+_DA_QUELLE_PARTI_RE = re.compile(
+    r"\b(?:da\s+quelle\s+parti|da\s+quella\s+parte|da\s+voi|dove\s+siete|dove\s+sei|"
+    r"da\s+te|da\s+lui|da\s+loro|voi\s+dove|com'è\s+(?:il\s+)?(?:tempo|meteo)\s+da|"
+    r"tempo\s+da\s+(?:te|voi|quelle?|loro))\b",
+    re.IGNORECASE
+)
+
+
 def extract_city_from_message(message: str) -> Optional[str]:
     """
     Extract a city/location name from a user message.
@@ -201,6 +215,14 @@ def extract_city_from_message(message: str) -> Optional[str]:
         if m:
             candidate = m.group(1).strip().rstrip("?!.,;:")
             if candidate.lower() not in _SKIP_WORDS and len(candidate) >= 2:
+                # Controlla: se la città trovata è in "qui a X" e la domanda è "da quelle parti",
+                # la città è quella del mittente — non quella richiesta → salta
+                qui_m = _QUI_CITY_RE.search(message)
+                if qui_m and qui_m.group(1).lower() == candidate.lower():
+                    if _DA_QUELLE_PARTI_RE.search(message):
+                        log("LOCATION_SENDER_CITY_SKIP", city=candidate,
+                            reason="qui_a_X_with_da_quelle_parti")
+                        return None
                 return candidate
 
     # Pass 1.5: STT robust parsing ONLY for noisy input (contains "genesis" or multiple capitalized words)
