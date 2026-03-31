@@ -634,11 +634,13 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 from core.telegram_group_memory import (
                     append_group_history, record_group_observation,
                     consolidate_group_insights_if_needed,
+                    summarize_group_discussion_if_needed,
                 )
                 orig_text = (text or caption or "").strip()
                 asyncio.create_task(append_group_history(chat_id, abs(hash(wa_id)) % (10**9), first_name, orig_text, reply))
                 asyncio.create_task(record_group_observation(chat_id, abs(hash(wa_id)) % (10**9), first_name, orig_text, reply))
                 asyncio.create_task(consolidate_group_insights_if_needed(chat_id))
+                asyncio.create_task(summarize_group_discussion_if_needed(chat_id))
             return reply
 
         async def _handle_reply(reply: str) -> bool:

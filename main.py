@@ -72,6 +72,7 @@ async def lifespan(app: FastAPI):
     
     # Start background tasks — keep strong refs in a set to prevent GC
     _bg_tasks: set = set()
+    from core.birthday_service import birthday_scheduler as _birthday_scheduler
     for coro, label in [
         (reminder_checker_background(),        "REMINDER_CHECKER"),
         (calendar_checker_background(),        "CALENDAR_CHECKER"),
@@ -80,6 +81,7 @@ async def lifespan(app: FastAPI):
         (moltbook_heartbeat_background(),      "MOLTBOOK_HEARTBEAT"),
         (improvement_health.run_background_loop(), "IMPROVEMENT_HEALTH"),
         (facebook_heartbeat_background(),      "FACEBOOK_HEARTBEAT"),
+        (_birthday_scheduler(),                "BIRTHDAY_SCHEDULER"),
     ]:
         t = asyncio.create_task(coro)
         _bg_tasks.add(t)

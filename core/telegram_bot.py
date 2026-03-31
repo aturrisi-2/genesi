@@ -23,6 +23,7 @@ from core.telegram_group_memory import (
     update_member_seen, get_member_city, save_member_city,
     build_group_context, append_group_history, append_raw_message, get_raw_messages,
     record_group_observation, consolidate_group_insights_if_needed,
+    summarize_group_discussion_if_needed,
     extract_family_relationship,
     sync_family_to_owner,
 )
@@ -772,6 +773,17 @@ async def handle_update(update: dict):
                 asyncio.create_task(
                     append_raw_message(chat_id, from_id, first_name, msg_text)
                 )
+            # Birthday: registra gruppo e collega pre-seed al from_id
+            try:
+                from core.birthday_service import (
+                    register_known_group, link_preseed_to_member, try_extract_birthday
+                )
+                asyncio.create_task(register_known_group(chat_id, "telegram"))
+                asyncio.create_task(link_preseed_to_member(from_id, first_name))
+                if msg_text:
+                    asyncio.create_task(try_extract_birthday(from_id, first_name, msg_text))
+            except Exception:
+                pass
 
         # Genesi decide autonomamente se e quando intervenire nel gruppo.
         if is_group:
@@ -846,9 +858,13 @@ async def handle_update(update: dict):
                 asyncio.create_task(
                     record_group_observation(chat_id, from_id, first_name, message, reply)
                 )
-                # Livello 2: consolidazione insights gruppo ogni 24h
+                # Livello 2a: consolidazione insights gruppo ogni 24h
                 asyncio.create_task(
                     consolidate_group_insights_if_needed(chat_id)
+                )
+                # Livello 2b: riepilogo discussioni ogni 6h (memoria cross-sessione)
+                asyncio.create_task(
+                    summarize_group_discussion_if_needed(chat_id)
                 )
                 # Livello 3: cross-awareness — sincronizza profili famiglia verso il proprietario
                 asyncio.create_task(_sync_family_background(chat_id))

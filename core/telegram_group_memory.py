@@ -46,13 +46,23 @@ Se NON c'è nessuna dichiarazione di relazione: {"found": false}
 Rispondi SOLO con JSON valido.
 """
 
-MAX_HISTORY    = 20   # turni conservati per gruppo
+MAX_HISTORY    = 30   # turni conservati per gruppo (era 20)
 MAX_FACTS      = 40   # fatti per membro
-HISTORY_INJECT = 8    # turni iniettati nel prompt
-MAX_RAW_MSGS   = 30   # messaggi grezzi conservati per gruppo (tutti, anche senza risposta)
-RAW_INJECT     = 15   # ultimi N messaggi grezzi iniettati nel contesto
+HISTORY_INJECT = 12   # turni iniettati nel prompt (era 8)
+MAX_RAW_MSGS   = 40   # messaggi grezzi conservati per gruppo (era 30)
+RAW_INJECT     = 20   # ultimi N messaggi grezzi iniettati nel contesto (era 15)
 CONSOLIDATION_INTERVAL = 86400  # 24h in secondi
 OBSERVATION_EVERY_N    = 5      # ogni N messaggi di gruppo → 1 osservazione lab
+SUMMARY_INTERVAL       = 21600  # 6h — riepilogo discussioni giornaliero
+
+_DAILY_SUMMARY_PROMPT = """\
+Sei un assistente che riassume le discussioni di una chat familiare.
+Leggi questi messaggi e scrivi un riepilogo compatto (max 5 righe, in italiano naturale)
+di COSA si è discusso: argomenti concreti, aggiornamenti personali, notizie condivise.
+NON elencare chi ha scritto cosa — sintetizza i temi. Usa frasi brevi.
+Esempio: "Mariella è partita stamattina con le ruote nuove verso Siracusa. Rita aspettava Ennio alla fermata. Scambio di saluti mattutini con affetto."
+Se non c'è nulla di rilevante oltre ai saluti, scrivi solo: "Saluti di routine."
+"""
 
 _GROUP_INSIGHT_PROMPT = """\
 Sei un analista della dinamica di gruppo. Leggi questi scambi recenti di una chat di famiglia
@@ -90,6 +100,9 @@ def _raw_key(chat_id: int) -> str:
 
 def _family_key(owner_user_id: str) -> str:
     return f"telegram:family_members:{owner_user_id}"
+
+def _summary_key(chat_id: int) -> str:
+    return f"telegram:group_summary:{chat_id}"
 
 
 async def _storage():
@@ -184,8 +197,14 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
     history  = await get_group_history(chat_id, limit=HISTORY_INJECT)
     insights = await _get_group_insights(chat_id)
     raw_msgs = await get_raw_messages(chat_id, limit=RAW_INJECT)
+    summary  = await _get_group_summary(chat_id)
 
     lines = []
+
+    # Riepilogo sessioni precedenti (ogni 6h) — dà a Genesi memoria cross-sessione
+    if summary:
+        lines.append("[RIEPILOGO DISCUSSIONI RECENTI (ultime ore):]")
+        lines.append(f"  {summary}")
 
     # Fatti noti sul membro che sta scrivendo
     facts = member.get("facts", {})
@@ -204,7 +223,7 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
 
     # Insights consolidati del gruppo
     if insights:
-        lines.append(f"[DINAMICHE DELLA FAMIGLIA (apprese nel tempo):]")
+        lines.append("[DINAMICHE DELLA FAMIGLIA (apprese nel tempo):]")
         for ins in insights:
             lines.append(f"  • {ins}")
 
@@ -216,16 +235,17 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
             msg  = m.get("text", "")[:150]
             lines.append(f"  {name}: {msg}")
         lines.append("[FINE DISCUSSIONE]")
-    elif history:
-        # Fallback: storia vecchia se non ci sono messaggi raw
-        lines.append("[STORIA RECENTE DEL GRUPPO:]")
-        for h in history:
+
+    # Scambi con Genesi (storia con le risposte date) — sempre mostrata, non in elif
+    if history:
+        lines.append("[RISPOSTE RECENTI DI GENESI IN QUESTO GRUPPO:]")
+        for h in history[-6:]:
             name = h.get("first_name", "?")
-            msg  = h.get("text", "")[:120]
-            resp = h.get("response", "")[:120]
+            msg  = h.get("text", "")[:100]
+            resp = h.get("response", "")[:150]
             lines.append(f"  {name}: {msg}")
             lines.append(f"  → Genesi: {resp}")
-        lines.append("[FINE STORIA]")
+        lines.append("[FINE RISPOSTE]")
 
     # Albero familiare completo (per inferenze sui gradi di parentela)
     s = await _storage()
@@ -346,6 +366,56 @@ async def consolidate_group_insights_if_needed(chat_id: int):
 
     except Exception as exc:
         logger.debug("GROUP_INSIGHTS_ERROR chat_id=%s err=%s", chat_id, exc)
+
+
+# ── Riepilogo discussioni (cross-sessione) ────────────────────────────────────
+
+async def _get_group_summary(chat_id: int) -> str:
+    s = await _storage()
+    data = await s.load(_summary_key(chat_id), default={}) or {}
+    return data.get("summary", "")
+
+
+async def summarize_group_discussion_if_needed(chat_id: int):
+    """
+    Ogni 6h genera un riepilogo compatto delle ultime discussioni del gruppo
+    usando il buffer di messaggi grezzi. Iniettato in build_group_context()
+    come memoria cross-sessione per Genesi.
+    """
+    try:
+        s    = await _storage()
+        data = await s.load(_summary_key(chat_id), default={}) or {}
+        last = data.get("last_summarized_at", 0)
+        if time.time() - last < SUMMARY_INTERVAL:
+            return
+
+        raw_msgs = await get_raw_messages(chat_id, limit=MAX_RAW_MSGS)
+        if len(raw_msgs) < 5:
+            return
+
+        from core.llm_service import llm_service
+
+        raw_text = "\n".join(
+            f"{m.get('first_name', '?')}: {m.get('text', '')[:150]}"
+            for m in raw_msgs
+        )
+        summary = await llm_service._call_model(
+            "openai/gpt-4o-mini",
+            _DAILY_SUMMARY_PROMPT,
+            raw_text,
+            user_id="group-summary",
+            route="memory",
+        )
+        if not summary or not summary.strip():
+            return
+
+        data["summary"]           = summary.strip()[:600]
+        data["last_summarized_at"] = int(time.time())
+        await s.save(_summary_key(chat_id), data)
+        logger.info("GROUP_SUMMARY_GENERATED chat_id=%s len=%d", chat_id, len(data["summary"]))
+
+    except Exception as exc:
+        logger.debug("GROUP_SUMMARY_ERROR chat_id=%s err=%s", chat_id, exc)
 
 
 # ── Automiglioramento livello 3: cross-awareness per il proprietario ───────────

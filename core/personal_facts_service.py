@@ -334,6 +334,19 @@ class PersonalFactsService:
                     logger.info("PERSONAL_FACT_SAVED key=%s user=%s text=%s", key, user_id, new_f["text"][:60])
                     _structured_log("PERSONAL_FACTS", key=key, user_id=user_id)
 
+                    # Birthday bridge: se il fatto riguarda la data di nascita → salva nel birthday_service
+                    if any(kw in key.lower() for kw in ("nascita", "compleanno", "birthdate", "birth")):
+                        try:
+                            import asyncio as _abday
+                            from core.birthday_service import save_birthday as _sbday, try_extract_birthday as _tebday
+                            _fact_text = new_f.get("text", "")
+                            # Prova estrazione data dal testo del fatto
+                            async def _bday_from_fact(_uid=user_id, _txt=_fact_text, _nm=new_f.get("text","")[:30]):
+                                await _tebday(0, _uid, _txt)
+                            _abday.create_task(_bday_from_fact())
+                        except Exception:
+                            pass
+
         # Limite massimo FIFO
         if len(existing_facts) > self.MAX_FACTS:
             existing_facts = existing_facts[-self.MAX_FACTS:]

@@ -655,6 +655,7 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
             update_member_seen, extract_family_relationship,
             append_group_history, record_group_observation,
             consolidate_group_insights_if_needed,
+            summarize_group_discussion_if_needed,
         )
 
         # Normalizza group_id e sender_id a interi (come fa whatsapp_bot.py)
@@ -697,6 +698,15 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
         # 3. Estrai parentela in background
         _aio.create_task(extract_family_relationship(clean_sender, request.sender_name, request.text, "whatsapp"))
 
+        # 3b. Birthday: collega pre-seed e prova a estrarre data nascita dal messaggio
+        try:
+            from core.birthday_service import link_preseed_to_member, try_extract_birthday
+            _aio.create_task(link_preseed_to_member(sender_int, request.sender_name))
+            if request.text and len(request.text.strip()) > 8:
+                _aio.create_task(try_extract_birthday(sender_int, request.sender_name, request.text))
+        except Exception:
+            pass
+
         # 4. Costruisci contesto gruppo (sincrono — serve per la risposta)
         group_ctx = await build_group_context(group_int, sender_int, request.sender_name)
 
@@ -731,6 +741,7 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
         _aio.create_task(append_group_history(group_int, sender_int, request.sender_name, request.text, response))
         _aio.create_task(record_group_observation(group_int, sender_int, request.sender_name, request.text, response))
         _aio.create_task(consolidate_group_insights_if_needed(group_int))
+        _aio.create_task(summarize_group_discussion_if_needed(group_int))
 
         # 8. Memoria personale del mittente — episodi e fatti su request.text (già pulito)
         if request.text and len(request.text.strip()) > 10:

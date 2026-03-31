@@ -141,6 +141,7 @@ async function startBaileys() {
         getMessage: async () => undefined,
     });
 
+    _activeSock = sock;  // aggiorna subito il riferimento
     sock.ev.on("creds.update", saveCreds);
 
     sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
@@ -226,9 +227,52 @@ async function startBaileys() {
     });
 }
 
+// ── HTTP server per invio proattivo (compleanni, reminder, ecc.) ──────────────
+// Python chiama: POST http://localhost:3001/send  { "groupId": "...", "text": "..." }
+const http = require("http");
+const SEND_PORT = parseInt(process.env.BAILEYS_SEND_PORT || "3001", 10);
+const SEND_SECRET = process.env.BAILEYS_SEND_SECRET || "";
+
+let _activeSock = null;  // riferimento al socket Baileys attivo
+
+function startHttpServer() {
+    const server = http.createServer(async (req, res) => {
+        if (req.method !== "POST" || req.url !== "/send") {
+            res.writeHead(404); res.end("not found"); return;
+        }
+        let body = "";
+        req.on("data", d => body += d);
+        req.on("end", async () => {
+            try {
+                const { groupId, text, secret } = JSON.parse(body);
+                if (SEND_SECRET && secret !== SEND_SECRET) {
+                    res.writeHead(403); res.end("forbidden"); return;
+                }
+                if (!groupId || !text) {
+                    res.writeHead(400); res.end("missing groupId or text"); return;
+                }
+                if (!_activeSock) {
+                    res.writeHead(503); res.end("socket not ready"); return;
+                }
+                await _activeSock.sendMessage(groupId, { text });
+                console.log(`[Baileys/HTTP] Sent to ${groupId}: ${text.slice(0, 60)}`);
+                res.writeHead(200, {"Content-Type": "application/json"});
+                res.end(JSON.stringify({ ok: true }));
+            } catch (e) {
+                console.error("[Baileys/HTTP] Send error:", e.message);
+                res.writeHead(500); res.end(e.message);
+            }
+        });
+    });
+    server.listen(SEND_PORT, "127.0.0.1", () => {
+        console.log(`[Baileys/HTTP] Send server on 127.0.0.1:${SEND_PORT}`);
+    });
+}
+
 // ── Avvio ─────────────────────────────────────────────────────────────────────
 console.log("[Genesi Baileys] Avvio servizio WhatsApp gruppi...");
-startBaileys().catch(e => {
+startHttpServer();
+startBaileys().then(sock => { _activeSock = sock; }).catch(e => {
     console.error("[Baileys] Errore fatale:", e);
     process.exit(1);
 });
