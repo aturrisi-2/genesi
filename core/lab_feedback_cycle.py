@@ -73,8 +73,13 @@ class LabFeedbackCycle:
     # ── Trigger logic ─────────────────────────────────────────────────────────
 
     def _count_pending_events(self) -> int:
+        _NOISE_TYPES = {"moltbook_social", "moltbook_technical_feedback", "GRUPPO_FAMIGLIA"}
         events = self._load_json(FALLBACK_LOG_PATH, [])
-        return sum(1 for e in events if e.get("status") == "pending")
+        return sum(
+            1 for e in events
+            if e.get("status") == "pending"
+            and e.get("fallback_type", "") not in _NOISE_TYPES
+        )
 
     def _should_run(self) -> bool:
         """Verifica se il ciclo deve essere avviato (soglia eventi + intervallo minimo)."""
@@ -131,7 +136,16 @@ class LabFeedbackCycle:
         # 1. Carica dati
         events: List[dict] = self._load_json(FALLBACK_LOG_PATH, [])
         suggestions: List[dict] = self._load_json(SUGGESTIONS_PATH, [])
-        pending_events = [e for e in events if e.get("status") == "pending"]
+
+        # Filtra eventi rilevanti: esclude Moltbook (social posts/feedback AI) e
+        # GRUPPO_FAMIGLIA (contesto grup, non errori). Mantiene solo errori reali e
+        # finding da audit.
+        _NOISE_TYPES = {"moltbook_social", "moltbook_technical_feedback", "GRUPPO_FAMIGLIA"}
+        pending_events = [
+            e for e in events
+            if e.get("status") == "pending"
+            and e.get("fallback_type", "") not in _NOISE_TYPES
+        ]
         pending_suggestions = [s for s in suggestions if s.get("status") == "pending"]
 
         if not pending_events and not pending_suggestions:
