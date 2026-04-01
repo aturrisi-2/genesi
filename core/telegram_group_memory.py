@@ -55,6 +55,33 @@ CONSOLIDATION_INTERVAL = 86400  # 24h in secondi
 OBSERVATION_EVERY_N    = 5      # ogni N messaggi di gruppo → 1 osservazione lab
 SUMMARY_INTERVAL       = 21600  # 6h — riepilogo discussioni giornaliero
 
+# ── Gender inference ───────────────────────────────────────────────────────────
+_FEMALE_RELATIONS = {
+    "madre", "mamma", "moglie", "sorella", "figlia", "nonna", "zia",
+    "cugina", "nipote", "cognata", "nuora", "suocera", "matrigna",
+    "fidanzata", "compagna", "ragazza", "ex",
+}
+_MALE_RELATIONS = {
+    "padre", "papà", "papa", "marito", "fratello", "figlio", "nonno", "zio",
+    "cugino", "nipote", "cognato", "genero", "suocero", "patrigno",
+    "fidanzato", "compagno", "ragazzo",
+}
+
+def _infer_gender(relationship: str) -> str:
+    """Ritorna 'F', 'M' o '' in base al tipo di relazione."""
+    r = relationship.strip().lower()
+    if r in _FEMALE_RELATIONS:
+        return "F"
+    if r in _MALE_RELATIONS:
+        return "M"
+    # suffisso -a → F, -o → M (cugina/cugino ecc.)
+    if r.endswith("a"):
+        return "F"
+    if r.endswith("o"):
+        return "M"
+    return ""
+
+
 _DAILY_SUMMARY_PROMPT = """\
 Sei un assistente che riassume le discussioni di una chat familiare.
 Leggi questi messaggi e scrivi un riepilogo compatto (max 5 righe, in italiano naturale)
@@ -256,10 +283,17 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
 
     # Nota famiglia
     rel = member.get("relationship_to_owner", "")
-    rel_note = f" È {rel} di {owner_name}." if rel and rel != "owner" else ""
+    gender = member.get("gender") or _infer_gender(rel)
+    if rel and rel != "owner":
+        pronoun = "a" if gender == "F" else "o" if gender == "M" else "o/a"
+        tratta   = f"Trattala" if gender == "F" else "Trattalo" if gender == "M" else "Trattalo/a"
+        rel_note = f" È {rel} di {owner_name} (genere: {'F — usa aggettivi/pronomi al femminile' if gender == 'F' else 'M — usa aggettivi/pronomi al maschile' if gender == 'M' else 'non determinato'})."
+    else:
+        tratta = "Trattalo/a"
+        rel_note = ""
     lines.append(
         f"[CONTESTO FAMIGLIA:{rel_note} "
-        f"Trattalo/a con calore e familiarità, come un parente. "
+        f"{tratta} con calore e familiarità, come un parente. "
         f"Usa i gradi di parentela corretti quando parli di altri membri. "
         f"Puoi fare riferimento a quello che altri hanno detto.]"
     )
@@ -487,6 +521,22 @@ async def get_family_context_block(owner_user_id: str) -> str:
         lines = ["[FAMIGLIA (dal gruppo Telegram):"]
         for m in members:
             lines.append(f"  • {m}")
+        # Albero genealogico con genere esplicito
+        s2   = await _storage()
+        prof = await s2.load(f"profile:{owner_user_id}", default={}) or {}
+        ft   = prof.get("family_tree", {})
+        if ft:
+            gender_lines = []
+            for v in ft.values():
+                _n  = v.get("name") or v.get("display_name", "")
+                _r  = v.get("relationship", "")
+                _g  = v.get("gender") or _infer_gender(_r)
+                if _n and _r:
+                    _glabel = "F" if _g == "F" else "M" if _g == "M" else "?"
+                    gender_lines.append(f"    {_n}: {_r} ({_glabel})")
+            if gender_lines:
+                lines.append("  Genere familiare (usa accordo grammaticale corretto):")
+                lines.extend(gender_lines)
         if insights:
             lines.append("  Dinamiche osservate:")
             for ins in insights:
@@ -553,8 +603,13 @@ async def extract_family_relationship(
                 member = await get_member(from_id_int)
                 member["relationship_to_owner"] = relationship
                 member["display_name"] = name
+                _g = _infer_gender(relationship)
+                if _g:
+                    member["gender"] = _g
                 facts = member.get("facts", {})
                 facts["relazione_con_alfio"] = relationship
+                if _g:
+                    facts["genere"] = _g
                 member["facts"] = facts
                 await s.save(_member_key(from_id_int), member)
             except Exception:
@@ -574,9 +629,11 @@ async def extract_family_relationship(
         profile = await s.load(profile_key, default={}) or {}
         family_tree = profile.get("family_tree", {})
         tree_key = f"{platform}_{member_id}"
+        _gender = _infer_gender(relationship)
         family_tree[tree_key] = {
             "name":         name,
             "relationship": relationship,
+            "gender":       _gender,
             "member_id":    member_id,
             "display_name": first_name,
             "notes":        notes,

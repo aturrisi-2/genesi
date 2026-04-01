@@ -18,6 +18,44 @@ logger = logging.getLogger(__name__)
 
 cognitive_engine = CognitiveMemoryEngine()
 
+
+# Gender inference dai personal facts
+import re as _re
+
+_GF_F = _re.compile(r"""(?i)su[ao] (sorella|madre|mamma|moglie|figlia|nonna|zia|cugina|cognata|nuora|fidanzata) (\w{3,})""")
+_GF_M = _re.compile(r"""(?i)su[ao] (fratello|padre|pap[aoà]|marito|figlio|nonno|zio|cugino|cognato|genero|fidanzato) (\w{3,})""")
+_GFN_F = _re.compile(r"""(?i)su[ao] (sorella|madre|mamma|moglie|figlia|nonna|zia|cugina|cognata|nuora|fidanzata)""")
+_GFN_M = _re.compile(r"""(?i)su[ao] (fratello|padre|pap[aoà]|marito|figlio|nonno|zio|cugino|cognato|genero|fidanzato)""")
+_GF_LABEL = {"F": "femminile - usa aggettivi/pronomi al femminile", "M": "maschile - usa aggettivi/pronomi al maschile"}
+_GF_STOP = {"quattro","cinque","sei","tre","due","anni","mesi","giorni","fa","scorso","volta","molto","poco","ogni","stato","stata"}
+
+
+def _build_gender_map_from_facts(facts: list) -> list:
+    seen = set()
+    result = []
+    for fact in facts:
+        text = fact.get("text", "")
+        for pat, g in ((_GF_F, "F"), (_GF_M, "M")):
+            for m in pat.finditer(text):
+                rel, name = m.group(1).lower(), m.group(2)
+                if not name[0].isupper() or name.lower() in _GF_STOP:
+                    continue
+                key = name + g
+                if key in seen:
+                    continue
+                seen.add(key)
+                result.append(rel + " " + name + ": " + _GF_LABEL[g])
+        for pat, g in ((_GFN_F, "F"), (_GFN_M, "M")):
+            for m in pat.finditer(text):
+                rel = m.group(1).lower()
+                key = rel + g
+                if key in seen:
+                    continue
+                seen.add(key)
+                result.append(rel + " dell'utente: " + _GF_LABEL[g])
+    return result
+
+
 class ContextAssembler:
     """
     Assembla contesto strutturato dalla memoria per il prompt LLM.
@@ -189,6 +227,13 @@ class ContextAssembler:
                 pf_block = "\n".join(pf_lines)
                 context["personal_facts"] = pf_block
                 summary += f"\n[FATTI PERSONALI APPRESI]\n{pf_block}"
+                try:
+                    _gmap = _build_gender_map_from_facts(relevant_pf)
+                    if _gmap:
+                        _gh = chr(10) + "[GENERE PERSONE MENZIONATE (usa accordo grammaticale corretto)]" + chr(10)
+                        summary += _gh + chr(10).join("  " + e for e in _gmap)
+                except Exception:
+                    pass
         except Exception:
             pass
 
