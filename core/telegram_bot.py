@@ -104,8 +104,15 @@ async def _group_should_intervene(
     if _GENESI_RE.search(combined):
         return True
 
-    # Fast-path: saluto al gruppo → sempre sì
-    _GREETINGS = ("buongiorno", "buonasera", "buonanotte", "ciao a tutti", "salve", "hey")
+    # Fast-path: saluto/augurio al gruppo → sempre sì
+    _GREETINGS = (
+        "buongiorno", "buonasera", "buonanotte", "ciao a tutti", "salve", "hey",
+        "buon pranzo", "buona cena", "buon pomeriggio", "buona notte",
+        "buon natale", "buona pasqua", "buon anno", "felice anno",
+        "buona domenica", "buon sabato", "buon venerdì",
+        "buon weekend", "buon week end", "buone feste",
+        "auguri", "tanti auguri", "felicitazioni", "congratulazioni",
+    )
     combined_lower = combined.lower()
     if any(g in combined_lower for g in _GREETINGS):
         return True

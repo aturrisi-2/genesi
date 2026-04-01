@@ -799,7 +799,7 @@ Leggi il messaggio attuale (e i messaggi recenti se presenti). Decidi se Genesi 
 
 RISPONDI "SI" SOLO se il messaggio rientra in UNO di questi casi:
 1. INVOCATA: qualcuno cita Genesi per nome o le pone una domanda diretta
-2. SALUTO: qualcuno saluta il gruppo (ciao, buongiorno, buonasera, buonanotte, salve, hey, ecc. — in qualsiasi lingua o forma)
+2. SALUTO O AUGURIO: qualcuno saluta o fa un augurio al gruppo (ciao, buongiorno, buonasera, buon pranzo, buona cena, buon natale, buona pasqua, buon anno, auguri, tanti auguri, buon weekend, buone feste, ecc. — in qualsiasi lingua o forma)
 3. BUONA NOTIZIA: qualcuno condivide una notizia bella, un successo, un traguardo, qualcosa da celebrare
 4. CONTINUAZIONE: è un follow-up diretto a una risposta appena data da Genesi (< 5 min).
    Se nei messaggi recenti vedi "Genesi: ..." seguito da una domanda breve (dove?, come?, perché?, e voi?, ma voi?,

@@ -38,10 +38,15 @@ _WEATHER_RE = re.compile(
     re.IGNORECASE
 )
 
-# Filtro gruppi: risponde solo se menzionato o saluto
+# Filtro gruppi: risponde solo se menzionato o saluto/augurio
 _GREETING_RE = re.compile(
     r'\b(ciao|salve|buongiorno|buonasera|buonanotte|hey|hei|ehilà|'
-    r'hello|hi|buon\s*giorno|buona\s*sera)\b',
+    r'hello|hi|buon\s*giorno|buona\s*sera|'
+    r'buon\s*pranzo|buona\s*cena|buon\s*pomeriggio|buona\s*notte|'
+    r'buon\s*natale|buona\s*pasqua|buon\s*anno|felice\s*anno|'
+    r'buona\s*domenica|buon\s*sabato|buon\s*venerd[iì]|'
+    r'buon\s*week\s*end|buon\s*weekend|buone\s*feste|'
+    r'auguri|tanti\s*auguri|felicitazioni|congratulazioni)\b',
     re.IGNORECASE
 )
 _GENESI_RE = re.compile(r'\bgenesi\b', re.IGNORECASE)
@@ -51,7 +56,8 @@ _GOOD_NEWS_KW = (
     "habemus", "ce l'ho fatta", "ce la fatta", "ho preso", "ho comprato",
     "è arrivat", "arrivata la", "arrivato il", "finalmente", "ho trovato",
     "ho vinto", "abbiamo vinto", "promozione", "promosso", "promossa",
-    "laurea", "diploma", "compleanno", "auguri",
+    "laurea", "diploma", "compleanno", "auguri", "tanti auguri",
+    "felicitazioni", "congratulazioni", "buone feste",
 )
 
 
