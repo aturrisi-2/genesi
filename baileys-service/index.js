@@ -225,17 +225,31 @@ async function startBaileys() {
                 const quotedParticipant = contextInfo.participant || contextInfo.remoteJid || "";
                 const myJid = sock.user?.id?.replace(/:.*@/, "@") || "";
                 const isReplyToGenesi = myJid && quotedParticipant && quotedParticipant.replace(/:.*@/, "@") === myJid;
+
+                // Estrai il testo quotato per iniettarlo nel contesto
+                let quotedText = "";
                 if (isReplyToGenesi) {
+                    const qm = contextInfo.quotedMessage;
+                    quotedText = (
+                        qm?.conversation
+                        || qm?.extendedTextMessage?.text
+                        || ""
+                    ).trim().slice(0, 300);
                     console.log(`[Baileys] Reply diretta a Genesi da ${senderName} → intervengo`);
                 } else {
                     const recentMsgs = getRecentMessages(groupId);
                     if (!await shouldRespond(text, recentMsgs, token)) continue;
                 }
 
-                console.log(`[Baileys] Intervengo per: "${text.slice(0, 50)}"`);
+                // Se c'è un messaggio quotato di Genesi, anteponi al testo per dare contesto
+                const textToSend = (isReplyToGenesi && quotedText)
+                    ? `[Stai rispondendo a questo tuo messaggio precedente: "${quotedText}"]\n${text}`
+                    : text;
+
+                console.log(`[Baileys] Intervengo per: "${textToSend.slice(0, 50)}"`);
 
                 await sock.sendPresenceUpdate("composing", groupId);
-                const reply = await askGenesiGroup(text, senderName, senderJid, groupId, token);
+                const reply = await askGenesiGroup(textToSend, senderName, senderJid, groupId, token);
                 await sock.sendPresenceUpdate("paused", groupId);
 
                 if (reply) {

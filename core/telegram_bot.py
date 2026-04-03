@@ -621,15 +621,18 @@ async def handle_update(update: dict):
         document   = msg.get("document")    # documento (pdf, txt, ecc.)
         caption    = msg.get("caption", "").strip()
 
-        # Reply diretta a un messaggio di Genesi → fast-path SI
+        # Reply diretta a un messaggio di Genesi → fast-path SI + inietta contesto
         _reply_to_genesi = False
+        _quoted_genesi_text = ""
         if is_group:
             reply_to = msg.get("reply_to_message", {})
             if reply_to:
                 replied_from_id = reply_to.get("from", {}).get("id", 0)
                 if _BOT_ID and replied_from_id == _BOT_ID:
                     _reply_to_genesi = True
-                    logger.info("REPLY_TO_GENESI from=%s chat=%s", from_id, chat_id)
+                    _quoted_genesi_text = (reply_to.get("text") or reply_to.get("caption") or "").strip()
+                    logger.info("REPLY_TO_GENESI from=%s chat=%s quoted_len=%s",
+                                from_id, chat_id, len(_quoted_genesi_text))
 
         # Aggiorna profilo membro del gruppo ad ogni messaggio
         if is_group and first_name:
@@ -867,7 +870,15 @@ async def handle_update(update: dict):
             # Per i gruppi: arricchisce il messaggio con contesto di gruppo
             if is_group:
                 group_ctx = await _load_group_ctx()
-                enriched = _group_msg(message, group_ctx)
+                # Se è una reply diretta a un vecchio messaggio di Genesi,
+                # preponi il testo citato così il proactor sa a cosa si riferisce
+                msg_with_quote = message
+                if _reply_to_genesi and _quoted_genesi_text:
+                    msg_with_quote = (
+                        f"[Stai rispondendo a questo tuo messaggio precedente: "
+                        f"\"{_quoted_genesi_text[:300]}\"]\n{message}"
+                    )
+                enriched = _group_msg(msg_with_quote, group_ctx)
             else:
                 enriched = _group_msg(message)
             reply = await _chat(token, enriched, city=city, is_group=is_group)
