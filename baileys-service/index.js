@@ -219,8 +219,18 @@ async function startBaileys() {
 
                 // Filtra: LLM decide se intervenire
                 const token = await getToken("group");
-                const recentMsgs = getRecentMessages(groupId);
-                if (!await shouldRespond(text, recentMsgs, token)) continue;
+
+                // Fast-path: reply diretta a un messaggio di Genesi → sempre sì
+                const contextInfo = msg.message?.extendedTextMessage?.contextInfo || {};
+                const quotedParticipant = contextInfo.participant || contextInfo.remoteJid || "";
+                const myJid = sock.user?.id?.replace(/:.*@/, "@") || "";
+                const isReplyToGenesi = myJid && quotedParticipant && quotedParticipant.replace(/:.*@/, "@") === myJid;
+                if (isReplyToGenesi) {
+                    console.log(`[Baileys] Reply diretta a Genesi da ${senderName} → intervengo`);
+                } else {
+                    const recentMsgs = getRecentMessages(groupId);
+                    if (!await shouldRespond(text, recentMsgs, token)) continue;
+                }
 
                 console.log(`[Baileys] Intervengo per: "${text.slice(0, 50)}"`);
 

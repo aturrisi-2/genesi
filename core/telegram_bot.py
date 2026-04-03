@@ -298,13 +298,15 @@ async def download_file(file_id: str) -> bytes | None:
 
 
 async def set_webhook(webhook_url: str):
-    global _BOT_USERNAME
+    global _BOT_USERNAME, _BOT_ID
     async with httpx.AsyncClient(timeout=10) as client:
-        # Scopri username del bot
+        # Scopri username e id del bot
         try:
             me = await client.get(f"{TELEGRAM_API}/getMe")
-            _BOT_USERNAME = me.json().get("result", {}).get("username", "")
-            logger.info("TELEGRAM_BOT_USERNAME=%s", _BOT_USERNAME)
+            me_data = me.json().get("result", {})
+            _BOT_USERNAME = me_data.get("username", "")
+            _BOT_ID = me_data.get("id", 0)
+            logger.info("TELEGRAM_BOT_USERNAME=%s id=%s", _BOT_USERNAME, _BOT_ID)
         except Exception:
             pass
         # Registra webhook
@@ -536,6 +538,7 @@ async def _send_response(chat_id: int, reply: str):
 _WEBAPP_LINK  = "https://genesi.lucadigitale.eu/"
 _WEBAPP_REG   = "https://genesi.lucadigitale.eu/register?from=telegram"
 _BOT_USERNAME = ""   # popolato da set_webhook via getMe
+_BOT_ID: int = 0     # popolato da set_webhook via getMe
 
 
 def get_bot_link() -> str:
@@ -617,6 +620,16 @@ async def handle_update(update: dict):
         audio      = msg.get("audio")       # file audio generico
         document   = msg.get("document")    # documento (pdf, txt, ecc.)
         caption    = msg.get("caption", "").strip()
+
+        # Reply diretta a un messaggio di Genesi → fast-path SI
+        _reply_to_genesi = False
+        if is_group:
+            reply_to = msg.get("reply_to_message", {})
+            if reply_to:
+                replied_from_id = reply_to.get("from", {}).get("id", 0)
+                if _BOT_ID and replied_from_id == _BOT_ID:
+                    _reply_to_genesi = True
+                    logger.info("REPLY_TO_GENESI from=%s chat=%s", from_id, chat_id)
 
         # Aggiorna profilo membro del gruppo ad ogni messaggio
         if is_group and first_name:
@@ -802,10 +815,14 @@ async def handle_update(update: dict):
 
         # Genesi decide autonomamente se e quando intervenire nel gruppo.
         if is_group:
-            should = await _group_should_intervene(
-                text, caption, chat_id, from_id, first_name,
-                bot_username=_BOT_USERNAME, bot_mentioned=_bot_mentioned
-            )
+            # Fast-path: reply diretta a un messaggio di Genesi → sempre sì
+            if _reply_to_genesi:
+                should = True
+            else:
+                should = await _group_should_intervene(
+                    text, caption, chat_id, from_id, first_name,
+                    bot_username=_BOT_USERNAME, bot_mentioned=_bot_mentioned
+                )
             if not should:
                 logger.info("TELEGRAM_GROUP_SILENT chat_id=%s from=%s msg=%.60s",
                             chat_id, first_name, f"{text} {caption}".strip())
