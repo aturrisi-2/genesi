@@ -20,7 +20,7 @@ import httpx
 from core.storage import storage
 from core.simple_chat import strip_group_ctx as _strip_group_ctx
 from core.telegram_group_memory import (
-    update_member_seen, get_member, get_member_city, save_member_city,
+    update_member_seen, get_member_city, save_member_city,
     build_group_context, append_group_history, append_raw_message, get_raw_messages,
     record_group_observation, consolidate_group_insights_if_needed,
     summarize_group_discussion_if_needed,
