@@ -522,7 +522,7 @@ class IntentClassifier:
         """
         # Usa solo il testo dell'utente, senza contesto pagina (widget) né annotazioni gruppo (Telegram)
         _user_part = message.split("[CONTESTO PAGINA]")[0].split("[PAGE CONTEXT]")[0]
-        _user_part = _user_part.split("[GRUPPO:")[0].split("[DISCUSSIONE IN CORSO")[0]
+        _user_part = _user_part.split("[GRUPPO:")[0].split("[GRUPPO ")[0].split("[DISCUSSIONE IN CORSO")[0]
         message_lower = _user_part.lower().strip()
 
         # 0️⃣ Parole chiave iCloud → forza icloud_sync / icloud_setup

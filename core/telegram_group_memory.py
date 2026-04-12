@@ -228,6 +228,17 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
 
     lines = []
 
+    # ⚠️ Correzioni esplicite — INIETTATE PRIME, massima priorità
+    corrections = await get_group_corrections(chat_id, max_age_seconds=604800)  # 7 giorni
+    if corrections:
+        lines.append("[⚠️ CORREZIONI IMPORTANTI — non ripetere le informazioni vecchie:]")
+        for c in corrections[-8:]:  # max 8 correzioni recenti
+            member_name = c.get("member", "?")
+            old = c.get("old_info", "")
+            new = c.get("new_info", "")
+            lines.append(f"  • {member_name} ha corretto: '{old}' → ora è: '{new}'")
+        lines.append("")
+
     # Riepilogo sessioni precedenti (ogni 6h) — dà a Genesi memoria cross-sessione
     if summary:
         lines.append("[RIEPILOGO DISCUSSIONI RECENTI (ultime ore):]")
@@ -672,3 +683,132 @@ async def extract_family_relationship(
     except Exception as exc:
         logger.debug("FAMILY_RELATIONSHIP_ERROR platform=%s member_id=%s err=%s",
                      platform, member_id, exc)
+
+
+# ── Correzioni esplicite dei membri ───────────────────────────────────────────
+# Quando qualcuno corregge Genesi ("no, non è più così", "sbagliato", ecc.)
+# la correzione viene salvata e iniettata in build_group_context() come avvertimento.
+
+MAX_CORRECTIONS = 30  # max correzioni per gruppo
+
+_CORRECTION_KEY = lambda chat_id: f"telegram:group_corrections:{chat_id}"
+
+_CORRECTION_DETECT_PROMPT = """\
+Stai analizzando un messaggio in una chat di famiglia dove Genesi (AI) ha appena risposto.
+Determina SE il messaggio contiene una correzione esplicita di qualcosa che Genesi ha detto
+o di un'informazione vecchia/sbagliata che Genesi ha tirato fuori.
+
+Segnali di correzione: "no, non è così", "sbagliato", "quella cosa è cambiata", "non sono più",
+"non è più", "adesso è diverso", "stai sbagliando", "ti sbagli", "non dire più", ecc.
+
+Se c'è una correzione, rispondi con JSON:
+{
+  "found": true,
+  "old_info": "breve descrizione della cosa errata/vecchia (max 20 parole)",
+  "new_info": "la versione corretta/aggiornata (max 20 parole)",
+  "member": "nome del membro che ha corretto"
+}
+Se NON è una correzione: {"found": false}
+Rispondi SOLO con JSON valido.
+"""
+
+
+async def detect_and_save_correction(
+    chat_id: int, from_id: int, first_name: str, text: str, last_genesi_response: str
+) -> bool:
+    """
+    Rileva se il messaggio è una correzione a qualcosa che Genesi ha detto.
+    Se sì, salva la correzione nel storage del gruppo.
+    Ritorna True se è stata rilevata e salvata una correzione.
+    Fail-silent.
+    """
+    # Fast-path: parole chiave di correzione per evitare LLM su ogni messaggio
+    _CORRECTION_KW = (
+        "sbagliato", "sbagliata", "sbagli", "ti sbagli",
+        "non è così", "non è più", "non sono più", "non siamo più",
+        "è cambiato", "è cambiata", "sono cambiate", "sono cambiati",
+        "adesso è", "ora è", "adesso sono", "ora sono",
+        "non dire più", "smettila di", "non tirare fuori",
+        "quella cosa è passata", "è passato", "è passata",
+        "non è vero", "non era vero", "questo non vale",
+    )
+    text_lower = text.lower()
+    if not any(kw in text_lower for kw in _CORRECTION_KW):
+        return False
+
+    try:
+        from core.llm_service import llm_service
+        user_msg = (
+            f"Ultima risposta di Genesi: {last_genesi_response[:300]}\n\n"
+            f"Messaggio di {first_name}: {text[:300]}"
+        )
+        raw = await llm_service._call_model(
+            "openai/gpt-4o-mini",
+            _CORRECTION_DETECT_PROMPT,
+            user_msg,
+            user_id="group-correction-detector",
+            route="memory",
+        )
+        if not raw:
+            return False
+        clean = raw.strip()
+        if clean.startswith("```"):
+            clean = clean.split("```")[1]
+            if clean.startswith("json"):
+                clean = clean[4:]
+        parsed = json.loads(clean.strip())
+        if not parsed.get("found"):
+            return False
+
+        old_info = (parsed.get("old_info") or "").strip()
+        new_info = (parsed.get("new_info") or text[:100]).strip()
+        if not old_info or not new_info:
+            return False
+
+        # Salva la correzione
+        s = await _storage()
+        corrections = await s.load(_CORRECTION_KEY(chat_id), default=[]) or []
+        if not isinstance(corrections, list):
+            corrections = []
+
+        corrections.append({
+            "member":    first_name,
+            "from_id":   from_id,
+            "old_info":  old_info,
+            "new_info":  new_info,
+            "ts":        int(time.time()),
+        })
+        corrections = corrections[-MAX_CORRECTIONS:]
+        await s.save(_CORRECTION_KEY(chat_id), corrections)
+
+        # Aggiorna anche i facts del membro se la correzione riguarda lui/lei
+        member = await get_member(from_id)
+        member_corrections = member.get("corrections", [])
+        if not isinstance(member_corrections, list):
+            member_corrections = []
+        member_corrections.append({"old": old_info, "new": new_info, "ts": int(time.time())})
+        member["corrections"] = member_corrections[-10:]
+        await s.save(_member_key(from_id), member)
+
+        logger.info(
+            "GROUP_CORRECTION_SAVED chat_id=%s member=%s old=%s new=%s",
+            chat_id, first_name, old_info[:40], new_info[:40]
+        )
+        return True
+
+    except Exception as exc:
+        logger.debug("GROUP_CORRECTION_ERROR chat_id=%s err=%s", chat_id, exc)
+        return False
+
+
+async def get_group_corrections(chat_id: int, max_age_seconds: int = 604800) -> list:
+    """
+    Ritorna le correzioni recenti del gruppo (default: ultima settimana).
+    """
+    try:
+        s = await _storage()
+        corrections = await s.load(_CORRECTION_KEY(chat_id), default=[]) or []
+        now = int(time.time())
+        return [c for c in corrections if now - c.get("ts", 0) < max_age_seconds]
+    except Exception:
+        return []

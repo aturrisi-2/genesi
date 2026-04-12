@@ -26,6 +26,7 @@ from core.telegram_group_memory import (
     summarize_group_discussion_if_needed,
     extract_family_relationship,
     sync_family_to_owner,
+    detect_and_save_correction,
 )
 
 logger = logging.getLogger(__name__)
@@ -900,6 +901,10 @@ async def handle_update(update: dict):
                 # Livello 1: osservazione lab_feedback_cycle ogni N messaggi
                 asyncio.create_task(
                     record_group_observation(chat_id, from_id, first_name, message, reply)
+                )
+                # Livello 1b: rileva correzioni esplicite (aggiorna memoria stale)
+                asyncio.create_task(
+                    detect_and_save_correction(chat_id, from_id, first_name, message, reply)
                 )
                 # Livello 2a: consolidazione insights gruppo ogni 24h
                 asyncio.create_task(

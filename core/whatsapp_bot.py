@@ -641,12 +641,15 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     append_group_history, record_group_observation,
                     consolidate_group_insights_if_needed,
                     summarize_group_discussion_if_needed,
+                    detect_and_save_correction,
                 )
                 orig_text = (text or caption or "").strip()
-                asyncio.create_task(append_group_history(chat_id, abs(hash(wa_id)) % (10**9), first_name, orig_text, reply))
-                asyncio.create_task(record_group_observation(chat_id, abs(hash(wa_id)) % (10**9), first_name, orig_text, reply))
+                _wa_from_id = abs(hash(wa_id)) % (10**9)
+                asyncio.create_task(append_group_history(chat_id, _wa_from_id, first_name, orig_text, reply))
+                asyncio.create_task(record_group_observation(chat_id, _wa_from_id, first_name, orig_text, reply))
                 asyncio.create_task(consolidate_group_insights_if_needed(chat_id))
                 asyncio.create_task(summarize_group_discussion_if_needed(chat_id))
+                asyncio.create_task(detect_and_save_correction(chat_id, _wa_from_id, first_name, orig_text, reply))
             return reply
 
         async def _handle_reply(reply: str) -> bool:
