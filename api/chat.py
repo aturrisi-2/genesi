@@ -310,7 +310,7 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                 pass
         _asyncio.create_task(_update_behavioral_memory())
 
-        # Audit automatico ogni 25 turni di chat (background, silenzioso)
+        # Audit automatico ogni 100 turni di chat (background, silenzioso)
         async def _maybe_audit():
             try:
                 from core.genesi_auditor import genesi_auditor as _auditor
@@ -323,7 +323,7 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                 _count += 1
                 with open(_counter_file, "w") as _cf:
                     _cf.write(str(_count))
-                if _count % 25 == 0:
+                if _count % 100 == 0:
                     log("AUDIT_AUTO_TRIGGER", turn=_count, user_id=user_id)
                     await _auditor.generate_report()
             except Exception:
@@ -521,7 +521,7 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                     pass
             _aio.create_task(_stream_detect_gap())
 
-            # Audit automatico ogni 25 turni di chat (background, silenzioso)
+            # Audit automatico ogni 100 turni di chat (background, silenzioso)
             async def _stream_maybe_audit():
                 try:
                     from core.genesi_auditor import genesi_auditor as _auditor
@@ -534,7 +534,7 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                     _count += 1
                     with open(_counter_file, "w") as _cf:
                         _cf.write(str(_count))
-                    if _count % 25 == 0:
+                    if _count % 100 == 0:
                         log("AUDIT_AUTO_TRIGGER", turn=_count, user_id=user_id)
                         await _auditor.generate_report()
                 except Exception:

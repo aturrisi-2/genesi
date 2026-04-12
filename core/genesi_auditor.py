@@ -15,7 +15,7 @@ class GenesiAuditor:
     def __init__(self, log_path=LOG_FILE):
         self.log_path = log_path
 
-    async def generate_report(self, lines_to_read: int = 2000) -> str:
+    async def generate_report(self, lines_to_read: int = 1000) -> str:
         if not os.path.exists(self.log_path):
             return "File log non trovato. Impossibile generare report."
 
@@ -37,11 +37,11 @@ Sii onesto, tecnico ma leggibile. Usa il formato Markdown in ITALIANO.
             user_prompt = f"Ecco gli ultimi log estratti da {self.log_path}:\n\n{log_snippet}"
 
             report = await llm_service._call_model(
-                "openai/gpt-4o",
+                "openai/gpt-4o-mini",
                 system_prompt,
                 user_prompt,
                 user_id="system_auditor",
-                route="deep_analysis"
+                route="memory"
             )
 
             # Salva il report su file

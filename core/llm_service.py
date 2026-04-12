@@ -68,8 +68,10 @@ def model_selector(message: str, route: str = "general") -> str:
     """
     msg_lower = message.lower()
 
-    # Opus SOLO per trigger esistenziali espliciti — frasi complete, non parole singole
-    if any(trigger in msg_lower for trigger in DEEP_ANALYSIS_TRIGGERS):
+    # Opus SOLO per trigger esistenziali espliciti — disabilitato di default (costa ~100× mini)
+    # Attiva con GENESI_DEEP_MODEL_ENABLED=true nell'env del VPS solo se necessario
+    _deep_enabled = os.environ.get("GENESI_DEEP_MODEL_ENABLED", "false").lower() in ("true", "1", "yes")
+    if _deep_enabled and any(trigger in msg_lower for trigger in DEEP_ANALYSIS_TRIGGERS):
         logger.info("LLM_MODEL_SELECTED=%s reason=deep_analysis_trigger", LLM_DEEP_MODEL)
         return LLM_DEEP_MODEL
 
