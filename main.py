@@ -76,6 +76,7 @@ async def lifespan(app: FastAPI):
     for coro, label in [
         (reminder_checker_background(),        "REMINDER_CHECKER"),
         (calendar_checker_background(),        "CALENDAR_CHECKER"),
+        (lab_cycle_scheduler(),                "LAB_CYCLE_SCHEDULER"),
         (evolution_scheduler(),                "EVOLUTION_SCHEDULER"),
         (training_autopilot.run_background_loop(), "TRAINING_AUTOPILOT"),
         (moltbook_heartbeat_background(),      "MOLTBOOK_HEARTBEAT"),
@@ -275,6 +276,20 @@ async def moltbook_heartbeat_background():
         except Exception as e:
             log("MOLTBOOK_LOOP_ERROR", error=str(e))
         await asyncio.sleep(3600)   # ogni 60 minuti
+
+
+async def lab_cycle_scheduler():
+    """Controlla ogni 6h se ci sono eventi pending nel lab feedback cycle e li processa."""
+    await asyncio.sleep(300)  # attendi 5 min dopo startup
+    while True:
+        try:
+            from core.lab_feedback_cycle import lab_feedback_cycle as _lfc
+            if _lfc._should_run():
+                log("LAB_CYCLE_SCHEDULED_TRIGGER", pending=_lfc._count_pending_events())
+                await _lfc.run()
+        except Exception as e:
+            log("LAB_CYCLE_SCHEDULER_ERROR", error=str(e))
+        await asyncio.sleep(21600)  # 6 ore
 
 
 async def evolution_scheduler():
