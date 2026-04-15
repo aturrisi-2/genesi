@@ -76,7 +76,9 @@ def model_selector(message: str, route: str = "general") -> str:
         return LLM_DEEP_MODEL
 
     # Route tecnico-cognitive → gpt-4o per qualità ragionamento
-    if route in _STRONG_ROUTES:
+    # Disabilitato di default (costa ~10× mini). Attiva con GENESI_STRONG_MODEL_ENABLED=true.
+    _strong_enabled = os.environ.get("GENESI_STRONG_MODEL_ENABLED", "false").lower() in ("true", "1", "yes")
+    if _strong_enabled and route in _STRONG_ROUTES:
         logger.info("LLM_MODEL_SELECTED=%s reason=strong_route_%s", LLM_STRONG_MODEL, route)
         return LLM_STRONG_MODEL
 

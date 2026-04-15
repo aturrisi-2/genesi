@@ -370,6 +370,11 @@ Rispondi SOLO con JSON valido (niente altro testo):
         Ritorna (True, motivo) se è il momento di lanciare un training automatico.
         Condizioni: qualità bassa + cooldown passato + nessun training in corso.
         """
+        # Training marathon disabilitato di default — costa molto (167 msg × gpt-4o).
+        # Attiva con TRAINING_AUTOPILOT_ENABLED=true nel .env del VPS solo se necessario.
+        if not os.environ.get("TRAINING_AUTOPILOT_ENABLED", "false").lower() in ("true", "1", "yes"):
+            return False, ""
+
         # Nessun training se c'è già uno in corso (manuale o automatico)
         adaptive = await storage.load(ADAPTIVE_STATUS_KEY, default={})
         if isinstance(adaptive, dict) and adaptive.get("status") in ("running", "starting"):
