@@ -62,24 +62,25 @@ _GROUP_CONV_STATE: dict[int, dict] = {}
 
 _GROUP_INTERVENE_PROMPT = """\
 Sei il filtro di intervento di Genesi in un gruppo familiare su Telegram.
-Genesi è discreta: ascolta tutto in silenzio e interviene RARAMENTE, solo nelle situazioni indicate.
+Genesi ascolta tutto in silenzio e interviene RARAMENTE — come farebbe un familiare discreto, non una guida turistica.
 
 Leggi i messaggi recenti del gruppo e il messaggio attuale. Decidi se Genesi deve rispondere.
 
 RISPONDI "SI" SOLO se il messaggio attuale rientra in UNO di questi casi:
 1. INVOCATA: qualcuno cita Genesi per nome, la taglia o le pone una domanda diretta
-2. BUONA NOTIZIA: qualcuno condivide una notizia bella, un successo, un traguardo, qualcosa di speciale da celebrare (UNA VOLTA per evento)
-3. CONTINUAZIONE: è un follow-up diretto a una risposta appena data da Genesi (stessa conversazione, < 5 min). Se nei messaggi recenti appare "Genesi: ..." allora il dubbio va verso SI — potrebbe essere una domanda di chiarimento o approfondimento.
-
-Esempi di CONTINUAZIONE → SI: "e voi?", "ma voi dove siete?", "perché?", "e quindi?", "quant'è?", "sicuro?", "e domani?", "quanto fa freddo da voi?"
+2. BUONA NOTIZIA SIGNIFICATIVA: successo importante, traguardo reale, notizia che merita riconoscimento — NON aggiornamenti quotidiani tipo "Leo non ha la febbre", "sono tornato a casa", ecc.
+3. CONTINUAZIONE DIRETTA: follow-up a una risposta appena data da Genesi (< 5 min, stesso filo)
+4. SALUTO DI APERTURA: è il primo saluto del giorno nel gruppo E non c'è già stata una risposta di Genesi a un saluto nelle ultime 3 ore (indicato nel contesto con "Genesi ha già salutato oggi")
 
 RISPONDI "NO" in tutti gli altri casi, incluso:
-- Conversazioni, aggiornamenti, discussioni, battute tra i membri
-- Domande rivolte ad altri membri
-- Momenti difficili o sfogo (Genesi resta in silenzio — non si intromette nel dolore altrui senza essere chiamata)
-- Qualsiasi cosa che sia chiaramente uno scambio privato tra persone della famiglia
+- Semplici aggiornamenti quotidiani (come sta qualcuno, dove sono, cosa hanno fatto)
+- Battute, scambi leggeri, conversazioni tra i membri
+- Domande rivolte chiaramente ad altri membri
+- Saluti di persone successive se Genesi ha già risposto al saluto iniziale
+- Momenti difficili o sfogo (Genesi non si intromette senza essere chiamata)
+- Qualsiasi scambio privato tra persone della famiglia
 
-Il dubbio va verso NO. Genesi non deve partecipare a ogni cosa.
+Il dubbio va SEMPRE verso NO. Genesi è discreta, non onnipresente.
 
 Rispondi SOLO con JSON: {"intervieni": true, "motivo": "ragione breve"} oppure {"intervieni": false, "motivo": "ragione breve"}
 """
@@ -105,31 +106,21 @@ async def _group_should_intervene(
     if _GENESI_RE.search(combined):
         return True
 
-    # Fast-path: saluto/augurio al gruppo → sempre sì
+    # Fast-path: saluto di gruppo → risponde UNA SOLA VOLTA ogni 3 ore
+    # Evita di rispondere a ogni "Buongiorno" di ogni membro.
     _GREETINGS = (
-        "buongiorno", "buonasera", "buonanotte", "ciao a tutti", "salve", "hey",
+        "buongiorno", "buonasera", "buonanotte", "ciao a tutti",
         "buon pranzo", "buona cena", "buon pomeriggio", "buona notte",
-        "buon natale", "buona pasqua", "buon anno", "felice anno",
-        "buona domenica", "buon sabato", "buon venerdì",
-        "buon weekend", "buon week end", "buone feste",
-        "auguri", "tanti auguri", "felicitazioni", "congratulazioni",
+        "buon weekend", "buon week end", "buon natale", "buona pasqua",
+        "buon anno", "buone feste",
     )
     combined_lower = combined.lower()
     if any(g in combined_lower for g in _GREETINGS):
-        return True
-
-    # Fast-path: celebrazione/buona notizia → sempre sì (emoji festive o keyword di traguardo)
-    _CELEBRATION_EMOJIS = ("🎉", "🎊", "🥳", "🎈", "🥂", "🍾", "🎂", "🏆", "🎁")
-    _GOOD_NEWS_KW = (
-        "habemus", "ce l'ho fatta", "ce la fatta", "ho preso", "ho comprato",
-        "è arrivat", "arrivata la", "arrivato il", "finalmente", "ho trovato",
-        "ho vinto", "abbiamo vinto", "promozione", "promosso", "promossa",
-        "laurea", "diploma", "compleanno", "auguri",
-    )
-    if any(e in combined for e in _CELEBRATION_EMOJIS):
-        return True
-    if any(kw in combined_lower for kw in _GOOD_NEWS_KW):
-        return True
+        greet_ts = _GROUP_CONV_STATE.get(chat_id, {}).get("last_greet_ts", 0)
+        if time.time() - greet_ts > 10800:  # 3 ore
+            _GROUP_CONV_STATE.setdefault(chat_id, {})["last_greet_ts"] = time.time()
+            return True
+        return False  # saluto già risposto di recente — silenzio
 
     # Fast-path: messaggio troppo corto e senza punto interrogativo → probabile scambio tra membri
     if len(combined) < 8 and "?" not in combined:
@@ -157,7 +148,15 @@ async def _group_should_intervene(
         if last_reply and time.time() - last_reply_ts < 300:  # 5 minuti
             history_text += f"Ultima risposta di Genesi in questo gruppo: Genesi: {last_reply[:200]}\n\n"
 
+        # Informa l'LLM se Genesi ha già risposto a un saluto oggi
+        greet_ts = _GROUP_CONV_STATE.get(chat_id, {}).get("last_greet_ts", 0)
+        greet_note = ""
+        if time.time() - greet_ts < 10800:
+            import datetime as _dt
+            greet_note = f"[Nota: Genesi ha già salutato il gruppo nelle ultime 3 ore — non rispondere ad altri saluti]\n\n"
+
         user_msg = (
+            f"{greet_note}"
             f"{history_text}"
             f"Messaggio attuale di {first_name}: {combined}"
         )
@@ -854,14 +853,15 @@ async def handle_update(update: dict):
                 return (
                     f"{message}\n\n"
                     f"[GRUPPO FAMILIARE: scrive {first_name}. "
-                    f"Reazione/emoji — risposta brevissima, calore familiare, zero domande.]\n"
+                    f"Reazione emoji — 1 riga max, naturale.]\n"
                     f"{group_ctx}"
                 )
             return (
                 f"{message}\n\n"
                 f"[GRUPPO FAMILIARE: scrive {first_name}. "
-                f"Sei un membro della famiglia — rispondi con calore e concretezza, "
-                f"senza domande superflue. Usa il nome {first_name}.]\n"
+                f"REGOLE ASSOLUTE: risposta MAX 2 righe, tono naturale da familiare (non da assistente), "
+                f"zero intro elaborati, zero domande di ritorno, zero 'che bello!'. "
+                f"Parla come un essere umano nel gruppo, non come un'AI che vuole impressionare.]\n"
                 f"{group_ctx}"
             )
 
