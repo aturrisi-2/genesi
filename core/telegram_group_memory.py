@@ -309,6 +309,14 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
         f"Puoi fare riferimento a quello che altri hanno detto.]"
     )
 
+    # Regola anti-staleness: non tirare fuori vecchie discussioni senza motivo
+    lines.append(
+        "[REGOLA FONDAMENTALE: Rispondi SOLO a ciò che viene detto ADESSO. "
+        "Non tirare in mezzo argomenti passati (malattie, problemi, eventi) "
+        "a meno che il messaggio attuale non li citi esplicitamente. "
+        "Se vuoi chiedere di un argomento passato, fallo con una domanda — non darlo per scontato ancora attuale.]"
+    )
+
     return "\n".join(lines)
 
 

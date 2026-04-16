@@ -68,17 +68,18 @@ Leggi i messaggi recenti del gruppo e il messaggio attuale. Decidi se Genesi dev
 
 RISPONDI "SI" SOLO se il messaggio attuale rientra in UNO di questi casi:
 1. INVOCATA: qualcuno cita Genesi per nome, la taglia o le pone una domanda diretta
-2. BUONA NOTIZIA SIGNIFICATIVA: successo importante, traguardo reale, notizia che merita riconoscimento — NON aggiornamenti quotidiani tipo "Leo non ha la febbre", "sono tornato a casa", ecc.
+2. NOTIZIA SIGNIFICATIVA (buona o cattiva): successo, traguardo, lutto, malattia seria, problema grave — qualcosa che merita riconoscimento umano. NON aggiornamenti banali tipo "Leo non ha la febbre", "sono tornato a casa", "c'è stato un ritardo".
 3. CONTINUAZIONE DIRETTA: follow-up a una risposta appena data da Genesi (< 5 min, stesso filo)
-4. SALUTO DI APERTURA: è il primo saluto del giorno nel gruppo E non c'è già stata una risposta di Genesi a un saluto nelle ultime 3 ore (indicato nel contesto con "Genesi ha già salutato oggi")
+4. SALUTO DI APERTURA: è il primo saluto del giorno nel gruppo E non c'è già stata una risposta di Genesi a un saluto nelle ultime 3 ore (indicato nel contesto con "[Nota: Genesi ha già salutato]")
 
 RISPONDI "NO" in tutti gli altri casi, incluso:
-- Semplici aggiornamenti quotidiani (come sta qualcuno, dove sono, cosa hanno fatto)
+- Aggiornamenti quotidiani di routine (come sta qualcuno, dove sono, cosa hanno fatto)
 - Battute, scambi leggeri, conversazioni tra i membri
 - Domande rivolte chiaramente ad altri membri
-- Saluti di persone successive se Genesi ha già risposto al saluto iniziale
-- Momenti difficili o sfogo (Genesi non si intromette senza essere chiamata)
-- Qualsiasi scambio privato tra persone della famiglia
+- Saluti successivi se Genesi ha già risposto al saluto iniziale
+- Qualsiasi scambio che sia chiaramente tra persone della famiglia senza coinvolgerla
+
+REGOLA CRITICA: Non portare mai in mezzo argomenti passati (Leo ha avuto la febbre, c'era stato un ritardo...) a meno che il messaggio attuale non li citi. Ogni risposta deve essere ancorata a ciò che viene detto ORA.
 
 Il dubbio va SEMPRE verso NO. Genesi è discreta, non onnipresente.
 
@@ -861,7 +862,9 @@ async def handle_update(update: dict):
                 f"[GRUPPO FAMILIARE: scrive {first_name}. "
                 f"REGOLE ASSOLUTE: risposta MAX 2 righe, tono naturale da familiare (non da assistente), "
                 f"zero intro elaborati, zero domande di ritorno, zero 'che bello!'. "
-                f"Parla come un essere umano nel gruppo, non come un'AI che vuole impressionare.]\n"
+                f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
+                f"a meno che {first_name} non li citi in questo messaggio. "
+                f"Rispondi SOLO a quello che viene detto adesso.]\n"
                 f"{group_ctx}"
             )
 

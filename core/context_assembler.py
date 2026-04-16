@@ -272,14 +272,17 @@ class ContextAssembler:
             pass
 
         # Predictive hint: tendenza prossimo turno (fail-silent, shadow phase per primi 12 turni)
-        try:
-            from core.predictive_engine import predictive_engine as _pe
-            pred_hint = await _pe.get_context_hint(user_id)
-            if pred_hint:
-                context["predictive_hint"] = pred_hint
-                summary += f"\n{pred_hint}"
-        except Exception:
-            pass
+        # Soppresso per telegram_group: il predictive è basato su chat personali e
+        # inietta argomenti stantii (es. "Leo ha la febbre") in risposte di gruppo non correlate.
+        if platform != "telegram_group":
+            try:
+                from core.predictive_engine import predictive_engine as _pe
+                pred_hint = await _pe.get_context_hint(user_id)
+                if pred_hint:
+                    context["predictive_hint"] = pred_hint
+                    summary += f"\n{pred_hint}"
+            except Exception:
+                pass
 
         # Few-shot lessons from training engine (fail-silent)
         try:
