@@ -5,6 +5,9 @@ from datetime import datetime
 from core.llm_service import llm_service
 from core.log import LOG_FILE, log
 
+# 🚨 DISABLED TO PREVENT CREDIT DRAIN
+GENESI_AUDITOR_DISABLED = True  # SET TO FALSE TO RE-ENABLE
+
 
 class GenesiAuditor:
     """
@@ -16,8 +19,11 @@ class GenesiAuditor:
         self.log_path = log_path
 
     async def generate_report(self, lines_to_read: int = 1000) -> str:
-        if not os.path.exists(self.log_path):
-            return "File log non trovato. Impossibile generare report."
+        # 🚨 DISABLED TO PREVENT CREDIT DRAIN
+        if GENESI_AUDITOR_DISABLED:
+            return \"📊 GenesiAuditor report generation DISABLED to prevent credit drain\"
+        
+        if not os.path.exists(self.log_path):\n            return "File log non trovato. Impossibile generare report."
 
         try:
             with open(self.log_path, "r", encoding="utf-8") as f:

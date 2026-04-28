@@ -26,6 +26,9 @@ from core.log import log
 
 logger = logging.getLogger(__name__)
 
+# 🚨 DISABLE AUTO-EVOLUTION TO PREVENT CREDIT DRAIN
+AUTO_EVOLUTION_DISABLED = True  # SET TO FALSE TO RE-ENABLE
+
 # Limiti massimi di variazione per singolo step evolutivo
 EVOLUTION_MAX_DELTA = {
     "supportive_intensity": 0.05,
@@ -174,6 +177,11 @@ class AutoEvolutionEngine:
         
     async def start_monitoring(self):
         """Avvia monitoraggio cartella lab per nuovi report."""
+        # 🚨 DISABLED TO PREVENT CREDIT DRAIN
+        if AUTO_EVOLUTION_DISABLED:
+            logger.warning("🔒 AUTO_EVOLUTION_DISABLED - Watchdog not started")
+            return
+        
         if self.is_running:
             return
             
@@ -563,6 +571,9 @@ def get_evolution_engine() -> AutoEvolutionEngine:
 
 async def start_auto_evolution():
     """Avvia l'auto-evoluzione in background."""
+    if AUTO_EVOLUTION_DISABLED:
+        logger.warning("🔒 AUTO_EVOLUTION_DISABLED - start_auto_evolution() skipped")
+        return
     engine = get_evolution_engine()
     await engine.start_monitoring()
 

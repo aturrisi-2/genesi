@@ -280,27 +280,37 @@ async def moltbook_heartbeat_background():
 
 async def lab_cycle_scheduler():
     """Controlla ogni 6h se ci sono eventi pending nel lab feedback cycle e li processa."""
-    await asyncio.sleep(300)  # attendi 5 min dopo startup
-    while True:
-        try:
-            from core.lab_feedback_cycle import lab_feedback_cycle as _lfc
-            if _lfc._should_run():
-                log("LAB_CYCLE_SCHEDULED_TRIGGER", pending=_lfc._count_pending_events())
-                await _lfc.run()
-        except Exception as e:
-            log("LAB_CYCLE_SCHEDULER_ERROR", error=str(e))
-        await asyncio.sleep(21600)  # 6 ore
+    # 🚨 DISABLED TO PREVENT CREDIT DRAIN
+    logger.warning("🔒 LAB_CYCLE_SCHEDULER_DISABLED - lab_feedback_cycle.run() paused")
+    await asyncio.sleep(1)
+    return
+    # Original code (disabled):
+    # await asyncio.sleep(300)  # attendi 5 min dopo startup
+    # while True:
+    #     try:
+    #         from core.lab_feedback_cycle import lab_feedback_cycle as _lfc
+    #         if _lfc._should_run():
+    #             log("LAB_CYCLE_SCHEDULED_TRIGGER", pending=_lfc._count_pending_events())
+    #             await _lfc.run()
+    #     except Exception as e:
+    #         log("LAB_CYCLE_SCHEDULER_ERROR", error=str(e))
+    #     await asyncio.sleep(21600)  # 6 ore
 
 
 async def evolution_scheduler():
     """Evolution scheduler that runs every 12 hours."""
-    supervisor = SupervisorEngine()
-    while True:
-        await asyncio.sleep(43200)  # 12 ore
-        try:
-            supervisor.run()
-        except Exception as e:
-            log("EVOLUTION_SCHEDULER_ERROR", error=str(e))
+    # 🚨 DISABLED TO PREVENT CREDIT DRAIN
+    logger.warning("🔒 EVOLUTION_SCHEDULER_DISABLED - supervisor.run() paused")
+    await asyncio.sleep(1)
+    return
+    # Original code (disabled):
+    # supervisor = SupervisorEngine()
+    # while True:
+    #     await asyncio.sleep(43200)  # 12 ore
+    #     try:
+    #         supervisor.run()
+    #     except Exception as e:
+    #         log("EVOLUTION_SCHEDULER_ERROR", error=str(e))
 
 
 # ===============================

@@ -24,6 +24,9 @@ from core.log import log
 
 logger = logging.getLogger("genesi")
 
+# 🚨 DISABLED TO PREVENT CREDIT DRAIN
+LAB_FEEDBACK_CYCLE_DISABLED = True  # SET TO FALSE TO RE-ENABLE
+
 FALLBACK_LOG_PATH = "memory/admin/fallbacks.json"
 SUGGESTIONS_PATH = "memory/admin/suggestions.json"
 GLOBAL_PROMPT_PATH = "lab/global_prompt.json"
@@ -99,6 +102,9 @@ class LabFeedbackCycle:
         Chiamato da FallbackEngine dopo ogni log_event.
         Avvia il ciclo in background se la soglia è raggiunta.
         """
+        # 🚨 DISABLED TO PREVENT CREDIT DRAIN
+        if LAB_FEEDBACK_CYCLE_DISABLED:
+            return
         if self._running:
             return
         if self._should_run():
