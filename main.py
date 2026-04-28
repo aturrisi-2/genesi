@@ -281,7 +281,7 @@ async def moltbook_heartbeat_background():
 async def lab_cycle_scheduler():
     """Controlla ogni 6h se ci sono eventi pending nel lab feedback cycle e li processa."""
     # 🚨 DISABLED TO PREVENT CREDIT DRAIN
-    logger.warning("🔒 LAB_CYCLE_SCHEDULER_DISABLED - lab_feedback_cycle.run() paused")
+    log("LAB_CYCLE_SCHEDULER_DISABLED", status="disabled")
     await asyncio.sleep(1)
     return
     # Original code (disabled):
@@ -300,7 +300,7 @@ async def lab_cycle_scheduler():
 async def evolution_scheduler():
     """Evolution scheduler that runs every 12 hours."""
     # 🚨 DISABLED TO PREVENT CREDIT DRAIN
-    logger.warning("🔒 EVOLUTION_SCHEDULER_DISABLED - supervisor.run() paused")
+    log("EVOLUTION_SCHEDULER_DISABLED", status="disabled")
     await asyncio.sleep(1)
     return
     # Original code (disabled):
