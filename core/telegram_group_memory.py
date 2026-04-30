@@ -1,3 +1,46 @@
+import re
+# ── Event change detection (memoria eventi dichiarati) ─────────────────────---
+
+# Pattern semplici per cambiamenti/eventi personali (estendibili)
+_EVENT_PATTERNS = [
+    (re.compile(r"\bsono tornat[oa]\b", re.IGNORECASE), "rientro"),
+    (re.compile(r"\b(sto meglio|sto peggio|ora sto bene|ora sto male)\b", re.IGNORECASE), "salute"),
+    (re.compile(r"\b(ho cambiato lavoro|nuovo lavoro|ora lavoro da casa|ora lavoro in ufficio)\b", re.IGNORECASE), "lavoro"),
+    (re.compile(r"\b(ho traslocato|mi sono trasferit[oa])\b", re.IGNORECASE), "trasloco"),
+    (re.compile(r"\b(sono in ferie|sono in vacanza|sono tornat[oa] dalle ferie|sono tornat[oa] dalle vacanze)\b", re.IGNORECASE), "ferie"),
+    (re.compile(r"\b(ho finito gli esami|ho superato l'esame|ho preso la patente)\b", re.IGNORECASE), "traguardo"),
+]
+
+async def detect_and_save_event_change(chat_id: int, from_id: int, first_name: str, text: str) -> dict:
+    """
+    Rileva cambiamenti/eventi personali dichiarati e li salva nel profilo membro.
+    Restituisce info su cambiamento rilevato, altrimenti {}.
+    """
+    found = None
+    for pattern, event_type in _EVENT_PATTERNS:
+        m = pattern.search(text)
+        if m:
+            found = {
+                "event_type": event_type,
+                "matched_text": m.group(0),
+                "full_text": text,
+                "from_id": from_id,
+                "first_name": first_name,
+                "ts": int(time.time()),
+            }
+            break
+    if found:
+        member = await get_member(from_id)
+        events = member.get("events", [])
+        # Evita duplicati ravvicinati
+        if not events or events[-1].get("event_type") != found["event_type"] or events[-1].get("matched_text") != found["matched_text"]:
+            events.append(found)
+            events = events[-10:]  # conserva solo ultimi 10 eventi
+            member["events"] = events
+            s = await _storage()
+            await s.save(_member_key(from_id), member)
+        return found
+    return {}
 """
 Memoria contestuale per i membri del gruppo Telegram.
 

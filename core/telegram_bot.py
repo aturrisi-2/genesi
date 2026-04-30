@@ -898,30 +898,28 @@ async def handle_update(update: dict):
                     reply = "__AUTH_FAILED__"
             # Automiglioramento + storia di gruppo in background
             if is_group and reply not in ("__TOKEN_EXPIRED__", "__AUTH_FAILED__"):
-                asyncio.create_task(
-                    append_group_history(chat_id, from_id, first_name, message, reply)
-                )
-                # Livello 1: osservazione lab_feedback_cycle ogni N messaggi
-                asyncio.create_task(
-                    record_group_observation(chat_id, from_id, first_name, message, reply)
-                )
-                # Livello 1b: rileva correzioni esplicite (aggiorna memoria stale)
-                asyncio.create_task(
-                    detect_and_save_correction(chat_id, from_id, first_name, message, reply)
-                )
-                # Livello 2a: consolidazione insights gruppo ogni 24h
-                asyncio.create_task(
-                    consolidate_group_insights_if_needed(chat_id)
-                )
-                # Livello 2b: riepilogo discussioni ogni 6h (memoria cross-sessione)
-                asyncio.create_task(
-                    summarize_group_discussion_if_needed(chat_id)
-                )
-                # Livello 3: cross-awareness — sincronizza profili famiglia verso il proprietario
+                asyncio.create_task(append_group_history(chat_id, from_id, first_name, message, reply))
+                asyncio.create_task(record_group_observation(chat_id, from_id, first_name, message, reply))
+                asyncio.create_task(detect_and_save_correction(chat_id, from_id, first_name, message, reply))
+                asyncio.create_task(consolidate_group_insights_if_needed(chat_id))
+                asyncio.create_task(summarize_group_discussion_if_needed(chat_id))
                 asyncio.create_task(_sync_family_background(chat_id))
 
+                # Nuovo: rileva cambiamenti dichiarati/eventi personali
+                from core.telegram_group_memory import detect_and_save_event_change
+                async def _tg_event_change():
+                    event = await detect_and_save_event_change(chat_id, from_id, first_name, message)
+                    if event:
+                        # Se il cambiamento è "importante" o ambiguo, Genesi può chiedere conferma/discretamente
+                        event_type = event.get("event_type")
+                        matched = event.get("matched_text", "")
+                        if event_type in ("lavoro", "trasloco", "salute", "ferie", "rientro", "traguardo"):
+                            # Risposta discreta: solo se non già confermato di recente
+                            await send_message(chat_id,
+                                f"{first_name}, confermi che {matched.lower()}? (Se vuoi, posso ricordartelo per il futuro)")
+                asyncio.create_task(_tg_event_change())
+
                 # Livello 4: memoria personale del mittente — episodi e fatti su testo pulito
-                # Il testo originale (senza group_ctx arricchito) è già in `message`
                 _raw_msg = _strip_group_ctx(message)
                 if _raw_msg and len(_raw_msg) > 10:
                     _mem_msg  = _raw_msg
