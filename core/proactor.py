@@ -310,6 +310,7 @@ class Proactor:
         Copre tutti gli handler (relational, emotional, identity, ecc.).
         """
         import re as _re_pp
+        msg_lower = user_message.lower().strip()
 
         # 1. IDENTITÀ INVARIABILE: rimuovi cliché da personaggio ovunque nella risposta
         response = _re_pp.sub(r'\b(ahoy|arrr+|aye aye|aye\b|matelot|avast|abborda|capitan[eo])\b[,!]?\s*', '', response, flags=_re_pp.IGNORECASE)
