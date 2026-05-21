@@ -372,22 +372,24 @@ class Proactor:
             response
         )
 
-        # 3. CRISI FAMILIARE: se il messaggio contiene emergenza + familiare,
-        #    assicura che "coraggio" e il nome del familiare siano nella risposta
-        _EMERGENCY = {"ricoverata", "ricoverato", "urgenza", "ospedale", "incidente", "operata", "operato"}
-        _FAMILY = {"madre", "padre", "figlio", "figlia", "fratello", "sorella", "nonno", "nonna", "mamma", "papà"}
-        msg_lower = user_message.lower()
-        if any(w in msg_lower for w in _EMERGENCY) and any(w in msg_lower for w in _FAMILY):
-            mentioned = next((w for w in _FAMILY if w in msg_lower), None)
-            resp_lower = response.lower()
-            needs_coraggio = "coraggio" not in resp_lower
-            needs_family = mentioned and mentioned not in resp_lower
-            if needs_coraggio and needs_family:
-                response = response.rstrip("!., ") + f" Coraggio per tua {mentioned}!"
-            elif needs_coraggio:
-                response = response.rstrip("!., ") + " Coraggio!"
-            elif needs_family:
-                response = response.rstrip("!., ") + f" Pensa a tua {mentioned}."
+        # 3. CRISI FAMILIARE: DISABILITATO
+        # Questa regola causava il problema del "Coraggio per tua nonna!" ripetuto ossessivamente.
+        # Genesi deve gestire il supporto emotivo con naturalezza, non con regole meccaniche.
+        # Il modello LLM è già capace di riconoscere emergenze e fornire supporto appropriato.
+        # _EMERGENCY = {"ricoverata", "ricoverato", "urgenza", "ospedale", "incidente", "operata", "operato"}
+        # _FAMILY = {"madre", "padre", "figlio", "figlia", "fratello", "sorella", "nonno", "nonna", "mamma", "papà"}
+        # msg_lower = user_message.lower()
+        # if any(w in msg_lower for w in _EMERGENCY) and any(w in msg_lower for w in _FAMILY):
+        #     mentioned = next((w for w in _FAMILY if w in msg_lower), None)
+        #     resp_lower = response.lower()
+        #     needs_coraggio = "coraggio" not in resp_lower
+        #     needs_family = mentioned and mentioned not in resp_lower
+        #     if needs_coraggio and needs_family:
+        #         response = response.rstrip("!., ") + f" Coraggio per tua {mentioned}!"
+        #     elif needs_coraggio:
+        #         response = response.rstrip("!., ") + " Coraggio!"
+        #     elif needs_family:
+        #         response = response.rstrip("!., ") + f" Pensa a tua {mentioned}."
 
         # 4. SPORT SPECIFICO: se il messaggio menziona uno sport e la risposta usa solo "partita/gara"
         #    senza nominare lo sport, inietta il nome dello sport (es. "partita" → "partita di tennis")
