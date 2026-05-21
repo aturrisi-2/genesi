@@ -832,6 +832,45 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 asyncio.create_task(consolidate_group_insights_if_needed(chat_id))
                 asyncio.create_task(summarize_group_discussion_if_needed(chat_id))
                 asyncio.create_task(detect_and_save_correction(chat_id, _wa_from_id, first_name, orig_text, reply))
+
+            # Livello 4: memoria personale del mittente — episodi e fatti su testo pulito
+            if reply not in ("__TOKEN_EXPIRED__", "__AUTH_FAILED__"):
+                from core.simple_chat import strip_group_ctx as _strip_group_ctx
+                _raw_msg = _strip_group_ctx(message)
+                if _raw_msg and len(_raw_msg) > 10:
+                    _mem_msg  = _raw_msg
+                    _mem_resp = reply
+                    _mem_session_uid = chat_id if is_group else wa_id
+
+                    async def _wa_extract_episode(_mm=_mem_msg, _su=_mem_session_uid):
+                        try:
+                            from core.episode_extractor import extract_episodes
+                            from core.episode_memory import episode_memory as _em
+                            ctx = f"{first_name}: {_mm}"
+                            for ep in await extract_episodes(ctx, _su):
+                                await _em.add(_su, ep)
+                                logger.info("EPISODE_SAVED_WA sender=%s text=%.60s", first_name, ep['text'])
+                        except Exception as e:
+                            logger.debug("WA_EPISODE_EXTRACT_ERROR err=%s", e)
+                    asyncio.create_task(_wa_extract_episode())
+
+                    async def _wa_extract_facts(_mm=_mem_msg, _mr=_mem_resp, _su=_mem_session_uid):
+                        try:
+                            from core.personal_facts_service import personal_facts_service as _pfs
+                            ctx = f"{first_name}: {_mm}"
+                            await _pfs.extract_and_save(ctx, _mr, _su)
+                        except Exception as e:
+                            logger.debug("WA_FACTS_EXTRACT_ERROR err=%s", e)
+                    asyncio.create_task(_wa_extract_facts())
+
+                    async def _wa_global_memory(_su=_mem_session_uid):
+                        try:
+                            from core.global_memory_service import global_memory_service as _gms
+                            await _gms.consolidate_if_needed(_su)
+                        except Exception as e:
+                            logger.debug("WA_GLOBAL_MEM_ERROR err=%s", e)
+                    asyncio.create_task(_wa_global_memory())
+
             return reply
 
         async def _handle_reply(reply: str) -> bool:
