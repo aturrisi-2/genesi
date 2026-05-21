@@ -29,7 +29,7 @@ MAX_ACTIVE_LESSONS     = 25    # max lessons attive nel prompt contemporaneament
 TRAIN_LESSON_RATIO     = 0.45  # se lessons/total < 45% → valuta training automatico
 MIN_UNRESOLVED         = 8     # min corrections irrisolte per avviare il training auto
 TRAINING_COOLDOWN_H    = 22    # ore minime tra due training automatici consecutivi
-LLM_CURATOR_INTERVAL_H = 6    # ore tra una curazione LLM e l'altra
+LLM_CURATOR_INTERVAL_H = 24   # ore tra una curazione LLM e l'altra
 CHECK_INTERVAL_S       = 3600  # controlla ogni ora
 STARTUP_DELAY_S        = 180   # attesa post-avvio (lascia stabilizzare il server)
 
@@ -58,7 +58,7 @@ DEEP_CONVO_STATUS_KEY   = "admin/deep_convo_training_status"
 DEEP_CONVO_MIN_PATTERNS = 4    # soglia: se patterns distillati < 4 → notifica email (non auto-run)
 DEEP_CONVO_COOLDOWN_H   = 8    # cooldown tra notifiche consecutive
 
-ENRICH_INTERVAL_H    = 6    # ogni 6h arricchisce il serbatoio da tutte le sorgenti
+ENRICH_INTERVAL_H    = 24   # ogni 24h arricchisce il serbatoio da tutte le sorgenti
 NOTIFY_COOLDOWN_H    = 24   # max 1 email di notifica al giorno
 NOTIFY_OWNER_EMAIL   = os.getenv("NOTIFY_OWNER_EMAIL", "alfio.turrisi@gmail.com")
 ADMIN_PANEL_URL      = os.getenv("ADMIN_PANEL_URL", "https://genesi.lucadigitale.eu/admin")

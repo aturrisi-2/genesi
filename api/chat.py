@@ -228,7 +228,11 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
 
         # Gruppi: episodi attivi ma solo se il testo ha contenuto semantico (>10 chars)
         if _clean_msg and len(_clean_msg) > 10:
-            _asyncio.create_task(_extract_and_save_episode())
+            import random
+            if request.platform in ("whatsapp_group", "telegram_group") and random.random() >= 0.10:
+                pass # Salta per risparmiare crediti (90% probabilità)
+            else:
+                _asyncio.create_task(_extract_and_save_episode())
 
         # 2. Pipeline Relazionale / Tecnico (Orchestrata dal Proactor)
         # Capability context: se l'utente chiede cosa Genesi sa fare, inietta la mappa capacità
@@ -281,7 +285,11 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                     log("PERSONAL_FACTS_SAVE_ERROR", user_id=user_id, error=str(_pf_e))
         # Gruppi: personal facts attivi su testo pulito (>10 chars)
         if _clean_msg and len(_clean_msg) > 10:
-            _asyncio.create_task(_extract_and_save_personal_facts())
+            import random
+            if request.platform in ("whatsapp_group", "telegram_group") and random.random() >= 0.10:
+                pass # Salta
+            else:
+                _asyncio.create_task(_extract_and_save_personal_facts())
 
         # Predictive engine: aggiorna predizione prossimo turno (background)
         _pred_msg  = _clean_msg
@@ -744,7 +752,8 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
         _aio.create_task(summarize_group_discussion_if_needed(group_int))
 
         # 8. Memoria personale del mittente — episodi e fatti su request.text (già pulito)
-        if request.text and len(request.text.strip()) > 10:
+        import random
+        if request.text and len(request.text.strip()) > 10 and random.random() < 0.10:
             _wa_text = request.text
             _wa_resp = response
             _wa_uid  = user.id

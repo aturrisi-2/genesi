@@ -268,14 +268,14 @@ async def facebook_heartbeat_background():
 
 
 async def moltbook_heartbeat_background():
-    """Moltbook heartbeat ogni 30 min: rispondi a commenti, upvota feed."""
+    """Moltbook heartbeat ogni 4 ore: rispondi a commenti, upvota feed."""
     await asyncio.sleep(60)  # attendi 1 min dopo startup
     while True:
         try:
             await moltbook_service.heartbeat()
         except Exception as e:
             log("MOLTBOOK_LOOP_ERROR", error=str(e))
-        await asyncio.sleep(3600)   # ogni 60 minuti
+        await asyncio.sleep(14400)   # ogni 4 ore (14400s)
 
 
 async def lab_cycle_scheduler():
