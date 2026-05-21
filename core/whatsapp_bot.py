@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import re
+import time
 import httpx
 from core.storage import storage
 
@@ -61,21 +62,172 @@ _GOOD_NEWS_KW = (
 )
 
 
-def _group_should_respond(text: str, caption: str = "") -> bool:
-    """In un gruppo risponde solo se: nome 'Genesi', saluto, o buona notizia/celebrazione."""
+# Stato conversazione per gruppo: traccia con chi Genesi stava parlando di recente
+# { chat_id: {"wa_id": str, "ts": float, "last_reply": str} }
+_GROUP_CONV_STATE: dict[int, dict] = {}
+
+
+def _get_greeting_category(text_lower: str) -> str:
+    holiday_kws = ("natal", "pasqu", "anno nuovo", "feste", "augur", "compleann", "onomastic")
+    if any(k in text_lower for k in holiday_kws):
+        return "holiday"
+    evening_kws = ("buonasera", "buona sera", "buonanotte", "buona notte", "buona cena", "buona serata", "buonaserata")
+    if any(k in text_lower for k in evening_kws):
+        return "evening"
+    morning_kws = ("buongiorno", "buon giorno", "buon pomeriggio", "buona domenica", "buon weekend", "buon week end", "buona giornata", "buon pranzo")
+    if any(k in text_lower for k in morning_kws):
+        return "morning"
+    general_kws = ("ciao", "salve", "hey", "hei", "ehilà", "hello", "hi")
+    if any(k in text_lower for k in general_kws):
+        return "general"
+    return ""
+
+
+async def _check_and_register_greeting(chat_id: int, category: str) -> bool:
+    if not category:
+        return False
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    try:
+        tz = ZoneInfo("Europe/Rome")
+    except Exception:
+        tz = None
+    today_str = datetime.now(tz).date().isoformat()
+    key = f"relational_state:group_greetings_{chat_id}"
+    history = await storage.load(key, default={}) or {}
+    if category == "general":
+        has_any_today = any(date_val == today_str for date_val in history.values())
+        if has_any_today:
+            return False
+    last_sent_date = history.get(category)
+    if last_sent_date == today_str:
+        return False
+    history[category] = today_str
+    await storage.save(key, history)
+    return True
+
+
+_GROUP_INTERVENE_PROMPT = """\
+Sei il filtro di intervento di Genesi in un gruppo familiare su Telegram o WhatsApp.
+Genesi ascolta tutto in silenzio e interviene RARAMENTE — come farebbe un familiare discreto, utile e intelligente, non un assistente virtuale invadente o spammone.
+
+Leggi i messaggi recenti del gruppo e il messaggio attuale. Decidi se Genesi deve rispondere.
+
+RISPONDI "SI" SOLO se il messaggio attuale rientra in UNO di questi casi:
+1. INVOCATA: qualcuno cita Genesi per nome (es: "Genesi..."), la taglia o le pone una domanda diretta.
+2. CONTINUAZIONE DIRETTA: follow-up a una risposta appena data da Genesi (< 5 min, stesso filo).
+3. DOMANDA GENERICA DA AIUTO: qualcuno pone una domanda oggettiva, informativa, o di curiosità generale rivolta al gruppo o a nessuno in particolare (es: "qualcuno sa a che ora chiude il supermercato?", "come si prepara la carbonara?", "che tempo fa domani a Roma?", "qual è la capitale del Portogallo?") a cui Genesi può rispondere con certezza assoluta, coerenza e grande utilità per il gruppo.
+4. COMPLEANNI E FESTIVITÀ: qualcuno fa gli auguri di compleanno o festeggia una festività nel gruppo (es: "Buona Pasqua!", "Auguri Rita!", "Oggi è il compleanno di Zoe!"), oppure il messaggio descrive una festività del giorno attuale, e Genesi vuole unirsi in modo caloroso e naturale agli auguri.
+5. NOTIZIA SIGNIFICATIVA (buona o cattiva): un successo eccezionale, un traguardo importante, un lutto, una malattia seria, o un problema grave di un familiare — qualcosa che merita assolutamente un sincero riconoscimento o vicinanza umana. NON aggiornamenti quotidiani e banali.
+6. SALUTO DI APERTURA: il primo saluto del giorno nel gruppo (es. "Buongiorno a tutti!"). Nota: se nel contesto è indicato che Genesi ha già salutato oggi per questa categoria di saluto, rispondi "NO".
+
+RISPONDI "NO" in tutti gli altri casi, incluso:
+- Aggiornamenti quotidiani di routine (dove si trova qualcuno, cosa sta facendo, come si sente per piccoli malesseri transitori come un po' di stanchezza o raffreddore).
+- Scambi di battute, chiacchiere leggere o discussioni personali/relazionali tra i membri della famiglia.
+- Domande rivolte specificamente ed esclusivamente a un altro membro della famiglia (es: "Papà, mi porti le chiavi?").
+- Saluti generici o successivi se Genesi ha già salutato per quella categoria oggi.
+- Qualsiasi scambio o discussione d'opinione in cui la presenza di un'AI risulterebbe fuori luogo, innaturale o fastidiosa.
+
+REGOLA CRITICA: Non portare mai in mezzo argomenti passati a meno che il messaggio attuale non li citi esplicitamente. Ogni risposta deve essere ancorata a ciò che viene detto ORA. Il dubbio va SEMPRE verso "NO". Genesi deve sembrare un membro reale della famiglia, discreto e piacevole.
+
+Rispondi SOLO con JSON: {"intervieni": true, "motivo": "ragione breve"} oppure {"intervieni": false, "motivo": "ragione breve"}
+"""
+
+
+async def _group_should_intervene(
+    text: str, caption: str, chat_id: int, wa_id: str, first_name: str,
+    bot_mentioned: bool = False
+) -> bool:
+    """
+    Decide con LLM se Genesi deve intervenire nel gruppo WhatsApp.
+    Fast-path per mention/nome diretti. LLM per tutto il resto.
+    """
     combined = f"{text} {caption}".strip()
     if not combined:
         return False
-    if _GENESI_RE.search(combined):
+
+    # Fast-path: menzione diretta → sempre sì
+    if bot_mentioned:
         return True
-    if _GREETING_RE.search(combined):
-        return True
-    if any(e in combined for e in _CELEBRATION_EMOJIS):
-        return True
+
+    # Fast-path: saluto di gruppo -> controlla limite giornaliero per categoria
     combined_lower = combined.lower()
-    if any(kw in combined_lower for kw in _GOOD_NEWS_KW):
+    category = _get_greeting_category(combined_lower)
+    if category:
+        should_greet = await _check_and_register_greeting(chat_id, category)
+        return should_greet
+
+    # Fast-path: messaggio troppo corto e senza punto interrogativo → probabile scambio tra membri
+    if len(combined) < 8 and "?" not in combined:
+        return False
+
+    # Fast-path: continuazione di conversazione attiva con questo utente (< 3 min)
+    state = _GROUP_CONV_STATE.get(chat_id, {})
+    if state.get("wa_id") == wa_id and time.time() - state.get("ts", 0) < 180:
         return True
-    return False
+
+    # LLM decision
+    try:
+        from core.llm_service import llm_service
+        from core.telegram_group_memory import get_raw_messages
+        raw_msgs = await get_raw_messages(chat_id, limit=12)
+        history_text = ""
+        if raw_msgs:
+            history_text = "Messaggi recenti nel gruppo (tutti, non solo quelli con Genesi):\n" + "\n".join(
+                f"  {m.get('first_name','?')}: {m.get('text','')[:100]}"
+                for m in raw_msgs[:-1]  # escludi l'ultimo che è il messaggio attuale
+            ) + "\n\n"
+        # Aggiungi l'ultima risposta di Genesi al contesto
+        state = _GROUP_CONV_STATE.get(chat_id, {})
+        last_reply = state.get("last_reply")
+        last_reply_ts = state.get("ts", 0)
+        if last_reply and time.time() - last_reply_ts < 300:  # 5 minuti
+            history_text += f"Ultima risposta di Genesi in questo gruppo: Genesi: {last_reply[:200]}\n\n"
+
+        # Informa l'LLM se Genesi ha già risposto a saluti oggi
+        key = f"relational_state:group_greetings_{chat_id}"
+        history = await storage.load(key, default={}) or {}
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        try:
+            tz = ZoneInfo("Europe/Rome")
+        except Exception:
+            tz = None
+        today_str = datetime.now(tz).date().isoformat()
+        
+        sent_today = [cat for cat, date_val in history.items() if date_val == today_str]
+        greet_note = ""
+        if sent_today:
+            greet_note = f"[Nota: Genesi ha già salutato oggi per queste categorie: {', '.join(sent_today)}. Non rispondere a saluti di queste categorie!]\n\n"
+
+        user_msg = (
+            f"{greet_note}"
+            f"{history_text}"
+            f"Messaggio attuale di {first_name}: {combined}"
+        )
+        raw = await llm_service._call_model(
+            "openai/gpt-4o-mini",
+            _GROUP_INTERVENE_PROMPT,
+            user_msg,
+            user_id="group-filter",
+            route="memory",
+        )
+        if not raw:
+            return False
+        clean = raw.strip()
+        if clean.startswith("```"):
+            clean = clean.split("```")[1]
+            if clean.startswith("json"):
+                clean = clean[4:]
+        parsed = json.loads(clean.strip())
+        intervieni = parsed.get("intervieni", False)
+        motivo     = parsed.get("motivo", "")
+        logger.info("GROUP_INTERVENE_DECISION_WA chat_id=%s from=%s intervieni=%s motivo=%s",
+                    chat_id, first_name, intervieni, motivo)
+        return bool(intervieni)
+    except Exception as exc:
+        logger.debug("GROUP_INTERVENE_ERROR_WA err=%s", exc)
+        return False
 
 # Regex per trovare URL immagini nelle risposte
 _IMG_URL_RE = re.compile(
@@ -605,11 +757,34 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             if msg_text and chat_id:
                 asyncio.create_task(append_raw_message(chat_id, abs(hash(wa_id)) % (10**9), first_name, msg_text))
 
-        # ── FILTRO GRUPPI ─────────────────────────────────────────────────────
-        if is_group and not _group_should_respond(text, caption=caption):
-            logger.info("WA_GROUP_SKIP wa_id=%s msg=%.60s",
-                        wa_id, f"{text} {caption}".strip())
-            return
+        # ── FILTRO GRUPPI (LLM-based) ──────────────────────────────────────────
+        _reply_to_genesi = False
+        if is_group:
+            combined = f"{text} {caption}".strip()
+            bot_mentioned = False
+            if WA_PHONE_NUMBER and WA_PHONE_NUMBER in combined:
+                bot_mentioned = True
+            if _GENESI_RE.search(combined):
+                bot_mentioned = True
+
+            # Reply a Genesi
+            reply_to = msg.get("context", {})
+            replied_from = reply_to.get("from", "")
+            if replied_from == WA_PHONE_NUMBER:
+                _reply_to_genesi = True
+
+            # Fast-path: reply diretta a Genesi -> sempre sì
+            if _reply_to_genesi:
+                should = True
+            else:
+                should = await _group_should_intervene(
+                    text, caption, chat_id, wa_id, first_name,
+                    bot_mentioned=bot_mentioned
+                )
+            if not should:
+                logger.info("WA_GROUP_SILENT chat_id=%s from=%s msg=%.60s",
+                            chat_id, first_name, f"{text} {caption}".strip())
+                return
 
         async def _do_chat(message: str) -> str:
             nonlocal token, session
@@ -618,10 +793,17 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 try:
                     from core.telegram_group_memory import build_group_context
                     group_ctx = await build_group_context(chat_id, abs(hash(wa_id)) % (10**9), first_name)
+                    msg_with_quote = message
+                    if _reply_to_genesi:
+                        msg_with_quote = f"[Stai rispondendo a un tuo messaggio precedente di Genesi]\n{message}"
                     message = (
-                        f"{message}\n\n"
+                        f"{msg_with_quote}\n\n"
                         f"[GRUPPO FAMILIARE: scrive {first_name}. "
-                        f"Sei un membro della famiglia. Usa il nome {first_name}.]\n"
+                        f"REGOLE ASSOLUTE: risposta MAX 2 righe, tono naturale da familiare (non da assistente), "
+                        f"zero intro elaborati, zero domande di ritorno, zero 'che bello!'. "
+                        f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
+                        f"a meno che {first_name} non li citi in questo messaggio. "
+                        f"Rispondi SOLO a quello che viene detto adesso.]\n"
                         f"{group_ctx}"
                     )
                 except Exception:
@@ -669,6 +851,13 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                         "Sessione scaduta. Inserisci la tua email:")
                 return False
             await _send_response(wa_id, reply)
+            # Traccia con chi Genesi stava conversando
+            if is_group and chat_id:
+                _GROUP_CONV_STATE[chat_id] = {
+                    "wa_id":      wa_id,
+                    "ts":         time.time(),
+                    "last_reply": reply[:300],
+                }
             return True
 
         # ── FOTO ──────────────────────────────────────────────────────────────

@@ -59,29 +59,69 @@ _GENESI_RE = re.compile(r'\bgenesi\b', re.IGNORECASE)
 # Stato conversazione per gruppo: traccia con chi Genesi stava parlando di recente
 # { chat_id: {"from_id": int, "ts": float, "count": int} }
 _GROUP_CONV_STATE: dict[int, dict] = {}
+ 
+def _get_greeting_category(text_lower: str) -> str:
+    holiday_kws = ("natal", "pasqu", "anno nuovo", "feste", "augur", "compleann", "onomastic")
+    if any(k in text_lower for k in holiday_kws):
+        return "holiday"
+    evening_kws = ("buonasera", "buona sera", "buonanotte", "buona notte", "buona cena", "buona serata", "buonaserata")
+    if any(k in text_lower for k in evening_kws):
+        return "evening"
+    morning_kws = ("buongiorno", "buon giorno", "buon pomeriggio", "buona domenica", "buon weekend", "buon week end", "buona giornata", "buon pranzo")
+    if any(k in text_lower for k in morning_kws):
+        return "morning"
+    general_kws = ("ciao", "salve", "hey", "hei", "ehilà", "hello", "hi")
+    if any(k in text_lower for k in general_kws):
+        return "general"
+    return ""
+
+
+async def _check_and_register_greeting(chat_id: int, category: str) -> bool:
+    if not category:
+        return False
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    try:
+        tz = ZoneInfo("Europe/Rome")
+    except Exception:
+        tz = None
+    today_str = datetime.now(tz).date().isoformat()
+    key = f"relational_state:group_greetings_{chat_id}"
+    history = await storage.load(key, default={}) or {}
+    if category == "general":
+        has_any_today = any(date_val == today_str for date_val in history.values())
+        if has_any_today:
+            return False
+    last_sent_date = history.get(category)
+    if last_sent_date == today_str:
+        return False
+    history[category] = today_str
+    await storage.save(key, history)
+    return True
+
 
 _GROUP_INTERVENE_PROMPT = """\
-Sei il filtro di intervento di Genesi in un gruppo familiare su Telegram.
-Genesi ascolta tutto in silenzio e interviene RARAMENTE — come farebbe un familiare discreto, non una guida turistica.
+Sei il filtro di intervento di Genesi in un gruppo familiare su Telegram o WhatsApp.
+Genesi ascolta tutto in silenzio e interviene RARAMENTE — come farebbe un familiare discreto, utile e intelligente, non un assistente virtuale invadente o spammone.
 
 Leggi i messaggi recenti del gruppo e il messaggio attuale. Decidi se Genesi deve rispondere.
 
 RISPONDI "SI" SOLO se il messaggio attuale rientra in UNO di questi casi:
-1. INVOCATA: qualcuno cita Genesi per nome, la taglia o le pone una domanda diretta
-2. NOTIZIA SIGNIFICATIVA (buona o cattiva): successo, traguardo, lutto, malattia seria, problema grave — qualcosa che merita riconoscimento umano. NON aggiornamenti banali tipo "Leo non ha la febbre", "sono tornato a casa", "c'è stato un ritardo".
-3. CONTINUAZIONE DIRETTA: follow-up a una risposta appena data da Genesi (< 5 min, stesso filo)
-4. SALUTO DI APERTURA: è il primo saluto del giorno nel gruppo E non c'è già stata una risposta di Genesi a un saluto nelle ultime 3 ore (indicato nel contesto con "[Nota: Genesi ha già salutato]")
+1. INVOCATA: qualcuno cita Genesi per nome (es: "Genesi..."), la taglia o le pone una domanda diretta.
+2. CONTINUAZIONE DIRETTA: follow-up a una risposta appena data da Genesi (< 5 min, stesso filo).
+3. DOMANDA GENERICA DA AIUTO: qualcuno pone una domanda oggettiva, informativa, o di curiosità generale rivolta al gruppo o a nessuno in particolare (es: "qualcuno sa a che ora chiude il supermercato?", "come si prepara la carbonara?", "che tempo fa domani a Roma?", "qual è la capitale del Portogallo?") a cui Genesi può rispondere con certezza assoluta, coerenza e grande utilità per il gruppo.
+4. COMPLEANNI E FESTIVITÀ: qualcuno fa gli auguri di compleanno o festeggia una festività nel gruppo (es: "Buona Pasqua!", "Auguri Rita!", "Oggi è il compleanno di Zoe!"), oppure il messaggio descrive una festività del giorno attuale, e Genesi vuole unirsi in modo caloroso e naturale agli auguri.
+5. NOTIZIA SIGNIFICATIVA (buona o cattiva): un successo eccezionale, un traguardo importante, un lutto, una malattia seria, o un problema grave di un familiare — qualcosa che merita assolutamente un sincero riconoscimento o vicinanza umana. NON aggiornamenti quotidiani e banali.
+6. SALUTO DI APERTURA: il primo saluto del giorno nel gruppo (es. "Buongiorno a tutti!"). Nota: se nel contesto è indicato che Genesi ha già salutato oggi per questa categoria di saluto, rispondi "NO".
 
 RISPONDI "NO" in tutti gli altri casi, incluso:
-- Aggiornamenti quotidiani di routine (come sta qualcuno, dove sono, cosa hanno fatto)
-- Battute, scambi leggeri, conversazioni tra i membri
-- Domande rivolte chiaramente ad altri membri
-- Saluti successivi se Genesi ha già risposto al saluto iniziale
-- Qualsiasi scambio che sia chiaramente tra persone della famiglia senza coinvolgerla
+- Aggiornamenti quotidiani di routine (dove si trova qualcuno, cosa sta facendo, come si sente per piccoli malesseri transitori come un po' di stanchezza o raffreddore).
+- Scambi di battute, chiacchiere leggere o discussioni personali/relazionali tra i membri della famiglia.
+- Domande rivolte specificamente ed esclusivamente a un altro membro della famiglia (es: "Papà, mi porti le chiavi?").
+- Saluti generici o successivi se Genesi ha già salutato per quella categoria oggi.
+- Qualsiasi scambio o discussione d'opinione in cui la presenza di un'AI risulterebbe fuori luogo, innaturale o fastidiosa.
 
-REGOLA CRITICA: Non portare mai in mezzo argomenti passati (Leo ha avuto la febbre, c'era stato un ritardo...) a meno che il messaggio attuale non li citi. Ogni risposta deve essere ancorata a ciò che viene detto ORA.
-
-Il dubbio va SEMPRE verso NO. Genesi è discreta, non onnipresente.
+REGOLA CRITICA: Non portare mai in mezzo argomenti passati a meno che il messaggio attuale non li citi esplicitamente. Ogni risposta deve essere ancorata a ciò che viene detto ORA. Il dubbio va SEMPRE verso "NO". Genesi deve sembrare un membro reale della famiglia, discreto e piacevole.
 
 Rispondi SOLO con JSON: {"intervieni": true, "motivo": "ragione breve"} oppure {"intervieni": false, "motivo": "ragione breve"}
 """
@@ -107,21 +147,12 @@ async def _group_should_intervene(
     if _GENESI_RE.search(combined):
         return True
 
-    # Fast-path: saluto di gruppo → risponde UNA SOLA VOLTA ogni 3 ore
-    # Evita di rispondere a ogni "Buongiorno" di ogni membro.
-    _GREETINGS = (
-        "buongiorno", "buonasera", "buonanotte", "ciao a tutti",
-        "buon pranzo", "buona cena", "buon pomeriggio", "buona notte",
-        "buon weekend", "buon week end", "buon natale", "buona pasqua",
-        "buon anno", "buone feste",
-    )
+    # Fast-path: saluto di gruppo -> controlla limite giornaliero per categoria
     combined_lower = combined.lower()
-    if any(g in combined_lower for g in _GREETINGS):
-        greet_ts = _GROUP_CONV_STATE.get(chat_id, {}).get("last_greet_ts", 0)
-        if time.time() - greet_ts > 10800:  # 3 ore
-            _GROUP_CONV_STATE.setdefault(chat_id, {})["last_greet_ts"] = time.time()
-            return True
-        return False  # saluto già risposto di recente — silenzio
+    category = _get_greeting_category(combined_lower)
+    if category:
+        should_greet = await _check_and_register_greeting(chat_id, category)
+        return should_greet
 
     # Fast-path: messaggio troppo corto e senza punto interrogativo → probabile scambio tra membri
     if len(combined) < 8 and "?" not in combined:
@@ -150,11 +181,20 @@ async def _group_should_intervene(
             history_text += f"Ultima risposta di Genesi in questo gruppo: Genesi: {last_reply[:200]}\n\n"
 
         # Informa l'LLM se Genesi ha già risposto a un saluto oggi
-        greet_ts = _GROUP_CONV_STATE.get(chat_id, {}).get("last_greet_ts", 0)
+        key = f"relational_state:group_greetings_{chat_id}"
+        history = await storage.load(key, default={}) or {}
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        try:
+            tz = ZoneInfo("Europe/Rome")
+        except Exception:
+            tz = None
+        today_str = datetime.now(tz).date().isoformat()
+        
+        sent_today = [cat for cat, date_val in history.items() if date_val == today_str]
         greet_note = ""
-        if time.time() - greet_ts < 10800:
-            import datetime as _dt
-            greet_note = f"[Nota: Genesi ha già salutato il gruppo nelle ultime 3 ore — non rispondere ad altri saluti]\n\n"
+        if sent_today:
+            greet_note = f"[Nota: Genesi ha già salutato oggi per queste categorie: {', '.join(sent_today)}. Non rispondere a saluti di queste categorie!]\n\n"
 
         user_msg = (
             f"{greet_note}"
