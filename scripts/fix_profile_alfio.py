@@ -1,111 +1,290 @@
 """
-Script one-shot: pulisce il profilo di Alfio dai dati corrotti.
-Da eseguire UNA SOLA VOLTA su Ubuntu:
+Script: pulisce il profilo di Alfio e tutti i profili dei membri del gruppo Telegram dai dati corrotti.
+Da eseguire su Ubuntu:
   cd /opt/genesi && python3 scripts/fix_profile_alfio.py
 """
 import json
 import sys
 from pathlib import Path
+from datetime import datetime
 
 USER_ID = "6028d92a-94f2-4e2f-bcb7-012c861e3ab2"
 PROFILE_PATH = Path(f"memory/profile/{USER_ID}.json")
+PF_PATH = Path(f"memory/personal_facts/{USER_ID}.json")
+FAMILY_CACHE_PATH = Path(f"memory/telegram/family_members:{USER_ID}.json")
 
-if not PROFILE_PATH.exists():
-    print(f"ERRORE: {PROFILE_PATH} non trovato")
-    sys.exit(1)
+print("=== INIZIO PULIZIA INTEGRALE PROFILO E GRUPPO TELEGRAM ===")
 
-with open(PROFILE_PATH, "r", encoding="utf-8") as f:
-    profile = json.load(f)
-
-print("=== PROFILO PRIMA ===")
-print(f"  city:       {profile.get('city')}")
-print(f"  profession: {profile.get('profession')}")
-print(f"  interests:  {profile.get('interests')}")
-print(f"  children:   {profile.get('children')}")
-print(f"  pets:       {profile.get('pets')}")
-
-changes = []
-
-# 0. Reset campi artefatti di test (Marco Ferrara, Laura) per non influenzare il prossimo test
-_TEST_NAMES = {"marco ferrara", "marco", "ferrara", "mariella"}
-if (profile.get("name") or "").lower() in _TEST_NAMES:
+# 1. Pulisci il profilo principale di Alfio
+if PROFILE_PATH.exists():
+    with open(PROFILE_PATH, "r", encoding="utf-8") as f:
+        profile = json.load(f)
+    
+    print("\n[1] Pulisco profilo principale Alfio...")
     profile["name"] = "Alfio"
-    changes.append(f"name ripristinato ad Alfio (era artefatto test: '{profile.get('name')}')")
-# Reset se name == città (bug: city salvata come name)
-_current_name = (profile.get("name") or "").lower().strip()
-_current_city = (profile.get("city") or "").lower().strip()
-if _current_name and _current_city and _current_name == _current_city:
-    profile["name"] = "Alfio"
-    changes.append(f"name ripristinato a Alfio (era '{_current_name}' = city)")
-_TEST_SPOUSES = {"laura"}
-if (profile.get("spouse") or "").lower() in _TEST_SPOUSES:
-    profile["spouse"] = None
-    changes.append("spouse rimosso (artefatto test Laura)")
-
-# 1. City: se è corrotta (non è Imola), ripristina
-bad_cities = {"Roma", "Razza Europea", "Professione Cuoco", None, ""}
-if profile.get("city") in bad_cities:
     profile["city"] = "Imola"
-    changes.append("city → Imola")
+    profile["timezone"] = "Europe/Rome"
+    profile["profession"] = "Sviluppatore"
+    profile["spouse"] = "Rita"
+    
+    # Pulisci figli
+    bad_children = {"figlio", "mio figlio", "madre", "alfio"}
+    children = profile.get("children", [])
+    cleaned_children = []
+    for c in children:
+        cname = (c.get("name") if isinstance(c, dict) else str(c)).strip()
+        if cname.lower() not in bad_children:
+            cleaned_children.append({"name": cname})
+    
+    # Assicurati che Zoe ed Ennio ci siano
+    child_names = {c["name"].lower() for c in cleaned_children}
+    if "zoe" not in child_names:
+        cleaned_children.append({"name": "Zoe"})
+    if "ennio" not in child_names:
+        cleaned_children.append({"name": "Ennio"})
+    profile["children"] = cleaned_children
 
-# 2. Profession: rimuovi se corrotta da artefatti di test o frasi emotive
-bad_professions = {"persiani", "leclerc e hamilton", "professione cuoco", "cuoco"}
-current_prof = profile.get("profession") or ""
-current_prof_lower = current_prof.lower()
-if current_prof_lower in bad_professions:
-    profile["profession"] = None
-    changes.append(f"profession rimossa ({current_prof})")
-# Rimuovi frasi emotive/narrative finite in profession per bug CME
-_EMOTIONAL_FRAGMENTS = ["scosso", "distrutto", "preoccupato", "agitato", "emozionato",
-                        "stanco", "felice", "triste", "arrabbiato", "ancora molto"]
-if any(frag in current_prof_lower for frag in _EMOTIONAL_FRAGMENTS):
-    profile["profession"] = None
-    changes.append(f"profession rimossa (frammento emotivo: '{current_prof}')")
+    # Pets
+    pets = profile.get("pets", [])
+    pet_names = {(p.get("name") if isinstance(p, dict) else str(p)).lower() for p in pets}
+    cleaned_pets = []
+    for p in pets:
+        pname = (p.get("name") if isinstance(p, dict) else str(p)).strip()
+        ptype = p.get("type") if isinstance(p, dict) else "cat"
+        cleaned_pets.append({"name": pname, "type": ptype})
+    
+    pet_names_cleaned = {p["name"].lower() for p in cleaned_pets}
+    if "mignolo" not in pet_names_cleaned:
+        cleaned_pets.append({"type": "cat", "name": "Mignolo"})
+    if "prof" not in pet_names_cleaned:
+        cleaned_pets.append({"type": "cat", "name": "Prof"})
+    if "rio" not in pet_names_cleaned:
+        cleaned_pets.append({"type": "dog", "name": "Rio"})
+    profile["pets"] = cleaned_pets
 
-# 3. Interests: rimuovi 'gatti persiani' (falso positivo)
-interests = profile.get("interests", [])
-original_len = len(interests)
-interests = [i for i in interests if "persiani" not in i.lower()]
-if len(interests) != original_len:
-    profile["interests"] = interests
-    changes.append("interests: rimosso 'gatti persiani'")
+    # Rimuovi interessi corrotti
+    interests = profile.get("interests", [])
+    cleaned_interests = [i for i in interests if "persiani" not in i.lower() and "sogni" not in i.lower()]
+    profile["interests"] = cleaned_interests
 
-# 4. Children: rimuovi Marco (artefatto di test)
-children = profile.get("children", [])
-original_len = len(children)
-children = [c for c in children if (c.get("name", "") if isinstance(c, dict) else str(c)).lower() != "marco"]
-if len(children) != original_len:
-    profile["children"] = children
-    changes.append("children: rimosso Marco (artefatto test)")
-
-# 5. Pets: assicura che Mignolo e Prof ci siano
-pets = profile.get("pets", [])
-existing_names = {(p.get("name", "") if isinstance(p, dict) else str(p)).lower() for p in pets}
-if "mignolo" not in existing_names:
-    pets.append({"type": "cat", "name": "Mignolo"})
-    changes.append("pets: aggiunto Mignolo")
-if "prof" not in existing_names:
-    pets.append({"type": "cat", "name": "Prof"})
-    changes.append("pets: aggiunto Prof")
-if "rio" not in existing_names:
-    pets.append({"type": "dog", "name": "Rio"})
-    changes.append("pets: aggiunto Rio")
-profile["pets"] = pets
-
-if changes:
-    from datetime import datetime
     profile["updated_at"] = datetime.utcnow().isoformat()
+    
     with open(PROFILE_PATH, "w", encoding="utf-8") as f:
         json.dump(profile, f, ensure_ascii=False, indent=2)
-    print("\n=== MODIFICHE APPLICATE ===")
-    for c in changes:
-        print(f"  ✓ {c}")
+    print("  ✓ Profilo principale di Alfio aggiornato con successo.")
 else:
-    print("\n=== NESSUNA MODIFICA NECESSARIA ===")
+    print("  ⚠️ Profilo principale Alfio non trovato.")
 
-print("\n=== PROFILO DOPO ===")
-print(f"  city:       {profile.get('city')}")
-print(f"  profession: {profile.get('profession')}")
-print(f"  interests:  {profile.get('interests')}")
-print(f"  children:   {profile.get('children')}")
-print(f"  pets:       {profile.get('pets')}")
+# 2. Pulisci personal_facts di Alfio
+if PF_PATH.exists():
+    with open(PF_PATH, "r", encoding="utf-8") as f:
+        pf_data = json.load(f)
+    
+    print("\n[2] Pulisco fatti personali di Alfio...")
+    facts = pf_data.get("facts", [])
+    cleaned_facts = []
+    
+    bad_keys = {
+        "famiglia_madre_telegram_494065944",
+        "famiglia_figlio_telegram_494065944",
+        "famiglia_fratello_telegram_1329017213",
+        "famiglia_figlia_telegram_873633028",
+        "famiglia_figlia_telegram_32393144",
+        "famiglia_cugina_telegram_32393144",
+        "famiglia_madre_telegram_32393144"
+    }
+    
+    for fact in facts:
+        key = fact.get("key", "")
+        value = fact.get("value", "").lower()
+        
+        # Filtra fatti autogenerati corrotti
+        if key in bad_keys:
+            print(f"  ✗ Rimosso fatto corrotto: {key} -> {fact.get('value')}")
+            continue
+        if "alfio (madre)" in value or "alfio (figlio)" in value or "mamma (madre)" in value:
+            print(f"  ✗ Rimosso fatto corrotto per contenuto: {fact.get('value')}")
+            continue
+            
+        cleaned_facts.append(fact)
+        
+    pf_data["facts"] = cleaned_facts
+    pf_data["updated_at"] = datetime.utcnow().isoformat()
+    
+    with open(PF_PATH, "w", encoding="utf-8") as f:
+        json.dump(pf_data, f, ensure_ascii=False, indent=2)
+    print("  ✓ Fatti personali aggiornati.")
+else:
+    print("  ⚠️ File personal_facts non trovato.")
+
+# 3. Pulisci e correggi i profili dei membri del gruppo Telegram
+print("\n[3] Correggo i profili dei membri del gruppo Telegram...")
+telegram_dir = Path("memory/telegram")
+
+# Definisci le correzioni per ciascun ID Telegram conosciuto
+member_corrections = {
+    # Alfio
+    "494065944": {
+        "relationship_to_owner": "",
+        "display_name": "Alfio",
+        "gender": "M",
+        "city": "Imola",
+        "facts": {
+            "city": "Imola"
+        }
+    },
+    # Sandra
+    "1329017213": {
+        "relationship_to_owner": "sorella",
+        "display_name": "Sandra",
+        "gender": "F",
+        "city": "Siracusa",
+        "facts": {
+            "relazione_con_alfio": "sorella",
+            "note": "sorella di Alfio",
+            "genere": "F",
+            "city": "Siracusa"
+        }
+    },
+    # Katia
+    "670663120": {
+        "relationship_to_owner": "sorella",
+        "display_name": "Katia",
+        "gender": "F",
+        "city": "Siracusa",
+        "facts": {
+            "relazione_con_alfio": "sorella",
+            "note": "sorella di Alfio",
+            "genere": "F"
+        }
+    },
+    # Mariella
+    "32393144": {
+        "relationship_to_owner": "sorella",
+        "display_name": "Mariella",
+        "gender": "F",
+        "city": "Lentini",
+        "facts": {
+            "relazione_con_alfio": "sorella",
+            "note": "sorella di Alfio",
+            "genere": "F",
+            "city": "Lentini"
+        }
+    },
+    # Iolanda
+    "873633028": {
+        "relationship_to_owner": "madre",
+        "display_name": "Iolanda",
+        "gender": "F",
+        "facts": {
+            "relazione_con_alfio": "madre",
+            "note": "madre di Alfio",
+            "genere": "F"
+        }
+    },
+    # Rita
+    "552835672": {
+        "relationship_to_owner": "moglie",
+        "display_name": "Rita",
+        "gender": "F",
+        "facts": {
+            "relazione_con_alfio": "moglie",
+            "genere": "F"
+        }
+    },
+    # Zoe
+    "638368716": {
+        "relationship_to_owner": "figlia",
+        "display_name": "Zoe",
+        "gender": "F",
+        "facts": {
+            "relazione_con_alfio": "figlia",
+            "genere": "F"
+        }
+    },
+    # Leonardo
+    "1852211854": {
+        "relationship_to_owner": "nipote",
+        "display_name": "Leonardo",
+        "gender": "M",
+        "facts": {
+            "relazione_con_alfio": "nipote",
+            "genere": "M"
+        }
+    }
+}
+
+if telegram_dir.exists():
+    for tid, corr in member_corrections.items():
+        m_file = telegram_dir / f"group_member:{tid}.json"
+        if m_file.exists():
+            with open(m_file, "r", encoding="utf-8") as f:
+                member = json.load(f)
+            
+            print(f"  Pulisco e correggo {m_file.name} ({member.get('first_name')})...")
+            member["relationship_to_owner"] = corr["relationship_to_owner"]
+            member["display_name"] = corr["display_name"]
+            member["gender"] = corr["gender"]
+            if "city" in corr:
+                member["city"] = corr["city"]
+            
+            # Unisci i fatti
+            facts = member.get("facts", {})
+            facts.clear() # Cancella tutti i vecchi fatti sporchi
+            facts.update(corr["facts"])
+            member["facts"] = facts
+            
+            with open(m_file, "w", encoding="utf-8") as f:
+                json.dump(member, f, ensure_ascii=False, indent=2)
+            print(f"    ✓ Corretto.")
+        else:
+            # Se non esiste, lo creiamo pulito
+            print(f"  Creazione da zero profilo pulito per {tid} ({corr['display_name']})...")
+            new_member = {
+                "from_id": int(tid),
+                "first_name": corr["display_name"],
+                "last_seen": int(datetime.utcnow().timestamp()),
+                "message_count": 1,
+                "joined_at": int(datetime.utcnow().timestamp()),
+                "relationship_to_owner": corr["relationship_to_owner"],
+                "display_name": corr["display_name"],
+                "gender": corr["gender"],
+                "facts": corr["facts"]
+            }
+            if "city" in corr:
+                new_member["city"] = corr["city"]
+            with open(m_file, "w", encoding="utf-8") as f:
+                json.dump(new_member, f, ensure_ascii=False, indent=2)
+            print(f"    ✓ Creato.")
+else:
+    print("  ⚠️ Directory memory/telegram non trovata.")
+
+# 4. Pulisci la cache dei membri della famiglia
+print("\n[4] Rigenero cache familiare...")
+family_cache = {
+  "members": [
+    "Rita (relazione: moglie; genere: F)",
+    "Iolanda (relazione: madre; genere: F)",
+    "Mariella (relazione: sorella; città: Lentini; genere: F)",
+    "Sandra (relazione: sorella; città: Siracusa; genere: F)",
+    "Katia (relazione: sorella; città: Siracusa; genere: F)",
+    "Zoe (relazione: figlia; genere: F)",
+    "Ennio (relazione: figlio; genere: M)",
+    "Leonardo (relazione: nipote; genere: M)"
+  ],
+  "group_insights": [
+    "Tutti i membri usano saluti affettuosi e emoji.",
+    "Iolanda è molto attiva nella conversazione.",
+    "Genesi risponde positivamente a tutte le interazioni.",
+    "Alfio e Katia condividono aggiornamenti sulla loro vita.",
+    "I membri apprezzano riconoscimenti per eventi importanti."
+  ],
+  "last_synced_at": int(datetime.utcnow().timestamp()),
+  "family_chain": "ALBERO FAMILIARE COMPLETO DI ALFIO:\nAlfio (proprietario):\n  - Moglie: Rita\n  - Madre: Iolanda\n  - Figlio: Ennio\n  - Figlia: Zoe\n  - Sorelle: Mariella, Sandra, Katia\n  - Cognati: Gianluca (marito di Katia), Gianvito (marito di Sandra)\n  - Nipoti: Leonardo (figlio di Katia), Elena (figlia di Mariella)\n\nREGOLE DI INFERENZA:\n- Se qualcuno dice di essere figlio/figlia di Mariella/Sandra/Katia -> nipote di Alfio\n- Se qualcuno dice di essere marito/moglie di Mariella/Sandra/Katia -> cognato/cognata di Alfio\n- Se qualcuno dice di essere figlio/figlia di Rita o Alfio -> figlio/figlia di Alfio\n- Iolanda e nonna di Zoe, Ennio, Leonardo, Elena\n- Rita, Mariella, Sandra, Katia sono zie di Zoe e Ennio"
+}
+
+with open(FAMILY_CACHE_PATH, "w", encoding="utf-8") as f:
+    json.dump(family_cache, f, ensure_ascii=False, indent=2)
+print("  ✓ Cache familiare rigenerata con successo.")
+
+print("\n=== PULIZIA COMPLETATA CON SUCCESSO! ===")

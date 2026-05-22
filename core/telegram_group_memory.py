@@ -629,6 +629,9 @@ async def extract_family_relationship(
       3. Aggiunge un fatto personale in personal_facts di Alfio
     Fail-silent. Non blocca il flusso principale.
     """
+    if not first_name or first_name.lower().strip() == "alfio" or member_id == "494065944" or "494065944" in member_id:
+        logger.info("FAMILY_RELATIONSHIP_SKIP: sender is owner (Alfio) to prevent self-mapping")
+        return
     if not text or len(text.strip()) < 3:
         return
     try:
