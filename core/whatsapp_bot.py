@@ -801,6 +801,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                         f"[GRUPPO FAMILIARE: scrive {first_name}. "
                         f"REGOLE ASSOLUTE: risposta MAX 2 righe, tono naturale da familiare (non da assistente), "
                         f"zero intro elaborati, zero domande di ritorno, zero 'che bello!'. "
+                        f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri e non dire 'grazie per gli auguri' se festeggiano altri (es. 'Auguri mamma!'). Invece unisciti con calore agli auguri per lei (es. 'Tanti auguri alla tua mamma!'). "
                         f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
                         f"a meno che {first_name} non li citi in questo messaggio. "
                         f"Rispondi SOLO a quello che viene detto adesso.]\n"

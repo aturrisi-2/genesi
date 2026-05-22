@@ -72,20 +72,25 @@ _RELATIONSHIP_PROMPT = """\
 Sei un estrattore di relazioni familiari. Leggi questo messaggio inviato in un gruppo Telegram familiare.
 Il proprietario del gruppo si chiama Alfio (è il creatore di Genesi, l'AI del gruppo).
 
-Determina SE il mittente sta dichiarando una relazione con Alfio o con la sua famiglia, anche implicitamente.
-Esempi: "sono la sorella", "sono la figlia di Alfio", "sono sua madre", "sono il fratello",
-"mi chiamo Rita, la moglie", "sono la cugina", "io sono Ennio il figlio" ecc.
-Anche relazioni indirette: "sono il marito di tua sorella" → cognato di Alfio.
+Determina SE il mittente sta dichiarando la PROPRIA relazione con Alfio o con la sua famiglia (cioè chi è il mittente stesso rispetto ad Alfio).
 
-Se c'è una relazione, ritorna:
+ATTENZIONE CRITICA AI FALSI POSITIVI (VOCATIVI):
+- Il mittente deve dichiarare se stesso/a! Non confondere quando il mittente si rivolge o chiama qualcun altro con un nome di parentela.
+- Se Sandra scrive "Stamattina la connessione ti funziona mamma????", Sandra NON è la madre! Si sta rivolgendo a sua madre (mamma è usato come vocativo). In questo caso rispondi {"found": false}.
+- Se qualcuno scrive "Auguri mamma!", il mittente NON è la mamma, ma sta facendo gli auguri alla propria mamma. Rispondi {"found": false}.
+- Se Ennio scrive "Rita, ti amo", Ennio non è Rita. Rispondi {"found": false}.
+- Esempi di relazioni proprie VALIDE (dove il mittente dice chi è LUI stesso):
+  "Sono la sorella di Alfio", "sono sua madre" (detto da chi scrive riferendosi a se stesso, es. "qui scrive la mamma"), "sono il fratello", "mi chiamo Rita, la moglie", "io sono Ennio il figlio", "sono la cugina".
+
+Se c'è una relazione dichiarata del MITTENTE stesso, ritorna:
 {
   "found": true,
   "relationship": "sorella",           // ruolo in italiano, singolare (sorella/fratello/figlia/figlio/moglie/madre/padre/cugina/nipote/cognata ecc.)
-  "name": "Maria",                     // nome della persona se menzionato, altrimenti null
+  "name": "Maria",                     // nome del mittente se menzionato o se si auto-identifica, altrimenti null
   "notes": "frase breve opzionale"     // max 10 parole di contesto
 }
 
-Se NON c'è nessuna dichiarazione di relazione: {"found": false}
+Se NON c'è nessuna dichiarazione esplicita su chi sia il mittente stesso: {"found": false}
 Rispondi SOLO con JSON valido.
 """
 
