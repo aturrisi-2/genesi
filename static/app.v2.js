@@ -1802,7 +1802,9 @@ async function sendChatMessageStream(message, { onChunk, onFirstChunk } = {}) {
     doLogout();
     throw new Error('Session expired');
   }
-  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok || !res.body || typeof res.body.getReader !== 'function') {
+    throw new Error(`Streaming non supportato dal browser (${res.status})`);
+  }
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -2045,7 +2047,7 @@ async function sendMessage(voiceText = null) {
   ];
   const isMemoryQuery = memoryTriggers.some(t => text.toLowerCase().includes(t));
 
-  if (isMemoryQuery && window.currentConvId) {
+  if (isMemoryQuery && currentConvId) {
     showThinking("Sto rileggendo l'archivio di questa chat...");
   } else {
     showThinking();
@@ -2053,6 +2055,7 @@ async function sendMessage(voiceText = null) {
 
   console.log('FRONTEND_THINKING_START');
 
+  let streamErrorDetail = null;
   try {
     let data;
     let alreadyRendered = false;
@@ -2104,6 +2107,7 @@ async function sendMessage(voiceText = null) {
         }
       } catch (streamErr) {
         console.warn('[STREAM_FALLBACK] errore streaming, uso endpoint normale:', streamErr.message);
+        streamErrorDetail = streamErr.message || String(streamErr);
         if (streamBubble) { streamBubble.remove(); streamBubble = null; }
         data = await sendChatMessage(text);
       }
@@ -2194,7 +2198,12 @@ async function sendMessage(voiceText = null) {
     window.responseProcessed = true;
     window.ttsExpected = false;
     hideThinking();
-    addMessage("Qualcosa non ha funzionato. Riprova tra poco.", 'genesi');
+    let errorDetail = e ? (e.message || String(e)) : "Unknown Error";
+    let finalErrorMsg = `Qualcosa non ha funzionato. Riprova tra poco. (Dettaglio: ${errorDetail})`;
+    if (streamErrorDetail) {
+      finalErrorMsg += ` [Stream fallback err: ${streamErrorDetail}]`;
+    }
+    addMessage(finalErrorMsg, 'genesi');
     console.log('TTS_ERROR_FALLBACK');
   } finally {
     setState(STATES.IDLE);
@@ -4860,7 +4869,7 @@ function setVoiceStatusText(text) {
 
 // ── PWA: registrazione Service Worker ───────────────────────
 if ('serviceWorker' in navigator) {
-  const SW_VERSION = 'v7';
+  const SW_VERSION = 'v8';
   navigator.serviceWorker
     .register(`/sw.js?v=${SW_VERSION}`, { updateViaCache: 'none' })
     .then((reg) => {
