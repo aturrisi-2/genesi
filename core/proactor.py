@@ -4148,7 +4148,7 @@ ORA: {time_ctx}
 
         # STEP 1: Document Context injection (NotebookLM behavior)
         system_prompt = ""
-        if user_id:
+        if user_id and is_document_reference(message):
             doc_manager = get_document_context_manager()
             if doc_manager.has_documents(user_id):
                 doc_context = doc_manager.get_relevant_context(user_id, message)
