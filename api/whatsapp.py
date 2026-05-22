@@ -36,7 +36,11 @@ async def whatsapp_webhook(request: Request):
         payload = await request.json()
         asyncio.create_task(handle_update(payload))
     except Exception as e:
-        logger.error("WA_WEBHOOK_ERROR err=%s", e)
+        try:
+            body_bytes = await request.body()
+            logger.error("WA_WEBHOOK_ERROR err=%s body=%s", e, body_bytes)
+        except Exception as body_err:
+            logger.error("WA_WEBHOOK_ERROR err=%s body_err=%s", e, body_err)
     # Meta richiede sempre 200 OK, altrimenti riprova
     return {"status": "ok"}
 
