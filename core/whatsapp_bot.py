@@ -136,7 +136,7 @@ Rispondi SOLO con JSON: {"intervieni": true, "motivo": "ragione breve"} oppure {
 
 async def _group_should_intervene(
     text: str, caption: str, chat_id: int, wa_id: str, first_name: str,
-    bot_mentioned: bool = False
+    bot_mentioned: bool = False, has_media: bool = False
 ) -> bool:
     """
     Decide con LLM se Genesi deve intervenire nel gruppo WhatsApp.
@@ -144,7 +144,9 @@ async def _group_should_intervene(
     """
     combined = f"{text} {caption}".strip()
     if not combined:
-        return False
+        if not has_media:
+            return False
+        combined = "[Inviato elemento multimediale senza didascalia]"
 
     # Fast-path: menzione diretta → sempre sì
     if bot_mentioned:
@@ -740,6 +742,36 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
 
         city = session.get("city", "")
 
+        # ── Pre-processing Media e Trascrizione Vocale ─────────────────────────
+        _original_has_media = bool(photo_id or voice_id or doc_id)
+        _transcribed_voice_text = ""
+        
+        if voice_id:
+            await send_typing(wa_id, msg_id)
+            audio_bytes, mime = await download_media(voice_id)
+            if audio_bytes:
+                transcription = await _transcribe(token, audio_bytes, mime or "audio/ogg")
+                if transcription == "__TOKEN_EXPIRED__":
+                    new_token = await _auto_refresh(wa_id, session)
+                    if new_token:
+                        token = new_token
+                        transcription = await _transcribe(token, audio_bytes, mime or "audio/ogg")
+                
+                if transcription and transcription != "__TOKEN_EXPIRED__":
+                    _transcribed_voice_text = transcription
+                    text = transcription  # Aggiorna per i filtri successivi
+                    voice_id = ""         # Evita ri-processamento nel blocco media
+                    if not is_group:
+                        await send_message(wa_id, f"🎤 _{transcription}_")
+                else:
+                    if not is_group:
+                        await send_message(wa_id, "Non sono riuscita a capire il vocale. Prova a scrivere.")
+                    return
+            else:
+                if not is_group:
+                    await send_message(wa_id, "Non sono riuscita a scaricare il vocale.")
+                return
+
         # ── LOGICA GRUPPO ─────────────────────────────────────────────────────
         if is_group and first_name:
             from core.telegram_group_memory import (
@@ -779,15 +811,26 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             else:
                 should = await _group_should_intervene(
                     text, caption, chat_id, wa_id, first_name,
-                    bot_mentioned=bot_mentioned
+                    bot_mentioned=bot_mentioned,
+                    has_media=_original_has_media
                 )
             if not should:
                 logger.info("WA_GROUP_SILENT chat_id=%s from=%s msg=%.60s",
                             chat_id, first_name, f"{text} {caption}".strip())
                 return
+            
+            # Se interveniamo su un vocale, invia prima la trascrizione
+            if _transcribed_voice_text:
+                await send_message(wa_id, f"🎤 _{_transcribed_voice_text}_")
 
         async def _do_chat(message: str) -> str:
             nonlocal token, session
+            try:
+                from core.link_explorer import explore_links_in_text
+                message = await explore_links_in_text(message)
+            except Exception as e:
+                logger.warning("WA_LINK_EXPLORE_FAIL err=%s", e)
+
             # Gruppi WhatsApp: inietta contesto famiglia e usa platform whatsapp_group
             if is_group and chat_id and first_name:
                 try:

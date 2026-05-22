@@ -129,7 +129,7 @@ Rispondi SOLO con JSON: {"intervieni": true, "motivo": "ragione breve"} oppure {
 
 async def _group_should_intervene(
     text: str, caption: str, chat_id: int, from_id: int, first_name: str,
-    bot_username: str = "", bot_mentioned: bool = False
+    bot_username: str = "", bot_mentioned: bool = False, has_media: bool = False
 ) -> bool:
     """
     Decide con LLM se Genesi deve intervenire nel gruppo.
@@ -137,7 +137,9 @@ async def _group_should_intervene(
     """
     combined = f"{text} {caption}".strip()
     if not combined:
-        return False
+        if not has_media:
+            return False
+        combined = "[Inviato elemento multimediale senza didascalia]"
 
     # Fast-path: menzione diretta (@bot o nome) → sempre sì
     if bot_mentioned:
@@ -836,6 +838,42 @@ async def handle_update(update: dict):
         else:
             city = session.get("city", "")
 
+        # ── Pre-processing Media e Trascrizione Vocale ─────────────────────────
+        _original_has_media = bool(photo or voice or audio or document)
+        _transcribed_voice_text = ""
+        
+        if voice or audio:
+            await send_typing(chat_id)
+            media = voice or audio
+            audio_bytes = await download_file(media["file_id"])
+            if audio_bytes:
+                mime = media.get("mime_type", "audio/ogg")
+                transcription = await _transcribe(token, audio_bytes, mime)
+                if transcription == "__TOKEN_EXPIRED__":
+                    if is_group:
+                        new_token = await _refresh_member_token(from_id)
+                    else:
+                        new_token = await _auto_refresh(session_uid, session)
+                    if new_token:
+                        token = new_token
+                        transcription = await _transcribe(token, audio_bytes, mime)
+                
+                if transcription and transcription != "__TOKEN_EXPIRED__":
+                    _transcribed_voice_text = transcription
+                    text = transcription  # Aggiorna per i filtri successivi
+                    voice = None
+                    audio = None
+                    if not is_group:
+                        await send_message(chat_id, f"🎤 {transcription}")
+                else:
+                    if not is_group:
+                        await send_message(chat_id, "Non sono riuscita a capire il vocale. Prova a scrivere.")
+                    return
+            else:
+                if not is_group:
+                    await send_message(chat_id, "Non sono riuscita a scaricare il vocale.")
+                return
+
         # ── FILTRO GRUPPI (LLM-based) ──────────────────────────────────────────
         # Salva ogni messaggio nel buffer grezzo PRIMA di decidere se intervenire,
         # così il contesto includerà anche i messaggi a cui Genesi non ha risposto.
@@ -865,12 +903,17 @@ async def handle_update(update: dict):
             else:
                 should = await _group_should_intervene(
                     text, caption, chat_id, from_id, first_name,
-                    bot_username=_BOT_USERNAME, bot_mentioned=_bot_mentioned
+                    bot_username=_BOT_USERNAME, bot_mentioned=_bot_mentioned,
+                    has_media=_original_has_media
                 )
             if not should:
                 logger.info("TELEGRAM_GROUP_SILENT chat_id=%s from=%s msg=%.60s",
                             chat_id, first_name, f"{text} {caption}".strip())
                 return
+            
+            # Se interveniamo su un vocale, invia prima la trascrizione
+            if _transcribed_voice_text:
+                await send_message(chat_id, f"🎤 {_transcribed_voice_text}")
 
         # In gruppi: appende il nome del mittente DOPO il messaggio per evitare
         # che il LLM mescoli il nome dell'account con quello del mittente.
@@ -912,6 +955,12 @@ async def handle_update(update: dict):
         async def _do_chat(message: str) -> str:
             """Chat con auto-refresh del token in caso di scadenza."""
             nonlocal token
+            try:
+                from core.link_explorer import explore_links_in_text
+                message = await explore_links_in_text(message)
+            except Exception as e:
+                logger.warning("TELEGRAM_LINK_EXPLORE_FAIL err=%s", e)
+
             # Per i gruppi: arricchisce il messaggio con contesto di gruppo
             if is_group:
                 group_ctx = await _load_group_ctx()
@@ -1026,7 +1075,10 @@ async def handle_update(update: dict):
 
             analysis = await _upload_file(token, img_bytes, "photo.jpg", "image/jpeg")
             if analysis == "__TOKEN_EXPIRED__":
-                new_token = await _auto_refresh(session_uid, session)
+                if is_group:
+                    new_token = await _refresh_member_token(from_id)
+                else:
+                    new_token = await _auto_refresh(session_uid, session)
                 if new_token:
                     token = new_token
                     analysis = await _upload_file(token, img_bytes, "photo.jpg", "image/jpeg")
@@ -1054,7 +1106,10 @@ async def handle_update(update: dict):
 
             analysis = await _upload_file(token, doc_bytes, filename, mime)
             if analysis == "__TOKEN_EXPIRED__":
-                new_token = await _auto_refresh(session_uid, session)
+                if is_group:
+                    new_token = await _refresh_member_token(from_id)
+                else:
+                    new_token = await _auto_refresh(session_uid, session)
                 if new_token:
                     token = new_token
                     analysis = await _upload_file(token, doc_bytes, filename, mime)
