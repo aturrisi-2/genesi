@@ -95,6 +95,74 @@
     </div>
 
     <script>
+        // SafeStorage helper to fallback to Cookies if localStorage throws (e.g. Safari iOS Private Mode)
+        const SafeStorage = {
+            isSupported: (() => {
+                try {
+                    const testKey = '__storage_test__';
+                    localStorage.setItem(testKey, testKey);
+                    localStorage.removeItem(testKey);
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            })(),
+            setCookie(name, value, days) {
+                let expires = "";
+                if (days) {
+                    const date = new Date();
+                    date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+                    expires = "; expires=" + date.toUTCString();
+                }
+                document.cookie = name + "=" + encodeURIComponent(value || "") + expires + "; path=/; SameSite=Lax; Secure";
+            },
+            getCookie(name) {
+                const nameEQ = name + "=";
+                const ca = document.cookie.split(';');
+                for (let i = 0; i < ca.length; i++) {
+                    let c = ca[i];
+                    while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+                    if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+                }
+                return null;
+            },
+            eraseCookie(name) {
+                document.cookie = name + '=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure';
+            },
+            setItem(key, value) {
+                if (this.isSupported) {
+                    try {
+                        localStorage.setItem(key, value);
+                        return;
+                    } catch (e) {
+                        // fallback to cookie
+                    }
+                }
+                this.setCookie(key, value, 7);
+            },
+            getItem(key) {
+                if (this.isSupported) {
+                    try {
+                        const val = localStorage.getItem(key);
+                        if (val !== null) return val;
+                    } catch (e) {
+                        // fallback to cookie
+                    }
+                }
+                return this.getCookie(key);
+            },
+            removeItem(key) {
+                if (this.isSupported) {
+                    try {
+                        localStorage.removeItem(key);
+                    } catch (e) {
+                        // fallback to cookie
+                    }
+                }
+                this.eraseCookie(key);
+            }
+        };
+
         function showPlatformPopup(platform, link) {
             const popup = document.getElementById('platform-popup');
             const btn   = document.getElementById('popup-btn');
@@ -140,10 +208,10 @@
                 const data = await res.json();
 
                 if (res.ok) {
-                    localStorage.setItem('genesi_access_token', data.access_token);
-                    localStorage.setItem('genesi_refresh_token', data.refresh_token);
-                    localStorage.setItem('genesi_user_id', data.user_id);
-                    localStorage.setItem('genesi_is_admin', data.is_admin);
+                    SafeStorage.setItem('genesi_access_token', data.access_token);
+                    SafeStorage.setItem('genesi_refresh_token', data.refresh_token);
+                    SafeStorage.setItem('genesi_user_id', data.user_id);
+                    SafeStorage.setItem('genesi_is_admin', data.is_admin);
                     const params = new URLSearchParams(window.location.search);
                     const from = params.get('from');
                     if (from === 'whatsapp') {
@@ -178,7 +246,8 @@
                     unverifiedBlock.style.display = 'none';
                 }
             } catch (err) {
-                msg.textContent = 'Errore di connessione.';
+                console.error("Login catch block error:", err);
+                msg.textContent = 'Errore di connessione o del browser: ' + (err.message || String(err));
                 msg.className = 'msg error';
             } finally {
                 btn.disabled = false;

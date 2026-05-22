@@ -97,10 +97,80 @@ const adminLink = document.getElementById('admin-link');
 const logoutBtn = document.getElementById('logout-btn');
 
 // ===============================
+// SAFE STORAGE WRAPPER
+// ===============================
+const SafeStorage = {
+  isSupported: (() => {
+    try {
+      const testKey = '__storage_test__';
+      localStorage.setItem(testKey, testKey);
+      localStorage.removeItem(testKey);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  })(),
+  setCookie(name, value, days) {
+    let expires = "";
+    if (days) {
+      const date = new Date();
+      date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+      expires = "; expires=" + date.toUTCString();
+    }
+    document.cookie = name + "=" + encodeURIComponent(value || "") + expires + "; path=/; SameSite=Lax; Secure";
+  },
+  getCookie(name) {
+    const nameEQ = name + "=";
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+      let c = ca[i];
+      while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+      if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+    }
+    return null;
+  },
+  eraseCookie(name) {
+    document.cookie = name + '=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure';
+  },
+  setItem(key, value) {
+    if (this.isSupported) {
+      try {
+        localStorage.setItem(key, value);
+        return;
+      } catch (e) {
+        // fallback to cookie
+      }
+    }
+    this.setCookie(key, value, 7);
+  },
+  getItem(key) {
+    if (this.isSupported) {
+      try {
+        const val = localStorage.getItem(key);
+        if (val !== null) return val;
+      } catch (e) {
+        // fallback to cookie
+      }
+    }
+    return this.getCookie(key);
+  },
+  removeItem(key) {
+    if (this.isSupported) {
+      try {
+        localStorage.removeItem(key);
+      } catch (e) {
+        // fallback to cookie
+      }
+    }
+    this.eraseCookie(key);
+  }
+};
+
+// ===============================
 // AUTH STATE — JWT-based
 // ===============================
 function getAuthToken() {
-  return localStorage.getItem('genesi_access_token');
+  return SafeStorage.getItem('genesi_access_token');
 }
 
 function isLoggedIn() {
@@ -126,11 +196,11 @@ function getTokenPayload() {
 }
 
 function isAdmin() {
-  return localStorage.getItem('genesi_is_admin') === 'true';
+  return SafeStorage.getItem('genesi_is_admin') === 'true';
 }
 
 async function tryRefreshToken() {
-  const refresh = localStorage.getItem('genesi_refresh_token');
+  const refresh = SafeStorage.getItem('genesi_refresh_token');
   if (!refresh) return false;
   try {
     const res = await fetch('/auth/refresh', {
@@ -140,10 +210,10 @@ async function tryRefreshToken() {
     });
     if (!res.ok) return false;
     const data = await res.json();
-    localStorage.setItem('genesi_access_token', data.access_token);
+    SafeStorage.setItem('genesi_access_token', data.access_token);
     // Salva il nuovo refresh token (rolling — allunga la sessione ad ogni uso)
     if (data.refresh_token) {
-      localStorage.setItem('genesi_refresh_token', data.refresh_token);
+      SafeStorage.setItem('genesi_refresh_token', data.refresh_token);
     }
     return true;
   } catch (e) {
@@ -166,10 +236,10 @@ function doLogout() {
       headers: { 'Authorization': 'Bearer ' + token },
     }).catch(() => { });
   }
-  localStorage.removeItem('genesi_access_token');
-  localStorage.removeItem('genesi_refresh_token');
-  localStorage.removeItem('genesi_user_id');
-  localStorage.removeItem('genesi_is_admin');
+  SafeStorage.removeItem('genesi_access_token');
+  SafeStorage.removeItem('genesi_refresh_token');
+  SafeStorage.removeItem('genesi_user_id');
+  SafeStorage.removeItem('genesi_is_admin');
   window.location.href = '/login';
 }
 
@@ -1162,7 +1232,7 @@ let currentSystemSettings = { ...SETTINGS_DEFAULTS };
 
 function getStoredSystemSettings() {
   try {
-    const parsed = JSON.parse(localStorage.getItem('genesi-system-settings') || '{}') || {};
+    const parsed = JSON.parse(SafeStorage.getItem('genesi-system-settings') || '{}') || {};
     if (!['italy', 'world', 'technology'].includes(parsed.newsTickerSource)) {
       parsed.newsTickerSource = SETTINGS_DEFAULTS.newsTickerSource;
     }
@@ -1266,7 +1336,7 @@ async function saveSystemSettings() {
   if (!['italy', 'world', 'technology'].includes(payload.newsTickerSource)) {
     payload.newsTickerSource = SETTINGS_DEFAULTS.newsTickerSource;
   }
-  localStorage.setItem('genesi-system-settings', JSON.stringify(payload));
+  SafeStorage.setItem('genesi-system-settings', JSON.stringify(payload));
   const previousTickerSource = currentSystemSettings.newsTickerSource;
   applySystemSettingsRuntime(payload);
 
@@ -4852,18 +4922,18 @@ function setVoiceStatusText(text) {
   if (!navigator.permissions) return;
   try {
     const mic = await navigator.permissions.query({ name: 'microphone' });
-    localStorage.setItem('genesi_perm_microphone', mic.state);
-    mic.onchange = () => localStorage.setItem('genesi_perm_microphone', mic.state);
+    SafeStorage.setItem('genesi_perm_microphone', mic.state);
+    mic.onchange = () => SafeStorage.setItem('genesi_perm_microphone', mic.state);
   } catch (_) {}
   try {
     const loc = await navigator.permissions.query({ name: 'geolocation' });
-    localStorage.setItem('genesi_perm_geolocation', loc.state);
-    loc.onchange = () => localStorage.setItem('genesi_perm_geolocation', loc.state);
+    SafeStorage.setItem('genesi_perm_geolocation', loc.state);
+    loc.onchange = () => SafeStorage.setItem('genesi_perm_geolocation', loc.state);
   } catch (_) {}
   try {
     const cam = await navigator.permissions.query({ name: 'camera' });
-    localStorage.setItem('genesi_perm_camera', cam.state);
-    cam.onchange = () => localStorage.setItem('genesi_perm_camera', cam.state);
+    SafeStorage.setItem('genesi_perm_camera', cam.state);
+    cam.onchange = () => SafeStorage.setItem('genesi_perm_camera', cam.state);
   } catch (_) {}
 })();
 
@@ -5038,7 +5108,7 @@ if (manualSyncBtn) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('genesi_access_token') || ''}`,
+          'Authorization': `Bearer ${SafeStorage.getItem('genesi_access_token') || ''}`,
         },
         body: JSON.stringify(subscription.toJSON()),
       });
@@ -5060,7 +5130,7 @@ if (manualSyncBtn) {
     }
 
     // Aspetta che l'utente sia loggato (presenza del token)
-    const token = localStorage.getItem('genesi_access_token');
+    const token = SafeStorage.getItem('genesi_access_token');
     if (!token) {
       console.info('[PUSH] Utente non loggato — skip push init.');
       return;
