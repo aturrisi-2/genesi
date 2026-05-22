@@ -301,15 +301,38 @@ async def _save_city(token: str, city: str):
 
 async def send_message(wa_id: str, text: str):
     """Invia un messaggio testuale WhatsApp."""
-    if not text or not WA_ACCESS_TOKEN or not WA_PHONE_NUMBER_ID:
+    if not text:
         return
-    # WhatsApp ha limite 4096 caratteri per messaggio
+    
+    # Costruisci il JID di WhatsApp (Baileys)
+    jid = wa_id if "@" in wa_id else f"{wa_id}@s.whatsapp.net"
+
+    # Tentiamo di inviare tramite il bridge Baileys locale
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            payload = {
+                "groupId": jid,
+                "text": text
+            }
+            res = await client.post("http://localhost:3001/send", json=payload)
+            if res.status_code == 200:
+                logger.info("WA_SEND_BAILEYS_OK to=%s", jid)
+                return
+            else:
+                logger.warning("WA_SEND_BAILEYS_FAIL status=%d to=%s, falling back to Meta API", res.status_code, jid)
+    except Exception as e:
+        logger.warning("WA_SEND_BAILEYS_EXCEPTION err=%s to=%s, falling back to Meta API", e, jid)
+
+    # Fallback su Meta Business Cloud API originale
+    if not WA_ACCESS_TOKEN or not WA_PHONE_NUMBER_ID:
+        return
+    meta_to = wa_id.split("@")[0]
     chunks = [text[i:i+4000] for i in range(0, len(text), 4000)]
     async with httpx.AsyncClient(timeout=15) as client:
         for chunk in chunks:
             payload = {
                 "messaging_product": "whatsapp",
-                "to": wa_id,
+                "to": meta_to,
                 "type": "text",
                 "text": {"body": chunk, "preview_url": False},
             }
@@ -319,18 +342,33 @@ async def send_message(wa_id: str, text: str):
                     json=payload,
                     headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"},
                 )
+                logger.info("WA_SEND_META_OK to=%s", meta_to)
             except Exception as e:
-                logger.error("WA_SEND_ERROR wa_id=%s err=%s", wa_id, e)
+                logger.error("WA_SEND_META_ERROR to=%s err=%s", meta_to, e)
             if len(chunks) > 1:
                 await asyncio.sleep(0.3)
 
 
 async def send_typing(wa_id: str, msg_id: str = ""):
-    """Segna il messaggio come letto (doppie spunte blu) su WhatsApp.
+    """Segna il messaggio come letto su WhatsApp e attiva l'indicatore di scrittura via Baileys."""
+    jid = wa_id if "@" in wa_id else f"{wa_id}@s.whatsapp.net"
 
-    La WhatsApp Cloud API non supporta typing indicator nativi.
-    L'unico feedback visivo disponibile è il mark-as-read.
-    """
+    # Tentiamo di inviare lo stato di scrittura tramite il bridge Baileys
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            payload = {
+                "groupId": jid,
+                "presence": "composing"
+            }
+            res = await client.post("http://localhost:3001/send", json=payload)
+            if res.status_code == 200:
+                logger.info("WA_SEND_TYPING_BAILEYS_OK to=%s", jid)
+            else:
+                logger.warning("WA_SEND_TYPING_BAILEYS_FAIL status=%d to=%s", res.status_code, jid)
+    except Exception as e:
+        logger.debug("WA_SEND_TYPING_BAILEYS_EXCEPTION err=%s to=%s", e, jid)
+
+    # Segna il messaggio come letto tramite Meta API (come backup/originale)
     if not WA_ACCESS_TOKEN or not WA_PHONE_NUMBER_ID or not msg_id:
         return
     try:
@@ -351,11 +389,32 @@ async def send_typing(wa_id: str, msg_id: str = ""):
 
 async def send_image(wa_id: str, image_url: str, caption: str = "") -> bool:
     """Invia un'immagine da URL pubblico."""
+    jid = wa_id if "@" in wa_id else f"{wa_id}@s.whatsapp.net"
+
+    # Tentiamo di inviare tramite il bridge Baileys
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            payload = {
+                "groupId": jid,
+                "imageUrl": image_url,
+                "caption": caption
+            }
+            res = await client.post("http://localhost:3001/send", json=payload)
+            if res.status_code == 200:
+                logger.info("WA_SEND_IMAGE_BAILEYS_OK to=%s url=%s", jid, image_url)
+                return True
+            else:
+                logger.warning("WA_SEND_IMAGE_BAILEYS_FAIL status=%d to=%s, falling back to Meta API", res.status_code, jid)
+    except Exception as e:
+        logger.warning("WA_SEND_IMAGE_BAILEYS_EXCEPTION err=%s to=%s, falling back to Meta API", e, jid)
+
+    # Fallback su Meta Business Cloud API originale
     if not WA_ACCESS_TOKEN or not WA_PHONE_NUMBER_ID:
         return False
+    meta_to = wa_id.split("@")[0]
     payload = {
         "messaging_product": "whatsapp",
-        "to": wa_id,
+        "to": meta_to,
         "type": "image",
         "image": {"link": image_url},
     }
@@ -368,14 +427,49 @@ async def send_image(wa_id: str, image_url: str, caption: str = "") -> bool:
                 json=payload,
                 headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"},
             )
+            logger.info("WA_SEND_IMAGE_META_OK to=%s status=%d", meta_to, res.status_code)
             return res.status_code == 200
         except Exception as e:
-            logger.error("WA_SEND_IMAGE_ERROR wa_id=%s err=%s", wa_id, e)
+            logger.error("WA_SEND_IMAGE_META_ERROR to=%s err=%s", meta_to, e)
             return False
 
 
 async def download_media(media_id: str) -> tuple[bytes | None, str]:
-    """Scarica un media da WhatsApp tramite media_id. Ritorna (bytes, mime_type)."""
+    """Scarica un media da WhatsApp. Ritorna (bytes, mime_type).
+    Tenta prima di leggere la cache locale salvata da Baileys, poi fa il fallback su Meta.
+    """
+    media_path = os.path.join("/opt/genesi-baileys/media-cache", media_id)
+    mime_path = media_path + ".mime"
+    
+    # Controlla percorso alternativo relativo per testing locale su Windows
+    if not os.path.exists(media_path):
+        alt_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "baileys-service", "media-cache", media_id))
+        if os.path.exists(alt_path):
+            media_path = alt_path
+            mime_path = alt_path + ".mime"
+
+    if os.path.exists(media_path):
+        try:
+            with open(media_path, "rb") as f:
+                content = f.read()
+            mime = "application/octet-stream"
+            if os.path.exists(mime_path):
+                with open(mime_path, "r", encoding="utf-8") as f:
+                    mime = f.read().strip()
+                try:
+                    os.remove(mime_path)
+                except Exception:
+                    pass
+            try:
+                os.remove(media_path)
+            except Exception:
+                pass
+            logger.info("WA_DOWNLOAD_LOCAL_OK media_id=%s mime=%s", media_id, mime)
+            return content, mime
+        except Exception as e:
+            logger.error("WA_DOWNLOAD_LOCAL_ERROR media_id=%s err=%s", media_id, e)
+
+    # Fallback su Meta Business Cloud API originale
     if not WA_ACCESS_TOKEN:
         return None, ""
     async with httpx.AsyncClient(timeout=30) as client:
@@ -395,9 +489,10 @@ async def download_media(media_id: str) -> tuple[bytes | None, str]:
                 url,
                 headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"},
             )
+            logger.info("WA_DOWNLOAD_META_OK media_id=%s mime=%s", media_id, mime)
             return res2.content, mime
         except Exception as e:
-            logger.error("WA_DOWNLOAD_ERROR media_id=%s err=%s", media_id, e)
+            logger.error("WA_DOWNLOAD_META_ERROR media_id=%s err=%s", media_id, e)
             return None, ""
 
 

@@ -12,12 +12,14 @@ const {
     DisconnectReason,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
+    downloadMediaMessage,
 } = require("@whiskeysockets/baileys");
 const { Boom } = require("@hapi/boom");
 const axios = require("axios");
 const pino = require("pino");
 const qrcode = require("qrcode-terminal");
 const fs = require("fs");
+const path = require("path");
 require("dotenv").config();
 
 const GENESI_URL       = process.env.GENESI_URL || "http://localhost:8000";
@@ -189,8 +191,119 @@ async function startBaileys() {
                 if (msg.key.fromMe) continue;
 
                 const remoteJid = msg.key.remoteJid;
-                const groupId = msg.key.remoteJid;
-                if (!groupId?.endsWith("@g.us")) continue; // solo gruppi
+                if (!remoteJid) continue;
+
+                // 1. GESTIONE MESSAGGI DIRETTI (1:1)
+                if (!remoteJid.endsWith("@g.us")) {
+                    const mType = Object.keys(msg.message || {})[0];
+                    if (!mType) continue;
+
+                    let text = "";
+                    let caption = "";
+                    let filename = "";
+                    let mime = "";
+                    let finalMsgType = "text";
+
+                    if (mType === "conversation") {
+                        text = msg.message.conversation;
+                        finalMsgType = "text";
+                    } else if (mType === "extendedTextMessage") {
+                        text = msg.message.extendedTextMessage.text;
+                        finalMsgType = "text";
+                    } else if (mType === "imageMessage") {
+                        caption = msg.message.imageMessage.caption || "";
+                        mime = msg.message.imageMessage.mimetype || "image/jpeg";
+                        finalMsgType = "image";
+                    } else if (mType === "audioMessage") {
+                        mime = msg.message.audioMessage.mimetype || "audio/ogg";
+                        finalMsgType = "audio";
+                    } else if (mType === "documentMessage") {
+                        caption = msg.message.documentMessage.caption || "";
+                        filename = msg.message.documentMessage.fileName || "document";
+                        mime = msg.message.documentMessage.mimetype || "application/octet-stream";
+                        finalMsgType = "document";
+                    } else {
+                        continue;
+                    }
+
+                    // Se ha un media, scaricalo localmente
+                    if (["imageMessage", "audioMessage", "documentMessage"].includes(mType)) {
+                        try {
+                            const buffer = await downloadMediaMessage(
+                                msg,
+                                "buffer",
+                                {},
+                                { logger }
+                            );
+                            const mediaId = msg.key.id;
+                            const cacheDir = "/opt/genesi-baileys/media-cache";
+                            if (!fs.existsSync(cacheDir)) {
+                                fs.mkdirSync(cacheDir, { recursive: true });
+                            }
+                            const filePath = path.join(cacheDir, mediaId);
+                            fs.writeFileSync(filePath, buffer);
+                            fs.writeFileSync(filePath + ".mime", mime);
+                            console.log(`[Baileys] Media 1:1 salvato in cache: ${filePath} (${mime})`);
+                        } catch (err) {
+                            console.error("[Baileys] Errore salvataggio media 1:1:", err.message);
+                        }
+                    }
+
+                    // Prepara payload simulato Meta Cloud API
+                    const senderPhone = remoteJid.split("@")[0];
+                    const payload = {
+                        object: "whatsapp_business_account",
+                        entry: [{
+                            id: "baileys",
+                            changes: [{
+                                value: {
+                                    messaging_product: "whatsapp",
+                                    metadata: {
+                                        display_phone_number: "393313650671",
+                                        phone_number_id: "1094888310365993"
+                                    },
+                                    contacts: [{
+                                        profile: {
+                                            name: msg.pushName || "Utente"
+                                        },
+                                        wa_id: senderPhone
+                                    }],
+                                    messages: [{
+                                        from: senderPhone,
+                                        id: msg.key.id,
+                                        timestamp: Math.floor(Date.now() / 1000).toString(),
+                                        type: finalMsgType === "audio" ? "audio" : finalMsgType
+                                    }]
+                                },
+                                field: "messages"
+                            }]
+                        }]
+                    };
+
+                    const messageObj = payload.entry[0].changes[0].value.messages[0];
+                    if (finalMsgType === "text") {
+                        messageObj.text = { body: text.trim() };
+                    } else if (finalMsgType === "image") {
+                        messageObj.image = { id: msg.key.id, caption: caption.trim(), mime_type: mime };
+                    } else if (finalMsgType === "audio") {
+                        messageObj.audio = { id: msg.key.id, mime_type: mime };
+                        messageObj.voice = { id: msg.key.id, mime_type: mime };
+                    } else if (finalMsgType === "document") {
+                        messageObj.document = { id: msg.key.id, filename: filename, caption: caption.trim(), mime_type: mime };
+                    }
+
+                    // Invia a Python FastAPI locale
+                    try {
+                        console.log(`[Baileys] Inoltro messaggio 1:1 da ${senderPhone} a Python...`);
+                        await axios.post(`${GENESI_URL}/api/whatsapp/webhook`, payload, { timeout: 15000 });
+                    } catch (err) {
+                        console.error("[Baileys] Errore inoltro messaggio 1:1 a Python:", err.message);
+                    }
+                    continue;
+                }
+
+                // 2. GESTIONE MESSAGGI DI GRUPPO
+                const groupId = remoteJid;
 
                 // Filtro per gruppi specifici (se configurato)
                 if (ALLOWED_GROUPS.length && !ALLOWED_GROUPS.includes(groupId)) continue;
@@ -281,18 +394,30 @@ function startHttpServer() {
         req.on("data", d => body += d);
         req.on("end", async () => {
             try {
-                const { groupId, text, secret } = JSON.parse(body);
+                const { groupId, text, imageUrl, caption, presence, secret } = JSON.parse(body);
                 if (SEND_SECRET && secret !== SEND_SECRET) {
                     res.writeHead(403); res.end("forbidden"); return;
                 }
-                if (!groupId || !text) {
-                    res.writeHead(400); res.end("missing groupId or text"); return;
+                if (!groupId) {
+                    res.writeHead(400); res.end("missing groupId"); return;
                 }
                 if (!_activeSock) {
                     res.writeHead(503); res.end("socket not ready"); return;
                 }
-                await _activeSock.sendMessage(groupId, { text });
-                console.log(`[Baileys/HTTP] Sent to ${groupId}: ${text.slice(0, 60)}`);
+
+                if (presence) {
+                    await _activeSock.sendPresenceUpdate(presence, groupId);
+                    console.log(`[Baileys/HTTP] Presence updated for ${groupId}: ${presence}`);
+                } else if (imageUrl) {
+                    await _activeSock.sendMessage(groupId, { image: { url: imageUrl }, caption: caption || text || "" });
+                    console.log(`[Baileys/HTTP] Sent image to ${groupId}: ${imageUrl}`);
+                } else if (text) {
+                    await _activeSock.sendMessage(groupId, { text });
+                    console.log(`[Baileys/HTTP] Sent text to ${groupId}: ${text.slice(0, 60)}`);
+                } else {
+                    res.writeHead(400); res.end("missing text, imageUrl, or presence"); return;
+                }
+
                 res.writeHead(200, {"Content-Type": "application/json"});
                 res.end(JSON.stringify({ ok: true }));
             } catch (e) {
