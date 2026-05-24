@@ -472,6 +472,9 @@ def _disambiguate(city: str, results: list, message: str) -> dict:
     if len(results) == 1:
         return _format_result(results[0])
 
+    # Check if all results are in the same country → just pick first
+    countries = set(r.get("country", "") for r in results)
+
     # Check if there's an IT result
     it_results = [r for r in results if r.get("country") == "IT"]
     non_it_results = [r for r in results if r.get("country") != "IT"]
@@ -492,9 +495,6 @@ def _disambiguate(city: str, results: list, message: str) -> dict:
         if city_lower in [c.lower() for c in ITALIAN_CITIES]:
             log("LOCATION_IT_PRIORITY", city=city, reason="known_italian_city")
             return _format_result(it_results[0])
-
-    # Check if all results are in the same country → just pick first
-    countries = set(r.get("country", "") for r in results)
     if len(countries) == 1:
         return _format_result(results[0])
 
