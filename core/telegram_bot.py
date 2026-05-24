@@ -113,11 +113,12 @@ RISPONDI "SI" SOLO se il messaggio attuale rientra in UNO di questi casi:
 4. COMPLEANNI E FESTIVITÀ: qualcuno fa gli auguri di compleanno o festeggia una festività nel gruppo (es: "Buona Pasqua!", "Auguri Rita!", "Oggi è il compleanno di Zoe!"), oppure il messaggio descrive una festività del giorno attuale, e Genesi vuole unirsi in modo caloroso e naturale agli auguri.
 5. NOTIZIA SIGNIFICATIVA (buona o cattiva): un successo eccezionale, un traguardo importante, un lutto, una malattia seria, o un problema grave di un familiare — qualcosa che merita assolutamente un sincero riconoscimento o vicinanza umana. NON aggiornamenti quotidiani e banali.
 6. SALUTO DI APERTURA: il primo saluto del giorno nel gruppo (es. "Buongiorno a tutti!"). Nota: se nel contesto è indicato che Genesi ha già salutato oggi per questa categoria di saluto, rispondi "NO".
+7. DOMANDA DI FOLLOW-UP O CHIARIMENTO: qualcuno pone una domanda di approfondimento, continuazione o chiarimento legata a un tema o a una risposta data da Genesi di recente (es: dopo che Genesi ha detto il tempo di Imola, qualcuno chiede "e a Bracciano?" o "e da Mariella e Katia?"). In questi casi di conversazione attiva nel gruppo, Genesi deve rispondere per mantenere la fluidità del dialogo.
 
 RISPONDI "NO" in tutti gli altri casi, incluso:
 - Aggiornamenti quotidiani di routine (dove si trova qualcuno, cosa sta facendo, come si sente per piccoli malesseri transitori come un po' di stanchezza o raffreddore).
 - Scambi di battute, chiacchiere leggere o discussioni personali/relazionali tra i membri della famiglia.
-- Domande rivolte specificamente ed esclusivamente a un altro membro della famiglia (es: "Papà, mi porti le chiavi?").
+- Domande rivolte specificamente ed esclusivamente a un altro membro umano della famiglia (es: "Papà, mi porti le chiavi?", "Mamma, a che ora mangiamo?"). Se invece la domanda riguarda informazioni che l'AI possiede (meteo, news, informazioni sui familiari) e non è rivolta in modo esclusivo a un umano specifico, rispondi "SI".
 - Saluti generici o successivi se Genesi ha già salutato per quella categoria oggi.
 - Qualsiasi scambio o discussione d'opinione in cui la presenza di un'AI risulterebbe fuori luogo, innaturale o fastidiosa.
 
@@ -160,10 +161,20 @@ async def _group_should_intervene(
     if len(combined) < 8 and "?" not in combined:
         return False
 
-    # Fast-path: continuazione di conversazione attiva con questo utente (< 3 min)
+    # Fast-path: continuazione di conversazione attiva nel gruppo (< 5 min)
     state = _GROUP_CONV_STATE.get(chat_id, {})
-    if state.get("from_id") == from_id and time.time() - state.get("ts", 0) < 180:
-        return True
+    last_reply_age = time.time() - state.get("ts", 0)
+    if last_reply_age < 300:
+        # Se lo stesso utente continua a scrivere
+        if state.get("from_id") == from_id:
+            return True
+        # Se un altro utente fa una domanda o cita Genesi
+        if "?" in combined:
+            return True
+        # Se è una domanda implicita di follow-up (es. inizia con "e ", "ma ", "invece ")
+        combined_clean = combined.lower().strip()
+        if combined_clean.startswith(("e ", "ma ", "invece ")):
+            return True
 
     # LLM decision
     try:
