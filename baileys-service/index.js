@@ -249,8 +249,9 @@ async function startBaileys() {
                         }
                     }
 
-                    // Prepara payload simulato Meta Cloud API
-                    const senderPhone = remoteJid.split("@")[0];
+                    // Prepara payload simulato Meta Cloud API (preservando il JID completo con dominio)
+                    const senderPhone = remoteJid;
+
                     const payload = {
                         object: "whatsapp_business_account",
                         entry: [{
