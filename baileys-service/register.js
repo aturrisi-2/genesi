@@ -53,7 +53,7 @@ async function main() {
             keys: makeCacheableSignalKeyStore(state.keys, logger),
         },
         printQRInTerminal: false,
-        browser: ["Genesi", "Chrome", "1.0.0"],
+        browser: ["Ubuntu", "Chrome", "20.0.04"],
         getMessage: async () => undefined,
     });
 
