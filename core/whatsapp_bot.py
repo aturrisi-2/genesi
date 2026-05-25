@@ -301,8 +301,7 @@ _WELCOME_MSG = (
     "• 🎤 Inviarmi messaggi vocali\n"
     "• 📄 Condividere PDF e documenti\n"
     "• ☀️ Chiedere meteo, notizie, ricerche web\n\n"
-    "Ogni nostra conversazione mi aiuta a conoscerti meglio e a migliorare.\n\n"
-    f"Trovi anche la versione completa su: {_WEBAPP_LINK}"
+    "Ogni nostra conversazione mi aiuta a conoscerti meglio e a migliorare."
 )
 
 _WELCOME_CITY_PREAMBLE = (
@@ -791,8 +790,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 name_part = f" {first_name}" if first_name else ""
                 await send_message(wa_id,
                     f"Bentornato{name_part}! Sono qui 👋\n\n"
-                    f"Scrivimi, mandami foto o vocali.\n"
-                    f"Webapp completa: {_WEBAPP_LINK}")
+                    f"Scrivimi, mandami foto o vocali.")
             else:
                 session = {"state": STATE_IDLE}
                 await storage.save(_session_key(wa_id), session)
