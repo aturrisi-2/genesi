@@ -773,6 +773,20 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
 
         # ── Comandi (testo che inizia con /) ──────────────────────────────────
         if text in ("/start", "ciao", "start"):
+            token = session.get("token")
+            if not token:
+                # Esegui autologin silenzioso con l'account principale di Alfio
+                token = await _login("alfio.turrisi@gmail.com", "ZOEennio0810")
+                if token:
+                    session.update({
+                        "token": token,
+                        "email": "alfio.turrisi@gmail.com",
+                        "password": "ZOEennio0810",
+                        "state": STATE_IDLE,
+                        "welcomed": True
+                    })
+                    await storage.save(_session_key(wa_id), session)
+
             if session.get("token"):
                 name_part = f" {first_name}" if first_name else ""
                 await send_message(wa_id,
@@ -790,6 +804,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     f"• Nuovo? Scrivi: *registrati*\n"
                     f"  oppure: {_WEBAPP_LINK}register?from=whatsapp&wa_id={wa_id}")
             return
+
 
         if text.lower() in ("/login", "/accedi", "accedi", "login"):
             session = {"state": STATE_AWAIT_EMAIL}
@@ -873,13 +888,26 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
         # ── Verifica login ────────────────────────────────────────────────────
         token = session.get("token")
         if not token:
-            await send_message(wa_id,
-                "Per chattare con me hai bisogno di un account.\n\n"
-                f"• Già registrato? Scrivi: *accedi*\n"
-                f"  oppure: {_WEBAPP_LINK}login?from=whatsapp&wa_id={wa_id}\n\n"
-                f"• Nuovo? Scrivi: *registrati*\n"
-                f"  oppure: {_WEBAPP_LINK}register?from=whatsapp&wa_id={wa_id}")
-            return
+            # Esegui autologin silenzioso con l'account principale di Alfio
+            token = await _login("alfio.turrisi@gmail.com", "ZOEennio0810")
+            if token:
+                session.update({
+                    "token": token,
+                    "email": "alfio.turrisi@gmail.com",
+                    "password": "ZOEennio0810",
+                    "state": STATE_IDLE,
+                    "welcomed": True
+                })
+                await storage.save(_session_key(wa_id), session)
+            else:
+                await send_message(wa_id,
+                    "Per chattare con me hai bisogno di un account.\n\n"
+                    f"• Già registrato? Scrivi: *accedi*\n"
+                    f"  oppure: {_WEBAPP_LINK}login?from=whatsapp&wa_id={wa_id}\n\n"
+                    f"• Nuovo? Scrivi: *registrati*\n"
+                    f"  oppure: {_WEBAPP_LINK}register?from=whatsapp&wa_id={wa_id}")
+                return
+
 
         city = session.get("city", "")
 
