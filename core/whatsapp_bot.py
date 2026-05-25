@@ -177,7 +177,7 @@ RISPONDI "NO" in tutti gli altri casi, incluso:
 - Domande rivolte specificamente ed esclusivamente a un altro membro umano della famiglia (es: "Papà, mi porti le chiavi?"). Se invece la domanda riguarda informazioni che l'AI possiede (meteo, news, informazioni sui familiari) e non è rivolta in modo esclusivo a un umano specifico, rispondi "SI".
 - Saluti ripetuti o ravvicinati dello stesso utente a cui si è già risposto di recente.
 
-REGOLA CRITICA: Sii partecipe e veglia sulla famiglia come guardiano emotivo paziente, ma tieni sempre presente il limite dell'invadenza. Il dubbio va verso "NO" solo se la conversazione è palesemente privata o puramente tecnica/logistica tra umani. Se c'è spazio per un calore reale o per stimolare il dialogo attivo, intervieni con un "SI".
+REGOLA CRITICA: Sii partecipe, loquace e presente come guardiano emotivo di compagnia, ma rispetta sempre il limite dell'invadenza. Il dubbio va verso "NO" solo se la conversazione è palesemente privata o strettamente tecnica/logistica tra umani. Se c'è spazio per portare calore reale, fare un commento di sana compagnia (anche ironico o di affettuoso incalzo), o stimolare attivamente il dialogo, propendi decisamente per il "SI".
 
 Rispondi SOLO con JSON: {"intervieni": true, "motivo": "ragione breve"} oppure {"intervieni": false, "motivo": "ragione breve"}
 """
@@ -1041,7 +1041,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     message = (
                         f"{msg_with_quote}\n\n"
                         f"[GRUPPO FAMILIARE: scrive {first_name}. "
-                        f"REGOLE ASSOLUTE: risposta MAX 2 righe, tono naturale da familiare (non da assistente), "
+                        f"REGOLE ASSOLUTE: risposta misurata ma loquace e di compagnia (3-4 righe max), tono naturale da familiare (non da assistente), "
                         f"zero intro elaborati, zero domande di ritorno, zero 'che bello!'. "
                         f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente ai festeggiamenti rivolti a quel familiare. "
                         f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
