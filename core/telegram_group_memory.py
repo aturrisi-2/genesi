@@ -276,6 +276,18 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
 
     lines = []
 
+    # 📅 Contesto Temporale, Festività e Compleanni di Oggi
+    try:
+        from core.birthday_service import get_today_events_context
+        event_ctx = await get_today_events_context(chat_id)
+        if event_ctx:
+            lines.append("[📅 CONTESTO TEMPORALE, FESTIVITÀ E COMPLEANNI DI OGGI — argomenta coerentemente se rilevante:]")
+            for line in event_ctx.split("\n"):
+                lines.append(f"  {line}")
+            lines.append("")
+    except Exception as e:
+        logger.warning("Error injecting today events context: %s", e)
+
     # ⚠️ Correzioni esplicite — INIETTATE PRIME, massima priorità
     corrections = await get_group_corrections(chat_id, max_age_seconds=604800)  # 7 giorni
     if corrections:

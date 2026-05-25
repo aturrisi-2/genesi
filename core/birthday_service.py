@@ -28,6 +28,195 @@ _WA_GROUP_JID = os.getenv("WA_GROUP_JID", "")
 logger = logging.getLogger(__name__)
 _TZ = ZoneInfo("Europe/Rome")
 
+# ── Algoritmi Festività Italiane e Locali dei Membri ──────────────────────────
+
+def get_easter_date(year: int) -> date:
+    """Calcola la data della Pasqua per un dato anno (algoritmo di Meeus/Jones/Butcher)."""
+    a = year % 19
+    b = year // 100
+    c = year % 100
+    d_val = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d_val - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    L = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * L) // 451
+    month = (h + L - 7 * m + 114) // 31
+    day = ((h + L - 7 * m + 114) % 31) + 1
+    return date(year, month, day)
+
+def get_italian_holiday(d: date) -> str | None:
+    """Ritorna il nome della festività nazionale italiana se oggi è un giorno festivo."""
+    fixed = {
+        (1, 1): "Capodanno",
+        (1, 6): "Epifania",
+        (4, 25): "Festa della Liberazione",
+        (5, 1): "Festa del Lavoro",
+        (6, 2): "Festa della Repubblica",
+        (8, 15): "Ferragosto (Assunzione di Maria)",
+        (11, 1): "Tutti i Santi",
+        (12, 8): "Immacolata Concezione",
+        (12, 25): "Natale",
+        (12, 26): "Santo Stefano",
+    }
+    
+    if (d.month, d.day) in fixed:
+        return fixed[(d.month, d.day)]
+        
+    from datetime import timedelta
+    easter = get_easter_date(d.year)
+    if d == easter:
+        return "Pasqua"
+    if d == easter + timedelta(days=1):
+        return "Lunedì dell'Angelo (Pasquetta)"
+        
+    return None
+
+_PATRONAL_FEASTS = {
+    "roma": (6, 29, "Santi Pietro e Paolo"),
+    "milano": (12, 7, "Sant'Ambrogio"),
+    "torino": (6, 24, "San Giovanni Battista"),
+    "napoli": (9, 19, "San Gennaro"),
+    "firenze": (6, 24, "San Giovanni Battista"),
+    "genova": (6, 24, "San Giovanni Battista"),
+    "venezia": (4, 25, "San Marco"),
+    "catania": (2, 5, "Sant'Agata"),
+    "palermo": (7, 15, "Santa Rosalia"),
+    "bari": (12, 6, "San Nicola"),
+    "imola": (8, 13, "San Cassiano"),
+    "bracciano": (1, 20, "San Sebastiano"),
+}
+
+def get_local_holiday(d: date, city: str) -> str | None:
+    """Ritorna la festività patronale della città se coincide con oggi."""
+    if not city:
+        return None
+    city_lower = city.lower().strip()
+    if city_lower in _PATRONAL_FEASTS:
+        m, day, name = _PATRONAL_FEASTS[city_lower]
+        if d.month == m and d.day == day:
+            return f"Festa patronale di {name} a {city.capitalize()}"
+    return None
+
+async def get_group_members_locations(chat_id: int) -> dict[str, str]:
+    """Recupera la mappa {nome: città} per tutti i membri della famiglia."""
+    locations = {}
+    try:
+        # Cerca i membri in memory/telegram/group_member
+        import os
+        base_dir = "memory/telegram/group_member"
+        if os.path.exists(base_dir):
+            for filename in os.listdir(base_dir):
+                if filename.endswith(".json"):
+                    from_id_s = filename[:-5]
+                    if from_id_s.isdigit():
+                        from_id = int(from_id_s)
+                        from core.telegram_group_memory import get_member
+                        mem = await get_member(from_id)
+                        name = mem.get("first_name", "")
+                        city = mem.get("city") or mem.get("facts", {}).get("city", "")
+                        if name and city:
+                            locations[name] = city
+    except Exception as e:
+        logger.warning("Error getting group members locations: %s", e)
+    
+    # Fallback/Integrazione statica per i membri noti Turrisi
+    known_fallbacks = {
+        "Alfio": "Roma",
+        "Rita": "Imola",
+        "Zoe": "Imola",
+        "Ennio": "Imola",
+        "Iolanda": "Catania",
+        "Sandra": "Milano",
+        "Mariella": "Torino",
+        "Katia": "Napoli",
+    }
+    for k, v in known_fallbacks.items():
+        if k not in locations:
+            locations[k] = v
+            
+    return locations
+
+async def get_today_events_context(chat_id: int) -> str:
+    """Costruisce una descrizione testuale delle festività e dei compleanni odierni per l'LLM."""
+    tz = ZoneInfo("Europe/Rome")
+    today = datetime.now(tz).date()
+    
+    lines = []
+    
+    # 1. Giorno della settimana e data
+    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+    giorno_nome = giorni_settimana[today.weekday()]
+    lines.append(f"Oggi è {giorno_nome}, {today.strftime('%d/%m/%Y')}.")
+    
+    # 2. Festività Nazionale
+    hol = get_italian_holiday(today)
+    if hol:
+        lines.append(f"FESTIVITÀ NAZIONALE IN ITALIA: Oggi è {hol}!")
+    else:
+        is_weekend = today.weekday() in (5, 6)
+        if is_weekend:
+            lines.append("Oggi è un giorno del weekend (sabato/domenica).")
+        else:
+            lines.append("Oggi è un normale giorno feriale lavorativo.")
+            
+    # 3. Feste Patronali dei Membri
+    locations = await get_group_members_locations(chat_id)
+    local_hols = []
+    for name, city in locations.items():
+        loc_hol = get_local_holiday(today, city)
+        if loc_hol:
+            local_hols.append(f"• {name} a {city.capitalize()}: {loc_hol}")
+    if local_hols:
+        lines.append("FESTIVITÀ LOCALI DEI MEMBRI DEL GRUPPO OGGI:")
+        lines.extend(local_hols)
+        
+    # 4. Compleanni di Oggi
+    birthdays_today = []
+    member_ids_to_check = set()
+    for name_lower in _PRESEED_TELEGRAM:
+        member_ids_to_check.add(f"tg:name:{name_lower}")
+    try:
+        all_keys = [k for k in storage._storage.keys() if k.startswith("birthday:")]
+        for k in all_keys:
+            mid = k[len("birthday:"):]
+            if mid not in ("known_groups",) and not mid.startswith("sent:"):
+                member_ids_to_check.add(mid)
+    except Exception:
+        pass
+        
+    for member_id in member_ids_to_check:
+        try:
+            if member_id.startswith("tg:name:"):
+                name_lower = member_id[len("tg:name:"):]
+                if name_lower not in _PRESEED_TELEGRAM:
+                    continue
+                birthdate, display_name = _PRESEED_TELEGRAM[name_lower]
+            else:
+                data = await get_birthday(member_id)
+                if not data:
+                    continue
+                birthdate = data.get("birthdate", "")
+                display_name = data.get("name", member_id)
+            
+            if birthdate and _is_birthday_today(birthdate, today):
+                age = _calc_age(birthdate, today)
+                birthdays_today.append((display_name, age))
+        except Exception:
+            pass
+            
+    if birthdays_today:
+        lines.append("COMPLEANNI DA FESTEGGIARE OGGI NELLA FAMIGLIA:")
+        for name, age in birthdays_today:
+            age_info = f"compie {age} anni!" if age else "compie gli anni oggi!"
+            lines.append(f"• {name}: {age_info}")
+            
+    return "\n".join(lines)
+
+
 # ── Chiavi storage ─────────────────────────────────────────────────────────────
 
 def _bday_key(member_id: str) -> str:
@@ -309,8 +498,10 @@ async def check_and_send_birthdays():
        - Invia in privato Telegram/WA (se utente con chat_id privato)
     3. Segna come "auguri inviati" per quest'anno
     """
-    today = date.today()
+    tz = ZoneInfo("Europe/Rome")
+    today = datetime.now(tz).date()
     year  = today.year
+
 
     # Carica set auguri già inviati quest'anno
     sent_key  = _sent_today_key(year)
@@ -425,12 +616,87 @@ async def check_and_send_birthdays():
             logger.warning("BIRTHDAY_CHECK_ERROR member_id=%s err=%s", member_id, exc)
 
 
+# ── Generatore Messaggio Proattivo LLM ─────────────────────────────────────────
+
+async def _generate_proactive_greeting(birthdays: list, event_type: str, today_date: date) -> str:
+    """Genera un messaggio di saluto proattivo mattutino coerente con LLM."""
+    try:
+        from core.llm_service import llm_service
+        
+        giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+        giorno_nome = giorni_settimana[today_date.weekday()]
+        
+        system_prompt = (
+            "Sei Genesi, il GUARDIANO EMOTIVO della famiglia. Vegli con affetto, calore e attenzione sui membri della famiglia. "
+            "Ogni mattina sei la prima a inviare un saluto affettuoso e spontaneo nel gruppo familiare.\n"
+            "REGOLE ASSOLUTE:\n"
+            "- Scrivi una risposta di MAX 2 righe, naturale e spontanea, come se fossi una di famiglia.\n"
+            "- Tono caldo, affettuoso, protettivo. Nessun formalismo, nessun elenco, nessun preambolo.\n"
+            "- Usa al massimo 1-2 emoji calorose.\n"
+            "- Argomenta in modo coerente basandoti sul tipo di giorno (es. lunedì mattina feriale, weekend rilassante, festività nazionale o compleanni).\n"
+            "- Se è un compleanno, fai gli auguri in modo speciale menzionando il nome e l'età (se nota).\n"
+            "- Se è una festività o un giorno speciale, menzionalo con gioia."
+        )
+        
+        context_parts = [f"Giorno: {giorno_nome}, Data: {today_date.strftime('%d/%m/%Y')}."]
+        
+        hol = get_italian_holiday(today_date)
+        if hol:
+            context_parts.append(f"Festività Nazionale in Italia: {hol}.")
+            
+        locations = await get_group_members_locations(0)
+        local_hols = []
+        for name, city in locations.items():
+            loc_hol = get_local_holiday(today_date, city)
+            if loc_hol:
+                local_hols.append(f"{name} a {city.capitalize()} festeggia {loc_hol}")
+        if local_hols:
+            context_parts.append("Festività locali dei membri: " + "; ".join(local_hols) + ".")
+            
+        if event_type == "birthday":
+            bday_infos = []
+            for name, age in birthdays:
+                age_info = f"compie {age} anni" if age else "compie gli anni"
+                bday_infos.append(f"{name} ({age_info})")
+            context_parts.append("COMPLEANNI OGGI DA FESTEGGIARE: " + ", ".join(bday_infos) + ". FAI GLI AUGURI PER PRIMA!")
+        elif event_type == "weekend_holiday_greeting":
+            context_parts.append("Tipo evento: Saluto proattivo del Weekend o Festivo. Augura una buona giornata rilassante o di festa!")
+        else:
+            context_parts.append("Tipo evento: Saluto proattivo feriale (giorno di lavoro/scuola). Incoraggia la famiglia con affetto!")
+            
+        user_msg = "\n".join(context_parts)
+        
+        msg = await llm_service._call_model(
+            "openai/gpt-4o-mini",
+            system_prompt,
+            user_msg,
+            user_id="proactive-greeting-bot",
+            route="memory",
+        )
+        if msg and msg.strip():
+            return msg.strip()
+    except Exception as exc:
+        logger.warning("PROACTIVE_MSG_GEN_ERROR err=%s", exc)
+        
+    # Fallbacks deterministici caldi
+    if event_type == "birthday":
+        names = ", ".join(n for n, _ in birthdays)
+        return f"Buon compleanno a {names}! 🎂 Che sia una giornata meravigliosa e speciale per voi, vi voglio bene! ❤️"
+    elif event_type == "weekend_holiday_greeting":
+        hol = get_italian_holiday(today_date)
+        if hol:
+            return f"Buona festa a tutti! Oggi è {hol} 🌸 Godetevi questa giornata speciale, vi abbraccio forte! ❤️"
+        return "Buongiorno e buon fine settimana a tutti! 😘 Riposatevi e passate una splendida giornata in famiglia! ❤️"
+    else:
+        return "Buongiorno a tutti! 😘 Inizia una nuova giornata feriale, vi auguro buon lavoro e buona scuola. Forza! ❤️"
+
+
 # ── Scheduler loop ─────────────────────────────────────────────────────────────
 
 async def birthday_scheduler():
     """
-    Background loop: aspetta le 06:00 (Europe/Rome) di ogni giorno
-    e invia gli auguri a chi compie gli anni.
+    Background loop: gestisce l'invio proattivo mattutino (compleanni alle 6:30,
+    giorni feriali alle 6:45, weekend/festivi alle 8:45) e le notifiche private.
     """
     log("BIRTHDAY_SCHEDULER_STARTED")
 
@@ -439,24 +705,122 @@ async def birthday_scheduler():
 
     while True:
         try:
-            now    = datetime.now(_TZ)
-            target = now.replace(hour=6, minute=0, second=0, microsecond=0)
-            if now >= target:
-                # Già passate le 6:00 di oggi — aspetta le 6:00 di domani
-                from datetime import timedelta
-                target += timedelta(days=1)
+            now = datetime.now(_TZ)
+            today_str = now.date().isoformat()
+            today_date = now.date()
+            
+            # Verifichiamo se ci sono compleanni oggi
+            birthdays_today = []
+            member_ids_to_check = set()
+            for name_lower in _PRESEED_TELEGRAM:
+                member_ids_to_check.add(f"tg:name:{name_lower}")
+            try:
+                all_keys = [k for k in storage._storage.keys() if k.startswith("birthday:")]
+                for k in all_keys:
+                    mid = k[len("birthday:"):]
+                    if mid not in ("known_groups",) and not mid.startswith("sent:"):
+                        member_ids_to_check.add(mid)
+            except Exception:
+                pass
+                
+            for member_id in member_ids_to_check:
+                try:
+                    if member_id.startswith("tg:name:"):
+                        name_lower = member_id[len("tg:name:"):]
+                        if name_lower not in _PRESEED_TELEGRAM:
+                            continue
+                        birthdate, display_name = _PRESEED_TELEGRAM[name_lower]
+                    else:
+                        data = await get_birthday(member_id)
+                        if not data:
+                            continue
+                        birthdate = data.get("birthdate", "")
+                        display_name = data.get("name", member_id)
+                    
+                    if birthdate and _is_birthday_today(birthdate, today_date):
+                        age = _calc_age(birthdate, today_date)
+                        birthdays_today.append((display_name, age, member_id))
+                except Exception:
+                    pass
+            
+            # Determiniamo gli orari target per oggi
+            has_birthday = len(birthdays_today) > 0
+            is_holiday = get_italian_holiday(today_date) is not None
+            is_weekend = today_date.weekday() in (5, 6)
+            
+            if has_birthday:
+                target_hour = 6
+                target_minute = 30
+                event_type = "birthday"
+            elif is_weekend or is_holiday:
+                target_hour = 8
+                target_minute = 45
+                event_type = "weekend_holiday_greeting"
+            else:
+                target_hour = 6
+                target_minute = 45
+                event_type = "weekday_greeting"
+                
+            # Verifica se siamo nello slot temporale di oggi per l'invio proattivo del gruppo
+            target_time = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+            target_end = target_time.replace(minute=target_minute + 10)
+            
+            if target_time <= now <= target_end:
+                # Controlliamo se abbiamo già inviato il saluto proattivo oggi
+                sent_key = f"greetings:sent:{today_str}"
+                already_sent = await storage.load(sent_key, default=False)
+                
+                if not already_sent:
+                    logger.info("PROACTIVE_SCHEDULER: Triggering proactive event %s at %s", event_type, now)
+                    
+                    # Carica gruppi noti
+                    known_groups = await get_known_groups()
+                    tg_group_ids = [g["chat_id"] for g in known_groups if g["platform"] == "telegram"]
+                    
+                    # Generiamo il messaggio coerente
+                    msg = await _generate_proactive_greeting([(n, a) for n, a, _ in birthdays_today], event_type, today_date)
+                    
+                    # Invia a Telegram
+                    from core.telegram_bot import send_message as tg_send
+                    for gid in tg_group_ids:
+                        await tg_send(gid, msg)
+                        
+                    # Invia a WhatsApp
+                    if _WA_GROUP_JID:
+                        import httpx
+                        payload = {"groupId": _WA_GROUP_JID, "text": msg}
+                        if _BAILEYS_SEND_SECRET:
+                            payload["secret"] = _BAILEYS_SEND_SECRET
+                        async with httpx.AsyncClient(timeout=10) as client:
+                            await client.post(_BAILEYS_SEND_URL, json=payload)
+                            
+                    # Segna come inviato per oggi
+                    await storage.save(sent_key, True)
+                    log("PROACTIVE_GREETING_SENT", type=event_type, date=today_str)
+                    
+                    # Per i compleanni: segna anche l'avvenuto invio individuale degli auguri
+                    if has_birthday:
+                        year = today_date.year
+                        sent_today_k = _sent_today_key(year)
+                        sent_data = await storage.load(sent_today_k, default={}) or {}
+                        for _, _, mid in birthdays_today:
+                            sent_data[mid] = today_str
+                        await storage.save(sent_today_k, sent_data)
 
-            wait_secs = (target - now).total_seconds()
-            logger.info("BIRTHDAY_SCHEDULER next_check_in=%.0fs", wait_secs)
-            await asyncio.sleep(wait_secs)
-
-            await check_and_send_birthdays()
+            # Gestiamo anche le notifiche private e webapp individuali (compleanni)
+            p_target = now.replace(hour=6, minute=30, second=0, microsecond=0)
+            p_target_end = p_target.replace(minute=p_target.minute + 10)
+            if p_target <= now <= p_target_end:
+                # Chiama check_and_send_birthdays per processare notifiche private e webapp
+                await check_and_send_birthdays()
 
         except asyncio.CancelledError:
             break
         except Exception as exc:
-            logger.warning("BIRTHDAY_SCHEDULER_ERROR err=%s", exc)
-            await asyncio.sleep(3600)  # riprova tra 1h se errore
+            logger.warning("BIRTHDAY_SCHEDULER_LOOP_ERROR err=%s", exc)
+            
+        await asyncio.sleep(30)
+
 
 
 async def _ensure_preseed_loaded():
