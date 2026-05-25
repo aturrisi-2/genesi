@@ -76,6 +76,33 @@ def _get_greeting_category(text_lower: str) -> str:
     return ""
 
 
+def _is_pure_greeting(text_lower: str) -> bool:
+    category = _get_greeting_category(text_lower)
+    if not category:
+        return False
+    if "?" in text_lower:
+        return False
+    cleaned = re.sub(r'[^a-záéíóúàèìòù\s]', ' ', text_lower)
+    words = [w for w in cleaned.split() if w]
+    
+    greeting_vocab = {
+        "buongiorno", "buon", "giorno", "pomeriggio", "domenica", "weekend", "week", "end", "giornata", "pranzo",
+        "buonasera", "buona", "sera", "buonanotte", "notte", "cena", "serata", "buonaserata",
+        "ciao", "salve", "hey", "hei", "ehilà", "hello", "hi", "tutti", "a", "da", "di", "per", "con", "e", "o",
+        "famiglia", "gruppo", "belli", "bella", "cara", "caro", "nonna", "mamma", "papà", "zio", "zia", "ragazzi",
+        "gente", "mondo", "ciurma", "soci", "società", "tutte", "tutti", "tutto", "auguri", "augur", "feste",
+        "felice", "compleanno", "onomastico", "pasqua", "natale", "anno", "nuovo",
+        "del", "al", "ai", "degli", "delle", "della", "dello", "nei", "nella", "nello", "negli", "nelle",
+        "sul", "sulla", "sullo", "sugli", "sulle", "col", "coi", "dal", "dalla", "dallo", "dagli", "dalle",
+        "un", "una", "uno", "il", "la", "i", "gli", "le", "te", "ti", "tu"
+    }
+    
+    non_greeting_words = [w for w in words if w not in greeting_vocab]
+    significant_words = [w for w in non_greeting_words if len(w) > 2]
+    return len(significant_words) == 0
+
+
+
 async def _check_and_register_greeting(chat_id: int, user_id: str, category: str) -> bool:
     if not category or not user_id:
         return False
@@ -177,8 +204,13 @@ async def _group_should_intervene(
         should_greet = await _check_and_register_greeting(chat_id, str(from_id), category)
         if should_greet:
             return True
-        # Se should_greet è False, NON usciamo con False direttamente!
-        # Facciamo fall-through per consentire ad altre regole (es. domande o follow-up) di intervenire.
+        # Se should_greet è False e il saluto è "puro" (senza domande o altro testo utile),
+        # ignoralo subito senza fare fall-through verso l'LLM, per evitare di ripetere i saluti!
+        if _is_pure_greeting(combined_lower):
+            return False
+        # Se non è un saluto puro (es. contiene una domanda o altre info rilevanti),
+        # facciamo fall-through per far sì che possa comunque rispondere ad altro.
+
 
     # Fast-path: messaggio troppo corto e senza punto interrogativo → probabile scambio tra membri
     if len(combined) < 8 and "?" not in combined:
@@ -990,7 +1022,7 @@ async def handle_update(update: dict):
                 f"[GRUPPO FAMILIARE: scrive {first_name}. "
                 f"REGOLE ASSOLUTE: risposta MAX 2 righe, tono naturale da familiare (non da assistente), "
                 f"zero intro elaborati, zero domande di ritorno, zero 'che bello!'. "
-                f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri e non dire 'grazie per gli auguri' se festeggiano altri (es. 'Auguri mamma!'). Invece unisciti con calore agli auguri per lei (es. 'Tanti auguri alla tua mamma!'). "
+                f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente ai festeggiamenti rivolti a quel familiare. "
                 f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
                 f"a meno che {first_name} non li citi in questo messaggio. "
                 f"Rispondi SOLO a quello che viene detto adesso.]\n"
