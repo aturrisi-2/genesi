@@ -123,6 +123,13 @@ async def _check_and_register_greeting(chat_id: int, user_id: str, category: str
     today_str = now.date().isoformat()
     now_ts = time.time()
     
+    # 1. Controlla il gap globale di 1 ora (3600 secondi) a livello di gruppo
+    global_key = f"relational_state:last_group_greeting_ts_{chat_id}"
+    last_ts = await storage.load(global_key, default=0.0)
+    if now_ts - last_ts < 3600:
+        return False
+        
+    # 2. Controlla il gap per-singolo-utente
     key = f"relational_state:group_greetings_{chat_id}"
     history = await storage.load(key, default={}) or {}
     
@@ -151,6 +158,7 @@ async def _check_and_register_greeting(chat_id: int, user_id: str, category: str
         "ts": now_ts
     }
     await storage.save(key, history)
+    await storage.save(global_key, now_ts)
     return True
 
 
@@ -210,14 +218,16 @@ async def _group_should_intervene(
             return True
         # Se should_greet è False e il saluto è "puro" (senza domande o altro testo utile),
         # ignoralo subito senza fare fall-through verso l'LLM, per evitare di ripetere i saluti!
-        if _is_pure_greeting(combined_lower):
+        # Se c'è un elemento multimediale (media), non scartarlo come saluto puro per permettere all'LLM di valutarlo.
+        if _is_pure_greeting(combined_lower) and not has_media:
             return False
         # Se non è un saluto puro (es. contiene una domanda o altre info rilevanti),
         # facciamo fall-through per far sì che possa comunque rispondere ad altro.
 
 
     # Fast-path: messaggio troppo corto e senza punto interrogativo → probabile scambio tra membri
-    if len(combined) < 8 and "?" not in combined:
+    # Se c'è un elemento multimediale, bypassiamo questo controllo per consentire l'analisi del media.
+    if len(combined) < 8 and "?" not in combined and not has_media:
         return False
 
     # Fast-path: continuazione di conversazione attiva nel gruppo (< 5 min)
