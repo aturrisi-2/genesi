@@ -782,8 +782,12 @@ async def birthday_scheduler():
                     
                     # Invia a Telegram
                     from core.telegram_bot import send_message as tg_send
+                    now_ts = time.time()
                     for gid in tg_group_ids:
                         await tg_send(gid, msg)
+                        # Registra il timestamp del saluto proattivo per il gap globale di 1 ora
+                        tg_global_key = f"relational_state:last_group_greeting_ts_{gid}"
+                        await storage.save(tg_global_key, now_ts)
                         
                     # Invia a WhatsApp
                     if _WA_GROUP_JID:
@@ -793,6 +797,10 @@ async def birthday_scheduler():
                             payload["secret"] = _BAILEYS_SEND_SECRET
                         async with httpx.AsyncClient(timeout=10) as client:
                             await client.post(_BAILEYS_SEND_URL, json=payload)
+                        # Registra il timestamp del saluto proattivo per il gap globale di 1 ora
+                        wa_chat_id = abs(hash(_WA_GROUP_JID)) % (10**9)
+                        wa_global_key = f"relational_state:last_group_greeting_ts_{wa_chat_id}"
+                        await storage.save(wa_global_key, now_ts)
                             
                     # Segna come inviato per oggi
                     await storage.save(sent_key, True)
