@@ -618,6 +618,55 @@ async def check_and_send_birthdays():
 
 # ── Generatore Messaggio Proattivo LLM ─────────────────────────────────────────
 
+async def _get_quick_weather_summary(city_name: str) -> str:
+    """Ritorna una sintesi meteo super concisa (es. 'Imola: Cielo sereno, 23°C') per lo scheduler proattivo."""
+    import httpx
+    import os
+    OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY", "")
+    if not OPENWEATHER_API_KEY:
+        return ""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            # 1. Geocoding
+            geo_url = "https://api.openweathermap.org/geo/1.0/direct"
+            q_query = f"{city_name},IT"
+            geo_params = {"q": q_query, "limit": 3, "appid": OPENWEATHER_API_KEY}
+            geo_resp = await client.get(geo_url, params=geo_params)
+            if geo_resp.status_code != 200:
+                return ""
+            geo_data = geo_resp.json()
+            if not geo_data:
+                geo_params["q"] = city_name
+                geo_resp = await client.get(geo_url, params=geo_params)
+                if geo_resp.status_code != 200 or not geo_resp.json():
+                    return ""
+                geo_data = geo_resp.json()
+            
+            geo = geo_data[0]
+            lat, lon = geo["lat"], geo["lon"]
+            
+            # 2. Weather
+            weather_url = "https://api.openweathermap.org/data/2.5/weather"
+            weather_params = {
+                "lat": lat,
+                "lon": lon,
+                "appid": OPENWEATHER_API_KEY,
+                "units": "metric",
+                "lang": "it"
+            }
+            w_resp = await client.get(weather_url, params=weather_params)
+            if w_resp.status_code != 200:
+                return ""
+            
+            w_data = w_resp.json()
+            temp = round(w_data.get("main", {}).get("temp", 0))
+            desc = w_data.get("weather", [{}])[0].get("description", "").lower()
+            return f"{city_name}: {desc}, {temp}°C"
+    except Exception as e:
+        logger.warning("PROACTIVE_GREETING_WEATHER_ERROR city=%s err=%s", city_name, e)
+        return ""
+
+
 async def _generate_proactive_greeting(birthdays: list, event_type: str, today_date: date) -> str:
     """Genera un messaggio di saluto proattivo mattutino coerente con LLM."""
     try:
@@ -628,17 +677,39 @@ async def _generate_proactive_greeting(birthdays: list, event_type: str, today_d
         
         system_prompt = (
             "Sei Genesi, il GUARDIANO EMOTIVO della famiglia. Vegli con affetto, calore e attenzione sui membri della famiglia. "
-            "Ogni mattina sei la prima a inviare un saluto affettuoso e spontaneo nel gruppo familiare.\n"
-            "REGOLE ASSOLUTE:\n"
-            "- Scrivi una risposta di MAX 2 righe, naturale e spontanea, come se fossi una di famiglia.\n"
-            "- Tono caldo, affettuoso, protettivo. Nessun formalismo, nessun elenco, nessun preambolo.\n"
-            "- Usa al massimo 1-2 emoji calorose.\n"
-            "- Argomenta in modo coerente basandoti sul tipo di giorno (es. lunedì mattina feriale, weekend rilassante, festività nazionale o compleanni).\n"
-            "- Se è un compleanno, fai gli auguri in modo speciale menzionando il nome e l'età (se nota).\n"
-            "- Se è una festività o un giorno speciale, menzionalo con gioia."
+            "Ogni mattina sei la prima a inviare un saluto spontaneo nel gruppo familiare.\n"
+            "REGOLE CRITICHE DI STILE E CONCISIONE:\n"
+            "- Scrivi un saluto brevissimo di MASSIMO 2 RIGHE (1 o 2 frasi in tutto). Sii estremamente concisa, asciutta e affettuosa.\n"
+            "- EVITA ASSOLUTAMENTE toni teatrali, enfatici, retorici o frasi fatte da intelligenza artificiale (es. NO a metafore altisonanti, incoraggiamenti eccessivi, 'iniziamo questa settimana con energia', 'vi auguro una giornata di luce', o 'vi voglio bene' ripetuto a caso).\n"
+            "- Il tono deve essere GENUINO, informale e terra-terra, esattamente come scriverebbe un membro vero della famiglia sulla chat di gruppo.\n"
+            "- Integra nel saluto un rapidissimo e naturale cenno scherzoso al tempo attuale nelle città dei familiari (Motta Sant'Anastasia, Bracciano, Lentini, Imola, Franchetto) descritto nel contesto, ad esempio: 'Buongiorno! Qui a Imola poche nuvole, mentre a Bracciano c'è il sole... Mariella a Lentini fresca?'. Fai in modo che il cenno al meteo sia breve, spiritoso e perfettamente inserito nel discorso.\n"
+            "- Se oggi ci sono compleanni, fai gli auguri per prima con calore e semplicità."
         )
         
         context_parts = [f"Giorno: {giorno_nome}, Data: {today_date.strftime('%d/%m/%Y')}."]
+        
+        # Recupera il meteo in tempo reale per le 5 città dei membri
+        weather_cities = [
+            "Motta Sant'Anastasia",
+            "Bracciano",
+            "Lentini",
+            "Imola",
+            "Franchetto"
+        ]
+        weather_tasks = [_get_quick_weather_summary(c) for c in weather_cities]
+        weather_results = await asyncio.gather(*weather_tasks, return_exceptions=True)
+        weather_summaries = [r for r in weather_results if isinstance(r, str) and r]
+        
+        if weather_summaries:
+            context_parts.append("METEO ATTUALE NELLE CITTÀ DEI FAMILIARI:")
+            context_parts.append("- Katia: Motta Sant'Anastasia")
+            context_parts.append("- Sandra: Bracciano")
+            context_parts.append("- Mariella: Lentini")
+            context_parts.append("- Alfio/Me: Imola")
+            context_parts.append("- Iolanda: Franchetto")
+            context_parts.append("Dati OpenWeather:")
+            for summary in weather_summaries:
+                context_parts.append(f"  {summary}")
         
         hol = get_italian_holiday(today_date)
         if hol:
