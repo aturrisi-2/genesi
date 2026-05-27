@@ -189,8 +189,20 @@ function getTokenPayload() {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
-    return JSON.parse(atob(parts[1]));
+    let base64Url = parts[1];
+    let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    let pad = base64.length % 4;
+    if (pad) {
+      if (pad === 1) return null;
+      base64 += new Array(5 - pad).join('=');
+    }
+    const raw = atob(base64);
+    const utf8 = decodeURIComponent(Array.prototype.map.call(raw, function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(utf8);
   } catch (e) {
+    console.error('getTokenPayload error:', e);
     return null;
   }
 }
@@ -4939,7 +4951,7 @@ function setVoiceStatusText(text) {
 
 // ── PWA: registrazione Service Worker ───────────────────────
 if ('serviceWorker' in navigator) {
-  const SW_VERSION = 'v8';
+  const SW_VERSION = 'v9';
   navigator.serviceWorker
     .register(`/sw.js?v=${SW_VERSION}`, { updateViaCache: 'none' })
     .then((reg) => {

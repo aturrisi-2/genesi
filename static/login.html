@@ -191,7 +191,7 @@
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             msg.className = 'msg';
-            msg.style.display = 'none';
+            msg.style.display = '';
 
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;

@@ -109,7 +109,7 @@
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             msg.className = 'msg';
-            msg.style.display = 'none';
+            msg.style.display = '';
 
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
@@ -165,7 +165,7 @@
                     } else {
                         msg.innerHTML = `<strong>Registrazione completata!</strong><br>${data.message || 'Puoi ora accedere.'}`;
                         msg.className = 'msg success';
-                        msg.style.display = 'block';
+                        msg.style.display = '';
                         form.reset();
                         setTimeout(() => { window.location.href = '/login'; }, 3000);
                     }
@@ -178,7 +178,7 @@
                     }
                     msg.innerHTML = errorMsg;
                     msg.className = 'msg error';
-                    msg.style.display = 'block';
+                    msg.style.display = '';
                 }
             } catch (err) {
                 msg.textContent = 'Errore di connessione.';
