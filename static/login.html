@@ -95,6 +95,26 @@
     </div>
 
     <script>
+        // Self-healing: clean active service workers and cache storage to bypass stale caching on clients
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then((registrations) => {
+                for (const registration of registrations) {
+                    registration.unregister().then((ok) => {
+                        if (ok) console.log('[Self-Healing] Service Worker unregistered');
+                    });
+                }
+            }).catch(() => {});
+        }
+        if ('caches' in window) {
+            caches.keys().then((keys) => {
+                for (const key of keys) {
+                    caches.delete(key).then((ok) => {
+                        if (ok) console.log('[Self-Healing] Cache deleted:', key);
+                    });
+                }
+            }).catch(() => {});
+        }
+
         // SafeStorage helper to fallback to Cookies if localStorage throws (e.g. Safari iOS Private Mode)
         const SafeStorage = {
             isSupported: (() => {
