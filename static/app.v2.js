@@ -4092,6 +4092,27 @@ async function initializeNewsTicker() {
 }
 
 (async () => {
+  // Self-healing: check if token is passed in URL query params (helps in blocked storage contexts like Ermes sandbox)
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlToken = urlParams.get('token');
+    if (urlToken) {
+      SafeStorage.setItem('genesi_access_token', urlToken);
+      const urlRefresh = urlParams.get('refresh');
+      const urlUserId = urlParams.get('user_id');
+      const urlIsAdmin = urlParams.get('is_admin');
+      if (urlRefresh) SafeStorage.setItem('genesi_refresh_token', urlRefresh);
+      if (urlUserId) SafeStorage.setItem('genesi_user_id', urlUserId);
+      if (urlIsAdmin) SafeStorage.setItem('genesi_is_admin', urlIsAdmin);
+      
+      // Clean up URL parameters immediately to protect credentials
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
+  } catch (e) {
+    console.warn('[Self-Healing] failed to read/clean tokens from URL:', e);
+  }
+
   // Apply auth state FIRST - sempre loggato
   applyAuthState();
 

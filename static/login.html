@@ -250,6 +250,12 @@
                     SafeStorage.setItem('genesi_is_admin', data.is_admin);
                     const params = new URLSearchParams(window.location.search);
                     const from = params.get('from');
+
+                    const redirectUrl = '/?token=' + encodeURIComponent(data.access_token) + 
+                                        '&refresh=' + encodeURIComponent(data.refresh_token || '') + 
+                                        '&user_id=' + encodeURIComponent(data.user_id || '') + 
+                                        '&is_admin=' + encodeURIComponent(data.is_admin || '');
+
                     if (from === 'whatsapp') {
                         const waId = params.get('wa_id') || '';
                         try {
@@ -262,16 +268,16 @@
                             }
                             const wl = await fetch('/api/whatsapp/wa-link').then(r => r.json());
                             showPlatformPopup('whatsapp', wl.wa_link || '#');
-                        } catch (_) { window.location.href = '/'; }
+                        } catch (_) { window.location.href = redirectUrl; }
                         return;
                     } else if (from === 'telegram') {
                         try {
                             const bl = await fetch('/api/telegram/bot-link').then(r => r.json());
                             showPlatformPopup('telegram', bl.bot_link || '#');
-                        } catch (_) { window.location.href = '/'; }
+                        } catch (_) { window.location.href = redirectUrl; }
                         return;
                     }
-                    window.location.href = '/';
+                    window.location.href = redirectUrl;
                 } else if (res.status === 403 && data.detail && data.detail.includes('non verificato')) {
                     // Mostra blocco non verificato
                     msg.style.display = 'none';
