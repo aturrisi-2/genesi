@@ -100,6 +100,7 @@ const logoutBtn = document.getElementById('logout-btn');
 // SAFE STORAGE WRAPPER
 // ===============================
 const SafeStorage = {
+  memoryStore: {},
   isSupported: (() => {
     try {
       const testKey = '__storage_test__';
@@ -111,35 +112,46 @@ const SafeStorage = {
     }
   })(),
   setCookie(name, value, days) {
-    let expires = "";
-    if (days) {
-      const date = new Date();
-      date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
-      expires = "; expires=" + date.toUTCString();
+    try {
+      let expires = "";
+      if (days) {
+        const date = new Date();
+        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+        expires = "; expires=" + date.toUTCString();
+      }
+      document.cookie = name + "=" + encodeURIComponent(value || "") + expires + "; path=/; SameSite=Lax; Secure";
+    } catch (e) {
+      console.warn('[SafeStorage] cookie write blocked:', e);
     }
-    document.cookie = name + "=" + encodeURIComponent(value || "") + expires + "; path=/; SameSite=Lax; Secure";
   },
   getCookie(name) {
-    const nameEQ = name + "=";
-    const ca = document.cookie.split(';');
-    for (let i = 0; i < ca.length; i++) {
-      let c = ca[i];
-      while (c.charAt(0) === ' ') c = c.substring(1, c.length);
-      if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+    try {
+      const nameEQ = name + "=";
+      const ca = document.cookie.split(';');
+      for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+      }
+    } catch (e) {
+      console.warn('[SafeStorage] cookie read blocked:', e);
     }
     return null;
   },
   eraseCookie(name) {
-    document.cookie = name + '=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure';
+    try {
+      document.cookie = name + '=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure';
+    } catch (e) {
+      console.warn('[SafeStorage] cookie erase blocked:', e);
+    }
   },
   setItem(key, value) {
+    this.memoryStore[key] = value;
     if (this.isSupported) {
       try {
         localStorage.setItem(key, value);
         return;
-      } catch (e) {
-        // fallback to cookie
-      }
+      } catch (e) {}
     }
     this.setCookie(key, value, 7);
   },
@@ -148,19 +160,18 @@ const SafeStorage = {
       try {
         const val = localStorage.getItem(key);
         if (val !== null) return val;
-      } catch (e) {
-        // fallback to cookie
-      }
+      } catch (e) {}
     }
-    return this.getCookie(key);
+    const cookieVal = this.getCookie(key);
+    if (cookieVal !== null) return cookieVal;
+    return this.memoryStore[key] || null;
   },
   removeItem(key) {
+    delete this.memoryStore[key];
     if (this.isSupported) {
       try {
         localStorage.removeItem(key);
-      } catch (e) {
-        // fallback to cookie
-      }
+      } catch (e) {}
     }
     this.eraseCookie(key);
   }
