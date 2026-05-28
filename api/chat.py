@@ -247,6 +247,14 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                     log("CAPABILITY_CONTEXT_INJECTED", user_id=user_id, msg_len=len(_chat_message))
         except Exception:
             pass
+
+        # Link Explorer per chat 1:1
+        try:
+            from core.link_explorer import explore_links_in_text
+            _chat_message = await explore_links_in_text(_chat_message)
+        except Exception as _e:
+            log("CHAT_1TO1_LINK_EXPLORE_FAIL", error=str(_e))
+
         _handler_result = await simple_chat_handler(user_id, _chat_message, request.conversation_id, platform=request.platform)
         if isinstance(_handler_result, tuple):
             response, classified_intent = _handler_result[0], _handler_result[1]
@@ -453,6 +461,14 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                         log("CAPABILITY_CONTEXT_INJECTED", user_id=user_id, msg_len=len(_stream_chat_message))
             except Exception:
                 pass
+
+            # Link Explorer per chat streaming 1:1
+            try:
+                from core.link_explorer import explore_links_in_text
+                _stream_chat_message = await explore_links_in_text(_stream_chat_message)
+            except Exception as _e:
+                log("CHAT_STREAM_1TO1_LINK_EXPLORE_FAIL", error=str(_e))
+
             resp = await _sch(user_id, _stream_chat_message, request.conversation_id, platform=request.platform)
             if isinstance(resp, tuple):
                 resp = resp[0]
