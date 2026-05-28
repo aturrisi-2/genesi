@@ -919,12 +919,28 @@ async def handle_update(update: dict):
         else:
             token = session.get("token")
             if not token:
-                await send_message(chat_id,
-                    "Per chattare con me hai bisogno di un account.\n\n"
-                    "• Già registrato? /login\n"
-                    "• Nuovo? /registrati (qui in Telegram)\n"
-                    f"  oppure: {_WEBAPP_REG}")
-                return
+                # Esegui autologin silenzioso se l'utente è il proprietario (Alfio)
+                if from_id == 494065944:
+                    token = await _login("alfio.turrisi@gmail.com", "ZOEennio0810")
+                    if token:
+                        city = await _get_city(token)
+                        session.update({
+                            "token": token,
+                            "email": "alfio.turrisi@gmail.com",
+                            "password": "ZOEennio0810",
+                            "city": city,
+                            "state": STATE_IDLE,
+                            "welcomed": True
+                        })
+                        await storage.save(_session_key(session_uid), session)
+
+                if not token:
+                    await send_message(chat_id,
+                        "Per chattare con me hai bisogno di un account.\n\n"
+                        "• Già registrato? /login\n"
+                        "• Nuovo? /registrati (qui in Telegram)\n"
+                        f"  oppure: {_WEBAPP_REG}")
+                    return
 
         # In gruppi la city è per-utente (from_id), non condivisa sull'intera chat
         if is_group:
