@@ -102,7 +102,7 @@ async function getToken(type = "group") {
 }
 
 // ── Chiamata a Genesi — gruppo ────────────────────────────────────────────────
-async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "WhatsApp Group", participants = null, token = null) {
+async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "WhatsApp Group", participants = null, token = null, mediaId = null, mediaType = null, mediaMime = null) {
     try {
         if (!token) token = await getToken("group");
         const res = await axios.post(`${GENESI_URL}/api/chat/group`, {
@@ -112,6 +112,9 @@ async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "
             group_id:    groupId,
             group_name:  groupName,
             participants: participants,
+            media_id:    mediaId,
+            media_type:  mediaType,
+            media_mime:  mediaMime,
         }, {
             headers: { Authorization: `Bearer ${token}` },
             timeout: 35000,
@@ -322,7 +325,7 @@ async function startBaileys() {
                 // Filtro per gruppi specifici (se configurato)
                 if (ALLOWED_GROUPS.length && !ALLOWED_GROUPS.includes(groupId)) continue;
 
-                const text = (
+                let text = (
                     msg.message?.conversation
                     || msg.message?.extendedTextMessage?.text
                     || msg.message?.imageMessage?.caption
@@ -330,7 +333,58 @@ async function startBaileys() {
                     || ""
                 ).trim();
 
-                if (!text) continue;
+                const mType = Object.keys(msg.message || {})[0];
+                let mediaId = null;
+                let mediaMime = null;
+                let mediaType = null;
+
+                if (mType === "imageMessage") {
+                    mediaId = msg.key.id;
+                    mediaMime = msg.message.imageMessage.mimetype || "image/jpeg";
+                    mediaType = "image";
+                } else if (mType === "documentMessage") {
+                    mediaId = msg.key.id;
+                    mediaMime = msg.message.documentMessage.mimetype || "application/octet-stream";
+                    mediaType = "document";
+                } else if (mType === "audioMessage") {
+                    mediaId = msg.key.id;
+                    mediaMime = msg.message.audioMessage.mimetype || "audio/ogg";
+                    mediaType = "audio";
+                }
+
+                // Se non c'è testo e non c'è nemmeno media, salta il messaggio
+                if (!text && !mediaType) continue;
+
+                // Se c'è media ma non c'è didascalia, imposta testi descrittivi di fallback
+                if (!text && mediaType === "image") {
+                    text = "Analizza questa immagine.";
+                } else if (!text && mediaType === "document") {
+                    text = "Analizza questo documento.";
+                } else if (!text && mediaType === "audio") {
+                    text = "Ascolta questo audio.";
+                }
+
+                // Se c'è un file multimediale scaricalo localmente
+                if (mediaType && ["image", "document", "audio"].includes(mediaType)) {
+                    try {
+                        const buffer = await downloadMediaMessage(
+                            msg,
+                            "buffer",
+                            {},
+                            { logger }
+                        );
+                        const cacheDir = "/opt/genesi-baileys/media-cache";
+                        if (!fs.existsSync(cacheDir)) {
+                            fs.mkdirSync(cacheDir, { recursive: true });
+                        }
+                        const filePath = path.join(cacheDir, mediaId);
+                        fs.writeFileSync(filePath, buffer);
+                        fs.writeFileSync(filePath + ".mime", mediaMime);
+                        console.log(`[Baileys/Group] Media salvato in cache: ${filePath} (${mediaMime})`);
+                    } catch (err) {
+                        console.error("[Baileys/Group] Errore salvataggio media gruppo:", err.message);
+                    }
+                }
 
                 let senderName = (msg.pushName || senderJid).split(" ")[0];
                 let groupName = "WhatsApp Group";
@@ -401,7 +455,7 @@ async function startBaileys() {
                 console.log(`[Baileys] Intervengo in ${groupName} per: "${textToSend.slice(0, 50)}"`);
 
                 await sock.sendPresenceUpdate("composing", groupId);
-                const reply = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, participants, token);
+                const reply = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, participants, token, mediaId, mediaType, mediaMime);
                 await sock.sendPresenceUpdate("paused", groupId);
 
                 if (reply) {

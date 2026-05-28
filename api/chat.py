@@ -681,13 +681,16 @@ class GroupChatRequest(BaseModel):
     group_id: str    # JID gruppo WhatsApp
     group_name: str = "WhatsApp Group"
     participants: Optional[list[GroupParticipant]] = None
+    media_id: Optional[str] = None
+    media_type: Optional[str] = None
+    media_mime: Optional[str] = None
 
 class GroupChatResponse(BaseModel):
     response: str
     status: str
 
 @router.post("/group", response_model=GroupChatResponse)
-async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depends(require_auth)):
+async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: AuthUser = Depends(require_auth)):
     """
     Endpoint dedicato ai gruppi WhatsApp (Baileys).
     Usa la stessa logica memoria/contesto del gruppo Telegram:
@@ -781,11 +784,34 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
                 except Exception as ex:
                     log("WA_GROUP_MEMBER_PRESEED_FAIL", error=str(ex))
 
+        # 3cc. Analisi file/media per gruppi WhatsApp (Immagini, Documenti, Audio)
+        media_analysis = ""
+        if request.media_id and request.media_type:
+            try:
+                from core.whatsapp_bot import download_media, _upload_file, _transcribe
+                media_bytes, media_mime = await download_media(request.media_id)
+                if media_bytes:
+                    auth_header = req.headers.get("Authorization", "")
+                    token = auth_header.replace("Bearer ", "").strip()
+                    
+                    if request.media_type == "audio":
+                        transcription = await _transcribe(token, media_bytes, media_mime)
+                        if transcription:
+                            media_analysis = f"[Nota vocale trascritta: {transcription}]"
+                    else:
+                        ext = "jpg" if "jpeg" in media_mime else media_mime.split("/")[-1]
+                        filename = f"photo.{ext}" if request.media_type == "image" else f"doc.{ext}"
+                        media_analysis = await _upload_file(token, media_bytes, filename, media_mime)
+            except Exception as _me:
+                log("WA_GROUP_MEDIA_ANALYZE_FAIL", error=str(_me))
+
         # 3d. Link Explorer per gruppi WhatsApp
         processed_text = request.text
+        if media_analysis:
+            processed_text = f"{processed_text}\n\n[Contenuto {request.media_type}: {media_analysis}]"
         try:
             from core.link_explorer import explore_links_in_text
-            processed_text = await explore_links_in_text(request.text)
+            processed_text = await explore_links_in_text(processed_text)
         except Exception as _e:
             log("GROUP_CHAT_LINK_EXPLORE_FAIL", error=str(_e))
 
@@ -794,7 +820,7 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
             group_int,
             sender_int,
             request.sender_name,
-            current_message=request.text,
+            current_message=processed_text,
             participants=[p.dict() for p in request.participants] if request.participants else None
         )
 
