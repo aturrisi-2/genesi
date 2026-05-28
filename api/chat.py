@@ -705,14 +705,15 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
             append_group_history, record_group_observation,
             consolidate_group_insights_if_needed,
             summarize_group_discussion_if_needed,
+            stable_hash,
         )
 
         # Normalizza group_id e sender_id a interi (come fa whatsapp_bot.py)
         clean_sender = request.sender_id.split("@")[0].replace("+", "")
         clean_group  = request.group_id.split("@")[0].replace("-", "")
         try:
-            sender_int = abs(hash(clean_sender)) % (10**9)
-            group_int  = abs(hash(clean_group))  % (10**9)
+            sender_int = stable_hash(clean_sender)
+            group_int  = stable_hash(clean_group)
             from core.birthday_service import register_known_group
             _aio.create_task(register_known_group(group_int, "whatsapp", title=request.group_name))
         except Exception:
@@ -766,7 +767,7 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
                     continue
                 p_clean = p.id.split("@")[0].replace("+", "")
                 try:
-                    p_int = abs(hash(p_clean)) % (10**9)
+                    p_int = stable_hash(p_clean)
                     from core.telegram_group_memory import get_member
                     p_member = await get_member(p_int)
                     if p_member.get("first_name") != p.name:

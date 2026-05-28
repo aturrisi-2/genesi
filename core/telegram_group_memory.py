@@ -1,4 +1,12 @@
 import re
+import hashlib
+
+def stable_hash(s: str) -> int:
+    """Ritorna un intero a 9 cifre stabile da una stringa per prevenire la randomizzazione di hash()."""
+    if not s:
+        return 0
+    return int(hashlib.md5(s.encode('utf-8')).hexdigest(), 16) % (10**9)
+
 # ── Event change detection (memoria eventi dichiarati) ─────────────────────---
 
 # Pattern semplici per cambiamenti/eventi personali (estendibili)
@@ -311,13 +319,15 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
         for p in participants:
             p_id = p.get("id", "")
             is_me = p.get("is_me", False)
-            if is_me:
+            clean_jid = p_id.split("@")[0].replace("+", "")
+            
+            # Esclude esplicitamente il bot (sia per JID, sia per LID) dal conteggio umani
+            if is_me or clean_jid in ("69123891531797", "393313650671"):
                 has_bot = True
                 continue
                 
-            clean_jid = p_id.split("@")[0].replace("+", "")
             try:
-                p_int = abs(hash(clean_jid)) % (10**9)
+                p_int = stable_hash(clean_jid)
                 p_member = await get_member(p_int)
             except Exception:
                 p_member = {}

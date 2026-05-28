@@ -761,7 +761,8 @@ async def handle_update(payload: dict):
                     )
                     # Usa group_id come chat_id (hash stabile in int per storage)
                     gid = raw_group_id or msg.get("context", {}).get("id", "")
-                    chat_id = abs(hash(gid)) % (10**9) if gid else 0
+                    from core.telegram_group_memory import stable_hash
+                    chat_id = stable_hash(gid) if gid else 0
                     await _process_message(msg, name_map, is_group=msg_is_group, chat_id=chat_id)
 
     except Exception as e:
@@ -987,16 +988,16 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 update_member_seen, append_raw_message, build_group_context,
                 append_group_history, record_group_observation,
                 consolidate_group_insights_if_needed, extract_family_relationship,
-                sync_family_to_owner,
+                sync_family_to_owner, stable_hash,
             )
             # Aggiorna profilo membro ad ogni messaggio
-            asyncio.create_task(update_member_seen(abs(hash(wa_id)) % (10**9), first_name))
+            asyncio.create_task(update_member_seen(stable_hash(wa_id), first_name))
             # Estrai relazioni familiari
             asyncio.create_task(extract_family_relationship(wa_id, first_name, (text or caption), "whatsapp"))
             # Salva nel buffer grezzo (tutti i messaggi, anche quelli ignorati)
             msg_text = (text or caption or "").strip()
             if msg_text and chat_id:
-                asyncio.create_task(append_raw_message(chat_id, abs(hash(wa_id)) % (10**9), first_name, msg_text))
+                asyncio.create_task(append_raw_message(chat_id, stable_hash(wa_id), first_name, msg_text))
 
         # ── FILTRO GRUPPI (LLM-based) ──────────────────────────────────────────
         _reply_to_genesi = False
@@ -1043,8 +1044,8 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             # Gruppi WhatsApp: inietta contesto famiglia e usa platform whatsapp_group
             if is_group and chat_id and first_name:
                 try:
-                    from core.telegram_group_memory import build_group_context
-                    group_ctx = await build_group_context(chat_id, abs(hash(wa_id)) % (10**9), first_name, current_message=message)
+                    from core.telegram_group_memory import build_group_context, stable_hash
+                    group_ctx = await build_group_context(chat_id, stable_hash(wa_id), first_name, current_message=message)
                     msg_with_quote = message
                     if _reply_to_genesi:
                         msg_with_quote = f"[Stai rispondendo a un tuo messaggio precedente di Genesi]\n{message}"
@@ -1076,10 +1077,10 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     append_group_history, record_group_observation,
                     consolidate_group_insights_if_needed,
                     summarize_group_discussion_if_needed,
-                    detect_and_save_correction,
+                    detect_and_save_correction, stable_hash,
                 )
                 orig_text = (text or caption or "").strip()
-                _wa_from_id = abs(hash(wa_id)) % (10**9)
+                _wa_from_id = stable_hash(wa_id)
                 asyncio.create_task(append_group_history(chat_id, _wa_from_id, first_name, orig_text, reply))
                 asyncio.create_task(record_group_observation(chat_id, _wa_from_id, first_name, orig_text, reply))
                 asyncio.create_task(consolidate_group_insights_if_needed(chat_id))

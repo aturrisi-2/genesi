@@ -893,7 +893,8 @@ async def birthday_scheduler():
                     # Invia a WhatsApp
                     if _WA_GROUP_JID:
                         import httpx
-                        wa_chat_id = abs(hash(_WA_GROUP_JID)) % (10**9)
+                        from core.telegram_group_memory import stable_hash
+                        wa_chat_id = stable_hash(_WA_GROUP_JID)
                         msg = await _generate_proactive_greeting(
                             [(n, a) for n, a, _ in birthdays_today],
                             event_type,

@@ -43,6 +43,10 @@ const MAX_RAW = 25;
 const lastGenesiReply = {};
 const GENESI_REPLY_TTL = 5 * 60 * 1000; // 5 minuti
 
+// ── Cache per i nomi dei contatti visti ───────────────────────────────────────
+// { jid/lid: name }
+const contactCache = {};
+
 function addToBuffer(groupId, name, text) {
     if (!rawBuffers[groupId]) rawBuffers[groupId] = [];
     rawBuffers[groupId].push({ name, text: text.slice(0, 200), ts: Date.now() });
@@ -195,6 +199,13 @@ async function startBaileys() {
                 const remoteJid = msg.key.remoteJid;
                 if (!remoteJid) continue;
 
+                // Cache del pushName del mittente se disponibile
+                const senderJid = msg.key.participant || remoteJid;
+                if (msg.pushName && senderJid) {
+                    const cleanSender = senderJid.replace(/:.*@/, "@");
+                    contactCache[cleanSender] = msg.pushName;
+                }
+
                 // 1. GESTIONE MESSAGGI DIRETTI (1:1)
                 if (!remoteJid.endsWith("@g.us")) {
                     const mType = Object.keys(msg.message || {})[0];
@@ -328,21 +339,25 @@ async function startBaileys() {
                 try {
                     const meta = await sock.groupMetadata(groupId);
                     if (meta?.subject) groupName = meta.subject;
+                    const cleanSender = senderJid.replace(/:.*@/, "@");
                     const p = meta?.participants?.find(x => x.id === senderJid);
-                    if (p?.name) senderName = p.name.split(" ")[0];
+                    let resolvedSenderName = p?.name || contactCache[cleanSender] || msg.pushName;
+                    if (resolvedSenderName) senderName = resolvedSenderName.split(" ")[0];
                     
                     if (meta?.participants) {
                         const myJid = sock.user?.id?.replace(/:.*@/, "@") || "";
+                        const myLid = sock.user?.lid?.replace(/:.*@/, "@") || "";
+                        const BOT_IDS = ["393313650671@s.whatsapp.net", "69123891531797@lid"];
                         participants = meta.participants.map(part => {
                             const cleanId = part.id.replace(/:.*@/, "@");
-                            let pName = part.name || part.verifiedName || part.notify || null;
+                            let pName = part.name || part.verifiedName || part.notify || contactCache[cleanId] || null;
                             if (pName) {
                                 pName = pName.trim();
                             }
                             return {
                                 id: cleanId,
                                 name: pName,
-                                is_me: cleanId === myJid
+                                is_me: cleanId === myJid || (myLid && cleanId === myLid) || BOT_IDS.includes(cleanId)
                             };
                         });
                     }
