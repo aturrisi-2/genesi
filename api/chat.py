@@ -708,8 +708,8 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
         )
 
         # Normalizza group_id e sender_id a interi (come fa whatsapp_bot.py)
-        clean_sender = request.sender_id.replace("@s.whatsapp.net", "").replace("+", "")
-        clean_group  = request.group_id.replace("@g.us", "").replace("-", "")
+        clean_sender = request.sender_id.split("@")[0].replace("+", "")
+        clean_group  = request.group_id.split("@")[0].replace("-", "")
         try:
             sender_int = abs(hash(clean_sender)) % (10**9)
             group_int  = abs(hash(clean_group))  % (10**9)
@@ -764,7 +764,7 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
             for p in request.participants:
                 if p.is_me or not p.name:
                     continue
-                p_clean = p.id.replace("@s.whatsapp.net", "").replace("+", "")
+                p_clean = p.id.split("@")[0].replace("+", "")
                 try:
                     p_int = abs(hash(p_clean)) % (10**9)
                     from core.telegram_group_memory import get_member
