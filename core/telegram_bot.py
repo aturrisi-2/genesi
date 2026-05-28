@@ -1083,6 +1083,16 @@ async def handle_update(update: dict):
                 asyncio.create_task(summarize_group_discussion_if_needed(chat_id))
                 asyncio.create_task(_sync_family_background(chat_id))
 
+                # Rilevamento Risoluzione Episodi della Famiglia in background
+                async def _tg_episode_resolution():
+                    try:
+                        from core.episode_memory import episode_memory as _em
+                        _clean_msg = _strip_group_ctx(message)
+                        await _em.resolve_episodes(session_uid, _clean_msg)
+                    except Exception as _e:
+                        logger.warning("EPISODE_RESOLUTION_BG_ERROR_TG: %s", _e)
+                asyncio.create_task(_tg_episode_resolution())
+
                 # Nuovo: rileva cambiamenti dichiarati/eventi personali
                 from core.telegram_group_memory import detect_and_save_event_change
                 async def _tg_event_change():

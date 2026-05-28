@@ -60,10 +60,11 @@ class EpisodeMemory:
         """
         try:
             episodes = await self.get_all(user_id)
-            if not episodes:
+            active_episodes = [e for e in episodes if e.get("status", "active") == "active"]
+            if not active_episodes:
                 return []
             scored = []
-            for ep in episodes:
+            for ep in active_episodes:
                 score = self._score_relevance(ep, message)
                 # Mood-congruent retrieval: boost episodi che condividono l'emozione corrente
                 if current_emotion and current_emotion not in ("neutral", ""):
@@ -76,9 +77,9 @@ class EpisodeMemory:
             # Recency fallback: se nessun episodio supera score>0, includi il più
             # recente salvato nelle ultime 72h — garantisce continuità di contesto
             # anche quando il topic della nuova conversazione è diverso.
-            if not relevant and episodes:
+            if not relevant and active_episodes:
                 try:
-                    most_recent = max(episodes, key=lambda e: e.get("saved_at", ""))
+                    most_recent = max(active_episodes, key=lambda e: e.get("saved_at", ""))
                     saved_dt = datetime.fromisoformat(most_recent.get("saved_at", ""))
                     if (datetime.utcnow() - saved_dt).total_seconds() < 259200:  # 72h
                         relevant = [most_recent]
@@ -170,6 +171,75 @@ class EpisodeMemory:
         except Exception:
             pass
         return score
+
+    async def resolve_episodes(self, user_id: str, message: str) -> None:
+        """
+        Analizza il messaggio in arrivo per verificare se risolve uno o più episodi 'active'.
+        Usa gpt-4o-mini con _call_model (fail-silent).
+        """
+        try:
+            episodes = await self._load(user_id)
+            active_eps = [e for e in episodes if e.get("status", "active") == "active"]
+            if not active_eps:
+                return
+
+            # Costruisci una lista leggibile degli episodi attivi con ID
+            ep_list_str = "\n".join([f"- ID: {e.get('id')} | Evento: {e.get('text')}" for e in active_eps])
+
+            system_prompt = (
+                "Sei un assistente specializzato nel monitorare l'evoluzione di situazioni personali e familiari.\n"
+                "Ti verrà fornito un elenco di episodi/situazioni personali ATTIVE (in corso, non risolte) ed un messaggio in arrivo.\n"
+                "Il tuo compito è determinare se il messaggio indica chiaramente che una (o più) di queste situazioni è stata RISOLTA, CONCLUSA o COMPLETATA.\n\n"
+                "REGOLE:\n"
+                "1. La risoluzione deve essere esplicita o chiaramente deducibile (es. 'la caviglia è guarita', 'sono tornato a casa' per un viaggio, 'il colloquio è andato' per un colloquio).\n"
+                "2. Se c'è una risoluzione, rispondi con un JSON che contiene una lista 'resolved_ids' con gli ID degli episodi risolti.\n"
+                "3. Se nessuna situazione attiva viene risolta da questo messaggio, rispondi con: {\"resolved_ids\": []}\n"
+                "4. Rispondi esclusivamente con il JSON, senza altri commenti o formattazioni markdown.\n"
+            )
+
+            user_msg = (
+                f"SITUAZIONI ATTIVE:\n{ep_list_str}\n\n"
+                f"MESSAGGIO IN ARRIVO:\n\"{message}\""
+            )
+
+            from core.llm_service import llm_service
+            raw = await llm_service._call_model(
+                "openai/gpt-4o-mini",
+                system_prompt,
+                user_msg,
+                user_id=user_id,
+                route="memory"
+            )
+            if not raw:
+                return
+
+            clean = raw.strip()
+            if clean.startswith("```"):
+                clean = clean.split("```")[1]
+                if clean.startswith("json"):
+                    clean = clean[4:]
+            clean = clean.strip()
+
+            import json
+            parsed = json.loads(clean)
+            resolved_ids = parsed.get("resolved_ids", [])
+            if not isinstance(resolved_ids, list):
+                return
+
+            if resolved_ids:
+                changed = False
+                for ep in episodes:
+                    if ep.get("id") in resolved_ids and ep.get("status", "active") == "active":
+                        ep["status"] = "resolved"
+                        ep["resolved_at"] = datetime.utcnow().isoformat()
+                        changed = True
+                        log("EPISODE_RESOLVED", user_id=user_id, id=ep.get("id"), text=ep.get("text")[:60])
+                
+                if changed:
+                    await storage.save(_STORAGE_KEY.format(user_id=user_id), episodes)
+
+        except Exception as e:
+            logger.debug("EPISODE_RESOLUTION_ERROR user=%s err=%s", user_id, e)
 
 
 # Istanza globale

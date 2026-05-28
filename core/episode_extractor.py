@@ -96,6 +96,8 @@ async def extract_episodes(message: str, user_id: str) -> List[Dict]:
                 "saved_at": datetime.utcnow().isoformat(),
                 "last_used_at": None,
                 "use_count": 0,
+                "status": "active",
+                "resolved_at": None,
             }
             result.append(episode)
 

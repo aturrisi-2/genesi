@@ -754,6 +754,15 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
         _aio.create_task(consolidate_group_insights_if_needed(group_int))
         _aio.create_task(summarize_group_discussion_if_needed(group_int))
 
+        # 7b. Rilevamento Risoluzione Episodi della Famiglia in background
+        async def _run_episode_resolution():
+            try:
+                from core.episode_memory import episode_memory as _em
+                await _em.resolve_episodes(user.id, request.text)
+            except Exception as _e:
+                log("EPISODE_RESOLUTION_BG_ERROR", error=str(_e))
+        _aio.create_task(_run_episode_resolution())
+
         # 8. Memoria personale del mittente — episodi e fatti su request.text (già pulito)
         import random
         if request.text and len(request.text.strip()) > 10 and random.random() < 0.10:

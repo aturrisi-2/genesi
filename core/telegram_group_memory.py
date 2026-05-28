@@ -327,7 +327,7 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
         from core.episode_memory import episode_memory as _em
         relevant_episodes = await _em.get_relevant(_OWNER_USER_ID_FOR_TREE, current_message, limit=5)
         if relevant_episodes:
-            lines.append("[MEMORIA EPISODICA DELLA FAMIGLIA (eventi recenti o rilevanti):]")
+            lines.append("[MEMORIA EPISODICA DELLA FAMIGLIA (situazioni attive in corso):]")
             for ep in relevant_episodes:
                 lines.append(f"  • {ep.get('text')}")
             lines.append("")
@@ -413,7 +413,8 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
         f"Usa i gradi di parentela corretti quando parli di altri membri. "
         f"Puoi fare riferimento a quello che altri hanno detto. "
         f"ATTENZIONE ASSOLUTA DI COERENZA: Ti trovi nel gruppo '{group_title}'. I membri attivi qui sono esclusivamente: {', '.join(active_members)}. "
-        f"NON nominare, non salutare e non fare riferimento a parenti assenti da questo specifico gruppo (es. se sei nel gruppo di WhatsApp dove non ci sono Katia, Sandra, Mariella, Iolanda, non nominarle e non parlare di loro!).]"
+        f"NON nominare, non salutare e non fare riferimento a parenti assenti da questo specifico gruppo (es. se sei nel gruppo di WhatsApp dove non ci sono Katia, Sandra, Mariella, Iolanda, non nominarle e non parlare di loro!). "
+        f"SOLLECITAZIONE SITUAZIONI IN CORSO: Se tra le situazioni attive in corso ('situazioni attive in corso') ci sono problemi irrisolti (es. Rita con la caviglia slogata, o qualcuno in viaggio) e nella chat recente non se ne parla da un po', trova l'occasione adatta e in modo del tutto spontaneo ed affettuoso di chiedere aggiornamenti (es. 'Rita, come va la caviglia oggi? Ti fa ancora male?'). Se l'utente ti dice che è guarito o rientrato, commenta con gioia!]"
     )
 
     # Regola anti-staleness: non tirare fuori vecchie discussioni senza motivo
