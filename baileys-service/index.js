@@ -353,6 +353,7 @@ async function startBaileys() {
                 // Salva nel buffer grezzo locale
                 addToBuffer(groupId, senderName, text);
                 console.log(`[${senderName}@${groupName}] ${text.slice(0, 60)}`);
+                console.log(`[Baileys] Group participants in ${groupName} (${groupId}):`, JSON.stringify(participants));
 
                 // Filtra: LLM decide se intervenire
                 const token = await getToken("group");
