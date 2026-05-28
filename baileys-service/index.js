@@ -332,7 +332,6 @@ async function startBaileys() {
 
                 if (!text) continue;
 
-                const senderJid = msg.key.participant || groupId;
                 let senderName = (msg.pushName || senderJid).split(" ")[0];
                 let groupName = "WhatsApp Group";
                 let participants = null;
