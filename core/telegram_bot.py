@@ -192,8 +192,9 @@ async def _group_should_intervene(
     Decide con LLM se Genesi deve intervenire nel gruppo.
     Fast-path per mention/nome diretti. LLM per tutto il resto.
     """
-    if has_media:
-        # Interviene sempre se viene inviato un elemento multimediale (foto, video, doc, ecc.)
+    has_link = bool(re.search(r'https?://[^\s]+|www\.[^\s]+', f"{text} {caption}", re.IGNORECASE))
+    if has_media or has_link:
+        # Interviene sempre se viene inviato un elemento multimediale o un link
         return True
 
     combined = f"{text} {caption}".strip()
@@ -752,6 +753,9 @@ async def handle_update(update: dict):
         voice      = msg.get("voice")       # messaggio vocale
         audio      = msg.get("audio")       # file audio generico
         document   = msg.get("document")    # documento (pdf, txt, ecc.)
+        video      = msg.get("video")       # video
+        animation  = msg.get("animation")   # gif/animazione
+        video_note = msg.get("video_note")  # video note
         caption    = msg.get("caption", "").strip()
 
         # Reply diretta a un messaggio di Genesi → fast-path SI + inietta contesto
@@ -929,7 +933,7 @@ async def handle_update(update: dict):
             city = session.get("city", "")
 
         # ── Pre-processing Media e Trascrizione Vocale ─────────────────────────
-        _original_has_media = bool(photo or voice or audio or document)
+        _original_has_media = bool(photo or voice or audio or document or video or animation or video_note)
         _transcribed_voice_text = ""
         
         if voice or audio:
@@ -1223,6 +1227,16 @@ async def handle_update(update: dict):
             if not await _handle_reply(reply):
                 return
             logger.info("TELEGRAM_DOCUMENT_OK chat_id=%s filename=%s", chat_id, filename)
+            return
+
+        # ── VIDEO / ANIMATION / VIDEO_NOTE ─────────────────────────────────────
+        if video or animation or video_note:
+            await send_typing(chat_id)
+            user_msg = caption or "Guarda questo video/animazione."
+            reply = await _do_chat(f"{user_msg}\n\n[Inviato un file video/animazione]")
+            if not await _handle_reply(reply):
+                return
+            logger.info("TELEGRAM_VIDEO_OK chat_id=%s", chat_id)
             return
 
         # ── VOCALE ─────────────────────────────────────────────────────────────

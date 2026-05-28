@@ -350,6 +350,10 @@ async function startBaileys() {
                     mediaId = msg.key.id;
                     mediaMime = msg.message.audioMessage.mimetype || "audio/ogg";
                     mediaType = "audio";
+                } else if (mType === "videoMessage") {
+                    mediaId = msg.key.id;
+                    mediaMime = msg.message.videoMessage.mimetype || "video/mp4";
+                    mediaType = "video";
                 }
 
                 // Se non c'è testo e non c'è nemmeno media, salta il messaggio
@@ -362,10 +366,12 @@ async function startBaileys() {
                     text = "Analizza questo documento.";
                 } else if (!text && mediaType === "audio") {
                     text = "Ascolta questo audio.";
+                } else if (!text && mediaType === "video") {
+                    text = "Guarda questo video.";
                 }
 
                 // Se c'è un file multimediale scaricalo localmente
-                if (mediaType && ["image", "document", "audio"].includes(mediaType)) {
+                if (mediaType && ["image", "document", "audio", "video"].includes(mediaType)) {
                     try {
                         const buffer = await downloadMediaMessage(
                             msg,
@@ -434,6 +440,8 @@ async function startBaileys() {
 
                 // Estrai il testo quotato per iniettarlo nel contesto
                 let quotedText = "";
+                const hasLink = /https?:\/\/[^\s]+|www\.[^\s]+/i.test(text);
+
                 if (isReplyToGenesi) {
                     const qm = contextInfo.quotedMessage;
                     quotedText = (
@@ -442,6 +450,10 @@ async function startBaileys() {
                         || ""
                     ).trim().slice(0, 300);
                     console.log(`[Baileys] Reply diretta a Genesi da ${senderName} in ${groupName} → intervengo`);
+                } else if (mediaType) {
+                    console.log(`[Baileys] Messaggio contiene media (${mediaType}) in ${groupName} → bypasso filtro e intervengo`);
+                } else if (hasLink) {
+                    console.log(`[Baileys] Messaggio contiene link in ${groupName} → bypasso filtro e intervengo`);
                 } else {
                     const recentMsgs = getRecentMessages(groupId);
                     if (!await shouldRespond(text, recentMsgs, token)) continue;

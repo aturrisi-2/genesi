@@ -199,8 +199,10 @@ async def _group_should_intervene(
     Decide con LLM se Genesi deve intervenire nel gruppo WhatsApp.
     Fast-path per mention/nome diretti. LLM per tutto il resto.
     """
-    if has_media:
-        # Interviene sempre se viene inviato un elemento multimediale (foto, video, doc, ecc.)
+    import re
+    has_link = bool(re.search(r'https?://[^\s]+|www\.[^\s]+', f"{text} {caption}", re.IGNORECASE))
+    if has_media or has_link:
+        # Interviene sempre se viene inviato un elemento multimediale (foto, video, doc, ecc.) o un link
         return True
 
     combined = f"{text} {caption}".strip()
@@ -786,6 +788,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
         mime_type_media = ""
         doc_id   = ""
         doc_name = ""
+        video_id = ""
 
         if msg_type == "text":
             text = msg.get("text", {}).get("body", "").strip()
@@ -804,6 +807,11 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             doc_name = doc.get("filename", "document")
             caption  = doc.get("caption", "").strip()
             mime_type_media = doc.get("mime_type", "application/octet-stream")
+        elif msg_type == "video":
+            vid = msg.get("video", {})
+            video_id = vid.get("id", "")
+            caption  = vid.get("caption", "").strip()
+            mime_type_media = vid.get("mime_type", "video/mp4")
         else:
             # Tipo non gestito (sticker, location, ecc.)
             logger.info("WA_UNSUPPORTED_TYPE wa_id=%s type=%s", wa_id, msg_type)
@@ -955,7 +963,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
         city = session.get("city", "")
 
         # ── Pre-processing Media e Trascrizione Vocale ─────────────────────────
-        _original_has_media = bool(photo_id or voice_id or doc_id)
+        _original_has_media = bool(photo_id or voice_id or doc_id or video_id)
         _transcribed_voice_text = ""
         
         if voice_id:
@@ -1204,6 +1212,16 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             if not await _handle_reply(reply):
                 return
             logger.info("WA_DOCUMENT_OK wa_id=%s filename=%s", wa_id, doc_name)
+            return
+
+        # ── VIDEO ─────────────────────────────────────────────────────────────
+        if video_id:
+            await send_typing(wa_id, msg_id)
+            user_msg = caption or "Guarda questo video."
+            reply = await _do_chat(f"{user_msg}\n\n[Inviato un file video/animazione]")
+            if not await _handle_reply(reply):
+                return
+            logger.info("WA_VIDEO_OK wa_id=%s", wa_id)
             return
 
         # ── VOCALE ────────────────────────────────────────────────────────────

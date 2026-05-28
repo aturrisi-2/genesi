@@ -798,6 +798,8 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                         transcription = await _transcribe(token, media_bytes, media_mime)
                         if transcription:
                             media_analysis = f"[Nota vocale trascritta: {transcription}]"
+                    elif request.media_type == "video":
+                        media_analysis = "[File Video/Animazione]"
                     else:
                         ext = "jpg" if "jpeg" in media_mime else media_mime.split("/")[-1]
                         filename = f"photo.{ext}" if request.media_type == "image" else f"doc.{ext}"
