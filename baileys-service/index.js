@@ -41,7 +41,7 @@ const MAX_RAW = 25;
 // ── Ultima risposta di Genesi per gruppo (per CONTINUAZIONE) ──────────────────
 // { groupId: { text, ts } }
 const lastGenesiReply = {};
-const GENESI_REPLY_TTL = 5 * 60 * 1000; // 5 minuti
+const GENESI_REPLY_TTL = 10 * 60 * 1000; // 10 minuti
 
 // ── Cache per i nomi dei contatti visti ───────────────────────────────────────
 // { jid/lid: name }

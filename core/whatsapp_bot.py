@@ -171,12 +171,12 @@ Leggi i messaggi recenti del gruppo e il messaggio attuale. Decidi se Genesi dev
 
 RISPONDI "SI" se il messaggio attuale rientra in UNO di questi casi:
 1. INVOCATA: qualcuno cita Genesi per nome (es: "Genesi..."), la taglia o le pone una domanda diretta.
-2. CONTINUAZIONE DIRETTA: follow-up a una risposta appena data da Genesi (< 5 min, stesso filo).
+2. CONTINUAZIONE DIRETTA: follow-up a una risposta appena data da Genesi (< 10 min, stesso filo).
 3. VERO DIALOGO E INTRATTENIMENTO: intuisci un vero dialogo attivo in cui la partecipazione proattiva di Genesi può arricchire la discussione, incalzando con curiosità o intrattenendo i familiari in modo caloroso e naturale.
 4. DOMANDA GENERICA DA AIUTO: qualcuno pone una domanda oggettiva, informativa, o di curiosità generale rivolta al gruppo o a nessuno in particolare (es: "qualcuno sa a che ora chiude il supermercato?", "come si prepara la carbonara?", "che tempo fa domani a Roma?") a cui Genesi può rispondere con certezza assoluta, coerenza e grande utilità per il gruppo.
 5. COMPLEANNI E FESTIVITÀ: qualcuno fa gli auguri di compleanno o festeggia una festività nel gruppo, oppure il messaggio descrive una festività del giorno attuale, e Genesi vuole unirsi in modo caloroso e naturale agli auguri.
 6. NOTIZIA EMOTIVA O SIGNIFICATIVA: un successo eccezionale, un traguardo importante, un lutto, una malattia seria, o un problema/stato emotivo di un familiare — Genesi, come guardiano emotivo, interviene sempre con sincera vicinanza e calore umano.
-7. SALUTO DI APERTURA / ACCOGLIENZA: il primo saluto del giorno nel gruppo o il saluto di un utente che si sveglia/arriva più tardi (es. dopo ore di silenzio per quell'utente). Genesi deve accogliere calorosamente chiunque saluti a distanza di tempo. Nota: se nel contesto è indicato che Genesi ha già salutato di recente o oggi lo stesso utente per quella categoria, rispondi "NO".
+7. SALUTO DI APERTURA / ACCOGLIENZA: il primo saluto del giorno nel gruppo o il saluto di un utente che si sveglia/arriva più tardi (es. dopo ore di silenzio per quell'utente). Genesi deve accogliere calorosamente chiunque saluti a distanza di tempo. Nota: rispondi "NO" a saluti ripetuti SOLO se il messaggio è un saluto puro privo di altro testo significativo. Se l'utente unisce al saluto una domanda, un commento o partecipa a una conversazione attiva, rispondi decisamente "SI" per mantenere la continuità conversazionale.
 8. DOMANDA DI FOLLOW-UP O CHIARIMENTO: qualcuno pone una domanda di approfondimento, continuazione o chiarimento legata a un tema o a una risposta data da Genesi di recente.
 
 RISPONDI "NO" in tutti gli altri casi, incluso:
@@ -234,10 +234,10 @@ async def _group_should_intervene(
     if len(combined) < 8 and "?" not in combined and not has_media:
         return False
 
-    # Fast-path: continuazione di conversazione attiva nel gruppo (< 5 min)
+    # Fast-path: continuazione di conversazione attiva nel gruppo (< 10 min)
     state = _GROUP_CONV_STATE.get(chat_id, {})
     last_reply_age = time.time() - state.get("ts", 0)
-    if last_reply_age < 300:
+    if last_reply_age < 600:
         # Se lo stesso utente continua a scrivere
         if state.get("wa_id") == wa_id:
             return True
@@ -264,7 +264,7 @@ async def _group_should_intervene(
         state = _GROUP_CONV_STATE.get(chat_id, {})
         last_reply = state.get("last_reply")
         last_reply_ts = state.get("ts", 0)
-        if last_reply and time.time() - last_reply_ts < 300:  # 5 minuti
+        if last_reply and time.time() - last_reply_ts < 600:  # 10 minuti
             history_text += f"Ultima risposta di Genesi in questo gruppo: Genesi: {last_reply[:200]}\n\n"
 
         # Informa l'LLM se Genesi ha già risposto a saluti oggi per questo specifico utente
