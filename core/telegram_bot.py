@@ -971,12 +971,12 @@ async def handle_update(update: dict):
                 asyncio.create_task(
                     append_raw_message(chat_id, from_id, first_name, msg_text)
                 )
-            # Birthday: registra gruppo e collega pre-seed al from_id
             try:
                 from core.birthday_service import (
                     register_known_group, link_preseed_to_member, try_extract_birthday
                 )
-                asyncio.create_task(register_known_group(chat_id, "telegram"))
+                chat_title = msg["chat"].get("title")
+                asyncio.create_task(register_known_group(chat_id, "telegram", title=chat_title))
                 asyncio.create_task(link_preseed_to_member(from_id, first_name))
                 if msg_text:
                     asyncio.create_task(try_extract_birthday(from_id, first_name, msg_text))
@@ -1011,7 +1011,7 @@ async def handle_update(update: dict):
 
         async def _load_group_ctx() -> str:
             if not _group_ctx_cache:
-                ctx = await build_group_context(chat_id, from_id, first_name)
+                ctx = await build_group_context(chat_id, from_id, first_name, current_message=text)
                 _group_ctx_cache.append(ctx)
             return _group_ctx_cache[0]
 

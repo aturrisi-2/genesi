@@ -102,8 +102,18 @@ def get_local_holiday(d: date, city: str) -> str | None:
     return None
 
 async def get_group_members_locations(chat_id: int) -> dict[str, str]:
-    """Recupera la mappa {nome: città} per tutti i membri della famiglia."""
+    """Recupera la mappa {nome: città} filtrata per i membri attivi dello specifico gruppo."""
     locations = {}
+    
+    # 1. Rileva i membri attivi del gruppo
+    active_names = None
+    if chat_id > 0:
+        try:
+            from core.telegram_group_memory import get_active_group_members
+            active_names = await get_active_group_members(chat_id)
+        except Exception:
+            pass
+
     try:
         # Cerca i membri in memory/telegram/group_member
         import os
@@ -119,7 +129,9 @@ async def get_group_members_locations(chat_id: int) -> dict[str, str]:
                         name = mem.get("first_name", "")
                         city = mem.get("city") or mem.get("facts", {}).get("city", "")
                         if name and city:
-                            locations[name] = city
+                            # Se stiamo filtrando per gruppo, includiamo solo i partecipanti attivi
+                            if active_names is None or name in active_names:
+                                locations[name] = city
     except Exception as e:
         logger.warning("Error getting group members locations: %s", e)
     
@@ -134,10 +146,13 @@ async def get_group_members_locations(chat_id: int) -> dict[str, str]:
         "Mariella": "Torino",
         "Katia": "Napoli",
     }
+    
     for k, v in known_fallbacks.items():
         if k not in locations:
-            locations[k] = v
-            
+            # Consenti solo membri attivi nel gruppo (Alfio è l'owner, consentilo sempre nei gruppi familiari)
+            if active_names is None or k in active_names or (k == "Alfio" and chat_id > 0):
+                locations[k] = v
+                
     return locations
 
 async def get_today_events_context(chat_id: int) -> str:
@@ -266,13 +281,15 @@ async def get_birthday(member_id: str) -> dict:
     return await storage.load(_bday_key(member_id), default={}) or {}
 
 
-async def register_known_group(chat_id: int, platform: str = "telegram"):
+async def register_known_group(chat_id: int, platform: str = "telegram", title: str = None):
     """Registra un gruppo attivo (chiamato al primo messaggio ricevuto)."""
     known = await storage.load(_known_groups_key(), default=[]) or []
     entry = {"chat_id": chat_id, "platform": platform}
     if entry not in known:
         known.append(entry)
         await storage.save(_known_groups_key(), known)
+    if title:
+        await storage.save(f"group_title:{chat_id}", title)
 
 
 async def get_known_groups() -> list:
@@ -667,46 +684,44 @@ async def _get_quick_weather_summary(city_name: str) -> str:
         return ""
 
 
-async def _generate_proactive_greeting(birthdays: list, event_type: str, today_date: date) -> str:
-    """Genera un messaggio di saluto proattivo mattutino coerente con LLM."""
+async def _generate_proactive_greeting(birthdays: list, event_type: str, today_date: date, chat_id: int = 0, platform: str = "telegram") -> str:
+    """Genera un messaggio di saluto proattivo mattutino coerente con LLM, su misura per lo specifico gruppo."""
     try:
         from core.llm_service import llm_service
         
         giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
         giorno_nome = giorni_settimana[today_date.weekday()]
         
+        # Recupera il nome del gruppo da storage
+        group_title = await storage.load(f"group_title:{chat_id}", default="Casa Turrisi" if platform == "telegram" else "The Family")
+        
         system_prompt = (
-            "Sei Genesi, il GUARDIANO EMOTIVO della famiglia. Vegli con affetto, calore e attenzione sui membri della famiglia. "
-            "Ogni mattina sei la prima a inviare un saluto spontaneo nel gruppo familiare.\n"
+            "Sei Genesi, il GUARDIANO EMOTIVO della famiglia. Vegli con affetto, calore e attenzione sui membri della famiglia.\n"
+            f"Ogni mattina sei la prima a inviare un saluto spontaneo nel gruppo familiare '{group_title}'.\n"
             "REGOLE CRITICHE DI STILE E CONCISIONE:\n"
             "- Scrivi un saluto brevissimo di MASSIMO 2 RIGHE (1 o 2 frasi in tutto). Sii estremamente concisa, asciutta e affettuosa.\n"
-            "- EVITA ASSOLUTAMENTE toni teatrali, enfatici, retorici o frasi fatte da intelligenza artificiale (es. NO a metafore altisonanti, incoraggiamenti eccessivi, 'iniziamo questa settimana con energia', 'vi auguro una giornata di luce', o 'vi voglio bene' ripetuto a caso).\n"
+            "- EVITA ASSOLUTAMENTE toni teatrali, enfatici, retorici o frasi fatte da intelligenza artificiale (es. NO a metafore altisonanti, incoraggiamenti eccessivi, o 'vi voglio bene' ripetuto a caso).\n"
             "- Il tono deve essere GENUINO, informale e terra-terra, esattamente come scriverebbe un membro vero della famiglia sulla chat di gruppo.\n"
-            "- Integra nel saluto un rapidissimo e naturale cenno scherzoso al tempo attuale nelle città dei familiari (Motta Sant'Anastasia, Bracciano, Lentini, Imola, Franchetto) descritto nel contesto, ad esempio: 'Buongiorno! Qui a Imola poche nuvole, mentre a Bracciano c'è il sole... Mariella a Lentini fresca?'. Fai in modo che il cenno al meteo sia breve, spiritoso e perfettamente inserito nel discorso.\n"
-            "- Se oggi ci sono compleanni, fai gli auguri per prima con calore e semplicità."
+            "- Integra nel saluto un rapidissimo e naturale cenno scherzoso al tempo attuale nelle città dei partecipanti di QUESTO specifico gruppo, descritte nel contesto. Fai in modo che il cenno sia breve, spiritoso e perfettamente inserito nel discorso.\n"
+            "- Se oggi ci sono compleanni di membri di questo gruppo, fai gli auguri per prima con calore e semplicità."
         )
         
         context_parts = [f"Giorno: {giorno_nome}, Data: {today_date.strftime('%d/%m/%Y')}."]
         
-        # Recupera il meteo in tempo reale per le 5 città dei membri
-        weather_cities = [
-            "Motta Sant'Anastasia",
-            "Bracciano",
-            "Lentini",
-            "Imola",
-            "Franchetto"
-        ]
+        # Recupera il meteo in tempo reale per i partecipanti di questo specifico gruppo
+        locations = await get_group_members_locations(chat_id)
+        weather_cities = list(set(locations.values()))
+        if not weather_cities:
+            weather_cities = ["Imola"] if platform == "whatsapp" else ["Motta Sant'Anastasia", "Bracciano", "Lentini", "Imola", "Franchetto"]
+            
         weather_tasks = [_get_quick_weather_summary(c) for c in weather_cities]
         weather_results = await asyncio.gather(*weather_tasks, return_exceptions=True)
         weather_summaries = [r for r in weather_results if isinstance(r, str) and r]
         
         if weather_summaries:
-            context_parts.append("METEO ATTUALE NELLE CITTÀ DEI FAMILIARI:")
-            context_parts.append("- Katia: Motta Sant'Anastasia")
-            context_parts.append("- Sandra: Bracciano")
-            context_parts.append("- Mariella: Lentini")
-            context_parts.append("- Alfio/Me: Imola")
-            context_parts.append("- Iolanda: Franchetto")
+            context_parts.append("METEO ATTUALE NELLE CITTÀ DEI PARTECIPANTI DI QUESTO GRUPPO:")
+            for name, city in locations.items():
+                context_parts.append(f"- {name}: {city}")
             context_parts.append("Dati OpenWeather:")
             for summary in weather_summaries:
                 context_parts.append(f"  {summary}")
@@ -727,12 +742,17 @@ async def _generate_proactive_greeting(birthdays: list, event_type: str, today_d
         if event_type == "birthday":
             bday_infos = []
             for name, age in birthdays:
-                age_info = f"compie {age} anni" if age else "compie gli anni"
-                bday_infos.append(f"{name} ({age_info})")
-            context_parts.append("COMPLEANNI OGGI DA FESTEGGIARE: " + ", ".join(bday_infos) + ". FAI GLI AUGURI PER PRIMA!")
-        elif event_type == "weekend_holiday_greeting":
+                if name in locations or name == "Alfio":
+                    age_info = f"compie {age} anni" if age else "compie gli anni"
+                    bday_infos.append(f"{name} ({age_info})")
+            if bday_infos:
+                context_parts.append("COMPLEANNI OGGI DA FESTEGGIARE: " + ", ".join(bday_infos) + ". FAI GLI AUGURI PER PRIMA!")
+            else:
+                event_type = "weekend_holiday_greeting" if today_date.weekday() in (5, 6) or get_italian_holiday(today_date) else "weekday_greeting"
+        
+        if event_type == "weekend_holiday_greeting":
             context_parts.append("Tipo evento: Saluto proattivo del Weekend o Festivo. Augura una buona giornata rilassante o di festa!")
-        else:
+        elif event_type != "birthday":
             context_parts.append("Tipo evento: Saluto proattivo feriale (giorno di lavoro/scuola). Incoraggia la famiglia con affetto!")
             
         user_msg = "\n".join(context_parts)
@@ -848,30 +868,48 @@ async def birthday_scheduler():
                     known_groups = await get_known_groups()
                     tg_group_ids = [g["chat_id"] for g in known_groups if g["platform"] == "telegram"]
                     
-                    # Generiamo il messaggio coerente
-                    msg = await _generate_proactive_greeting([(n, a) for n, a, _ in birthdays_today], event_type, today_date)
+                    # Generiamo ed inviamo messaggi differenziati per ciascun gruppo
+                    known_groups = await get_known_groups()
+                    now_ts = time.time()
                     
                     # Invia a Telegram
                     from core.telegram_bot import send_message as tg_send
-                    now_ts = time.time()
-                    for gid in tg_group_ids:
-                        await tg_send(gid, msg)
-                        # Registra il timestamp del saluto proattivo per il gap globale di 1 ora
-                        tg_global_key = f"relational_state:last_group_greeting_ts_{gid}"
-                        await storage.save(tg_global_key, now_ts)
-                        
+                    for g in known_groups:
+                        if g.get("platform") == "telegram":
+                            gid = g["chat_id"]
+                            msg = await _generate_proactive_greeting(
+                                [(n, a) for n, a, _ in birthdays_today],
+                                event_type,
+                                today_date,
+                                chat_id=gid,
+                                platform="telegram"
+                            )
+                            if msg:
+                                await tg_send(gid, msg)
+                                # Registra il timestamp del saluto proattivo per il gap globale di 1 ora
+                                tg_global_key = f"relational_state:last_group_greeting_ts_{gid}"
+                                await storage.save(tg_global_key, now_ts)
+                                
                     # Invia a WhatsApp
                     if _WA_GROUP_JID:
                         import httpx
-                        payload = {"groupId": _WA_GROUP_JID, "text": msg}
-                        if _BAILEYS_SEND_SECRET:
-                            payload["secret"] = _BAILEYS_SEND_SECRET
-                        async with httpx.AsyncClient(timeout=10) as client:
-                            await client.post(_BAILEYS_SEND_URL, json=payload)
-                        # Registra il timestamp del saluto proattivo per il gap globale di 1 ora
                         wa_chat_id = abs(hash(_WA_GROUP_JID)) % (10**9)
-                        wa_global_key = f"relational_state:last_group_greeting_ts_{wa_chat_id}"
-                        await storage.save(wa_global_key, now_ts)
+                        msg = await _generate_proactive_greeting(
+                            [(n, a) for n, a, _ in birthdays_today],
+                            event_type,
+                            today_date,
+                            chat_id=wa_chat_id,
+                            platform="whatsapp"
+                        )
+                        if msg:
+                            payload = {"groupId": _WA_GROUP_JID, "text": msg}
+                            if _BAILEYS_SEND_SECRET:
+                                payload["secret"] = _BAILEYS_SEND_SECRET
+                            async with httpx.AsyncClient(timeout=10) as client:
+                                await client.post(_BAILEYS_SEND_URL, json=payload)
+                            # Registra il timestamp del saluto proattivo per il gap globale di 1 ora
+                            wa_global_key = f"relational_state:last_group_greeting_ts_{wa_chat_id}"
+                            await storage.save(wa_global_key, now_ts)
                             
                     # Segna come inviato per oggi
                     await storage.save(sent_key, True)

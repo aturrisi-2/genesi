@@ -640,6 +640,7 @@ class GroupChatRequest(BaseModel):
     sender_name: str
     sender_id: str   # numero telefono o JID
     group_id: str    # JID gruppo WhatsApp
+    group_name: str = "WhatsApp Group"
 
 class GroupChatResponse(BaseModel):
     response: str
@@ -672,6 +673,8 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
         try:
             sender_int = abs(hash(clean_sender)) % (10**9)
             group_int  = abs(hash(clean_group))  % (10**9)
+            from core.birthday_service import register_known_group
+            _aio.create_task(register_known_group(group_int, "whatsapp", title=request.group_name))
         except Exception:
             sender_int = 0
             group_int  = 0
@@ -716,7 +719,7 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
             pass
 
         # 4. Costruisci contesto gruppo (sincrono — serve per la risposta)
-        group_ctx = await build_group_context(group_int, sender_int, request.sender_name)
+        group_ctx = await build_group_context(group_int, sender_int, request.sender_name, current_message=request.text)
 
         # 5. Costruisci messaggio arricchito (stesso formato di telegram_bot.py)
         only_emoji = all(ord(c) > 127 or c in (' ', '\n') for c in request.text.strip())

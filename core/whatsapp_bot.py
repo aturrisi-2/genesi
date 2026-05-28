@@ -1044,7 +1044,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             if is_group and chat_id and first_name:
                 try:
                     from core.telegram_group_memory import build_group_context
-                    group_ctx = await build_group_context(chat_id, abs(hash(wa_id)) % (10**9), first_name)
+                    group_ctx = await build_group_context(chat_id, abs(hash(wa_id)) % (10**9), first_name, current_message=message)
                     msg_with_quote = message
                     if _reply_to_genesi:
                         msg_with_quote = f"[Stai rispondendo a un tuo messaggio precedente di Genesi]\n{message}"

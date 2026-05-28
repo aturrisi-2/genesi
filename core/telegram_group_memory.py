@@ -266,15 +266,49 @@ async def get_raw_messages(chat_id: int, limit: int = RAW_INJECT) -> list:
 
 # ── Context builder ────────────────────────────────────────────────────────────
 
+async def get_active_group_members(chat_id: int) -> list[str]:
+    """Estrae i nomi unici dei partecipanti attivi che hanno inviato messaggi in questo gruppo."""
+    if not chat_id:
+        return []
+    history = await get_group_history(chat_id, limit=80)
+    raw_msgs = await get_raw_messages(chat_id, limit=80)
+    
+    active = set()
+    for h in history:
+        name = h.get("first_name")
+        if name:
+            active.add(name.strip())
+    for m in raw_msgs:
+        name = m.get("first_name")
+        if name:
+            active.add(name.strip())
+            
+    return sorted(list(active))
+
+
 async def build_group_context(chat_id: int, from_id: int, first_name: str,
-                               owner_name: str = "Alfio") -> str:
+                              owner_name: str = "Alfio", current_message: str = "") -> str:
+    s        = await _storage()
     member   = await get_member(from_id)
     history  = await get_group_history(chat_id, limit=HISTORY_INJECT)
     insights = await _get_group_insights(chat_id)
     raw_msgs = await get_raw_messages(chat_id, limit=RAW_INJECT)
     summary  = await _get_group_summary(chat_id)
 
+    # 1. Rileva nome del gruppo e membri attivi in questo specifico gruppo
+    group_title = await s.load(f"group_title:{chat_id}", default="Casa Turrisi" if chat_id > 0 else "Gruppo")
+    active_members = await get_active_group_members(chat_id)
+    if first_name not in active_members:
+        active_members.append(first_name)
+        active_members = sorted(list(set(active_members)))
+
     lines = []
+
+    # [INFO GRUPPO CORRENTE]
+    lines.append(f"[INFO GRUPPO: Ti trovi nel gruppo '{group_title}']")
+    if active_members:
+        lines.append(f"[MEMBRI ATTIVI IN QUESTO GRUPPO: {', '.join(active_members)}]")
+    lines.append("")
 
     # 📅 Contesto Temporale, Festività e Compleanni di Oggi
     try:
@@ -287,6 +321,18 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
             lines.append("")
     except Exception as e:
         logger.warning("Error injecting today events context: %s", e)
+
+    # 🧠 Memoria Episodica della Famiglia (eventi recenti e importanti di famiglia)
+    try:
+        from core.episode_memory import episode_memory as _em
+        relevant_episodes = await _em.get_relevant(_OWNER_USER_ID_FOR_TREE, current_message, limit=5)
+        if relevant_episodes:
+            lines.append("[MEMORIA EPISODICA DELLA FAMIGLIA (eventi recenti o rilevanti):]")
+            for ep in relevant_episodes:
+                lines.append(f"  • {ep.get('text')}")
+            lines.append("")
+    except Exception as e:
+        logger.warning("Error injecting family episodic memory: %s", e)
 
     # ⚠️ Correzioni esplicite — INIETTATE PRIME, massima priorità
     corrections = await get_group_corrections(chat_id, max_age_seconds=604800)  # 7 giorni
@@ -346,7 +392,6 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
         lines.append("[FINE RISPOSTE]")
 
     # Albero familiare completo (per inferenze sui gradi di parentela)
-    s = await _storage()
     fdata = await s.load(_family_key(_OWNER_USER_ID_FOR_TREE), default={}) or {}
     family_chain = fdata.get("family_chain", "")
     if family_chain:
@@ -366,7 +411,9 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
         f"[CONTESTO FAMIGLIA:{rel_note} "
         f"{tratta} con calore e familiarità, come un parente. "
         f"Usa i gradi di parentela corretti quando parli di altri membri. "
-        f"Puoi fare riferimento a quello che altri hanno detto.]"
+        f"Puoi fare riferimento a quello che altri hanno detto. "
+        f"ATTENZIONE ASSOLUTA DI COERENZA: Ti trovi nel gruppo '{group_title}'. I membri attivi qui sono esclusivamente: {', '.join(active_members)}. "
+        f"NON nominare, non salutare e non fare riferimento a parenti assenti da questo specifico gruppo (es. se sei nel gruppo di WhatsApp dove non ci sono Katia, Sandra, Mariella, Iolanda, non nominarle e non parlare di loro!).]"
     )
 
     # Regola anti-staleness: non tirare fuori vecchie discussioni senza motivo

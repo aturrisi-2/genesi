@@ -98,7 +98,7 @@ async function getToken(type = "group") {
 }
 
 // ── Chiamata a Genesi — gruppo ────────────────────────────────────────────────
-async function askGenesiGroup(text, senderName, senderId, groupId, token = null) {
+async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "WhatsApp Group", token = null) {
     try {
         if (!token) token = await getToken("group");
         const res = await axios.post(`${GENESI_URL}/api/chat/group`, {
@@ -106,6 +106,7 @@ async function askGenesiGroup(text, senderName, senderId, groupId, token = null)
             sender_name: senderName,
             sender_id:   senderId,
             group_id:    groupId,
+            group_name:  groupName,
         }, {
             headers: { Authorization: `Bearer ${token}` },
             timeout: 35000,
@@ -321,15 +322,17 @@ async function startBaileys() {
 
                 const senderJid = msg.key.participant || groupId;
                 let senderName = (msg.pushName || senderJid).split(" ")[0];
+                let groupName = "WhatsApp Group";
                 try {
                     const meta = await sock.groupMetadata(groupId);
+                    if (meta?.subject) groupName = meta.subject;
                     const p = meta?.participants?.find(x => x.id === senderJid);
                     if (p?.name) senderName = p.name.split(" ")[0];
                 } catch (_) {}
 
                 // Salva nel buffer grezzo locale
                 addToBuffer(groupId, senderName, text);
-                console.log(`[${senderName}@${groupId.slice(0,10)}] ${text.slice(0, 60)}`);
+                console.log(`[${senderName}@${groupName}] ${text.slice(0, 60)}`);
 
                 // Filtra: LLM decide se intervenire
                 const token = await getToken("group");
@@ -349,7 +352,7 @@ async function startBaileys() {
                         || qm?.extendedTextMessage?.text
                         || ""
                     ).trim().slice(0, 300);
-                    console.log(`[Baileys] Reply diretta a Genesi da ${senderName} → intervengo`);
+                    console.log(`[Baileys] Reply diretta a Genesi da ${senderName} in ${groupName} → intervengo`);
                 } else {
                     const recentMsgs = getRecentMessages(groupId);
                     if (!await shouldRespond(text, recentMsgs, token)) continue;
@@ -360,16 +363,16 @@ async function startBaileys() {
                     ? `[Stai rispondendo a questo tuo messaggio precedente: "${quotedText}"]\n${text}`
                     : text;
 
-                console.log(`[Baileys] Intervengo per: "${textToSend.slice(0, 50)}"`);
+                console.log(`[Baileys] Intervengo in ${groupName} per: "${textToSend.slice(0, 50)}"`);
 
                 await sock.sendPresenceUpdate("composing", groupId);
-                const reply = await askGenesiGroup(textToSend, senderName, senderJid, groupId, token);
+                const reply = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, token);
                 await sock.sendPresenceUpdate("paused", groupId);
 
                 if (reply) {
                     await sock.sendMessage(groupId, { text: reply });
                     lastGenesiReply[groupId] = { text: reply, ts: Date.now() };
-                    console.log(`[Genesi → ${senderName}] ${reply.slice(0, 80)}`);
+                    console.log(`[Genesi → ${senderName} in ${groupName}] ${reply.slice(0, 80)}`);
                 }
             } catch (e) {
                 console.error("[Baileys] Errore messaggio:", e.message);
