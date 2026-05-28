@@ -346,7 +346,9 @@ async function startBaileys() {
                             };
                         });
                     }
-                } catch (_) {}
+                } catch (err) {
+                    console.error("[Baileys] Error fetching group metadata:", err.message || err);
+                }
 
                 // Salva nel buffer grezzo locale
                 addToBuffer(groupId, senderName, text);
