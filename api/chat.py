@@ -303,6 +303,15 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                     pass
         _asyncio.create_task(_update_prediction())
 
+        # Rilevamento Risoluzione Episodi in background per chat 1:1
+        async def _1to1_episode_resolution():
+            try:
+                from core.episode_memory import episode_memory as _em
+                await _em.resolve_episodes(user_id, _clean_msg)
+            except Exception as _e:
+                log("1TO1_EPISODE_RESOLUTION_BG_ERROR", error=str(_e))
+        _asyncio.create_task(_1to1_episode_resolution())
+
         # Behavioral memory update in background (zero-cost, no LLM)
         _beh_msg = _clean_msg
         _beh_resp = _raw_response
@@ -498,6 +507,15 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                     except Exception:
                         pass
             _aio.create_task(_stream_update_prediction())
+
+            # Rilevamento Risoluzione Episodi in background per chat streaming 1:1
+            async def _stream_episode_resolution():
+                try:
+                    from core.episode_memory import episode_memory as _em
+                    await _em.resolve_episodes(user_id, _stream_clean_msg)
+                except Exception as _e:
+                    log("STREAM_EPISODE_RESOLUTION_BG_ERROR", error=str(_e))
+            _aio.create_task(_stream_episode_resolution())
 
             # Behavioral memory update in background (zero-cost, no LLM)
             _stream_beh_msg = _stream_clean_msg
