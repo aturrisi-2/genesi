@@ -199,11 +199,13 @@ async def _group_should_intervene(
     Decide con LLM se Genesi deve intervenire nel gruppo WhatsApp.
     Fast-path per mention/nome diretti. LLM per tutto il resto.
     """
+    if has_media:
+        # Interviene sempre se viene inviato un elemento multimediale (foto, video, doc, ecc.)
+        return True
+
     combined = f"{text} {caption}".strip()
     if not combined:
-        if not has_media:
-            return False
-        combined = "[Inviato elemento multimediale senza didascalia]"
+        return False
 
     # Fast-path: menzione diretta → sempre sì
     if bot_mentioned:
