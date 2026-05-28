@@ -98,7 +98,7 @@ async function getToken(type = "group") {
 }
 
 // ── Chiamata a Genesi — gruppo ────────────────────────────────────────────────
-async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "WhatsApp Group", token = null) {
+async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "WhatsApp Group", participants = null, token = null) {
     try {
         if (!token) token = await getToken("group");
         const res = await axios.post(`${GENESI_URL}/api/chat/group`, {
@@ -107,6 +107,7 @@ async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "
             sender_id:   senderId,
             group_id:    groupId,
             group_name:  groupName,
+            participants: participants,
         }, {
             headers: { Authorization: `Bearer ${token}` },
             timeout: 35000,
@@ -323,11 +324,28 @@ async function startBaileys() {
                 const senderJid = msg.key.participant || groupId;
                 let senderName = (msg.pushName || senderJid).split(" ")[0];
                 let groupName = "WhatsApp Group";
+                let participants = null;
                 try {
                     const meta = await sock.groupMetadata(groupId);
                     if (meta?.subject) groupName = meta.subject;
                     const p = meta?.participants?.find(x => x.id === senderJid);
                     if (p?.name) senderName = p.name.split(" ")[0];
+                    
+                    if (meta?.participants) {
+                        const myJid = sock.user?.id?.replace(/:.*@/, "@") || "";
+                        participants = meta.participants.map(part => {
+                            const cleanId = part.id.replace(/:.*@/, "@");
+                            let pName = part.name || part.verifiedName || part.notify || null;
+                            if (pName) {
+                                pName = pName.trim();
+                            }
+                            return {
+                                id: cleanId,
+                                name: pName,
+                                is_me: cleanId === myJid
+                            };
+                        });
+                    }
                 } catch (_) {}
 
                 // Salva nel buffer grezzo locale
@@ -366,7 +384,7 @@ async function startBaileys() {
                 console.log(`[Baileys] Intervengo in ${groupName} per: "${textToSend.slice(0, 50)}"`);
 
                 await sock.sendPresenceUpdate("composing", groupId);
-                const reply = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, token);
+                const reply = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, participants, token);
                 await sock.sendPresenceUpdate("paused", groupId);
 
                 if (reply) {

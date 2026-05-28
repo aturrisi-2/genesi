@@ -287,7 +287,8 @@ async def get_active_group_members(chat_id: int) -> list[str]:
 
 
 async def build_group_context(chat_id: int, from_id: int, first_name: str,
-                              owner_name: str = "Alfio", current_message: str = "") -> str:
+                              owner_name: str = "Alfio", current_message: str = "",
+                              participants: Optional[list[dict]] = None) -> str:
     s        = await _storage()
     member   = await get_member(from_id)
     history  = await get_group_history(chat_id, limit=HISTORY_INJECT)
@@ -297,17 +298,70 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
 
     # 1. Rileva nome del gruppo e membri attivi in questo specifico gruppo
     group_title = await s.load(f"group_title:{chat_id}", default="Casa Turrisi" if chat_id > 0 else "Gruppo")
-    active_members = await get_active_group_members(chat_id)
-    if first_name not in active_members:
-        active_members.append(first_name)
-        active_members = sorted(list(set(active_members)))
+    
+    member_names_detailed = []
+    num_humans = 0
+    has_bot = False
+
+    if participants:
+        from collections import Counter
+        name_counts = Counter()
+        resolved_participants = []
+        
+        for p in participants:
+            p_id = p.get("id", "")
+            is_me = p.get("is_me", False)
+            if is_me:
+                has_bot = True
+                continue
+                
+            clean_jid = p_id.split("@")[0].replace("+", "")
+            try:
+                p_int = abs(hash(clean_jid)) % (10**9)
+                p_member = await get_member(p_int)
+            except Exception:
+                p_member = {}
+                
+            p_name = p_member.get("first_name") or p_member.get("display_name") or p.get("name")
+            if not p_name:
+                p_name = f"+{clean_jid}"
+                
+            resolved_participants.append({
+                "id": p_id,
+                "name": p_name,
+                "clean_jid": clean_jid
+            })
+            name_counts[p_name] += 1
+            num_humans += 1
+            
+        for rp in resolved_participants:
+            name = rp["name"]
+            if name_counts[name] > 1:
+                # Disambigua con le ultime 4 cifre del telefono
+                suffix = rp["clean_jid"][-4:]
+                disambiguated_name = f"{name} (tel: ...{suffix})"
+            else:
+                disambiguated_name = name
+            member_names_detailed.append(disambiguated_name)
+            
+        active_members = sorted(member_names_detailed)
+    else:
+        # Fallback classico Telegram / Storico
+        active_members = await get_active_group_members(chat_id)
+        if first_name not in active_members:
+            active_members.append(first_name)
+            active_members = sorted(list(set(active_members)))
+        num_humans = len(active_members)
+        has_bot = True # Genesi è nel gruppo
 
     lines = []
 
     # [INFO GRUPPO CORRENTE]
     lines.append(f"[INFO GRUPPO: Ti trovi nel gruppo '{group_title}']")
+    total_members = num_humans + (1 if has_bot else 0)
+    lines.append(f"[CONTEGGIO MEMBRI DEL GRUPPO: In totale ci sono {total_members} membri: tu (e gli altri umani) e io (Genesi, l'assistente AI).]")
     if active_members:
-        lines.append(f"[MEMBRI ATTIVI IN QUESTO GRUPPO: {', '.join(active_members)}]")
+        lines.append(f"[LISTA DETTAGLIATA MEMBRI UMANI: {', '.join(active_members)}]")
     lines.append("")
 
     # 📅 Contesto Temporale, Festività e Compleanni di Oggi

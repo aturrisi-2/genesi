@@ -669,12 +669,18 @@ async def get_user_info(user: AuthUser = Depends(require_auth)):
 
 # ── Endpoint gruppo WhatsApp (Baileys) ────────────────────────────────────────
 
+class GroupParticipant(BaseModel):
+    id: str
+    name: Optional[str] = None
+    is_me: bool = False
+
 class GroupChatRequest(BaseModel):
     text: str
     sender_name: str
     sender_id: str   # numero telefono o JID
     group_id: str    # JID gruppo WhatsApp
     group_name: str = "WhatsApp Group"
+    participants: Optional[list[GroupParticipant]] = None
 
 class GroupChatResponse(BaseModel):
     response: str
@@ -752,21 +758,57 @@ async def group_chat_endpoint(request: GroupChatRequest, user: AuthUser = Depend
         except Exception:
             pass
 
+        # 3c. Pre-seeding o aggiornamento dei profili dei membri del gruppo dal payload WhatsApp
+        if request.participants:
+            from core.telegram_group_memory import _member_key
+            for p in request.participants:
+                if p.is_me or not p.name:
+                    continue
+                p_clean = p.id.replace("@s.whatsapp.net", "").replace("+", "")
+                try:
+                    p_int = abs(hash(p_clean)) % (10**9)
+                    from core.telegram_group_memory import get_member
+                    p_member = await get_member(p_int)
+                    if p_member.get("first_name") != p.name:
+                        import time
+                        s = storage
+                        p_member["from_id"] = p_int
+                        p_member["first_name"] = p.name
+                        p_member.setdefault("joined_at", int(time.time()))
+                        await s.save(_member_key(p_int), p_member)
+                        log("WA_GROUP_MEMBER_PRESEEDED", id=p.id, name=p.name)
+                except Exception as ex:
+                    log("WA_GROUP_MEMBER_PRESEED_FAIL", error=str(ex))
+
+        # 3d. Link Explorer per gruppi WhatsApp
+        processed_text = request.text
+        try:
+            from core.link_explorer import explore_links_in_text
+            processed_text = await explore_links_in_text(request.text)
+        except Exception as _e:
+            log("GROUP_CHAT_LINK_EXPLORE_FAIL", error=str(_e))
+
         # 4. Costruisci contesto gruppo (sincrono — serve per la risposta)
-        group_ctx = await build_group_context(group_int, sender_int, request.sender_name, current_message=request.text)
+        group_ctx = await build_group_context(
+            group_int,
+            sender_int,
+            request.sender_name,
+            current_message=request.text,
+            participants=[p.dict() for p in request.participants] if request.participants else None
+        )
 
         # 5. Costruisci messaggio arricchito (stesso formato di telegram_bot.py)
         only_emoji = all(ord(c) > 127 or c in (' ', '\n') for c in request.text.strip())
         if only_emoji:
             enriched = (
-                f"{request.text}\n\n"
+                f"{processed_text}\n\n"
                 f"[GRUPPO FAMILIARE: scrive {request.sender_name}. "
                 f"Reazione/emoji — risposta brevissima, calore familiare, zero domande.]\n"
                 f"{group_ctx}"
             )
         else:
             enriched = (
-                f"{request.text}\n\n"
+                f"{processed_text}\n\n"
                 f"[GRUPPO FAMILIARE: scrive {request.sender_name}. "
                 f"Sei un membro della famiglia — rispondi con calore e concretezza, "
                 f"senza domande superflue. Usa il nome {request.sender_name}.]\n"
