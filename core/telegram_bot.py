@@ -441,9 +441,11 @@ async def send_message(chat_id: int, text: str, reply_markup: dict = None):
         payload["reply_markup"] = reply_markup
     async with httpx.AsyncClient(timeout=10) as client:
         try:
-            await client.post(f"{TELEGRAM_API}/sendMessage", json=payload)
+            res = await client.post(f"{TELEGRAM_API}/sendMessage", json=payload)
+            if res.status_code != 200:
+                logger.error("TELEGRAM_SEND_ERROR status=%d response=%s payload=%s", res.status_code, res.text, payload)
         except Exception as e:
-            logger.error("TELEGRAM_SEND_ERROR chat_id=%s err=%s", chat_id, e)
+            logger.error("TELEGRAM_SEND_EXCEPTION chat_id=%s err=%s", chat_id, e)
 
 
 async def send_photo(chat_id: int, photo_url: str, caption: str = "", reply_markup: dict = None):
@@ -455,9 +457,11 @@ async def send_photo(chat_id: int, photo_url: str, caption: str = "", reply_mark
     async with httpx.AsyncClient(timeout=15) as client:
         try:
             res = await client.post(f"{TELEGRAM_API}/sendPhoto", json=payload)
+            if res.status_code != 200:
+                logger.error("TELEGRAM_SEND_PHOTO_ERROR status=%d response=%s payload=%s", res.status_code, res.text, payload)
             return res.status_code == 200
         except Exception as e:
-            logger.error("TELEGRAM_SEND_PHOTO_ERROR chat_id=%s err=%s", chat_id, e)
+            logger.error("TELEGRAM_SEND_PHOTO_EXCEPTION chat_id=%s err=%s", chat_id, e)
             return False
 
 
