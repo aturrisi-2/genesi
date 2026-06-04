@@ -102,9 +102,9 @@ def test_build_webapp_inline_keyboard():
     assert "inline_keyboard" in markup
     assert len(markup["inline_keyboard"]) == 2
     assert markup["inline_keyboard"][0][0]["text"] == "🌐 Apri google.com"
-    assert markup["inline_keyboard"][0][0]["web_app"]["url"] == "https://google.com"
+    assert markup["inline_keyboard"][0][0]["url"] == "https://google.com"
     assert markup["inline_keyboard"][1][0]["text"] == "🌐 Apri wikipedia.org"
-    assert markup["inline_keyboard"][1][0]["web_app"]["url"] == "https://wikipedia.org"
+    assert markup["inline_keyboard"][1][0]["url"] == "https://wikipedia.org"
     print("[OK] build_webapp_inline_keyboard")
 
 def test_query_cleaning_and_building():

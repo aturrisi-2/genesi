@@ -372,7 +372,7 @@ def build_webapp_inline_keyboard(urls: list[str]) -> dict:
         keyboard.append([
             {
                 "text": f"🌐 Apri {domain}",
-                "web_app": {"url": url}
+                "url": url
             }
         ])
     return {"inline_keyboard": keyboard}
