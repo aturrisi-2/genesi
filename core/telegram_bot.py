@@ -302,6 +302,56 @@ _IMG_URL_RE = re.compile(
 # Markdown immagine: ![alt](url)
 _IMG_MD_RE = re.compile(r'!\[.*?\]\((https?://[^\)]+)\)', re.IGNORECASE)
 
+# Regex per trovare URL generici HTTPS nelle risposte
+_HTTPS_URL_RE = re.compile(r'(https://[^\s\)\"\']+)', re.IGNORECASE)
+
+def get_default_reply_markup(chat_type: str = "private") -> dict | None:
+    if chat_type != "private":
+        return None
+    return {
+        "keyboard": [
+            [{"text": "🌦️ Meteo"}, {"text": "📅 Impegni"}],
+            [{"text": "🎂 Compleanni"}, {"text": "❓ Aiuto"}]
+        ],
+        "resize_keyboard": True,
+        "is_persistent": True
+    }
+
+def get_domain_name(url: str) -> str:
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(url)
+        domain = parsed.netloc
+        if domain.startswith("www."):
+            domain = domain[4:]
+        if len(domain) > 20:
+            domain = domain[:17] + "..."
+        return domain
+    except Exception:
+        return "Sito"
+
+def extract_webapp_urls(text: str) -> list[str]:
+    all_urls = _HTTPS_URL_RE.findall(text)
+    valid_urls = []
+    for url in all_urls:
+        url_clean = url.rstrip(".,!?;:")
+        if not _IMG_URL_RE.match(url_clean):
+            if url_clean not in valid_urls:
+                valid_urls.append(url_clean)
+    return valid_urls
+
+def build_webapp_inline_keyboard(urls: list[str]) -> dict:
+    keyboard = []
+    for url in urls:
+        domain = get_domain_name(url)
+        keyboard.append([
+            {
+                "text": f"🌐 Apri {domain}",
+                "web_app": {"url": url}
+            }
+        ])
+    return {"inline_keyboard": keyboard}
+
 # Stati conversazionali
 STATE_IDLE               = "idle"
 STATE_AWAIT_EMAIL        = "await_email"
@@ -358,10 +408,12 @@ async def _save_city(token: str, city: str):
 
 # ── Telegram API helpers ───────────────────────────────────────────────────────
 
-async def send_message(chat_id: int, text: str):
+async def send_message(chat_id: int, text: str, reply_markup: dict = None):
     if not text:
         return
     payload = {"chat_id": chat_id, "text": text}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     async with httpx.AsyncClient(timeout=10) as client:
         try:
             await client.post(f"{TELEGRAM_API}/sendMessage", json=payload)
@@ -369,10 +421,12 @@ async def send_message(chat_id: int, text: str):
             logger.error("TELEGRAM_SEND_ERROR chat_id=%s err=%s", chat_id, e)
 
 
-async def send_photo(chat_id: int, photo_url: str, caption: str = ""):
+async def send_photo(chat_id: int, photo_url: str, caption: str = "", reply_markup: dict = None):
     payload = {"chat_id": chat_id, "photo": photo_url}
     if caption:
         payload["caption"] = caption[:1024]
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     async with httpx.AsyncClient(timeout=15) as client:
         try:
             res = await client.post(f"{TELEGRAM_API}/sendPhoto", json=payload)
@@ -623,26 +677,36 @@ async def _send_response(chat_id: int, reply: str):
 
     img_urls = md_urls + [u for u in raw_urls if u not in md_urls]
 
+    # Estrae URL HTTPS per bottoni WebApp (non immagini)
+    webapp_urls = extract_webapp_urls(reply)
+    reply_markup = None
+    if webapp_urls:
+        reply_markup = build_webapp_inline_keyboard(webapp_urls)
+    elif chat_id > 0:  # Private chat: mostra i comandi rapidi di default
+        reply_markup = get_default_reply_markup("private")
+
     if img_urls:
         # Rimuovi i link immagine dal testo per non mostrare URL grezze
         clean_text = _IMG_MD_RE.sub("", reply).strip()
         clean_text = _IMG_URL_RE.sub("", clean_text).strip()
 
         for url in img_urls[:3]:  # max 3 immagini
-            sent = await send_photo(chat_id, url, caption=clean_text if clean_text else "")
+            sent = await send_photo(chat_id, url, caption=clean_text if clean_text else "", reply_markup=reply_markup)
             if not sent:
                 # Fallback: manda il testo con l'URL
-                await send_message(chat_id, reply)
+                await send_message(chat_id, reply, reply_markup=reply_markup)
             clean_text = ""  # caption solo sulla prima
+            reply_markup = None
         return
 
     # Risposta testuale normale
     if len(reply) > 4000:
         for i in range(0, len(reply), 4000):
-            await send_message(chat_id, reply[i:i+4000])
+            markup_to_send = reply_markup if i + 4000 >= len(reply) else None
+            await send_message(chat_id, reply[i:i+4000], reply_markup=markup_to_send)
             await asyncio.sleep(0.3)
     else:
-        await send_message(chat_id, reply)
+        await send_message(chat_id, reply, reply_markup=reply_markup)
 
 
 _WEBAPP_LINK  = "https://genesi.lucadigitale.eu/"
@@ -679,14 +743,15 @@ async def _complete_login(chat_id: int, token: str, email: str, password: str = 
     city = await _get_city(token)
     session = {"token": token, "email": email, "password": password, "city": city,
                "state": STATE_IDLE, "welcomed": False}
+    markup = get_default_reply_markup("private") if chat_id > 0 else None
     if not city:
         session["state"] = STATE_AWAIT_CITY
         await storage.save(_session_key(chat_id), session)
-        await send_message(chat_id, _WELCOME_MSG + "\n\n" + _WELCOME_CITY_PREAMBLE)
+        await send_message(chat_id, _WELCOME_MSG + "\n\n" + _WELCOME_CITY_PREAMBLE, reply_markup=markup)
     else:
         session["welcomed"] = True
         await storage.save(_session_key(chat_id), session)
-        await send_message(chat_id, _WELCOME_MSG)
+        await send_message(chat_id, _WELCOME_MSG, reply_markup=markup)
 
 
 # ── Main update handler ────────────────────────────────────────────────────────
@@ -725,6 +790,15 @@ async def handle_update(update: dict):
         from_id    = msg.get("from", {}).get("id", chat_id)
         first_name = msg.get("from", {}).get("first_name", "")
         text       = msg.get("text", "").strip()
+        # Normalizzazione dei comandi rapidi (bottoni ReplyKeyboard)
+        if text == "🌦️ Meteo":
+            text = "Che tempo fa oggi?"
+        elif text == "📅 Impegni":
+            text = "Quali sono i miei impegni?"
+        elif text == "🎂 Compleanni":
+            text = "Ci sono compleanni oggi in famiglia?"
+        elif text == "❓ Aiuto":
+            text = "/start"
         photo      = msg.get("photo")       # lista di dimensioni
         voice      = msg.get("voice")       # messaggio vocale
         audio      = msg.get("audio")       # file audio generico
@@ -777,13 +851,15 @@ async def handle_update(update: dict):
 
         # ── Comandi globali ────────────────────────────────────────────────────
         if text == "/start":
+            markup = get_default_reply_markup("private") if chat_id > 0 else None
             if session.get("token"):
                 name_part = f" {first_name}" if first_name else ""
                 webapp = _WEBAPP_LINK
                 await send_message(chat_id,
                     f"Bentornato{name_part}! Sono qui 👋\n\n"
                     f"Scrivimi, mandami foto o vocali.\n"
-                    f"Webapp completa: {webapp}")
+                    f"Webapp completa: {webapp}",
+                    reply_markup=markup)
             else:
                 session = {"state": STATE_IDLE}
                 await storage.save(_session_key(session_uid), session)
@@ -792,7 +868,8 @@ async def handle_update(update: dict):
                     f"Per usarmi al massimo hai bisogno di un account.\n\n"
                     f"• Hai già un account? Scrivi /login\n"
                     f"• Nuovo? Registrati qui in Telegram: /registrati\n"
-                    f"  oppure sul sito: {_WEBAPP_REG}")
+                    f"  oppure sul sito: {_WEBAPP_REG}",
+                    reply_markup=markup)
             return
 
         if text in ("/login", "/accedi"):
