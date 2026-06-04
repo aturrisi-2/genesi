@@ -3914,6 +3914,11 @@ Messaggio: "{message}" """
             if new_response and len(new_response.strip()) > 20:
                 log("AUTO_SEARCH_OK", user_id=user_id,
                     source=live_result.get("source_name", "?"), query=message[:50])
+                if live_result.get("source_url"):
+                    url = live_result["source_url"]
+                    if url not in new_response:
+                        name = live_result.get("source_name") or "Fonte"
+                        new_response = f"{new_response}\n\n[Fonte: {name}]({url})"
                 return new_response
         except Exception as _ase:
             logger.debug("AUTO_SEARCH_FAIL user=%s reason=%s", user_id, str(_ase)[:80])
@@ -4299,6 +4304,7 @@ Messaggio utente: {message}"""
         Returns: (response_text: str, source: str)
         """
         # Build conversation context — MUST include chat history
+        live_result = None
         profile = await storage.load(f"profile:{user_id}", default={})
         conversation_ctx = build_conversation_context(user_id, message, profile, conversation_id)
 
@@ -4390,6 +4396,14 @@ Domanda: {message}"""
         result = filter_response(result, user_id)
         if not result:
             result = "Non ho una risposta precisa."
+
+        # Se abbiamo cercato online ed è presente una fonte, ci assicuriamo che il link
+        # sia presente nel testo della risposta affinché il bot/UI estragga l'URL per il bottone
+        if live_result and live_result.get("source_url"):
+            url = live_result["source_url"]
+            if url not in result:
+                name = live_result.get("source_name") or "Fonte"
+                result = f"{result}\n\n[Fonte: {name}]({url})"
 
         logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d route=knowledge", user_id, len(result))
         return result, "knowledge"
