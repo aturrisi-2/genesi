@@ -444,6 +444,8 @@ async def send_message(chat_id: int, text: str, reply_markup: dict = None):
             res = await client.post(f"{TELEGRAM_API}/sendMessage", json=payload)
             if res.status_code != 200:
                 logger.error("TELEGRAM_SEND_ERROR status=%d response=%s payload=%s", res.status_code, res.text, payload)
+            else:
+                log("TELEGRAM_SEND_OK", chat_id=chat_id, text=text, reply_markup=reply_markup)
         except Exception as e:
             logger.error("TELEGRAM_SEND_EXCEPTION chat_id=%s err=%s", chat_id, e)
 
@@ -459,6 +461,8 @@ async def send_photo(chat_id: int, photo_url: str, caption: str = "", reply_mark
             res = await client.post(f"{TELEGRAM_API}/sendPhoto", json=payload)
             if res.status_code != 200:
                 logger.error("TELEGRAM_SEND_PHOTO_ERROR status=%d response=%s payload=%s", res.status_code, res.text, payload)
+            else:
+                log("TELEGRAM_SEND_PHOTO_OK", chat_id=chat_id, caption=caption, reply_markup=reply_markup)
             return res.status_code == 200
         except Exception as e:
             logger.error("TELEGRAM_SEND_PHOTO_EXCEPTION chat_id=%s err=%s", chat_id, e)
