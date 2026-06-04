@@ -302,8 +302,8 @@ _IMG_URL_RE = re.compile(
 # Markdown immagine: ![alt](url)
 _IMG_MD_RE = re.compile(r'!\[.*?\]\((https?://[^\)]+)\)', re.IGNORECASE)
 
-# Regex per trovare URL generici HTTPS nelle risposte
-_HTTPS_URL_RE = re.compile(r'(https://[^\s\)\"\']+)', re.IGNORECASE)
+# Regex per trovare URL generici nelle risposte
+_HTTPS_URL_RE = re.compile(r'(https?://[^\s\"\'\>]+)', re.IGNORECASE)
 
 def get_default_reply_markup(chat_type: str = "private") -> dict | None:
     if chat_type != "private":
@@ -334,8 +334,11 @@ def extract_webapp_urls(text: str) -> list[str]:
     all_urls = _HTTPS_URL_RE.findall(text)
     valid_urls = []
     for url in all_urls:
-        url_clean = url.rstrip(".,!?;:")
+        url_clean = url.rstrip(".,!?;:)")
         if not _IMG_URL_RE.match(url_clean):
+            # Forziamo a HTTPS per compatibilità con le Web App di Telegram
+            if url_clean.lower().startswith("http://"):
+                url_clean = "https://" + url_clean[7:]
             if url_clean not in valid_urls:
                 valid_urls.append(url_clean)
     return valid_urls

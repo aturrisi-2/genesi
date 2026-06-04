@@ -58,10 +58,15 @@ def test_extract_webapp_urls():
     assert "https://wikipedia.org" in urls
     assert "https://example.com/photo.jpg" not in urls  # Ignored image URL
     
-    # Strip punctuation
-    text_ends_with_link = "Visita https://google.com."
+    # Strip punctuation and parentheses
+    text_ends_with_link = "Visita (https://google.com)."
     urls2 = extract_webapp_urls(text_ends_with_link)
     assert urls2 == ["https://google.com"]
+
+    # HTTP to HTTPS translation
+    text_http = "Sito: http://it.wikipedia.org/wiki/Papa"
+    urls3 = extract_webapp_urls(text_http)
+    assert urls3 == ["https://it.wikipedia.org/wiki/Papa"]
     print("[OK] extract_webapp_urls")
 
 def test_build_webapp_inline_keyboard():

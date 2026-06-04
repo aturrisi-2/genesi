@@ -2725,7 +2725,7 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                 if not has_icloud and not has_google:
                     return "Non ho trovato alcun impegno. Forse è perché non hai ancora collegato i tuoi account iCloud o Google? Se vuoi, posso aiutarti a farlo ora!", "reminder"
                 else:
-                    return "Sembra che la tua agenda sia libera! Non ho trovato alcun impegno programmato per ora.", "reminder"
+                    return "Sembra che la tua agenda sia libera! Non ho trovato alcun impegno programmato per ora. Se hai altri calendari personali, di lavoro o di famiglia, ricordati che puoi condividerli con me per tenerli sincronizzati!", "reminder"
             
             if not is_explicit:
                 # Conversational response via LLM
@@ -2739,6 +2739,7 @@ I suoi impegni nel programma sono:
 Rispondi in modo naturale, empatico e discorsivo (non usare elenchi numerati o punti elenco nel testo della risposta parlata).
 Spiega all'utente i suoi impegni in modo fluido come farebbe un assistente personale.
 Fai riferimento alle fonti (Google, iCloud) solo se necessario per chiarezza, ma in modo naturale.
+Ricorda all'utente che può condividere e sincronizzare con me anche altri suoi calendari (Google o iCloud) per avere tutti gli impegni unificati.
 Se non ci sono impegni per il periodo richiesto, faglielo presente con calore."""
 
                 model = model_selector(message, route="reminder")
