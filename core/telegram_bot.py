@@ -18,6 +18,7 @@ import re
 import time
 import httpx
 from core.storage import storage
+from core.log import log
 from core.simple_chat import strip_group_ctx as _strip_group_ctx
 from core.telegram_group_memory import (
     update_member_seen, get_member_city, save_member_city,
