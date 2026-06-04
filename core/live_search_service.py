@@ -69,7 +69,10 @@ _EXPLICIT_SEARCH = {
     "fai una ricerca", "fai una ricerca su", "fai una ricerca online",
     "cerca per me", "trovami informazioni", "trovami notizie",
     "cerca informazioni su", "cerca notizie su",
+    "wikipedia", "sito", "link", "url", "pagina", "sito web", "sito ufficiale",
+    "cercami", "trova", "trovami"
 }
+
 
 # Ambito eventi correnti — politica, economia, sport, conflitti, tech
 _CURRENT_EVENTS = {

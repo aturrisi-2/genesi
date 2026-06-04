@@ -303,7 +303,12 @@ _IMG_URL_RE = re.compile(
 _IMG_MD_RE = re.compile(r'!\[.*?\]\((https?://[^\)]+)\)', re.IGNORECASE)
 
 # Regex per trovare URL generici nelle risposte
-_HTTPS_URL_RE = re.compile(r'(https?://[^\s\"\'\>]+)', re.IGNORECASE)
+_HTTPS_URL_RE = re.compile(r'(https?://[^\s\"\'\>\)]+)', re.IGNORECASE)
+_WWW_URL_RE = re.compile(r'(www\.[a-zA-Z0-9\-\.\/\?\&\=\#\%\~\+\_]+)', re.IGNORECASE)
+
+def clean_markdown_links(text: str) -> str:
+    """Rimuove la sintassi markdown dei link lasciando solo il testo visualizzabile."""
+    return re.sub(r'\[([^\]]+)\]\((https?://[^\s\)\>]+|www\.[^\s\)\>]+)\)', r'\1', text)
 
 def get_default_reply_markup(chat_type: str = "private") -> dict | None:
     if chat_type != "private":
@@ -331,7 +336,21 @@ def get_domain_name(url: str) -> str:
         return "Sito"
 
 def extract_webapp_urls(text: str) -> list[str]:
+    # Trova prima gli URL con schema http/https
     all_urls = _HTTPS_URL_RE.findall(text)
+    
+    # Trova anche gli URL che iniziano con www.
+    www_urls = _WWW_URL_RE.findall(text)
+    for w in www_urls:
+        # Se non è già parte di una URL completa estratta
+        is_sub = False
+        for u in all_urls:
+            if w in u:
+                is_sub = True
+                break
+        if not is_sub:
+            all_urls.append(w)
+
     valid_urls = []
     for url in all_urls:
         url_clean = url.rstrip(".,!?;:)")
@@ -339,6 +358,9 @@ def extract_webapp_urls(text: str) -> list[str]:
             # Forziamo a HTTPS per compatibilità con le Web App di Telegram
             if url_clean.lower().startswith("http://"):
                 url_clean = "https://" + url_clean[7:]
+            elif url_clean.lower().startswith("www."):
+                url_clean = "https://" + url_clean
+            
             if url_clean not in valid_urls:
                 valid_urls.append(url_clean)
     return valid_urls
@@ -692,24 +714,26 @@ async def _send_response(chat_id: int, reply: str):
         # Rimuovi i link immagine dal testo per non mostrare URL grezze
         clean_text = _IMG_MD_RE.sub("", reply).strip()
         clean_text = _IMG_URL_RE.sub("", clean_text).strip()
+        clean_text = clean_markdown_links(clean_text)
 
         for url in img_urls[:3]:  # max 3 immagini
             sent = await send_photo(chat_id, url, caption=clean_text if clean_text else "", reply_markup=reply_markup)
             if not sent:
-                # Fallback: manda il testo con l'URL
-                await send_message(chat_id, reply, reply_markup=reply_markup)
+                # Fallback: manda il testo con l'URL pulito da markdown
+                await send_message(chat_id, clean_markdown_links(reply), reply_markup=reply_markup)
             clean_text = ""  # caption solo sulla prima
             reply_markup = None
         return
 
     # Risposta testuale normale
-    if len(reply) > 4000:
-        for i in range(0, len(reply), 4000):
-            markup_to_send = reply_markup if i + 4000 >= len(reply) else None
-            await send_message(chat_id, reply[i:i+4000], reply_markup=markup_to_send)
+    clean_reply = clean_markdown_links(reply)
+    if len(clean_reply) > 4000:
+        for i in range(0, len(clean_reply), 4000):
+            markup_to_send = reply_markup if i + 4000 >= len(clean_reply) else None
+            await send_message(chat_id, clean_reply[i:i+4000], reply_markup=markup_to_send)
             await asyncio.sleep(0.3)
     else:
-        await send_message(chat_id, reply, reply_markup=reply_markup)
+        await send_message(chat_id, clean_reply, reply_markup=reply_markup)
 
 
 _WEBAPP_LINK  = "https://genesi.lucadigitale.eu/"

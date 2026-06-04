@@ -805,7 +805,8 @@ class Proactor:
                 _redirectable_intents = ("news", "chat_free", "relational", "general")
                 _question_starters = ("chi ", "cosa ", "come ", "dove ", "quando ", "quale ",
                                       "qual ", "quanto ", "quanti ", "dimmi ", "spiega ",
-                                      "parlami ", "descrivi ", "raccontami ", "quali ", "cerca ")
+                                      "parlami ", "descrivi ", "raccontami ", "quali ", "cerca ",
+                                      "cercami ", "trova ", "trovami ")
                 # Per i controlli usiamo SOLO il testo dell'utente (prima del blocco [GRUPPO...])
                 # per evitare che il context block contamine la rilevazione
                 _raw_user_msg = message.split("[GRUPPO")[0].split("[GRUPPO FAMILIARE")[0].strip()
@@ -816,7 +817,8 @@ class Proactor:
                 _explicit_search_kw = ("cerca sul web", "cerca online", "cerca su internet",
                                        "cerca per me", "trovami informazioni", "trovami notizie",
                                        "cerca informazioni su", "cerca notizie su",
-                                       "fai una ricerca")
+                                       "fai una ricerca", "sito", "link", "url", "wikipedia",
+                                       "cercami", "trova", "trovami")
                 _is_explicit_search = any(kw in _raw_lower for kw in _explicit_search_kw)
                 if (intents and intents[0] in _redirectable_intents
                         and _needs_live(_raw_user_msg)
@@ -3893,8 +3895,8 @@ Messaggio: "{message}" """
             else:
                 instruction = (
                     f"Usa questi dati per rispondere alla domanda dell'utente in modo COLLOQUIALE e NARRATIVO. "
-                    f"Cita la fonte solo con il nome (es: 'Secondo {live_result.get('source_name', 'una fonte online')}, ...'). "
-                    f"NON includere URL, link, titoli di articoli o riferimenti tecnici. "
+                    f"Cita la fonte con il nome e includi il link della fonte ({live_result.get('source_url')}) in formato markdown "
+                    f"(es: '[{live_result.get('source_name', 'Fonte')}]({live_result.get('source_url')})') alla fine o nel testo se rilevante per l'utente. "
                     f"NON elencare punti. Parla come se stessi raccontando la notizia a voce. Max 3-4 frasi."
                 )
             sys_prompt = (
@@ -4332,7 +4334,9 @@ Messaggio utente: {message}"""
                             f"\nISTRUZIONE FONTE: inizia con "
                             f'"Secondo {live_result["source_name"]}, ..." '
                             f"poi continua in modo naturale e narrativo, come se raccontassi a voce. "
-                            f"NON includere URL, link, indirizzi web o titoli tecnici di articoli. "
+                            f"Includi il link della fonte principale ({live_result['source_url']}) nel testo in formato markdown, "
+                            f"ad esempio: '[{live_result['source_name']}]({live_result['source_url']})' per permettere all'utente di approfondire. "
+                            f"NON includere altri link di ricerca o di reindirizzamento non necessari. "
                             f"NON elencare punti. Narra. Max 4-5 frasi.\n"
                         )
         except Exception as _lse:

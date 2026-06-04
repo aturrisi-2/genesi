@@ -17,7 +17,8 @@ from core.telegram_bot import (
     get_default_reply_markup,
     get_domain_name,
     extract_webapp_urls,
-    build_webapp_inline_keyboard
+    build_webapp_inline_keyboard,
+    clean_markdown_links
 )
 
 def test_default_reply_markup():
@@ -67,7 +68,28 @@ def test_extract_webapp_urls():
     text_http = "Sito: http://it.wikipedia.org/wiki/Papa"
     urls3 = extract_webapp_urls(text_http)
     assert urls3 == ["https://it.wikipedia.org/wiki/Papa"]
+
+    # support www. links
+    text_www = "Visita www.google.com o anche il sito www.wikipedia.org/wiki/Papa."
+    urls4 = extract_webapp_urls(text_www)
+    assert "https://www.google.com" in urls4
+    assert "https://www.wikipedia.org/wiki/Papa" in urls4
+
+    # support markdown links extraction
+    text_md = "Vedi [Wikipedia del Papa](https://it.wikipedia.org/wiki/Papa_Francesco) o anche [Google](www.google.com)."
+    urls5 = extract_webapp_urls(text_md)
+    assert "https://it.wikipedia.org/wiki/Papa_Francesco" in urls5
+    assert "https://www.google.com" in urls5 or "https://google.com" in urls5
+
     print("[OK] extract_webapp_urls")
+
+def test_clean_markdown_links():
+    print("Testing clean_markdown_links...")
+    text = "Ecco la pagina di [Wikipedia su Papa Francesco](https://it.wikipedia.org/wiki/Papa_Francesco) per te, o vedi [Google](www.google.com)."
+    cleaned = clean_markdown_links(text)
+    print("Cleaned text:", cleaned)
+    assert cleaned == "Ecco la pagina di Wikipedia su Papa Francesco per te, o vedi Google."
+    print("[OK] clean_markdown_links")
 
 def test_build_webapp_inline_keyboard():
     print("Testing build_webapp_inline_keyboard...")
@@ -86,6 +108,7 @@ if __name__ == "__main__":
         test_default_reply_markup()
         test_get_domain_name()
         test_extract_webapp_urls()
+        test_clean_markdown_links()
         test_build_webapp_inline_keyboard()
         print("\nALL TESTS PASSED SUCCESSFULLY!")
     except AssertionError as e:
