@@ -20,6 +20,10 @@ from core.telegram_bot import (
     build_webapp_inline_keyboard,
     clean_markdown_links
 )
+from core.live_search_service import (
+    _clean_query_for_search,
+    _build_search_query
+)
 
 def test_default_reply_markup():
     print("Testing get_default_reply_markup...")
@@ -103,6 +107,29 @@ def test_build_webapp_inline_keyboard():
     assert markup["inline_keyboard"][1][0]["web_app"]["url"] == "https://wikipedia.org"
     print("[OK] build_webapp_inline_keyboard")
 
+def test_query_cleaning_and_building():
+    print("Testing query cleaning and building...")
+    q1 = "Cercami su Wikipedia l’articolo sul Papa e forniscimi il link"
+    cq1 = _clean_query_for_search(q1)
+    print("Cleaned Q1:", cq1)
+    assert "Wikipedia" in cq1
+    assert "Papa" in cq1
+    assert "cercami" not in cq1.lower()
+    assert "link" not in cq1.lower()
+    
+    # Check that timeless queries don't append year or time filters
+    sq1, tbs1 = _build_search_query(cq1)
+    print("Built Q1:", sq1, "tbs:", tbs1)
+    assert "202" not in sq1  # No year like 2026 appended
+    assert tbs1 == ""       # No time limit filter
+    
+    # Check that temporal queries still append date/time filters
+    q2 = "previsioni meteo di oggi a Roma"
+    sq2, tbs2 = _build_search_query(q2)
+    print("Built Q2:", sq2, "tbs:", tbs2)
+    assert tbs2 == "qdr:w"
+    print("[OK] test_query_cleaning_and_building")
+
 if __name__ == "__main__":
     try:
         test_default_reply_markup()
@@ -110,6 +137,7 @@ if __name__ == "__main__":
         test_extract_webapp_urls()
         test_clean_markdown_links()
         test_build_webapp_inline_keyboard()
+        test_query_cleaning_and_building()
         print("\nALL TESTS PASSED SUCCESSFULLY!")
     except AssertionError as e:
         print("\nTEST FAILED:", e)

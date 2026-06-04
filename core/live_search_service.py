@@ -157,10 +157,39 @@ def needs_live_data(message: str) -> bool:
     return False
 
 
+def _clean_query_for_search(query: str) -> str:
+    """Rimuove filler e punteggiatura per ottenere una query di ricerca ottimale."""
+    import re
+    # Filler comuni da rimuovere
+    fillers = [
+        "cercami su", "cerca su", "cerca sul web", "cerca online", "cerca su internet",
+        "cercami l'articolo su", "cercami l'articolo", "cercami il link di", "cercami il link",
+        "cercami", "trovami", "forniscimi il link di", "forniscimi il link", "forniscimi l'url di",
+        "forniscimi l'url", "dammi il link di", "dammi il link", "dammi il sito di", "dammi il sito",
+        "vai sul sito", "vai su", "naviga su",
+        "sito di", "sito per", "sito ufficiale di", "sito ufficiale",
+        "link di", "link per", "url di", "url per", "pagina di", "pagina per",
+        "articolo di", "articolo su"
+    ]
+    # Ordina i filler dal più lungo al più breve
+    fillers.sort(key=len, reverse=True)
+    
+    clean_q = query
+    for f in fillers:
+        pattern = re.compile(r'\b' + re.escape(f) + r'\b', re.IGNORECASE)
+        clean_q = pattern.sub("", clean_q)
+        
+    # Pulisce punteggiatura e spazi doppi
+    clean_q = re.sub(r'[.,!?;:()\'"“”‘’\-\_\/]', ' ', clean_q)
+    clean_q = " ".join(clean_q.split()).strip()
+    return clean_q if clean_q else query
+
+
 def _build_search_query(query: str) -> tuple[str, str]:
     """
     Ritorna (search_query, tbs) dove tbs è il filtro temporale Serper/DDG.
-    Inietta data/anno nella query per forzare risultati del 2026.
+    Inietta data/anno nella query per forzare risultati del 2026,
+    tranne che per le query "timeless" (enciclopediche o di navigazione).
     """
     from datetime import datetime as _dt
     now = _dt.now()
@@ -171,6 +200,16 @@ def _build_search_query(query: str) -> tuple[str, str]:
     date_str = f"{now.day} {months_it[now.month - 1]} {year}"
 
     q_lower = query.lower()
+    
+    # Controlla se la query è "timeless" (enciclopedica, siti, link, ecc.)
+    timeless_kw = [
+        "wikipedia", "sito", "link", "url", "pagina", "storia", "biografia", 
+        "definizione", "chi è", "chi era", "che cos'è", "che cosa è", 
+        "significato", "google", "facebook", "instagram", "youtube"
+    ]
+    if any(k in q_lower for k in timeless_kw):
+        return query, ""  # Nessun anno aggiunto, nessun limite temporale
+
     immediate_kw = [
         "questo weekend", "questo fine settimana", "fine settimana",
         "oggi", "adesso", "ora", "stanotte", "stasera", "stamattina",
@@ -299,13 +338,14 @@ async def search_for_answer(query: str, max_results: int = 5) -> Optional[dict]:
           - context_block: tutti i risultati aggregati per il prompt LLM
         oppure None se nessun risultato.
     """
+    cleaned_query = _clean_query_for_search(query)
     # Prova Serper prima
-    results = await _search_serper(query, max_results=max_results)
+    results = await _search_serper(cleaned_query, max_results=max_results)
     provider = "serper"
 
     # Fallback DDG se Serper non configurato o fallisce
     if not results:
-        results = await _search_ddg(query, max_results=min(max_results, 3))
+        results = await _search_ddg(cleaned_query, max_results=min(max_results, 3))
         provider = "ddg"
 
     if not results:
