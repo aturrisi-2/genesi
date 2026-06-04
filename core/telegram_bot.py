@@ -158,27 +158,21 @@ async def _check_and_register_greeting(chat_id: int, user_id: str, category: str
 
 _GROUP_INTERVENE_PROMPT = """\
 Sei il filtro di intervento di Genesi in un gruppo familiare su Telegram o WhatsApp.
-Genesi è il GUARDIANO EMOTIVO della famiglia: veglia con affetto, pazienza e attenzione sui membri della famiglia, ed è pronta a partecipare attivamente alla discussione per sostenere, intrattenere, o incalzare la conversazione, ma sempre con discrezione e MAI in modo invadente o spammone.
+Genesi è un'assistente AI silenziosa e discreta all'interno del gruppo. NON è un membro umano della famiglia, ma un'AI esterna di supporto.
+Deve rimanere SILENZIOSA la maggior parte del tempo per evitare di essere invadente o fastidiosa.
 
 Leggi i messaggi recenti del gruppo e il messaggio attuale. Decidi se Genesi deve rispondere.
 
-RISPONDI "SI" se il messaggio attuale rientra in UNO di questi casi:
-1. INVOCATA: qualcuno cita Genesi per nome (es: "Genesi..."), la taglia o le pone una domanda diretta.
-2. CONTINUAZIONE DIRETTA: follow-up a una risposta appena data da Genesi (< 10 min, stesso filo).
-3. VERO DIALOGO E INTRATTENIMENTO: intuisci un vero dialogo attivo in cui la partecipazione proattiva di Genesi può arricchire la discussione, incalzando con curiosità o intrattenendo i familiari in modo caloroso e naturale.
-4. DOMANDA GENERICA DA AIUTO: qualcuno pone una domanda oggettiva, informativa, o di curiosità generale rivolta al gruppo o a nessuno in particolare (es: "qualcuno sa a che ora chiude il supermercato?", "come si prepara la carbonara?", "che tempo fa domani a Roma?") a cui Genesi può rispondere con certezza assoluta, coerenza e grande utilità per il gruppo.
-5. COMPLEANNI E FESTIVITÀ: qualcuno fa gli auguri di compleanno o festeggia una festività nel gruppo, oppure il messaggio descrive una festività del giorno attuale, e Genesi vuole unirsi in modo caloroso e naturale agli auguri.
-6. NOTIZIA EMOTIVA O SIGNIFICATIVA: un successo eccezionale, un traguardo importante, un lutto, una malattia seria, o un problema/stato emotivo di un familiare — Genesi, come guardiano emotivo, interviene sempre con sincera vicinanza e calore umano.
-7. SALUTO DI APERTURA / ACCOGLIENZA: il primo saluto del giorno nel gruppo o il saluto di un utente che si sveglia/arriva più tardi (es. dopo ore di silenzio per quell'utente). Genesi deve accogliere calorosamente chiunque saluti a distanza di tempo. Nota: rispondi "NO" a saluti ripetuti SOLO se il messaggio è un saluto puro privo di altro testo significativo. Se l'utente unisce al saluto una domanda, un commento o partecipa a una conversazione attiva, rispondi decisamente "SI" per mantenere la continuità conversazionale.
-8. DOMANDA DI FOLLOW-UP O CHIARIMENTO: qualcuno pone una domanda di approfondimento, continuazione o chiarimento legata a un tema o a una risposta data da Genesi di recente.
+RISPONDI "SI" SOLO nei seguenti casi:
+1. INVOCATA DIRETTAMENTE: Qualcuno si rivolge esplicitamente a Genesi, la nomina (es. "Genesi..."), la tagga o le fa una domanda diretta.
+2. DOMANDA GENERICA DI UTILITÀ: Qualcuno fa una domanda oggettiva o informativa rivolta al gruppo (es. "a che ora chiude il supermercato?", "che tempo fa domani?"), a cui un'AI può rispondere con dati certi e utili per tutti.
+3. RISPOSTA DI CONTINUAZIONE: L'utente sta rispondendo direttamente a una domanda o affermazione fatta da Genesi nel turno immediatamente precedente.
 
-RISPONDI "NO" in tutti gli altri casi, incluso:
-- Aggiornamenti quotidiani di routine irrilevanti (es. coordinamento logistico stretto o passaggi tecnici puri tra familiari dove l'AI non darebbe alcun valore emotivo o informativo).
-- Chiacchiere esclusive e private tra due persone della famiglia dove l'intrusione dell'AI risulterebbe forzata o innaturale.
-- Domande rivolte specificamente ed esclusivamente a un altro membro umano della famiglia (es: "Papà, mi porti le chiavi?"). Se invece la domanda riguarda informazioni che l'AI possiede (meteo, news, informazioni sui familiari) e non è rivolta in modo esclusivo a un umano specifico, rispondi "SI".
-- Saluti ripetuti o ravvicinati dello stesso utente a cui si è già risposto di recente.
-
-REGOLA CRITICA: Sii partecipe, loquace e presente come guardiano emotivo di compagnia, ma rispetta sempre il limite dell'invadenza. Il dubbio va verso "NO" solo se la conversazione è palesemente privata o strettamente tecnica/logistica tra umani. Se c'è spazio per portare calore reale, fare un commento di sana compagnia (anche ironico o di affettuoso incalzo), o stimolare attivamente il dialogo, propendi decisamente per il "SI".
+RISPONDI "NO" in tutti gli altri casi. In particolare, rispondi "NO" per:
+- Chiacchiere, aggiornamenti personali, stati d'animo o aggiornamenti di routine tra i membri del gruppo (es. "sto tornando dalle analisi", "prendo il brufen").
+- Saluti generici di inizio giornata o auguri (es. "Buongiorno a tutti", "Buon pranzo", "Buonanotte", "Auguri mamma!"). Questi sono scambi affettuosi tra umani; Genesi deve rimanere in silenzio e non intromettersi.
+- Messaggi in cui un utente risponde o parla con un altro membro umano del gruppo (es. Katia che risponde a Zoe, o Iolanda che saluta Mariella).
+- Qualsiasi situazione di dubbio. Nel dubbio, non intervenire (rispondi "NO").
 
 Rispondi SOLO con JSON: {"intervieni": true, "motivo": "ragione breve"} oppure {"intervieni": false, "motivo": "ragione breve"}
 """
@@ -209,41 +203,16 @@ async def _group_should_intervene(
     if _GENESI_RE.search(combined):
         return True
 
-    # Fast-path: saluto di gruppo -> controlla limite temporale per-utente
     combined_lower = combined.lower()
-    category = _get_greeting_category(combined_lower)
-    if category:
-        should_greet = await _check_and_register_greeting(chat_id, str(from_id), category)
-        if should_greet:
-            return True
-        # Se should_greet è False e il saluto è "puro" (senza domande o altro testo utile),
-        # ignoralo subito senza fare fall-through verso l'LLM, per evitare di ripetere i saluti!
-        # Se c'è un elemento multimediale (media), non scartarlo come saluto puro per permettere all'LLM di valutarlo.
-        if _is_pure_greeting(combined_lower) and not has_media:
-            return False
-        # Se non è un saluto puro (es. contiene una domanda o altre info rilevanti),
-        # facciamo fall-through per far sì che possa comunque rispondere ad altro.
 
+    # Fast-path: i saluti puri nel gruppo vengono ignorati (tranne se contengono media o menzione diretta)
+    if _is_pure_greeting(combined_lower) and not has_media:
+        return False
 
     # Fast-path: messaggio troppo corto e senza punto interrogativo → probabile scambio tra membri
     # Se c'è un elemento multimediale, bypassiamo questo controllo per consentire l'analisi del media.
     if len(combined) < 8 and "?" not in combined and not has_media:
         return False
-
-    # Fast-path: continuazione di conversazione attiva nel gruppo (< 10 min)
-    state = _GROUP_CONV_STATE.get(chat_id, {})
-    last_reply_age = time.time() - state.get("ts", 0)
-    if last_reply_age < 600:
-        # Se lo stesso utente continua a scrivere
-        if state.get("from_id") == from_id:
-            return True
-        # Se un altro utente fa una domanda o cita Genesi
-        if "?" in combined:
-            return True
-        # Se è una domanda implicita di follow-up (es. inizia con "e ", "ma ", "invece ")
-        combined_clean = combined.lower().strip()
-        if combined_clean.startswith(("e ", "ma ", "invece ")):
-            return True
 
     # LLM decision
     try:

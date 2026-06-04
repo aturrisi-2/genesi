@@ -87,10 +87,9 @@ async def run_tests():
     print(f"  Messaggio: '{msg_only_greet}' da Sandra (solo saluto ripetuto): {should_tg_only} (Atteso: False)")
     assert should_tg_only is False, "FAIL: Non dovrebbe intervenire su saluto ripetuto senza altro contenuto"
 
-    # Sandra scrive "Buongiorno, che tempo fa a Bracciano?" -> deve essere True (anche se il saluto è ripetuto, c'è una domanda reale!)
+    # Sandra scrive "Buongiorno, come state tutti?" -> deve essere False perché non è rivolta a Genesi e i fast-path di continuazione sono stati rimossi.
     # Nota: nei test non abbiamo l'LLM attivo nel mock o se è attivo farà una chiamata mockata/reale.
-    # Proviamo a simulare il fall-through fast-path di continuazione o semplicemente a verificare che non esca a False subito.
-    # Per farlo fall-through verso il fast-path di continuazione (< 5 min):
+    # Per farlo fall-through verso l'LLM:
     _GROUP_CONV_STATE[chat_id] = {
         "from_id": sandra_id,
         "ts": time.time() - 40,
@@ -111,11 +110,11 @@ async def run_tests():
         text=msg_with_question, caption="", chat_id=chat_id, wa_id=str(sandra_id), first_name="Sandra",
         bot_mentioned=False, has_media=False
     )
-    print(f"  Messaggio: '{msg_with_question}' da Sandra (saluto ripetuto + continuazione attiva):")
-    print(f"    -> Telegram should_intervene: {should_tg_question} (Atteso: True)")
-    print(f"    -> WhatsApp should_intervene: {should_wa_question} (Atteso: True)")
-    assert should_tg_question is True, "FAIL: Dovrebbe intervenire sul fall-through di continuazione"
-    assert should_wa_question is True, "FAIL: Dovrebbe intervenire sul fall-through di continuazione"
+    print(f"  Messaggio: '{msg_with_question}' da Sandra (saluto ripetuto, no fast-path):")
+    print(f"    -> Telegram should_intervene: {should_tg_question} (Atteso: False)")
+    print(f"    -> WhatsApp should_intervene: {should_wa_question} (Atteso: False)")
+    assert should_tg_question is False, "FAIL: Non avrebbe dovuto intervenire su una domanda sociale rivolta a tutti"
+    assert should_wa_question is False, "FAIL: Non avrebbe dovuto intervenire su una domanda sociale rivolta a tutti"
     print("  -> OK!")
 
 
@@ -123,7 +122,7 @@ async def run_tests():
     print("\n--- Test 3: Scenario Follow-up Standard ---")
     
     # 3.1: Alfio scrive "E da Mariella e Katia?"
-    # Mittente diverso, ma entro 5 min e ha "?" ➔ Deve attivare il fast-path e ritornare True!
+    # Mittente diverso, no fast-path, no menzione Genesi ➔ Deve ritornare False!
     msg = "E da Mariella e Katia?"
     should_tg = await _group_should_intervene(
         text=msg, caption="", chat_id=chat_id, from_id=alfio_id, first_name="Alfio",
@@ -134,11 +133,11 @@ async def run_tests():
         bot_mentioned=False, has_media=False
     )
 
-    print(f"  Messaggio: '{msg}' da Alfio (mittente differente, entro 5 minuti con '?')")
-    print(f"    -> Telegram: {should_tg} (Atteso: True)")
-    print(f"    -> WhatsApp: {should_wa} (Atteso: True)")
-    assert should_tg is True, "FAIL: Telegram fast-path non attivato per domanda di follow-up"
-    assert should_wa is True, "FAIL: WhatsApp fast-path non attivato per domanda di follow-up"
+    print(f"  Messaggio: '{msg}' da Alfio (mittente differente, no fast-path, no menzione)")
+    print(f"    -> Telegram: {should_tg} (Atteso: False)")
+    print(f"    -> WhatsApp: {should_wa} (Atteso: False)")
+    assert should_tg is False, "FAIL: Non deve intervenire su domande di routine tra terzi"
+    assert should_wa is False, "FAIL: Non deve intervenire su domande di routine tra terzi"
     print("  -> OK!")
 
 
