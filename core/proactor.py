@@ -4318,9 +4318,10 @@ Messaggio utente: {message}"""
         try:
             from core.live_search_service import needs_live_data, search_for_answer
             if needs_live_data(_search_query):
-                logger.info("LIVE_SEARCH_TRIGGERED user=%s query=%s", user_id, _search_query[:60])
+                log("LIVE_SEARCH_TRIGGERED", user_id=user_id, query=_search_query)
                 live_result = await search_for_answer(_search_query)
                 if live_result:
+                    log("LIVE_SEARCH_SUCCESS", user_id=user_id, source=live_result.get("source_name"), url=live_result.get("source_url"))
                     live_context_block = (
                         f"\n[DATI AGGIORNATI DAL WEB]\n"
                         f"{live_result['context_block']}\n"
@@ -4345,7 +4346,12 @@ Messaggio utente: {message}"""
                             f"NON includere altri link di ricerca o di reindirizzamento non necessari. "
                             f"NON elencare punti. Narra. Max 4-5 frasi.\n"
                         )
+                else:
+                    log("LIVE_SEARCH_EMPTY", user_id=user_id, query=_search_query)
+            else:
+                log("LIVE_SEARCH_SKIP_NOT_NEEDED", user_id=user_id, query=_search_query)
         except Exception as _lse:
+            log("LIVE_SEARCH_EXCEPTION", user_id=user_id, error=str(_lse))
             logger.debug("LIVE_SEARCH_SKIP user=%s reason=%s", user_id, str(_lse)[:80])
 
         knowledge_prompt = f"""Sei Genesi.
