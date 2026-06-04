@@ -1045,10 +1045,15 @@ class Proactor:
                     final_source = "tool"
                     
                 elif current_intent == "openclaw" and self._current_platform not in ("telegram_group", "whatsapp_group"):
-                    log("ROUTING_DECISION", route="openclaw", user_id=user_id)
-                    self._emit_status("Navigo il web per te...")
-                    current_response = await self._handle_openclaw(user_id, processed_message)
-                    final_source = "tool"
+                    if not os.getenv("OPENCLAW_ENABLED", "true").lower() in ("true", "1", "yes"):
+                        log("ROUTING_DECISION", route="relational", user_id=user_id, note="openclaw_disabled_fallback")
+                        current_response = await self._handle_relational(user_id, processed_message, brain_state, conversation_id)
+                        final_source = "relational"
+                    else:
+                        log("ROUTING_DECISION", route="openclaw", user_id=user_id)
+                        self._emit_status("Navigo il web per te...")
+                        current_response = await self._handle_openclaw(user_id, processed_message)
+                        final_source = "tool"
 
                 elif current_intent == "moltbook_activity":
                     log("ROUTING_DECISION", route="moltbook_activity", user_id=user_id)

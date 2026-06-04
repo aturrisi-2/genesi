@@ -602,6 +602,10 @@ class IntentClassifier:
                 log("REMINDER_GUARD_AMBIGUOUS", original_intent=intent, final_intent="chat_free", reason="ambiguous_reminder", message=message[:50])
                 return "chat_free"
         
+        if intent == "openclaw":
+            import os
+            if not os.getenv("OPENCLAW_ENABLED", "true").lower() in ("true", "1", "yes"):
+                return "chat_free"
         return intent
     
     def _has_datetime_reference(self, message_lower: str) -> bool:
@@ -922,6 +926,11 @@ REGOLE SPECIALI:
                     if not intents and "intent" in data:
                         intents = [data["intent"]]
                     
+                    if intents and intents[0] == "openclaw":
+                        import os
+                        if not os.getenv("OPENCLAW_ENABLED", "true").lower() in ("true", "1", "yes"):
+                            intents = ["chat_free"]
+                            
                     if not intents:
                         intents = ["chat_free"]
 
