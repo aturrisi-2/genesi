@@ -205,9 +205,16 @@ async def _group_should_intervene(
 
     combined_lower = combined.lower()
 
-    # Fast-path: i saluti puri nel gruppo vengono ignorati (tranne se contengono media o menzione diretta)
-    if _is_pure_greeting(combined_lower) and not has_media:
-        return False
+    # Fast-path: saluto di gruppo -> controlla limite temporale per-utente
+    category = _get_greeting_category(combined_lower)
+    if category:
+        should_greet = await _check_and_register_greeting(chat_id, str(from_id), category)
+        if should_greet:
+            return True
+        # Se should_greet è False e il saluto è "puro" (senza domande o altro testo utile),
+        # ignoralo subito senza fare fall-through, per evitare di ripetere i saluti!
+        if _is_pure_greeting(combined_lower) and not has_media:
+            return False
 
     # Fast-path: messaggio troppo corto e senza punto interrogativo → probabile scambio tra membri
     # Se c'è un elemento multimediale, bypassiamo questo controllo per consentire l'analisi del media.
