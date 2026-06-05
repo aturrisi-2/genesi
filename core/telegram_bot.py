@@ -358,7 +358,7 @@ def extract_webapp_urls(text: str) -> list[str]:
 
     valid_urls = []
     for url in all_urls:
-        url_clean = url.rstrip(".,!?;:)")
+        url_clean = url.rstrip(".,!?;:")
         if not _IMG_URL_RE.match(url_clean):
             # Forziamo a HTTPS per compatibilità con le Web App di Telegram
             if url_clean.lower().startswith("http://"):
