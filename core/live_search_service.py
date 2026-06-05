@@ -169,32 +169,46 @@ def needs_live_data(message: str) -> bool:
     return False
 
 
-def _clean_query_for_search(query: str) -> str:
-    """Rimuove filler e punteggiatura per ottenere una query di ricerca ottimale."""
+async def _clean_query_for_search(query: str) -> str:
+    """Usa l'LLM per estrarre una query di ricerca Google ottimale dal messaggio."""
+    try:
+        from core.llm_service import llm_service
+        prompt = (
+            "Sei un esperto SEO. Trasforma questa frase colloquiale in una query "
+            "di ricerca Google essenziale, rimuovendo convenevoli e articoli inutili. "
+            "Mantieni solo le keyword principali. Restituisci SOLO la query, nient'altro. "
+            "Esempio: 'voglio sapere dove si svolge il prossimo granpremio di f1' -> 'prossimo gran premio F1 dove'\n\n"
+            f"Frase: {query}"
+        )
+        # Use a fast model for this simple task
+        clean_q = await llm_service._call_with_protection(
+            "gpt-4o-mini", prompt, query, route="live_search_clean"
+        )
+        if clean_q:
+            # Strip quotes if the LLM added them
+            return clean_q.strip("'\" \n")
+    except Exception as e:
+        logger.warning("CLEAN_QUERY_LLM_ERROR err=%s", str(e)[:80])
+    
+    # Fallback deterministico se l'LLM fallisce
     import re
-    # Filler comuni da rimuovere
     fillers = [
+        "voglio sapere", "vorrei sapere", "mi dici", "mi potresti dire", "potresti dirmi",
+        "mi sai dire", "sai dirmi", "mi piacerebbe sapere", "mi chiedo",
         "cercami su", "cerca su", "cerca sul web", "cerca online", "cerca su internet",
         "cercami l'articolo su", "cercami l'articolo", "cercami il link di", "cercami il link",
         "cercami", "trovami", "forniscimi il link di", "forniscimi il link", "forniscimi l'url di",
         "forniscimi l'url", "dammi il link di", "dammi il link", "dammi il sito di", "dammi il sito",
-        "vai sul sito", "vai su", "naviga su",
-        "sito di", "sito per", "sito ufficiale di", "sito ufficiale",
-        "link di", "link per", "url di", "url per", "pagina di", "pagina per",
-        "articolo di", "articolo su"
+        "vai sul sito", "vai su", "naviga su"
     ]
-    # Ordina i filler dal più lungo al più breve
     fillers.sort(key=len, reverse=True)
-    
     clean_q = query
     for f in fillers:
-        pattern = re.compile(r'\b' + re.escape(f) + r'\b', re.IGNORECASE)
-        clean_q = pattern.sub("", clean_q)
-        
-    # Pulisce punteggiatura e spazi doppi
+        clean_q = re.sub(r'\b' + re.escape(f) + r'\b', "", clean_q, flags=re.IGNORECASE)
     clean_q = re.sub(r'[.,!?;:()\'"“”‘’\-\_\/]', ' ', clean_q)
     clean_q = " ".join(clean_q.split()).strip()
     return clean_q if clean_q else query
+
 
 
 def _build_search_query(query: str) -> tuple[str, str]:
@@ -350,7 +364,7 @@ async def search_for_answer(query: str, max_results: int = 5) -> Optional[dict]:
           - context_block: tutti i risultati aggregati per il prompt LLM
         oppure None se nessun risultato.
     """
-    cleaned_query = _clean_query_for_search(query)
+    cleaned_query = await _clean_query_for_search(query)
     # Prova Serper prima
     results = await _search_serper(cleaned_query, max_results=max_results)
     provider = "serper"
