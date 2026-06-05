@@ -791,7 +791,7 @@ class Proactor:
             if not _is_group_platform:
               try:
                 from core.live_search_service import needs_live_data as _needs_live
-                _redirectable_intents = ("news", "chat_free", "relational", "general")
+                _redirectable_intents = ("news", "chat_free", "relational", "general", "spiegazione")
                 _question_starters = ("chi ", "cosa ", "come ", "dove ", "quando ", "quale ",
                                       "qual ", "quanto ", "quanti ", "dimmi ", "spiega ",
                                       "parlami ", "descrivi ", "raccontami ", "quali ", "cerca ",

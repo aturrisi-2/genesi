@@ -130,12 +130,24 @@ def needs_live_data(message: str) -> bool:
     has_regulatory    = _hits(_REGULATORY)
     has_current_events = _hits(_CURRENT_EVENTS)
 
+    # Knowledge / Enciclopedico (sempre live per ottenere fonti e link)
+    _KNOWLEDGE = {
+        "come funziona", "che cos'è", "che cosa è", "chi è", "chi era",
+        "storia di", "biografia di", "dove si trova", "quando è nato",
+        "significato di", "definisci", "spiegami", "cosa significa",
+    }
+    has_knowledge = _hits(_KNOWLEDGE)
+
     # Medico/farmacologico: sempre live
     if has_medical:
         return True
 
     # Ricerca scientifica citata esplicitamente: sempre live
     if has_scientific:
+        return True
+        
+    # Domande di conoscenza pura / enciclopediche: sempre live per recuperare il link
+    if has_knowledge:
         return True
 
     # Normativa/statistiche + temporalità: live
