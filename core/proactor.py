@@ -99,7 +99,7 @@ KNOWLEDGE_TRIGGERS = [
 ]
 
 # Intent che devono saltare completamente il relational router
-SKIP_RELATIONAL_INTENTS = ["tecnica", "debug", "spiegazione", "genesi_audit"]
+SKIP_RELATIONAL_INTENTS = ["tecnica", "debug", "spiegazione", "genesi_audit", "live_search"]
 
 
 def is_identity_question(message: str) -> bool:
@@ -1016,7 +1016,7 @@ class Proactor:
                         final_source = "relational"
                     else:
                         log("ROUTING_DECISION", route="knowledge_strict", user_id=user_id)
-                        current_response = await self._handle_knowledge(user_id, processed_message, conversation_id)
+                        current_response = await self._handle_knowledge(user_id, processed_message, conversation_id, intent=current_intent)
                         final_source = "knowledge"
 
                 elif current_intent == "identity":
@@ -4285,7 +4285,7 @@ REGOLE ASSOLUTE:
 Messaggio utente: {message}"""
         return system_prompt
 
-    async def _handle_knowledge(self, user_id: str, message: str, conversation_id: str = None) -> str:
+    async def _handle_knowledge(self, user_id: str, message: str, conversation_id: str = None, intent: str = None) -> str:
         """
         GPT per domande di definizione/conoscenza.
         Include chat history per risolvere riferimenti contestuali.
@@ -4306,7 +4306,7 @@ Messaggio utente: {message}"""
         live_source_instruction = ""
         try:
             from core.live_search_service import needs_live_data, search_for_answer
-            if needs_live_data(_search_query):
+            if intent == "live_search" or needs_live_data(_search_query):
                 log("LIVE_SEARCH_TRIGGERED", user_id=user_id, query=_search_query)
                 live_result = await search_for_answer(_search_query)
                 if live_result:
