@@ -203,6 +203,10 @@ async def _group_should_intervene(
         return True
     if _GENESI_RE.search(combined):
         return True
+        
+    # Fast-path: pulsanti della tastiera → sempre sì
+    if combined in ("🌦️ Meteo", "🤖 Aiuto"):
+        return True
 
     combined_lower = combined.lower()
 
