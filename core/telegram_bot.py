@@ -206,6 +206,8 @@ async def _group_should_intervene(
         
     # Fast-path: pulsanti della tastiera → sempre sì
     if combined in ("🌦️ Meteo", "🤖 Aiuto"):
+        if chat_id < 0 and chat_id != -318483633:
+            return False  # Ignora i click sui bottoni preesistenti nei gruppi esterni
         return True
 
     combined_lower = combined.lower()
