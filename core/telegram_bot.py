@@ -314,12 +314,9 @@ def clean_markdown_links(text: str) -> str:
     return text
 
 def get_default_reply_markup(chat_type: str = "private") -> dict | None:
-    if chat_type != "private":
-        return None
     return {
         "keyboard": [
-            [{"text": "🌦️ Meteo"}, {"text": "📅 Impegni"}],
-            [{"text": "🎂 Compleanni"}, {"text": "❓ Aiuto"}]
+            [{"text": "🌦️ Meteo"}, {"text": "❓ Aiuto"}]
         ],
         "resize_keyboard": True,
         "is_persistent": True
@@ -720,7 +717,7 @@ async def _send_response(chat_id: int, reply: str):
     reply_markup = None
     if webapp_urls:
         reply_markup = build_webapp_inline_keyboard(webapp_urls)
-    elif chat_id > 0:  # Private chat: mostra i comandi rapidi di default
+    elif True:  # Mostra i comandi rapidi di default ovunque
         reply_markup = get_default_reply_markup("private")
 
     if img_urls:
@@ -783,7 +780,7 @@ async def _complete_login(chat_id: int, token: str, email: str, password: str = 
     city = await _get_city(token)
     session = {"token": token, "email": email, "password": password, "city": city,
                "state": STATE_IDLE, "welcomed": False}
-    markup = get_default_reply_markup("private") if chat_id > 0 else None
+    markup = get_default_reply_markup("private")
     if not city:
         session["state"] = STATE_AWAIT_CITY
         await storage.save(_session_key(chat_id), session)
@@ -891,7 +888,7 @@ async def handle_update(update: dict):
 
         # ── Comandi globali ────────────────────────────────────────────────────
         if text == "/start":
-            markup = get_default_reply_markup("private") if chat_id > 0 else None
+            markup = get_default_reply_markup("private")
             if session.get("token"):
                 name_part = f" {first_name}" if first_name else ""
                 webapp = _WEBAPP_LINK
@@ -911,6 +908,8 @@ async def handle_update(update: dict):
                     f"  oppure sul sito: {_WEBAPP_REG}",
                     reply_markup=markup)
             return
+        if text == "❓ Aiuto":
+            text = "Ho premuto il pulsante Aiuto. Avvia una breve intervista facendomi una domanda alla volta per capire chi sono, cosa faccio e come puoi essermi utile."
 
         if text in ("/login", "/accedi"):
             session = {"state": STATE_AWAIT_EMAIL}
