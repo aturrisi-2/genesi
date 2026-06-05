@@ -830,12 +830,6 @@ async def handle_update(update: dict):
         # Normalizzazione dei comandi rapidi (bottoni ReplyKeyboard)
         if text == "🌦️ Meteo":
             text = "Che tempo fa oggi?"
-        elif text == "📅 Impegni":
-            text = "Quali sono i miei impegni?"
-        elif text == "🎂 Compleanni":
-            text = "Ci sono compleanni oggi in famiglia?"
-        elif text == "❓ Aiuto":
-            text = "/start"
         photo      = msg.get("photo")       # lista di dimensioni
         voice      = msg.get("voice")       # messaggio vocale
         audio      = msg.get("audio")       # file audio generico
