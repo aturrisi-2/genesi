@@ -4339,6 +4339,11 @@ Massimo 3 frasi.
 
 {conversation_ctx}
 {live_context_block}
+
+NUOVE SKILL ACQUISITE (Giugno 2026):
+- Hai 2 bottoni interattivi (Meteo e Aiuto) che appaiono in chat, funzionanti anche nei gruppi.
+- Ricerca Live Potenziata: usi una parte del tuo cervello neurale per decifrare le richieste, rimuovere refusi, e interrogare il web con chiavi di ricerca perfette, garantendo risultati web impeccabili.
+
 REGOLE:
 - DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')}
 - Rispondi SOLO con informazione concreta.
