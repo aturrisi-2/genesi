@@ -94,23 +94,49 @@ async def describe_image(path: str) -> str:
 
     system_prompt = (
         "Sei un analizzatore di immagini esperto. "
-        "Descrivi ciò che vedi nell'immagine in italiano, in modo dettagliato e preciso. "
-        "Includi: composizione, oggetti principali, persone (se presenti), colori dominanti, "
-        "ambiente/sfondo, illuminazione, stile visivo. "
-        "Se l'immagine contiene testo, riportalo fedelmente. "
-        "NON inventare dettagli che non sono visibili. "
-        "NON aggiungere interpretazioni soggettive non supportate dalla visione."
+        "FOCALIZZATI PRINCIPALMENTE SUI SOGGETTI (PERSONE) presenti nell'immagine. "
+        "Descrivi in dettaglio: chi sono (se li riconosci dalle immagini di riferimento fornite), "
+        "come sono vestiti, la loro età apparente, corporatura, azioni, postura ed espressioni emotive. "
+        "Se l'immagine contiene paesaggi, oggetti o screenshot e NON ci sono persone di rilievo, descrivila in maniera super concisa e discorsiva (massimo 1 o 2 frasi, senza spiegoni o elenchi). "
+        "Se invece ci sono persone, fornisci una descrizione molto ricca di loro, trascurando lo sfondo sterile. "
+        "Se l'immagine contiene persone che NON riconosci dalle immagini di riferimento fornite, "
+        "DEVI obbligatoriamente inserire questo tag esatto alla fine della tua risposta: "
+        "[UNKNOWN_FACES_DETECTED] "
+        "e poi elencare le persone sconosciute indicando esplicitamente la loro POSIZIONE (es. 'L'uomo alto a sinistra', 'La ragazza al centro', 'La signora bionda a destra'). "
+        "NON inventare dettagli che non sono visibili."
     )
+
+    try:
+        from core.face_memory_service import get_known_faces
+        known_faces = await get_known_faces()
+    except Exception as e:
+        logger.error("Error loading face memory: %s", e)
+        known_faces = []
+
+    content_array = []
+    # Aggiungi i riferimenti visivi
+    for face in known_faces:
+        try:
+            face_name = face.get("name")
+            face_img_path = face.get("image_path")
+            face_desc = face.get("description_in_image", "")
+            if face_img_path and os.path.exists(face_img_path):
+                with open(face_img_path, "rb") as ref_f:
+                    ref_data = ref_f.read()
+                ref_mime = _get_mime(face_img_path)
+                ref_b64 = base64.b64encode(ref_data).decode("utf-8")
+                ref_url = f"data:{ref_mime};base64,{ref_b64}"
+                content_array.append({"type": "text", "text": f"Riferimento volto noto: {face_name}. {face_desc}"})
+                content_array.append({"type": "image_url", "image_url": {"url": ref_url, "detail": "low"}})
+        except Exception as e:
+            logger.warning("Failed to load reference face %s: %s", face.get("name"), e)
+
+    content_array.append({"type": "text", "text": "Questa è l'immagine principale da analizzare. Dimmi chi è presente e descrivila:"})
+    content_array.append({"type": "image_url", "image_url": {"url": data_url, "detail": "high"}})
 
     messages = [
         {"role": "system", "content": system_prompt},
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Descrivi questa immagine in dettaglio."},
-                {"type": "image_url", "image_url": {"url": data_url, "detail": "high"}},
-            ],
-        },
+        {"role": "user", "content": content_array},
     ]
 
     clients = _get_vision_clients()

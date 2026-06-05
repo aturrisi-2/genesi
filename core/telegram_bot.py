@@ -1330,6 +1330,19 @@ async def handle_update(update: dict):
             user_msg  = caption or "Analizza questa immagine che ti ho inviato."
             if analysis and analysis != "__TOKEN_EXPIRED__":
                 user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
+                
+                # Se l'immagine contiene volti sconosciuti, salva la foto e metti in attesa
+                if "[UNKNOWN_FACES_DETECTED]" in analysis:
+                    import uuid
+                    tmp_img = f"/tmp/genesi_face_{uuid.uuid4().hex[:8]}.jpg"
+                    try:
+                        with open(tmp_img, "wb") as f:
+                            f.write(img_bytes)
+                        session["awaiting_faces_img"] = tmp_img
+                        session["awaiting_faces_desc"] = analysis
+                        await storage.save(_session_key(session_uid), session)
+                    except Exception as e:
+                        logger.error("Failed to save tmp face image: %s", e)
 
             reply = await _do_chat(user_msg)
             if not await _handle_reply(reply):
@@ -1415,6 +1428,46 @@ async def handle_update(update: dict):
         # ── TESTO ──────────────────────────────────────────────────────────────
         if not text:
             return
+
+        # Rilevamento nomi per volti sconosciuti
+        if session.get("awaiting_faces_img"):
+            tmp_img = session.pop("awaiting_faces_img", None)
+            desc_img = session.pop("awaiting_faces_desc", "")
+            await storage.save(_session_key(session_uid), session)
+            
+            if tmp_img and os.path.exists(tmp_img):
+                # Usiamo un prompt rapido per capire se ha fornito i nomi
+                from core.llm_service import llm_service
+                extract_prompt = (
+                    "L'utente sta rispondendo a una tua richiesta di identificare i volti in una foto.\n"
+                    f"Descrizione precedente dei volti: {desc_img}\n"
+                    f"Risposta utente: {text}\n"
+                    "Estrai i nomi delle persone (in formato JSON) associati alla loro descrizione visiva.\n"
+                    "Se non ha fornito nomi ma sta parlando di altro, ritorna {}.\n"
+                    "Esempio valido: {\"Rita\": \"la donna bionda a sinistra\", \"Ennio\": \"l'uomo con i baffi a destra\"}"
+                )
+                try:
+                    raw_ext = await llm_service._call_model("openai/gpt-4o-mini", extract_prompt, text, user_id=session_uid, route="memory")
+                    clean = raw_ext.strip()
+                    if clean.startswith("```"):
+                        clean = clean.split("```")[1]
+                        if clean.startswith("json"):
+                            clean = clean[4:]
+                    parsed_faces = json.loads(clean.strip())
+                    
+                    if parsed_faces:
+                        from core.face_memory_service import save_known_face
+                        for name, f_desc in parsed_faces.items():
+                            await save_known_face(name, tmp_img, f_desc)
+                            logger.info("FACE_SAVED FROM CHAT name=%s", name)
+                except Exception as e:
+                    logger.warning("Error parsing faces names: %s", e)
+                
+                # Pulisci file temporaneo dopo aver salvato
+                try:
+                    os.remove(tmp_img)
+                except Exception:
+                    pass
 
         if _WEATHER_RE.search(text) and not city:
             session["state"]               = STATE_AWAIT_CITY
