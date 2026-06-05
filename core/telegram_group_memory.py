@@ -296,7 +296,8 @@ async def get_active_group_members(chat_id: int) -> list[str]:
 
 async def build_group_context(chat_id: int, from_id: int, first_name: str,
                               owner_name: str = "Alfio", current_message: str = "",
-                              participants: Optional[list[dict]] = None) -> str:
+                              participants: Optional[list[dict]] = None,
+                              is_family_group: bool = True) -> str:
     s        = await _storage()
     member   = await get_member(from_id)
     history  = await get_group_history(chat_id, limit=HISTORY_INJECT)
@@ -388,16 +389,17 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
         logger.warning("Error injecting today events context: %s", e)
 
     # 🧠 Memoria Episodica della Famiglia (eventi recenti e importanti di famiglia)
-    try:
-        from core.episode_memory import episode_memory as _em
-        relevant_episodes = await _em.get_relevant(_OWNER_USER_ID_FOR_TREE, current_message, limit=5)
-        if relevant_episodes:
-            lines.append("[MEMORIA EPISODICA DELLA FAMIGLIA (situazioni attive in corso):]")
-            for ep in relevant_episodes:
-                lines.append(f"  • {ep.get('text')}")
-            lines.append("")
-    except Exception as e:
-        logger.warning("Error injecting family episodic memory: %s", e)
+    if is_family_group:
+        try:
+            from core.episode_memory import episode_memory as _em
+            relevant_episodes = await _em.get_relevant(_OWNER_USER_ID_FOR_TREE, current_message, limit=5)
+            if relevant_episodes:
+                lines.append("[MEMORIA EPISODICA DELLA FAMIGLIA (situazioni attive in corso):]")
+                for ep in relevant_episodes:
+                    lines.append(f"  • {ep.get('text')}")
+                lines.append("")
+        except Exception as e:
+            logger.warning("Error injecting family episodic memory: %s", e)
 
     # ⚠️ Correzioni esplicite — INIETTATE PRIME, massima priorità
     corrections = await get_group_corrections(chat_id, max_age_seconds=604800)  # 7 giorni
@@ -457,30 +459,39 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
         lines.append("[FINE RISPOSTE]")
 
     # Albero familiare completo (per inferenze sui gradi di parentela)
-    fdata = await s.load(_family_key(_OWNER_USER_ID_FOR_TREE), default={}) or {}
-    family_chain = fdata.get("family_chain", "")
-    if family_chain:
-        lines.append(family_chain)
+    if is_family_group:
+        fdata = await s.load(_family_key(_OWNER_USER_ID_FOR_TREE), default={}) or {}
+        family_chain = fdata.get("family_chain", "")
+        if family_chain:
+            lines.append(family_chain)
 
-    # Nota famiglia
+    # Nota famiglia o esterna
     rel = member.get("relationship_to_owner", "")
     gender = member.get("gender") or _infer_gender(rel)
-    if rel and rel != "owner":
+    if is_family_group and rel and rel != "owner":
         pronoun = "a" if gender == "F" else "o" if gender == "M" else "o/a"
         tratta   = f"Trattala" if gender == "F" else "Trattalo" if gender == "M" else "Trattalo/a"
         rel_note = f" È {rel} di {owner_name} (genere: {'F — usa aggettivi/pronomi al femminile' if gender == 'F' else 'M — usa aggettivi/pronomi al maschile' if gender == 'M' else 'non determinato'})."
     else:
         tratta = "Trattalo/a"
         rel_note = ""
-    lines.append(
-        f"[CONTESTO FAMIGLIA:{rel_note} "
-        f"{tratta} con calore e familiarità, come un parente. "
-        f"Usa i gradi di parentela corretti quando parli di altri membri. "
-        f"Puoi fare riferimento a quello che altri hanno detto. "
-        f"ATTENZIONE ASSOLUTA DI COERENZA: Ti trovi nel gruppo '{group_title}'. I membri attivi qui sono esclusivamente: {', '.join(active_members)}. "
-        f"NON nominare, non salutare e non fare riferimento a parenti assenti da questo specifico gruppo (es. se sei nel gruppo di WhatsApp dove non ci sono Katia, Sandra, Mariella, Iolanda, non nominarle e non parlare di loro!). "
-        f"SOLLECITAZIONE SITUAZIONI IN CORSO: Se tra le situazioni attive in corso ('situazioni attive in corso') ci sono problemi irrisolti (es. Rita con la caviglia slogata, o qualcuno in viaggio) e nella chat recente non se ne parla da un po', trova l'occasione adatta e in modo del tutto spontaneo ed affettuoso di chiedere aggiornamenti (es. 'Rita, come va la caviglia oggi? Ti fa ancora male?'). Se l'utente ti dice che è guarito o rientrato, commenta con gioia!]"
-    )
+        
+    if is_family_group:
+        lines.append(
+            f"[CONTESTO FAMIGLIA:{rel_note} "
+            f"{tratta} con calore e familiarità, come un parente. "
+            f"Usa i gradi di parentela corretti quando parli di altri membri. "
+            f"Puoi fare riferimento a quello che altri hanno detto. "
+            f"ATTENZIONE ASSOLUTA DI COERENZA: Ti trovi nel gruppo '{group_title}'. I membri attivi qui sono esclusivamente: {', '.join(active_members)}. "
+            f"NON nominare, non salutare e non fare riferimento a parenti assenti da questo specifico gruppo (es. se sei nel gruppo di WhatsApp dove non ci sono Katia, Sandra, Mariella, Iolanda, non nominarle e non parlare di loro!). "
+            f"SOLLECITAZIONE SITUAZIONI IN CORSO: Se tra le situazioni attive in corso ('situazioni attive in corso') ci sono problemi irrisolti (es. Rita con la caviglia slogata, o qualcuno in viaggio) e nella chat recente non se ne parla da un po', trova l'occasione adatta e in modo del tutto spontaneo ed affettuoso di chiedere aggiornamenti (es. 'Rita, come va la caviglia oggi? Ti fa ancora male?'). Se l'utente ti dice che è guarito o rientrato, commenta con gioia!]"
+        )
+    else:
+        lines.append(
+            f"[ATTENZIONE ASSOLUTA DI COERENZA: Ti trovi nel gruppo esterno '{group_title}'. "
+            f"I membri attivi qui sono: {', '.join(active_members)}. "
+            f"NON SEI NEL GRUPPO DELLA FAMIGLIA. NON nominare Alfio, Rita, Ennio o altri membri della famiglia Turrisi a meno che non siano esplicitamente presenti o menzionati in questo gruppo. Mantieni un profilo educato, distaccato ma utile.]"
+        )
 
     # Regola anti-staleness: non tirare fuori vecchie discussioni senza motivo
     lines.append(

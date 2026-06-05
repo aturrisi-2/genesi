@@ -859,8 +859,9 @@ async def handle_update(update: dict):
         # Aggiorna profilo membro del gruppo ad ogni messaggio
         if is_group and first_name:
             asyncio.create_task(update_member_seen(from_id, first_name))
-            # Estrai relazioni familiari e aggiorna albero genealogico di Alfio
-            asyncio.create_task(extract_family_relationship(str(from_id), first_name, text or caption, "telegram"))
+            # Estrai relazioni familiari e aggiorna albero genealogico di Alfio solo nel gruppo famiglia
+            if chat_id == -318483633:
+                asyncio.create_task(extract_family_relationship(str(from_id), first_name, text or caption, "telegram"))
 
         # ── Logica gruppi ──────────────────────────────────────────────────────
         _bot_mentioned = False  # True se il messaggio menzionava direttamente il bot
@@ -1123,31 +1124,50 @@ async def handle_update(update: dict):
 
         async def _load_group_ctx() -> str:
             if not _group_ctx_cache:
-                ctx = await build_group_context(chat_id, from_id, first_name, current_message=text)
+                ctx = await build_group_context(
+                    chat_id, from_id, first_name, current_message=text,
+                    is_family_group=(chat_id == -318483633)
+                )
                 _group_ctx_cache.append(ctx)
             return _group_ctx_cache[0]
 
         def _group_msg(message: str, group_ctx: str = "") -> str:
             if not is_group or not first_name:
                 return message
+            
+            is_family_group = (chat_id == -318483633)
+            group_type_label = "GRUPPO FAMILIARE" if is_family_group else "GRUPPO ESTERNO"
+            role_label = "naturale da familiare (non da assistente)" if is_family_group else "da assistente AI educata, utile e mai invadente"
+            
+            if is_family_group:
+                extra_rules = (
+                    f"zero intro elaborati, zero domande di ritorno, zero 'che bello!'. "
+                    f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente ai festeggiamenti rivolti a quel familiare. "
+                    f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
+                    f"a meno che {first_name} non li citi in questo messaggio. "
+                )
+            else:
+                extra_rules = (
+                    f"Rispondi in modo estremamente conciso, al punto, senza chiacchiere. Non fare la finta amica, sei un'AI esterna. "
+                    f"Fornisci il dato richiesto o rispondi alla domanda e fermati. Zero emoji eccessive. "
+                    f"NON utilizzare o menzionare informazioni personali di altre chat. "
+                )
+
             only_emoji = all(
                 ord(c) > 127 or c in (' ', '\n') for c in message.strip()
             )
             if only_emoji:
                 return (
                     f"{message}\n\n"
-                    f"[GRUPPO FAMILIARE: scrive {first_name}. "
+                    f"[{group_type_label}: scrive {first_name}. "
                     f"Reazione emoji — 1 riga max, naturale.]\n"
                     f"{group_ctx}"
                 )
             return (
                 f"{message}\n\n"
-                f"[GRUPPO FAMILIARE: scrive {first_name}. "
-                f"REGOLE ASSOLUTE: risposta misurata ma loquace e di compagnia (3-4 righe max), tono naturale da familiare (non da assistente), "
-                f"zero intro elaborati, zero domande di ritorno, zero 'che bello!'. "
-                f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente ai festeggiamenti rivolti a quel familiare. "
-                f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
-                f"a meno che {first_name} non li citi in questo messaggio. "
+                f"[{group_type_label}: scrive {first_name}. "
+                f"REGOLE ASSOLUTE: risposta misurata (3-4 righe max), tono {role_label}, "
+                f"{extra_rules}"
                 f"Rispondi SOLO a quello che viene detto adesso.]\n"
                 f"{group_ctx}"
             )
@@ -1193,7 +1213,10 @@ async def handle_update(update: dict):
                 asyncio.create_task(detect_and_save_correction(chat_id, from_id, first_name, message, reply))
                 asyncio.create_task(consolidate_group_insights_if_needed(chat_id))
                 asyncio.create_task(summarize_group_discussion_if_needed(chat_id))
-                asyncio.create_task(_sync_family_background(chat_id))
+                
+                is_family_group = (chat_id == -318483633)
+                if is_family_group:
+                    asyncio.create_task(_sync_family_background(chat_id))
 
                 # Rilevamento Risoluzione Episodi della Famiglia in background
                 async def _tg_episode_resolution():
@@ -1203,7 +1226,8 @@ async def handle_update(update: dict):
                         await _em.resolve_episodes(session_uid, _clean_msg)
                     except Exception as _e:
                         logger.warning("EPISODE_RESOLUTION_BG_ERROR_TG: %s", _e)
-                asyncio.create_task(_tg_episode_resolution())
+                if is_family_group:
+                    asyncio.create_task(_tg_episode_resolution())
 
                 # Nuovo: rileva cambiamenti dichiarati/eventi personali
                 from core.telegram_group_memory import detect_and_save_event_change
@@ -1237,8 +1261,7 @@ async def handle_update(update: dict):
                                 logger.info("EPISODE_SAVED_TG_GROUP sender=%s text=%.60s", first_name, ep['text'])
                         except Exception:
                             pass
-                    asyncio.create_task(_tg_extract_episode())
-
+                    
                     async def _tg_extract_facts(_mm=_mem_msg, _mr=_mem_resp, _su=_mem_session_uid):
                         try:
                             from core.personal_facts_service import personal_facts_service as _pfs
@@ -1246,15 +1269,18 @@ async def handle_update(update: dict):
                             await _pfs.extract_and_save(ctx, _mr, _su)
                         except Exception:
                             pass
-                    asyncio.create_task(_tg_extract_facts())
-
+                    
                     async def _tg_global_memory(_su=_mem_session_uid):
                         try:
                             from core.global_memory_service import global_memory_service as _gms
                             await _gms.consolidate_if_needed(_su)
                         except Exception:
                             pass
-                    asyncio.create_task(_tg_global_memory())
+                    
+                    if is_family_group:
+                        asyncio.create_task(_tg_extract_episode())
+                        asyncio.create_task(_tg_extract_facts())
+                        asyncio.create_task(_tg_global_memory())
 
             return reply
 
