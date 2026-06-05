@@ -215,8 +215,10 @@ def _build_search_query(query: str) -> tuple[str, str]:
     """
     Ritorna (search_query, tbs) dove tbs è il filtro temporale Serper/DDG.
     Inietta data/anno nella query per forzare risultati del 2026,
-    tranne che per le query "timeless" (enciclopediche o di navigazione).
+    tranne che per le query "timeless" (enciclopediche o di navigazione)
+    o se l'utente ha già indicato un anno o una data specifica.
     """
+    import re
     from datetime import datetime as _dt
     now = _dt.now()
     year = now.year
@@ -226,6 +228,11 @@ def _build_search_query(query: str) -> tuple[str, str]:
     date_str = f"{now.day} {months_it[now.month - 1]} {year}"
 
     q_lower = query.lower()
+    
+    # Controlla se l'utente ha già indicato esplicitamente un anno (es. 1999, 2024, 2025)
+    # Cerca un numero di 4 cifre che inizia per 19 o 20
+    if re.search(r'\b(?:19|20)\d{2}\b', query):
+        return query, ""  # Nessun filtro temporale aggiunto, rispetta la data richiesta
     
     # Controlla se la query è "timeless" (enciclopedica, siti, link, ecc.)
     timeless_kw = [
@@ -249,10 +256,8 @@ def _build_search_query(query: str) -> tuple[str, str]:
     elif any(k in q_lower for k in month_kw):
         return f"{query} {year}", "qdr:m"
     else:
-        # Sempre aggiunge l'anno per evitare risultati del 2025
-        if str(year) not in query:
-            return f"{query} {year}", "qdr:y"
-        return query, "qdr:y"
+        # Sempre aggiunge l'anno corrente se non specificato
+        return f"{query} {year}", "qdr:y"
 
 
 async def _search_serper(query: str, max_results: int = 5) -> Optional[list[dict]]:
