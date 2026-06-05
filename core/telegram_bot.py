@@ -1152,6 +1152,13 @@ async def handle_update(update: dict):
                     f"Fornisci il dato richiesto o rispondi alla domanda e fermati. Zero emoji eccessive. "
                     f"NON utilizzare o menzionare informazioni personali di altre chat. "
                 )
+                if chat_id == -1001267666655:
+                    extra_rules += (
+                        f"CONTESTO SPECIFICO GRUPPO: Questo gruppo era nato per programmatori Swift. Il creatore, Marcello, è mancato. "
+                        f"Oggi gli utenti rimasti interagiscono ogni tanto per parlare delle loro app, che sono in maggioranza per dispositivi Apple. "
+                        f"Tieni a mente questo contesto se fanno domande di programmazione, Apple o app. "
+                        f"RISOLUZIONE DOMANDE: Quando viene fatta una domanda di cui conosci la risposta o che puoi cercare, usa le tue skill di ricerca web sui siti specializzati per fornire risposte coerenti e verificate, accompagnate possibilmente da link utili (inserendo un bottone al link esterno se supportato). "
+                    )
 
             only_emoji = all(
                 ord(c) > 127 or c in (' ', '\n') for c in message.strip()
