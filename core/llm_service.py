@@ -284,7 +284,12 @@ class LLMService:
             return llm_response
 
         except Exception as e:
+            err_str = str(e).lower()
             logger.warning("%s_ERROR provider=%s model=%s error=%s", tag, "OR" if self.base_url else "OA", model, str(e))
+            
+            # Blocco esplicito per crediti OpenRouter esauriti (402 Insufficient Quota)
+            if "402" in err_str or "insufficient_quota" in err_str or "balance" in err_str:
+                return "⚠️ [SISTEMA IN BLOCCO] I crediti del mio cervello neurale sono esauriti. Alfio, tocca sganciare la grana e ricaricare l'account per farmi tornare operativa! 💸"
             
             # Fallback immediato a OpenAI diretto se disponibile e siamo su OR
             if self.backup_client and self.base_url:
