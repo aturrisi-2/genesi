@@ -448,17 +448,6 @@ class Proactor:
         # 7. STRIP STANDALONE "Dimmi." / "Dimmi!" come chiusura meccanica
         response = _re_pp.sub(r'\s*\bDimmi[.!]\s*$', '', response, flags=_re_pp.IGNORECASE).strip()
 
-        # 8. STRIP URL / LINK: rimuovi qualsiasi URL http/https che il LLM ha incluso
-        #    Es: "Secondo Sky Sport (https://sky.it/...), ..." → "Secondo Sky Sport, ..."
-        #    Rimuovi prima parentesi con solo URL: " (https://...)" o "[https://...]"
-        response = _re_pp.sub(r'\s*[\(\[]\s*https?://\S+\s*[\)\]]', '', response)
-        #    Poi URL nudi rimasti
-        response = _re_pp.sub(r'https?://\S+', '', response)
-        #    Pulizia spazi doppi o virgole/punti prima di spazio generati dalla rimozione
-        response = _re_pp.sub(r'[ \t]{2,}', ' ', response)
-        response = _re_pp.sub(r'\s*,\s*,', ',', response)
-        response = response.strip()
-
         return response
 
     def handle_response_only(self, user_id: str, message: str = None, intent: str = None, conversation_id: str = None) -> str:
