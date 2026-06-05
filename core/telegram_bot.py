@@ -316,7 +316,7 @@ def clean_markdown_links(text: str) -> str:
 def get_default_reply_markup(chat_type: str = "private") -> dict | None:
     return {
         "keyboard": [
-            [{"text": "🌦️ Meteo"}, {"text": "❓ Aiuto"}]
+            [{"text": "🌦️ Meteo"}, {"text": "🤖 Aiuto"}]
         ],
         "resize_keyboard": True,
         "is_persistent": True
@@ -902,7 +902,7 @@ async def handle_update(update: dict):
                     f"  oppure sul sito: {_WEBAPP_REG}",
                     reply_markup=markup)
             return
-        if text == "❓ Aiuto":
+        if text == "🤖 Aiuto":
             text = "Ho premuto il pulsante Aiuto. Avvia una breve intervista facendomi una domanda alla volta per capire chi sono, cosa faccio e come puoi essermi utile."
 
         if text in ("/login", "/accedi"):
