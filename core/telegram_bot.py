@@ -303,13 +303,15 @@ _IMG_URL_RE = re.compile(
 # Markdown immagine: ![alt](url)
 _IMG_MD_RE = re.compile(r'!\[.*?\]\((https?://[^\)]+)\)', re.IGNORECASE)
 
-# Regex per trovare URL generici nelle risposte
-_HTTPS_URL_RE = re.compile(r'(https?://[^\s\"\'\>\)]+)', re.IGNORECASE)
-_WWW_URL_RE = re.compile(r'(www\.[a-zA-Z0-9\-\.\/\?\&\=\#\%\~\+\_]+)', re.IGNORECASE)
-
 def clean_markdown_links(text: str) -> str:
-    """Rimuove la sintassi markdown dei link lasciando solo il testo visualizzabile."""
-    return re.sub(r'\[([^\]]+)\]\((https?://[^\s\)\>]+|www\.[^\s\)\>]+)\)', r'\1', text)
+    """Rimuove la sintassi markdown dei link lasciando solo il testo visualizzabile e rimuove URL nudi."""
+    # 1. Rimuove markdown: [testo](url) -> testo, supportando 1 livello di parentesi nell'URL
+    text = re.sub(r'\[([^\]]+)\]\(((?:[^)(]+|\([^)(]*\))*)\)', r'\1', text)
+    # 2. Rimuove URL nudi dal testo
+    text = re.sub(r'(?<!\S)(https?://[^\s\"\'\>]+|www\.[^\s\"\'\>]+)', '', text, flags=re.IGNORECASE)
+    # 3. Pulisce spazi doppi
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
 def get_default_reply_markup(chat_type: str = "private") -> dict | None:
     if chat_type != "private":
@@ -337,20 +339,22 @@ def get_domain_name(url: str) -> str:
         return "Sito"
 
 def extract_webapp_urls(text: str) -> list[str]:
-    # Trova prima gli URL con schema http/https
-    all_urls = _HTTPS_URL_RE.findall(text)
+    # 1. Trova URL dai link markdown espliciti
+    md_urls = re.findall(r'\[[^\]]+\]\(((?:[^)(]+|\([^)(]*\))*)\)', text)
     
-    # Trova anche gli URL che iniziano con www.
-    www_urls = _WWW_URL_RE.findall(text)
-    for w in www_urls:
-        # Se non è già parte di una URL completa estratta
-        is_sub = False
-        for u in all_urls:
-            if w in u:
-                is_sub = True
-                break
-        if not is_sub:
-            all_urls.append(w)
+    # 2. Trova URL nudi nel testo rimanente
+    text_no_md = re.sub(r'\[[^\]]+\]\(((?:[^)(]+|\([^)(]*\))*)\)', '', text)
+    raw_urls = re.findall(r'(https?://[^\s\"\'\>]+|www\.[^\s\"\'\>]+)', text_no_md, flags=re.IGNORECASE)
+    
+    cleaned_raw = []
+    for u in raw_urls:
+        u = u.rstrip(".,!?;:")
+        # Se la parentesi non è bilanciata (es. trascinata dalla punteggiatura), rimuovila
+        while u.count(')') > u.count('(') and u.endswith(')'):
+            u = u[:-1]
+        cleaned_raw.append(u)
+        
+    all_urls = md_urls + cleaned_raw
 
     valid_urls = []
     for url in all_urls:
