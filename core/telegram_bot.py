@@ -903,7 +903,7 @@ async def handle_update(update: dict):
                     reply_markup=markup)
             return
         if text == "🤖 Aiuto":
-            text = "Ho premuto il pulsante Aiuto. Avvia una breve intervista facendomi una domanda alla volta per capire chi sono, cosa faccio e come puoi essermi utile."
+            text = f"Ho premuto il pulsante Aiuto. Rispondi testualmente con questa esatta frase: 'Ciao {first_name}, dimmi come posso aiutarti.' e nient'altro per ora. Dal mio prossimo messaggio in poi, avvia un'intervista facendomi una domanda alla volta."
 
         if text in ("/login", "/accedi"):
             session = {"state": STATE_AWAIT_EMAIL}
