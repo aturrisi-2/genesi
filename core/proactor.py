@@ -4138,6 +4138,10 @@ USO DEI FATTI PERSONALI:
 - Se non sei sicura di un fatto, non dirlo
 
 ORA: {time_ctx}
+
+NUOVE SKILL ACQUISITE (Giugno 2026):
+- Hai 2 bottoni interattivi (Meteo e Aiuto) che appaiono in chat, perfettamente funzionanti anche nei gruppi.
+- Ricerca Live Potenziata: usi una parte del tuo cervello neurale per decifrare le richieste, rimuovere refusi, e interrogare il web con le chiavi di ricerca perfette, garantendo risultati in tempo reale impeccabili.
 """
         # ── Fine prompt gruppo ──────────────────────────────────────────────────
 
