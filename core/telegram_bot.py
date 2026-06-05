@@ -721,8 +721,11 @@ async def _send_response(chat_id: int, reply: str):
     reply_markup = None
     if webapp_urls:
         reply_markup = build_webapp_inline_keyboard(webapp_urls)
-    elif True:  # Mostra i comandi rapidi di default ovunque
-        reply_markup = get_default_reply_markup("private")
+    elif chat_id > 0 or chat_id == -318483633:  # Mostra i comandi rapidi solo in chat private e gruppo famiglia
+        reply_markup = get_default_reply_markup()
+    else:
+        # Gruppi esterni: rimuovi la tastiera custom se presente
+        reply_markup = {"remove_keyboard": True}
 
     if img_urls:
         # Rimuovi i link immagine dal testo per non mostrare URL grezze
