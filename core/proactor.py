@@ -4316,25 +4316,15 @@ Messaggio utente: {message}"""
                         f"{live_result['context_block']}\n"
                         f"[FINE DATI WEB]\n"
                     )
-                    _OPINION_MARKERS = ["cosa pensi", "cosa ne pensi", "secondo te", "tua opinione", "come la vedi", "cosa credi", "tu cosa pensi"]
-                    _is_opinion = any(m in message.lower() for m in _OPINION_MARKERS)
-                    if _is_opinion:
-                        live_source_instruction = (
-                            f"\nUSA questi dati per formarti un'opinione personale. "
-                            f"Rispondi in PRIMA PERSONA come Genesi. "
-                            f"NON iniziare con 'Secondo Wikipedia' o citazioni formali. "
-                            f"Esprimi il tuo punto di vista usando le informazioni trovate. Max 3-4 frasi.\n"
-                        )
-                    else:
-                        live_source_instruction = (
-                            f"\nISTRUZIONE FONTE: inizia con "
-                            f'"Secondo {live_result["source_name"]}, ..." '
-                            f"poi continua in modo naturale e narrativo, come se raccontassi a voce. "
-                            f"Includi il link della fonte principale ({live_result['source_url']}) nel testo in formato markdown, "
-                            f"ad esempio: '[{live_result['source_name']}]({live_result['source_url']})' per permettere all'utente di approfondire. "
-                            f"NON includere altri link di ricerca o di reindirizzamento non necessari. "
-                            f"NON elencare punti. Narra. Max 4-5 frasi.\n"
-                        )
+                    live_source_instruction = (
+                        f"\nISTRUZIONE FONTE: Usa questi dati per rispondere in PRIMA PERSONA come Genesi. "
+                        f"NON iniziare MAI con 'Secondo {live_result['source_name']}' o altre citazioni formali. "
+                        f"Racconta l'informazione o formati un'opinione in modo naturale e narrativo, come se parlassi a voce. "
+                        f"DEVI sempre includere il link della fonte principale ({live_result['source_url']}) nel testo in formato markdown, "
+                        f"ad esempio: '[{live_result['source_name']}]({live_result['source_url']})' per permettere all'utente di approfondire. "
+                        f"NON includere altri link di ricerca o di reindirizzamento non necessari. "
+                        f"NON elencare punti. Narra. Max 4-5 frasi.\n"
+                    )
                 else:
                     log("LIVE_SEARCH_EMPTY", user_id=user_id, query=_search_query)
             else:
