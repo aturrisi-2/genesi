@@ -82,6 +82,9 @@ def resolve_elliptical_image(user_id: str, message: str) -> Optional[str]:
     if not ctx or ctx.get("intent") != "image_search":
         return None
 
+    if not is_elliptical_image_followup(message):
+        return None
+
     msg_lower = message.lower().strip()
     stops = {"no", "si", "sì", "ok", "grazie", "basta", "ciao", "perfetto"}
     words = msg_lower.split()
@@ -94,7 +97,7 @@ def resolve_elliptical_image(user_id: str, message: str) -> Optional[str]:
         logger.info("TOOL_CONTEXT_IMAGE_REUSE user=%s query=%s", user_id, q)
         return q
 
-    return msg_lower if msg_lower not in stops else None
+    return None
 
 
 
