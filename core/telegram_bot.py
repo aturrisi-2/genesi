@@ -1355,9 +1355,6 @@ async def handle_update(update: dict):
                     analysis = ""
             user_msg  = caption or "Analizza questa immagine che ti ho inviato."
             if analysis and analysis != "__TOKEN_EXPIRED__":
-                user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
-                
-                # Se l'immagine contiene volti sconosciuti, salva la foto e metti in attesa
                 if "[UNKNOWN_FACES_DETECTED]" in analysis:
                     import uuid
                     tmp_img = f"/tmp/genesi_face_{uuid.uuid4().hex[:8]}.jpg"
@@ -1369,6 +1366,9 @@ async def handle_update(update: dict):
                         await storage.save(_session_key(session_uid), session)
                     except Exception as e:
                         logger.error("Failed to save tmp face image: %s", e)
+                
+                # Non rimuovere il tag, altrimenti le regole di _group_msg non scattano!
+                user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
 
             reply = await _do_chat(user_msg)
             if not await _handle_reply(reply):
