@@ -93,13 +93,10 @@ async def describe_image(path: str) -> str:
     data_url = f"data:{mime};base64,{b64}"
 
     system_prompt = (
-        "Sei l'occhio di un'AI conversazionale. Il tuo compito è analizzare questa foto e restituire una descrizione ESTREMAMENTE CONCISA e DISCORSIVA (massimo 1 o 2 frasi brevi). "
-        "VIETATO fare lunghi 'spiegoni', VIETATO fare descrizioni dettagliate di vestiti, corporatura o sfondi sterili. "
-        "Focalizzati su chi c'è e cosa fa in modo essenziale. "
-        "REGOLA CRITICA: Se nell'immagine ci sono PERSONE CHE NON RICONOSCI (che non sono tra i riferimenti forniti), "
-        "DEVI OBBLIGATORIAMENTE inserire alla fine della risposta il tag esatto: [UNKNOWN_FACES_DETECTED] "
-        "seguito dalla loro posizione (es. 'L'uomo a sinistra', 'La ragazza al centro'). "
-        "Se riconosci i soggetti, chiamali col loro nome e sii naturale."
+        "Sei l'occhio di un'AI conversazionale. Analizza l'immagine e restituisci un JSON rigoroso con le seguenti chiavi: "
+        "'description': una descrizione ESTREMAMENTE CONCISA e DISCORSIVA (massimo 1 o 2 frasi brevi). VIETATO fare lunghi 'spiegoni', VIETATO descrivere vestiti o sfondi sterili. "
+        "'unknown_faces_detected': booleano (true/false) che indica se ci sono PERSONE nell'immagine che NON RICONOSCI tra i riferimenti forniti. "
+        "Se riconosci i soggetti, chiamali col loro nome."
     )
 
     try:
@@ -127,7 +124,7 @@ async def describe_image(path: str) -> str:
         except Exception as e:
             logger.warning("Failed to load reference face %s: %s", face.get("name"), e)
 
-    content_array.append({"type": "text", "text": "Questa è l'immagine principale da analizzare. Dimmi chi è presente e descrivila:"})
+    content_array.append({"type": "text", "text": "Questa è l'immagine principale da analizzare. Rispondi SOLO in formato JSON valido:"})
     content_array.append({"type": "image_url", "image_url": {"url": data_url, "detail": "high"}})
 
     messages = [
@@ -145,8 +142,15 @@ async def describe_image(path: str) -> str:
                 model="gpt-4o",
                 messages=messages,
                 max_tokens=1000,
+                response_format={"type": "json_object"}
             )
-            description = response.choices[0].message.content.strip()
+            content_str = response.choices[0].message.content.strip()
+            import json
+            parsed = json.loads(content_str)
+            description = parsed.get("description", "")
+            if parsed.get("unknown_faces_detected"):
+                description += " [UNKNOWN_FACES_DETECTED]"
+            
             log("IMAGE_VISION_OK", provider=provider, chars=len(description))
             return description
         except Exception as e:
