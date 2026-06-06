@@ -1162,7 +1162,7 @@ async def handle_update(update: dict):
                 
                 domande_rule = "zero domande di ritorno, "
                 if "[UNKNOWN_FACES_DETECTED]" in message:
-                    photo_rules += 'Ci sono persone sconosciute nella foto: DEVI CHIEDERE "Chi sono?" in modo naturale. '
+                    photo_rules += 'REGOLA ASSOLUTA: Ci sono volti sconosciuti nella foto. DEVI OBBLIGATORIAMENTE CHIEDERE "Chi sono?". FAI LA DOMANDA ANCHE SE PENSI DI SAPERLO DAL CONTESTO PRECEDENTE. '
                     domande_rule = ""
 
                 extra_rules = (
