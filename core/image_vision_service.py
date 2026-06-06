@@ -95,8 +95,7 @@ async def describe_image(path: str) -> str:
     system_prompt = (
         "Sei l'occhio di un'AI conversazionale. Analizza l'immagine e restituisci un JSON rigoroso con le seguenti chiavi: "
         "'description': una descrizione ESTREMAMENTE CONCISA e DISCORSIVA (massimo 1 o 2 frasi brevi). VIETATO fare lunghi 'spiegoni', VIETATO descrivere vestiti o sfondi sterili. "
-        "'unknown_faces_detected': booleano (true/false) che indica se ci sono PERSONE nell'immagine che NON RICONOSCI tra i riferimenti forniti. "
-        "Se riconosci i soggetti, chiamali col loro nome."
+        "'unknown_faces_detected': booleano (true/false). Questo deve essere RIGOROSAMENTE 'true' se nell'immagine ci sono PERSONE e tu non sai chi siano. Nota bene: se non ti viene fornito nessun 'Riferimento volto noto', allora QUALSIASI persona nell'immagine è per te sconosciuta, quindi DEVI restituire 'true'. Se ti vengono forniti riferimenti, restituisci 'true' se c'è qualcuno che non corrisponde a quei riferimenti."
     )
 
     try:
@@ -144,11 +143,37 @@ async def describe_image(path: str) -> str:
                 max_tokens=1000,
                 response_format={"type": "json_object"}
             )
+            if not response.choices or not response.choices[0].message.content:
+                raise ValueError("Empty content from vision model")
+            
             content_str = response.choices[0].message.content.strip()
+            logger.info("VISION_JSON_OUTPUT: %s", content_str)
+            
+            # Pulisci eventuali backtick markdown che il modello potrebbe aver aggiunto
+            clean_json_str = content_str
+            if clean_json_str.startswith("```json"):
+                clean_json_str = clean_json_str[7:]
+            if clean_json_str.startswith("```"):
+                clean_json_str = clean_json_str[3:]
+            if clean_json_str.endswith("```"):
+                clean_json_str = clean_json_str[:-3]
+            clean_json_str = clean_json_str.strip()
+
             import json
-            parsed = json.loads(content_str)
+            try:
+                parsed = json.loads(clean_json_str)
+            except json.JSONDecodeError:
+                # Se non è JSON valido, cerchiamo le keyword grezze
+                parsed = {
+                    "description": content_str, 
+                    "unknown_faces_detected": "unknown_faces_detected" in content_str.lower() and "true" in content_str.lower()
+                }
+
             description = parsed.get("description", "")
-            if parsed.get("unknown_faces_detected"):
+            
+            # Se rileva volti sconosciuti (o se il booleano è true, o stringa 'true')
+            is_unknown = parsed.get("unknown_faces_detected")
+            if is_unknown and str(is_unknown).lower() in ("true", "1", "yes", "si", "sì"):
                 description += " [UNKNOWN_FACES_DETECTED]"
             
             log("IMAGE_VISION_OK", provider=provider, chars=len(description))
