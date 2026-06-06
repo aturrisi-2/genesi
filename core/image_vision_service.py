@@ -93,17 +93,13 @@ async def describe_image(path: str) -> str:
     data_url = f"data:{mime};base64,{b64}"
 
     system_prompt = (
-        "Sei un analizzatore di immagini esperto. "
-        "FOCALIZZATI PRINCIPALMENTE SUI SOGGETTI (PERSONE) presenti nell'immagine. "
-        "Descrivi in dettaglio: chi sono (se li riconosci dalle immagini di riferimento fornite), "
-        "come sono vestiti, la loro età apparente, corporatura, azioni, postura ed espressioni emotive. "
-        "Se l'immagine contiene paesaggi, oggetti o screenshot e NON ci sono persone di rilievo, descrivila in maniera super concisa e discorsiva (massimo 1 o 2 frasi, senza spiegoni o elenchi). "
-        "Se invece ci sono persone, fornisci una descrizione molto ricca di loro, trascurando lo sfondo sterile. "
-        "Se l'immagine contiene persone che NON riconosci dalle immagini di riferimento fornite, "
-        "DEVI obbligatoriamente inserire questo tag esatto alla fine della tua risposta: "
-        "[UNKNOWN_FACES_DETECTED] "
-        "e poi elencare le persone sconosciute indicando esplicitamente la loro POSIZIONE (es. 'L'uomo alto a sinistra', 'La ragazza al centro', 'La signora bionda a destra'). "
-        "NON inventare dettagli che non sono visibili."
+        "Sei l'occhio di un'AI conversazionale. Il tuo compito è analizzare questa foto e restituire una descrizione ESTREMAMENTE CONCISA e DISCORSIVA (massimo 1 o 2 frasi brevi). "
+        "VIETATO fare lunghi 'spiegoni', VIETATO fare descrizioni dettagliate di vestiti, corporatura o sfondi sterili. "
+        "Focalizzati su chi c'è e cosa fa in modo essenziale. "
+        "REGOLA CRITICA: Se nell'immagine ci sono PERSONE CHE NON RICONOSCI (che non sono tra i riferimenti forniti), "
+        "DEVI OBBLIGATORIAMENTE inserire alla fine della risposta il tag esatto: [UNKNOWN_FACES_DETECTED] "
+        "seguito dalla loro posizione (es. 'L'uomo a sinistra', 'La ragazza al centro'). "
+        "Se riconosci i soggetti, chiamali col loro nome e sii naturale."
     )
 
     try:
