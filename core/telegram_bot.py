@@ -1117,6 +1117,9 @@ async def handle_update(update: dict):
             # Fast-path: reply diretta a un messaggio di Genesi → sempre sì
             if _reply_to_genesi:
                 should = True
+            # Fast-path: in attesa di volti, il prossimo messaggio dell'utente potrebbe essere la risposta!
+            elif session.get("awaiting_faces_img"):
+                should = True
             else:
                 should = await _group_should_intervene(
                     text, caption, chat_id, from_id, first_name,
