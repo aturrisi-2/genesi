@@ -207,8 +207,6 @@ async def _group_should_intervene(
         
     # Fast-path: pulsanti della tastiera → sempre sì
     if combined in ("🌦️ Meteo", "🤖 Aiuto"):
-        if chat_id < 0 and chat_id != -318483633:
-            return False  # Ignora i click sui bottoni preesistenti nei gruppi esterni
         return True
 
     combined_lower = combined.lower()
@@ -321,11 +319,19 @@ def clean_markdown_links(text: str) -> str:
     return text
 
 def get_default_reply_markup(chat_type: str = "private", is_family: bool = False) -> dict | None:
-    if chat_type == "private" or is_family:
+    if chat_type == "private":
         return {
             "keyboard": [
                 [{"text": "📍 Meteo (GPS)", "request_location": True}, {"text": "🌦️ Meteo"}],
                 [{"text": "🤖 Aiuto"}]
+            ],
+            "resize_keyboard": True,
+            "is_persistent": True
+        }
+    elif is_family:
+        return {
+            "keyboard": [
+                [{"text": "🌦️ Meteo"}, {"text": "🤖 Aiuto"}]
             ],
             "resize_keyboard": True,
             "is_persistent": True
@@ -727,11 +733,11 @@ async def _send_response(chat_id: int, reply: str):
     reply_markup = None
     if webapp_urls:
         reply_markup = build_webapp_inline_keyboard(webapp_urls)
-    elif chat_id > 0 or chat_id == -318483633:  # Mostra i comandi rapidi solo in chat private e gruppo famiglia
-        reply_markup = get_default_reply_markup()
     else:
-        # Gruppi esterni: rimuovi la tastiera custom se presente
-        reply_markup = {"remove_keyboard": True}
+        reply_markup = get_default_reply_markup(
+            chat_type="private" if chat_id > 0 else "group",
+            is_family=(chat_id < 0)
+        )
 
     if img_urls:
         # Rimuovi i link immagine dal testo per non mostrare URL grezze
@@ -870,7 +876,7 @@ async def handle_update(update: dict):
         if is_group and first_name:
             asyncio.create_task(update_member_seen(from_id, first_name))
             # Estrai relazioni familiari e aggiorna albero genealogico di Alfio solo nel gruppo famiglia
-            if chat_id == -318483633:
+            if chat_id < 0:
                 asyncio.create_task(extract_family_relationship(str(from_id), first_name, text or caption, "telegram"))
 
         # ── Logica gruppi ──────────────────────────────────────────────────────
@@ -1136,7 +1142,7 @@ async def handle_update(update: dict):
             if not _group_ctx_cache:
                 ctx = await build_group_context(
                     chat_id, from_id, first_name, current_message=text,
-                    is_family_group=(chat_id == -318483633)
+                    is_family_group=(chat_id < 0)
                 )
                 _group_ctx_cache.append(ctx)
             return _group_ctx_cache[0]
@@ -1145,16 +1151,26 @@ async def handle_update(update: dict):
             if not is_group or not first_name:
                 return message
             
-            is_family_group = (chat_id == -318483633)
+            is_family_group = (chat_id < 0)
             group_type_label = "GRUPPO FAMILIARE" if is_family_group else "GRUPPO ESTERNO"
             role_label = "naturale da familiare (non da assistente)" if is_family_group else "da assistente AI educata, utile e mai invadente"
             
             if is_family_group:
+                photo_rules = ""
+                if "[Contenuto immagine:" in message:
+                    photo_rules += "Evita spiegoni descrittivi dell'immagine: fai un commento discorsivo e conciso. "
+                
+                domande_rule = "zero domande di ritorno, "
+                if "[UNKNOWN_FACES_DETECTED]" in message:
+                    photo_rules += 'Ci sono persone sconosciute nella foto: DEVI CHIEDERE "Chi sono?" in modo naturale. '
+                    domande_rule = ""
+
                 extra_rules = (
-                    f"zero intro elaborati, zero domande di ritorno, zero 'che bello!'. "
+                    f"zero intro elaborati, {domande_rule}zero 'che bello!'. "
                     f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente ai festeggiamenti rivolti a quel familiare. "
                     f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
                     f"a meno che {first_name} non li citi in questo messaggio. "
+                    f"{photo_rules}"
                 )
             else:
                 extra_rules = (
@@ -1231,7 +1247,7 @@ async def handle_update(update: dict):
                 asyncio.create_task(consolidate_group_insights_if_needed(chat_id))
                 asyncio.create_task(summarize_group_discussion_if_needed(chat_id))
                 
-                is_family_group = (chat_id == -318483633)
+                is_family_group = (chat_id < 0)
                 if is_family_group:
                     asyncio.create_task(_sync_family_background(chat_id))
 

@@ -591,7 +591,7 @@ async def check_and_send_birthdays():
             if member_id.startswith("tg:") or member_id.startswith("tg:name:"):
                 # Invia a tutti i gruppi Telegram noti (solo famiglia)
                 for gid in tg_group_ids:
-                    if gid == -318483633:
+                    if gid < 0:
                         await _send_telegram_group_birthday(gid, display_name, age)
                 # Invia anche al gruppo WhatsApp (stessa famiglia)
                 await _send_wa_group_birthday(display_name, age)
@@ -878,7 +878,7 @@ async def birthday_scheduler():
                     for g in known_groups:
                         if g.get("platform") == "telegram":
                             gid = g["chat_id"]
-                            if gid != -318483633:
+                            if gid >= 0:
                                 continue
                             msg = await _generate_proactive_greeting(
                                 [(n, a) for n, a, _ in birthdays_today],

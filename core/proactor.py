@@ -531,11 +531,14 @@ class Proactor:
 
             logger.info("PROACTOR_HANDLE_ENTRY user=%s intent=%s", user_id, intent)
 
+            # Estrai il vero messaggio utente ignorando i blocchi di contesto iniettati
+            clean_message = message.split("\n\n[", 1)[0]
+
             # STEP 0.5: IMAGE SEARCH ROUTE (web images) — priorità su richieste esplicite "cerca/mostra immagini"
-            image_query = extract_image_query(message)
+            image_query = extract_image_query(clean_message)
             if not image_query:
                 from core.tool_context import resolve_elliptical_image
-                image_query = resolve_elliptical_image(user_id, message)
+                image_query = resolve_elliptical_image(user_id, clean_message)
                 
             if image_query:
                 log("ROUTING_DECISION", route="image_search", user_id=user_id)
@@ -657,15 +660,15 @@ class Proactor:
             ]
             _is_openclaw_request = any(p in msg_lower for p in _OPENCLAW_KEYWORDS)
 
-            if active_docs and is_document_reference(message) and not _is_image_gen_request and not _is_openclaw_request and not skip_document_mode:
+            if active_docs and is_document_reference(clean_message) and not _is_image_gen_request and not _is_openclaw_request and not skip_document_mode:
                 logger.info("DOCUMENT_MODE_TRIGGERED user=%s doc_count=%d", user_id, len(active_docs))
-                response = await self._handle_document_query(user_id, message, profile, brain_state, conversation_id)
+                response = await self._handle_document_query(user_id, clean_message, profile, brain_state, conversation_id)
                 return response, "tool"
 
             # STEP 3.8: MEMORY ROUTING OVERRIDE — bypass classifier for memory references
             chat_count = chat_memory.get_message_count(user_id)
-            if (chat_count > 0 or conversation_id) and is_memory_reference(message):
-                logger.info("MEMORY_ROUTING_OVERRIDE user=%s chat_count=%d msg=%s", user_id, chat_count, message[:40])
+            if (chat_count > 0 or conversation_id) and is_memory_reference(clean_message):
+                logger.info("MEMORY_ROUTING_OVERRIDE user=%s chat_count=%d msg=%s", user_id, chat_count, clean_message[:40])
                 intent = "memory_context"
                 
                 # Fix: se è un override della memoria e c'era un falso positivo di identità ("io adesso", "ti ricordi cosa..."), 
