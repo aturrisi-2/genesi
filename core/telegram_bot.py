@@ -181,15 +181,16 @@ Rispondi SOLO con JSON: {"intervieni": true, "motivo": "ragione breve"} oppure {
 
 async def _group_should_intervene(
     text: str, caption: str, chat_id: int, from_id: int, first_name: str,
-    bot_username: str = "", bot_mentioned: bool = False, has_media: bool = False
+    bot_username: str = None, bot_mentioned: bool = False,
+    has_media: bool = False, has_location: bool = False
 ) -> bool:
     """
     Decide con LLM se Genesi deve intervenire nel gruppo.
     Fast-path per mention/nome diretti. LLM per tutto il resto.
     """
     has_link = bool(re.search(r'https?://[^\s]+|www\.[^\s]+', f"{text} {caption}", re.IGNORECASE))
-    if has_media or has_link:
-        # Interviene sempre se viene inviato un elemento multimediale o un link
+    if has_media or has_link or has_location:
+        # Interviene sempre se viene inviato un elemento multimediale, un link o una posizione
         return True
 
     combined = f"{text} {caption}".strip()
@@ -319,14 +320,17 @@ def clean_markdown_links(text: str) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-def get_default_reply_markup(chat_type: str = "private") -> dict | None:
-    return {
-        "keyboard": [
-            [{"text": "🌦️ Meteo"}, {"text": "🤖 Aiuto"}]
-        ],
-        "resize_keyboard": True,
-        "is_persistent": True
-    }
+def get_default_reply_markup(chat_type: str = "private", is_family: bool = False) -> dict | None:
+    if chat_type == "private" or is_family:
+        return {
+            "keyboard": [
+                [{"text": "📍 Meteo (GPS)", "request_location": True}, {"text": "🌦️ Meteo"}],
+                [{"text": "🤖 Aiuto"}]
+            ],
+            "resize_keyboard": True,
+            "is_persistent": True
+        }
+    return None
 
 def get_domain_name(url: str) -> str:
     from urllib.parse import urlparse
@@ -837,7 +841,7 @@ async def handle_update(update: dict):
         first_name = msg.get("from", {}).get("first_name", "")
         text       = msg.get("text", "").strip()
         # Normalizzazione dei comandi rapidi (bottoni ReplyKeyboard)
-        if text == "🌦️ Meteo":
+        if text in ("🌦️ Meteo", "📍 Meteo (GPS)"):
             text = "Che tempo fa oggi?"
         photo      = msg.get("photo")       # lista di dimensioni
         voice      = msg.get("voice")       # messaggio vocale
@@ -846,6 +850,7 @@ async def handle_update(update: dict):
         video      = msg.get("video")       # video
         animation  = msg.get("animation")   # gif/animazione
         video_note = msg.get("video_note")  # video note
+        location   = msg.get("location")    # GPS location
         caption    = msg.get("caption", "").strip()
 
         # Reply diretta a un messaggio di Genesi → fast-path SI + inietta contesto
@@ -1110,7 +1115,7 @@ async def handle_update(update: dict):
                 should = await _group_should_intervene(
                     text, caption, chat_id, from_id, first_name,
                     bot_username=_BOT_USERNAME, bot_mentioned=_bot_mentioned,
-                    has_media=_original_has_media
+                    has_media=_original_has_media, has_location=bool(location)
                 )
             if not should:
                 logger.info("TELEGRAM_GROUP_SILENT chat_id=%s from=%s msg=%.60s",
@@ -1384,6 +1389,29 @@ async def handle_update(update: dict):
             if not await _handle_reply(reply):
                 return
             logger.info("TELEGRAM_DOCUMENT_OK chat_id=%s filename=%s", chat_id, filename)
+            return
+
+        # ── POSIZIONE (Location) ─────────────────────────────────────────────
+        if location:
+            await send_typing(chat_id)
+            lat = location["latitude"]
+            lon = location["longitude"]
+            from core.location_resolver import reverse_geocode
+            city_name = await reverse_geocode(lat, lon)
+            if city_name:
+                if is_group:
+                    await save_member_city(from_id, city_name)
+                else:
+                    if session.get("token"):
+                        await _save_city(session["token"], city_name)
+                    session["city"] = city_name
+                    await storage.save(_session_key(session_uid), session)
+                reply = await _do_chat(f"[L'utente ha inviato la sua posizione GPS: {city_name}] Dimmi le previsioni meteo per {city_name}.")
+                if not await _handle_reply(reply):
+                    return
+                logger.info("TELEGRAM_LOCATION_OK chat_id=%s city=%s", chat_id, city_name)
+            else:
+                await send_message(chat_id, "Ho ricevuto la tua posizione, ma non sono riuscita a determinare il nome della città esatta per il meteo.")
             return
 
         # ── VIDEO / ANIMATION / VIDEO_NOTE ─────────────────────────────────────
