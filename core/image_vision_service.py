@@ -141,7 +141,6 @@ async def describe_image(path: str) -> str:
                 model="gpt-4o",
                 messages=messages,
                 max_tokens=1000,
-                response_format={"type": "json_object"}
             )
             if not response.choices or not response.choices[0].message.content:
                 raise ValueError("Empty content from vision model")
