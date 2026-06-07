@@ -1494,9 +1494,10 @@ async def handle_update(update: dict):
                     "L'utente sta rispondendo a una tua richiesta di identificare i volti in una foto.\n"
                     f"Descrizione precedente dei volti: {desc_img}\n"
                     f"Risposta utente: {text}\n"
-                    "Estrai i nomi delle persone (in formato JSON) associati alla loro descrizione visiva.\n"
-                    "Se non ha fornito nomi ma sta parlando di altro, ritorna {}.\n"
-                    "Esempio valido: {\"Rita\": \"la donna bionda a sinistra\", \"Ennio\": \"l'uomo con i baffi a destra\"}"
+                    "Estrai le identità delle persone (nomi propri, ruoli o gradi di parentela, es. 'mia moglie', 'Marco', 'il nonno') associati alla loro descrizione visiva.\n"
+                    "Formatta la risposta ESCLUSIVAMENTE come JSON: le chiavi sono le identità, i valori sono la descrizione o deduzione visiva.\n"
+                    "Se l'utente non ha fornito alcuna informazione utile per identificare le persone e sta parlando di tutt'altro, ritorna {}.\n"
+                    "Esempio valido: {\"mia moglie\": \"la donna a sinistra\", \"Ennio\": \"l'uomo con i baffi a destra\"}"
                 )
                 try:
                     raw_ext = await llm_service._call_model("openai/gpt-4o-mini", extract_prompt, text, user_id=session_uid, route="memory")
