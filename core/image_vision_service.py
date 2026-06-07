@@ -95,6 +95,7 @@ async def describe_image(path: str) -> str:
     system_prompt = (
         "Sei l'occhio di un'AI conversazionale. Analizza l'immagine e restituisci un JSON rigoroso con le seguenti chiavi: "
         "'description': una descrizione ESTREMAMENTE CONCISA e DISCORSIVA (massimo 1 o 2 frasi brevi). VIETATO fare lunghi 'spiegoni'. "
+        "ATTENZIONE: Se riconosci dei volti dai riferimenti forniti, DEVI TASSATIVAMENTE includere i loro nomi in questa descrizione (es. 'Vedo Rita e Zoe al tavolo'). "
         "'unknown_faces_detected': booleano (true/false). Regola assoluta: se nell'immagine è presente ALMENO UNA figura umana, volto o persona che non corrisponde ESATTAMENTE a uno dei 'Riferimenti volto noto' forniti, DEVI TASSATIVAMENTE impostare questo valore a 'true'. Se non ti vengono forniti riferimenti, qualsiasi persona è sconosciuta, quindi il valore DEVE essere 'true'."
     )
 
@@ -146,7 +147,7 @@ async def describe_image(path: str) -> str:
                 raise ValueError("Empty content from vision model")
             
             content_str = response.choices[0].message.content.strip()
-            logger.info("VISION_JSON_OUTPUT: %s", content_str)
+            logger.error("VISION_JSON_OUTPUT: %s", content_str)
             
             # Pulisci eventuali backtick markdown che il modello potrebbe aver aggiunto
             clean_json_str = content_str
