@@ -16,6 +16,8 @@ import logging
 import os
 import re
 import time
+from typing import Dict, Any, List
+
 import httpx
 from core.storage import storage
 from core.log import log
@@ -31,6 +33,46 @@ from core.telegram_group_memory import (
 )
 
 logger = logging.getLogger(__name__)
+
+async def _try_extract_faces_from_text(text: str, tmp_img: str, desc_img: str, session_uid: str) -> bool:
+    """Tenta di estrarre i nomi dei volti dal testo e salvarli."""
+    if not text or not tmp_img or not desc_img:
+        return False
+        
+    import os
+    if not os.path.exists(tmp_img):
+        return False
+        
+    from core.llm_service import llm_service
+    extract_prompt = (
+        "L'utente sta descrivendo le identità delle persone in una foto.\n"
+        f"Descrizione dei volti (dall'analisi visiva): {desc_img}\n"
+        f"Testo dell'utente: {text}\n"
+        "Estrai le identità delle persone (nomi propri, ruoli o gradi di parentela, es. 'mia moglie', 'Marco', 'il nonno') associati alla loro descrizione visiva.\n"
+        "Formatta la risposta ESCLUSIVAMENTE come JSON: le chiavi sono le identità, i valori sono la descrizione o deduzione visiva.\n"
+        "Se l'utente non ha fornito alcuna informazione utile per identificare le persone e sta parlando di tutt'altro, ritorna {}.\n"
+        "Esempio valido: {\"mia moglie\": \"la donna a sinistra\", \"Ennio\": \"l'uomo con i baffi a destra\"}"
+    )
+    try:
+        raw_ext = await llm_service._call_model("openai/gpt-4o-mini", extract_prompt, text, user_id=session_uid, route="memory")
+        clean = raw_ext.strip()
+        if clean.startswith("```"):
+            clean = clean.split("```")[1]
+            if clean.startswith("json"):
+                clean = clean[4:]
+        parsed_faces = json.loads(clean.strip())
+        
+        if parsed_faces:
+            from core.face_memory_service import save_known_face
+            for name, f_desc in parsed_faces.items():
+                await save_known_face(name, tmp_img, f_desc)
+                logger.info("FACE_SAVED FROM TEXT name=%s", name)
+            return True
+    except Exception as e:
+        logger.warning("Error parsing faces names: %s", e)
+    
+    return False
+
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_API   = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
@@ -1370,8 +1412,27 @@ async def handle_update(update: dict):
                     except Exception as e:
                         logger.error("Failed to save tmp face image: %s", e)
                 
+                # Verifica immediata se la caption contiene i nomi
+                faces_saved_now = False
+                if caption:
+                    faces_saved_now = await _try_extract_faces_from_text(caption, session.get("awaiting_faces_img"), analysis, session_uid)
+                    if faces_saved_now:
+                        tmp_img = session.pop("awaiting_faces_img", None)
+                        session.pop("awaiting_faces_desc", None)
+                        await storage.save(_session_key(session_uid), session)
+                        try:
+                            import os
+                            os.remove(tmp_img)
+                        except:
+                            pass
+                
                 # Non rimuovere il tag, altrimenti le regole di _group_msg non scattano!
                 user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
+                if "[UNKNOWN_FACES_DETECTED]" in analysis:
+                    if faces_saved_now:
+                        user_msg += "\n[SISTEMA: Hai estratto e memorizzato con successo le identità dei volti dalla didascalia dell'utente. Ringrazia l'utente per avertele presentate in modo molto naturale!]"
+                    else:
+                        user_msg += "\n[SISTEMA: Hai rilevato persone sconosciute nell'immagine. Chiedi all'utente in modo colloquiale e naturale chi sono le persone nella foto, così potrai memorizzarle in futuro.]"
 
             reply = await _do_chat(user_msg)
             if not await _handle_reply(reply):
@@ -1487,37 +1548,15 @@ async def handle_update(update: dict):
             desc_img = session.pop("awaiting_faces_desc", "")
             await storage.save(_session_key(session_uid), session)
             
-            if tmp_img and os.path.exists(tmp_img):
-                # Usiamo un prompt rapido per capire se ha fornito i nomi
-                from core.llm_service import llm_service
-                extract_prompt = (
-                    "L'utente sta rispondendo a una tua richiesta di identificare i volti in una foto.\n"
-                    f"Descrizione precedente dei volti: {desc_img}\n"
-                    f"Risposta utente: {text}\n"
-                    "Estrai le identità delle persone (nomi propri, ruoli o gradi di parentela, es. 'mia moglie', 'Marco', 'il nonno') associati alla loro descrizione visiva.\n"
-                    "Formatta la risposta ESCLUSIVAMENTE come JSON: le chiavi sono le identità, i valori sono la descrizione o deduzione visiva.\n"
-                    "Se l'utente non ha fornito alcuna informazione utile per identificare le persone e sta parlando di tutt'altro, ritorna {}.\n"
-                    "Esempio valido: {\"mia moglie\": \"la donna a sinistra\", \"Ennio\": \"l'uomo con i baffi a destra\"}"
-                )
+            faces_saved = await _try_extract_faces_from_text(text, tmp_img, desc_img, session_uid)
+            if faces_saved:
+                # Appendi l'informazione al messaggio corrente così il bot reagisce positivamente
+                text += "\n\n[SISTEMA: Hai estratto e memorizzato con successo le identità di queste persone dalla risposta dell'utente. Esclama in modo naturale che ti ricorderai di loro!]"
+            
+            # Pulisci file temporaneo in ogni caso (sia successo che fallimento)
+            if tmp_img:
                 try:
-                    raw_ext = await llm_service._call_model("openai/gpt-4o-mini", extract_prompt, text, user_id=session_uid, route="memory")
-                    clean = raw_ext.strip()
-                    if clean.startswith("```"):
-                        clean = clean.split("```")[1]
-                        if clean.startswith("json"):
-                            clean = clean[4:]
-                    parsed_faces = json.loads(clean.strip())
-                    
-                    if parsed_faces:
-                        from core.face_memory_service import save_known_face
-                        for name, f_desc in parsed_faces.items():
-                            await save_known_face(name, tmp_img, f_desc)
-                            logger.info("FACE_SAVED FROM CHAT name=%s", name)
-                except Exception as e:
-                    logger.warning("Error parsing faces names: %s", e)
-                
-                # Pulisci file temporaneo dopo aver salvato
-                try:
+                    import os
                     os.remove(tmp_img)
                 except Exception:
                     pass
