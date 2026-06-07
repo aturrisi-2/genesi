@@ -1,8 +1,8 @@
 import asyncio
 import logging
 import re
-from html.parser import HTMLParser
 import httpx
+from youtube_transcript_api import YouTubeTranscriptApi
 
 logger = logging.getLogger(__name__)
 
@@ -12,116 +12,128 @@ URL_REGEX = re.compile(
     re.IGNORECASE
 )
 
-class HTMLTextExtractor(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.title = ""
-        self.text_parts = []
-        self.current_tag = ""
-        # Tag HTML rumorosi da ignorare completamente per il contenuto testuale
-        self.ignore_tags = {
-            "script", "style", "nav", "header", "footer", "head",
-            "svg", "noscript", "aside", "form", "iframe", "button"
-        }
-        self.ignore_depth = 0
+def extract_youtube_id(url: str) -> str:
+    m = re.search(r'(?:v=|youtu\.be/|shorts/)([^&?]+)', url)
+    if m:
+        return m.group(1)
+    return None
 
-    def handle_starttag(self, tag, attrs):
-        self.current_tag = tag.lower()
-        if self.current_tag in self.ignore_tags:
-            self.ignore_depth += 1
+async def summarize_long_text(text: str, url: str) -> str:
+    """Riassume il testo se è troppo lungo per evitare di consumare troppi token nel contesto."""
+    if len(text) <= 1500:
+        return text
+    
+    prompt = (
+        "Sei un assistente che riassume il contenuto testuale estratto da un URL o video in modo conciso ma completo (max 150 parole). "
+        "Estrai i punti salienti, chiari e utili per una discussione. Mantieni il tono informativo neutro."
+    )
+    user_msg = f"URL: {url}\n\nTESTO DA RIASSUMERE:\n{text[:15000]}"
+    
+    try:
+        from core.llm_service import llm_service
+        summary = await llm_service._call_model(
+            "openai/gpt-4o-mini",
+            prompt,
+            user_msg,
+            user_id="link-summarizer",
+            route="memory"
+        )
+        if summary:
+            return f"[RIASSUNTO AUTOGENERATO (testo originale troppo lungo)]\n{summary.strip()}"
+    except Exception as e:
+        logger.warning("LINK_SUMMARIZER_ERROR url=%s err=%s", url, e)
+    
+    # Fallback
+    return text[:1500] + "\n...[testo troncato per lunghezza]"
 
-    def handle_endtag(self, tag):
-        tag_lower = tag.lower()
-        if tag_lower in self.ignore_tags:
-            self.ignore_depth = max(0, self.ignore_depth - 1)
-        if self.current_tag == tag_lower:
-            self.current_tag = ""
-
-    def handle_data(self, data):
-        if self.ignore_depth > 0:
-            return
-        
-        text = data.strip()
-        if not text:
-            return
+async def explore_youtube(url: str, video_id: str) -> str:
+    """Scarica la trascrizione di un video YouTube."""
+    try:
+        api = YouTubeTranscriptApi()
+        transcript_list = api.list(video_id)
+        try:
+            transcript = transcript_list.find_transcript(['it', 'en'])
+        except Exception:
+            # Fallback a qualsiasi lingua generata
+            transcript = transcript_list.find_generated_transcript(['it', 'en'])
             
-        if self.current_tag == "title":
-            self.title = text
-        else:
-            self.text_parts.append(text)
+        transcript_data = transcript.fetch()
+        text_parts = []
+        for t in transcript_data:
+            if isinstance(t, dict):
+                text_parts.append(t.get('text', ''))
+            elif hasattr(t, 'text'):
+                text_parts.append(getattr(t, 'text'))
+                
+        text = " ".join(text_parts)
+        # Pulizia
+        text = re.sub(r'\[.*?\]', '', text)
+        text = re.sub(r'\s+', ' ', text).strip()
+        
+        final_text = await summarize_long_text(text, url)
+        
+        return f"[Link YouTube: {url}]\nTrascrizione Parlato:\n{final_text}"
+    except Exception as e:
+        logger.warning("LINK_YOUTUBE_ERROR url=%s id=%s err=%s", url, video_id, e)
+        return None
 
-    def get_text(self) -> str:
-        content = " ".join(self.text_parts)
-        # Sostituisce spazi e tab multipli con uno spazio singolo
-        content = re.sub(r'[ \t]+', ' ', content)
-        # Sostituisce newlines multiple con un'unica newline
-        content = re.sub(r'\n+', '\n', content)
-        return content.strip()
-
-
-async def explore_link(url: str) -> str:
-    """Scarica e analizza un URL estraendo titolo e testo pulito."""
+async def explore_jina(url: str) -> str:
+    """Scarica il contenuto markdown della pagina tramite l'API gratuita Jina Reader."""
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/120.0.0.0 Safari/537.36"
-        ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+        )
     }
+    jina_url = f"https://r.jina.ai/{url}"
     try:
-        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
-            resp = await client.get(url, headers=headers)
-            if resp.status_code != 200:
-                logger.warning("LINK_EXPLORER_HTTP_ERROR status=%d url=%s", resp.status_code, url)
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.get(jina_url, headers=headers)
+            if resp.status_code == 200:
+                text = resp.text.strip()
+                final_text = await summarize_long_text(text, url)
+                return f"[Link Esterno: {url}]\nContenuto della pagina:\n{final_text}"
+            else:
                 return f"[Link: {url} | Errore: HTTP {resp.status_code}]"
-            
-            content_type = resp.headers.get("content-type", "").lower()
-            if "html" not in content_type:
-                # Se è testo semplice o JSON
-                text_content = resp.text[:800].strip()
-                return f"[Link: {url}\nContenuto: {text_content}]"
-            
-            parser = HTMLTextExtractor()
-            parser.feed(resp.text)
-            title = parser.title or "Nessun titolo"
-            body = parser.get_text()
-            
-            # Limita il corpo a 800 caratteri per evitare token bloat
-            if len(body) > 800:
-                body = body[:800] + "..."
-                
-            logger.info("LINK_EXPLORE_OK url=%s title=%s len=%d", url, title, len(body))
-            return f"[Link: {url} | Titolo: {title}\nContenuto: {body}]"
     except Exception as e:
-        logger.warning("LINK_EXPLORE_EXCEPTION url=%s err=%s", url, e)
+        logger.warning("LINK_JINA_ERROR url=%s err=%s", url, e)
         return f"[Link: {url} | Errore: non raggiungibile ({type(e).__name__})]"
 
+async def explore_link(url: str) -> str:
+    """Esplora un singolo link. Prova prima l'estrattore specifico (YouTube), poi fallback generico (Jina)."""
+    yt_id = extract_youtube_id(url)
+    if yt_id:
+        yt_text = await explore_youtube(url, yt_id)
+        if yt_text:
+            return yt_text
+
+    return await explore_jina(url)
 
 async def explore_links_in_text(text: str) -> str:
-    """Trova tutti i link nel testo, li esplora e appende le informazioni utili."""
+    """Trova tutti i link nel testo, li esplora (riassumendoli se necessario) e appende le info."""
     if not text:
         return text
 
-    urls = list(dict.fromkeys(URL_REGEX.findall(text)))  # Rimuove duplicati mantenendo l'ordine
+    urls = list(dict.fromkeys(URL_REGEX.findall(text)))
     if not urls:
         return text
 
-    logger.info("LINK_EXPLORER_FOUND_URLS count=%d urls=%s", len(urls), urls)
+    logger.info("LINK_EXPLORER_FOUND count=%d urls=%s", len(urls), urls)
     
-    # Esplora fino a un massimo di 3 link in parallelo per non rallentare troppo la risposta
     tasks = [explore_link(url) for url in urls[:3]]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
     summaries = []
     for r in results:
         if isinstance(r, Exception):
+            logger.warning("LINK_EXPLORER_EXCEPTION err=%s", r)
             continue
-        summaries.append(r)
-        
+        if r:
+            summaries.append(r)
+            
     if not summaries:
         return text
         
-    summary_block = "\n\n[Contenuto dei Link esplorati nel messaggio:\n" + "\n\n".join(summaries) + "]"
+    summary_block = "\n\n[INFORMAZIONI ESTRATTE DAI LINK PRESENTI NEL MESSAGGIO:\n" + "\n\n".join(summaries) + "]"
     return text + summary_block
