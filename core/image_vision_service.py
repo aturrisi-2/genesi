@@ -94,8 +94,8 @@ async def describe_image(path: str) -> str:
 
     system_prompt = (
         "Sei l'occhio di un'AI conversazionale. Analizza l'immagine e restituisci un JSON rigoroso con le seguenti chiavi: "
-        "'description': una descrizione ESTREMAMENTE CONCISA e DISCORSIVA (massimo 1 o 2 frasi brevi). VIETATO fare lunghi 'spiegoni', VIETATO descrivere vestiti o sfondi sterili. "
-        "'unknown_faces_detected': booleano (true/false). Questo deve essere RIGOROSAMENTE 'true' se nell'immagine ci sono PERSONE e tu non sai chi siano. Nota bene: se non ti viene fornito nessun 'Riferimento volto noto', allora QUALSIASI persona nell'immagine è per te sconosciuta, quindi DEVI restituire 'true'. Se ti vengono forniti riferimenti, restituisci 'true' se c'è qualcuno che non corrisponde a quei riferimenti."
+        "'description': una descrizione ESTREMAMENTE CONCISA e DISCORSIVA (massimo 1 o 2 frasi brevi). VIETATO fare lunghi 'spiegoni'. "
+        "'unknown_faces_detected': booleano (true/false). Regola assoluta: se nell'immagine è presente ALMENO UNA figura umana, volto o persona che non corrisponde ESATTAMENTE a uno dei 'Riferimenti volto noto' forniti, DEVI TASSATIVAMENTE impostare questo valore a 'true'. Se non ti vengono forniti riferimenti, qualsiasi persona è sconosciuta, quindi il valore DEVE essere 'true'."
     )
 
     try:
