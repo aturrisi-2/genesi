@@ -18,8 +18,13 @@ async def save_known_face(name: str, image_path: str, description_in_image: str)
     """
     _ensure_dir()
     clean_name = name.strip().lower().replace(" ", "_")
-    if not clean_name:
+    
+    # Previene l'apprendimento di nomi segnaposto
+    invalid_names = {"unknown", "sconosciuto", "ignoto", "persona", "ragazzo", "ragazza", "uomo", "donna"}
+    if not clean_name or clean_name in invalid_names:
+        logger.warning("Tentativo di salvare un volto con nome non valido: %s", name)
         return
+        
         
     import shutil
     new_img_name = f"{clean_name}_{int(time.time())}.jpg"
@@ -44,8 +49,13 @@ async def save_known_face(name: str, image_path: str, description_in_image: str)
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         logger.info("FACE_MEMORY_SAVED name=%s", name)
+        
+        # Calcola e salva embedding biometrico
+        from core.biometric_service import compute_and_save_embeddings
+        saved_faces = await compute_and_save_embeddings(name, new_img_path, description_hint=description_in_image)
+        logger.info("BIOMETRIC_EMBEDDING_SAVED name=%s faces_count=%d", name, saved_faces)
     except Exception as e:
-        logger.error("Error saving face json: %s", e)
+        logger.error("Error saving face: %s", e)
 
 async def get_known_faces() -> list[dict]:
     """

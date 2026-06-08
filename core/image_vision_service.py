@@ -99,30 +99,31 @@ async def describe_image(path: str) -> str:
         "'unknown_faces_detected': booleano (true/false). Regola assoluta: se nell'immagine è presente ALMENO UNA figura umana, volto o persona che non corrisponde ESATTAMENTE a uno dei 'Riferimenti volto noto' forniti, DEVI TASSATIVAMENTE impostare questo valore a 'true'. Se non ti vengono forniti riferimenti, qualsiasi persona è sconosciuta, quindi il valore DEVE essere 'true'."
     )
 
-    try:
-        from core.face_memory_service import get_known_faces
-        known_faces = await get_known_faces()
-    except Exception as e:
-        logger.error("Error loading face memory: %s", e)
-        known_faces = []
-
     content_array = []
-    # Aggiungi i riferimenti visivi
-    for face in known_faces:
-        try:
-            face_name = face.get("name")
-            face_img_path = face.get("image_path")
-            face_desc = face.get("description_in_image", "")
-            if face_img_path and os.path.exists(face_img_path):
-                with open(face_img_path, "rb") as ref_f:
-                    ref_data = ref_f.read()
-                ref_mime = _get_mime(face_img_path)
-                ref_b64 = base64.b64encode(ref_data).decode("utf-8")
-                ref_url = f"data:{ref_mime};base64,{ref_b64}"
-                content_array.append({"type": "text", "text": f"Riferimento volto noto: {face_name}. {face_desc}"})
-                content_array.append({"type": "image_url", "image_url": {"url": ref_url, "detail": "low"}})
-        except Exception as e:
-            logger.warning("Failed to load reference face %s: %s", face.get("name"), e)
+    
+    try:
+        from core.biometric_service import analyze_faces_biometric
+        bio_result = await analyze_faces_biometric(path)
+        recognized_names = bio_result.get("recognized_names", [])
+        unknown_faces_detected = bio_result.get("unknown_faces_detected", False)
+        unknown_faces_positions = bio_result.get("unknown_faces_positions", [])
+        
+        if recognized_names:
+            names_str = ", ".join(recognized_names)
+            content_array.append({"type": "text", "text": f"Contesto fornito dall'utente sulle persone presenti: {names_str}. Usa questi nomi naturalmente nella descrizione per riferirti alle persone nell'immagine."})
+        
+        if unknown_faces_detected:
+            if unknown_faces_positions:
+                pos_str = ", ".join(unknown_faces_positions)
+                content_array.append({"type": "text", "text": f"ATTENZIONE: Ci sono persone nell'immagine di cui non è stato fornito il nome. Posizioni rilevate dal sistema biometrico: {pos_str}. DEVI impostare 'unknown_faces_detected' a true nel JSON. Inoltre, nella tua 'description', DEVI chiedere attivamente all'utente chi sono guidandolo con le posizioni (es. 'e chi è la ragazza a sinistra?')."})
+            else:
+                content_array.append({"type": "text", "text": "ATTENZIONE: Ci sono persone nell'immagine di cui non è stato fornito il nome. DEVI impostare 'unknown_faces_detected' a true nel JSON."})
+        elif bio_result.get("total_faces", 0) > 0 and not unknown_faces_detected:
+            content_array.append({"type": "text", "text": "Tutte le persone presenti hanno un nome fornito. DEVI impostare 'unknown_faces_detected' a false nel JSON."})
+            
+        log("VISION_PROMPT_INJECTED", names=str(recognized_names), unknown=unknown_faces_detected, positions=str(unknown_faces_positions))
+    except Exception as e:
+        logger.error("Error running biometric service: %s", e)
 
     content_array.append({"type": "text", "text": "Questa è l'immagine principale da analizzare. Rispondi SOLO in formato JSON valido:"})
     content_array.append({"type": "image_url", "image_url": {"url": data_url, "detail": "high"}})
@@ -138,8 +139,9 @@ async def describe_image(path: str) -> str:
     for client, provider in clients:
         try:
             log("IMAGE_VISION_TRY", provider=provider)
+            model_name = "openai/gpt-4o" if provider == "openrouter" else "gpt-4o"
             response = await client.chat.completions.create(
-                model="gpt-4o",
+                model=model_name,
                 messages=messages,
                 max_tokens=1000,
             )
@@ -147,7 +149,7 @@ async def describe_image(path: str) -> str:
                 raise ValueError("Empty content from vision model")
             
             content_str = response.choices[0].message.content.strip()
-            logger.error("VISION_JSON_OUTPUT: %s", content_str)
+            log("VISION_RAW_OUTPUT", provider=provider, content=content_str)
             
             # Pulisci eventuali backtick markdown che il modello potrebbe aver aggiunto
             clean_json_str = content_str

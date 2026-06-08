@@ -84,6 +84,8 @@ _GROUP_EMAIL    = os.getenv("TELEGRAM_GROUP_EMAIL", "")
 _GROUP_PASSWORD = os.getenv("TELEGRAM_GROUP_PASSWORD", "")
 # Segreto per derivare le password degli account virtuali dei membri del gruppo
 _GROUP_MEMBER_SECRET = os.getenv("TELEGRAM_GROUP_MEMBER_SECRET", "genesi-family-group-2026")
+_FAMILY_GROUP_ID = -5007188402
+
 
 # Cache token per-membro (in memoria, si rinnova automaticamente)
 _MEMBER_TOKENS: dict[int, str] = {}
@@ -256,13 +258,18 @@ async def _group_should_intervene(
     # Fast-path: saluto di gruppo -> controlla limite temporale per-utente
     category = _get_greeting_category(combined_lower)
     if category:
-        should_greet = await _check_and_register_greeting(chat_id, str(from_id), category)
-        if should_greet:
-            return True
-        # Se should_greet è False e il saluto è "puro" (senza domande o altro testo utile),
-        # ignoralo subito senza fare fall-through, per evitare di ripetere i saluti!
-        if _is_pure_greeting(combined_lower) and not has_media:
-            return False
+        if chat_id == _FAMILY_GROUP_ID or bot_mentioned:
+            should_greet = await _check_and_register_greeting(chat_id, str(from_id), category)
+            if should_greet:
+                return True
+            # Se should_greet è False e il saluto è "puro" (senza domande o altro testo utile),
+            # ignoralo subito senza fare fall-through, per evitare di ripetere i saluti!
+            if _is_pure_greeting(combined_lower) and not has_media:
+                return False
+        else:
+            # Nei gruppi esterni interviene sui saluti solo se menzionata
+            if _is_pure_greeting(combined_lower) and not has_media:
+                return False
 
     # Fast-path: messaggio troppo corto e senza punto interrogativo → probabile scambio tra membri
     # Se c'è un elemento multimediale, bypassiamo questo controllo per consentire l'analisi del media.
@@ -918,7 +925,7 @@ async def handle_update(update: dict):
         if is_group and first_name:
             asyncio.create_task(update_member_seen(from_id, first_name))
             # Estrai relazioni familiari e aggiorna albero genealogico di Alfio solo nel gruppo famiglia
-            if chat_id < 0:
+            if chat_id == _FAMILY_GROUP_ID:
                 asyncio.create_task(extract_family_relationship(str(from_id), first_name, text or caption, "telegram"))
 
         # ── Logica gruppi ──────────────────────────────────────────────────────
@@ -1187,7 +1194,7 @@ async def handle_update(update: dict):
             if not _group_ctx_cache:
                 ctx = await build_group_context(
                     chat_id, from_id, first_name, current_message=text,
-                    is_family_group=(chat_id < 0)
+                    is_family_group=(chat_id == _FAMILY_GROUP_ID)
                 )
                 _group_ctx_cache.append(ctx)
             return _group_ctx_cache[0]
@@ -1196,7 +1203,7 @@ async def handle_update(update: dict):
             if not is_group or not first_name:
                 return message
             
-            is_family_group = (chat_id < 0)
+            is_family_group = (chat_id == _FAMILY_GROUP_ID)
             group_type_label = "GRUPPO FAMILIARE" if is_family_group else "GRUPPO ESTERNO"
             role_label = "naturale da familiare (non da assistente)" if is_family_group else "da assistente AI educata, utile e mai invadente"
             
@@ -1207,7 +1214,7 @@ async def handle_update(update: dict):
                 
                 domande_rule = "zero domande di ritorno, "
                 if "[UNKNOWN_FACES_DETECTED]" in message:
-                    photo_rules += 'REGOLA ASSOLUTA: Ci sono volti sconosciuti nella foto. DEVI OBBLIGATORIAMENTE CHIEDERE "Chi sono?". FAI LA DOMANDA ANCHE SE PENSI DI SAPERLO DAL CONTESTO PRECEDENTE. '
+                    photo_rules += 'Ci sono persone sconosciute in foto. Fai un commento colloquiale, curioso e intelligente. Includi con molta naturalezza una domanda per chiedere chi sono (se non lo sai dal contesto), ma non essere ripetitivo se l\'hai già chiesto di recente. '
                     domande_rule = ""
 
                 extra_rules = (
@@ -1292,7 +1299,7 @@ async def handle_update(update: dict):
                 asyncio.create_task(consolidate_group_insights_if_needed(chat_id))
                 asyncio.create_task(summarize_group_discussion_if_needed(chat_id))
                 
-                is_family_group = (chat_id < 0)
+                is_family_group = (chat_id == _FAMILY_GROUP_ID)
                 if is_family_group:
                     asyncio.create_task(_sync_family_background(chat_id))
 
@@ -1432,7 +1439,35 @@ async def handle_update(update: dict):
                     if faces_saved_now:
                         user_msg += "\n[SISTEMA: Hai estratto e memorizzato con successo le identità dei volti dalla didascalia dell'utente. Ringrazia l'utente per avertele presentate in modo molto naturale!]"
                     else:
-                        user_msg += "\n[SISTEMA: Hai rilevato persone sconosciute nell'immagine. Chiedi all'utente in modo colloquiale e naturale chi sono le persone nella foto, così potrai memorizzarle in futuro.]"
+                        user_msg += "\n[SISTEMA: Hai rilevato persone sconosciute nell'immagine. Fai un commento discorsivo colloquiale e chiedi all'utente in modo naturale chi sono le persone nella foto, così potrai memorizzarle in futuro.]"
+
+            media_group_id = msg.get("media_group_id")
+            if media_group_id:
+                # Accumula messaggi per gli album
+                key = f"media_group_desc:{media_group_id}"
+                desc_list = await storage.load(key) or []
+                desc_list.append(user_msg)
+                await storage.save(key, desc_list)
+                
+                # Debounce: aspetta per vedere se arrivano altre foto dell'album
+                msg_id = msg.get("message_id")
+                await storage.save(f"media_group_latest:{media_group_id}", msg_id)
+                await asyncio.sleep(4.0)
+                latest = await storage.load(f"media_group_latest:{media_group_id}")
+                if latest != msg_id:
+                    # Non è l'ultima foto arrivata, interrompi qui l'esecuzione silente
+                    return
+                
+                # È l'ultima foto dell'album: concatena le descrizioni
+                all_descs = await storage.load(key) or []
+                if len(all_descs) > 1:
+                    user_msg = f"L'utente ha inviato un album di {len(all_descs)} foto.\n"
+                    for idx, d in enumerate(all_descs):
+                        user_msg += f"\n--- FOTO {idx+1} ---\n{d}\n"
+                
+                # Pulizia cache
+                await storage.save(key, [])
+                await storage.save(f"media_group_latest:{media_group_id}", 0)
 
             reply = await _do_chat(user_msg)
             if not await _handle_reply(reply):

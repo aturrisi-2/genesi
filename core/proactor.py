@@ -1635,7 +1635,7 @@ class Proactor:
             "- 'non mi piace X' -> rimuovi X da preferences/interests se presente, NON aggiungere X\n"
             "- pets/children: includi SEMPRE tutti quelli esistenti nel profilo per non perderli\n"
             "- traits: SOLO aggettivi in prima persona, MAI nomi propri\n\n"
-            "REPLY: Una frase breve e naturale, come un amico. MAI 'salvato/rimosso/aggiornato/registrato'.\n\n"
+            "REPLY: Una risposta naturale, come un amico. OLTRE a recepire la novità, SE il messaggio dell'utente contiene anche altre domande, osservazioni o battute (es. 'e questa chi è?'), DEVI assolutamente rispondere anche a quelle! MAI usare termini tecnici come 'salvato/rimosso/aggiornato'.\n\n"
             "ESEMPI:\n"
             "- \"non sono architetto, sono medico\" -> {\"corrections\":[{\"field\":\"profession\",\"action\":\"update\",\"new_value\":\"medico\",\"old_value\":\"architetto\"}],\"reply\":\"Ah, medico!\"}\n"
             "- \"tifo Inter non Juventus, non mi piace il tennis\" -> {\"corrections\":["
