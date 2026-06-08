@@ -668,9 +668,6 @@ def _inject_document_context(user_id: str, message: str,
     if not active_docs:
         return ""
 
-    if not is_document_reference(message):
-        return ""
-
     # I più recenti sono in fondo — invertiamo per dargli priorità nel selector
     active_docs_recent_first = list(reversed(active_docs))
 
