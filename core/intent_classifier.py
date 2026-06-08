@@ -668,7 +668,14 @@ class IntentClassifier:
         # Per la classificazione intent usa solo il testo utente, senza contesto pagina né annotazioni gruppo
         _classify_msg = (message or "").split("[CONTESTO PAGINA]")[0].split("[PAGE CONTEXT]")[0]
         _classify_msg = _classify_msg.split("[GRUPPO:")[0].split("[DISCUSSIONE IN CORSO")[0].strip()
-        message_lower = _classify_msg.lower().strip()
+        
+        # Rimuovi i prefissi iniettati (es. reply di telegram, descrizioni visuali silenti)
+        import re
+        _classify_msg = re.sub(r'\[Stai rispondendo a questo tuo messaggio precedente: ".*?"\]\n?', '', _classify_msg, flags=re.DOTALL)
+        _classify_msg = re.sub(r'\[SISTEMA: .*?\]\n?', '', _classify_msg, flags=re.DOTALL)
+        
+        _classify_msg = _classify_msg.strip()
+        message_lower = _classify_msg.lower()
 
         # PRIORITÀ ASSOLUTA 0: saluti semplici — mai classificare come tool/weather per contesto
         # Garantisce che "Ciao", "Salve", "Hey" non vengano mai misclassificati come weather
