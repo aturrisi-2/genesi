@@ -162,16 +162,16 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 1.20) -> d
         recognized_names = set()
         matched_face_indices = set()
         
-        # Confronta ogni volto trovato con il database
+        # Carica tutti gli embedding noti una sola volta
+        known_faces_data = []
         for f in os.listdir(FACES_DIR):
             if f.endswith(".pt"):
                 clean_name = f[:-3]
                 try:
-                    known_embs = torch.load(os.path.join(FACES_DIR, f), weights_only=True) # [num_known, 512] o [512]
+                    known_embs = torch.load(os.path.join(FACES_DIR, f), weights_only=True)
                     if known_embs.dim() == 1:
                         known_embs = known_embs.unsqueeze(0)
                         
-                    # Ripristina il nome originale cercandolo dal json (se esiste)
                     display_name = clean_name
                     json_path = os.path.join(FACES_DIR, f"{clean_name}.json")
                     if os.path.exists(json_path):
@@ -179,17 +179,29 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 1.20) -> d
                         with open(json_path, "r", encoding="utf-8") as jf:
                             data = json.load(jf)
                             display_name = data.get("name", display_name)
-                    
-                    # Per ogni volto nuovo, calcola distanza con tutti i volti noti di questo utente
-                    for i in range(total_faces):
-                        # L2 distance
-                        dists = (known_embs - emb_new[i]).norm(dim=1)
-                        min_dist = dists.min().item()
-                        if min_dist < threshold:
-                            recognized_names.add(display_name)
-                            matched_face_indices.add(i)
+                            
+                    known_faces_data.append({
+                        "name": display_name,
+                        "embs": known_embs
+                    })
                 except Exception as load_err:
                     logger.warning("Failed to load embeddings for %s: %s", f, load_err)
+
+        # Per ogni volto nuovo, trova la corrispondenza MIGLIORE assoluta
+        for i in range(total_faces):
+            best_name = None
+            best_dist = float('inf')
+            
+            for kf in known_faces_data:
+                dists = (kf["embs"] - emb_new[i]).norm(dim=1)
+                min_dist = dists.min().item()
+                if min_dist < best_dist:
+                    best_dist = min_dist
+                    best_name = kf["name"]
+            
+            if best_dist < threshold and best_name:
+                recognized_names.add(best_name)
+                matched_face_indices.add(i)
 
         unknown_faces_detected = len(matched_face_indices) < total_faces
         unknown_faces_positions = []
