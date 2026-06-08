@@ -110,7 +110,7 @@ async def compute_and_save_embeddings(name: str, image_path: str, description_hi
         logger.error("Error computing face embeddings: %s", e)
         return 0
 
-async def analyze_faces_biometric(image_path: str, threshold: float = 0.45) -> dict:
+async def analyze_faces_biometric(image_path: str, threshold: float = 0.60) -> dict:
     """
     Analizza i volti presenti nell'immagine.
     Ritorna un dizionario:
