@@ -113,7 +113,7 @@ async def save_document(doc_id: str, user_id: str, filename: str,
         "user_id": user_id,
         "last_accessed_at": now,
         "access_count": 0,
-        "importance_score": 50,
+        "importance_score": 80,  # Partiamo da 80 così è stabilmente 'active' (>70)
         "status": "active",
     }
 
@@ -168,7 +168,7 @@ def reinforce_document(doc_id: str) -> None:
     doc = load_document(doc_id)
     if not doc:
         return
-    doc["importance_score"] = min(100, doc.get("importance_score", 50) + 10)
+    doc["importance_score"] = min(100, doc.get("importance_score", 80) + 10)
     doc["access_count"] = doc.get("access_count", 0) + 1
     doc["last_accessed_at"] = datetime.now(timezone.utc).isoformat()
     old_status = doc.get("status", "active")
