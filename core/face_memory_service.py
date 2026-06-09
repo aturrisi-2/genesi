@@ -122,11 +122,14 @@ async def try_extract_faces_from_text(text: str, tmp_img: str, desc_img: str, se
             if clean.startswith("json"):
                 clean = clean[4:]
         parsed_faces = json.loads(clean.strip())
+        logger.info("EXTRACTED_FACES raw=%s parsed=%s", raw_ext, parsed_faces)
         
         if parsed_faces and isinstance(parsed_faces, list):
             for face_data in parsed_faces:
                 name = face_data.get("name")
                 pos_idx = face_data.get("position_index")
+                if pos_idx is None:
+                    pos_idx = 0
                 subject_type = face_data.get("type", "human")
                 
                 if name and pos_idx is not None:
@@ -134,9 +137,8 @@ async def try_extract_faces_from_text(text: str, tmp_img: str, desc_img: str, se
                     if subject_type == "pet":
                         try:
                             from core.biometric_pets_service import compute_and_save_pet_embeddings
-                            import asyncio
-                            asyncio.create_task(compute_and_save_pet_embeddings(name, tmp_img, f_desc))
-                            logger.info("PET_SAVED FROM TEXT name=%s index=%s", name, pos_idx)
+                            res = await compute_and_save_pet_embeddings(name, tmp_img, f_desc)
+                            logger.info("PET_SAVED FROM TEXT name=%s index=%s res=%s", name, pos_idx, res)
                         except Exception as ep:
                             logger.error("Error saving pet embedding: %s", ep)
                     else:
