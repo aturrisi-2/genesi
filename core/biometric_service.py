@@ -42,10 +42,10 @@ async def compute_and_save_embeddings(name: str, image_path: str, description_hi
         if faces is None or len(faces) == 0 or boxes is None:
             return 0
             
-        # Filtra i volti di background (area < 15% del più grande) per non confonderli con le pose
+        # Filtra i volti di background (area < 10% del più grande) per non confonderli con le pose
         areas = [(box[2]-box[0]) * (box[3]-box[1]) for box in boxes]
         max_area = max(areas)
-        valid_indices = [i for i, area in enumerate(areas) if area >= max_area * 0.15]
+        valid_indices = [i for i, area in enumerate(areas) if area >= max_area * 0.10]
         
         boxes = [boxes[i] for i in valid_indices]
         faces = faces[valid_indices]
@@ -53,34 +53,41 @@ async def compute_and_save_embeddings(name: str, image_path: str, description_hi
         # Se ci sono più volti, usa l'indizio spaziale o salva SOLO quello più grande
         if len(faces) > 1:
             best_idx = None
-            if description_hint:
-                desc_lower = description_hint.lower()
+            
+            # Lista di (indice_originale, cx, cy, area)
+            face_stats = []
+            for i, box in enumerate(boxes):
+                x1, y1, x2, y2 = box
+                face_stats.append({
+                    "idx": i,
+                    "cx": (x1 + x2) / 2,
+                    "cy": (y1 + y2) / 2,
+                    "area": (x2 - x1) * (y2 - y1)
+                })
                 
-                # Lista di (indice, cx, cy, area)
-                face_stats = []
-                for i, box in enumerate(boxes):
-                    x1, y1, x2, y2 = box
-                    face_stats.append({
-                        "idx": i,
-                        "cx": (x1 + x2) / 2,
-                        "cy": (y1 + y2) / 2,
-                        "area": (x2 - x1) * (y2 - y1)
-                    })
+            if description_hint and "[INDEX:" in description_hint:
+                try:
+                    idx_str = description_hint.split("[INDEX:")[1].split("]")[0]
+                    target_idx = int(idx_str)
                     
+                    # Ordina da sinistra a destra (cx crescente)
+                    sorted_faces = sorted(face_stats, key=lambda x: x["cx"])
+                    if target_idx < len(sorted_faces):
+                        best_idx = sorted_faces[target_idx]["idx"]
+                except Exception as e:
+                    logger.warning("Error parsing INDEX from description_hint: %s", e)
+            
+            if best_idx is None and description_hint:
+                desc_lower = description_hint.lower()
                 if "sinistra" in desc_lower:
-                    # Ordina per cx crescente (il primo è il più a sinistra)
                     best_idx = sorted(face_stats, key=lambda x: x["cx"])[0]["idx"]
                 elif "destra" in desc_lower:
-                    # Ordina per cx decrescente (il primo è il più a destra)
                     best_idx = sorted(face_stats, key=lambda x: x["cx"], reverse=True)[0]["idx"]
                 elif "alto" in desc_lower:
-                    # cy crescente (0 è in alto)
                     best_idx = sorted(face_stats, key=lambda x: x["cy"])[0]["idx"]
                 elif "basso" in desc_lower:
-                    # cy decrescente
                     best_idx = sorted(face_stats, key=lambda x: x["cy"], reverse=True)[0]["idx"]
                 elif "centro" in desc_lower:
-                    # Ordina per distanza dal centro immagine
                     width, height = img.size
                     img_cx, img_cy = width / 2, height / 2
                     best_idx = sorted(face_stats, key=lambda x: (x["cx"] - img_cx)**2 + (x["cy"] - img_cy)**2)[0]["idx"]
@@ -110,7 +117,7 @@ async def compute_and_save_embeddings(name: str, image_path: str, description_hi
         logger.error("Error computing face embeddings: %s", e)
         return 0
 
-async def analyze_faces_biometric(image_path: str, threshold: float = 1.20) -> dict:
+async def analyze_faces_biometric(image_path: str, threshold: float = 0.85) -> dict:
     """
     Analizza i volti presenti nell'immagine.
     Ritorna un dizionario:
@@ -136,10 +143,10 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 1.20) -> d
                 "total_faces": 0
             }
             
-        # Filtra i volti di background: tieni solo quelli la cui area è almeno il 15% del volto più grande
+        # Filtra i volti di background: tieni solo quelli la cui area è almeno il 10% del volto più grande
         areas = [(box[2]-box[0]) * (box[3]-box[1]) for box in boxes]
         max_area = max(areas)
-        min_allowed_area = max_area * 0.15
+        min_allowed_area = max_area * 0.10
         
         valid_indices = [i for i, area in enumerate(areas) if area >= min_allowed_area]
         
@@ -151,8 +158,20 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 1.20) -> d
                 "total_faces": 0
             }
             
-        boxes = [boxes[i] for i in valid_indices]
-        faces = faces[valid_indices]
+        filtered_boxes = [boxes[i] for i in valid_indices]
+        filtered_faces = faces[valid_indices]
+        
+        # Ordina da sinistra a destra in base alla coordinata X centrale
+        boxes_with_idx = []
+        for i, box in enumerate(filtered_boxes):
+            cx = (box[0] + box[2]) / 2
+            boxes_with_idx.append((cx, i))
+            
+        boxes_with_idx.sort(key=lambda x: x[0])
+        sorted_indices = [item[1] for item in boxes_with_idx]
+        
+        boxes = [filtered_boxes[i] for i in sorted_indices]
+        faces = filtered_faces[sorted_indices]
         
         total_faces = len(faces)
         
@@ -187,48 +206,50 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 1.20) -> d
                 except Exception as load_err:
                     logger.warning("Failed to load embeddings for %s: %s", f, load_err)
 
-        # Per ogni volto nuovo, trova la corrispondenza MIGLIORE assoluta
+        # Per ogni volto nuovo, trova la corrispondenza MIGLIORE assoluta con vincolo 1-a-1
+        distances = []
         for i in range(total_faces):
-            best_name = None
-            best_dist = float('inf')
-            
             for kf in known_faces_data:
                 dists = (kf["embs"] - emb_new[i]).norm(dim=1)
                 min_dist = dists.min().item()
-                if min_dist < best_dist:
-                    best_dist = min_dist
-                    best_name = kf["name"]
-            
-            if best_dist < threshold and best_name:
-                recognized_names.add(best_name)
-                matched_face_indices.add(i)
+                distances.append((min_dist, i, kf["name"]))
+                
+        distances.sort(key=lambda x: x[0])
+        
+        matched_identities = set()
+        face_to_name = {}
+        
+        for min_dist, i, name in distances:
+            if i not in matched_face_indices and name not in matched_identities:
+                if min_dist < threshold:
+                    matched_face_indices.add(i)
+                    matched_identities.add(name)
+                    face_to_name[i] = name
+                    recognized_names.add(name)
 
         unknown_faces_detected = len(matched_face_indices) < total_faces
         unknown_faces_positions = []
+        recognized_faces_list = []
         
-        if unknown_faces_detected and boxes is not None:
+        if boxes is not None:
             width, height = img.size
             for i in range(total_faces):
+                box = boxes[i]
+                x1, y1, x2, y2 = box
+                cx = (x1 + x2) / 2
+                cy = (y1 + y2) / 2
+                
+                # Visto che abbiamo già ordinato i volti per X crescente, l'indice `i` rappresenta esattamente l'ordine da sinistra a destra.
+                pos_str = f"{i+1}° da sinistra"
+                    
                 if i not in matched_face_indices:
-                    box = boxes[i]
-                    x1, y1, x2, y2 = box
-                    cx = (x1 + x2) / 2
-                    cy = (y1 + y2) / 2
-                    
-                    pos_x = "a sinistra" if cx < width * 0.4 else ("a destra" if cx > width * 0.6 else "al centro")
-                    pos_y = "in alto" if cy < height * 0.4 else ("in basso" if cy > height * 0.6 else "")
-                    
-                    if pos_y and pos_x != "al centro":
-                        pos_str = f"{pos_y} {pos_x}"
-                    elif pos_y and pos_x == "al centro":
-                        pos_str = pos_y
-                    else:
-                        pos_str = pos_x
-                        
                     unknown_faces_positions.append(pos_str)
+                else:
+                    recognized_faces_list.append(f"{face_to_name[i]} ({pos_str})")
         
         result = {
             "recognized_names": list(recognized_names),
+            "recognized_faces_with_positions": recognized_faces_list,
             "unknown_faces_detected": unknown_faces_detected,
             "unknown_faces_positions": unknown_faces_positions,
             "total_faces": total_faces

@@ -95,7 +95,7 @@ async def describe_image(path: str) -> str:
     system_prompt = (
         "Sei l'occhio di un'AI conversazionale. Analizza l'immagine e restituisci un JSON rigoroso con le seguenti chiavi: "
         "'description': una descrizione ESTREMAMENTE CONCISA e DISCORSIVA (massimo 1 o 2 frasi brevi). VIETATO fare lunghi 'spiegoni'. "
-        "ATTENZIONE: Se riconosci dei volti dai riferimenti forniti, DEVI TASSATIVAMENTE includere i loro nomi in questa descrizione (es. 'Vedo Rita e Zoe al tavolo'). "
+        "ATTENZIONE: Se ricevi dei riferimenti sui volti noti, DEVI TASSATIVAMENTE elencare TUTTI i nomi forniti citando esattamente la loro POSIZIONE nella descrizione (es. 'Vedo Rita a sinistra e Zoe al centro'). "
         "'unknown_faces_detected': booleano (true/false). Regola assoluta: se nell'immagine è presente ALMENO UNA figura umana, volto o persona che non corrisponde ESATTAMENTE a uno dei 'Riferimenti volto noto' forniti, DEVI TASSATIVAMENTE impostare questo valore a 'true'. Se non ti vengono forniti riferimenti, qualsiasi persona è sconosciuta, quindi il valore DEVE essere 'true'."
     )
 
@@ -105,12 +105,13 @@ async def describe_image(path: str) -> str:
         from core.biometric_service import analyze_faces_biometric
         bio_result = await analyze_faces_biometric(path)
         recognized_names = bio_result.get("recognized_names", [])
+        recognized_faces_list = bio_result.get("recognized_faces_with_positions", [])
         unknown_faces_detected = bio_result.get("unknown_faces_detected", False)
         unknown_faces_positions = bio_result.get("unknown_faces_positions", [])
         
-        if recognized_names:
-            names_str = ", ".join(recognized_names)
-            content_array.append({"type": "text", "text": f"Contesto fornito dall'utente sulle persone presenti: {names_str}. Usa questi nomi naturalmente nella descrizione per riferirti alle persone nell'immagine."})
+        if recognized_faces_list:
+            names_str = " | ".join(recognized_faces_list)
+            content_array.append({"type": "text", "text": f"Mappa esatta dei volti noti rilevati: {names_str}. REGOLA SPECIALE: Ignora l'istruzione di essere 'estremamente conciso'. Devi TASSATIVAMENTE includere nel campo 'description' l'elenco completo di questi nomi e la loro esatta posizione, senza riassumere o saltare nessuno."})
         
         if unknown_faces_detected:
             if unknown_faces_positions:

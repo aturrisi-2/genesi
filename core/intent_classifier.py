@@ -707,7 +707,7 @@ class IntentClassifier:
         # "dove sono" generico: solo se non seguito da participio passato O articolo+nome (oggetti/eventi)
         # es. "dove sono state le qualifiche" → NO; "dove sono le chiavi" → NO; "dove sono?" → SÌ
         _dove_sono_event_pp = re.compile(
-            r"dove\s+sono\s+(state?|stati?|andate?|andati?|avvenute?|successe?|svolte?|tenute?|disputate?)", re.IGNORECASE
+            r"dove\s+sono\s+(state?|stati?|andate?|andati?|avvenute?|successe?|svolte?|tenute?|disputate?|posizionat[ei])", re.IGNORECASE
         )
         _dove_sono_article = re.compile(
             r"dove\s+sono\s+(il|la|le|i|gli|lo|un|una|uno)\s+", re.IGNORECASE

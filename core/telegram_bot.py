@@ -45,13 +45,13 @@ async def _try_extract_faces_from_text(text: str, tmp_img: str, desc_img: str, s
         
     from core.llm_service import llm_service
     extract_prompt = (
-        "L'utente sta descrivendo le identità delle persone in una foto.\n"
+        "L'utente sta elencando le identità delle persone in una foto di gruppo o singola.\n"
         f"Descrizione dei volti (dall'analisi visiva): {desc_img}\n"
         f"Testo dell'utente: {text}\n"
-        "Estrai le identità delle persone (nomi propri, ruoli o gradi di parentela, es. 'mia moglie', 'Marco', 'il nonno') associati alla loro descrizione visiva.\n"
-        "Formatta la risposta ESCLUSIVAMENTE come JSON: le chiavi sono le identità, i valori sono la descrizione o deduzione visiva.\n"
-        "Se l'utente non ha fornito alcuna informazione utile per identificare le persone e sta parlando di tutt'altro, ritorna {}.\n"
-        "Esempio valido: {\"mia moglie\": \"la donna a sinistra\", \"Ennio\": \"l'uomo con i baffi a destra\"}"
+        "Estrai le identità delle persone (nomi propri, ruoli, es. 'mia moglie', 'Sandra') e deduci il loro indice di posizione ESATTO da sinistra a destra nella foto (0 è il primo a sinistra, 1 il secondo, ecc.) basandoti rigorosamente sull'ordine o sulle posizioni fornite dall'utente.\n"
+        "Formatta la risposta ESCLUSIVAMENTE come un array JSON di dizionari, con chiavi 'name' e 'position_index'.\n"
+        "Se l'utente non ha fornito nomi o sta parlando di tutt'altro, ritorna [].\n"
+        "Esempio valido: [{\"name\": \"Mariella\", \"position_index\": 0}, {\"name\": \"Sandra\", \"position_index\": 1}]"
     )
     try:
         raw_ext = await llm_service._call_model("openai/gpt-4o-mini", extract_prompt, text, user_id=session_uid, route="memory")
@@ -62,11 +62,15 @@ async def _try_extract_faces_from_text(text: str, tmp_img: str, desc_img: str, s
                 clean = clean[4:]
         parsed_faces = json.loads(clean.strip())
         
-        if parsed_faces:
+        if parsed_faces and isinstance(parsed_faces, list):
             from core.face_memory_service import save_known_face
-            for name, f_desc in parsed_faces.items():
-                await save_known_face(name, tmp_img, f_desc)
-                logger.info("FACE_SAVED FROM TEXT name=%s", name)
+            for face_data in parsed_faces:
+                name = face_data.get("name")
+                pos_idx = face_data.get("position_index")
+                if name and pos_idx is not None:
+                    f_desc = f"[INDEX:{pos_idx}]"
+                    await save_known_face(name, tmp_img, f_desc)
+                    logger.info("FACE_SAVED FROM TEXT name=%s index=%s", name, pos_idx)
             return True
     except Exception as e:
         logger.warning("Error parsing faces names: %s", e)
@@ -212,12 +216,13 @@ RISPONDI "SI" SOLO nei seguenti casi:
 1. INVOCATA DIRETTAMENTE: Qualcuno si rivolge esplicitamente a Genesi, la nomina (es. "Genesi..."), la tagga o le fa una domanda diretta.
 2. DOMANDA GENERICA DI UTILITÀ: Qualcuno fa una domanda oggettiva o informativa rivolta al gruppo (es. "a che ora chiude il supermercato?", "che tempo fa domani?"), a cui un'AI può rispondere con dati certi e utili per tutti.
 3. RISPOSTA DI CONTINUAZIONE ESPLICITA: L'utente sta rispondendo direttamente (tramite la funzione 'Rispondi' di Telegram) a una domanda o affermazione fatta da Genesi.
-4. CONTINUAZIONE IMPLICITA: L'utente sta chiaramente facendo un commento o aggiungendo informazioni a ciò che Genesi ha appena detto nel suo ultimo messaggio (mostrato come 'Ultima risposta di Genesi'), anche se non ha usato la funzione 'Rispondi' o non l'ha menzionata.
+4. CONTINUAZIONE IMPLICITA (REGOLA ASSOLUTA): Se il messaggio dell'utente arriva subito dopo un'azione o risposta di Genesi (es. Genesi ha analizzato una foto e l'utente subito dopo chiede "chi sono?", "e io?"), l'utente sta PARLANDO CON GENESI e testando le sue capacità. In questi casi DEVI SEMPRE RISPONDERE "SI", anche se la frase sembra generica e non contiene il nome di Genesi. Non presumere che l'utente stia parlando con altri membri se Genesi ha appena agito!
 
 RISPONDI "NO" in tutti gli altri casi. In particolare, rispondi "NO" per:
 - Chiacchiere, aggiornamenti personali, stati d'animo o aggiornamenti di routine tra i membri del gruppo (es. "sto tornando dalle analisi", "prendo il brufen").
-- Saluti generici di inizio giornata o auguri (es. "Buongiorno a tutti", "Buon pranzo", "Buonanotte", "Auguri mamma!"). Questi sono scambi affettuosi tra umani; Genesi deve rimanere in silenzio e non intromettersi.
-- Messaggi in cui un utente risponde o parla con un altro membro umano del gruppo (es. Katia che risponde a Zoe, o Iolanda che saluta Mariella).
+- Saluti generici tra umani.
+- Messaggi in cui un utente si rivolge inequivocabilmente a un altro umano citandolo per nome (es. "Zoe a che ora torni?").
+- Domande strettamente personali se non è in corso una conversazione attiva con Genesi. MENTRE se Genesi ha appena parlato, le domande vanno considerate rivolte a lei.
 - Qualsiasi situazione di dubbio in cui il messaggio sembra rivolto agli umani. Nel dubbio, non intervenire (rispondi "NO").
 
 Rispondi SOLO con JSON: {"intervieni": true, "motivo": "ragione breve"} oppure {"intervieni": false, "motivo": "ragione breve"}
@@ -274,8 +279,27 @@ async def _group_should_intervene(
 
     # Fast-path: messaggio troppo corto e senza punto interrogativo → probabile scambio tra membri
     # Se c'è un elemento multimediale, bypassiamo questo controllo per consentire l'analisi del media.
+    state = _GROUP_CONV_STATE.get(chat_id, {})
+    last_ts = state.get("ts", 0)
+    
     if len(combined) < 8 and "?" not in combined and not has_media:
-        return False
+        # Permetti comunque all'LLM di valutare se Genesi ha parlato da poco (follow-up implicito corto)
+        if time.time() - last_ts > 300:  # 5 minuti
+            return False
+
+    last_user_id = state.get("from_id")
+    
+    # Bypass LLM: se Genesi ha appena parlato (entro 5 minuti) e a rispondere è lo stesso utente,
+    # assumiamo sia un follow-up diretto e interveniamo a prescindere da punti interrogativi o lunghezza.
+    if time.time() - last_ts < 300 and last_user_id == from_id:
+        logger.info("GROUP_INTERVENE_DECISION chat_id=%s from=%s intervieni=True motivo=follow_up_diretto_stesso_utente", chat_id, first_name)
+        return True
+
+    # Bypass LLM: se Genesi ha appena parlato (entro 2 minuti) ed è l'unico utente che sta interagendo, 
+    # o se il messaggio contiene una domanda, assumiamo sia un follow-up diretto.
+    if time.time() - last_ts < 120 and ("?" in combined or len(combined) < 20):
+        logger.info("GROUP_INTERVENE_DECISION chat_id=%s from=%s intervieni=True motivo=follow_up_rapido", chat_id, first_name)
+        return True
 
     # LLM decision
     try:
@@ -501,19 +525,22 @@ async def _save_city(token: str, city: str):
 
 # ── Telegram API helpers ───────────────────────────────────────────────────────
 
-async def send_message(chat_id: int, text: str, reply_markup: dict = None):
+async def send_message(chat_id: int, text: str, reply_markup: dict = None, reply_to_message_id: int = None):
     if not text:
         return
     payload = {"chat_id": chat_id, "text": text}
     if reply_markup:
         payload["reply_markup"] = reply_markup
+    if reply_to_message_id:
+        payload["reply_to_message_id"] = reply_to_message_id
+        
     async with httpx.AsyncClient(timeout=10) as client:
         try:
             res = await client.post(f"{TELEGRAM_API}/sendMessage", json=payload)
             if res.status_code != 200:
                 logger.error("TELEGRAM_SEND_ERROR status=%d response=%s payload=%s", res.status_code, res.text, payload)
             else:
-                log("TELEGRAM_SEND_OK", chat_id=chat_id, text=text, reply_markup=reply_markup)
+                log("TELEGRAM_SEND_OK", chat_id=chat_id, text=text, reply_markup=reply_markup, reply_to=reply_to_message_id)
         except Exception as e:
             logger.error("TELEGRAM_SEND_EXCEPTION chat_id=%s err=%s", chat_id, e)
 
@@ -769,7 +796,7 @@ async def _transcribe(token: str, audio_data: bytes,
 
 # ── Risposta con immagini ──────────────────────────────────────────────────────
 
-async def _send_response(chat_id: int, reply: str):
+async def _send_response(chat_id: int, reply: str, reply_to_message_id: int = None):
     """Invia la risposta: se contiene URL immagini le manda come foto Telegram."""
     # Cerca prima markdown immagini: ![alt](url)
     md_urls = _IMG_MD_RE.findall(reply)
@@ -1376,7 +1403,11 @@ async def handle_update(update: dict):
                 await send_message(chat_id,
                     "Non riesco ad autenticarti. Usa /login per riconnetterti.")
                 return False
-            await _send_response(chat_id, reply)
+            
+            # Legge il message_id originale per poter rispondere in thread se in gruppo
+            reply_to = msg.get("message_id") if is_group else None
+            await _send_response(chat_id, reply, reply_to_message_id=reply_to)
+            
             # Traccia con chi Genesi stava conversando (per il fast-path del filtro)
             if is_group:
                 _GROUP_CONV_STATE[chat_id] = {
