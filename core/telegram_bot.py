@@ -38,6 +38,7 @@ from core.face_memory_service import set_awaiting_faces, pop_awaiting_faces, try
 from core.awaiting_helper import process_awaiting_faces
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+from core.prompt_template import build_extra_rules, LATE_WAKEUP_PROMPT
 TELEGRAM_API   = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 TELEGRAM_FILES = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}"
 GENESI_URL     = "http://localhost:8000"
@@ -1161,22 +1162,32 @@ async def handle_update(update: dict):
             # Fast-path: reply diretta a un messaggio di Genesi → sempre sì
             if _reply_to_genesi:
                 should = True
-            # Fast-path: in attesa di volti, il prossimo messaggio dell'utente potrebbe essere la risposta!
-            elif await get_awaiting_faces(str(chat_id)):
-                should = True
             else:
-                should = await _group_should_intervene(
-                    text, caption, chat_id, from_id, first_name,
-                    bot_username=_BOT_USERNAME, bot_mentioned=_bot_mentioned,
-                    has_media=_original_has_media, has_location=bool(location)
-                )
+                # Fast-path: check awaiting faces
+                try:
+                    awaiting_data = await core.face_memory_service.pop_awaiting_faces(str(chat_id))
+                except Exception as e:
+                    logger.error("Failed to pop awaiting faces: %s", e)
+                    awaiting_data = None
+                if awaiting_data:
+                    should = True
+                else:
+                    should = await _group_should_intervene(
+                        text, caption, chat_id, from_id, first_name,
+                        bot_username=_BOT_USERNAME, bot_mentioned=_bot_mentioned,
+                        has_media=_original_has_media, has_location=bool(location)
+                    )
             if not should:
                 logger.info("TELEGRAM_GROUP_SILENT chat_id=%s from=%s msg=%.60s",
                             chat_id, first_name, f"{text} {caption}".strip())
                 return
             
             # Rilevamento nomi per volti sconosciuti (gestione testuale nel gruppo)
-            awaiting_data = await pop_awaiting_faces(str(chat_id))
+            try:
+                awaiting_data = await core.face_memory_service.pop_awaiting_faces(str(chat_id))
+            except Exception as e:
+                logger.error("Failed to pop awaiting faces: %s", e)
+                awaiting_data = None
             if awaiting_data:
                 tmp_img = awaiting_data.get("img_path")
                 desc_img = awaiting_data.get("description", "")
@@ -1235,13 +1246,8 @@ async def handle_update(update: dict):
                         photo_rules += 'Ci sono persone sconosciute in foto. Fai un commento colloquiale, curioso e intelligente. Includi con molta naturalezza una domanda per chiedere chi sono (se non lo sai dal contesto), ma non essere ripetitivo se l\'hai già chiesto di recente. '
                     domande_rule = ""
 
-                extra_rules = (
-                    f"zero intro elaborati, {domande_rule}zero 'che bello!'. "
-                    f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente ai festeggiamenti rivolti a quel familiare. "
-                    f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
-                    f"a meno che {first_name} non li citi in questo messaggio. "
-                    f"{photo_rules}"
-                )
+                extra_rules = build_extra_rules(first_name, chat_id, message, is_family_group)
+
             else:
                 extra_rules = (
                     f"Rispondi in modo estremamente conciso, al punto, senza chiacchiere. Non fare la finta amica, sei un'AI esterna. "
@@ -1287,7 +1293,7 @@ async def handle_update(update: dict):
             # Per i gruppi: arricchisce il messaggio con contesto di gruppo
             if is_group:
                 group_ctx = await _load_group_ctx()
-                # Se è una reply diretta a un vecchio messaggio di Genesi,
+                # Se è una reply diretta a un messaggio di Genesi,
                 # preponi il testo citato così il proactor sa a cosa si riferisce
                 msg_with_quote = message
                 if _reply_to_genesi and _quoted_genesi_text:
@@ -1508,6 +1514,7 @@ async def handle_update(update: dict):
                     new_token = await _auto_refresh(session_uid, session)
                 if new_token:
                     token = new_token
+                    token = new_token
                     analysis = await _upload_file(token, doc_bytes, filename, mime)
                 else:
                     analysis = ""
@@ -1520,6 +1527,11 @@ async def handle_update(update: dict):
                         with open(tmp_img, "wb") as f:
                             f.write(doc_bytes)
                         # removed redundant import; using globally imported functions
+                        try:
+                            awaiting_data = await core.face_memory_service.pop_awaiting_faces(str(chat_id) if is_group else str(from_id))
+                        except Exception as e:
+                            logger.error("Failed to pop awaiting faces: %s", e)
+                            awaiting_data = None
                         await set_awaiting_faces(str(chat_id) if is_group else str(from_id), tmp_img, analysis)
                     except Exception as e:
                         logger.error("Failed to save tmp face image: %s", e)
@@ -1527,17 +1539,24 @@ async def handle_update(update: dict):
                 faces_saved_now = False
                 if caption:
                     # removed redundant import; using globally imported functions
-                    awaiting_data = await get_awaiting_faces(str(chat_id) if is_group else str(from_id))
+                    try:
+                        awaiting_data = await core.face_memory_service.pop_awaiting_faces(str(chat_id) if is_group else str(from_id))
+                    except Exception as e:
+                        logger.error("Failed to pop awaiting faces: %s", e)
+                        awaiting_data = None
                     if awaiting_data:
                         faces_saved_now = await try_extract_faces_from_text(caption, awaiting_data.get("img_path"), analysis, session_uid)
                         if faces_saved_now:
-                            popped = await pop_awaiting_faces(str(chat_id) if is_group else str(from_id))
-                            if popped and popped.get("img_path"):
-                                try:
-                                    import os
-                                    os.remove(popped["img_path"])
-                                except:
-                                    pass
+                            try:
+                                popped = await core.face_memory_service.pop_awaiting_faces(str(chat_id) if is_group else str(from_id))
+                                if popped and popped.get("img_path"):
+                                    try:
+                                        import os
+                                        os.remove(popped["img_path"])
+                                    except Exception:
+                                        pass
+                            except Exception as e:
+                                logger.error("Failed to clean up awaiting faces: %s", e)
                 
                 user_msg = f"{user_msg}\n\n[Contenuto: {analysis}]"
                 if "[UNKNOWN_FACES_DETECTED]" in analysis or "[UNKNOWN_PETS_DETECTED]" in analysis:
@@ -1627,7 +1646,11 @@ async def handle_update(update: dict):
             return
 
         # Rilevamento nomi per volti sconosciuti
-        awaiting_data = await pop_awaiting_faces(str(chat_id) if is_group else str(from_id))
+        try:
+            awaiting_data = await core.face_memory_service.pop_awaiting_faces(str(chat_id) if is_group else str(from_id))
+        except Exception as e:
+            logger.error("Failed to pop awaiting faces: %s", e)
+            awaiting_data = None
         if awaiting_data:
             tmp_img = awaiting_data.get("img_path")
             desc_img = awaiting_data.get("description", "")
