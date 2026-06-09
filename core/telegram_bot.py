@@ -1416,7 +1416,7 @@ async def handle_update(update: dict):
         # ── FOTO ───────────────────────────────────────────────────────────────
         if photo:
             await send_typing(chat_id)
-            file_id   = photo[-1]["file_id"]  # qualità massima
+            file_id = photo[-1]["file_id"]  # qualità massima
             img_bytes = await download_file(file_id)
             if not img_bytes:
                 await send_message(chat_id, "Non riuscito a scaricare la foto.")
@@ -1433,47 +1433,28 @@ async def handle_update(update: dict):
                     analysis = await _upload_file(token, img_bytes, "photo.jpg", "image/jpeg")
                 else:
                     analysis = ""
-            user_msg  = caption or "Analizza questa immagine che ti ho inviato."
-            if analysis and analysis != "__TOKEN_EXPIRED__":
-                if "[UNKNOWN_FACES_DETECTED]" in analysis or "[UNKNOWN_PETS_DETECTED]" in analysis:
-                    import uuid
-                    tmp_img = f"/tmp/genesi_face_{uuid.uuid4().hex[:8]}.jpg"
-                    try:
-                        with open(tmp_img, "wb") as f:
-                            f.write(img_bytes)
-                        
-                        from core.face_memory_service import set_awaiting_faces
-                        await set_awaiting_faces(str(chat_id) if is_group else str(from_id), tmp_img, analysis)
-                    except Exception as e:
-                        logger.error("Failed to save tmp face image: %s", e)
-                
-                # Verifica immediata se la caption contiene i nomi
-                faces_saved_now = False
-                if caption:
-                    awaiting_data = await get_awaiting_faces(str(chat_id) if is_group else str(from_id))
-                    if awaiting_data:
-                        faces_saved_now = await try_extract_faces_from_text(caption, awaiting_data.get("img_path"), analysis, session_uid)
-                        if faces_saved_now:
-                            popped = await pop_awaiting_faces(str(chat_id) if is_group else str(from_id))
-                            if popped and popped.get("img_path"):
-                                try:
-                                    import os
-                                    os.remove(popped["img_path"])
-                                except:
-                                    pass
-                
-                # Non rimuovere il tag, altrimenti le regole di _group_msg non scattano!
-                user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
-                if "[UNKNOWN_FACES_DETECTED]" in analysis or "[UNKNOWN_PETS_DETECTED]" in analysis:
-                    if faces_saved_now:
-                        user_msg += "\n[SISTEMA: Hai estratto e memorizzato con successo le identità dei volti o degli animali dalla didascalia dell'utente. Ringrazia l'utente per avertele presentate in modo molto naturale!]"
+
+            user_msg = caption or "Analizza questa immagine che ti ho inviato."
+            faces_saved, extra_msg = await process_awaiting_faces(
+                str(chat_id) if is_group else str(from_id),
+                img_bytes,
+                analysis,
+                caption,
+                session_uid,
+            )
+
+            # Append analysis and any helper‑generated system message
+            user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]{extra_msg}"
+
+            # Additional prompts when no caption was provided
+            if not caption and ("[UNKNOWN_FACES_DETECTED]" in analysis or "[UNKNOWN_PETS_DETECTED]" in analysis):
+                if not faces_saved:
+                    if "[UNKNOWN_PETS_DETECTED]" in analysis:
+                        user_msg += "\n[SISTEMA: Hai 'visto' questa foto. Hai rilevato un animale che non conosci visivamente. Anche se dal profilo sai già che l'utente possiede animali, DEVI ASSOLUTAMENTE chiedere all'utente di SCRIVERTI COME SI CHIAMA l'animale nella foto, spiegando con dolcezza che ti serve per memorizzare per la prima volta il suo aspetto visivo! REGOLA FERREA: Fai la domanda e chiedigli di scriverti il nome!]"
                     else:
-                        if "[UNKNOWN_PETS_DETECTED]" in analysis:
-                            user_msg += "\\n[SISTEMA: Hai 'visto' questa foto. Hai rilevato un animale che non conosci visivamente. Anche se dal profilo sai già che l'utente possiede animali, DEVI ASSOLUTAMENTE chiedere all'utente di SCRIVERTI COME SI CHIAMA l'animale nella foto, spiegando con dolcezza che ti serve per memorizzare per la prima volta il suo aspetto visivo! REGOLA FERREA: Fai la domanda e chiedigli di scriverti il nome!]"
-                        else:
-                            user_msg += "\n[SISTEMA: Hai 'visto' questa foto tramite il tuo modulo visivo. Hai rilevato persone sconosciute. Fai SEMPRE un commento affettuoso e discorsivo sulla foto, POI chiedi in modo cortese chi sono le persone sconosciute specificando le posizioni per memorizzarle. REGOLA FERREA: IGNORA ESPLICITAMENTE la regola 'zero domande di ritorno' o 'estrema concisione' per questo singolo messaggio! Devi chiedere chi sono! Comportati al 100% come se stessi guardando la foto coi tuoi occhi!]"
-                elif not caption and "Mappa esatta dei volti noti" in analysis:
-                    user_msg += "\n[SISTEMA: L'utente ha caricato una foto in cui hai riconosciuto i volti, e non ha aggiunto testo. Ignora la regola di essere 'estremamente conciso' o di 'rispondere solo a quello che viene detto'. Fai un commento affettuoso ed entusiasta di 1 o 2 righe, salutando e nominando le persone presenti nella foto!]"
+                        user_msg += "\n[SISTEMA: Hai 'visto' questa foto tramite il tuo modulo visivo. Hai rilevato persone sconosciute. Fai SEMPRE un commento affettuoso e discorsivo sulla foto, POI chiedi in modo cortese chi sono le persone sconosciute specificando le posizioni per memorizzarle. REGOLA FERREA: IGNORA ESPLICITAMENTE la regola 'zero domande di ritorno' o 'estrema concisione' per questo singolo messaggio! Devi chiedere chi sono! Comportati al 100% come se stessi guardando la foto coi tuoi occhi!]"
+            elif not caption and "Mappa esatta dei volti noti" in analysis:
+                user_msg += "\n[SISTEMA: L'utente ha caricato una foto in cui hai riconosciuto i volti, e non ha aggiunto testo. Ignora la regola di essere 'estremamente conciso' o di 'rispondere solo a quello che viene detto'. Fai un commento affettuoso ed entusiasta di 1 o 2 righe, salutando e nominando le persone presenti nella foto!]"
 
             media_group_id = msg.get("media_group_id")
             if media_group_id:
