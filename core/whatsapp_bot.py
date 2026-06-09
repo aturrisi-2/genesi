@@ -1068,14 +1068,27 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                         await storage.save(_session_key(wa_id), session)
                         late_prompt = "\n[SISTEMA: Tu hai già dato il buongiorno al gruppo stamattina. Questo utente si è svegliato (o ha scritto) tardi e ti sta salutando adesso. Rispondi con affetto e, se opportuno, con una battuta scherzosa sul fatto che è un po' in ritardo, dandogli un caloroso benvenuto nella giornata! Ignora la regola del 'rispondi in modo estremamente conciso' per questa interazione.]"
                         
+                    photo_rules = ""
+                    if "[Contenuto immagine:" in message:
+                        photo_rules += "Evita spiegoni descrittivi dell'immagine: fai un commento discorsivo e conciso. "
+                    
+                    domande_rule = "zero domande di ritorno, "
+                    if "[UNKNOWN_FACES_DETECTED]" in message or "[UNKNOWN_PETS_DETECTED]" in message:
+                        if "[UNKNOWN_PETS_DETECTED]" in message:
+                            photo_rules += 'Ci sono animali domestici sconosciuti al sistema visivo. Fai un commento affettuoso. Anche se intuisci chi sia dal profilo, DEVI CHIEDERE all\'utente di scriverti esplicitamente come si chiama per poter memorizzare il suo aspetto visivo. REGOLA FERREA: Fai la domanda e chiedi di scriverti il nome! '
+                        else:
+                            photo_rules += 'Ci sono persone sconosciute in foto. Fai un commento colloquiale, curioso e intelligente. Includi con molta naturalezza una domanda per chiedere chi sono (se non lo sai dal contesto), ma non essere ripetitivo se l\'hai già chiesto di recente. '
+                        domande_rule = ""
+
                     message = (
                         f"{msg_with_quote}\n\n"
                         f"[GRUPPO FAMILIARE: scrive {first_name}. "
                         f"REGOLE ASSOLUTE: risposta misurata ma loquace e di compagnia (3-4 righe max), tono naturale da familiare (non da assistente), "
-                        f"zero intro elaborati, zero domande di ritorno, zero 'che bello!'. "
+                        f"zero intro elaborati, {domande_rule}zero 'che bello!'. "
                         f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente ai festeggiamenti rivolti a quel familiare. "
                         f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
                         f"a meno che {first_name} non li citi in questo messaggio. "
+                        f"{photo_rules}"
                         f"Rispondi SOLO a quello che viene detto adesso.]{late_prompt}\n"
                         f"{group_ctx}"
                     )
