@@ -77,19 +77,19 @@ async def get_known_faces() -> list[dict]:
 async def set_awaiting_faces(user_or_group_id: str, img_path: str, description: str):
     """Salva globalmente che siamo in attesa dei nomi dei volti per una certa sessione."""
     from core.storage import storage
-    session_key = f"awaiting_faces:{user_or_group_id}"
-    await storage.save(session_key, {"img_path": img_path, "description": description, "ts": int(time.time())}, expire=3600)
+    session_key = f"short_term_chat:awaiting_faces_{user_or_group_id}"
+    await storage.save(session_key, {"img_path": img_path, "description": description, "ts": int(time.time())})
 
 async def get_awaiting_faces(user_or_group_id: str) -> dict:
     """Recupera lo stato di attesa volti per una sessione senza rimuoverlo."""
     from core.storage import storage
-    session_key = f"awaiting_faces:{user_or_group_id}"
+    session_key = f"short_term_chat:awaiting_faces_{user_or_group_id}"
     return await storage.load(session_key, default=None)
 
 async def pop_awaiting_faces(user_or_group_id: str) -> dict:
     """Recupera e rimuove lo stato di attesa volti per una sessione."""
     from core.storage import storage
-    session_key = f"awaiting_faces:{user_or_group_id}"
+    session_key = f"short_term_chat:awaiting_faces_{user_or_group_id}"
     data = await storage.load(session_key, default=None)
     if data:
         await storage.delete(session_key)
