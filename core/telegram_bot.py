@@ -1227,8 +1227,11 @@ async def handle_update(update: dict):
                     photo_rules += "Evita spiegoni descrittivi dell'immagine: fai un commento discorsivo e conciso. "
                 
                 domande_rule = "zero domande di ritorno, "
-                if "[UNKNOWN_FACES_DETECTED]" in message:
-                    photo_rules += 'Ci sono persone sconosciute in foto. Fai un commento colloquiale, curioso e intelligente. Includi con molta naturalezza una domanda per chiedere chi sono (se non lo sai dal contesto), ma non essere ripetitivo se l\'hai già chiesto di recente. '
+                if "[UNKNOWN_FACES_DETECTED]" in message or "[UNKNOWN_PETS_DETECTED]" in message:
+                    if "[UNKNOWN_PETS_DETECTED]" in message:
+                        photo_rules += 'Ci sono animali domestici sconosciuti in foto. Fai un commento colloquiale, curioso e intelligente. Includi con molta naturalezza una domanda per chiedere chi è l\'animale (se non lo sai dal contesto), ma non essere ripetitivo se l\'hai già chiesto di recente. '
+                    else:
+                        photo_rules += 'Ci sono persone sconosciute in foto. Fai un commento colloquiale, curioso e intelligente. Includi con molta naturalezza una domanda per chiedere chi sono (se non lo sai dal contesto), ma non essere ripetitivo se l\'hai già chiesto di recente. '
                     domande_rule = ""
 
                 extra_rules = (
