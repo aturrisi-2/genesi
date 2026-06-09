@@ -1460,11 +1460,14 @@ async def handle_update(update: dict):
                 
                 # Non rimuovere il tag, altrimenti le regole di _group_msg non scattano!
                 user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
-                if "[UNKNOWN_FACES_DETECTED]" in analysis:
+                if "[UNKNOWN_FACES_DETECTED]" in analysis or "[UNKNOWN_PETS_DETECTED]" in analysis:
                     if faces_saved_now:
-                        user_msg += "\n[SISTEMA: Hai estratto e memorizzato con successo le identità dei volti dalla didascalia dell'utente. Ringrazia l'utente per avertele presentate in modo molto naturale!]"
+                        user_msg += "\n[SISTEMA: Hai estratto e memorizzato con successo le identità dei volti o degli animali dalla didascalia dell'utente. Ringrazia l'utente per avertele presentate in modo molto naturale!]"
                     else:
-                        user_msg += "\n[SISTEMA: Hai 'visto' questa foto tramite il tuo modulo visivo. Hai rilevato persone sconosciute. Fai SEMPRE un commento affettuoso e discorsivo sulla foto, POI chiedi in modo cortese chi sono le persone sconosciute specificando le posizioni per memorizzarle. REGOLA FERREA: IGNORA ESPLICITAMENTE la regola 'zero domande di ritorno' o 'estrema concisione' per questo singolo messaggio! Devi chiedere chi sono! Comportati al 100% come se stessi guardando la foto coi tuoi occhi!]"
+                        if "[UNKNOWN_PETS_DETECTED]" in analysis:
+                            user_msg += "\n[SISTEMA: Hai 'visto' questa foto tramite il tuo modulo visivo. Hai rilevato un animale domestico che non conosci. Fai SEMPRE un commento affettuoso ed entusiasta sull'animale, POI chiedi in modo cortese come si chiama e di chi è, per poterlo memorizzare. REGOLA FERREA: IGNORA ESPLICITAMENTE la regola 'zero domande di ritorno' o 'estrema concisione' per questo singolo messaggio! Devi chiedere chi è!]"
+                        else:
+                            user_msg += "\n[SISTEMA: Hai 'visto' questa foto tramite il tuo modulo visivo. Hai rilevato persone sconosciute. Fai SEMPRE un commento affettuoso e discorsivo sulla foto, POI chiedi in modo cortese chi sono le persone sconosciute specificando le posizioni per memorizzarle. REGOLA FERREA: IGNORA ESPLICITAMENTE la regola 'zero domande di ritorno' o 'estrema concisione' per questo singolo messaggio! Devi chiedere chi sono! Comportati al 100% come se stessi guardando la foto coi tuoi occhi!]"
                 elif not caption and "Mappa esatta dei volti noti" in analysis:
                     user_msg += "\n[SISTEMA: L'utente ha caricato una foto in cui hai riconosciuto i volti, e non ha aggiunto testo. Ignora la regola di essere 'estremamente conciso' o di 'rispondere solo a quello che viene detto'. Fai un commento affettuoso ed entusiasta di 1 o 2 righe, salutando e nominando le persone presenti nella foto!]"
 
