@@ -1229,7 +1229,7 @@ async def handle_update(update: dict):
                 domande_rule = "zero domande di ritorno, "
                 if "[UNKNOWN_FACES_DETECTED]" in message or "[UNKNOWN_PETS_DETECTED]" in message:
                     if "[UNKNOWN_PETS_DETECTED]" in message:
-                        photo_rules += 'Ci sono animali domestici sconosciuti in foto. Fai un commento colloquiale, curioso e intelligente. Includi con molta naturalezza una domanda per chiedere chi è l\'animale (se non lo sai dal contesto), ma non essere ripetitivo se l\'hai già chiesto di recente. '
+                        photo_rules += 'Ci sono animali domestici sconosciuti al sistema visivo. Fai un commento affettuoso. Anche se intuisci chi sia dal profilo, DEVI CHIEDERE all\'utente di scriverti esplicitamente come si chiama per poter memorizzare il suo aspetto visivo. REGOLA FERREA: Fai la domanda e chiedi di scriverti il nome! '
                     else:
                         photo_rules += 'Ci sono persone sconosciute in foto. Fai un commento colloquiale, curioso e intelligente. Includi con molta naturalezza una domanda per chiedere chi sono (se non lo sai dal contesto), ma non essere ripetitivo se l\'hai già chiesto di recente. '
                     domande_rule = ""
@@ -1468,7 +1468,7 @@ async def handle_update(update: dict):
                         user_msg += "\n[SISTEMA: Hai estratto e memorizzato con successo le identità dei volti o degli animali dalla didascalia dell'utente. Ringrazia l'utente per avertele presentate in modo molto naturale!]"
                     else:
                         if "[UNKNOWN_PETS_DETECTED]" in analysis:
-                            user_msg += "\n[SISTEMA: Hai 'visto' questa foto tramite il tuo modulo visivo. Hai rilevato un animale domestico che non conosci. Fai SEMPRE un commento affettuoso ed entusiasta sull'animale, POI chiedi in modo cortese come si chiama e di chi è, per poterlo memorizzare. REGOLA FERREA: IGNORA ESPLICITAMENTE la regola 'zero domande di ritorno' o 'estrema concisione' per questo singolo messaggio! Devi chiedere chi è!]"
+                            user_msg += "\\n[SISTEMA: Hai 'visto' questa foto. Hai rilevato un animale che non conosci visivamente. Anche se dal profilo sai già che l'utente possiede animali, DEVI ASSOLUTAMENTE chiedere all'utente di SCRIVERTI COME SI CHIAMA l'animale nella foto, spiegando con dolcezza che ti serve per memorizzare per la prima volta il suo aspetto visivo! REGOLA FERREA: Fai la domanda e chiedigli di scriverti il nome!]"
                         else:
                             user_msg += "\n[SISTEMA: Hai 'visto' questa foto tramite il tuo modulo visivo. Hai rilevato persone sconosciute. Fai SEMPRE un commento affettuoso e discorsivo sulla foto, POI chiedi in modo cortese chi sono le persone sconosciute specificando le posizioni per memorizzarle. REGOLA FERREA: IGNORA ESPLICITAMENTE la regola 'zero domande di ritorno' o 'estrema concisione' per questo singolo messaggio! Devi chiedere chi sono! Comportati al 100% come se stessi guardando la foto coi tuoi occhi!]"
                 elif not caption and "Mappa esatta dei volti noti" in analysis:
