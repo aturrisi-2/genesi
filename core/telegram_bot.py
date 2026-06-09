@@ -35,6 +35,7 @@ from core.telegram_group_memory import (
 logger = logging.getLogger(__name__)
 
 from core.face_memory_service import set_awaiting_faces, pop_awaiting_faces, try_extract_faces_from_text, get_awaiting_faces
+from core.awaiting_helper import process_awaiting_faces
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_API   = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
