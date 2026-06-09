@@ -71,3 +71,67 @@ async def get_known_faces() -> list[dict]:
             except Exception as e:
                 logger.warning("Error loading face %s: %s", fname, e)
     return faces
+
+# Gestione stato "In attesa di volti" globale
+
+async def set_awaiting_faces(user_or_group_id: str, img_path: str, description: str):
+    """Salva globalmente che siamo in attesa dei nomi dei volti per una certa sessione."""
+    from core.storage import storage
+    session_key = f"awaiting_faces:{user_or_group_id}"
+    await storage.save(session_key, {"img_path": img_path, "description": description, "ts": int(time.time())}, expire=3600)
+
+async def get_awaiting_faces(user_or_group_id: str) -> dict:
+    """Recupera lo stato di attesa volti per una sessione senza rimuoverlo."""
+    from core.storage import storage
+    session_key = f"awaiting_faces:{user_or_group_id}"
+    return await storage.load(session_key, default=None)
+
+async def pop_awaiting_faces(user_or_group_id: str) -> dict:
+    """Recupera e rimuove lo stato di attesa volti per una sessione."""
+    from core.storage import storage
+    session_key = f"awaiting_faces:{user_or_group_id}"
+    data = await storage.load(session_key, default=None)
+    if data:
+        await storage.delete(session_key)
+    return data
+
+async def try_extract_faces_from_text(text: str, tmp_img: str, desc_img: str, session_uid: str) -> bool:
+    """Tenta di estrarre i nomi dei volti dal testo e salvarli."""
+    if not text or not tmp_img or not desc_img:
+        return False
+        
+    if not os.path.exists(tmp_img):
+        return False
+        
+    from core.llm_service import llm_service
+    extract_prompt = (
+        "L'utente sta elencando le identità delle persone in una foto di gruppo o singola.\n"
+        f"Descrizione dei volti (dall'analisi visiva): {desc_img}\n"
+        f"Testo dell'utente: {text}\n"
+        "Estrai le identità delle persone (nomi propri, ruoli, es. 'mia moglie', 'Sandra') e deduci il loro indice di posizione ESATTO da sinistra a destra nella foto (0 è il primo a sinistra, 1 il secondo, ecc.) basandoti rigorosamente sull'ordine o sulle posizioni fornite dall'utente.\n"
+        "Formatta la risposta ESCLUSIVAMENTE come un array JSON di dizionari, con chiavi 'name' e 'position_index'.\n"
+        "Se l'utente non ha fornito nomi o sta parlando di tutt'altro, ritorna [].\n"
+        "Esempio valido: [{\"name\": \"Mariella\", \"position_index\": 0}, {\"name\": \"Sandra\", \"position_index\": 1}]"
+    )
+    try:
+        raw_ext = await llm_service._call_model("openai/gpt-4o-mini", extract_prompt, text, user_id=session_uid, route="memory")
+        clean = raw_ext.strip()
+        if clean.startswith("```"):
+            clean = clean.split("```")[1]
+            if clean.startswith("json"):
+                clean = clean[4:]
+        parsed_faces = json.loads(clean.strip())
+        
+        if parsed_faces and isinstance(parsed_faces, list):
+            for face_data in parsed_faces:
+                name = face_data.get("name")
+                pos_idx = face_data.get("position_index")
+                if name and pos_idx is not None:
+                    f_desc = f"[INDEX:{pos_idx}]"
+                    await save_known_face(name, tmp_img, f_desc)
+                    logger.info("FACE_SAVED FROM TEXT name=%s index=%s", name, pos_idx)
+            return True
+    except Exception as e:
+        logger.warning("Error parsing faces names: %s", e)
+    
+    return False

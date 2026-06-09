@@ -805,6 +805,25 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
         session = await storage.load(_session_key(wa_id)) or {}
         state   = session.get("state", STATE_IDLE)
 
+        # ── Rilevamento nomi per volti sconosciuti (gestione testuale) ────────
+        awaiting_data = await pop_awaiting_faces(str(chat_id) if is_group else str(wa_id))
+        if awaiting_data and text:
+            tmp_img = awaiting_data.get("img_path")
+            desc_img = awaiting_data.get("description", "")
+            from core.telegram_group_memory import stable_hash
+            session_uid = chat_id if is_group else wa_id
+            
+            faces_saved = await try_extract_faces_from_text(text, tmp_img, desc_img, session_uid)
+            if faces_saved:
+                text += "\n\n[SISTEMA: Hai estratto e memorizzato con successo le identità di queste persone dalla risposta dell'utente. Esclama in modo naturale che ti ricorderai di loro!]"
+            
+            if tmp_img:
+                try:
+                    import os
+                    os.remove(tmp_img)
+                except Exception:
+                    pass
+
         # ── Comandi (testo che inizia con /) ──────────────────────────────────
         if text in ("/start", "ciao", "start"):
             token = session.get("token")
@@ -1010,6 +1029,8 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             # Fast-path: reply diretta a Genesi -> sempre sì
             if _reply_to_genesi:
                 should = True
+            elif await get_awaiting_faces(str(chat_id)):
+                should = True
             else:
                 should = await _group_should_intervene(
                     text, caption, chat_id, wa_id, first_name,
@@ -1170,7 +1191,38 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     return
             user_msg  = caption or "Analizza questa immagine che ti ho inviato."
             if analysis:
+                if "[UNKNOWN_FACES_DETECTED]" in analysis:
+                    import uuid
+                    tmp_img = f"/tmp/genesi_face_wa_{uuid.uuid4().hex[:8]}.jpg"
+                    try:
+                        with open(tmp_img, "wb") as f:
+                            f.write(img_bytes)
+                        await set_awaiting_faces(str(chat_id) if is_group else str(wa_id), tmp_img, analysis)
+                    except Exception as e:
+                        logger.error("Failed to save tmp face image: %s", e)
+                
+                faces_saved_now = False
+                if caption:
+                    awaiting_data = await get_awaiting_faces(str(chat_id) if is_group else str(wa_id))
+                    if awaiting_data:
+                        faces_saved_now = await try_extract_faces_from_text(caption, awaiting_data.get("img_path"), analysis, chat_id if is_group else wa_id)
+                        if faces_saved_now:
+                            popped = await pop_awaiting_faces(str(chat_id) if is_group else str(wa_id))
+                            if popped and popped.get("img_path"):
+                                try:
+                                    import os
+                                    os.remove(popped["img_path"])
+                                except:
+                                    pass
+
                 user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
+                if "[UNKNOWN_FACES_DETECTED]" in analysis:
+                    if faces_saved_now:
+                        user_msg += "\n[SISTEMA: Hai estratto e memorizzato con successo le identità dei volti dalla didascalia dell'utente. Ringrazia l'utente per avertele presentate in modo molto naturale!]"
+                    else:
+                        user_msg += "\n[SISTEMA: Hai 'visto' questa foto tramite il tuo modulo visivo. Hai rilevato persone sconosciute. Fai SEMPRE un commento affettuoso e discorsivo sulla foto, POI chiedi in modo cortese chi sono le persone sconosciute specificando le posizioni per memorizzarle. REGOLA FERREA: IGNORA ESPLICITAMENTE la regola 'zero domande di ritorno' o 'estrema concisione' per questo singolo messaggio! Devi chiedere chi sono! Comportati al 100% come se stessi guardando la foto coi tuoi occhi!]"
+                elif not caption and "Mappa esatta dei volti noti" in analysis:
+                    user_msg += "\n[SISTEMA: L'utente ha caricato una foto in cui hai riconosciuto i volti, e non ha aggiunto testo. Ignora la regola di essere 'estremamente conciso' o di 'rispondere solo a quello che viene detto'. Fai un commento affettuoso ed entusiasta di 1 o 2 righe, salutando e nominando le persone presenti nella foto!]"
             reply = await _do_chat(user_msg)
             if not await _handle_reply(reply):
                 return

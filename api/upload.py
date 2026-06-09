@@ -13,6 +13,7 @@ import asyncio
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Depends
 from core.file_analyzer import analyze_file
+from core.face_memory_service import set_awaiting_faces
 from core.document_memory import save_document, decay_and_forget, cleanup_by_size
 from core.storage import storage
 from core.log import log
@@ -70,6 +71,20 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
         
         user_id = user.id
         result = await analyze_file(file)
+
+        if "[UNKNOWN_FACES_DETECTED]" in result.get("content", ""):
+            b64_data = result.get("meta", {}).get("image_data_url", "").split(",")[-1]
+            if b64_data:
+                import base64
+                import uuid
+                img_bytes = base64.b64decode(b64_data)
+                tmp_img = f"/tmp/genesi_face_web_{uuid.uuid4().hex[:8]}.jpg"
+                try:
+                    with open(tmp_img, "wb") as f:
+                        f.write(img_bytes)
+                    await set_awaiting_faces(str(user_id), tmp_img, result.get("content", ""))
+                except Exception as e:
+                    log("AWAITING_FACES_TMP_ERROR", error=str(e))
 
         # Always persist document for authenticated user
         doc_id = None

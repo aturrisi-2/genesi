@@ -34,49 +34,7 @@ from core.telegram_group_memory import (
 
 logger = logging.getLogger(__name__)
 
-async def _try_extract_faces_from_text(text: str, tmp_img: str, desc_img: str, session_uid: str) -> bool:
-    """Tenta di estrarre i nomi dei volti dal testo e salvarli."""
-    if not text or not tmp_img or not desc_img:
-        return False
-        
-    import os
-    if not os.path.exists(tmp_img):
-        return False
-        
-    from core.llm_service import llm_service
-    extract_prompt = (
-        "L'utente sta elencando le identità delle persone in una foto di gruppo o singola.\n"
-        f"Descrizione dei volti (dall'analisi visiva): {desc_img}\n"
-        f"Testo dell'utente: {text}\n"
-        "Estrai le identità delle persone (nomi propri, ruoli, es. 'mia moglie', 'Sandra') e deduci il loro indice di posizione ESATTO da sinistra a destra nella foto (0 è il primo a sinistra, 1 il secondo, ecc.) basandoti rigorosamente sull'ordine o sulle posizioni fornite dall'utente.\n"
-        "Formatta la risposta ESCLUSIVAMENTE come un array JSON di dizionari, con chiavi 'name' e 'position_index'.\n"
-        "Se l'utente non ha fornito nomi o sta parlando di tutt'altro, ritorna [].\n"
-        "Esempio valido: [{\"name\": \"Mariella\", \"position_index\": 0}, {\"name\": \"Sandra\", \"position_index\": 1}]"
-    )
-    try:
-        raw_ext = await llm_service._call_model("openai/gpt-4o-mini", extract_prompt, text, user_id=session_uid, route="memory")
-        clean = raw_ext.strip()
-        if clean.startswith("```"):
-            clean = clean.split("```")[1]
-            if clean.startswith("json"):
-                clean = clean[4:]
-        parsed_faces = json.loads(clean.strip())
-        
-        if parsed_faces and isinstance(parsed_faces, list):
-            from core.face_memory_service import save_known_face
-            for face_data in parsed_faces:
-                name = face_data.get("name")
-                pos_idx = face_data.get("position_index")
-                if name and pos_idx is not None:
-                    f_desc = f"[INDEX:{pos_idx}]"
-                    await save_known_face(name, tmp_img, f_desc)
-                    logger.info("FACE_SAVED FROM TEXT name=%s index=%s", name, pos_idx)
-            return True
-    except Exception as e:
-        logger.warning("Error parsing faces names: %s", e)
-    
-    return False
-
+from core.face_memory_service import set_awaiting_faces, pop_awaiting_faces, try_extract_faces_from_text, get_awaiting_faces
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_API   = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
@@ -1203,7 +1161,7 @@ async def handle_update(update: dict):
             if _reply_to_genesi:
                 should = True
             # Fast-path: in attesa di volti, il prossimo messaggio dell'utente potrebbe essere la risposta!
-            elif session.get("awaiting_faces_img"):
+            elif await get_awaiting_faces(str(chat_id)):
                 should = True
             else:
                 should = await _group_should_intervene(
@@ -1217,15 +1175,15 @@ async def handle_update(update: dict):
                 return
             
             # Rilevamento nomi per volti sconosciuti (gestione testuale nel gruppo)
-            if session.get("awaiting_faces_img"):
-                tmp_img = session.pop("awaiting_faces_img", None)
-                desc_img = session.pop("awaiting_faces_desc", "")
-                await storage.save(_session_key(session_uid), session)
+            awaiting_data = await pop_awaiting_faces(str(chat_id))
+            if awaiting_data:
+                tmp_img = awaiting_data.get("img_path")
+                desc_img = awaiting_data.get("description", "")
                 
                 # Use caption if text is empty
                 _face_text = text if text else caption
                 if _face_text:
-                    faces_saved = await _try_extract_faces_from_text(_face_text, tmp_img, desc_img, session_uid)
+                    faces_saved = await try_extract_faces_from_text(_face_text, tmp_img, desc_img, session_uid)
                     if faces_saved:
                         text += "\n\n[SISTEMA: Hai estratto e memorizzato con successo le identità di queste persone dalla risposta testuale dell'utente. Esclama in modo naturale che ti ricorderai di loro!]"
                 
@@ -1479,25 +1437,24 @@ async def handle_update(update: dict):
                     try:
                         with open(tmp_img, "wb") as f:
                             f.write(img_bytes)
-                        session["awaiting_faces_img"] = tmp_img
-                        session["awaiting_faces_desc"] = analysis
-                        await storage.save(_session_key(session_uid), session)
+                        await set_awaiting_faces(str(chat_id) if is_group else str(from_id), tmp_img, analysis)
                     except Exception as e:
                         logger.error("Failed to save tmp face image: %s", e)
                 
                 # Verifica immediata se la caption contiene i nomi
                 faces_saved_now = False
                 if caption:
-                    faces_saved_now = await _try_extract_faces_from_text(caption, session.get("awaiting_faces_img"), analysis, session_uid)
-                    if faces_saved_now:
-                        tmp_img = session.pop("awaiting_faces_img", None)
-                        session.pop("awaiting_faces_desc", None)
-                        await storage.save(_session_key(session_uid), session)
-                        try:
-                            import os
-                            os.remove(tmp_img)
-                        except:
-                            pass
+                    awaiting_data = await get_awaiting_faces(str(chat_id) if is_group else str(from_id))
+                    if awaiting_data:
+                        faces_saved_now = await try_extract_faces_from_text(caption, awaiting_data.get("img_path"), analysis, session_uid)
+                        if faces_saved_now:
+                            popped = await pop_awaiting_faces(str(chat_id) if is_group else str(from_id))
+                            if popped and popped.get("img_path"):
+                                try:
+                                    import os
+                                    os.remove(popped["img_path"])
+                                except:
+                                    pass
                 
                 # Non rimuovere il tag, altrimenti le regole di _group_msg non scattano!
                 user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
@@ -1646,12 +1603,12 @@ async def handle_update(update: dict):
             return
 
         # Rilevamento nomi per volti sconosciuti
-        if session.get("awaiting_faces_img"):
-            tmp_img = session.pop("awaiting_faces_img", None)
-            desc_img = session.pop("awaiting_faces_desc", "")
-            await storage.save(_session_key(session_uid), session)
+        awaiting_data = await pop_awaiting_faces(str(chat_id) if is_group else str(from_id))
+        if awaiting_data:
+            tmp_img = awaiting_data.get("img_path")
+            desc_img = awaiting_data.get("description", "")
             
-            faces_saved = await _try_extract_faces_from_text(text, tmp_img, desc_img, session_uid)
+            faces_saved = await try_extract_faces_from_text(text, tmp_img, desc_img, session_uid)
             if faces_saved:
                 # Appendi l'informazione al messaggio corrente così il bot reagisce positivamente
                 text += "\n\n[SISTEMA: Hai estratto e memorizzato con successo le identità di queste persone dalla risposta dell'utente. Esclama in modo naturale che ti ricorderai di loro!]"
