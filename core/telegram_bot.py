@@ -1492,6 +1492,8 @@ async def handle_update(update: dict):
                         user_msg += "\n[SISTEMA: Hai estratto e memorizzato con successo le identità dei volti dalla didascalia dell'utente. Ringrazia l'utente per avertele presentate in modo molto naturale!]"
                     else:
                         user_msg += "\n[SISTEMA: Hai 'visto' questa foto tramite il tuo modulo visivo. Hai rilevato persone sconosciute. Fai un commento discorsivo e chiedi chi sono per memorizzarle. REGOLA FERREA: È assolutamente VIETATO scusarti o dire che non riesci a vedere l'immagine/i volti. Comportati al 100% come se stessi guardando la foto coi tuoi occhi!]"
+                elif not caption and "Mappa esatta dei volti noti" in analysis:
+                    user_msg += "\n[SISTEMA: L'utente ha caricato una foto in cui hai riconosciuto i volti, e non ha aggiunto testo. Ignora la regola di essere 'estremamente conciso' o di 'rispondere solo a quello che viene detto'. Fai un commento affettuoso ed entusiasta di 1 o 2 righe, salutando e nominando le persone presenti nella foto!]"
 
             media_group_id = msg.get("media_group_id")
             if media_group_id:
