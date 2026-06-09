@@ -1531,7 +1531,41 @@ async def handle_update(update: dict):
                     analysis = ""
             user_msg  = caption or f"Ho inviato il documento: {filename}."
             if analysis and analysis != "__TOKEN_EXPIRED__":
-                user_msg = f"{user_msg}\n\n[Contenuto: {analysis[:500]}]"
+                if "[UNKNOWN_FACES_DETECTED]" in analysis or "[UNKNOWN_PETS_DETECTED]" in analysis:
+                    import uuid
+                    tmp_img = f"/tmp/genesi_face_doc_{uuid.uuid4().hex[:8]}.jpg"
+                    try:
+                        with open(tmp_img, "wb") as f:
+                            f.write(doc_bytes)
+                        from core.face_memory_service import set_awaiting_faces, get_awaiting_faces, try_extract_faces_from_text, pop_awaiting_faces
+                        await set_awaiting_faces(str(chat_id) if is_group else str(from_id), tmp_img, analysis)
+                    except Exception as e:
+                        logger.error("Failed to save tmp face image: %s", e)
+                
+                faces_saved_now = False
+                if caption:
+                    from core.face_memory_service import get_awaiting_faces, try_extract_faces_from_text, pop_awaiting_faces
+                    awaiting_data = await get_awaiting_faces(str(chat_id) if is_group else str(from_id))
+                    if awaiting_data:
+                        faces_saved_now = await try_extract_faces_from_text(caption, awaiting_data.get("img_path"), analysis, session_uid)
+                        if faces_saved_now:
+                            popped = await pop_awaiting_faces(str(chat_id) if is_group else str(from_id))
+                            if popped and popped.get("img_path"):
+                                try:
+                                    import os
+                                    os.remove(popped["img_path"])
+                                except:
+                                    pass
+                
+                user_msg = f"{user_msg}\n\n[Contenuto: {analysis}]"
+                if "[UNKNOWN_FACES_DETECTED]" in analysis or "[UNKNOWN_PETS_DETECTED]" in analysis:
+                    if faces_saved_now:
+                        user_msg += "\n[SISTEMA: Hai estratto e memorizzato con successo le identità dei volti o degli animali dalla didascalia dell'utente. Ringrazia l'utente per avertele presentate in modo molto naturale!]"
+                    else:
+                        if "[UNKNOWN_PETS_DETECTED]" in analysis:
+                            user_msg += "\\n[SISTEMA: Hai 'visto' questa foto. Hai rilevato un animale che non conosci visivamente. Anche se dal profilo sai già che l'utente possiede animali, DEVI ASSOLUTAMENTE chiedere all'utente di SCRIVERTI COME SI CHIAMA l'animale nella foto, spiegando con dolcezza che ti serve per memorizzare per la prima volta il suo aspetto visivo! REGOLA FERREA: Fai la domanda e chiedigli di scriverti il nome!]"
+                        else:
+                            user_msg += "\n[SISTEMA: Hai 'visto' questa foto tramite il tuo modulo visivo. Hai rilevato persone sconosciute. Fai SEMPRE un commento affettuoso e discorsivo sulla foto, POI chiedi in modo cortese chi sono le persone sconosciute specificando le posizioni per memorizzarle. REGOLA FERREA: IGNORA ESPLICITAMENTE la regola 'zero domande di ritorno' o 'estrema concisione' per questo singolo messaggio! Devi chiedere chi sono! Comportati al 100% come se stessi guardando la foto coi tuoi occhi!]"
 
             reply = await _do_chat(user_msg)
             if not await _handle_reply(reply):
