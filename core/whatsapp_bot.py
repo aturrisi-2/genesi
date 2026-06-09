@@ -806,7 +806,8 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
         state   = session.get("state", STATE_IDLE)
 
         # ── Rilevamento nomi per volti sconosciuti (gestione testuale) ────────
-        awaiting_data = await pop_awaiting_faces(str(chat_id) if is_group else str(wa_id))
+        awaiting_data = await get_awaiting_faces(str(chat_id) if is_group else str(wa_id))
+        was_awaiting_faces = bool(awaiting_data)
         if awaiting_data and text:
             tmp_img = awaiting_data.get("img_path")
             desc_img = awaiting_data.get("description", "")
@@ -815,14 +816,15 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             
             faces_saved = await try_extract_faces_from_text(text, tmp_img, desc_img, session_uid)
             if faces_saved:
+                await pop_awaiting_faces(str(chat_id) if is_group else str(wa_id))
                 text += "\n\n[SISTEMA: Hai estratto e memorizzato con successo le identità di queste persone dalla risposta dell'utente. Esclama in modo naturale che ti ricorderai di loro!]"
             
-            if tmp_img:
-                try:
-                    import os
-                    os.remove(tmp_img)
-                except Exception:
-                    pass
+                if tmp_img:
+                    try:
+                        import os
+                        os.remove(tmp_img)
+                    except Exception:
+                        pass
 
         # ── Comandi (testo che inizia con /) ──────────────────────────────────
         if text in ("/start", "ciao", "start"):
@@ -1023,13 +1025,13 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             # Reply a Genesi
             reply_to = msg.get("context", {})
             replied_from = reply_to.get("from", "")
-            if replied_from == WA_PHONE_NUMBER:
+            if WA_PHONE_NUMBER and WA_PHONE_NUMBER in replied_from:
                 _reply_to_genesi = True
 
             # Fast-path: reply diretta a Genesi -> sempre sì
             if _reply_to_genesi:
                 should = True
-            elif await get_awaiting_faces(str(chat_id)):
+            elif was_awaiting_faces:
                 should = True
             else:
                 should = await _group_should_intervene(
@@ -1037,6 +1039,9 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     bot_mentioned=bot_mentioned,
                     has_media=_original_has_media
                 )
+                
+            if was_awaiting_faces and should:
+                await pop_awaiting_faces(str(chat_id))
             if not should:
                 logger.info("WA_GROUP_SILENT chat_id=%s from=%s msg=%.60s",
                             chat_id, first_name, f"{text} {caption}".strip())
@@ -1346,6 +1351,9 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
         # ── TESTO ─────────────────────────────────────────────────────────────
         if not text:
             return
+
+        if was_awaiting_faces and not is_group:
+            await pop_awaiting_faces(str(wa_id))
 
         if _WEATHER_RE.search(text) and not city:
             session["state"]           = STATE_AWAIT_CITY
