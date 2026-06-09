@@ -95,6 +95,7 @@ async def describe_image(path: str) -> str:
     system_prompt = (
         "Sei l'occhio di un'AI conversazionale. Analizza l'immagine e restituisci un JSON rigoroso con le seguenti chiavi: "
         "'description': una descrizione ESTREMAMENTE CONCISA e DISCORSIVA (massimo 1 o 2 frasi brevi). VIETATO fare lunghi 'spiegoni'. "
+        "Formato richiesto: {\"description\": \"...\", \"unknown_faces_detected\": false, \"unknown_pets_detected\": false}. Nessun altro testo."
         "ATTENZIONE: Se ricevi dei riferimenti sui volti/animali noti, DEVI TASSATIVAMENTE elencare TUTTI i nomi forniti citando esattamente la loro POSIZIONE nella descrizione (es. 'Vedo Rita a sinistra e il cane Fido al centro'). "
         "'unknown_faces_detected': booleano (true/false). Regola assoluta: se nell'immagine è presente ALMENO UNA figura umana o volto che non corrisponde ESATTAMENTE a uno dei 'Riferimenti volto noto' forniti, imposta a 'true'. "
         "'unknown_pets_detected': booleano (true/false). Regola assoluta: se nell'immagine è presente un animale domestico (cane, gatto, uccello, ecc.) di cui NON è stato fornito il nome, imposta a 'true'. "
