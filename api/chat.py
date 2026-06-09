@@ -204,7 +204,7 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             desc_img = awaiting_data.get("description", "")
             faces_saved = await try_extract_faces_from_text(request.message, tmp_img, desc_img, user_id)
             if faces_saved:
-                request.message += "\n\n[SISTEMA: Hai estratto e memorizzato con successo le identità di queste persone dalla risposta dell'utente. Esclama in modo naturale che ti ricorderai di loro!]"
+                request.message += "\n\n[SISTEMA: Hai estratto e memorizzato con successo le identità di queste persone o animali dalla risposta dell'utente. Esclama in modo naturale che ti ricorderai di loro!]"
             if tmp_img:
                 try:
                     import os

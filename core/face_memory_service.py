@@ -96,7 +96,7 @@ async def pop_awaiting_faces(user_or_group_id: str) -> dict:
     return data
 
 async def try_extract_faces_from_text(text: str, tmp_img: str, desc_img: str, session_uid: str) -> bool:
-    """Tenta di estrarre i nomi dei volti dal testo e salvarli."""
+    """Tenta di estrarre i nomi dei volti o degli animali dal testo e salvarli."""
     if not text or not tmp_img or not desc_img:
         return False
         
@@ -105,13 +105,14 @@ async def try_extract_faces_from_text(text: str, tmp_img: str, desc_img: str, se
         
     from core.llm_service import llm_service
     extract_prompt = (
-        "L'utente sta elencando le identità delle persone in una foto di gruppo o singola.\n"
-        f"Descrizione dei volti (dall'analisi visiva): {desc_img}\n"
+        "L'utente sta elencando le identità delle persone o degli animali domestici in una foto.\n"
+        f"Descrizione dei soggetti (dall'analisi visiva): {desc_img}\n"
         f"Testo dell'utente: {text}\n"
-        "Estrai le identità delle persone (nomi propri, ruoli, es. 'mia moglie', 'Sandra') e deduci il loro indice di posizione ESATTO da sinistra a destra nella foto (0 è il primo a sinistra, 1 il secondo, ecc.) basandoti rigorosamente sull'ordine o sulle posizioni fornite dall'utente.\n"
-        "Formatta la risposta ESCLUSIVAMENTE come un array JSON di dizionari, con chiavi 'name' e 'position_index'.\n"
+        "Estrai le identità dei soggetti (nomi propri di persone o animali) e deduci il loro indice di posizione ESATTO da sinistra a destra nella foto (0 è il primo a sinistra, 1 il secondo, ecc.) basandoti rigorosamente sull'ordine o sulle posizioni fornite dall'utente.\n"
+        "Aggiungi una chiave 'type' che vale 'human' o 'pet'.\n"
+        "Formatta la risposta ESCLUSIVAMENTE come un array JSON di dizionari, con chiavi 'name', 'position_index', e 'type'.\n"
         "Se l'utente non ha fornito nomi o sta parlando di tutt'altro, ritorna [].\n"
-        "Esempio valido: [{\"name\": \"Mariella\", \"position_index\": 0}, {\"name\": \"Sandra\", \"position_index\": 1}]"
+        "Esempio valido: [{\"name\": \"Mariella\", \"position_index\": 0, \"type\": \"human\"}, {\"name\": \"Fido\", \"position_index\": 1, \"type\": \"pet\"}]"
     )
     try:
         raw_ext = await llm_service._call_model("openai/gpt-4o-mini", extract_prompt, text, user_id=session_uid, route="memory")
@@ -126,10 +127,21 @@ async def try_extract_faces_from_text(text: str, tmp_img: str, desc_img: str, se
             for face_data in parsed_faces:
                 name = face_data.get("name")
                 pos_idx = face_data.get("position_index")
+                subject_type = face_data.get("type", "human")
+                
                 if name and pos_idx is not None:
                     f_desc = f"[INDEX:{pos_idx}]"
-                    await save_known_face(name, tmp_img, f_desc)
-                    logger.info("FACE_SAVED FROM TEXT name=%s index=%s", name, pos_idx)
+                    if subject_type == "pet":
+                        try:
+                            from core.biometric_pets_service import compute_and_save_pet_embeddings
+                            import asyncio
+                            asyncio.create_task(compute_and_save_pet_embeddings(name, tmp_img, f_desc))
+                            logger.info("PET_SAVED FROM TEXT name=%s index=%s", name, pos_idx)
+                        except Exception as ep:
+                            logger.error("Error saving pet embedding: %s", ep)
+                    else:
+                        await save_known_face(name, tmp_img, f_desc)
+                        logger.info("FACE_SAVED FROM TEXT name=%s index=%s", name, pos_idx)
             return True
     except Exception as e:
         logger.warning("Error parsing faces names: %s", e)

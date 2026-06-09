@@ -95,8 +95,9 @@ async def describe_image(path: str) -> str:
     system_prompt = (
         "Sei l'occhio di un'AI conversazionale. Analizza l'immagine e restituisci un JSON rigoroso con le seguenti chiavi: "
         "'description': una descrizione ESTREMAMENTE CONCISA e DISCORSIVA (massimo 1 o 2 frasi brevi). VIETATO fare lunghi 'spiegoni'. "
-        "ATTENZIONE: Se ricevi dei riferimenti sui volti noti, DEVI TASSATIVAMENTE elencare TUTTI i nomi forniti citando esattamente la loro POSIZIONE nella descrizione (es. 'Vedo Rita a sinistra e Zoe al centro'). "
-        "'unknown_faces_detected': booleano (true/false). Regola assoluta: se nell'immagine è presente ALMENO UNA figura umana, volto o persona che non corrisponde ESATTAMENTE a uno dei 'Riferimenti volto noto' forniti, DEVI TASSATIVAMENTE impostare questo valore a 'true'. Se non ti vengono forniti riferimenti, qualsiasi persona è sconosciuta, quindi il valore DEVE essere 'true'."
+        "ATTENZIONE: Se ricevi dei riferimenti sui volti/animali noti, DEVI TASSATIVAMENTE elencare TUTTI i nomi forniti citando esattamente la loro POSIZIONE nella descrizione (es. 'Vedo Rita a sinistra e il cane Fido al centro'). "
+        "'unknown_faces_detected': booleano (true/false). Regola assoluta: se nell'immagine è presente ALMENO UNA figura umana o volto che non corrisponde ESATTAMENTE a uno dei 'Riferimenti volto noto' forniti, imposta a 'true'. "
+        "'unknown_pets_detected': booleano (true/false). Regola assoluta: se nell'immagine è presente un animale domestico (cane, gatto, uccello, ecc.) di cui NON è stato fornito il nome, imposta a 'true'. "
     )
 
     content_array = []
@@ -108,6 +109,19 @@ async def describe_image(path: str) -> str:
         recognized_faces_list = bio_result.get("recognized_faces_with_positions", [])
         unknown_faces_detected = bio_result.get("unknown_faces_detected", False)
         unknown_faces_positions = bio_result.get("unknown_faces_positions", [])
+        
+        # Aggiunta Pet Recognition
+        try:
+            from core.biometric_pets_service import analyze_pets_biometric
+            pet_result = await analyze_pets_biometric(path)
+            recognized_names.extend(pet_result.get("recognized_names", []))
+            recognized_faces_list.extend(pet_result.get("recognized_faces_with_positions", []))
+            unknown_pets_detected = pet_result.get("unknown_faces_detected", False)
+            unknown_pets_positions = pet_result.get("unknown_faces_positions", [])
+        except Exception as e:
+            logger.error("Error running biometric pets service: %s", e)
+            unknown_pets_detected = False
+            unknown_pets_positions = []
         
         if recognized_faces_list:
             names_str = " | ".join(recognized_faces_list)
@@ -122,7 +136,14 @@ async def describe_image(path: str) -> str:
         elif bio_result.get("total_faces", 0) > 0 and not unknown_faces_detected:
             content_array.append({"type": "text", "text": "Tutte le persone presenti hanno un nome fornito. DEVI impostare 'unknown_faces_detected' a false nel JSON."})
             
-        log("VISION_PROMPT_INJECTED", names=str(recognized_names), unknown=unknown_faces_detected, positions=str(unknown_faces_positions))
+        if unknown_pets_detected:
+            if unknown_pets_positions:
+                pos_str = ", ".join(unknown_pets_positions)
+                content_array.append({"type": "text", "text": f"ATTENZIONE: Ci sono animali domestici nell'immagine di cui non è stato fornito il nome. Posizioni rilevate: {pos_str}. DEVI impostare 'unknown_pets_detected' a true nel JSON. Nella tua 'description', limitati a descrivere visivamente la scena senza fare domande all'utente."})
+            else:
+                content_array.append({"type": "text", "text": "ATTENZIONE: Ci sono animali domestici nell'immagine di cui non è stato fornito il nome. DEVI impostare 'unknown_pets_detected' a true nel JSON."})
+            
+        log("VISION_PROMPT_INJECTED", names=str(recognized_names), unknown=unknown_faces_detected, unknown_pets=unknown_pets_detected)
     except Exception as e:
         logger.error("Error running biometric service: %s", e)
 
@@ -169,15 +190,20 @@ async def describe_image(path: str) -> str:
                 # Se non è JSON valido, cerchiamo le keyword grezze
                 parsed = {
                     "description": content_str, 
-                    "unknown_faces_detected": "unknown_faces_detected" in content_str.lower() and "true" in content_str.lower()
+                    "unknown_faces_detected": "unknown_faces_detected" in content_str.lower() and "true" in content_str.lower(),
+                    "unknown_pets_detected": "unknown_pets_detected" in content_str.lower() and "true" in content_str.lower()
                 }
 
             description = parsed.get("description", "")
             
             # Se rileva volti sconosciuti (o se il booleano è true, o stringa 'true')
-            is_unknown = parsed.get("unknown_faces_detected")
-            if is_unknown and str(is_unknown).lower() in ("true", "1", "yes", "si", "sì"):
+            is_unknown_faces = parsed.get("unknown_faces_detected")
+            if is_unknown_faces and str(is_unknown_faces).lower() in ("true", "1", "yes", "si", "sì"):
                 description += " [UNKNOWN_FACES_DETECTED]"
+                
+            is_unknown_pets = parsed.get("unknown_pets_detected")
+            if is_unknown_pets and str(is_unknown_pets).lower() in ("true", "1", "yes", "si", "sì"):
+                description += " [UNKNOWN_PETS_DETECTED]"
             
             log("IMAGE_VISION_OK", provider=provider, chars=len(description))
             return description

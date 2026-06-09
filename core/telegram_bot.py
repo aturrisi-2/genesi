@@ -1431,12 +1431,14 @@ async def handle_update(update: dict):
                     analysis = ""
             user_msg  = caption or "Analizza questa immagine che ti ho inviato."
             if analysis and analysis != "__TOKEN_EXPIRED__":
-                if "[UNKNOWN_FACES_DETECTED]" in analysis:
+                if "[UNKNOWN_FACES_DETECTED]" in analysis or "[UNKNOWN_PETS_DETECTED]" in analysis:
                     import uuid
                     tmp_img = f"/tmp/genesi_face_{uuid.uuid4().hex[:8]}.jpg"
                     try:
                         with open(tmp_img, "wb") as f:
                             f.write(img_bytes)
+                        
+                        from core.face_memory_service import set_awaiting_faces
                         await set_awaiting_faces(str(chat_id) if is_group else str(from_id), tmp_img, analysis)
                     except Exception as e:
                         logger.error("Failed to save tmp face image: %s", e)

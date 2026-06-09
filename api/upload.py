@@ -72,7 +72,7 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
         user_id = user.id
         result = await analyze_file(file)
 
-        if "[UNKNOWN_FACES_DETECTED]" in result.get("content", ""):
+        if "[UNKNOWN_FACES_DETECTED]" in result.get("content", "") or "[UNKNOWN_PETS_DETECTED]" in result.get("content", ""):
             b64_data = result.get("meta", {}).get("image_data_url", "").split(",")[-1]
             if b64_data:
                 import base64
