@@ -76,7 +76,6 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
             b64_data = result.get("meta", {}).get("image_data_url", "").split(",")[-1]
             if b64_data:
                 import base64
-                import uuid
                 img_bytes = base64.b64decode(b64_data)
                 tmp_img = f"/tmp/genesi_face_web_{uuid.uuid4().hex[:8]}.jpg"
                 try:
