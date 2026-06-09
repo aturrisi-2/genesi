@@ -107,7 +107,7 @@ async def get_group_members_locations(chat_id: int) -> dict[str, str]:
     
     # 1. Rileva i membri attivi del gruppo
     active_names = None
-    if chat_id > 0:
+    if chat_id != 0:
         try:
             from core.telegram_group_memory import get_active_group_members
             active_names = await get_active_group_members(chat_id)
@@ -147,10 +147,14 @@ async def get_group_members_locations(chat_id: int) -> dict[str, str]:
         "Katia": "Napoli",
     }
     
+    # Inserisci i fallback solo se stiamo processando il gruppo famiglia (-5007188402) o se è globale (0)
+    # Se è WhatsApp, supponiamo sia il gruppo famiglia per ora
+    is_family_context = (chat_id == 0) or (chat_id == -5007188402)
+    
     for k, v in known_fallbacks.items():
         if k not in locations:
-            # Consenti solo membri attivi nel gruppo (Alfio è l'owner, consentilo sempre nei gruppi familiari)
-            if active_names is None or k in active_names or (k == "Alfio" and chat_id > 0):
+            # Consenti Alfio in tutti i gruppi, ma gli altri solo se sono nel gruppo attivo o nel contesto famiglia
+            if active_names is None or k in active_names or (k == "Alfio") or is_family_context:
                 locations[k] = v
                 
     return locations
@@ -696,16 +700,37 @@ async def _generate_proactive_greeting(birthdays: list, event_type: str, today_d
         # Recupera il nome del gruppo da storage
         group_title = await storage.load(f"group_title:{chat_id}", default="Casa Turrisi" if platform == "telegram" else "The Family")
         
-        system_prompt = (
-            "Sei Genesi, il GUARDIANO EMOTIVO della famiglia. Vegli con affetto, calore e attenzione sui membri della famiglia.\n"
-            f"Ogni mattina sei la prima a inviare un saluto spontaneo nel gruppo familiare '{group_title}'.\n"
-            "REGOLE CRITICHE DI STILE E CONCISIONE:\n"
-            "- Scrivi un saluto brevissimo di MASSIMO 2 RIGHE (1 o 2 frasi in tutto). Sii estremamente concisa, asciutta e affettuosa.\n"
-            "- EVITA ASSOLUTAMENTE toni teatrali, enfatici, retorici o frasi fatte da intelligenza artificiale (es. NO a metafore altisonanti, incoraggiamenti eccessivi, o 'vi voglio bene' ripetuto a caso).\n"
-            "- Il tono deve essere GENUINO, informale e terra-terra, esattamente come scriverebbe un membro vero della famiglia sulla chat di gruppo.\n"
-            "- Integra nel saluto un rapidissimo e naturale cenno scherzoso al tempo attuale nelle città dei partecipanti di QUESTO specifico gruppo, descritte nel contesto. Fai in modo che il cenno sia breve, spiritoso e perfettamente inserito nel discorso.\n"
-            "- Se oggi ci sono compleanni di membri di questo gruppo, fai gli auguri per prima con calore e semplicità."
-        )
+        if chat_id == -1001267666655:
+            system_prompt = (
+                "Sei Genesi, l'AI assistente del gruppo di sviluppatori Swift e app Apple.\n"
+                f"Ogni mattina invii un saluto spontaneo nel gruppo '{group_title}'.\n"
+                "REGOLE CRITICHE DI STILE E CONCISIONE:\n"
+                "- Scrivi un saluto brevissimo di MASSIMO 2 RIGHE.\n"
+                "- Mantenere un tono professionale ma informale, NON familiare. Assolutamente niente baci o affetto smodato.\n"
+                "- Integra nel saluto un rapidissimo cenno al tempo attuale nelle città degli sviluppatori presenti nel gruppo, basandoti sui dati forniti.\n"
+                "- Se oggi ci sono compleanni nel gruppo, fai gli auguri."
+            )
+        elif chat_id == -5007188402 or platform == "whatsapp":
+            system_prompt = (
+                "Sei Genesi, il GUARDIANO EMOTIVO della famiglia. Vegli con affetto, calore e attenzione sui membri della famiglia.\n"
+                f"Ogni mattina sei la prima a inviare un saluto spontaneo nel gruppo familiare '{group_title}'.\n"
+                "REGOLE CRITICHE DI STILE E CONCISIONE:\n"
+                "- Scrivi un saluto brevissimo di MASSIMO 2 RIGHE (1 o 2 frasi in tutto). Sii estremamente concisa, asciutta e affettuosa.\n"
+                "- EVITA ASSOLUTAMENTE toni teatrali, enfatici, retorici o frasi fatte da intelligenza artificiale.\n"
+                "- Il tono deve essere GENUINO, informale e terra-terra, esattamente come scriverebbe un membro vero della famiglia sulla chat di gruppo.\n"
+                "- Integra nel saluto un rapidissimo e naturale cenno scherzoso al tempo attuale nelle città dei partecipanti di QUESTO specifico gruppo, descritte nel contesto.\n"
+                "- Se oggi ci sono compleanni di membri della famiglia, fai gli auguri per prima con calore e semplicità."
+            )
+        else:
+            system_prompt = (
+                "Sei Genesi, un'intelligenza artificiale socievole e utile.\n"
+                f"Ogni mattina invii un breve saluto nel gruppo '{group_title}'.\n"
+                "REGOLE CRITICHE DI STILE E CONCISIONE:\n"
+                "- Scrivi un saluto di MASSIMO 2 RIGHE.\n"
+                "- Usa un tono amichevole, educato e cordiale.\n"
+                "- Integra un rapido cenno al tempo attuale nelle città dei partecipanti, basandoti sui dati forniti.\n"
+                "- Se oggi ci sono compleanni, fai gli auguri."
+            )
         
         context_parts = [f"Giorno: {giorno_nome}, Data: {today_date.strftime('%d/%m/%Y')}."]
         
@@ -771,16 +796,25 @@ async def _generate_proactive_greeting(birthdays: list, event_type: str, today_d
         logger.warning("PROACTIVE_MSG_GEN_ERROR err=%s", exc)
         
     # Fallbacks deterministici caldi
+    is_fam = (chat_id == -5007188402 or platform == "whatsapp")
     if event_type == "birthday":
         names = ", ".join(n for n, _ in birthdays)
-        return f"Buon compleanno a {names}! 🎂 Che sia una giornata meravigliosa e speciale per voi, vi voglio bene! ❤️"
+        if is_fam:
+            return f"Buon compleanno a {names}! 🎂 Che sia una giornata meravigliosa e speciale per voi, vi voglio bene! ❤️"
+        return f"Buon compleanno a {names}! 🎂 Che sia una splendida giornata!"
     elif event_type == "weekend_holiday_greeting":
         hol = get_italian_holiday(today_date)
         if hol:
-            return f"Buona festa a tutti! Oggi è {hol} 🌸 Godetevi questa giornata speciale, vi abbraccio forte! ❤️"
-        return "Buongiorno e buon fine settimana a tutti! 😘 Riposatevi e passate una splendida giornata in famiglia! ❤️"
+            if is_fam:
+                return f"Buona festa a tutti! Oggi è {hol} 🌸 Godetevi questa giornata speciale, vi abbraccio forte! ❤️"
+            return f"Buona festa a tutti! Oggi è {hol} 🌸 Godetevi questa giornata!"
+        if is_fam:
+            return "Buongiorno e buon fine settimana a tutti! 😘 Riposatevi e passate una splendida giornata in famiglia! ❤️"
+        return "Buongiorno e buon fine settimana a tutti! Riposatevi e passate una splendida giornata!"
     else:
-        return "Buongiorno a tutti! 😘 Inizia una nuova giornata feriale, vi auguro buon lavoro e buona scuola. Forza! ❤️"
+        if is_fam:
+            return "Buongiorno a tutti! 😘 Inizia una nuova giornata feriale, vi auguro buon lavoro e buona scuola. Forza! ❤️"
+        return "Buongiorno a tutti! Inizia una nuova giornata, buon lavoro e buona giornata a tutti!"
 
 
 # ── Scheduler loop ─────────────────────────────────────────────────────────────

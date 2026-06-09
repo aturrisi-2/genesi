@@ -110,9 +110,9 @@ def _is_pure_greeting(text_lower: str) -> bool:
 
 
 
-async def _check_and_register_greeting(chat_id: int, user_id: str, category: str) -> bool:
+async def _check_and_register_greeting(chat_id: int, user_id: str, category: str) -> tuple[bool, bool]:
     if not category or not user_id:
-        return False
+        return False, False
     from datetime import datetime
     from zoneinfo import ZoneInfo
     try:
@@ -127,7 +127,9 @@ async def _check_and_register_greeting(chat_id: int, user_id: str, category: str
     global_key = f"relational_state:last_group_greeting_ts_{chat_id}"
     last_ts = await storage.load(global_key, default=0.0)
     if now_ts - last_ts < 3600:
-        return False
+        return False, False
+        
+    is_late_wakeup = (last_ts > 0) and (category == "morning")
         
     # 2. Controlla il gap per-singolo-utente
     key = f"relational_state:group_greetings_{chat_id}"
@@ -148,10 +150,10 @@ async def _check_and_register_greeting(chat_id: int, user_id: str, category: str
             # If legacy string format (no ts), block if it was today for this category.
             if stored_ts > 0:
                 if now_ts - stored_ts < 14400:
-                    return False
+                    return False, False
             else:
                 if k == f"{user_id}:{category}" and stored_date == today_str:
-                    return False
+                    return False, False
 
     history[f"{user_id}:{category}"] = {
         "date": today_str,
@@ -159,7 +161,7 @@ async def _check_and_register_greeting(chat_id: int, user_id: str, category: str
     }
     await storage.save(key, history)
     await storage.save(global_key, now_ts)
-    return True
+    return True, is_late_wakeup
 
 
 
@@ -212,8 +214,12 @@ async def _group_should_intervene(
     # Fast-path: saluto di gruppo -> controlla limite temporale per-utente
     category = _get_greeting_category(combined_lower)
     if category:
-        should_greet = await _check_and_register_greeting(chat_id, wa_id, category)
+        should_greet, is_late_wakeup = await _check_and_register_greeting(chat_id, wa_id, category)
         if should_greet:
+            if is_late_wakeup:
+                session = await storage.load(_session_key(wa_id)) or {}
+                session["late_wakeup"] = True
+                await storage.save(_session_key(wa_id), session)
             return True
         # Se should_greet è False e il saluto è "puro" (senza domande o altro testo utile),
         # ignoralo subito senza fare fall-through, per evitare di ripetere i saluti!
@@ -1035,6 +1041,12 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     msg_with_quote = message
                     if _reply_to_genesi:
                         msg_with_quote = f"[Stai rispondendo a un tuo messaggio precedente di Genesi]\n{message}"
+                    
+                    late_prompt = ""
+                    if session.pop("late_wakeup", False):
+                        await storage.save(_session_key(wa_id), session)
+                        late_prompt = "\n[SISTEMA: Tu hai già dato il buongiorno al gruppo stamattina. Questo utente si è svegliato (o ha scritto) tardi e ti sta salutando adesso. Rispondi con affetto e, se opportuno, con una battuta scherzosa sul fatto che è un po' in ritardo, dandogli un caloroso benvenuto nella giornata! Ignora la regola del 'rispondi in modo estremamente conciso' per questa interazione.]"
+                        
                     message = (
                         f"{msg_with_quote}\n\n"
                         f"[GRUPPO FAMILIARE: scrive {first_name}. "
@@ -1043,7 +1055,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                         f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente ai festeggiamenti rivolti a quel familiare. "
                         f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
                         f"a meno che {first_name} non li citi in questo messaggio. "
-                        f"Rispondi SOLO a quello che viene detto adesso.]\n"
+                        f"Rispondi SOLO a quello che viene detto adesso.]{late_prompt}\n"
                         f"{group_ctx}"
                     )
                 except Exception:
