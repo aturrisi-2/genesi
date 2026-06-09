@@ -116,7 +116,7 @@ async def describe_image(path: str) -> str:
         if unknown_faces_detected:
             if unknown_faces_positions:
                 pos_str = ", ".join(unknown_faces_positions)
-                content_array.append({"type": "text", "text": f"ATTENZIONE: Ci sono persone nell'immagine di cui non è stato fornito il nome. Posizioni rilevate dal sistema biometrico: {pos_str}. DEVI impostare 'unknown_faces_detected' a true nel JSON. Inoltre, nella tua 'description', DEVI chiedere attivamente all'utente chi sono guidandolo con le posizioni (es. 'e chi è la ragazza a sinistra?')."})
+                content_array.append({"type": "text", "text": f"ATTENZIONE: Ci sono persone nell'immagine di cui non è stato fornito il nome. Posizioni rilevate dal sistema biometrico: {pos_str}. DEVI impostare 'unknown_faces_detected' a true nel JSON. Nella tua 'description', limitati a descrivere visivamente la scena senza fare domande all'utente."})
             else:
                 content_array.append({"type": "text", "text": "ATTENZIONE: Ci sono persone nell'immagine di cui non è stato fornito il nome. DEVI impostare 'unknown_faces_detected' a true nel JSON."})
         elif bio_result.get("total_faces", 0) > 0 and not unknown_faces_detected:
