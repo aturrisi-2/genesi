@@ -1208,6 +1208,26 @@ async def handle_update(update: dict):
                             chat_id, first_name, f"{text} {caption}".strip())
                 return
             
+            # Rilevamento nomi per volti sconosciuti (gestione testuale nel gruppo)
+            if session.get("awaiting_faces_img"):
+                tmp_img = session.pop("awaiting_faces_img", None)
+                desc_img = session.pop("awaiting_faces_desc", "")
+                await storage.save(_session_key(session_uid), session)
+                
+                # Use caption if text is empty
+                _face_text = text if text else caption
+                if _face_text:
+                    faces_saved = await _try_extract_faces_from_text(_face_text, tmp_img, desc_img, session_uid)
+                    if faces_saved:
+                        text += "\n\n[SISTEMA: Hai estratto e memorizzato con successo le identità di queste persone dalla risposta testuale dell'utente. Esclama in modo naturale che ti ricorderai di loro!]"
+                
+                if tmp_img:
+                    try:
+                        import os
+                        os.remove(tmp_img)
+                    except Exception:
+                        pass
+            
             # Se interveniamo su un vocale, invia prima la trascrizione
             if _transcribed_voice_text:
                 await send_message(chat_id, f"🎤 {_transcribed_voice_text}")
