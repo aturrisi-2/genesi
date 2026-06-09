@@ -42,10 +42,10 @@ async def compute_and_save_embeddings(name: str, image_path: str, description_hi
         if faces is None or len(faces) == 0 or boxes is None:
             return 0
             
-        # Filtra i volti di background (area < 10% del più grande) per non confonderli con le pose
+        # Filtra i volti di background (area < 2% del più grande) per non confonderli con le pose
         areas = [(box[2]-box[0]) * (box[3]-box[1]) for box in boxes]
         max_area = max(areas)
-        valid_indices = [i for i, area in enumerate(areas) if area >= max_area * 0.10]
+        valid_indices = [i for i, area in enumerate(areas) if area >= max_area * 0.02]
         
         boxes = [boxes[i] for i in valid_indices]
         faces = faces[valid_indices]
@@ -143,10 +143,10 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 0.85) -> d
                 "total_faces": 0
             }
             
-        # Filtra i volti di background: tieni solo quelli la cui area è almeno il 10% del volto più grande
+        # Filtra i volti di background: tieni solo quelli la cui area è almeno il 2% del volto più grande
         areas = [(box[2]-box[0]) * (box[3]-box[1]) for box in boxes]
         max_area = max(areas)
-        min_allowed_area = max_area * 0.10
+        min_allowed_area = max_area * 0.02
         
         valid_indices = [i for i, area in enumerate(areas) if area >= min_allowed_area]
         
