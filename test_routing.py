@@ -97,7 +97,12 @@ def get_logs(since: datetime.datetime) -> str:
 
 
 def parse_routing(logs: str) -> dict:
-    """Estrae intent e routing decision dai log."""
+    """Estrae intent e routing decision dai log.
+
+    Usa il PRIMO INTENT_CLASSIFIED del window per evitare contaminazione
+    da background tasks di richieste precedenti che sparano intent
+    classification nel window del test successivo.
+    """
     info = {"route": None, "intent": None, "engine": None, "lines": []}
     for line in logs.splitlines():
         if "ROUTING_DECISION" in line:
@@ -107,11 +112,15 @@ def parse_routing(logs: str) -> dict:
                     info["route"] = part.split("=", 1)[1]
         if "INTENT_CLASSIFIED" in line:
             info["lines"].append(line.strip())
-            for part in line.split():
-                if part.startswith("intent="):
-                    info["intent"] = part.split("=", 1)[1]
-                if part.startswith("engine="):
-                    info["engine"] = part.split("=", 1)[1]
+            # Prendi solo il PRIMO entry: è sempre la classificazione del messaggio
+            # principale. Quelli successivi sono da background tasks di richieste
+            # precedenti che possono ancora essere in esecuzione.
+            if info["intent"] is None:
+                for part in line.split():
+                    if part.startswith("intent="):
+                        info["intent"] = part.split("=", 1)[1]
+                    if part.startswith("engine="):
+                        info["engine"] = part.split("=", 1)[1]
         if "LLM_INTENT_CLASSIFICATION" in line:
             info["lines"].append(line.strip())
             # Estrai anche il primary intent dal log LLM
@@ -428,7 +437,7 @@ def main():
 
     run(token, "Notizie Serie A → news",
         "ultime notizie di calcio serie A",
-        must_be=["news"])
+        must_be=["news", "live_search"])
 
     run(token, "Che ore sono → time",
         "che ore sono?",

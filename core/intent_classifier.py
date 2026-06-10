@@ -759,6 +759,13 @@ class IntentClassifier:
             "sono sposato", "sono sposata", "ho un marito", "ho una moglie",
             "ho un partner", "ho una partner",
             "ho animali", "ho un cane", "ho una gatta", "ho un gatto",
+            # domande sul profilo familiare: "come si chiama mia moglie/mio figlio..."
+            "come si chiama mia moglie", "come si chiama mio marito",
+            "come si chiama mio figlio", "come si chiama mia figlia",
+            "come si chiama mio padre", "come si chiama mia madre",
+            "come si chiama mio fratello", "come si chiama mia sorella",
+            "come si chiama la mia", "come si chiama il mio",
+            "come si chiamano i miei figli",
         ]
         if any(kw in message_lower for kw in _identity_first_person):
             log("INTENT_CLASSIFIED", intent="identity", user_id=user_id, engine="regex_priority", message=message[:50])
