@@ -69,6 +69,10 @@ _GENESI_RE = re.compile(r'\bgenesi\b', re.IGNORECASE)
 # Stato conversazione per gruppo: traccia con chi Genesi stava parlando di recente
 # { chat_id: {"from_id": int, "ts": float, "count": int} }
 _GROUP_CONV_STATE: dict[int, dict] = {}
+
+# Saluti registrati da _group_should_intervene, in attesa di risposta personalizzata
+# { chat_id: {"from_id": int, "category": str, "late_wakeup": bool, "pure": bool, "ts": float} }
+_PENDING_GREETINGS: dict[int, dict] = {}
  
 def _get_greeting_category(text_lower: str) -> str:
     holiday_kws = ("natal", "pasqu", "anno nuovo", "feste", "augur", "compleann", "onomastic")
@@ -233,9 +237,16 @@ async def _group_should_intervene(
         if chat_id == _FAMILY_GROUP_ID or bot_mentioned:
             should_greet, is_late_wakeup = await _check_and_register_greeting(chat_id, str(from_id), category)
             if should_greet:
-                if is_late_wakeup:
-                    session["late_wakeup"] = True
-                    await storage.save(_session_key(session_uid), session)
+                # Registra il saluto: handle_update lo gestirà con il servizio
+                # universale (group_greeting_service) o, se il messaggio non è
+                # un saluto puro, con la pipeline normale (+ flag late_wakeup).
+                _PENDING_GREETINGS[chat_id] = {
+                    "from_id":     from_id,
+                    "category":    category,
+                    "late_wakeup": is_late_wakeup,
+                    "pure":        _is_pure_greeting(combined_lower) and not has_media,
+                    "ts":          time.time(),
+                }
                 return True
             # Se should_greet è False e il saluto è "puro" (senza domande o altro testo utile),
             # ignoralo subito senza fare fall-through, per evitare di ripetere i saluti!
@@ -921,6 +932,19 @@ async def handle_update(update: dict):
         # Aggiorna profilo membro del gruppo ad ogni messaggio
         if is_group and first_name:
             asyncio.create_task(update_member_seen(from_id, first_name))
+            # Servizio universale: estrae nome/città dai messaggi (regex gate + LLM)
+            try:
+                from core.group_greeting_service import group_greeting_service
+                asyncio.create_task(group_greeting_service.extract_and_save_member_info(
+                    platform_user_id=str(from_id),
+                    first_name=first_name,
+                    message=(text or caption or ""),
+                    platform="telegram",
+                    group_id=str(chat_id),
+                    is_family_group=(chat_id == _FAMILY_GROUP_ID),
+                ))
+            except Exception as _gge:
+                logger.warning("GROUP_GREETING_EXTRACT_TASK_FAIL err=%s", _gge)
             # Estrai relazioni familiari e aggiorna albero genealogico di Alfio solo nel gruppo famiglia
             if chat_id == _FAMILY_GROUP_ID:
                 asyncio.create_task(extract_family_relationship(str(from_id), first_name, text or caption, "telegram"))
@@ -1191,6 +1215,60 @@ async def handle_update(update: dict):
             # Se interveniamo su un vocale, invia prima la trascrizione
             if _transcribed_voice_text:
                 await send_message(chat_id, f"🎤 {_transcribed_voice_text}")
+
+            # ── SALUTO DI GRUPPO PERSONALIZZATO (servizio universale) ─────────
+            _pending_greet = _PENDING_GREETINGS.pop(chat_id, None)
+            if (_pending_greet and _pending_greet.get("from_id") == from_id
+                    and time.time() - _pending_greet.get("ts", 0) < 60):
+                _is_family = (chat_id == _FAMILY_GROUP_ID)
+                try:
+                    from core.group_greeting_service import group_greeting_service
+                    # Estrai info membro in background (non blocca la risposta)
+                    asyncio.create_task(group_greeting_service.extract_and_save_member_info(
+                        platform_user_id=str(from_id),
+                        first_name=first_name,
+                        message=(text or caption or ""),
+                        platform="telegram",
+                        group_id=str(chat_id),
+                        is_family_group=_is_family,
+                    ))
+                    if _pending_greet.get("pure"):
+                        # Saluto puro → risposta personalizzata diretta
+                        # (nome + meteo locale + commento), senza pipeline LLM completa.
+                        await send_typing(chat_id)
+                        greet_reply = await group_greeting_service.build_personalized_greeting(
+                            platform_user_id=str(from_id),
+                            first_name=first_name,
+                            greeting_category=_pending_greet.get("category", "general"),
+                            platform="telegram",
+                            group_id=str(chat_id),
+                            is_family_group=_is_family,
+                            is_late_wakeup=_pending_greet.get("late_wakeup", False),
+                        )
+                        if greet_reply:
+                            await _send_response(chat_id, greet_reply,
+                                                 reply_to_message_id=msg.get("message_id"))
+                            _GROUP_CONV_STATE[chat_id] = {
+                                "from_id":    from_id,
+                                "ts":         time.time(),
+                                "last_reply": greet_reply[:300],
+                            }
+                            asyncio.create_task(append_group_history(
+                                chat_id, from_id, first_name,
+                                (text or caption or ""), greet_reply))
+                            log("GROUP_GREETING_SENT", platform="telegram",
+                                chat_id=chat_id, user=from_id, name=first_name,
+                                category=_pending_greet.get("category", ""))
+                            return
+                    else:
+                        # Saluto + altro contenuto → pipeline normale, ma propaga
+                        # il flag late_wakeup nella sessione (qui session è in scope).
+                        if _pending_greet.get("late_wakeup"):
+                            session["late_wakeup"] = True
+                            await storage.save(_session_key(session_uid), session)
+                except Exception as _ge:
+                    logger.warning("GROUP_GREETING_PIPELINE_FALLBACK err=%s", _ge)
+                    # fall-through: la pipeline normale gestirà il messaggio
 
         # In gruppi: appende il nome del mittente DOPO il messaggio per evitare
         # che il LLM mescoli il nome dell'account con quello del mittente.
