@@ -1208,7 +1208,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 else:
                     await _handle_reply("__AUTH_FAILED__")
                     return
-            user_msg  = caption or ("[Immagine nel gruppo]" if is_group else "Analizza questa immagine che ti ho inviato.")
+            user_msg  = caption or "Analizza questa immagine che ti ho inviato."
             if analysis:
                 if "[UNKNOWN_FACES_DETECTED]" in analysis or "[UNKNOWN_PETS_DETECTED]" in analysis:
                     import uuid
