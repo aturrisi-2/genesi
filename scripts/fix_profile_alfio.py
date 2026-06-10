@@ -28,13 +28,19 @@ if PROFILE_PATH.exists():
     profile["spouse"] = "Rita"
     
     # Pulisci figli
-    bad_children = {"figlio", "mio figlio", "madre", "alfio"}
+    bad_children = {"figlio", "mio figlio", "mia figlia", "madre", "alfio",
+                    "mamma", "papà", "papa", "padre", "fratello", "sorella",
+                    "marito", "moglie", "nonno", "nonna", "zio", "zia"}
     children = profile.get("children", [])
     cleaned_children = []
     for c in children:
         cname = (c.get("name") if isinstance(c, dict) else str(c)).strip()
-        if cname.lower() not in bad_children:
-            cleaned_children.append({"name": cname})
+        # Blocca nomi di test (Ztfr_*, Ztest_*) e descrittori relazionali
+        if cname.lower() in bad_children:
+            continue
+        if cname.startswith("Ztfr_") or cname.startswith("Ztest_") or cname.startswith("ztfr_") or cname.startswith("ztest_"):
+            continue
+        cleaned_children.append({"name": cname})
     
     # Assicurati che Zoe ed Ennio ci siano
     child_names = {c["name"].lower() for c in cleaned_children}
@@ -286,5 +292,41 @@ family_cache = {
 with open(FAMILY_CACHE_PATH, "w", encoding="utf-8") as f:
     json.dump(family_cache, f, ensure_ascii=False, indent=2)
 print("  ✓ Cache familiare rigenerata con successo.")
+
+# 5. Pulisci profilo Telegram/WhatsApp Alfio (alfio.turrisi@gmail.com)
+MAIN_PROFILE_PATH = Path("memory/profile/fd037393-3e28-49f1-a125-e7b50c469871.json")
+print("\n[5] Pulisco profilo Telegram/WhatsApp Alfio...")
+if MAIN_PROFILE_PATH.exists():
+    with open(MAIN_PROFILE_PATH, "r", encoding="utf-8") as f:
+        mp = json.load(f)
+
+    bad_c = {"figlio", "mio figlio", "mia figlia", "madre", "alfio",
+             "mamma", "papà", "papa", "padre", "fratello", "sorella",
+             "marito", "moglie", "nonno", "nonna", "zio", "zia"}
+
+    kids = mp.get("children", [])
+    cleaned = []
+    for c in kids:
+        cn = (c.get("name") if isinstance(c, dict) else str(c)).strip()
+        if cn.lower() in bad_c:
+            print(f"  ✗ Rimosso: {cn}")
+            continue
+        if cn.startswith(("Ztfr_", "Ztest_", "ztfr_", "ztest_")):
+            print(f"  ✗ Rimosso (test): {cn}")
+            continue
+        cleaned.append({"name": cn})
+
+    child_names = {c["name"].lower() for c in cleaned}
+    if "zoe" not in child_names:
+        cleaned.append({"name": "Zoe"})
+    if "ennio" not in child_names:
+        cleaned.append({"name": "Ennio"})
+    mp["children"] = cleaned
+
+    with open(MAIN_PROFILE_PATH, "w", encoding="utf-8") as f:
+        json.dump(mp, f, ensure_ascii=False, indent=2)
+    print("  ✓ Profilo Telegram/WhatsApp aggiornato.")
+else:
+    print("  ⚠️ Profilo fd037393 non trovato.")
 
 print("\n=== PULIZIA COMPLETATA CON SUCCESSO! ===")

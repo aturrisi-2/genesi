@@ -24,10 +24,31 @@ FACES_DIR = "data/faces"
 
 # Nomi non validi da non salvare mai
 _INVALID_NAMES = {
+    # Placeholder generici
     "unknown", "sconosciuto", "ignoto", "persona", "ragazzo", "ragazza",
     "uomo", "donna", "bambino", "bambina", "uomo_sconosciuto", "donna_sconosciuta",
     "nessuno", "qualcuno", "qualcosa", "animale", "cane", "gatto", "uccello",
+    # Pronomi
+    "io", "lui", "lei", "tu", "noi", "voi", "loro",
+    # Sostantivi relazionali nudi
+    "mamma", "papa", "papà", "padre", "madre",
+    "figlio", "figlia", "fratello", "sorella",
+    "marito", "moglie", "nonno", "nonna",
+    "zio", "zia", "cugino", "cugina", "nipote",
 }
+
+# Pattern: possessivo/articolo + sostantivo relazionale (es. mia_mamma, suo_marito, il_figlio)
+_RELATIONAL_PATTERN = re.compile(
+    r"^(mia|mio|sua|suo|tua|tuo|nostra|nostro|la|il|lo|le)_"
+    r"(mamma|papa|pap.|padre|madre|figlio|figlia|fratello|sorella|"
+    r"marito|moglie|nonno|nonna|zio|zia|cugino|cugina|nipote)",
+    re.IGNORECASE,
+)
+
+
+def _is_relational_descriptor(clean_name: str) -> bool:
+    """True se il nome è un descrittore relazionale (es. 'mia_mamma', 'suo_marito_gianvito')."""
+    return bool(_RELATIONAL_PATTERN.match(clean_name))
 
 
 def _ensure_dir():
@@ -49,9 +70,10 @@ async def save_known_face(name: str, image_path: str, description_in_image: str,
     _ensure_dir()
     clean_name = name.strip().lower().replace(" ", "_")
 
-    # Blocca nomi placeholder / non validi
-    if not clean_name or clean_name in _INVALID_NAMES:
+    # Blocca nomi placeholder / non validi / descrittori relazionali
+    if not clean_name or clean_name in _INVALID_NAMES or _is_relational_descriptor(clean_name):
         logger.warning("FACE_SAVE_BLOCKED name=%s reason=invalid_name", name)
+        log("FACE_SAVE_BLOCKED", name=name, clean=clean_name)
         return False
 
     import shutil
@@ -233,7 +255,12 @@ async def try_extract_faces_from_text(
         "4. Aggiungi 'type': 'human' o 'pet'.\n"
         "5. Aggiungi 'gender': 'M', 'F' o '?' (dal nome o dai [GENDER_VISUAL_HINTS]).\n"
         "6. Aggiungi 'visual_desc': caratteristiche fisiche del soggetto dalla descrizione visiva.\n"
-        "7. Se l'utente non fornisce nomi (parla d'altro), restituisci [].\n\n"
+        "7. Se l'utente non fornisce nomi (parla d'altro), restituisci [].\n"
+        "8. MAI estrarre descrittori relazionali come nomi "
+        "   (es. 'mia mamma', 'mio figlio', 'la moglie', 'suo padre', 'tua sorella'). "
+        "   Estrai SOLO il nome proprio di battesimo o il cognome. "
+        "   Se l'utente dice 'quella è mia mamma Iolanda', il nome da estrarre è 'Iolanda', "
+        "   non 'mia mamma' né 'mia mamma Iolanda'.\n\n"
         "Output ESCLUSIVAMENTE come array JSON:\n"
         "[{\"name\": \"Mariella\", \"position_index\": 0, \"type\": \"human\", "
         "\"gender\": \"F\", \"visual_desc\": \"donna capelli biondi a sinistra\"}, ...]\n"
@@ -267,7 +294,8 @@ async def try_extract_faces_from_text(
             visual_desc = face_data.get("visual_desc", "")
 
             # Blocca nomi non validi (doppia protezione oltre a save_known_face)
-            if not name or name.lower() in _INVALID_NAMES:
+            clean_n = name.lower().replace(" ", "_")
+            if not name or clean_n in _INVALID_NAMES or _is_relational_descriptor(clean_n):
                 logger.warning("EXTRACT_FACES_SKIP_INVALID name=%s", name)
                 continue
 
@@ -407,6 +435,7 @@ async def handle_photo_identification(
                     "DESCRIVENDO le caratteristiche fisiche visibili "
                     "(es. 'chi è la donna con i capelli scuri a sinistra?', "
                     "'e quella con la maglia rossa al centro?'). "
+                    "NON usare elenchi numerati. "
                     "NON nominare persone che non conosci. "
                     "NON tirare ad indovinare. "
                     "REGOLA FERREA: ignora le regole di concisione per questo messaggio — "
@@ -415,13 +444,17 @@ async def handle_photo_identification(
         else:
             sistema_msg = (
                 "\n[SISTEMA: Hai estratto e memorizzato le identità dei soggetti "
-                "dalla risposta dell'utente. Ringrazialo in modo naturale "
-                "e conferma che ti ricorderai di loro!]"
+                "dalla risposta dell'utente. Ringrazialo in modo naturale e affettuoso "
+                "e conferma che ti ricorderai di loro. "
+                "NON usare elenchi o punti numerati. Scrivi in modo discorsivo, come stai parlando con un amico.]"
             )
     elif "[REFERENCES_KNOWN]" in analysis or "Mappa esatta dei volti noti" in analysis:
         sistema_msg = (
             "\n[SISTEMA: L'utente ha caricato una foto con persone che già conosci. "
-            "Fai un commento affettuoso e naturale nominando chi riconosci.]"
+            "Fai un commento affettuoso e naturale nominando chi riconosci. "
+            "NON usare elenchi numerati o punti elenco. "
+            "NON scrivere '1. Nome - posizione'. "
+            "Scrivi in modo discorsivo e caldo, come se stessi parlando con un amico che ti mostra le foto di famiglia.]"
         )
 
     awaiting = await get_awaiting_faces(session_id)
@@ -481,7 +514,8 @@ async def handle_text_identification(
             await _cleanup_awaiting(session_id)
             sistema_msg = (
                 "\n[SISTEMA: Hai memorizzato con successo TUTTE le identità! "
-                "Ringrazia l'utente in modo naturale e conferma che non dimenticherai nessuno.]"
+                "Ringrazia l'utente in modo naturale, affettuoso e discorsivo. "
+                "NON usare elenchi numerati. Parla liberamente come stai chiacchierando con un amico.]"
             )
         else:
             # Ancora qualcuno da identificare
@@ -489,8 +523,8 @@ async def handle_text_identification(
             sistema_msg = (
                 f"\n[SISTEMA: Hai memorizzato {', '.join(saved_names)}. "
                 f"Ci sono ancora {remaining} persona/e da identificare. "
-                "Ringrazia l'utente e continua a chiedere chi sono le altre persone "
-                "usando le loro caratteristiche fisiche dalla descrizione visiva.]"
+                "Ringrazia l'utente in modo naturale (NON usare elenchi). "
+                "Continua a chiedere chi sono le altre persone usando le loro caratteristiche fisiche.]"
             )
     # Se non ha estratto nomi ma c'è ancora un awaiting attivo → non fare nulla,
     # il LLM parlerà normalmente del testo
