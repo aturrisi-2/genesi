@@ -631,7 +631,7 @@ async def _upload_file(token: str, data: bytes, filename: str,
         )
         if res.status_code == 200:
             d = res.json()
-            return d.get("analysis") or d.get("summary") or d.get("message") or ""
+            return d.get("content") or d.get("analysis") or d.get("summary") or d.get("message") or ""
         if res.status_code == 401:
             return "__TOKEN_EXPIRED__"
         return ""
