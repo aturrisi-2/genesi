@@ -30,7 +30,7 @@ import re
 import sys
 import time
 from dataclasses import dataclass
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -200,14 +200,16 @@ class FaceRecognitionTester:
     def _log_has(self, pattern: str, logs: str) -> bool:
         return bool(re.search(pattern, logs, re.IGNORECASE))
 
-    # ── Delta-file: confronta file in data/faces/ prima e dopo ───────────────
-    def _snapshot_faces(self) -> Set[str]:
-        if not os.path.exists(FACES_DIR):
-            return set()
-        return set(f for f in os.listdir(FACES_DIR) if f.endswith(".json"))
+    # ── Mtime check: file creato/aggiornato nell'ultima finestra temporale ────
+    def _face_mtime(self, name: str) -> float:
+        """Ritorna mtime del JSON del nome, 0 se non esiste."""
+        clean = name.strip().lower().replace(" ", "_")
+        path = os.path.join(FACES_DIR, f"{clean}.json")
+        return os.path.getmtime(path) if os.path.exists(path) else 0.0
 
-    def _new_faces_since(self, before: Set[str]) -> Set[str]:
-        return self._snapshot_faces() - before
+    def _face_updated_recently(self, name: str, before_mtime: float) -> bool:
+        """True se il file è stato creato o aggiornato dopo before_mtime."""
+        return self._face_mtime(name) > before_mtime
 
     # ── Awaiting state seeding ────────────────────────────────────────────────
     async def _seed_awaiting(self, description: str, unknown_count: int = 1,
@@ -239,42 +241,42 @@ class FaceRecognitionTester:
         seed_desc: str = "",
         seed_count: int = 1,
         message: str,
-        expect_new_face: str = "",        # nome (clean lowercase) di un file atteso come NUOVO
-        expect_no_new_face: str = "",     # nome che NON deve comparire tra i nuovi file
+        expect_new_face: str = "",    # file deve essere creato/aggiornato dopo il test
+        expect_no_new_face: str = "", # file NON deve essere creato/aggiornato
         log_must: str = "",
         log_must_not: str = "",
         note: str = "",
         pre_seed: bool = True,
     ) -> TR:
+        # Pulizia sempre prima: azzera eventuale stato awaiting rimasto da test precedenti
+        await self._clear_awaiting()
+
         if pre_seed and seed_desc:
             await self._seed_awaiting(seed_desc, unknown_count=seed_count)
 
-        before = self._snapshot_faces()
-        self._read_new_logs()
+        # Cattura mtime PRIMA della chat (gestisce file già esistenti da test precedenti)
+        before_mtime_new  = self._face_mtime(expect_new_face)     if expect_new_face     else 0.0
+        before_mtime_none = self._face_mtime(expect_no_new_face)  if expect_no_new_face  else 0.0
 
+        self._read_new_logs()
         response, latency = await self.chat(message)
         await asyncio.sleep(PAUSE)
         logs = self._read_new_logs()
-
-        after = self._snapshot_faces()
-        new_files = self._new_faces_since(before)
 
         checks = []
         notes_parts = []
 
         if expect_new_face:
-            exp_key = expect_new_face.strip().lower().replace(" ", "_") + ".json"
-            found = exp_key in new_files
-            checks.append(found)
-            if not found:
-                notes_parts.append(f"file non creato: {exp_key} (nuovi: {new_files})")
+            updated = self._face_updated_recently(expect_new_face, before_mtime_new)
+            checks.append(updated)
+            if not updated:
+                notes_parts.append(f"file non creato/aggiornato: {expect_new_face}")
 
         if expect_no_new_face:
-            exp_key = expect_no_new_face.strip().lower().replace(" ", "_") + ".json"
-            absent = exp_key not in new_files
-            checks.append(absent)
-            if not absent:
-                notes_parts.append(f"file creato per errore: {exp_key}")
+            not_updated = not self._face_updated_recently(expect_no_new_face, before_mtime_none)
+            checks.append(not_updated)
+            if not not_updated:
+                notes_parts.append(f"file aggiornato per errore: {expect_no_new_face}")
 
         if log_must:
             found_log = self._log_has(log_must, logs)
