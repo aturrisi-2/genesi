@@ -1619,8 +1619,8 @@ class Proactor:
             "- city: citta' di residenza\n"
             "- profession: lavoro attuale\n"
             "- spouse: partner/coniuge\n"
-            "- children: figli -> [{\"name\":\"...\"}]\n"
-            "- pets: animali -> [{\"type\":\"cat|dog|bird|altro\",\"name\":\"...\",\"breed\":\"...\"}]\n"
+            "- children: figli -> [{\"name\":\"...\",\"gender\":\"M|F|?\"}]\n"
+            "- pets: animali -> [{\"type\":\"cat|dog|bird|altro\",\"name\":\"...\",\"breed\":\"...\",\"gender\":\"M|F|?\"}]\n"
             "- interests: hobby e passioni stabili (sport praticati, musica, cinema...)\n"
             "- preferences: gusti e preferenze (squadra del cuore, cibo preferito, abitudini orario...)\n"
             "- traits: caratteristiche personali (SOLO aggettivi sull'utente stesso, mai nomi propri)\n\n"
@@ -1635,6 +1635,8 @@ class Proactor:
             "  Se c'era anche un trait come 'tifoso della X', aggiorna anche traits\n"
             "- 'non mi piace X' -> rimuovi X da preferences/interests se presente, NON aggiungere X\n"
             "- pets/children: includi SEMPRE tutti quelli esistenti nel profilo per non perderli\n"
+            "- Per children/pets NUOVO NOME: deduci il genere dai nomi italiani (es. Ennio=M, Zoe=F, Rita=F)\n"
+            "- Se non sei sicuro del genere, usa '?'\n"
             "- traits: SOLO aggettivi in prima persona, MAI nomi propri\n\n"
             "REPLY: Una risposta naturale, come un amico. OLTRE a recepire la novità, SE il messaggio dell'utente contiene anche altre domande, osservazioni o battute (es. 'e questa chi è?'), DEVI assolutamente rispondere anche a quelle! MAI usare termini tecnici come 'salvato/rimosso/aggiornato'.\n\n"
             "ESEMPI:\n"
@@ -1644,8 +1646,8 @@ class Proactor:
             "{\"field\":\"traits\",\"action\":\"update\",\"new_value\":[\"tifoso dell'inter\"],\"old_value\":[\"tifoso della juventus\"]}],\"reply\":\"Forza Inter!\"}\n"
             "- \"ceno alle 21 non alle 19:30\" -> {\"corrections\":[{\"field\":\"preferences\",\"action\":\"update\",\"new_value\":[\"cena alle 21\"],\"old_value\":[\"cena alle 19:30\",\"cenare alle 19:30\"]}],\"reply\":\"Alle 21, capito!\"}\n"
             "- \"non mi piace il tennis\" -> {\"corrections\":[{\"field\":\"preferences\",\"action\":\"delete\",\"new_value\":\"tennis\",\"old_value\":null}],\"reply\":\"Tennis fuori!\"}\n"
-            "- \"ho due figli, Ennio e Zoe\" -> {\"corrections\":[{\"field\":\"children\",\"action\":\"update\",\"new_value\":[{\"name\":\"Ennio\"},{\"name\":\"Zoe\"}],\"old_value\":null}],\"reply\":\"Ennio e Zoe!\"}\n"
-            "- \"ho un cane Rio e due gatti Mignolo e Prof\" -> {\"corrections\":[{\"field\":\"pets\",\"action\":\"update\",\"new_value\":[{\"type\":\"dog\",\"name\":\"Rio\"},{\"type\":\"cat\",\"name\":\"Mignolo\"},{\"type\":\"cat\",\"name\":\"Prof\"}],\"old_value\":null}],\"reply\":\"Rio, Mignolo e Prof!\"}\n"
+            "- \"ho due figli, Ennio e Zoe\" -> {\"corrections\":[{\"field\":\"children\",\"action\":\"update\",\"new_value\":[{\"name\":\"Ennio\",\"gender\":\"M\"},{\"name\":\"Zoe\",\"gender\":\"F\"}],\"old_value\":null}],\"reply\":\"Ennio e Zoe!\"}\n"
+            "- \"ho un cane Rio maschio e due gatti Mignolo e Prof\" -> {\"corrections\":[{\"field\":\"pets\",\"action\":\"update\",\"new_value\":[{\"type\":\"dog\",\"name\":\"Rio\",\"gender\":\"M\"},{\"type\":\"cat\",\"name\":\"Mignolo\",\"gender\":\"M\"},{\"type\":\"cat\",\"name\":\"Prof\",\"gender\":\"M\"}],\"old_value\":null}],\"reply\":\"Rio, Mignolo e Prof!\"}\n"
             "- Se non capisci -> {\"corrections\":[],\"reply\":\"Capito!\"}"
         )
 
@@ -1688,6 +1690,38 @@ class Proactor:
             else:
                 corrections_list = []
 
+        def _infer_gender_from_name(name: str) -> str:
+            """Inferisci il genere da un nome italiano. Torna 'M', 'F', o '?' se incerto."""
+            if not isinstance(name, str):
+                return "?"
+            
+            name_lower = name.strip().lower()
+            
+            # Nomi maschili comuni italiani
+            male_names = {
+                "ennio", "marco", "luca", "andrea", "giovanni", "paolo", "carlo", "giuseppe",
+                "antonio", "Francesco", "domenico", "davide", "matteo", "stefano", "riccardo",
+                "diego", "leonardo", "alessio", "massimo", "daniele", "fabio", "maurizio",
+                "claudio", "bruno", "lorenzo", "filippo", "giulio", "luigi", "vincenzo",
+                "mario", "sergio", "bruno", "giangi", "gionni", "rio", "milo", "fuzzy"
+            }
+            
+            # Nomi femminili comuni italiani
+            female_names = {
+                "zoe", "rita", "maria", "anna", "laura", "francesca", "barbara", "silvia",
+                "angela", "clara", "elena", "carolina", "giulia", "alice", "marina", "rosa",
+                "teresa", "isabella", "domenica", "margherita", "santa", "lorena", "valentina",
+                "alessandra", "daniela", "monica", "sandra", "angela", "paola", "luisa",
+                "sara", "vanessa", "jessica", "martina", "arianna", "federica", "ilaria"
+            }
+            
+            if name_lower in male_names:
+                return "M"
+            elif name_lower in female_names:
+                return "F"
+            else:
+                return "?"
+
         def _apply_list_correction(field, action, new_value, old_value):
             """Applica una correzione a un campo lista del profilo (in-place)."""
             list_fields = {"children", "pets", "interests", "preferences", "traits"}
@@ -1705,17 +1739,44 @@ class Proactor:
                         pd = {"type": item.get("type", "?"), "name": item["name"]}
                         if item.get("breed"):
                             pd["breed"] = item["breed"]
+                        if "gender" in item:
+                            pd["gender"] = item["gender"]
+                        else:
+                            # Inferisci genere dal nome se possibile (meno affidabile per animali)
+                            pd["gender"] = _infer_gender_from_name(item["name"])
                         sanitized.append(pd)
                     elif isinstance(item, str) and item.strip():
                         parts = item.strip().split(" ", 1)
-                        sanitized.append({"type": parts[0], "name": parts[1]} if len(parts) == 2 else {"type": "?", "name": item})
+                        if len(parts) == 2:
+                            sanitized.append({
+                                "type": parts[0],
+                                "name": parts[1],
+                                "gender": _infer_gender_from_name(parts[1])
+                            })
+                        else:
+                            sanitized.append({
+                                "type": "?",
+                                "name": item,
+                                "gender": _infer_gender_from_name(item)
+                            })
                 new_value = sanitized
 
             if field == "children" and action == "update" and isinstance(new_value, list):
-                new_value = [
-                    item if isinstance(item, dict) and "name" in item else {"name": str(item)}
-                    for item in new_value if item
-                ]
+                sanitized = []
+                for item in new_value:
+                    if isinstance(item, dict):
+                        if "name" in item:
+                            child = {"name": item["name"]}
+                            if "gender" in item:
+                                child["gender"] = item["gender"]
+                            else:
+                                # Inferisci genere dal nome se possibile
+                                child["gender"] = _infer_gender_from_name(item["name"])
+                            sanitized.append(child)
+                    elif isinstance(item, str) and item.strip():
+                        child = {"name": item.strip(), "gender": _infer_gender_from_name(item.strip())}
+                        sanitized.append(child)
+                new_value = sanitized
 
             if action == "update":
                 if field in ("pets", "children") and isinstance(new_value, list):
