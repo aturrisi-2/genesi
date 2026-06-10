@@ -27,7 +27,9 @@ _INVALID_NAMES = {
     # Placeholder generici
     "unknown", "sconosciuto", "ignoto", "persona", "ragazzo", "ragazza",
     "uomo", "donna", "bambino", "bambina", "uomo_sconosciuto", "donna_sconosciuta",
-    "nessuno", "qualcuno", "qualcosa", "animale", "cane", "gatto", "uccello",
+    "nessuno", "qualcuno", "qualcosa",
+    # Specie animali (non sono nomi propri per umani; per animali usa sanitize_pet_name)
+    "animale", "cane", "gatto", "gatta", "uccello", "coniglio", "criceto",
     # Pronomi
     "io", "lui", "lei", "tu", "noi", "voi", "loro",
     # Sostantivi relazionali nudi
@@ -251,19 +253,25 @@ async def try_extract_faces_from_text(
         "2. Se l'utente usa posizioni esplicite ('quella a destra è Iolanda'), "
         "   deduci la posizione dalla descrizione visiva.\n"
         "3. MAI inserire 'UNKNOWN', 'sconosciuto', 'ignoto' o simili come nome. "
-        "   Se una persona non ha un nome fornito dall'utente, OMETTI quella voce dall'array.\n"
+        "   Se una persona o animale non ha un nome fornito dall'utente, OMETTI quella voce.\n"
         "4. Aggiungi 'type': 'human' o 'pet'.\n"
         "5. Aggiungi 'gender': 'M', 'F' o '?' (dal nome o dai [GENDER_VISUAL_HINTS]).\n"
         "6. Aggiungi 'visual_desc': caratteristiche fisiche del soggetto dalla descrizione visiva.\n"
-        "7. Se l'utente non fornisce nomi (parla d'altro), restituisci [].\n"
-        "8. MAI estrarre descrittori relazionali come nomi "
-        "   (es. 'mia mamma', 'mio figlio', 'la moglie', 'suo padre', 'tua sorella'). "
-        "   Estrai SOLO il nome proprio di battesimo o il cognome. "
-        "   Se l'utente dice 'quella è mia mamma Iolanda', il nome da estrarre è 'Iolanda', "
-        "   non 'mia mamma' né 'mia mamma Iolanda'.\n\n"
+        "7. Per animali ('type':'pet'): aggiungi 'species': 'cane'/'gatto'/'uccello'/ecc. "
+        "   dalla descrizione visiva.\n"
+        "8. Se l'utente non fornisce nomi (parla d'altro), restituisci [].\n"
+        "9. MAI estrarre descrittori relazionali come nomi "
+        "   (es. 'mia mamma', 'mio figlio', 'la moglie'). "
+        "   Estrai SOLO il nome proprio di battesimo. "
+        "   Se l'utente dice 'quella è mia mamma Iolanda', il nome è 'Iolanda'.\n"
+        "10. Per animali: MAI usare specie o razza come nome ('il mio gatto', 'gatto persiano' "
+        "    NON sono nomi). Il nome è quello dato dall'utente all'animale (es. 'Mignolo', 'Rio'). "
+        "    Se l'utente non ha nominato l'animale, OMETTI quella voce.\n\n"
         "Output ESCLUSIVAMENTE come array JSON:\n"
         "[{\"name\": \"Mariella\", \"position_index\": 0, \"type\": \"human\", "
-        "\"gender\": \"F\", \"visual_desc\": \"donna capelli biondi a sinistra\"}, ...]\n"
+        "\"gender\": \"F\", \"visual_desc\": \"donna capelli biondi a sinistra\"}, "
+        "{\"name\": \"Mignolo\", \"position_index\": 1, \"type\": \"pet\", "
+        "\"species\": \"gatto\", \"gender\": \"M\", \"visual_desc\": \"gatto tigrato grigio\"}]\n"
         "Nessun testo fuori dal JSON."
     )
 
@@ -293,11 +301,23 @@ async def try_extract_faces_from_text(
             gender = face_data.get("gender", "?")
             visual_desc = face_data.get("visual_desc", "")
 
-            # Blocca nomi non validi (doppia protezione oltre a save_known_face)
+            # Blocca nomi non validi — path diverso per pet e umani
             clean_n = name.lower().replace(" ", "_")
-            if not name or clean_n in _INVALID_NAMES or _is_relational_descriptor(clean_n):
-                logger.warning("EXTRACT_FACES_SKIP_INVALID name=%s", name)
+            if not name or _is_relational_descriptor(clean_n):
+                logger.warning("EXTRACT_FACES_SKIP_RELATIONAL name=%s", name)
                 continue
+
+            if subject_type == "pet":
+                from core.name_utils import sanitize_pet_name
+                clean_pet = sanitize_pet_name(name)
+                if not clean_pet:
+                    logger.warning("EXTRACT_PET_SKIP_INVALID name=%s reason=species_or_breed", name)
+                    continue
+                name = clean_pet
+            else:
+                if clean_n in _INVALID_NAMES:
+                    logger.warning("EXTRACT_FACES_SKIP_INVALID name=%s", name)
+                    continue
 
             f_desc = f"[INDEX:{pos_idx}]"
             if visual_desc:
@@ -306,7 +326,8 @@ async def try_extract_faces_from_text(
             if subject_type == "pet":
                 try:
                     from core.biometric_pets_service import compute_and_save_pet_embeddings
-                    res = await compute_and_save_pet_embeddings(name, tmp_img, f_desc)
+                    pet_species = face_data.get("species", "")
+                    res = await compute_and_save_pet_embeddings(name, tmp_img, f_desc, species=pet_species)
                     logger.info("PET_SAVED name=%s index=%s visual=%s", name, pos_idx, visual_desc)
                     log("PET_SAVED", name=name, index=pos_idx)
                     saved_count += 1
@@ -418,12 +439,15 @@ async def handle_photo_identification(
             if has_unknown_pets:
                 pet_detail = f" ({n_pets} animale/i visibile/i nella foto)" if n_pets > 0 else ""
                 sistema_msg += (
-                    f"\n[SISTEMA: Hai visto questa foto. Hai rilevato un animale{pet_detail} "
-                    "che non conosci visivamente. "
-                    "DEVI chiedere all'utente il nome dell'animale descrivendo brevemente "
-                    "ciò che vedi (colore, razza approssimativa, taglia), "
-                    "spiegando che ti serve per memorizzare il suo aspetto visivo. "
-                    "NON inventare il nome. CHIEDI esplicitamente.]"
+                    f"\n[SISTEMA: Hai visto questa foto. Hai rilevato {n_pets if n_pets > 0 else 'un'} "
+                    f"animale/i{pet_detail} che non conosci. "
+                    "DEVI chiedere il nome di CIASCUN animale sconosciuto, "
+                    "DESCRIVENDO ogni animale con le sue caratteristiche visive specifiche "
+                    "(colore del pelo, markings, taglia) così l'utente capisce di quale animale parli. "
+                    "Esempio: 'Il gatto tigrato grigio con la macchia bianca sul muso — come si chiama?' "
+                    "Se ci sono più animali sconosciuti, chiedili tutti uno per uno con le loro caratteristiche. "
+                    "NON usare elenchi numerati. "
+                    "NON inventare nomi. CHIEDI esplicitamente.]"
                 )
             if has_unknown_faces:
                 human_detail = f" ({n_humans} persone visibili in totale)" if n_humans > 0 else ""

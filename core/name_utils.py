@@ -183,3 +183,74 @@ def build_relational_map(profile: dict) -> str:
         return ""
 
     return "MAPPA RELAZIONALE (quando l'utente usa questi termini, usa il nome proprio nella risposta):\n" + "\n".join(lines)
+
+
+# ── Nomi invalidi per animali domestici ──────────────────────────────────────
+
+# Specie — non sono nomi propri
+_PET_SPECIES = {"cane", "gatto", "gatta", "uccello", "coniglio", "criceto", "criceto", "pesce",
+                "tartaruga", "pappagallo", "canarino", "furretto", "hamster"}
+
+# Razze comuni — non sono nomi propri
+_PET_BREEDS = {
+    "labrador", "golden", "retriever", "pastore", "husky", "bulldog", "beagle",
+    "poodle", "barboncino", "chihuahua", "dachshund", "boxer", "rottweiler",
+    "maltese", "shih", "tzu", "border", "collie", "dobermann", "setter",
+    "persiano", "siamese", "bengala", "ragdoll", "maine", "coon", "british",
+    "shorthair", "scottish", "fold", "sphynx", "burmese", "abissino",
+    "european", "europeo", "comune", "randagio", "meticcio", "bastardino",
+}
+
+# Colori e descrittori fisici usati al posto del nome
+_PET_DESCRIPTORS = {
+    "tigrato", "bianco", "nero", "marrone", "rosso", "arancione", "grigio",
+    "beige", "macchiato", "soriano", "tricolore", "bicolore", "peloso",
+    "piccolo", "grande", "medio", "cucciolo", "giovane", "vecchio",
+    "maschio", "femmina",
+}
+
+_PET_POSSESSIVES = {
+    "il mio cane", "la mia gatta", "il mio gatto", "il mio coniglio",
+    "il mio uccello", "la mia tartaruga", "il mio criceto",
+}
+
+# Pronomi/articoli usati senza nome
+_PET_INVALID_NAMES = _PET_SPECIES | _PET_BREEDS | _PET_DESCRIPTORS | {
+    "animale", "cucciolo", "bestia", "bestiola", "peloso", "pelosa",
+}
+
+
+def sanitize_pet_name(name: str) -> Optional[str]:
+    """
+    Sanitizza un nome per il salvataggio come nome di animale domestico.
+
+    - Rifiuta specie ("gatto"), razze ("persiano"), colori ("tigrato")
+    - Rifiuta possessivi con specie ("il mio gatto", "la mia cagnolina")
+    - Rifiuta nomi generico-invalidi (stessa logica di sanitize_profile_name)
+    - Capitalizza correttamente
+
+    Ritorna il nome pulito o None se da rifiutare.
+    """
+    if not name or not isinstance(name, str):
+        return None
+
+    name = name.strip()
+    nl = name.lower()
+
+    # Blocca possessivi con specie ("il mio gatto", "la mia gatta")
+    if any(nl == p or nl.startswith(p) for p in _PET_POSSESSIVES):
+        return None
+
+    # Blocca specie/razze/colori
+    if nl in _PET_INVALID_NAMES:
+        return None
+
+    # Blocca se è un aggettivo descrittivo + specie ("gatto tigrato", "cane marrone")
+    parts = nl.split()
+    if len(parts) == 2 and (parts[0] in _PET_SPECIES or parts[1] in _PET_SPECIES):
+        return None
+    if len(parts) == 2 and (parts[0] in _PET_BREEDS or parts[1] in _PET_BREEDS):
+        return None
+
+    # Usa la stessa logica di sanitize_profile_name per nomi generici invalidi
+    return sanitize_profile_name(name)

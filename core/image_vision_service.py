@@ -94,13 +94,16 @@ async def describe_image(path: str) -> str:
     system_prompt = (
         "Sei l'occhio di un'AI conversazionale familiare. Analizza l'immagine e restituisci ESCLUSIVAMENTE un JSON con le seguenti chiavi:\n"
         "'description': descrizione PRECISA E DETTAGLIATA di OGNI soggetto presente (persone, animali). "
-        "PER OGNI SOGGETTO SCONOSCIUTO: descrivi obbligatoriamente colore capelli, abbigliamento, espressione, posizione nella foto (es. 'la donna con capelli castani e maglietta rossa al centro'). "
+        "PER OGNI PERSONA SCONOSCIUTA: colore capelli, abbigliamento, espressione, posizione nella foto. "
+        "PER OGNI ANIMALE SCONOSCIUTO: specie (cane/gatto/uccello), colore e pattern del pelo (es. 'tigrato grigio', "
+        "'pelo nero con petto bianco', 'manto dorato'), markings distintivi (macchie, colore orecchie, segni particolari), "
+        "taglia (piccolo/medio/grande), posizione nella foto. "
+        "ESEMPIO animale: 'un gatto di taglia media, pelo tigrato grigio e bianco, con macchia bianca sul muso, a sinistra'. "
         "PER OGNI SOGGETTO NOTO (fornito nei riferimenti): cita esattamente il nome e la posizione. "
         "NON inventare nomi. NON indovinare chi siano. Descrivi e basta.\n"
         "'gender_hints': array di oggetti con 'position' (numero intero 0=primo da sinistra) e 'gender' (M o F) per ogni persona umana. "
         "Es: [{\"position\": 0, \"gender\": \"F\"}, {\"position\": 1, \"gender\": \"M\"}].\n"
-        "'unknown_faces_detected': true se c'è ALMENO UNA persona umana NON presente nei riferimenti forniti. "
-        "Se non vengono forniti riferimenti e ci sono persone, metti true.\n"
+        "'unknown_faces_detected': true se c'è ALMENO UNA persona umana NON presente nei riferimenti forniti.\n"
         "'unknown_pets_detected': true se c'è ALMENO UN animale domestico NON presente nei riferimenti forniti.\n"
         "'total_humans': numero intero di persone umane visibili nell'immagine.\n"
         "'total_pets': numero intero di animali domestici visibili nell'immagine.\n"
@@ -178,13 +181,24 @@ async def describe_image(path: str) -> str:
         # ── Animali sconosciuti ─────────────────────────────────────────────────
         if unknown_pets_detected:
             pos_str = ", ".join(unknown_pets_positions) if unknown_pets_positions else "posizione non determinata"
+            # Includi info specie dal biometrico se disponibile
+            species_counts = pet_result.get("species_counts", {})
+            species_hint = ""
+            if species_counts:
+                parts = [f"{v} {k}" for k, v in species_counts.items()]
+                species_hint = f" Il sensore biometrico ha rilevato: {', '.join(parts)}."
             content_array.append({
                 "type": "text",
                 "text": (
-                    f"ATTENZIONE: Sono presenti animali domestici SCONOSCIUTI (posizioni: {pos_str}). "
+                    f"ATTENZIONE: Sono presenti animali domestici SCONOSCIUTI (posizioni: {pos_str}).{species_hint} "
                     "DEVI impostare 'unknown_pets_detected' a true. "
-                    "Nella 'description', descrivi OGNI animale con: specie (cane/gatto/ecc.), "
-                    "colore/pelo, taglia approssimativa, posizione. Es: 'un cane di taglia media, pelo marrone, al centro'."
+                    "Nella 'description', descrivi OGNI animale SCONOSCIUTO con queste caratteristiche OBBLIGATORIE: "
+                    "1) specie (cane/gatto/uccello), "
+                    "2) colore e pattern del pelo (es. 'tigrato grigio e bianco', 'manto nero con petto bianco', 'pelo beige tinta unita'), "
+                    "3) markings distintivi (macchie, strisce, colore delle orecchie/zampe, eventuali segni particolari), "
+                    "4) taglia approssimativa (piccolo/medio/grande), "
+                    "5) posizione nella foto. "
+                    "Queste descrizioni permettono all'utente di riconoscere QUALE dei suoi animali è nella foto."
                 )
             })
 
