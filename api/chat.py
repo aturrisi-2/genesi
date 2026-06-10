@@ -271,7 +271,6 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         except Exception as _e:
             log("CHAT_1TO1_LINK_EXPLORE_FAIL", error=str(_e))
 
-        log("CHAT_HANDLER_CALL", user_id=user_id, platform=request.platform or "NONE")
         _handler_result = await simple_chat_handler(user_id, _chat_message, request.conversation_id, platform=request.platform)
         if isinstance(_handler_result, tuple):
             response, classified_intent = _handler_result[0], _handler_result[1]
