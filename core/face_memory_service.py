@@ -16,6 +16,7 @@ import json
 import logging
 import re
 import time
+from core.log import log
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,7 @@ async def save_known_face(name: str, image_path: str, description_in_image: str,
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         logger.info("FACE_MEMORY_SAVED name=%s gender=%s desc=%s", name, gender_norm, description_in_image[:60])
+        log("FACE_MEMORY_SAVED", name=name, gender=gender_norm)
 
         # Aggiorna embedding biometrico globale
         from core.biometric_service import compute_and_save_embeddings
@@ -126,6 +128,7 @@ async def set_awaiting_faces(session_id: str, img_path: str, description: str, u
         "ts": int(time.time())
     })
     logger.info("AWAITING_FACES_SET session=%s unknown_count=%d", session_id, unknown_count)
+    log("AWAITING_FACES_SET", session=session_id, unknown_count=unknown_count)
 
 
 async def get_awaiting_faces(session_id: str) -> dict | None:
@@ -165,6 +168,7 @@ async def update_awaiting_faces_identified(session_id: str, new_names: list[str]
     data["remaining"] = remaining
     await storage.save(session_key, data)
     logger.info("AWAITING_FACES_UPDATED session=%s identified=%s remaining=%d", session_id, existing, remaining)
+    log("AWAITING_FACES_UPDATED", session=session_id, remaining=remaining, identified=len(existing))
     return remaining
 
 
@@ -276,6 +280,7 @@ async def try_extract_faces_from_text(
                     from core.biometric_pets_service import compute_and_save_pet_embeddings
                     res = await compute_and_save_pet_embeddings(name, tmp_img, f_desc)
                     logger.info("PET_SAVED name=%s index=%s visual=%s", name, pos_idx, visual_desc)
+                    log("PET_SAVED", name=name, index=pos_idx)
                     saved_count += 1
                     saved_names.append(name)
                 except Exception as ep:
@@ -292,6 +297,7 @@ async def try_extract_faces_from_text(
             # Aggiorna lo stato awaiting con i nuovi nomi identificati
             remaining = await update_awaiting_faces_identified(str(session_uid), saved_names)
             logger.info("EXTRACT_FACES_DONE saved=%d remaining=%d", saved_count, remaining)
+            log("EXTRACT_FACES_DONE", saved=saved_count, remaining=remaining, names=",".join(saved_names))
             return True, saved_names
 
     except Exception as e:

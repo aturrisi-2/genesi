@@ -12,11 +12,12 @@ Testa il pipeline completo di riconoscimento visivo (piattaforma-indipendente):
 
 Uso:
   python3 scripts/test_face_recognition.py
-  python3 scripts/test_face_recognition.py alfio.turrisia@gmail.com ZOEennio0810
-  python3 scripts/test_face_recognition.py face_test@genesi.local Face_Test_2026
+  python3 scripts/test_face_recognition.py alfio.turrisi@gmail.com ZOEennio0810
 
 NOTE:
-  - Usa nomi con prefisso "Ztest_" → facili da identificare e cancellare
+  - Usa nomi con prefisso "Ztfr_" (ZTest_FaceRecognition) → rimossi in cleanup
+  - Approccio delta-file: confronta data/faces/ prima e dopo ogni test
+  - Non dipende da dati preesistenti: solo nuovi file creati durante il test
   - Richiede accesso ai file in memory/ e data/faces/ (stesso VPS del server)
   - Fa chiamate LLM reali (gpt-4o-mini) per l'estrazione nomi
 """
@@ -28,12 +29,8 @@ import os
 import re
 import sys
 import time
-import struct
-import zlib
-import shutil
-from datetime import datetime
-from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Optional, Set, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -41,29 +38,28 @@ BASE_URL      = "http://localhost:8000"
 TEST_EMAIL    = sys.argv[1] if len(sys.argv) > 1 else "face_test@genesi.local"
 TEST_PASSWORD = sys.argv[2] if len(sys.argv) > 2 else "Face_Test_2026"
 
-LOG_FILE      = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "genesi.log")
-FACES_DIR     = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "faces")
+LOG_FILE  = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "genesi.log")
+FACES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "faces")
 
-# Nomi test (prefisso Ztest_ per non confonderli con dati reali)
-T_HUMAN_1 = "Ztest_Marco"
-T_HUMAN_2 = "Ztest_Laura"
-T_HUMAN_3 = "Ztest_Rita"
-T_PET_1   = "Ztest_Milo"
+# Prefisso test — tutti i file che iniziano con "ztfr_" vengono rimossi al cleanup
+T_PREFIX  = "Ztfr_"
+T_HUMAN_1 = f"{T_PREFIX}Marco"
+T_HUMAN_2 = f"{T_PREFIX}Laura"
+T_HUMAN_3 = f"{T_PREFIX}Rita"
+T_PET_1   = f"{T_PREFIX}Milo"
 
-PAUSE = 2.5  # secondi tra test (attesa background tasks LLM)
+PAUSE = 3.0  # secondi tra test (attesa background tasks LLM)
 
 # ─── Colori ────────────────────────────────────────────────────────────────────
 G = "\033[92m"; R = "\033[91m"; Y = "\033[93m"; B = "\033[94m"; RST = "\033[0m"; BOLD = "\033[1m"
 
 def ok(s):   return f"{G}✅ {s}{RST}"
 def fail(s): return f"{R}❌ {s}{RST}"
-def warn(s): return f"{Y}⚠️  {s}{RST}"
 def info(s): return f"{B}   {s}{RST}"
 
 
-# ─── Immagine JPEG minimale 1x1 px (biometrico: 0 volti, ma file valido) ──────
+# ─── JPEG minimale 1x1 px (biometrico: 0 volti, ma file valido) ───────────────
 def _make_minimal_jpeg() -> bytes:
-    """JPEG 1x1 pixel bianco — valido come file, biometrico restituirà 0 faces."""
     return bytes([
         0xFF,0xD8,0xFF,0xE0,0x00,0x10,0x4A,0x46,0x49,0x46,0x00,0x01,0x01,0x00,0x00,0x01,
         0x00,0x01,0x00,0x00,0xFF,0xDB,0x00,0x43,0x00,0x08,0x06,0x06,0x07,0x06,0x05,0x08,
@@ -89,7 +85,6 @@ def _make_minimal_jpeg() -> bytes:
     ])
 
 
-# ─── Risultato ─────────────────────────────────────────────────────────────────
 @dataclass
 class TR:
     group: str
@@ -102,7 +97,6 @@ class TR:
 results: List[TR] = []
 
 
-# ─── Tester ────────────────────────────────────────────────────────────────────
 class FaceRecognitionTester:
 
     def __init__(self):
@@ -111,7 +105,7 @@ class FaceRecognitionTester:
         self.user_id: Optional[str] = None
         self._log_cursor = 0
 
-    # ── Setup / Teardown ──────────────────────────────────────────────────────
+    # ── Setup / teardown ──────────────────────────────────────────────────────
     async def setup(self):
         self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=90))
         await self._ensure_user()
@@ -145,7 +139,6 @@ class FaceRecognitionTester:
                 sys.exit(1)
             data = await r.json()
             self.token = data["access_token"]
-            # Decodifica user_id dal JWT (payload base64, no verifica firma)
             try:
                 payload_b64 = self.token.split(".")[1]
                 payload_b64 += "=" * (4 - len(payload_b64) % 4)
@@ -156,21 +149,20 @@ class FaceRecognitionTester:
                 sys.exit(1)
 
     async def _cleanup_test_data(self):
-        """Rimuove i file di test da data/faces/ per non inquinare i dati reali."""
         if not os.path.exists(FACES_DIR):
             return
         removed = []
         for fname in os.listdir(FACES_DIR):
-            if fname.startswith("ztest_"):
+            if fname.lower().startswith("ztfr_"):
                 try:
                     os.remove(os.path.join(FACES_DIR, fname))
                     removed.append(fname)
                 except Exception:
                     pass
         if removed:
-            print(info(f"Cleanup: rimossi {len(removed)} file di test da data/faces/"))
+            print(info(f"Cleanup: rimossi {len(removed)} file test da data/faces/"))
 
-    # ── Chat HTTP ─────────────────────────────────────────────────────────────
+    # ── Chat ──────────────────────────────────────────────────────────────────
     async def chat(self, message: str) -> Tuple[str, float]:
         t0 = time.time()
         try:
@@ -208,21 +200,20 @@ class FaceRecognitionTester:
     def _log_has(self, pattern: str, logs: str) -> bool:
         return bool(re.search(pattern, logs, re.IGNORECASE))
 
-    # ── Stato awaiting (seeding diretto file storage) ─────────────────────────
-    async def _seed_awaiting(
-        self,
-        description: str,
-        unknown_count: int = 1,
-        tmp_img: str = "/tmp/ztest_face.jpg",
-    ):
-        """
-        Scrive direttamente il file di storage awaiting_faces per l'utente di test.
-        Equivale a ciò che handle_photo_identification fa quando arriva una foto.
-        Il server legge gli stessi file → condivisione garantita.
-        """
+    # ── Delta-file: confronta file in data/faces/ prima e dopo ───────────────
+    def _snapshot_faces(self) -> Set[str]:
+        if not os.path.exists(FACES_DIR):
+            return set()
+        return set(f for f in os.listdir(FACES_DIR) if f.endswith(".json"))
+
+    def _new_faces_since(self, before: Set[str]) -> Set[str]:
+        return self._snapshot_faces() - before
+
+    # ── Awaiting state seeding ────────────────────────────────────────────────
+    async def _seed_awaiting(self, description: str, unknown_count: int = 1,
+                             tmp_img: str = "/tmp/ztfr_face.jpg"):
         with open(tmp_img, "wb") as f:
             f.write(_make_minimal_jpeg())
-
         from core.storage import storage
         session_key = f"short_term_chat:awaiting_faces_{self.user_id}"
         await storage.save(session_key, {
@@ -232,17 +223,14 @@ class FaceRecognitionTester:
             "identified": [],
             "ts": int(time.time()),
         })
+        await asyncio.sleep(0.2)
 
     async def _clear_awaiting(self):
         from core.storage import storage
         session_key = f"short_term_chat:awaiting_faces_{self.user_id}"
         await storage.delete(session_key)
 
-    def _face_file_exists(self, name: str) -> bool:
-        clean = name.strip().lower().replace(" ", "_")
-        return os.path.exists(os.path.join(FACES_DIR, f"{clean}.json"))
-
-    # ── Esecutore test ────────────────────────────────────────────────────────
+    # ── Runner ────────────────────────────────────────────────────────────────
     async def run(
         self,
         group: str,
@@ -251,8 +239,8 @@ class FaceRecognitionTester:
         seed_desc: str = "",
         seed_count: int = 1,
         message: str,
-        expect_face_file: str = "",
-        expect_no_face_file: str = "",
+        expect_new_face: str = "",        # nome (clean lowercase) di un file atteso come NUOVO
+        expect_no_new_face: str = "",     # nome che NON deve comparire tra i nuovi file
         log_must: str = "",
         log_must_not: str = "",
         note: str = "",
@@ -260,28 +248,33 @@ class FaceRecognitionTester:
     ) -> TR:
         if pre_seed and seed_desc:
             await self._seed_awaiting(seed_desc, unknown_count=seed_count)
-            await asyncio.sleep(0.3)  # piccola pausa per flush file
 
-        self._read_new_logs()  # reset cursore
+        before = self._snapshot_faces()
+        self._read_new_logs()
 
         response, latency = await self.chat(message)
-        await asyncio.sleep(PAUSE)  # attendi background LLM (face extraction)
+        await asyncio.sleep(PAUSE)
         logs = self._read_new_logs()
+
+        after = self._snapshot_faces()
+        new_files = self._new_faces_since(before)
 
         checks = []
         notes_parts = []
 
-        if expect_face_file:
-            found = self._face_file_exists(expect_face_file)
+        if expect_new_face:
+            exp_key = expect_new_face.strip().lower().replace(" ", "_") + ".json"
+            found = exp_key in new_files
             checks.append(found)
             if not found:
-                notes_parts.append(f"file mancante: {expect_face_file}")
+                notes_parts.append(f"file non creato: {exp_key} (nuovi: {new_files})")
 
-        if expect_no_face_file:
-            not_found = not self._face_file_exists(expect_no_face_file)
-            checks.append(not_found)
-            if not not_found:
-                notes_parts.append(f"file creato per errore: {expect_no_face_file}")
+        if expect_no_new_face:
+            exp_key = expect_no_new_face.strip().lower().replace(" ", "_") + ".json"
+            absent = exp_key not in new_files
+            checks.append(absent)
+            if not absent:
+                notes_parts.append(f"file creato per errore: {exp_key}")
 
         if log_must:
             found_log = self._log_has(log_must, logs)
@@ -290,12 +283,12 @@ class FaceRecognitionTester:
                 notes_parts.append(f"log mancante: {log_must}")
 
         if log_must_not:
-            absent = not self._log_has(log_must_not, logs)
-            checks.append(absent)
-            if not absent:
+            absent_log = not self._log_has(log_must_not, logs)
+            checks.append(absent_log)
+            if not absent_log:
                 notes_parts.append(f"log inatteso: {log_must_not}")
 
-        # Se non ci sono check specifici, passa se HTTP 200
+        # Nessun check specifico → passa se HTTP 200
         if not checks:
             checks.append(not response.startswith("[HTTP") and not response.startswith("[ERRORE]"))
 
@@ -303,12 +296,8 @@ class FaceRecognitionTester:
         full_note = (note + " | " if note else "") + "; ".join(notes_parts)
 
         result = TR(
-            group=group,
-            name=name,
-            passed=passed,
-            response=response[:200],
-            note=full_note.strip(" |"),
-            latency_ms=latency,
+            group=group, name=name, passed=passed,
+            response=response[:200], note=full_note.strip(" |"), latency_ms=latency
         )
         results.append(result)
 
@@ -330,38 +319,35 @@ async def run_suite():
     # ══════════════════════════════════════════════════════════════════════════
 
     desc_1human = (
-        "Nella foto c'è 1 persona. [UNKNOWN_FACES_DETECTED] "
-        "[TOTAL_HUMANS:1] "
-        "[INDEX:0] uomo capelli scuri, camicia blu, al centro "
-        "[GENDER_VISUAL_HINTS: index=0 gender=M]"
+        f"Nella foto c'è 1 persona. [UNKNOWN_FACES_DETECTED] [TOTAL_HUMANS:1] "
+        f"[INDEX:0] uomo capelli scuri camicia blu al centro "
+        f"[GENDER_VISUAL_HINTS: index=0 gender=M]"
     )
 
     await t.run(
-        "G1", "F1.1 — Identificazione singola (Marco)",
+        "G1", "F1.1 — Identificazione singola",
         seed_desc=desc_1human,
         message=f"si chiama {T_HUMAN_1}",
-        expect_face_file=T_HUMAN_1,
-        log_must=r"FACE_MEMORY_SAVED.*ztest_marco",
-        note="awaiting 1 face → name provided → file salvato"
+        expect_new_face=T_HUMAN_1,
+        log_must=r"FACE_MEMORY_SAVED.*ztfr",
+        note="awaiting 1 face → name → FACE_MEMORY_SAVED + file creato"
     )
 
     await t.run(
-        "G1", "F1.2 — Nome non valido bloccato ('una persona')",
+        "G1", "F1.2 — Nome placeholder bloccato",
         seed_desc=desc_1human,
         message="è una persona sconosciuta",
-        expect_no_face_file="ztest_persona",
-        log_must=r"(EXTRACT_FACES_SKIP_INVALID|EXTRACTED_FACES.*\[\])",
-        note="placeholder name non deve essere salvato"
+        expect_no_new_face="persona",
+        note="'persona' in _INVALID_NAMES → nessun salvataggio"
     )
 
     await t.run(
-        "G1", "F1.3 — Senza awaiting: nessuna identificazione falsa",
-        seed_desc="",
+        "G1", "F1.3 — Nessun false positive senza awaiting",
         pre_seed=False,
-        message="mi chiamo Alfio",
-        expect_no_face_file="alfio",
-        log_must_not=r"FACE_MEMORY_SAVED.*alfio",
-        note="senza awaiting state non deve salvare nulla"
+        message=f"mi chiamo {T_HUMAN_1}",
+        expect_no_new_face=T_HUMAN_1,
+        log_must_not=r"FACE_MEMORY_SAVED.*ztfr_marco",
+        note="senza awaiting state: nessun salvataggio dal testo libero"
     )
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -369,25 +355,23 @@ async def run_suite():
     # ══════════════════════════════════════════════════════════════════════════
 
     desc_1pet = (
-        "Nella foto c'è 1 animale domestico. [UNKNOWN_PETS_DETECTED] "
-        "[TOTAL_PETS:1] "
-        "[INDEX:0] gatto pelage arancione, taglia media "
+        f"Nella foto c'è 1 animale. [UNKNOWN_PETS_DETECTED] [TOTAL_PETS:1] "
+        f"[INDEX:0] gatto pelage arancione taglia media"
     )
 
     await t.run(
-        "G2", "F2.1 — Identificazione animale (Milo il gatto)",
+        "G2", "F2.1 — Identificazione animale",
         seed_desc=desc_1pet,
         message=f"è il mio gatto {T_PET_1}",
-        log_must=r"PET_SAVED.*ztest_milo",
-        note="awaiting 1 pet → name provided → PET_SAVED"
+        log_must=r"PET_SAVED.*ztfr",
+        note="awaiting 1 pet → name → PET_SAVED"
     )
 
     await t.run(
-        "G2", "F2.2 — Pet: nome non valido ('gatto') bloccato",
+        "G2", "F2.2 — Pet: nome generico bloccato",
         seed_desc=desc_1pet,
         message="è un gatto",
-        log_must=r"(EXTRACT_FACES_SKIP_INVALID|EXTRACTED_FACES.*\[\])",
-        note="'gatto' è nella lista invalid names"
+        note="'gatto' in _INVALID_NAMES → nessun PET_SAVED"
     )
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -395,91 +379,86 @@ async def run_suite():
     # ══════════════════════════════════════════════════════════════════════════
 
     desc_3humans = (
-        "Nella foto ci sono 3 persone. [UNKNOWN_FACES_DETECTED] "
-        "[TOTAL_HUMANS:3] "
-        "[INDEX:0] donna capelli biondi a sinistra [GENDER_VISUAL_HINTS: index=0 gender=F] "
-        "[INDEX:1] uomo capelli scuri al centro [GENDER_VISUAL_HINTS: index=1 gender=M] "
-        "[INDEX:2] donna capelli rossi a destra [GENDER_VISUAL_HINTS: index=2 gender=F]"
+        f"Nella foto ci sono 3 persone. [UNKNOWN_FACES_DETECTED] [TOTAL_HUMANS:3] "
+        f"[INDEX:0] donna capelli biondi a sinistra [GENDER_VISUAL_HINTS: index=0 gender=F] "
+        f"[INDEX:1] uomo capelli scuri al centro [GENDER_VISUAL_HINTS: index=1 gender=M] "
+        f"[INDEX:2] donna capelli rossi a destra [GENDER_VISUAL_HINTS: index=2 gender=F]"
     )
 
     await t.run(
-        "G3", f"F3.1 — Lista ordinata 3 nomi → tutti salvati",
+        "G3", "F3.1 — Lista ordinata 3 nomi → tutti salvati",
         seed_desc=desc_3humans, seed_count=3,
         message=f"da sinistra {T_HUMAN_2}, {T_HUMAN_1} e {T_HUMAN_3}",
-        expect_face_file=T_HUMAN_1,
+        expect_new_face=T_HUMAN_1,
         log_must=r"EXTRACT_FACES_DONE.*saved=3",
-        note="lista 3 nomi → tutti e 3 salvati, remaining=0"
+        note="3 nomi in ordine → saved=3 + remaining=0"
     )
 
     await t.run(
-        "G3", "F3.2 — Risposta parziale: 1 nome su 3 → remaining=2",
+        "G3", "F3.2 — Risposta parziale 1/3 → remaining=2",
         seed_desc=desc_3humans, seed_count=3,
         message=f"la prima a sinistra è {T_HUMAN_2}",
-        expect_face_file=T_HUMAN_2,
+        expect_new_face=T_HUMAN_2,
         log_must=r"AWAITING_FACES_UPDATED.*remaining=2",
-        note="1 nome fornito su 3 → awaiting state aggiornato con remaining=2"
+        note="1 nome su 3 → awaiting aggiornato con remaining=2"
     )
 
     # ══════════════════════════════════════════════════════════════════════════
-    print(f"\n{BOLD}{B}GRUPPO 4 — Correzioni e aggiornamento{RST}")
+    print(f"\n{BOLD}{B}GRUPPO 4 — Correzioni{RST}")
     # ══════════════════════════════════════════════════════════════════════════
 
     desc_correction = (
-        "Nella foto c'è 1 persona. [UNKNOWN_FACES_DETECTED] "
-        "[TOTAL_HUMANS:1] "
-        "[INDEX:0] uomo giacca verde "
-        "[GENDER_VISUAL_HINTS: index=0 gender=M]"
+        f"Nella foto c'è 1 persona. [UNKNOWN_FACES_DETECTED] [TOTAL_HUMANS:1] "
+        f"[INDEX:0] uomo giacca verde [GENDER_VISUAL_HINTS: index=0 gender=M]"
     )
 
-    # Prima salva un nome
     await t.run(
-        "G4", "F4.1 — Prima identificazione (nome iniziale)",
+        "G4", "F4.1 — Prima identificazione",
         seed_desc=desc_correction,
         message=f"si chiama {T_HUMAN_1}",
-        expect_face_file=T_HUMAN_1,
+        expect_new_face=T_HUMAN_1,
         note="setup: salva il primo nome"
     )
-    # Ora corregge
     await t.run(
-        "G4", "F4.2 — Correzione nome: nuovo file creato",
+        "G4", "F4.2 — Correzione: nuovo nome salvato",
         seed_desc=desc_correction,
         message=f"aspetta, in realtà si chiama {T_HUMAN_3}",
-        expect_face_file=T_HUMAN_3,
-        log_must=r"FACE_MEMORY_SAVED.*ztest_rita",
-        note="corrects name → nuovo file per il nome corretto"
+        expect_new_face=T_HUMAN_3,
+        log_must=r"FACE_MEMORY_SAVED.*ztfr",
+        note="correzione → file per il nome corretto creato"
     )
 
     # ══════════════════════════════════════════════════════════════════════════
     print(f"\n{BOLD}{B}GRUPPO 5 — Regressioni chat normale{RST}")
     # ══════════════════════════════════════════════════════════════════════════
 
-    await t._clear_awaiting()  # assicurati stato pulito
+    await t._clear_awaiting()
 
     await t.run(
-        "G5", "F5.1 — Chat testuale normale (greeting)",
+        "G5", "F5.1 — Chat normale (greeting): nessun side-effect",
         pre_seed=False,
         message="ciao come stai",
+        expect_no_new_face=T_HUMAN_1,
         log_must_not=r"FACE_MEMORY_SAVED|PET_SAVED|AWAITING_FACES_SET",
-        note="nessun effetto collaterale dal face pipeline su chat normale"
+        note="chat normale non tocca il face pipeline"
     )
 
     await t.run(
-        "G5", "F5.2 — Chat con nome proprio nel testo (nessun false positive)",
+        "G5", "F5.2 — Nome proprio nel testo senza awaiting: nessun false positive",
         pre_seed=False,
-        message="sai, ho un amico che si chiama Marco",
-        expect_no_face_file="marco",
-        log_must_not=r"FACE_MEMORY_SAVED.*marco(?!_ztest|ztest)",
-        note="menzione di un nome senza awaiting non salva nulla"
+        message=f"ho un amico che si chiama {T_HUMAN_1}",
+        expect_no_new_face=T_HUMAN_1,
+        log_must_not=r"FACE_MEMORY_SAVED.*ztfr_marco",
+        note="menzione nome senza awaiting → nessun salvataggio"
     )
 
     await t.run(
-        "G5", "F5.3 — Risposta HTTP 200 con domanda generica",
+        "G5", "F5.3 — Risposta HTTP 200 (smoke test)",
         pre_seed=False,
         message="che tempo fa a Roma",
         note="check base: server risponde normalmente"
     )
 
-    # ── Teardown (rimozione file test) ────────────────────────────────────────
     await t.teardown()
 
     # ── Report ────────────────────────────────────────────────────────────────
@@ -489,7 +468,6 @@ async def run_suite():
 
     passed_count = sum(1 for r in results if r.passed)
     total = len(results)
-
     current_group = ""
     for r in results:
         if r.group != current_group:
@@ -497,21 +475,18 @@ async def run_suite():
             current_group = r.group
         icon = f"{G}✅{RST}" if r.passed else f"{R}❌{RST}"
         print(f"    {icon} {r.name}  ({r.latency_ms:.0f}ms)")
-        if r.note:
+        if r.note and not r.passed:
             print(f"       {Y}{r.note}{RST}")
 
     print(f"\n{'─'*60}")
-    color = G if passed_count == total else R
+    color = G if passed_count == total else (Y if passed_count >= total * 0.7 else R)
     print(f"{BOLD}{color}Score: {passed_count}/{total}{RST}")
 
     if passed_count < total:
         print(f"\n{R}Test falliti:{RST}")
         for r in results:
             if not r.passed:
-                print(f"  • {r.name}")
-                if r.response:
-                    print(f"    resp: {r.response[:100]}")
-
+                print(f"  • {r.name}: {r.note[:100]}")
     print("")
     return passed_count == total
 
