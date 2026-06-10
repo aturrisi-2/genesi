@@ -1637,7 +1637,11 @@ class Proactor:
             "- pets/children: includi SEMPRE tutti quelli esistenti nel profilo per non perderli\n"
             "- Per children/pets NUOVO NOME: deduci il genere dai nomi italiani (es. Ennio=M, Zoe=F, Rita=F)\n"
             "- Se non sei sicuro del genere, usa '?'\n"
-            "- traits: SOLO aggettivi in prima persona, MAI nomi propri\n\n"
+            "- traits: SOLO aggettivi in prima persona, MAI nomi propri\n"
+            "- children/spouse: SOLO nomi propri di battesimo. MAI descrittori relazionali come "
+            "'mio figlio', 'mia figlia', 'mia moglie', 'mio marito'. "
+            "Se l'utente dice 'mio figlio si chiama Ennio' → name='Ennio'. "
+            "Se l'utente dice 'ho due figli, Ennio e Zoe' → [{\"name\":\"Ennio\"},{\"name\":\"Zoe\"}].\n\n"
             "REPLY: Una risposta naturale, come un amico. OLTRE a recepire la novità, SE il messaggio dell'utente contiene anche altre domande, osservazioni o battute (es. 'e questa chi è?'), DEVI assolutamente rispondere anche a quelle! MAI usare termini tecnici come 'salvato/rimosso/aggiornato'.\n\n"
             "ESEMPI:\n"
             "- \"non sono architetto, sono medico\" -> {\"corrections\":[{\"field\":\"profession\",\"action\":\"update\",\"new_value\":\"medico\",\"old_value\":\"architetto\"}],\"reply\":\"Ah, medico!\"}\n"
@@ -1762,20 +1766,28 @@ class Proactor:
                 new_value = sanitized
 
             if field == "children" and action == "update" and isinstance(new_value, list):
+                from core.name_utils import sanitize_profile_name
                 sanitized = []
                 for item in new_value:
                     if isinstance(item, dict):
                         if "name" in item:
-                            child = {"name": item["name"]}
+                            clean_name = sanitize_profile_name(item["name"])
+                            if not clean_name:
+                                logger.info("CHILDREN_SANITIZE_SKIP raw=%s", item["name"])
+                                continue
+                            child = {"name": clean_name}
                             if "gender" in item:
                                 child["gender"] = item["gender"]
                             else:
-                                # Inferisci genere dal nome se possibile
-                                child["gender"] = _infer_gender_from_name(item["name"])
+                                child["gender"] = _infer_gender_from_name(clean_name)
                             sanitized.append(child)
                     elif isinstance(item, str) and item.strip():
-                        child = {"name": item.strip(), "gender": _infer_gender_from_name(item.strip())}
-                        sanitized.append(child)
+                        clean_name = sanitize_profile_name(item.strip())
+                        if clean_name:
+                            child = {"name": clean_name, "gender": _infer_gender_from_name(clean_name)}
+                            sanitized.append(child)
+                        else:
+                            logger.info("CHILDREN_SANITIZE_SKIP raw=%s", item)
                 new_value = sanitized
 
             if action == "update":
@@ -1884,6 +1896,14 @@ class Proactor:
                 if _profile_city and _new_value.lower().strip() == _profile_city:
                     logger.warning("MEMORY_CORRECTION_BLOCKED field=name new_value=%s matches city=%s", _new_value, _profile_city)
                     continue
+            # Guard: spouse deve essere un nome proprio, mai un descrittore relazionale
+            if _field == "spouse" and isinstance(_new_value, str) and _action in ("update", "set"):
+                from core.name_utils import sanitize_profile_name
+                _clean_spouse = sanitize_profile_name(_new_value)
+                if not _clean_spouse:
+                    logger.warning("MEMORY_CORRECTION_BLOCKED field=spouse new_value=%s reason=relational_or_invalid", _new_value)
+                    continue
+                _new_value = _clean_spouse
             _apply_list_correction(_field, _action, _new_value, _old_value)
             log("MEMORY_CORRECTION_APPLIED", user_id=user_id, field=_field, action=_action, new_value=_new_value)
             # Pulizia auto: se la professione è aggiornata, rimuovila da traits
@@ -3784,12 +3804,15 @@ Messaggio: "{message}" """
         except Exception:
             pass
 
+        from core.name_utils import build_relational_map as _build_rel_map
+        _relational_map = _build_rel_map(brain_state.get("profile", {}))
         gpt_prompt = self._build_relational_gpt_prompt(
             conversation_ctx, latent_synopsis, message, user_id,
             calendar_info=calendar_info, tz=user_tz, user_city=user_city,
             emotional_trend=emotional_trend,
             emotion_data=brain_state.get("emotion", {}),
             cal_context=_cal_context, primo_oggi=_primo_oggi,
+            relational_map=_relational_map,
         )
         
         # Add system message to messages list
@@ -4163,7 +4186,7 @@ REGOLE TASSATIVE:
         else:
             return "Sera tardi — sii breve e caldo. Zero domande proattive, l'utente vuole staccare."
 
-    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str, user_id: str = None, calendar_info: str = "", tz: str = "Europe/Rome", user_city: str = "Italia", emotional_trend: str = "", emotion_data: dict = None, cal_context: str = "", primo_oggi: bool = False) -> str:
+    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str, user_id: str = None, calendar_info: str = "", tz: str = "Europe/Rome", user_city: str = "Italia", emotional_trend: str = "", emotion_data: dict = None, cal_context: str = "", primo_oggi: bool = False, relational_map: str = "") -> str:
         """Prompt GPT per relational router. Conversazione continua, comportamento umano."""
         user_boundaries = self._detect_user_boundaries(conversation_context, message)
         user_name = conversation_context.split("NOME: ")[1].split("\n")[0] if "NOME: " in conversation_context else "l'utente"
@@ -4322,7 +4345,7 @@ DETTAGLI DI STILE:
 
 DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')} ({time_ctx})
 {conversation_context}
-
+{f"{relational_map}" if relational_map else ""}
 STATO LATENTE: {latent_synopsis}
 CALENDARIO: {calendar_info}
 

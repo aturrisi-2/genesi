@@ -206,47 +206,62 @@ class CognitiveMemoryEngine:
                 logger.info("STORAGE_DIRECT_WRITE user=%s profession=%s", user_id, new_profession)
 
         if spouse_match:
-            extracted_spouse = spouse_match.group(1)
-            extracted_profile_data["spouse"] = extracted_spouse
-            persist = True
-            memory_type = "profile"
-            field = "spouse"
-            value = extracted_spouse
-            logger.info("COGNITIVE_SPOUSE_EXTRACT value=%s", value)
-            _structured_log("COGNITIVE_SPOUSE_EXTRACT", value=value)
-            
-            # FIX DEFINITIVO: Scrittura diretta su storage
-            profile = await storage.load(f"profile:{user_id}", default={}) or {}
-            profile["spouse"] = extracted_spouse
-            await storage.save(f"profile:{user_id}", profile)
-            logger.info("STORAGE_DIRECT_WRITE user=%s spouse=%s", user_id, extracted_spouse)
+            from core.name_utils import sanitize_profile_name
+            extracted_spouse = sanitize_profile_name(spouse_match.group(1))
+            if extracted_spouse:
+                extracted_profile_data["spouse"] = extracted_spouse
+                persist = True
+                memory_type = "profile"
+                field = "spouse"
+                value = extracted_spouse
+                logger.info("COGNITIVE_SPOUSE_EXTRACT value=%s", value)
+                _structured_log("COGNITIVE_SPOUSE_EXTRACT", value=value)
+                profile = await storage.load(f"profile:{user_id}", default={}) or {}
+                profile["spouse"] = extracted_spouse
+                await storage.save(f"profile:{user_id}", profile)
+                logger.info("STORAGE_DIRECT_WRITE user=%s spouse=%s", user_id, extracted_spouse)
+            else:
+                logger.info("COGNITIVE_SPOUSE_SKIP raw=%s reason=relational_descriptor", spouse_match.group(1))
 
         if children_match:
-            extracted_profile_data["children"] = [{"name": children_match.group(1)}, {"name": children_match.group(2)}]
-            persist = True
-            memory_type = "profile"
-            field = "children"
-            value = [{"name": children_match.group(1)}, {"name": children_match.group(2)}]
-            logger.info("COGNITIVE_CHILDREN_EXTRACT value=%s", value)
-            _structured_log("COGNITIVE_CHILDREN_EXTRACT", value=str(value))
+            from core.name_utils import sanitize_profile_name
+            n1 = sanitize_profile_name(children_match.group(1))
+            n2 = sanitize_profile_name(children_match.group(2))
+            valid = [{"name": n} for n in [n1, n2] if n]
+            if valid:
+                extracted_profile_data["children"] = valid
+                persist = True
+                memory_type = "profile"
+                field = "children"
+                value = valid
+                logger.info("COGNITIVE_CHILDREN_EXTRACT value=%s", value)
+                _structured_log("COGNITIVE_CHILDREN_EXTRACT", value=str(value))
 
         if son_match:
-            name = son_match.group(1).strip().title()
-            persist = True
-            memory_type = "profile"
-            field = "children"
-            value = {"name": name}
-            logger.info("COGNITIVE_CHILDREN_EXTRACT son_name=%s", name)
-            _structured_log("COGNITIVE_CHILDREN_EXTRACT", son_name=name)
+            from core.name_utils import sanitize_profile_name
+            name = sanitize_profile_name(son_match.group(1))
+            if name:
+                persist = True
+                memory_type = "profile"
+                field = "children"
+                value = {"name": name, "gender": "M"}
+                logger.info("COGNITIVE_CHILDREN_EXTRACT son_name=%s", name)
+                _structured_log("COGNITIVE_CHILDREN_EXTRACT", son_name=name)
+            else:
+                logger.info("COGNITIVE_CHILDREN_SKIP raw=%s reason=relational_descriptor", son_match.group(1))
 
         if daughter_match:
-            name = daughter_match.group(1).strip().title()
-            persist = True
-            memory_type = "profile"
-            field = "children"
-            value = {"name": name}
-            logger.info("COGNITIVE_CHILDREN_EXTRACT daughter_name=%s", name)
-            _structured_log("COGNITIVE_CHILDREN_EXTRACT", daughter_name=name)
+            from core.name_utils import sanitize_profile_name
+            name = sanitize_profile_name(daughter_match.group(1))
+            if name:
+                persist = True
+                memory_type = "profile"
+                field = "children"
+                value = {"name": name, "gender": "F"}
+                logger.info("COGNITIVE_CHILDREN_EXTRACT daughter_name=%s", name)
+                _structured_log("COGNITIVE_CHILDREN_EXTRACT", daughter_name=name)
+            else:
+                logger.info("COGNITIVE_CHILDREN_SKIP raw=%s reason=relational_descriptor", daughter_match.group(1))
 
         if dog_match:
             extracted_profile_data["pets"] = {"type": "dog", "name": dog_match.group(1)}

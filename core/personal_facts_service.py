@@ -49,6 +49,12 @@ NON ESTRARRE:
 - Domande generiche su meteo, notizie, calcoli, orari pubblici
 - Frasi di saluto o conversazione generica
 
+REGOLA NOMI: Nei testi estratti usa SEMPRE il nome proprio della persona, mai il termine relazionale.
+- CORRETTO: "La figlia dell'utente, Zoe, ha frequentato una scuola di danza"
+- SBAGLIATO: "La figlia dell'utente ha frequentato una scuola di danza" (se il nome è noto)
+- Se il nome non è noto, usa il ruolo: "Il figlio dell'utente studia medicina"
+- MAI usare "mia figlia", "mio figlio", "mia moglie" nel campo "text" — scrivi sempre in terza persona
+
 Per ogni fatto estratto:
 - "text": il fatto in terza persona ("L'utente cena di solito alle 20:00" / "L'utente tende ad essere perfezionista")
 - "category": una di: ["famiglia", "interessi", "abitudini", "luoghi", "conversazione", "valori", "sfide", "personalità", "obiettivi", "relazioni", "altro"]
