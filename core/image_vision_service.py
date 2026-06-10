@@ -95,7 +95,8 @@ async def describe_image(path: str) -> str:
     system_prompt = (
         "Sei l'occhio di un'AI conversazionale. Analizza l'immagine e restituisci un JSON rigoroso con le seguenti chiavi: "
         "'description': una descrizione ESTREMAMENTE CONCISA e DISCORSIVA (massimo 1 o 2 frasi brevi). VIETATO fare lunghi 'spiegoni'. "
-        "Formato richiesto: {\"description\": \"...\", \"unknown_faces_detected\": false, \"unknown_pets_detected\": false}. Nessun altro testo."
+        "'gender_hints': array di oggetti con 'position' (es. 'sinistra', 'centro', 'destra' o posizioni numeriche 0,1,2...) e 'gender' (M o F dedotto dall'aspetto visivo) per ogni persona umana riconoscibile. Es: [{\"position\": \"sinistra\", \"gender\": \"M\"}, {\"position\": \"centro\", \"gender\": \"F\"}]. "
+        "Formato richiesto: {\"description\": \"...\", \"gender_hints\": [...], \"unknown_faces_detected\": false, \"unknown_pets_detected\": false}. Nessun altro testo."
         "ATTENZIONE: Se ricevi dei riferimenti sui volti/animali noti, DEVI TASSATIVAMENTE elencare TUTTI i nomi forniti citando esattamente la loro POSIZIONE nella descrizione (es. 'Vedo Rita a sinistra e il cane Fido al centro'). "
         "'unknown_faces_detected': booleano (true/false). Regola assoluta: se nell'immagine è presente ALMENO UNA figura umana o volto che non corrisponde ESATTAMENTE a uno dei 'Riferimenti volto noto' forniti, imposta a 'true'. "
         "'unknown_pets_detected': booleano (true/false). Regola assoluta: se nell'immagine è presente un animale domestico (cane, gatto, uccello, ecc.) di cui NON è stato fornito il nome, imposta a 'true'. "
@@ -206,8 +207,18 @@ async def describe_image(path: str) -> str:
             if is_unknown_pets and str(is_unknown_pets).lower() in ("true", "1", "yes", "si", "sì"):
                 description += " [UNKNOWN_PETS_DETECTED]"
             
-            log("IMAGE_VISION_OK", provider=provider, chars=len(description))
-            return description
+            # Estrai gender_hints se presenti
+            gender_hints = parsed.get("gender_hints", [])
+            if not isinstance(gender_hints, list):
+                gender_hints = []
+            
+            log("IMAGE_VISION_OK", provider=provider, chars=len(description), gender_hints_count=len(gender_hints))
+            return {
+                "description": description,
+                "gender_hints": gender_hints,
+                "unknown_faces": is_unknown_faces and str(is_unknown_faces).lower() in ("true", "1", "yes", "si", "sì"),
+                "unknown_pets": is_unknown_pets and str(is_unknown_pets).lower() in ("true", "1", "yes", "si", "sì"),
+            }
         except Exception as e:
             logger.warning("IMAGE_VISION_PROVIDER_FAILED provider=%s error=%s", provider, str(e))
             log("IMAGE_VISION_PROVIDER_FAILED", provider=provider, error=str(e)[:120])

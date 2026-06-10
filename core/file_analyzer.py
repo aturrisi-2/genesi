@@ -198,15 +198,35 @@ async def _handle_image(path: str, filename: str) -> dict:
         logger.warning("IMAGE_OCR_FAILED error=%s", str(e))
 
     # Vision description
+    vision_result = None
+    gender_hints = []
     try:
         from core.image_vision_service import describe_image
-        description = await describe_image(path)
+        vision_result = await describe_image(path)
+        if isinstance(vision_result, dict):
+            description = vision_result.get("description", "")
+            gender_hints = vision_result.get("gender_hints", [])
+        else:
+            # Backward compatibility: if it returns a string
+            description = str(vision_result)
+            gender_hints = []
     except Exception as e:
         logger.warning("IMAGE_VISION_FAILED error=%s", str(e))
+        description = ""
+        gender_hints = []
 
     # Combina OCR + vision: entrambi nel contenuto per massima ricchezza
     ocr_clean = ocr_text.strip() if ocr_text else ""
     desc_clean = description.strip() if description else ""
+    
+    # Aggiungi i gender_hints alla descrizione se presenti
+    if gender_hints and isinstance(gender_hints, list):
+        hints_text = " | ".join([
+            f"{hint.get('gender', '?')} a {hint.get('position', 'posizione ignota')}"
+            for hint in gender_hints if isinstance(hint, dict)
+        ])
+        if hints_text:
+            desc_clean = f"{desc_clean} [GENDER_VISUAL_HINTS: {hints_text}]"
 
     if ocr_clean and len(ocr_clean) > 20 and desc_clean:
         # Immagine con testo E descrizione visiva — massima qualità
@@ -227,6 +247,7 @@ async def _handle_image(path: str, filename: str) -> dict:
             "filename": filename,
             "ocr_text": ocr_clean[:500],
             "description": desc_clean[:500],
+            "gender_hints": gender_hints,
             "chars": len(content),
         }
     }

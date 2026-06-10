@@ -11,10 +11,16 @@ def _ensure_dir():
     if not os.path.exists(FACES_DIR):
         os.makedirs(FACES_DIR, exist_ok=True)
 
-async def save_known_face(name: str, image_path: str, description_in_image: str):
+async def save_known_face(name: str, image_path: str, description_in_image: str, gender: str = "?"):
     """
     Salva il riferimento di un volto associandolo all'immagine originale
     e alla descrizione visiva (es. "l'uomo a sinistra con il cappello").
+    
+    Args:
+        name: Nome del volto
+        image_path: Percorso all'immagine
+        description_in_image: Descrizione del volto (posizione, caratteristiche)
+        gender: Genere dedotto ('M', 'F', o '?')
     """
     _ensure_dir()
     clean_name = name.strip().lower().replace(" ", "_")
@@ -37,10 +43,14 @@ async def save_known_face(name: str, image_path: str, description_in_image: str)
         logger.error("Error copying face image: %s", e)
         return
 
+    # Normalizza genere
+    gender_norm = str(gender).upper() if gender and str(gender).upper() in ("M", "F") else "?"
+    
     data = {
         "name": name.strip(),
         "image_path": new_img_path,
         "description_in_image": description_in_image,
+        "gender": gender_norm,
         "ts": int(time.time())
     }
     
@@ -48,7 +58,7 @@ async def save_known_face(name: str, image_path: str, description_in_image: str)
     try:
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        logger.info("FACE_MEMORY_SAVED name=%s", name)
+        logger.info("FACE_MEMORY_SAVED name=%s gender=%s", name, gender_norm)
         
         # Calcola e salva embedding biometrico
         from core.biometric_service import compute_and_save_embeddings
@@ -110,9 +120,11 @@ async def try_extract_faces_from_text(text: str, tmp_img: str, desc_img: str, se
         f"Testo dell'utente: {text}\n"
         "Estrai le identità dei soggetti (nomi propri di persone o animali) e deduci il loro indice di posizione ESATTO da sinistra a destra nella foto (0 è il primo a sinistra, 1 il secondo, ecc.) basandoti rigorosamente sull'ordine o sulle posizioni fornite dall'utente.\n"
         "Aggiungi una chiave 'type' che vale 'human' o 'pet'.\n"
-        "Formatta la risposta ESCLUSIVAMENTE come un array JSON di dizionari, con chiavi 'name', 'position_index', e 'type'.\n"
+        "Aggiungi una chiave 'gender' che vale 'M', 'F', o '?' (dedotto dalla descrizione visiva o dal nome).\n"
+        "Se nella descrizione compare '[GENDER_VISUAL_HINTS: ...]', ESTRAI i generi visivi dalla foto e applicali alla posizione corrispondere (es. 'M a sinistra' → il nome della persona a sinistra avrà gender: M).\n"
+        "Formatta la risposta ESCLUSIVAMENTE come un array JSON di dizionari, con chiavi 'name', 'position_index', 'type', e 'gender'.\n"
         "Se l'utente non ha fornito nomi o sta parlando di tutt'altro, ritorna [].\n"
-        "Esempio valido: [{\"name\": \"Mariella\", \"position_index\": 0, \"type\": \"human\"}, {\"name\": \"Fido\", \"position_index\": 1, \"type\": \"pet\"}]"
+        "Esempio valido: [{\"name\": \"Mariella\", \"position_index\": 0, \"type\": \"human\", \"gender\": \"F\"}, {\"name\": \"Ennio\", \"position_index\": 1, \"type\": \"human\", \"gender\": \"M\"}, {\"name\": \"Fido\", \"position_index\": 2, \"type\": \"pet\", \"gender\": \"M\"}]"
     )
     try:
         raw_ext = await llm_service._call_model("openai/gpt-4o-mini", extract_prompt, text, user_id=session_uid, route="memory")
@@ -131,6 +143,7 @@ async def try_extract_faces_from_text(text: str, tmp_img: str, desc_img: str, se
                 if pos_idx is None:
                     pos_idx = 0
                 subject_type = face_data.get("type", "human")
+                gender = face_data.get("gender", "?")
                 
                 if name and pos_idx is not None:
                     f_desc = f"[INDEX:{pos_idx}]"
@@ -138,12 +151,12 @@ async def try_extract_faces_from_text(text: str, tmp_img: str, desc_img: str, se
                         try:
                             from core.biometric_pets_service import compute_and_save_pet_embeddings
                             res = await compute_and_save_pet_embeddings(name, tmp_img, f_desc)
-                            logger.info("PET_SAVED FROM TEXT name=%s index=%s res=%s", name, pos_idx, res)
+                            logger.info("PET_SAVED FROM TEXT name=%s index=%s gender=%s res=%s", name, pos_idx, gender, res)
                         except Exception as ep:
                             logger.error("Error saving pet embedding: %s", ep)
                     else:
-                        await save_known_face(name, tmp_img, f_desc)
-                        logger.info("FACE_SAVED FROM TEXT name=%s index=%s", name, pos_idx)
+                        await save_known_face(name, tmp_img, f_desc, gender=gender)
+                        logger.info("FACE_SAVED FROM TEXT name=%s index=%s gender=%s", name, pos_idx, gender)
             return True
     except Exception as e:
         logger.warning("Error parsing faces names: %s", e)
