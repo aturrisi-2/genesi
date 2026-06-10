@@ -19,7 +19,6 @@ import httpx
 from core.storage import storage
 
 logger = logging.getLogger(__name__)
-from core.prompt_template import build_extra_rules, LATE_WAKEUP_PROMPT
 
 # ── Credenziali Meta WhatsApp Business Cloud API ────────────────────────────
 WA_ACCESS_TOKEN    = os.getenv("WA_ACCESS_TOKEN", "")
@@ -604,7 +603,7 @@ async def _register(email: str, password: str) -> bool:
 
 # ── Genesi API calls ─────────────────────────────────────────────────────────
 
-async def _chat(token: str, message: str, city: str = "", platform: str = "telegram") -> str:
+async def _chat(token: str, message: str, city: str = "", platform: str = "whatsapp") -> str:
     if city and _WEATHER_RE.search(message) and city.lower() not in message.lower():
         message = f"{message} (sono a {city})"
     async with httpx.AsyncClient(timeout=60) as client:
@@ -1025,6 +1024,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
 
             # Reply a Genesi
             reply_to = msg.get("context", {})
+            replied_from = reply_to.get("from", "")
             if WA_PHONE_NUMBER and WA_PHONE_NUMBER in replied_from:
                 _reply_to_genesi = True
 
@@ -1063,14 +1063,16 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             if is_group and chat_id and first_name:
                 try:
                     from core.telegram_group_memory import build_group_context, stable_hash
+                    group_ctx = await build_group_context(chat_id, stable_hash(wa_id), first_name, current_message=message)
+                    msg_with_quote = message
+                    if _reply_to_genesi:
+                        msg_with_quote = f"[Stai rispondendo a un tuo messaggio precedente di Genesi]\n{message}"
                     
-                    is_family_group = (chat_id == _FAMILY_GROUP_ID)
-                    extra_rules = build_extra_rules(first_name, chat_id, message, is_family_group)
                     late_prompt = ""
                     if session.pop("late_wakeup", False):
                         await storage.save(_session_key(wa_id), session)
-                        late_prompt = LATE_WAKEUP_PROMPT
-
+                        late_prompt = "\n[SISTEMA: Tu hai già dato il buongiorno al gruppo stamattina. Questo utente si è svegliato (o ha scritto) tardi e ti sta salutando adesso. Rispondi con affetto e, se opportuno, con una battuta scherzosa sul fatto che è un po' in ritardo, dandogli un caloroso benvenuto nella giornata! Ignora la regola del 'rispondi in modo estremamente conciso' per questa interazione.]"
+                        
                     photo_rules = ""
                     if "[Contenuto immagine:" in message:
                         photo_rules += "Evita spiegoni descrittivi dell'immagine: fai un commento discorsivo e conciso. "
@@ -1084,12 +1086,16 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                         domande_rule = ""
 
                     message = (
-                        f"{late_prompt}"
+                        f"{msg_with_quote}\n\n"
+                        f"[GRUPPO FAMILIARE: scrive {first_name}. "
+                        f"REGOLE ASSOLUTE: risposta misurata ma loquace e di compagnia (3-4 righe max), tono naturale da familiare (non da assistente), "
+                        f"zero intro elaborati, {domande_rule}zero 'che bello!'. "
+                        f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente ai festeggiamenti rivolti a quel familiare. "
+                        f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
+                        f"a meno che {first_name} non li citi in questo messaggio. "
                         f"{photo_rules}"
-                        f"{extra_rules}"
-                        f"{domande_rule}"
+                        f"Rispondi SOLO a quello che viene detto adesso.]{late_prompt}\n"
                         f"{group_ctx}"
-                        f"{message}"
                     )
                 except Exception:
                     pass
