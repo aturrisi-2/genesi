@@ -279,7 +279,8 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
 
         # Identity extractor: gira DOPO simple_chat_handler per evitare race condition
         # con _handle_memory_correction (che salva il profilo dentro simple_chat_handler).
-        if request.platform != "telegram_group":
+        # Salta per GRUPPI (evita di popolare profilo con dati condivisi di gruppo)
+        if request.platform not in ("telegram_group", "whatsapp_group"):
             _asyncio.create_task(_extract_and_save_identity())
 
         # Defensive normalization: ensure response is always a string
