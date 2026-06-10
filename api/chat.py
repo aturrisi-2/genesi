@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
 from typing import Dict, Optional
 from core.simple_chat import simple_chat_handler, strip_group_ctx
-from core.face_memory_service import pop_awaiting_faces, try_extract_faces_from_text
+from core.face_memory_service import handle_text_identification
 from core.user_manager import user_manager
 from core.chat_memory import chat_memory
 from core.log import log
@@ -198,19 +198,9 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         import asyncio as _asyncio
 
         # ── Rilevamento nomi per volti sconosciuti (WebApp) ──
-        awaiting_data = await pop_awaiting_faces(str(user_id))
-        if awaiting_data and request.message:
-            tmp_img = awaiting_data.get("img_path")
-            desc_img = awaiting_data.get("description", "")
-            faces_saved = await try_extract_faces_from_text(request.message, tmp_img, desc_img, user_id)
-            if faces_saved:
-                request.message += "\n\n[SISTEMA: Hai estratto e memorizzato con successo le identità di queste persone o animali dalla risposta dell'utente. Esclama in modo naturale che ti ricorderai di loro!]"
-            if tmp_img:
-                try:
-                    import os
-                    os.remove(tmp_img)
-                except:
-                    pass
+        face_result = await handle_text_identification(str(user_id), request.message)
+        if face_result["was_awaiting"] and face_result["faces_saved"]:
+            request.message += face_result["sistema_msg"]
 
         # Testo utente pulito (senza group_ctx) — usato da tutti i sistemi di memoria.
         # Il messaggio completo (con group_ctx) serve solo al proactor per rispondere.

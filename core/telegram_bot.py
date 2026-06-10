@@ -34,7 +34,10 @@ from core.telegram_group_memory import (
 
 logger = logging.getLogger(__name__)
 
-from core.face_memory_service import set_awaiting_faces, pop_awaiting_faces, try_extract_faces_from_text, get_awaiting_faces
+from core.face_memory_service import (
+    handle_photo_identification, handle_text_identification,
+    get_awaiting_faces,
+)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_API   = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
@@ -1174,25 +1177,16 @@ async def handle_update(update: dict):
                             chat_id, first_name, f"{text} {caption}".strip())
                 return
             
-            # Rilevamento nomi per volti sconosciuti (gestione testuale nel gruppo)
-            awaiting_data = await pop_awaiting_faces(str(chat_id))
-            if awaiting_data:
-                tmp_img = awaiting_data.get("img_path")
-                desc_img = awaiting_data.get("description", "")
-                
-                # Use caption if text is empty
-                _face_text = text if text else caption
-                if _face_text:
-                    faces_saved = await try_extract_faces_from_text(_face_text, tmp_img, desc_img, session_uid)
-                    if faces_saved:
-                        text += "\n\n[SISTEMA: Hai estratto e memorizzato con successo le identità di queste persone dalla risposta testuale dell'utente. Esclama in modo naturale che ti ricorderai di loro!]"
-                
-                if tmp_img:
-                    try:
-                        import os
-                        os.remove(tmp_img)
-                    except Exception:
-                        pass
+            # Rilevamento nomi per volti sconosciuti (usa handler centralizzato)
+            _face_text = text if text else caption
+            if _face_text:
+                face_result = await handle_text_identification(str(chat_id), _face_text)
+                if face_result["faces_saved"]:
+                    if face_result["all_done"]:
+                        text += face_result["sistema_msg"]
+                    else:
+                        text += face_result["sistema_msg"]
+
             
             # Se interveniamo su un vocale, invia prima la trascrizione
             if _transcribed_voice_text:
@@ -1434,60 +1428,14 @@ async def handle_update(update: dict):
                     analysis = ""
             user_msg  = caption or "Analizza questa immagine che ti ho inviato."
             if analysis and analysis != "__TOKEN_EXPIRED__":
-                if "[UNKNOWN_FACES_DETECTED]" in analysis or "[UNKNOWN_PETS_DETECTED]" in analysis:
-                    import uuid
-                    tmp_img = f"/tmp/genesi_face_{uuid.uuid4().hex[:8]}.jpg"
-                    try:
-                        with open(tmp_img, "wb") as f:
-                            f.write(img_bytes)
-                        
-                        from core.face_memory_service import set_awaiting_faces
-                        await set_awaiting_faces(str(chat_id) if is_group else str(from_id), tmp_img, analysis)
-                    except Exception as e:
-                        logger.error("Failed to save tmp face image: %s", e)
-                
-                # Verifica immediata se la caption contiene i nomi
-                faces_saved_now = False
-                if caption:
-                    awaiting_data = await get_awaiting_faces(str(chat_id) if is_group else str(from_id))
-                    if awaiting_data:
-                        faces_saved_now = await try_extract_faces_from_text(caption, awaiting_data.get("img_path"), analysis, session_uid)
-                        if faces_saved_now:
-                            popped = await pop_awaiting_faces(str(chat_id) if is_group else str(from_id))
-                            if popped and popped.get("img_path"):
-                                try:
-                                    import os
-                                    os.remove(popped["img_path"])
-                                except:
-                                    pass
-                
-                # Non rimuovere il tag, altrimenti le regole di _group_msg non scattano!
+                # Handler centralizzato per identificazione volti/animali
+                _photo_session = str(chat_id) if is_group else str(from_id)
+                photo_result = await handle_photo_identification(
+                    _photo_session, img_bytes, analysis, caption=caption
+                )
                 user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
-                if "[UNKNOWN_FACES_DETECTED]" in analysis or "[UNKNOWN_PETS_DETECTED]" in analysis:
-                    if faces_saved_now:
-                        user_msg += "\n[SISTEMA: Hai estratto e memorizzato con successo le identità dei volti o degli animali dalla didascalia dell'utente. Ringrazia l'utente per avertele presentate in modo molto naturale!]"
-                    else:
-                        import re as _re
-                        _total_h = _re.search(r'\[TOTAL_HUMANS:(\d+)\]', analysis)
-                        _total_p = _re.search(r'\[TOTAL_PETS:(\d+)\]', analysis)
-                        _n_humans = int(_total_h.group(1)) if _total_h else 0
-                        _n_pets = int(_total_p.group(1)) if _total_p else 0
-                        if "[UNKNOWN_PETS_DETECTED]" in analysis:
-                            _pet_detail = f" ({_n_pets} animale/i visibile/i nella foto)" if _n_pets > 0 else ""
-                            user_msg += f"\n[SISTEMA: Hai 'visto' questa foto. Hai rilevato un animale{_pet_detail} che non conosci visivamente. "\
-                                "DEVI ASSOLUTAMENTE chiedere all'utente di scriverti COME SI CHIAMA descrivendo anche brevemente l'animale che vedi (colore, razza approssimativa, taglia), "\
-                                "spiegando con dolcezza che ti serve per memorizzare per la prima volta il suo aspetto visivo. "\
-                                "REGOLA FERREA: Chiedi esplicitamente il nome — non tirare ad indovinare!]"
-                        if "[UNKNOWN_FACES_DETECTED]" in analysis:
-                            _human_detail = f" ({_n_humans} persone visibili in totale)" if _n_humans > 0 else ""
-                            user_msg += f"\n[SISTEMA: Hai 'visto' questa foto tramite il tuo modulo visivo. Hai rilevato persone sconosciute{_human_detail}. "\
-                                "Fai un commento BREVE e affettuoso sulla foto, POI chiedi i nomi di ciascuna persona sconosciuta "\
-                                "DESCRIVENDO brevemente le caratteristiche fisiche che vedi (es. 'chi e la donna con i capelli scuri a sinistra?', "\
-                                "'e quella con la maglia rossa al centro?') per permettere all'utente di identificarle con precisione. "\
-                                "NON nominare persone che non conosci. NON tirare ad indovinare. CHIEDI sempre. "\
-                                "REGOLA FERREA: Ignora le regole di concisione per questo messaggio — devi chiedere chi sono tutti gli sconosciuti!]"
-                elif not caption and "Mappa esatta dei volti noti" in analysis:
-                    user_msg += "\n[SISTEMA: L'utente ha caricato una foto in cui hai riconosciuto i volti, e non ha aggiunto testo. Ignora la regola di essere 'estremamente conciso' o di 'rispondere solo a quello che viene detto'. Fai un commento affettuoso ed entusiasta di 1 o 2 righe, salutando e nominando le persone presenti nella foto!]"
+                if photo_result["sistema_msg"]:
+                    user_msg += photo_result["sistema_msg"]
 
             media_group_id = msg.get("media_group_id")
             if media_group_id:
@@ -1546,39 +1494,13 @@ async def handle_update(update: dict):
                     analysis = ""
             user_msg  = caption or f"Ho inviato il documento: {filename}."
             if analysis and analysis != "__TOKEN_EXPIRED__":
-                if "[UNKNOWN_FACES_DETECTED]" in analysis or "[UNKNOWN_PETS_DETECTED]" in analysis:
-                    import uuid
-                    tmp_img = f"/tmp/genesi_face_doc_{uuid.uuid4().hex[:8]}.jpg"
-                    try:
-                        with open(tmp_img, "wb") as f:
-                            f.write(doc_bytes)
-                        await set_awaiting_faces(str(chat_id) if is_group else str(from_id), tmp_img, analysis)
-                    except Exception as e:
-                        logger.error("Failed to save tmp face image: %s", e)
-                
-                faces_saved_now = False
-                if caption:
-                    awaiting_data = await get_awaiting_faces(str(chat_id) if is_group else str(from_id))
-                    if awaiting_data:
-                        faces_saved_now = await try_extract_faces_from_text(caption, awaiting_data.get("img_path"), analysis, session_uid)
-                        if faces_saved_now:
-                            popped = await pop_awaiting_faces(str(chat_id) if is_group else str(from_id))
-                            if popped and popped.get("img_path"):
-                                try:
-                                    import os
-                                    os.remove(popped["img_path"])
-                                except:
-                                    pass
-                
+                _doc_session = str(chat_id) if is_group else str(from_id)
+                doc_result = await handle_photo_identification(
+                    _doc_session, doc_bytes, analysis, caption=caption
+                )
                 user_msg = f"{user_msg}\n\n[Contenuto: {analysis}]"
-                if "[UNKNOWN_FACES_DETECTED]" in analysis or "[UNKNOWN_PETS_DETECTED]" in analysis:
-                    if faces_saved_now:
-                        user_msg += "\n[SISTEMA: Hai estratto e memorizzato con successo le identità dei volti o degli animali dalla didascalia dell'utente. Ringrazia l'utente per avertele presentate in modo molto naturale!]"
-                    else:
-                        if "[UNKNOWN_PETS_DETECTED]" in analysis:
-                            user_msg += "\\n[SISTEMA: Hai 'visto' questa foto. Hai rilevato un animale che non conosci visivamente. Anche se dal profilo sai già che l'utente possiede animali, DEVI ASSOLUTAMENTE chiedere all'utente di SCRIVERTI COME SI CHIAMA l'animale nella foto, spiegando con dolcezza che ti serve per memorizzare per la prima volta il suo aspetto visivo! REGOLA FERREA: Fai la domanda e chiedigli di scriverti il nome!]"
-                        else:
-                            user_msg += "\n[SISTEMA: Hai 'visto' questa foto tramite il tuo modulo visivo. Hai rilevato persone sconosciute. Fai SEMPRE un commento affettuoso e discorsivo sulla foto, POI chiedi in modo cortese chi sono le persone sconosciute specificando le posizioni per memorizzarle. REGOLA FERREA: IGNORA ESPLICITAMENTE la regola 'zero domande di ritorno' o 'estrema concisione' per questo singolo messaggio! Devi chiedere chi sono! Comportati al 100% come se stessi guardando la foto coi tuoi occhi!]"
+                if doc_result["sistema_msg"]:
+                    user_msg += doc_result["sistema_msg"]
 
             reply = await _do_chat(user_msg)
             if not await _handle_reply(reply):
@@ -1657,24 +1579,11 @@ async def handle_update(update: dict):
         if not text:
             return
 
-        # Rilevamento nomi per volti sconosciuti
-        awaiting_data = await pop_awaiting_faces(str(chat_id) if is_group else str(from_id))
-        if awaiting_data:
-            tmp_img = awaiting_data.get("img_path")
-            desc_img = awaiting_data.get("description", "")
-            
-            faces_saved = await try_extract_faces_from_text(text, tmp_img, desc_img, session_uid)
-            if faces_saved:
-                # Appendi l'informazione al messaggio corrente così il bot reagisce positivamente
-                text += "\n\n[SISTEMA: Hai estratto e memorizzato con successo le identità di queste persone dalla risposta dell'utente. Esclama in modo naturale che ti ricorderai di loro!]"
-            
-            # Pulisci file temporaneo in ogni caso (sia successo che fallimento)
-            if tmp_img:
-                try:
-                    import os
-                    os.remove(tmp_img)
-                except Exception:
-                    pass
+        # Rilevamento nomi per volti sconosciuti (usa handler centralizzato)
+        face_result = await handle_text_identification(str(chat_id) if is_group else str(from_id), text)
+        if face_result["was_awaiting"] and face_result["faces_saved"]:
+            text += face_result["sistema_msg"]
+
 
         if _WEATHER_RE.search(text) and not city:
             session["state"]               = STATE_AWAIT_CITY
