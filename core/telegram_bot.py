@@ -1467,10 +1467,25 @@ async def handle_update(update: dict):
                     if faces_saved_now:
                         user_msg += "\n[SISTEMA: Hai estratto e memorizzato con successo le identità dei volti o degli animali dalla didascalia dell'utente. Ringrazia l'utente per avertele presentate in modo molto naturale!]"
                     else:
+                        import re as _re
+                        _total_h = _re.search(r'\[TOTAL_HUMANS:(\d+)\]', analysis)
+                        _total_p = _re.search(r'\[TOTAL_PETS:(\d+)\]', analysis)
+                        _n_humans = int(_total_h.group(1)) if _total_h else 0
+                        _n_pets = int(_total_p.group(1)) if _total_p else 0
                         if "[UNKNOWN_PETS_DETECTED]" in analysis:
-                            user_msg += "\\n[SISTEMA: Hai 'visto' questa foto. Hai rilevato un animale che non conosci visivamente. Anche se dal profilo sai già che l'utente possiede animali, DEVI ASSOLUTAMENTE chiedere all'utente di SCRIVERTI COME SI CHIAMA l'animale nella foto, spiegando con dolcezza che ti serve per memorizzare per la prima volta il suo aspetto visivo! REGOLA FERREA: Fai la domanda e chiedigli di scriverti il nome!]"
-                        else:
-                            user_msg += "\n[SISTEMA: Hai 'visto' questa foto tramite il tuo modulo visivo. Hai rilevato persone sconosciute. Fai SEMPRE un commento affettuoso e discorsivo sulla foto, POI chiedi in modo cortese chi sono le persone sconosciute specificando le posizioni per memorizzarle. REGOLA FERREA: IGNORA ESPLICITAMENTE la regola 'zero domande di ritorno' o 'estrema concisione' per questo singolo messaggio! Devi chiedere chi sono! Comportati al 100% come se stessi guardando la foto coi tuoi occhi!]"
+                            _pet_detail = f" ({_n_pets} animale/i visibile/i nella foto)" if _n_pets > 0 else ""
+                            user_msg += f"\n[SISTEMA: Hai 'visto' questa foto. Hai rilevato un animale{_pet_detail} che non conosci visivamente. "\
+                                "DEVI ASSOLUTAMENTE chiedere all'utente di scriverti COME SI CHIAMA descrivendo anche brevemente l'animale che vedi (colore, razza approssimativa, taglia), "\
+                                "spiegando con dolcezza che ti serve per memorizzare per la prima volta il suo aspetto visivo. "\
+                                "REGOLA FERREA: Chiedi esplicitamente il nome — non tirare ad indovinare!]"
+                        if "[UNKNOWN_FACES_DETECTED]" in analysis:
+                            _human_detail = f" ({_n_humans} persone visibili in totale)" if _n_humans > 0 else ""
+                            user_msg += f"\n[SISTEMA: Hai 'visto' questa foto tramite il tuo modulo visivo. Hai rilevato persone sconosciute{_human_detail}. "\
+                                "Fai un commento BREVE e affettuoso sulla foto, POI chiedi i nomi di ciascuna persona sconosciuta "\
+                                "DESCRIVENDO brevemente le caratteristiche fisiche che vedi (es. 'chi e la donna con i capelli scuri a sinistra?', "\
+                                "'e quella con la maglia rossa al centro?') per permettere all'utente di identificarle con precisione. "\
+                                "NON nominare persone che non conosci. NON tirare ad indovinare. CHIEDI sempre. "\
+                                "REGOLA FERREA: Ignora le regole di concisione per questo messaggio — devi chiedere chi sono tutti gli sconosciuti!]"
                 elif not caption and "Mappa esatta dei volti noti" in analysis:
                     user_msg += "\n[SISTEMA: L'utente ha caricato una foto in cui hai riconosciuto i volti, e non ha aggiunto testo. Ignora la regola di essere 'estremamente conciso' o di 'rispondere solo a quello che viene detto'. Fai un commento affettuoso ed entusiasta di 1 o 2 righe, salutando e nominando le persone presenti nella foto!]"
 

@@ -42,10 +42,10 @@ async def compute_and_save_embeddings(name: str, image_path: str, description_hi
         if faces is None or len(faces) == 0 or boxes is None:
             return 0
             
-        # Filtra i volti di background (area < 2% del più grande) per non confonderli con le pose
+        # Filtra i volti di background (area < 5% del più grande) per non confonderli con pose/sfondi
         areas = [(box[2]-box[0]) * (box[3]-box[1]) for box in boxes]
         max_area = max(areas)
-        valid_indices = [i for i, area in enumerate(areas) if area >= max_area * 0.02]
+        valid_indices = [i for i, area in enumerate(areas) if area >= max_area * 0.05]
         
         boxes = [boxes[i] for i in valid_indices]
         faces = faces[valid_indices]
@@ -117,7 +117,7 @@ async def compute_and_save_embeddings(name: str, image_path: str, description_hi
         logger.error("Error computing face embeddings: %s", e)
         return 0
 
-async def analyze_faces_biometric(image_path: str, threshold: float = 0.85) -> dict:
+async def analyze_faces_biometric(image_path: str, threshold: float = 0.75) -> dict:
     """
     Analizza i volti presenti nell'immagine.
     Ritorna un dizionario:
@@ -143,10 +143,10 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 0.85) -> d
                 "total_faces": 0
             }
             
-        # Filtra i volti di background: tieni solo quelli la cui area è almeno il 2% del volto più grande
+        # Filtra i volti di background: tieni solo quelli la cui area è almeno il 5% del volto più grande
         areas = [(box[2]-box[0]) * (box[3]-box[1]) for box in boxes]
         max_area = max(areas)
-        min_allowed_area = max_area * 0.02
+        min_allowed_area = max_area * 0.05
         
         valid_indices = [i for i, area in enumerate(areas) if area >= min_allowed_area]
         
@@ -218,6 +218,7 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 0.85) -> d
         
         matched_identities = set()
         face_to_name = {}
+        face_to_confidence = {}  # Confidence score per ogni match
         
         for min_dist, i, name in distances:
             if i not in matched_face_indices and name not in matched_identities:
@@ -225,6 +226,7 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 0.85) -> d
                     matched_face_indices.add(i)
                     matched_identities.add(name)
                     face_to_name[i] = name
+                    face_to_confidence[i] = round(1.0 - min_dist, 3)  # più alto = più sicuro
                     recognized_names.add(name)
 
         unknown_faces_detected = len(matched_face_indices) < total_faces
@@ -245,7 +247,8 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 0.85) -> d
                 if i not in matched_face_indices:
                     unknown_faces_positions.append(pos_str)
                 else:
-                    recognized_faces_list.append(f"{face_to_name[i]} ({pos_str})")
+                    conf = face_to_confidence.get(i, 0)
+                    recognized_faces_list.append(f"{face_to_name[i]} ({pos_str}, conf={conf:.2f})")
         
         result = {
             "recognized_names": list(recognized_names),
