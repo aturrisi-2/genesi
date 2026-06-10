@@ -1352,37 +1352,15 @@ async def handle_update(update: dict):
                     _mem_resp = reply
                     _mem_session_uid = session_uid  # uid del proprietario (Alfio) — il solo con memoria persistente
 
-                    async def _tg_extract_episode(_mm=_mem_msg, _su=_mem_session_uid):
-                        try:
-                            import asyncio as _a
-                            from core.episode_extractor import extract_episodes
-                            from core.episode_memory import episode_memory as _em
-                            ctx = f"{first_name}: {_mm}"
-                            for ep in await extract_episodes(ctx, _su):
-                                await _em.add(_su, ep)
-                                logger.info("EPISODE_SAVED_TG_GROUP sender=%s text=%.60s", first_name, ep['text'])
-                        except Exception:
-                            pass
-                    
-                    async def _tg_extract_facts(_mm=_mem_msg, _mr=_mem_resp, _su=_mem_session_uid):
-                        try:
-                            from core.personal_facts_service import personal_facts_service as _pfs
-                            ctx = f"{first_name}: {_mm}"
-                            await _pfs.extract_and_save(ctx, _mr, _su)
-                        except Exception:
-                            pass
-                    
-                    async def _tg_global_memory(_su=_mem_session_uid):
-                        try:
-                            from core.global_memory_service import global_memory_service as _gms
-                            await _gms.consolidate_if_needed(_su)
-                        except Exception:
-                            pass
-                    
                     if is_family_group:
-                        asyncio.create_task(_tg_extract_episode())
-                        asyncio.create_task(_tg_extract_facts())
-                        asyncio.create_task(_tg_global_memory())
+                        from core.message_pipeline import schedule_memory_tasks
+                        asyncio.create_task(schedule_memory_tasks(
+                            user_id=_mem_session_uid,
+                            user_message=f"{first_name}: {_mem_msg}",
+                            response=_mem_resp,
+                            platform="telegram",
+                            is_group=True,
+                        ))
 
             return reply
 
