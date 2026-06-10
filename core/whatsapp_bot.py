@@ -17,6 +17,7 @@ import re
 import time
 import httpx
 from core.storage import storage
+from core.face_memory_service import set_awaiting_faces, pop_awaiting_faces, try_extract_faces_from_text, get_awaiting_faces
 
 logger = logging.getLogger(__name__)
 
@@ -1274,14 +1275,12 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     try:
                         with open(tmp_img, "wb") as f:
                             f.write(doc_bytes)
-                        from core.face_memory_service import set_awaiting_faces, get_awaiting_faces, try_extract_faces_from_text, pop_awaiting_faces
                         await set_awaiting_faces(str(chat_id) if is_group else str(wa_id), tmp_img, analysis)
                     except Exception as e:
                         logger.error("Failed to save tmp face image: %s", e)
                 
                 faces_saved_now = False
                 if caption:
-                    from core.face_memory_service import get_awaiting_faces, try_extract_faces_from_text, pop_awaiting_faces
                     awaiting_data = await get_awaiting_faces(str(chat_id) if is_group else str(wa_id))
                     if awaiting_data:
                         faces_saved_now = await try_extract_faces_from_text(caption, awaiting_data.get("img_path"), analysis, chat_id if is_group else wa_id)
