@@ -660,7 +660,8 @@ class Proactor:
             ]
             _is_openclaw_request = any(p in msg_lower for p in _OPENCLAW_KEYWORDS)
 
-            if active_docs and is_document_reference(clean_message) and not _is_image_gen_request and not _is_openclaw_request and not skip_document_mode:
+            _is_group_platform = self._current_platform in ("telegram_group", "whatsapp_group")
+            if active_docs and is_document_reference(clean_message) and not _is_image_gen_request and not _is_openclaw_request and not skip_document_mode and not _is_group_platform:
                 logger.info("DOCUMENT_MODE_TRIGGERED user=%s doc_count=%d", user_id, len(active_docs))
                 response = await self._handle_document_query(user_id, clean_message, profile, brain_state, conversation_id)
                 return response, "tool"
