@@ -545,12 +545,23 @@ async def send_photo(chat_id: int, photo_url: str, caption: str = "", reply_mark
 
 
 async def send_typing(chat_id: int):
-    async with httpx.AsyncClient(timeout=5) as client:
-        try:
-            await client.post(f"{TELEGRAM_API}/sendChatAction",
-                              json={"chat_id": chat_id, "action": "typing"})
-        except Exception:
-            pass
+    """
+    Mostra i puntini "sta scrivendo" e li mantiene attivi in background.
+    Un singolo sendChatAction dura ~5s, ma il LLM può impiegare 10-20s:
+    il keepalive bounded (4 refresh ≈ 20s) copre la costruzione della
+    risposta. Telegram cancella i puntini automaticamente all'invio.
+    """
+    async def _keepalive():
+        async with httpx.AsyncClient(timeout=5) as client:
+            for i in range(4):
+                try:
+                    await client.post(f"{TELEGRAM_API}/sendChatAction",
+                                      json={"chat_id": chat_id, "action": "typing"})
+                except Exception:
+                    break
+                await asyncio.sleep(4.5)
+
+    asyncio.create_task(_keepalive())
 
 
 async def download_file(file_id: str) -> bytes | None:

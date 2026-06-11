@@ -174,6 +174,36 @@ def _get_api_base(platform: str) -> str:
     return PLATFORMS.get(platform, {}).get("api_base", META_API_BASE)
 
 
+async def send_sender_action(platform: str, recipient_id: str, action: str = "typing_on"):
+    """
+    Invia un sender_action (typing_on/typing_off/mark_seen) via Graph API.
+    Mostra i puntini "sta scrivendo" mentre Genesi costruisce la risposta.
+    Fail-silent: un errore qui non deve mai bloccare la risposta.
+    """
+    if not _SENDER_RE.match(recipient_id or ""):
+        return
+    token = _get_access_token(platform)
+    if not token:
+        return
+    api_base = _get_api_base(platform)
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"{api_base}/me/messages",
+                params={"access_token": token},
+                json={"recipient": {"id": recipient_id}, "sender_action": action},
+            )
+    except Exception as e:
+        logger.debug("META_SENDER_ACTION_ERR platform=%s action=%s err=%s",
+                     platform, action, e)
+
+
+async def show_typing(platform: str, recipient_id: str):
+    """Segna come letto e mostra i puntini (typing_on dura ~20s su Meta)."""
+    await send_sender_action(platform, recipient_id, "mark_seen")
+    await send_sender_action(platform, recipient_id, "typing_on")
+
+
 async def send_message(platform: str, recipient_id: str, text: str) -> bool:
     """Invia un messaggio testuale via Graph API (Messenger o Instagram DM)."""
     if not text or not _SENDER_RE.match(recipient_id or ""):
@@ -429,6 +459,9 @@ async def _handle_text(user_id: str, sender_id: str, platform: str, text: str):
     from core.message_pipeline import process_incoming_text, schedule_memory_tasks
     from core.simple_chat import simple_chat_handler
 
+    # Puntini "sta scrivendo" mentre Genesi costruisce la risposta
+    asyncio.create_task(show_typing(platform, sender_id))
+
     pre = await process_incoming_text(
         session_id=user_id, user_id=user_id, text=text, platform=platform,
     )
@@ -457,6 +490,9 @@ async def _handle_image(user_id: str, sender_id: str, platform: str,
         process_incoming_photo, schedule_memory_tasks,
     )
     from core.simple_chat import simple_chat_handler
+
+    # Puntini "sta scrivendo" — l'analisi foto può durare 10-15s
+    asyncio.create_task(show_typing(platform, sender_id))
 
     img_bytes, _mime = await download_image(image_url)
     if not img_bytes:
