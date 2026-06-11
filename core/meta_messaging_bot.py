@@ -289,6 +289,41 @@ _COMMENT_REPLY_PROMPT = (
 )
 
 
+async def reply_to_comment(comment_id: str, username: str, text: str) -> bool:
+    """
+    Genera e pubblica una risposta a un commento Instagram.
+    Usata sia dal webhook handler che dal polling di fallback del publisher.
+    """
+    try:
+        from core.llm_service import llm_service
+        ctx = f"Commento di @{username}: {text}" if username else f"Commento: {text}"
+        reply = await llm_service._call_model(
+            "openai/gpt-4o-mini", _COMMENT_REPLY_PROMPT, ctx,
+            user_id="ig_comments", route="memory",
+        )
+        reply = (reply or "").strip()
+        if not reply:
+            return False
+
+        token = _get_access_token("instagram")
+        api_base = _get_api_base("instagram")
+        async with httpx.AsyncClient(timeout=30) as client:
+            res = await client.post(
+                f"{api_base}/{comment_id}/replies",
+                data={"message": reply[:900], "access_token": token},
+            )
+            if res.status_code == 200:
+                log("META_COMMENT_REPLIED", comment_id=comment_id, user=username)
+                logger.info("META_COMMENT_REPLIED comment_id=%s user=%s", comment_id, username)
+                return True
+            logger.error("META_COMMENT_REPLY_FAIL status=%d body=%.200s",
+                         res.status_code, res.text)
+            return False
+    except Exception as e:
+        logger.error("META_COMMENT_REPLY_ERROR err=%s", e)
+        return False
+
+
 async def _process_change(change: dict, platform: str):
     """
     Processa eventi 'changes' (non-messaging): commenti sui post Instagram.
@@ -310,47 +345,30 @@ async def _process_change(change: dict, platform: str):
 
     # Anti-loop: ignora i commenti scritti da Genesi stessa
     try:
-        from core.instagram_publisher import get_ig_user_id
+        from core.instagram_publisher import get_ig_user_id, is_comment_replied, mark_comment_replied
         own_id = await get_ig_user_id()
         if own_id and from_id == str(own_id):
             logger.info("META_COMMENT_OWN_SKIP")
             return
+        # Dedup persistente condiviso con il polling
+        if is_comment_replied(comment_id):
+            return
     except Exception:
         pass
 
-    # Deduplica (i webhook possono essere ri-consegnati)
+    # Deduplica in-memory (i webhook possono essere ri-consegnati)
     if _is_duplicate_mid(f"comment_{comment_id}"):
         return
 
     logger.info("META_COMMENT_RECEIVED from=%s text=%.80s", from_user.get("username", "?"), text)
 
-    try:
-        from core.llm_service import llm_service
-        username = from_user.get("username", "")
-        ctx = f"Commento di @{username}: {text}" if username else f"Commento: {text}"
-        reply = await llm_service._call_model(
-            "openai/gpt-4o-mini", _COMMENT_REPLY_PROMPT, ctx,
-            user_id="ig_comments", route="memory",
-        )
-        reply = (reply or "").strip()
-        if not reply:
-            return
-
-        token = _get_access_token("instagram")
-        api_base = _get_api_base("instagram")
-        async with httpx.AsyncClient(timeout=30) as client:
-            res = await client.post(
-                f"{api_base}/{comment_id}/replies",
-                data={"message": reply[:900], "access_token": token},
-            )
-            if res.status_code == 200:
-                log("META_COMMENT_REPLIED", comment_id=comment_id, user=username)
-                logger.info("META_COMMENT_REPLIED comment_id=%s", comment_id)
-            else:
-                logger.error("META_COMMENT_REPLY_FAIL status=%d body=%.200s",
-                             res.status_code, res.text)
-    except Exception as e:
-        logger.error("META_COMMENT_REPLY_ERROR err=%s", e)
+    ok = await reply_to_comment(comment_id, from_user.get("username", ""), text)
+    if ok:
+        try:
+            from core.instagram_publisher import mark_comment_replied
+            mark_comment_replied(comment_id)
+        except Exception:
+            pass
 
 
 async def _process_event(event: dict, platform: str, cfg: dict):

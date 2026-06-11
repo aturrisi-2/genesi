@@ -261,6 +261,70 @@ async def publish_one_post() -> bool:
         return False
 
 
+# ── Dedup risposte commenti (condiviso webhook + polling) ───────────────────
+
+def is_comment_replied(comment_id: str) -> bool:
+    state = _load_state()
+    return comment_id in state.get("replied_comments", [])
+
+
+def mark_comment_replied(comment_id: str):
+    state = _load_state()
+    replied = state.setdefault("replied_comments", [])
+    if comment_id not in replied:
+        replied.append(comment_id)
+        state["replied_comments"] = replied[-500:]
+        _save_state(state)
+
+
+# ── Polling commenti (fallback se i webhook non arrivano) ───────────────────
+
+async def poll_and_reply_comments():
+    """
+    Controlla i commenti sui post recenti e risponde a quelli nuovi.
+    Fallback robusto: i webhook comments via flusso pagina possono non
+    arrivare; questo polling garantisce che nessun commento resti ignorato.
+    """
+    token = _page_token()
+    ig_id = await get_ig_user_id()
+    if not token or not ig_id:
+        return
+
+    state = _load_state()
+    posts = state.get("posts", [])[-5:]
+    if not posts:
+        return
+
+    try:
+        from core.meta_messaging_bot import reply_to_comment
+        async with httpx.AsyncClient(timeout=30) as client:
+            for p in posts:
+                mid = p.get("media_id")
+                if not mid:
+                    continue
+                res = await client.get(
+                    f"{GRAPH}/{mid}/comments",
+                    params={"fields": "id,text,username,from", "access_token": token},
+                )
+                for c in (res.json().get("data") or []):
+                    cid = c.get("id", "")
+                    text = (c.get("text") or "").strip()
+                    from_id = str((c.get("from") or {}).get("id", ""))
+                    if not cid or not text:
+                        continue
+                    # Anti-loop: salta i commenti/risposte di Genesi stessa
+                    if from_id == str(ig_id):
+                        continue
+                    if is_comment_replied(cid):
+                        continue
+                    ok = await reply_to_comment(cid, c.get("username", ""), text)
+                    if ok:
+                        mark_comment_replied(cid)
+                    await asyncio.sleep(2)
+    except Exception as e:
+        logger.error("IG_COMMENT_POLL_ERROR err=%s", e)
+
+
 # ── Insights (apprendimento da like/commenti) ────────────────────────────────
 
 async def refresh_insights():
@@ -326,6 +390,9 @@ async def instagram_publisher_scheduler():
                                 ps.pop(k, None)
                         _save_state(state)
                         log("IG_PUB_SLOT_DONE", slot=slot, published=ok)
+
+                # Polling commenti ad ogni ciclo (5 min) — fallback dei webhook
+                await poll_and_reply_comments()
 
                 if time.time() - last_insights > 6 * 3600:
                     await refresh_insights()
