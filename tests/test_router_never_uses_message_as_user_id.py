@@ -39,17 +39,14 @@ class TestRouterUserIdIntegrity:
         # Mock storage.load per tracciare le chiamate
         with patch.object(storage, 'load') as mock_load, \
              patch.object(storage, 'save') as mock_save:
-            
-            # Mock memory_brain.update_brain direttamente senza patch
-            # perché il patch non sta funzionando
-            from core.memory_brain import memory_brain
-            original_update_brain = memory_brain.update_brain
-            
-            # Mock identity service
+
+            mock_load.return_value = {}  # configura AsyncMock: await restituisce dict, non MagicMock
+            mock_save.return_value = None
+
+            # Chiama handle con user_id e message diversi
             with patch('core.identity_service.handle_identity_question', new_callable=AsyncMock) as mock_identity:
-                mock_identity.return_value = None  # Non identity question per continuare
-                
-                # Chiama handle con user_id e message diversi
+                mock_identity.return_value = None
+
                 response = await proactor.handle(real_user_id, message_content)
                 
                 # Verifica che storage.load sia stato chiamato con il vero user_id
