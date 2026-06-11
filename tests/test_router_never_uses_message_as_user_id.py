@@ -39,16 +39,14 @@ class TestRouterUserIdIntegrity:
         # Mock storage.load per tracciare le chiamate
         with patch.object(storage, 'load') as mock_load, \
              patch.object(storage, 'save') as mock_save:
-            
-            # Mock memory_brain.update_brain direttamente senza patch
-            # perché il patch non sta funzionando
-            from core.memory_brain import memory_brain
-            original_update_brain = memory_brain.update_brain
-            
+
+            mock_load.return_value = {}  # configura AsyncMock: await restituisce dict, non MagicMock
+            mock_save.return_value = None
+
             # Mock identity service
             with patch('core.identity_service.handle_identity_question', new_callable=AsyncMock) as mock_identity:
                 mock_identity.return_value = None  # Non identity question per continuare
-                
+
                 # Chiama handle con user_id e message diversi
                 response = await proactor.handle(real_user_id, message_content)
                 
@@ -62,13 +60,17 @@ class TestRouterUserIdIntegrity:
                     args, kwargs = call
                     assert args[0] != forbidden_key, f"Storage.load called with message as key: {forbidden_key}"
                 
-                # Verifica che nessuna chiamata storage usi message come chiave
+                # Verifica che nessuna chiamata storage usi message come chiave.
+                # Le chiavi user-scoped (es. "profile:<id>") devono contenere il vero user_id;
+                # le chiavi globali (es. "admin/corrections") sono legittime e vengono saltate.
+                user_scoped_prefixes = ("profile:", "chat:", "latent:", "relational:", "episodes:")
                 for call in mock_load.call_args_list:
                     args, kwargs = call
                     if args:
                         storage_key = args[0]
-                        assert real_user_id in storage_key, f"Storage key doesn't contain user_id: {storage_key}"
                         assert message_content not in storage_key, f"Storage key contains message: {storage_key}"
+                        if storage_key.startswith(user_scoped_prefixes):
+                            assert real_user_id in storage_key, f"User-scoped key doesn't contain user_id: {storage_key}"
     
     @pytest.mark.asyncio
     async def test_identity_service_uses_correct_user_id(self):
