@@ -460,7 +460,8 @@ async def send_typing(wa_id: str, msg_id: str = ""):
     except Exception as e:
         logger.debug("WA_SEND_TYPING_BAILEYS_EXCEPTION err=%s to=%s", e, jid)
 
-    # Segna il messaggio come letto tramite Meta API (come backup/originale)
+    # Mark-read + indicatore "sta scrivendo" nativo Cloud API
+    # (typing_indicator mostra i puntini fino a ~25s o fino alla risposta)
     if not WA_ACCESS_TOKEN or not WA_PHONE_NUMBER_ID or not msg_id:
         return
     try:
@@ -471,10 +472,24 @@ async def send_typing(wa_id: str, msg_id: str = ""):
                     "messaging_product": "whatsapp",
                     "status": "read",
                     "message_id": msg_id,
+                    "typing_indicator": {"type": "text"},
                 },
                 headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"},
             )
-            logger.info("WA_MARK_READ msg_id=%s status=%d", msg_id, r.status_code)
+            logger.info("WA_MARK_READ_TYPING msg_id=%s status=%d", msg_id, r.status_code)
+            if r.status_code != 200:
+                # Fallback: alcuni account non supportano typing_indicator —
+                # ritenta il solo mark-read classico
+                r2 = await client.post(
+                    f"{WA_API_BASE}/{WA_PHONE_NUMBER_ID}/messages",
+                    json={
+                        "messaging_product": "whatsapp",
+                        "status": "read",
+                        "message_id": msg_id,
+                    },
+                    headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"},
+                )
+                logger.info("WA_MARK_READ_FALLBACK msg_id=%s status=%d", msg_id, r2.status_code)
     except Exception as e:
         logger.warning("WA_MARK_READ_ERROR wa_id=%s err=%s", wa_id, e)
 
