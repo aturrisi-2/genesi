@@ -1240,7 +1240,10 @@ class Proactor:
         L'LLM produce solo la fraseggiatura, non inventa fatti.
         """
         profile = brain_state.get("profile", {})
-        msg_lower = message.lower().strip()
+        # Solo il testo dell'utente: il blocco [CAPACITÀ DI GENESI...] appeso
+        # da capability_awareness contiene parole come "iCloud"/"Google" che
+        # farebbero scattare il ramo account su domande tipo "Cosa sai di me?"
+        msg_lower = message.split("[CAPACITÀ DI GENESI")[0].lower().strip()
 
         # AUTO-CLEAN CORRUPTED DATA (Guard against old bugs)
         _CORRUPTED_PROF_KW = [

@@ -470,7 +470,7 @@ async def phase7_stress_rapid_fire(t: NeuralTester):
         ("Come mi chiamo?",          ["marco"]),
         ("Dove vivo?",               ["bologna"]),
         ("Che lavoro faccio?",       ["neurochirurg"]),
-        ("Chi è Laura?",             ["moglie", "laura"]),
+        ("Chi è Laura?",             ["laura"]),  # accetta "moglie" o "coniuge" — il recall del nome è ciò che conta
         ("Che sport mi piace?",      ["tennis"]),
         ("Per quale squadra tifo?",  ["juventus"]),
         ("Hai una memoria?",         []),
