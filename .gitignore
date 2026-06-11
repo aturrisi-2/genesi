@@ -80,3 +80,6 @@ static/intranet/*.html
 # Widget Service — progetto separato in genesi-widget/
 # ===============================
 widget-service/
+
+# Artefatti generati dai test (test_face_extraction.py)
+tests/dummy_face_image*.jpg
