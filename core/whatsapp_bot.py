@@ -391,11 +391,34 @@ async def _save_city(token: str, city: str):
 
 # ── WhatsApp API helpers ─────────────────────────────────────────────────────
 
+_WA_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^\s\)]+)\)")
+
+
+def _wa_clean_links(text: str) -> tuple[str, list[tuple[str, str]]]:
+    """
+    WhatsApp non rende il markdown: [titolo](url) apparirebbe grezzo.
+    Converte in '🌐 titolo: url' (cliccabile) e ritorna i link estratti
+    per l'eventuale bottone cta_url sul fallback Cloud API.
+    """
+    links = _WA_MD_LINK_RE.findall(text or "")
+    clean = _WA_MD_LINK_RE.sub(lambda m: f"🌐 {m.group(1)}: {m.group(2)}", text or "")
+    seen: set[str] = set()
+    out: list[tuple[str, str]] = []
+    for title, url in links:
+        if url not in seen:
+            seen.add(url)
+            out.append((title.strip(), url))
+    return clean, out[:1]
+
+
 async def send_message(wa_id: str, text: str):
     """Invia un messaggio testuale WhatsApp."""
     if not text:
         return
-    
+
+    # Fonti live search: markdown → link cliccabile pulito
+    text, _source_links = _wa_clean_links(text)
+
     # Costruisci il JID di WhatsApp (Baileys)
     jid = wa_id if "@" in wa_id else f"{wa_id}@s.whatsapp.net"
 
@@ -439,6 +462,31 @@ async def send_message(wa_id: str, text: str):
                 logger.error("WA_SEND_META_ERROR to=%s err=%s", meta_to, e)
             if len(chunks) > 1:
                 await asyncio.sleep(0.3)
+
+        # Fonte come bottone nativo (cta_url) — solo path Cloud API
+        if _source_links:
+            _title, _url = _source_links[0]
+            try:
+                await client.post(
+                    f"{WA_API_BASE}/{WA_PHONE_NUMBER_ID}/messages",
+                    json={
+                        "messaging_product": "whatsapp",
+                        "to": meta_to,
+                        "type": "interactive",
+                        "interactive": {
+                            "type": "cta_url",
+                            "body": {"text": f"Fonte: {_title[:900]}"},
+                            "action": {"name": "cta_url", "parameters": {
+                                "display_text": "🌐 Apri fonte",
+                                "url": _url,
+                            }},
+                        },
+                    },
+                    headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"},
+                )
+                logger.info("WA_SOURCE_BUTTON_SENT to=%s", meta_to)
+            except Exception as e:
+                logger.debug("WA_SOURCE_BUTTON_ERR to=%s err=%s", meta_to, e)
 
 
 async def send_typing(wa_id: str, msg_id: str = ""):

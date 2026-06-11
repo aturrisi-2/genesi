@@ -204,6 +204,73 @@ async def show_typing(platform: str, recipient_id: str):
     await send_sender_action(platform, recipient_id, "typing_on")
 
 
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^\s\)]+)\)")
+
+
+def _extract_source_links(text: str) -> tuple[str, list[tuple[str, str]]]:
+    """
+    Estrae i link markdown [titolo](url) dal testo (le fonti del live search).
+    Ritorna (testo_pulito, [(titolo, url), ...]) — max 3 link deduplicati.
+    """
+    links = _MD_LINK_RE.findall(text or "")
+    clean = _MD_LINK_RE.sub(r"\1", text or "")
+    seen: set[str] = set()
+    out: list[tuple[str, str]] = []
+    for title, url in links:
+        if url not in seen:
+            seen.add(url)
+            out.append((title.strip(), url))
+    return clean, out[:3]
+
+
+def _domain_of(url: str) -> str:
+    try:
+        from urllib.parse import urlparse
+        d = urlparse(url).netloc
+        return d[4:] if d.startswith("www.") else d
+    except Exception:
+        return "fonte"
+
+
+async def _send_source_buttons(platform: str, recipient_id: str,
+                               links: list[tuple[str, str]]):
+    """
+    Invia le fonti come bottoni nativi (generic template con web_url):
+    il link si apre nella webview interna di Messenger/Instagram.
+    Fail-silent: un errore qui non blocca mai la conversazione.
+    """
+    token = _get_access_token(platform)
+    if not token or not links:
+        return
+    api_base = _get_api_base(platform)
+    elements = [{
+        "title": (title or _domain_of(url))[:80],
+        "subtitle": _domain_of(url)[:80],
+        "buttons": [{"type": "web_url", "url": url, "title": "🌐 Apri fonte"}],
+    } for title, url in links]
+    payload = {
+        "recipient": {"id": recipient_id},
+        "message": {"attachment": {"type": "template", "payload": {
+            "template_type": "generic", "elements": elements,
+        }}},
+        "messaging_type": "RESPONSE",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            res = await client.post(
+                f"{api_base}/me/messages",
+                params={"access_token": token},
+                json=payload,
+            )
+            if res.status_code == 200:
+                log("META_SOURCE_BUTTON_SENT", platform=platform, links=len(links))
+            else:
+                logger.warning("META_SOURCE_BUTTON_FAIL platform=%s status=%d body=%.200s",
+                               platform, res.status_code, res.text)
+    except Exception as e:
+        logger.debug("META_SOURCE_BUTTON_ERR platform=%s err=%s", platform, e)
+
+
 async def send_message(platform: str, recipient_id: str, text: str) -> bool:
     """Invia un messaggio testuale via Graph API (Messenger o Instagram DM)."""
     if not text or not _SENDER_RE.match(recipient_id or ""):
@@ -213,6 +280,9 @@ async def send_message(platform: str, recipient_id: str, text: str) -> bool:
         logger.warning("META_SEND_NO_TOKEN platform=%s", platform)
         return False
     api_base = _get_api_base(platform)
+
+    # Link markdown (fonti live search) → testo pulito + bottoni nativi dopo
+    text, source_links = _extract_source_links(text)
 
     chunks = [text[i:i + MSG_CHUNK_LEN] for i in range(0, len(text), MSG_CHUNK_LEN)]
     ok = True
@@ -239,6 +309,10 @@ async def send_message(platform: str, recipient_id: str, text: str) -> bool:
                 ok = False
             if len(chunks) > 1:
                 await asyncio.sleep(0.3)
+
+    # Fonti come bottoni dopo il testo (live search)
+    if ok and source_links:
+        await _send_source_buttons(platform, recipient_id, source_links)
     return ok
 
 

@@ -1014,7 +1014,10 @@ class Proactor:
 
                 elif current_intent in SKIP_RELATIONAL_INTENTS:
                     # Knowledge/Technical Strict (tecnica, debug)
-                    if self._should_override_to_relational(processed_message, user_id):
+                    # live_search non va MAI scavalcato verso relational: il LLM
+                    # risponderebbe dalla memoria di addestramento (stantia)
+                    # invece di cercare sul web — es. "mondiali" → dati 2022
+                    if current_intent != "live_search" and self._should_override_to_relational(processed_message, user_id):
                         log("ROUTING_DECISION", route="relational_override", user_id=user_id)
                         current_response = await self._handle_relational(user_id, processed_message, brain_state, conversation_id)
                         final_source = "relational"
