@@ -242,6 +242,18 @@ async def describe_image(path: str) -> str:
             content_str = response.choices[0].message.content.strip()
             log("VISION_RAW_OUTPUT", provider=provider, content=content_str[:300])
 
+            # Rifiuto del modello (content policy sui volti): trattalo come
+            # fallimento provider → si tenta il successivo. Mai usarlo come descrizione.
+            _refusal_markers = (
+                "i'm sorry", "i am sorry", "i can't assist", "i cannot assist",
+                "i can't help", "non posso aiutarti", "non posso assisterti",
+                "non posso fornire assistenza",
+            )
+            if len(content_str) < 150 and any(m in content_str.lower() for m in _refusal_markers):
+                log("IMAGE_VISION_REFUSAL", provider=provider)
+                last_error = ValueError(f"vision refusal from {provider}")
+                continue
+
             # Pulisci eventuali backtick markdown
             clean_json_str = content_str
             if clean_json_str.startswith("```json"):
@@ -320,7 +332,41 @@ async def describe_image(path: str) -> str:
             last_error = e
             continue
 
-    # Tutti i provider hanno fallito
+    # Tutti i provider hanno fallito o rifiutato.
+    # Se il biometrico ha comunque riconosciuto qualcosa, costruisci una
+    # descrizione dai suoi dati: il riconoscimento resta funzionante anche
+    # quando il modello vision rifiuta l'analisi.
+    if recognized_faces_list or bio_total_faces > 0 or bio_total_pets > 0:
+        parts = []
+        if recognized_faces_list:
+            parts.append("Soggetti riconosciuti dal sistema biometrico: "
+                         + " | ".join(recognized_faces_list) + ".")
+        if unknown_faces_detected:
+            pos = ", ".join(unknown_faces_positions) or "posizione non determinata"
+            parts.append(f"Presenti anche persone non riconosciute ({pos}).")
+        if unknown_pets_detected:
+            pos = ", ".join(unknown_pets_positions) or "posizione non determinata"
+            parts.append(f"Presenti animali non riconosciuti ({pos}).")
+        description = " ".join(parts) or "Immagine ricevuta."
+        if unknown_faces_detected:
+            description += " [UNKNOWN_FACES_DETECTED]"
+        if unknown_pets_detected:
+            description += " [UNKNOWN_PETS_DETECTED]"
+        if bio_total_faces:
+            description += f" [TOTAL_HUMANS:{bio_total_faces}]"
+        if bio_total_pets:
+            description += f" [TOTAL_PETS:{bio_total_pets}]"
+        log("IMAGE_VISION_BIOMETRIC_FALLBACK", chars=len(description),
+            total_humans=bio_total_faces, total_pets=bio_total_pets)
+        return {
+            "description": description,
+            "gender_hints": [],
+            "unknown_faces": unknown_faces_detected,
+            "unknown_pets": unknown_pets_detected,
+            "total_humans": bio_total_faces,
+            "total_pets": bio_total_pets,
+        }
+
     logger.error("IMAGE_VISION_ERROR error=%s", str(last_error), exc_info=True)
     log("IMAGE_VISION_ERROR", error=str(last_error))
     raise RuntimeError(f"Vision analysis failed: {str(last_error)}")
