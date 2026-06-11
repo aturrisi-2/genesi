@@ -382,15 +382,11 @@ def get_default_reply_markup(chat_type: str = "private", is_family: bool = False
             "resize_keyboard": True,
             "is_persistent": True
         }
-    elif is_family:
-        return {
-            "keyboard": [
-                [{"text": "🌦️ Meteo"}, {"text": "🤖 Aiuto"}]
-            ],
-            "resize_keyboard": True,
-            "is_persistent": True
-        }
-    return None
+    # Nei gruppi NESSUNA reply keyboard: la tastiera custom persistente
+    # collide con quella di sistema (si apre dietro e non è cliccabile).
+    # remove_keyboard pulisce anche quella vecchia rimasta nei client.
+    # Meteo/Aiuto restano invocabili scrivendo "meteo" / "aiuto".
+    return {"remove_keyboard": True}
 
 def get_domain_name(url: str) -> str:
     from urllib.parse import urlparse
