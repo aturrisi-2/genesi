@@ -57,6 +57,7 @@ Prima di ogni push su `gold-faro-stable`:
 - **`core/message_pipeline.py`**: Pipeline memory platform-independent (WhatsApp, Telegram, web, ecc.).
 - **`core/storage.py`**: Storage asincrono key-value. Le chiavi user-scoped usano il pattern `<prefix>:<user_id>` (es. `profile:user123`, `chat:user123`). Non usare mai il `message` come chiave.
 - **`core/group_context.py`** / `strip_group_ctx()` in `simple_chat.py`: La sintassi `[GRUPPO FAMILIARE: ...]` / `[GRUPPO: ...]` inietta contesto di gruppo nel prompt relazionale. Il tono viene inferito dal nome del gruppo (es. `casa/turrisi/famiglia` → "familiare e affettuoso").
+- **`core/meta_messaging_bot.py`** / **`api/meta_messaging.py`**: Facebook Messenger e Instagram DM via webhook Meta. Namespace utente isolati per piattaforma (`fb_<psid>`, `ig_<igsid>`) — nessuna contaminazione con WhatsApp/Telegram/web. Firma `X-Hub-Signature-256` obbligatoria se `META_APP_SECRET` è configurato. Env: `META_APP_SECRET`, `META_VERIFY_TOKEN`, `FB_PAGE_ACCESS_TOKEN`, `IG_ACCESS_TOKEN`. Test di sicurezza dedicati: `tests/test_meta_messaging_security.py`.
 
 ---
 
