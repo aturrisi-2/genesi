@@ -18,7 +18,13 @@ EMOTIONAL_KEYWORDS = [
     "mi manca", "soffro", "sono deluso", "mi sento inutile",
     "non ce la faccio", "sono esausto", "tutto mi pesa",
     "mi sento sopraffatto", "sono giù", "non sto bene",
-    "ho il cuore pesante", "non so come andare avanti"
+    "ho il cuore pesante", "non so come andare avanti",
+    # Varianti con avverbi intensificatori (evitano mancati match per "sono molto stressato" etc.)
+    "molto stressato", "molto triste", "molto solo", "molto ansioso",
+    "molto depresso", "molto esausto", "molto deluso", "molto spaventato",
+    "tanto stressato", "tanto triste", "tanto solo", "tanto esausto",
+    "non riesco a dormire", "non riesco a smettere", "non dormo",
+    "mi sento sopraffatto", "sono a pezzi", "sono distrutto", "sono distrutta",
 ]
 
 def _is_emotional(message: str) -> bool:
@@ -93,14 +99,17 @@ class IntentClassifier:
         # Pattern per GPT-4o (tecnica)
         self.gpt_patterns = {
             "reminder_create": [
-                "ricordami", "ricorda", "promemoria", "appuntamento", "ricordare",
-                "imposta promemoria", "crea promemoria", "nuovo promemoria"
+                "ricordami", "ricordamelo", "segnami un promemoria", "promemoria", "appuntamento",
+                "imposta promemoria", "crea promemoria", "nuovo promemoria", "memorizza promemoria",
+                "metti in agenda", "segna in agenda", "nuovo appuntamento", "meeting", "riunione"
             ],
             "reminder_list": [
                 "quali promemoria ho", "che appuntamenti ho", "lista promemoria",
                 "i miei promemoria", "mostra promemoria", "elenco appuntamenti",
                 "promemoria attivi", "appuntamenti impostati", "ricordami i promemoria",
-                "appuntamenti ho", "quali appuntamenti"
+                "appuntamenti ho", "quali appuntamenti", "cosa ho da fare", "miei impegni",
+                "agenda di oggi", "agenda di domani", "cosa ho in agenda", "cosa devo fare",
+                "cosa ho da fare oggi", "cosa ho da fare domani"
             ],
             "reminder_delete": [
                 "cancella promemoria", "cancella tutti i promemoria", "elimina promemoria",
@@ -116,7 +125,8 @@ class IntentClassifier:
             "tecnica": [
                 "tecnica", "tecnico", "architettura", "sistema", "implementazione",
                 "codice", "programmazione", "sviluppo", "software", "hardware",
-                "algoritmo", "database", "api", "framework", "libreria"
+                "algoritmo", "database", "api", "framework", "libreria",
+                "script", "python", "javascript", "java", "c++", "rust", "html", "css"
             ],
             "debug": [
                 "debug", "errore", "bug", "problema", "non funziona", "crash",
@@ -125,7 +135,98 @@ class IntentClassifier:
             "spiegazione": [
                 "spiega", "spiegazione", "come funziona", "perché", "come mai",
                 "dettagli", "approfondire", "chiarire", "illustrare"
-            ]
+            ],
+            "icloud_sync": [
+                "sincronizza icloud", "aggiorna icloud", "scarica da icloud",
+                "sincronizza promemoria", "importa promemoria"
+            ],
+            "calendar_sync_all": [
+                "sincronizza i miei calendari", "sincronizza calendari", "integra calendari", 
+                "collega calendari", "aggiorna tutto", "sincronizza tutto", "aggiorna calendari"
+            ],
+            "google_setup": [
+                "collega google", "configura google", "imposta google", "accesso google",
+                "connetti google", "login google", "account google", "attiva google", "usa google"
+            ],
+            "genesi_audit": [
+                "fammi un riassunto dei log", "come sta andando genesi", "analisi log",
+                "auditor genesi", "report genesi", "debug log", "cosa non va?",
+                "analizza i miei log", "report prestazioni", "audit sistema",
+                "audita", "audit log", "riassunto prestazioni"
+            ],
+            "google_sync": [
+                "sincronizza google", "aggiorna google", "scarica da google", "scarica google"
+            ],
+            "icloud_setup": [
+                "collega icloud", "configura icloud", "imposta icloud", "password icloud",
+                "accesso icloud", "account icloud", "attiva icloud", "usa icloud"
+            ],
+            "image_generation": [
+                "genera un'immagine", "genera una immagine", "genera un immagine",
+                "generami un'immagine", "generami una immagine", "generami un immagine",
+                "generami immagine", "generami una foto", "generami foto",
+                "crea un'immagine", "crea una immagine",
+                "disegna", "crea un'illustrazione", "genera una foto", "crea una foto",
+                "fai un'illustrazione", "crea una picture", "genera grafica", "dipingi", "disegni",
+                "genera immagine", "crea immagine", "genera foto",
+                "fammi vedere un'immagine", "mostrami un'immagine",
+                "fotomontaggio", "crea un fotomontaggio", "fai un fotomontaggio",
+                "modifica la foto", "modifica l'immagine", "modifica foto", "modifica immagine",
+                "ritocca la foto", "ritocca l'immagine", "edita la foto", "edita l'immagine",
+                "aggiungi alla foto", "metti nella foto", "metti nella immagine",
+            ],
+            # ── Integrazioni esterne ──────────────────────────────────────────
+            "gmail_setup": [
+                "collega gmail", "configura gmail", "accedi a gmail", "connetti gmail",
+                "imposta gmail", "attiva gmail", "usa gmail",
+            ],
+            "gmail_read": [
+                "leggi le mail", "leggi le email", "controlla email", "controlla le email",
+                "nuove email", "ho mail", "le mie email", "nuove mail", "leggi la posta",
+                "controlla la posta", "ho messaggi email", "nuovi messaggi email",
+            ],
+            "gmail_send": [
+                "invia mail", "invia email", "manda email", "manda una mail",
+                "scrivi email", "scrivi una mail", "invia un'email", "invia un email",
+                "spedisci email", "spedisci una mail",
+            ],
+            "whatsapp_send": [
+                "manda su whatsapp", "scrivi su whatsapp", "invia su whatsapp",
+                "manda un messaggio su whatsapp", "manda un messaggio whatsapp",
+                "scrivi a whatsapp", "invia whatsapp", "messaggio whatsapp",
+                "manda whatsapp", "invia un messaggio su whatsapp",
+            ],
+            "whatsapp_setup": [
+                "collega whatsapp", "configura whatsapp", "attiva whatsapp",
+                "imposta whatsapp", "connetti whatsapp",
+            ],
+            "telegram_send": [
+                "manda su telegram", "scrivi su telegram", "invia su telegram",
+                "manda un messaggio su telegram", "scrivi a telegram",
+                "invia telegram", "messaggio telegram",
+            ],
+            "telegram_setup": [
+                "collega telegram", "configura telegram", "attiva telegram",
+                "imposta telegram", "connetti telegram",
+            ],
+            "moltbook_activity": [
+                "cosa hai fatto su moltbook", "cosa hai commentato su moltbook",
+                "cosa hai postato su moltbook", "moltbook oggi", "attività moltbook",
+                "hai commentato qualcosa", "hai postato qualcosa", "su moltbook cosa",
+                "cosa hai scritto su moltbook", "aggiornamenti moltbook",
+                "com'è andata su moltbook", "novità su moltbook",
+            ],
+            "social_read": [
+                "controlla facebook", "vedi facebook", "leggi facebook",
+                "vedi instagram", "controlla instagram", "leggi instagram",
+                "vedi tiktok", "controlla tiktok", "leggi i social",
+                "aggiornamenti social", "novità sui social",
+            ],
+            "social_setup": [
+                "collega facebook", "configura facebook", "connetti facebook",
+                "collega instagram", "configura instagram", "connetti instagram",
+                "collega tiktok", "configura tiktok", "connetti tiktok",
+            ],
         }
     
     def classify(self, message: str, user_id: str = None) -> str:
@@ -141,15 +242,82 @@ class IntentClassifier:
         """
         message_lower = message.lower().strip()
         
-        # 0️⃣ PRIORITA' MASSIMA: reminder patterns (tutti)
+        # 0️⃣ PRIORITA' MASSIMA: Cloud patterns (Robust)
+        if "google" in message_lower:
+            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "scarica"]):
+                log("INTENT_CLASSIFIED", intent="google_sync", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "google_sync"
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login", "usa", "account", "user", "email"]):
+                log("INTENT_CLASSIFIED", intent="google_setup", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "google_setup"
+        
+        if "icloud" in message_lower or "apple" in message_lower:
+            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "importa", "scarica"]):
+                log("INTENT_CLASSIFIED", intent="icloud_sync", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "icloud_sync"
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login", "usa", "account", "user", "email"]):
+                log("INTENT_CLASSIFIED", intent="icloud_setup", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "icloud_setup"
+
+        # ── Integrazioni esterne: Gmail ──────────────────────────────────────
+        if "gmail" in message_lower:
+            if any(kw in message_lower for kw in ["leggi", "controlla", "apri", "nuove", "posta"]):
+                log("INTENT_CLASSIFIED", intent="gmail_read", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "gmail_read"
+            if any(kw in message_lower for kw in ["invia", "manda", "scrivi", "spedisci"]):
+                log("INTENT_CLASSIFIED", intent="gmail_send", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "gmail_send"
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "connetti", "accedi", "usa", "attiva"]):
+                log("INTENT_CLASSIFIED", intent="gmail_setup", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "gmail_setup"
+
+        # ── Integrazioni esterne: WhatsApp ───────────────────────────────────
+        if "whatsapp" in message_lower:
+            if any(kw in message_lower for kw in ["manda", "invia", "scrivi", "messaggio"]):
+                log("INTENT_CLASSIFIED", intent="whatsapp_send", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "whatsapp_send"
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "connetti", "attiva"]):
+                log("INTENT_CLASSIFIED", intent="whatsapp_setup", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "whatsapp_setup"
+
+        # ── Integrazioni esterne: Telegram ───────────────────────────────────
+        if "telegram" in message_lower:
+            if any(kw in message_lower for kw in ["manda", "invia", "scrivi", "messaggio"]):
+                log("INTENT_CLASSIFIED", intent="telegram_send", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "telegram_send"
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "connetti", "attiva"]):
+                log("INTENT_CLASSIFIED", intent="telegram_setup", user_id=user_id, engine="regex_robust", message=message[:50])
+                return "telegram_setup"
+
+        # ── Integrazioni esterne: Social (Facebook, Instagram, TikTok) ───────
+        _social_platforms = ["facebook", "instagram", "tiktok"]
+        for _sp in _social_platforms:
+            if _sp in message_lower:
+                if any(kw in message_lower for kw in ["collega", "configura", "connetti", "attiva", "imposta"]):
+                    log("INTENT_CLASSIFIED", intent="social_setup", user_id=user_id, engine="regex_robust", message=message[:50], platform=_sp)
+                    return "social_setup"
+                if any(kw in message_lower for kw in ["controlla", "vedi", "leggi", "apri", "aggiornamenti"]):
+                    log("INTENT_CLASSIFIED", intent="social_read", user_id=user_id, engine="regex_robust", message=message[:50], platform=_sp)
+                    return "social_read"
+
+        # 0.5️⃣ PRIORITA' ALTA: Cloud patterns (Exact)
+        for intent in ["icloud_setup", "icloud_sync", "google_setup", "google_sync"]:
+            keywords = self.gpt_patterns.get(intent, [])
+            for keyword in keywords:
+                if re.search(rf'\b{re.escape(keyword)}\b', message_lower):
+                    log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="regex", message=message[:50])
+                    return intent
+
+        # 1️⃣ PRIORITA' ALTA: reminder patterns (tutti) + image generation
         for intent, keywords in self.gpt_patterns.items():
-            if intent.startswith('reminder_'):
+            if intent.startswith('reminder_') or intent == 'image_generation':
                 if any(keyword in message_lower for keyword in keywords):
-                    log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="gpt-4o", message=message[:50])
-                    logger.info("INTENT_ENGINE=gpt-4o-mini intent=%s", intent)
-                    # APPLICA REMINDER GUARD LAYER
-                    normalized_intent = self.normalize_reminder_intent(message, intent)
-                    return normalized_intent
+                    log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="regex", message=message[:50])
+                    # APPLICA REMINDER GUARD LAYER solo per reminder intents
+                    if intent.startswith('reminder_'):
+                        normalized_intent = self.normalize_reminder_intent(message, intent)
+                        return normalized_intent
+                    return intent
         
         # 0.1️⃣ PRIORITA' ALTA: pattern memoria/ricordo
         if any(pattern in message_lower for pattern in self.memory_patterns):
@@ -158,50 +326,11 @@ class IntentClassifier:
         
         # 0.5️⃣ PRIORITY OVERRIDES for mixed intents
         
-        # 🔥 NEW: Guardia per messaggi brevi contestuali
-        if self._should_block_weather_override(message_lower):
-            # Continua con la classificazione normale - non applicare weather override
-            pass
-        else:
-            # Blocca override weather per richieste tempo/data
-            time_keywords = [
-                "che ore",
-                "ora",
-                "orario",
-                "che giorno",
-                "data",
-                "oggi è",
-                "dimmi la data",
-            ]
-            
-            if any(k in message_lower for k in time_keywords):
-                # Continua con la classificazione normale, non applicare weather override
-                pass
-            else:
-                # Check for weather keywords (solo parole meteo reali)
-                weather_keywords = [
-                    "meteo",
-                    "tempo",
-                    "pioggia",
-                    "sole",
-                    "nuvol",
-                    "vento",
-                    "temperatura",
-                    "gradi",
-                    "umidità",
-                    "temporale",
-                ]
-                if any(kw in message_lower for kw in weather_keywords) and self._should_override_to_weather(message):
-                    log("INTENT_OVERRIDE_APPLIED", original="mixed", final="weather", message=message[:50])
-                    return "weather"
-                
-                # Check for follow-up weather patterns (solo città pura)
-                if self._is_followup_weather(message_lower):
-                    log("INTENT_OVERRIDE_APPLIED", original="mixed", final="weather", message=message[:50])
-                    return "weather"
-        
         # Check for reminder keywords
-        reminder_keywords = ["ricorda", "ricordami", "promemoria", "appuntamento", "ricordare"]
+        reminder_keywords = [
+            "ricordami", "ricordamelo", "promemoria", "appuntamento", 
+            "segnami un promemoria", "calendario", "agenda", "metti nel", "segna nel"
+        ]
         if any(kw in message_lower for kw in reminder_keywords):
             log("INTENT_OVERRIDE_APPLIED", original="mixed", final="reminder_create", message=message[:50])
             # APPLICA REMINDER GUARD LAYER
@@ -220,12 +349,12 @@ class IntentClassifier:
             log("INTENT_OVERRIDE_APPLIED", original="mixed", final="tecnica", message=message[:50])
             return "tecnica"
         
-        # 1️⃣ Pattern tecnici (GPT-4o)
+        # 2️⃣ Altri pattern tecnici (GPT-4o)
         for intent, keywords in self.gpt_patterns.items():
+            if intent.startswith('icloud_'): continue # Già gestiti sopra
             if any(keyword in message_lower for keyword in keywords):
-                log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="gpt-4o", message=message[:50])
-                logger.info("INTENT_ENGINE=gpt-4o-mini intent=%s", intent)
-                # APPLICA REMINDER GUARD LAYER solo per reminder intents
+                log("INTENT_CLASSIFIED", intent=intent, user_id=user_id, engine="regex", message=message[:50])
+                # APPLICA REMINDER GUARD LAYER solo per reminder intents (anche se qui non dovrebbero essercene rimasti)
                 if intent.startswith('reminder_'):
                     normalized_intent = self.normalize_reminder_intent(message, intent)
                     return normalized_intent
@@ -243,7 +372,14 @@ class IntentClassifier:
             log("INTENT_OVERRIDE_APPLIED", original="chat_free", final="emotional", message=message[:50])
             return "emotional"
         
-        # 3️⃣ Default: chat libera (GPT-4o)
+        # 3️⃣ Default: chat libera (GPT-4o) con normalizzazione finale
+        intent = "chat_free"
+        normalized_intent = self.normalize_reminder_intent(message, intent)
+        
+        if normalized_intent != intent:
+             log("INTENT_GUARD_RECOVERY", original=intent, final=normalized_intent, message=message[:50])
+             return normalized_intent
+
         log("INTENT_DEFAULT", intent="chat_free", user_id=user_id, engine="gpt-4o", message=message[:50])
         logger.info("INTENT_ENGINE=gpt-4o-mini intent=chat_free")
         return "chat_free"
@@ -384,7 +520,24 @@ class IntentClassifier:
         Returns:
             Intent normalizzato (reminder_*, chat_free, o intent originale)
         """
-        message_lower = message.lower().strip()
+        # Usa solo il testo dell'utente, senza contesto pagina (widget) né annotazioni gruppo (Telegram)
+        _user_part = message.split("[CONTESTO PAGINA]")[0].split("[PAGE CONTEXT]")[0]
+        _user_part = _user_part.split("[GRUPPO:")[0].split("[GRUPPO ")[0].split("[DISCUSSIONE IN CORSO")[0]
+        message_lower = _user_part.lower().strip()
+
+        # 0️⃣ Parole chiave iCloud → forza icloud_sync / icloud_setup
+        if any(kw in message_lower for kw in ["icloud", "apple"]):
+            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "importa", "scarica"]):
+                return "icloud_sync"
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login", "usa", "account", "user", "email"]):
+                return "icloud_setup"
+        
+        if "google" in message_lower:
+            if any(kw in message_lower for kw in ["sincronizza", "aggiorna", "scarica"]):
+                return "google_sync"
+            if any(kw in message_lower for kw in ["collega", "configura", "imposta", "accesso", "login", "usa", "account", "user", "email"]):
+                return "google_setup"
+                
         forced_intent = False
         
         # 1️⃣ Parole chiave CANCELLAZIONE → forza reminder_delete
@@ -398,10 +551,11 @@ class IntentClassifier:
         list_keywords = [
             "quali", "mostra", "lista", "che appuntamenti", "che promemoria", "i miei", 
             "elenco", "appuntamenti ho", "cosa mi devi ricordare", "cosa devi ricordarmi", 
-            "cosa devo fare", "dimmi i promemoria", "elenca i promemoria", "che promemoria ho"
+            "cosa devo fare", "dimmi i promemoria", "elenca i promemoria", "che promemoria ho",
+            "impegni", "agenda", "cosa ho oggi", "cosa ho domani", "programmi"
         ]
         if any(keyword in message_lower for keyword in list_keywords):
-            if "promemoria" in message_lower or "appuntament" in message_lower:
+            if any(kw in message_lower for kw in ["promemoria", "appuntament", "impegn", "agenda"]):
                 log("REMINDER_GUARD_FORCED", original_intent=intent, forced_intent="reminder_list", reason="list_keyword", message=message[:50])
                 return "reminder_list"
         
@@ -425,14 +579,33 @@ class IntentClassifier:
                 log("REMINDER_GUARD_VALIDATED", intent=intent, has_datetime=True, message=message[:50])
         
         # 5️⃣ Altri casi ambigui con parole reminder ma azione non chiara
-        reminder_keywords = ["ricordami", "ricorda", "promemoria", "appuntamento", "ricordare"]
+        reminder_keywords = [
+            "ricordami", "ricordamelo", "promemoria", "appuntamento", 
+            "segnami un promemoria", "calendario", "agenda", "metti nel", "segna nel"
+        ]
         if any(keyword in message_lower for keyword in reminder_keywords):
+            # Forza reminder_create se c'è una data/ora
+            if self._has_datetime_reference(message_lower):
+                log("REMINDER_GUARD_FORCED", original_intent=intent, forced_intent="reminder_create", reason="reminder_keyword_with_dt", message=message[:50])
+                return "reminder_create"
+            
             # Se contiene reminder keywords ma non è stato classificato come reminder_*
             # e non ha data/orario chiara → downgrade a chat_free
+            # MA solo se non è già un intent tecnico o esplicito (weather, news, tecnica, etc.)
             if not intent.startswith('reminder_') and not self._has_datetime_reference(message_lower):
+                protected_intents = ["weather", "news", "tecnica", "debug", "spiegazione", "icloud_sync", "google_sync", "identity",
+                                     "gmail_setup", "gmail_read", "gmail_send", "whatsapp_send", "whatsapp_setup",
+                                     "telegram_send", "telegram_setup", "social_read", "social_setup", "moltbook_activity"]
+                if intent in protected_intents:
+                    return intent
+                
                 log("REMINDER_GUARD_AMBIGUOUS", original_intent=intent, final_intent="chat_free", reason="ambiguous_reminder", message=message[:50])
                 return "chat_free"
         
+        if intent == "openclaw":
+            import os
+            if not os.getenv("OPENCLAW_ENABLED", "true").lower() in ("true", "1", "yes"):
+                return "chat_free"
         return intent
     
     def _has_datetime_reference(self, message_lower: str) -> bool:
@@ -449,21 +622,25 @@ class IntentClassifier:
         import re
         
         # Pattern orario HH:MM
-        if re.search(r'\d{1,2}:\d{2}', message_lower):
+        if re.search(r'\b\d{1,2}:\d{2}\b', message_lower):
             return True
         
         # Pattern "alle H" (senza minuti)
-        if re.search(r'alle\s+\d{1,2}(?::\d{2})?', message_lower):
+        if re.search(r'\balle\s+\d{1,2}\b', message_lower):
             return True
         
         # Parole chiave data
-        date_keywords = ["domani", "oggi", "dopodomani", "ieri"]
+        date_keywords = ["domani", "oggi", "dopodomani", "ieri", "stasera", "pomeriggio", "mattina"]
         if any(keyword in message_lower for keyword in date_keywords):
             return True
         
         # Giorni della settimana
-        weekdays = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]
+        weekdays = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica", "lunedi", "martedi", "mercoledi", "giovedi", "venerdi"]
         if any(day in message_lower for day in weekdays):
+            return True
+            
+        # Pattern relativo "tra X minuti/ore"
+        if re.search(r'\b(tra|fra|entro)\s+(\d+|un|una|uno|due|tre)\s+(minut|or|second|giorn|settiman)\b', message_lower):
             return True
         
         return False
@@ -482,6 +659,343 @@ class IntentClassifier:
                 return False
         
         return True
+
+    async def classify_async(self, message: str, user_id: str = None) -> str:
+        """
+        Classificazione tramite LLM con valutazione score e contesto.
+        Sostituisce le keyword statiche come logica primaria.
+        """
+        # Per la classificazione intent usa solo il testo utente, senza contesto pagina né annotazioni gruppo
+        _classify_msg = (message or "").split("[CONTESTO PAGINA]")[0].split("[PAGE CONTEXT]")[0]
+        _classify_msg = _classify_msg.split("[GRUPPO:")[0].split("[DISCUSSIONE IN CORSO")[0].strip()
+        
+        # Rimuovi i prefissi iniettati (es. reply di telegram, descrizioni visuali silenti)
+        import re
+        _classify_msg = re.sub(r'\[Stai rispondendo a questo tuo messaggio precedente: ".*?"\]\n?', '', _classify_msg, flags=re.DOTALL)
+        _classify_msg = re.sub(r'\[SISTEMA: .*?\]\n?', '', _classify_msg, flags=re.DOTALL)
+        
+        _classify_msg = _classify_msg.strip()
+        message_lower = _classify_msg.lower()
+
+        # PRIORITÀ ASSOLUTA 0: saluti semplici — mai classificare come tool/weather per contesto
+        # Garantisce che "Ciao", "Salve", "Hey" non vengano mai misclassificati come weather
+        # anche quando l'ultimo intent era weather.
+        _bare_greeting = message_lower.rstrip("!?., ")
+        _simple_greetings = {
+            "ciao", "salve", "hey", "hello", "hi", "hola",
+            "buongiorno", "buonasera", "buon pomeriggio", "buonanotte",
+            "bello", "ehi",
+        }
+        if _bare_greeting in _simple_greetings:
+            log("INTENT_CLASSIFIED", intent="greeting", user_id=user_id, engine="regex_absolute", message=message[:50])
+            return ["greeting"]
+
+        # PRIORITÀ ASSOLUTA: image generation deterministico (evita false chat_free dal classificatore LLM)
+        image_keywords = self.gpt_patterns.get("image_generation", [])
+        if any(keyword in message_lower for keyword in image_keywords):
+            log("INTENT_CLASSIFIED", intent="image_generation", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["image_generation"]
+
+
+        # PRIORITÀ ALTA: dove_sono — "dove sono", "dove mi trovo", ecc.
+        _location_self_kw = [
+            "dove mi trovo",
+            "in che zona sono", "in che posto sono",
+            "la mia posizione", "dove sono adesso",
+            "dove mi trovo adesso",
+        ]
+        # "dove sono" generico: solo se non seguito da participio passato O articolo+nome (oggetti/eventi)
+        # es. "dove sono state le qualifiche" → NO; "dove sono le chiavi" → NO; "dove sono?" → SÌ
+        _dove_sono_event_pp = re.compile(
+            r"dove\s+sono\s+(state?|stati?|andate?|andati?|avvenute?|successe?|svolte?|tenute?|disputate?|posizionat[ei])", re.IGNORECASE
+        )
+        _dove_sono_article = re.compile(
+            r"dove\s+sono\s+(il|la|le|i|gli|lo|un|una|uno)\s+", re.IGNORECASE
+        )
+        # "dove siamo" è ambiguo (metafora progresso) — NON triggera dove_sono via keyword list
+        _has_location_self = any(kw in message_lower for kw in _location_self_kw)
+        if not _has_location_self and "dove sono" in message_lower:
+            if not _dove_sono_event_pp.search(message_lower) and not _dove_sono_article.search(message_lower):
+                _has_location_self = True
+        if _has_location_self:
+            log("INTENT_CLASSIFIED", intent="dove_sono", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["dove_sono"]
+
+        # PRIORITÀ ALTA: memory_correction — patterns inequivocabili di correzione profilo
+        _correction_kw = [
+            "non mi chiamo", "hai sbagliato il mio nome", "correggiti",
+            "dimentica che", "aggiorna il mio", "cambia quello che sai",
+            "in realtà mi chiamo", "in realtà sono", "non vivo a",
+            "non lavoro come", "non ho figli", "non ho un cane", "non ho una gatta",
+            "il mio nome non è", "la mia città non è", "la mia professione non è",
+            # Correzioni professione ("hai sbagliato, non sono un ingegnere")
+            "hai sbagliato",
+            "non sono un ", "non sono una ",
+            # Varianti "in realtà"
+            "in realtà vivo", "in realtà lavoro", "in realtà ho",
+            # Cambiamenti di stato
+            "non lavoro più", "non abito più", "non vivo più a",
+            "non sono più", "non ho più",
+            # Negazioni partner/famiglia
+            "non sono sposato", "non sono sposata", "non ho animali",
+            # Correzioni dopo identity ("ti ho detto che lavoro/sono/vivo/abito...")
+            "ti ho detto che lavoro", "ti ho detto che sono", "ti ho detto che vivo",
+            "ti ho detto che abito", "ti ho detto che mi chiamo",
+        ]
+        if any(kw in message_lower for kw in _correction_kw):
+            log("INTENT_CLASSIFIED", intent="memory_correction", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["memory_correction"]
+
+        # PRIORITÀ ALTA: identity — domande dirette dell'utente sul PROPRIO profilo
+        # (messo DOPO memory_correction così "non ho figli" è già catturato dalla correzione)
+        _identity_first_person = [
+            "come mi chiamo", "come mi chiama",
+            "qual è il mio nome", "qual è il mio cognome",
+            "dove vivo", "dove abito", "dove sono nato", "dove sono nata",
+            "cosa sai di me", "dimmi quello che sai di me",
+            "ho figli", "ho un figlio", "ho una figlia",
+            "quanti anni ho", "che età ho", "la mia età",
+            "che lavoro faccio", "che mestiere faccio", "di cosa mi occupo",
+            "sono sposato", "sono sposata", "ho un marito", "ho una moglie",
+            "ho un partner", "ho una partner",
+            "ho animali", "ho un cane", "ho una gatta", "ho un gatto",
+            # domande sul profilo familiare: "come si chiama mia moglie/mio figlio..."
+            "come si chiama mia moglie", "come si chiama mio marito",
+            "come si chiama mio figlio", "come si chiama mia figlia",
+            "come si chiama mio padre", "come si chiama mia madre",
+            "come si chiama mio fratello", "come si chiama mia sorella",
+            "come si chiama la mia", "come si chiama il mio",
+            "come si chiamano i miei figli",
+        ]
+        if any(kw in message_lower for kw in _identity_first_person):
+            log("INTENT_CLASSIFIED", intent="identity", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["identity"]
+
+        # PRIORITÀ ALTA: emotional — keyword emotive chiare (prima del LLM, resistente al contesto)
+        if any(kw in message_lower for kw in EMOTIONAL_KEYWORDS):
+            log("INTENT_CLASSIFIED", intent="emotional", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["emotional"]
+
+        # PRIORITÀ ALTA: spiegazione — domande definitorie "cosa è il/la/un X", "cos'è X", "come funziona X"
+        # Resistente al contesto: una domanda definitoria è sempre spiegazione, indipendentemente dalla history
+        if re.search(r"^cos[a'][\s']+[èe]\s+(il|la|lo|i|gli|le|un|un'|una|l')\b", message_lower) or \
+           re.search(r"^(come funziona|cosa vuol dire|cosa significa|cosa intendi per)\b", message_lower):
+            log("INTENT_CLASSIFIED", intent="spiegazione", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["spiegazione"]
+
+        # "cos'è [nome proprio]" senza articolo → live_search (es: "cos'è Moltbook", "cos'è OpenAI")
+        # Il nome proprio inizia con maiuscola nel messaggio originale
+        _cose_match = re.match(r"^cos[a'][\s']+[èe]\s+(\S+)", message_lower)
+        if _cose_match:
+            _original_word = message[_cose_match.start(1):_cose_match.end(1)]
+            if _original_word and _original_word[0].isupper():
+                log("INTENT_CLASSIFIED", intent="live_search", user_id=user_id, engine="regex_priority", message=message[:50])
+                return ["live_search"]
+
+        # BLOCCO: imperativi "dimmelo tu" = l'utente chiede a Genesi di decidere/rispondere
+        # NON sono richieste di notizie o tool — sono chat conversazionale
+        _tu_imperatives = [
+            "dimmelo tu", "dimmi tu", "decidilo tu", "decidi tu",
+            "scegli tu", "pensaci tu", "dicci tu", "dillo tu",
+            "lo sai tu", "dimmelo", "dimmi pure",
+        ]
+        if any(imp in message_lower for imp in _tu_imperatives):
+            log("INTENT_CLASSIFIED", intent="chat_free", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["chat_free"]
+
+        # ⚡ FAST-TRACK: Per messaggi corti e intent comuni, usa il classificatore regex istantaneo
+        # Evita un roundtrip LLM per "Ciao", "Come stai", "Che ore sono", ecc.
+        if len(message_lower.split()) <= 4:
+            fast_intent = self.classify(message, user_id)
+            if fast_intent in ["greeting", "how_are_you", "time", "date", "weather", "emotional"]:
+                log("INTENT_CLASSIFIED", intent=fast_intent, user_id=user_id, engine="regex_fast_track", message=message[:50])
+                return [fast_intent]
+
+        from core.chat_memory import chat_memory
+        from core.llm_service import llm_service
+        import json
+
+        # Raccogli ultimi 12 messaggi per un contesto conversazionale robusto
+        history = chat_memory.get_messages(user_id, limit=12) if user_id else []
+        # chat_memory ritorna {"user_message": ..., "system_response": ...} — NON role/content
+        history_text = "\n".join([
+            f"utente: {msg.get('user_message', '')}\ngenesi: {msg.get('system_response', '')}"
+            for msg in history
+        ])
+
+        # Recupera contesto minimo del profilo per aiutare il classifier (fail-silent)
+        _prof_ctx = ""
+        _last_intent_ctx = ""
+        try:
+            from core.storage import storage as _ctx_storage
+            _prof = await _ctx_storage.get(f"profile:{user_id}") or {}
+            _nome = _prof.get("name", "")
+            _citta = _prof.get("city", "")
+            _last_intent = _prof.get("_last_classified_intent", "")
+            _prof_parts = [p for p in [f"nome={_nome}" if _nome else "", f"città={_citta}" if _citta else ""] if p]
+            if _prof_parts:
+                _prof_ctx = "Profilo utente: " + ", ".join(_prof_parts)
+            if _last_intent:
+                _last_intent_ctx = f"Ultimo intent classificato: {_last_intent}"
+        except Exception:
+            pass
+
+        system_prompt = """Sei un classificatore di intent per un assistente AI personale italiano.
+
+IMPORTANTE: Non analizzare il messaggio in isolamento. Leggi TUTTA la conversazione recente
+e classifica l'intent in base al CONTESTO COMPLETO. Una stessa frase può avere intent diversi
+a seconda di cosa è stato detto prima. Privilegia sempre il contesto sulla parola isolata.
+
+Valuta il parametro "score" tra 0.0 e 1.0 (dove 1.0 è certezza assoluta).
+
+INTENT POSSIBILI:
+- weather: richieste sul meteo o temperatura
+- news: richieste di notizie o aggiornamenti
+- time: richieste sull'ora
+- date: richieste sulla data
+- reminder_create: creare un VERO promemoria o evento manuale per il futuro (es: "ricordami di", "segna un impegno"). NON USARE se l'utente chiede solo rassicurazioni sul fatto che tu ti ricorderai un dettaglio passato o appena detto (es. "adesso te lo ricorderai?", "te ne ricorderai?"), in quel caso usa "chat_free".
+- reminder_list: elenco promemoria, appuntamenti o impegni (es: "i miei impegni", "cosa ho da fare")
+- reminder_delete: cancellare promemoria
+- reminder_update: modificare promemoria
+- tecnica: questioni tecniche, programmazione, architettura
+- debug: errori codice, malfunzionamenti software
+- spiegazione: richiesta di spiegazione "perchè", "come mai", "che c'entra", o espressione di frustrazione generica. NON USARE se l'utente ti sta correggendo su un suo dato personale (es: "no, è al contrario", "hai sbagliato il mio nome"), in quel caso DEVI usare "memory_correction".
+- identity: chi sono io, che lavoro faccio, i miei account, i miei dati, ho figli?, sono sposato?, ho animali? (domande ESCLUSIVAMENTE sulle informazioni dirette dell'utente. Se l'utente chiede di qualcun altro "che lavoro fa mia moglie" o "da dove viene mia figlia", usa "chat_free")
+- memory_correction: l'utente ti CORREGGE esplicitamente o implicitamente su un dato del suo profilo che hai capito o memorizzato male ("hai sbagliato", "no, è al contrario", "in realtà", "quella è mia figlia"). DA USARE SEMPRE per aggiornare nome, città, professione, animali, età, stato civile, o per eliminare vecchi dati ("Lina non c'è più").
+- live_search: l'utente fa una domanda che richiede una ricerca sul web in tempo reale per dati aggiornati (eventi attuali, sport come f1 o motogp, classifiche, normative recenti, notizie dell'ultima ora, scoperte scientifiche, ecc.). Anche per errori di battitura (es. "granpremio", "f1"). Usa questo intent ogniqualvolta la risposta dipende da internet.
+- dove_sono: l'utente chiede dove LUI/LEI si trova o la PROPRIA posizione attuale (ATTENZIONE: NON USARE se si cerca la posizione geografica di altre persone o luoghi come "dove si trova Sofia" o "dove è stata mia figlia")
+- icloud_setup: collegare o impostare account iCloud
+- icloud_sync: sincronizzare dati da iCloud
+- google_setup: collegare Google Calendar
+- google_sync: sincronizzare appuntamenti da Google
+- emotional: stato d'animo utente
+- memory_context: riferimento ESPLICITO a messaggi passati (es: "cosa ho detto prima?")
+- openclaw: DA USARE SOLO COME EXTREMA RATIO se l'utente chiede esplicitamente di navigare su uno specifico sito web, usare il browser, o compilare form complessi. NON usare per domande o ricerche generali (usa chat_free o tecnica). (es. "vai sul sito ryanair e prenota un volo", "naviga su amazon e cerca...").
+- gmail_setup: collegare o configurare Gmail (es. "collega gmail", "accedi a gmail")
+- gmail_read: leggere email Gmail (es. "leggi le mail", "controlla la posta", "ho nuove email")
+- gmail_send: inviare email tramite Gmail (es. "invia mail a X", "scrivi un'email a Y")
+- whatsapp_send: inviare un messaggio WhatsApp (es. "manda su whatsapp a X", "scrivi su whatsapp a Y")
+- whatsapp_setup: collegare o configurare WhatsApp
+- telegram_send: inviare un messaggio Telegram (es. "manda su telegram a X", "scrivi su telegram")
+- telegram_setup: collegare o configurare il bot Telegram
+- moltbook_activity: cosa ha fatto GenesiA su Moltbook (commenti, post, attività recente)
+- social_read: leggere aggiornamenti da Facebook, Instagram o TikTok
+- social_setup: collegare Facebook, Instagram o TikTok
+- genesi_audit: analisi dei log per monitorare cosa funziona e cosa no (report prestazioni)
+- chat_free: salutare, ringraziare, generico
+
+Devi restituire esclusivamente un payload JSON valido in questa forma:
+{"intents": ["scelta1", "scelta2"], "score": 0.95}
+
+REGOLE SPECIALI:
+- Se l'utente chiede "impegni", "agenda" o "programma", usa SEMPRE "reminder_list".
+- Se l'utente chiede "perchè" su un comportamento passato o manifesta insoddisfazione, usa "spiegazione" (tranne per correzioni di memoria utente).
+- Se l'utente ti dice "No, è al contrario" dopo che gli hai detto un suo dato (es: dove vive e dov'è nato), è ASSOLUTAMENTE "memory_correction".
+- Se il messaggio contiene "cosa pensi", "cosa ne pensi", "ti piace", "ti sembra", "sei d'accordo" riguardo al meteo/temperatura/freddo/caldo, usa "relational" o "chat_free" — NON "weather".
+- Se l'utente chiede dove si trova un'altra città, luogo o persona (es. "dove si trova Sofia", "dove è mia figlia"), usa "chat_free" — NON "dove_sono".
+- Se il messaggio è un imperativo che chiede a Genesi di rispondere/decidere ("dimmelo tu", "dimmi tu", "scegli tu", "decidilo tu"), usa sempre "chat_free" — NON "news" o altri tool.
+- Se il messaggio è un semplice saluto (ciao, salve, hey, buongiorno, ecc.) usa SEMPRE "chat_free" indipendentemente dal contesto conversazionale precedente.
+- Se l'intenzione non è chiara, usa uno score basso.
+"""
+
+        _user_prompt_parts = [
+            f"Conversazione recente:\n{history_text}" if history_text else "",
+            _prof_ctx,
+            _last_intent_ctx,
+            f"\nUltimo messaggio utente:\n{_classify_msg}",
+        ]
+        user_prompt = "\n".join(p for p in _user_prompt_parts if p)
+
+        def _extract_json_balanced(text: str) -> Optional[str]:
+            """Parser JSON robusto: trova il primo oggetto {} bilanciato."""
+            start = text.find('{')
+            if start < 0:
+                return None
+            depth, i = 0, start
+            while i < len(text):
+                if text[i] == '{':
+                    depth += 1
+                elif text[i] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        return text[start:i + 1]
+                i += 1
+            return None
+
+        try:
+            # USA _call_model per preservare system_prompt del classificatore
+            # _call_with_protection lo sovrascrive con il prompt adattivo globale!
+            response = await llm_service._call_model(
+                "openai/gpt-4o-mini",
+                system_prompt,
+                user_prompt,
+                user_id=user_id or "system",
+                route="classification"
+            )
+
+            if response:
+                _json_str = _extract_json_balanced(response)
+                if _json_str:
+                    data = json.loads(_json_str)
+                    intents = data.get("intents", [])
+                    if not intents and "intent" in data:
+                        intents = [data["intent"]]
+                    
+                    if intents and intents[0] == "openclaw":
+                        import os
+                        if not os.getenv("OPENCLAW_ENABLED", "true").lower() in ("true", "1", "yes"):
+                            intents = ["chat_free"]
+                            
+                    if not intents:
+                        intents = ["chat_free"]
+
+                    score = float(data.get("score", 0.0))
+                    
+                    # LOGGING
+                    log("LLM_INTENT_CLASSIFICATION", intents=intents, score=score, message=message[:50], user_id=user_id)
+                    logger.info(f"LLM_INTENT_CLASSIFICATION intents={intents} score={score}")
+                    
+                    # Se lo score < 0.8 per intent che azionano tool/api specifiche, ferma e chiedi chiarimenti
+                    # (Solo se c'è un solo intent critico)
+                    tool_intents = [
+                        "weather", "news", "time", "date", 
+                        "reminder_create", "reminder_delete", "reminder_update", "reminder_list"
+                    ]
+                    if len(intents) == 1 and score < 0.8 and intents[0] in tool_intents:
+                        if intents[0] == "weather":
+                            # Solo ambiguous_weather se il messaggio ha DAVVERO contesto meteo
+                            _actual_weather_kw = [
+                                "meteo", "temperatura", "piove", "nevica", "freddo", "caldo",
+                                "previsioni", "che tempo", "ombrello", "nuvol", "sole",
+                                "clima", "gradi", "umidità", "vento",
+                            ]
+                            if not any(kw in message_lower for kw in _actual_weather_kw):
+                                # LLM ha allucinato weather — reclassifica
+                                _news_rescue_kw = [
+                                    "notizie", "guerra", "politica", "economia", "conflitto",
+                                    "elezioni", "governo", "corrono", "giocano", "svolge",
+                                    "partita", "gara", "formula", "risultati",
+                                ]
+                                if any(kw in message_lower for kw in _news_rescue_kw):
+                                    log("WEATHER_RECLASSIFIED_NEWS", message=message[:50], score=score, user_id=user_id)
+                                    return ["news"]
+                                log("WEATHER_RECLASSIFIED_CHAT", message=message[:50], score=score, user_id=user_id)
+                                return ["chat_free"]
+                            return ["ambiguous_weather"]
+                        return ["ambiguous_tool"]
+                    
+                    # Normalize all intents
+                    normalized = []
+                    for i in intents:
+                        norm = self.normalize_reminder_intent(message, i)
+                        if norm not in normalized:
+                            normalized.append(norm)
+                    return normalized
+        except Exception as e:
+            logger.error(f"Errore nella classificazione JSON LLM: {str(e)}")
+            
+        # Fallback alla vecchia regex classification se LLM fallisce
+        return [self.classify(message, user_id)]
 
 
 # Istanza globale

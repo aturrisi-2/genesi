@@ -1,20 +1,41 @@
+import logging
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy import select
 from auth.config import DATABASE_URL
 from auth.models import Base, AuthUser
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+_log = logging.getLogger(__name__)
+
+engine = create_async_engine(
+    DATABASE_URL, 
+    echo=False,
+    connect_args={"timeout": 30}
+)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
 async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    import asyncio
+    from sqlalchemy import text
+    retries = 10
+    while retries > 0:
+        try:
+            async with engine.begin() as conn:
+                # Impostiamo il timeout anche via PRAGMA per sicurezza
+                await conn.execute(text("PRAGMA busy_timeout = 30000"))
+                await conn.run_sync(Base.metadata.create_all)
+            return
+        except Exception as e:
+            if "locked" in str(e).lower() and retries > 1:
+                _log.warning("Database locked, waiting for release... (%d left)", retries - 1)
+                await asyncio.sleep(3)
+                retries -= 1
+            else:
+                raise e
 
 
 async def get_db() -> AsyncSession:
     async with async_session() as session:
-        print(f"[DEBUG AUTH] DB URL: {engine.url}")  # DEBUG TEMPORANEO
         yield session
 
 

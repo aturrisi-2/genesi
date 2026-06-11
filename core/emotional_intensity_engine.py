@@ -11,6 +11,7 @@ import random
 import re
 from collections import deque
 from typing import Dict, Any, Optional, List
+from core.time_awareness import get_time_context
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,19 @@ RELATIONAL_OPENINGS_NO_NAME = [
     "Lasciami dire una cosa. ",
 ]
 
-# Aperture piu' calde per intensita' > 0.7 — disabilitate (coach-style)
-WARM_OPENINGS_WITH_NAME = []
-WARM_OPENINGS_NO_NAME = []
+# Aperture piu' calde per intensita' > 0.7, usate solo se trust > 0.6
+WARM_OPENINGS_WITH_NAME = [
+    "{name}, sento il peso di quello che dici. ",
+    "Lo sento, {name}. ",
+    "{name} — ci sono. ",
+    "So cosa intendi, {name}. ",
+]
+WARM_OPENINGS_NO_NAME = [
+    "Lo sento. ",
+    "Ci sono. ",
+    "So cosa intendi. ",
+    "Sento il peso di quello che dici. ",
+]
 
 # ═══════════════════════════════════════════════════════════════
 # PASSIVE PATTERNS — frasi standalone vietate
@@ -239,6 +250,14 @@ GREETING_EXPANSIONS_WITH_NAME = [
     "{name}, tutto bene?",
 ]
 
+# Time-aware greetings
+TIME_GREETINGS = {
+    "mattina ☀️": ["Buongiorno {name}. Come inizia la tua giornata?", "Buongiorno. Come stai stamattina?", "Ehi, buongiorno! Tutto bene?"],
+    "pomeriggio 🌅": ["Buon pomeriggio {name}. Come procede la giornata?", "Ciao! Ti senti bene questo pomeriggio?", "Ehi. Buon pomeriggio."],
+    "sera 🌙": ["Buonasera {name}. Com'è andata la giornata?", "Buonasera. Ti senti stanco o tutto ok?", "Ciao! Che si dice stasera?"],
+    "notte 🌌": ["Buonanotte {name}. Ancora sveglio?", "Ciao, buonanotte. Tutto bene?", "Ehi. Spero che la tua notte sia tranquilla."],
+}
+
 # ═══════════════════════════════════════════════════════════════
 # COGNITIVE MODES — structural unpredictability
 # ═══════════════════════════════════════════════════════════════
@@ -422,9 +441,10 @@ GROUNDED_SUGGESTIONS = {
 }
 
 STORY_STARTERS = [
-    "C'era una volta, in un paese dove il tempo scorreva diversamente, un uomo che aveva dimenticato come si faceva a sognare. Non perche' non volesse, ma perche' la vita gli aveva insegnato a tenere gli occhi aperti e i piedi per terra. Un giorno, pero', trovo' una lettera sotto la porta. Non c'era mittente, solo una frase: 'Ricordi quando credevi che tutto fosse possibile?' Quella notte, per la prima volta dopo anni, chiuse gli occhi e lascio' che la mente lo portasse dove voleva.",
-    "Ti racconto una cosa. Immagina una citta' dove ogni persona porta con se' una lanterna. La luce di ogni lanterna ha un colore diverso — dipende da quello che la persona sente dentro. Blu per la malinconia, rosso per la passione, verde per la speranza. Un giorno, una ragazza si accorse che la sua lanterna non aveva piu' colore. Era trasparente. E invece di spaventarsi, sorrise. Perche' capì che significava che era pronta a sentire tutto, senza filtri.",
-    "Lascia che ti racconti qualcosa. C'era un vecchio pescatore che ogni mattina usciva in mare, non per pescare, ma per ascoltare. Diceva che il mare gli parlava, e che ogni onda portava con se' una storia diversa. La gente del villaggio lo considerava strano, ma lui sapeva qualcosa che gli altri non capivano: che le storie piu' importanti non sono quelle che raccontiamo, ma quelle che ascoltiamo in silenzio.",
+    "C'era un bambino che collezionava passi. Non pietre o monete, ma i passi delle persone che gli volevano bene...",
+    "In una soffitta polverosa di Roma, un vecchio orologio ricominciò a battere dopo cinquant'anni...",
+    "C'è una leggenda che parla di un vento che soffia solo quando qualcuno ha bisogno di un'idea nuova...",
+    "Ti racconto di quella volta che un uomo decise di camminare solo seguendo il profumo del pane...",
 ]
 
 
@@ -460,6 +480,7 @@ class EmotionalIntensityEngine:
         Returns:
             risposta espansa, mai sotto il minimo, mai passiva
         """
+        self._raw_brain_state = brain_state # Store for helpers
         emotion = brain_state.get("emotion", {})
         latent = brain_state.get("latent", {})
         profile = brain_state.get("profile", {})
@@ -520,6 +541,10 @@ class EmotionalIntensityEngine:
 
         # ── ANTI-GENERIC ENDING ──
         response = self._fix_generic_ending(response)
+
+        # ── WARM OPENING: solo per alta intensità emotiva + alto trust ──
+        if trust > 0.6 and intensity > 0.7 and not is_greeting:
+            response = self._maybe_add_opening(response, user_name, intensity, resonance, is_greeting)
 
         # ── Track response for empathic repetition detection ──
         self._recent_responses.append(response.lower())
@@ -638,6 +663,20 @@ class EmotionalIntensityEngine:
 
     def _handle_greeting(self, response: str, name: str, trust: float) -> str:
         """Expand greeting beyond minimal salute."""
+        profile = self._raw_brain_state.get("profile", {})
+        tz = profile.get("timezone", "Europe/Rome")
+        time_ctx = get_time_context(tz)
+        
+        # Prefer time-aware greeting
+        if time_ctx in TIME_GREETINGS:
+            opts = TIME_GREETINGS[time_ctx]
+            expansion = random.choice(opts).format(name=name or "").strip()
+            # Se name è vuoto, pulisci ", " o ". " iniziale
+            expansion = expansion.replace("  ", " ").strip(",. ")
+            if not name and expansion[0].islower():
+                 expansion = expansion[0].upper() + expansion[1:]
+            return expansion
+
         if name:
             expansion = random.choice(GREETING_EXPANSIONS_WITH_NAME).format(name=name)
         else:
@@ -712,47 +751,19 @@ class EmotionalIntensityEngine:
         random.shuffle(reflections)
         random.shuffle(questions)
 
-        presence_pool = [
-            "Sono qui con te, senza fretta. Possiamo parlare di quello che vuoi, quando vuoi.",
-            "Non c'e' fretta. Possiamo restare qui quanto serve.",
-            "Prenditi il tempo che ti serve. Sono qui e non vado da nessuna parte.",
-            "Quello che senti e' importante, e merita di essere ascoltato con attenzione.",
-        ]
-
-        depth_pool = [
-            "A volte le parole non bastano per esprimere tutto quello che sentiamo dentro, e va bene cosi'. L'importante e' che tu sappia che qui c'e' spazio per tutto.",
-            "Ogni persona porta con se' un mondo intero di esperienze, emozioni, ricordi. E ogni conversazione e' un'occasione per scoprire qualcosa di nuovo su quel mondo.",
-            "Non devi avere tutte le risposte adesso. A volte il primo passo e' semplicemente permettersi di sentire quello che c'e', senza giudicarlo.",
-        ]
-
         parts = [response]
-        used = set()
 
-        # Add reflections until we approach target
-        for r in reflections:
-            if len(" ".join(parts).split()) >= min_words:
-                break
-            if r.lower()[:25] not in " ".join(parts).lower():
-                parts.append(r)
-                used.add(r[:25])
+        # Aggiungi al massimo UNA riflessione se la risposta è davvero troppo corta
+        if len(response.split()) < 6:
+            for r in reflections:
+                if r.lower()[:25] not in response.lower():
+                    parts.append(r)
+                    break
 
-        # Add question if missing
-        if len(" ".join(parts).split()) < min_words and not self._has_question(" ".join(parts)):
-            parts.append(questions[0] if questions else "Come ti senti in questo momento?")
-
-        # Add presence
-        for p in presence_pool:
-            if len(" ".join(parts).split()) >= min_words:
-                break
-            if p[:20] not in " ".join(parts):
-                parts.append(p)
-
-        # Add depth
-        for d in depth_pool:
-            if len(" ".join(parts).split()) >= min_words:
-                break
-            if d[:20] not in " ".join(parts):
-                parts.append(d)
+        # Se manca ancora una domanda, aggiungine una sola
+        current = " ".join(parts)
+        if not self._has_question(current) and len(current.split()) < min_words:
+            parts.append(questions[0] if questions else "Come stai davvero?")
 
         result = " ".join(parts)
         return result
@@ -1027,6 +1038,8 @@ class EmotionalIntensityEngine:
             pool = RELATIONAL_OPENINGS_WITH_NAME if name else RELATIONAL_OPENINGS_NO_NAME
 
         # Filter out recently used
+        if not pool:
+            return response
         available = [o for o in pool if o not in self._recent_openings]
         if not available:
             available = pool  # All used recently, reset

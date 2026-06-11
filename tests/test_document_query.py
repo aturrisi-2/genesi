@@ -228,18 +228,18 @@ class TestMultiDocInjection:
         mock_resolve.return_value = [DOC_A]
         profile = {"active_documents": ["doc_a"]}
         result = _inject_document_context("user1", "riassumi il file", profile)
-        assert "[DOCUMENT_CONTEXT]" in result
+        assert "DOCUMENT_CONTEXT" in result
         assert "report.pdf" in result
-        assert "questo documento" in result
+        assert "questo file" in result
 
     @patch("core.context_assembler.resolve_documents")
     def test_multi_doc_injection(self, mock_resolve):
         mock_resolve.return_value = [DOC_A, DOC_B]
         profile = {"active_documents": ["doc_a", "doc_b"]}
         result = _inject_document_context("user1", "confronta i file", profile)
-        assert result.count("[DOCUMENT_CONTEXT]") == 2
-        assert "questi documenti" in result
-        assert "confronto" in result.lower() or "differenze" in result.lower() or "similitudini" in result.lower()
+        assert result.count("DOCUMENT_CONTEXT") == 4
+        assert "questi file" in result
+        assert "confrontare" in result.lower()
 
     @patch("core.context_assembler.resolve_documents")
     def test_no_docs_no_injection(self, mock_resolve):
@@ -258,7 +258,7 @@ class TestMultiDocInjection:
         mock_resolve.return_value = [DOC_A]
         profile = {"active_document_id": "doc_a"}
         result = _inject_document_context("user1", "leggi il file", profile)
-        assert "[DOCUMENT_CONTEXT]" in result
+        assert "DOCUMENT_CONTEXT" in result
 
 
 # ═══════════════════════════════════════════════════════════════

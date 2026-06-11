@@ -13,7 +13,8 @@ import asyncio
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Depends
 from core.file_analyzer import analyze_file
-from core.document_memory import save_document
+from core.face_memory_service import set_awaiting_faces
+from core.document_memory import save_document, decay_and_forget, cleanup_by_size
 from core.storage import storage
 from core.log import log
 from auth.router import require_auth
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/upload")
 
 # Upload validation constants
 UPLOAD_MAX_SIZE_MB = 20
-UPLOAD_ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.webp', '.txt', '.md'}
+UPLOAD_ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.webp', '.txt', '.md', '.heic', '.heif'}
 
 def _validate_upload(filename: str, file_size_bytes: int) -> tuple[bool, str]:
     """Valida dimensione e estensione file."""
@@ -43,14 +44,14 @@ async def _ocr_with_retry(file_path: str, max_retries: int = 3) -> str:
         try:
             result = await extract_text_from_image(file_path)
             if result and len(result.strip()) > 0:
-                print(f"OCR_SUCCESS attempt={attempt+1} chars={len(result)}")
+                log("OCR_SUCCESS", attempt=attempt+1, chars=len(result))
                 return result
-            print(f"OCR_EMPTY attempt={attempt+1}")
+            log("OCR_EMPTY", attempt=attempt+1)
         except Exception as e:
-            print(f"OCR_ERROR attempt={attempt+1} error={e}")
+            log("OCR_ERROR", attempt=attempt+1, error=str(e))
             if attempt < max_retries - 1:
                 await asyncio.sleep(1)
-    print(f"OCR_FAILED all_attempts_exhausted")
+    log("OCR_FAILED", reason="all_attempts_exhausted")
     return ""
 
 
@@ -66,16 +67,30 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
         if not is_valid:
             raise HTTPException(status_code=400, detail=error_msg)
         
-        print(f"UPLOAD_VALIDATED filename={file.filename} size_mb={file.size/(1024*1024):.1f}")
+        log("UPLOAD_VALIDATED", filename=file.filename, size_mb=round((file.size or 0)/(1024*1024), 1))
         
         user_id = user.id
         result = await analyze_file(file)
 
+        if "[UNKNOWN_FACES_DETECTED]" in result.get("content", "") or "[UNKNOWN_PETS_DETECTED]" in result.get("content", ""):
+            b64_data = result.get("meta", {}).get("image_data_url", "").split(",")[-1]
+            if b64_data:
+                import base64
+                img_bytes = base64.b64decode(b64_data)
+                tmp_img = f"/tmp/genesi_face_web_{uuid.uuid4().hex[:8]}.jpg"
+                try:
+                    with open(tmp_img, "wb") as f:
+                        f.write(img_bytes)
+                    await set_awaiting_faces(str(user_id), tmp_img, result.get("content", ""))
+                except Exception as e:
+                    log("AWAITING_FACES_TMP_ERROR", error=str(e))
+
         # Always persist document for authenticated user
         doc_id = None
+        saved_doc = None
         if user_id:
             doc_id = f"{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
-            await save_document(
+            saved_doc = await save_document(
                 doc_id=doc_id,
                 user_id=user_id,
                 filename=result.get("meta", {}).get("filename", file.filename or "unknown"),
@@ -83,6 +98,9 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
                 content=result.get("content", ""),
                 meta=result.get("meta", {}),
             )
+            # Fire-and-forget: decay + cleanup spazio (non blocca l'upload)
+            asyncio.create_task(asyncio.to_thread(decay_and_forget, user_id))
+            asyncio.create_task(asyncio.to_thread(cleanup_by_size, user_id))
             
             # STEP 2: Register in Document Context Manager (NotebookLM behavior)
             try:
@@ -95,9 +113,9 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
                     content=result.get("content", ""), 
                     file_type=result.get("type", "unknown")
                 )
-                print(f"DOCUMENT_CONTEXT_REGISTERED user={user_id} filename={file.filename}")
+                log("DOCUMENT_CONTEXT_REGISTERED", user_id=user_id, filename=file.filename)
             except Exception as doc_err:
-                print(f"DOCUMENT_CONTEXT_REGISTER_ERROR user={user_id} error={doc_err}")
+                log("DOCUMENT_CONTEXT_REGISTER_ERROR", user_id=user_id, error=str(doc_err))
 
             # Add to active_documents list on user profile (max 5)
             try:
@@ -107,11 +125,11 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
                 old_id = profile.pop("active_document_id", None)
                 if old_id and old_id not in active_docs:
                     active_docs.append(old_id)
-                # Add new doc
+                # Add new doc (più recente in fondo — sarà il primo in contesto)
                 if doc_id not in active_docs:
                     active_docs.append(doc_id)
-                # Enforce max 5 — remove oldest
-                while len(active_docs) > 5:
+                # Enforce max 10 — remove oldest
+                while len(active_docs) > 10:
                     active_docs.pop(0)
                 profile["active_documents"] = active_docs
                 await storage.save(f"profile:{user_id}", profile)
@@ -119,19 +137,18 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
             except Exception as profile_err:
                 log("ACTIVE_DOCUMENTS_UPDATE_ERROR", user_id=user_id, error=str(profile_err))
 
-        # Build response for frontend
-        filename = result.get("meta", {}).get("filename", file.filename or "file")
+        # Build response for frontend — risposta breve, Genesi aspetta l'input utente
+        raw_filename = result.get("meta", {}).get("filename", file.filename or "file")
+        display_name = (saved_doc.get("title") if saved_doc else None) or raw_filename
         file_type = result.get("type", "unknown")
-        content_preview = (result.get("content", "") or "")[:300]
-
         if file_type == "image":
-            response_text = f"Ho analizzato l'immagine '{filename}'. {content_preview}"
+            response_text = f"Immagine caricata. Dimmi cosa vuoi fare!"
         elif file_type == "pdf":
             pages = result.get("meta", {}).get("pages", "?")
-            response_text = f"Ho letto il PDF '{filename}' ({pages} pagine). Puoi chiedermi qualsiasi cosa su di esso."
+            response_text = f"Documento '{display_name}' caricato ({pages} pagine). Cosa vuoi sapere?"
         else:
             lines = result.get("meta", {}).get("lines", "?")
-            response_text = f"Ho letto il file '{filename}' ({lines} righe). Puoi chiedermi qualsiasi cosa su di esso."
+            response_text = f"File '{display_name}' caricato ({lines} righe). Cosa vuoi sapere?"
 
         # List active documents for frontend
         active_docs_info = []
@@ -143,14 +160,11 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
                 if d:
                     active_docs_info.append({"doc_id": did, "filename": d.get("filename", "?"), "type": d.get("type", "?")})
 
-        if len(active_docs_info) >= 2:
-            names = [d["filename"] for d in active_docs_info[-2:]]
-            response_text += f"\n\nPuoi chiedere: confronta '{names[0]}' e '{names[1]}'"
-
         return {
             "type": result.get("type"),
             "content": result.get("content"),
             "meta": result.get("meta"),
+            "image_data_url": result.get("meta", {}).get("image_data_url") if file_type == "image" else None,
             "doc_id": doc_id,
             "active_documents": active_docs_info,
             "response": response_text,

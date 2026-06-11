@@ -504,16 +504,23 @@ class ConsolidationEngine:
         new_patterns = [p for p in patterns if (p["type"], p.get("key", "")) not in existing_pattern_keys]
         profile.setdefault("patterns", []).extend(new_patterns)
 
-        existing_trait_types = {t["type"] for t in profile.get("traits", []) if isinstance(t, dict)}
-        new_traits = [t for t in traits if t["type"] not in existing_trait_types]
-        # Update existing traits instead of duplicating
+        # Cognitive traits (communication style, dominant emotion) → campo separato per non
+        # inquinare profile["traits"] che contiene solo stringhe aggettivali.
+        existing_cog_types = {t["type"] for t in profile.get("cognitive_traits", []) if isinstance(t, dict)}
+        new_cog_traits = [t for t in traits if t["type"] not in existing_cog_types]
         for t in traits:
-            if t["type"] in existing_trait_types:
-                for i, existing in enumerate(profile["traits"]):
+            if t["type"] in existing_cog_types:
+                for i, existing in enumerate(profile["cognitive_traits"]):
                     if isinstance(existing, dict) and existing.get("type") == t["type"]:
-                        profile["traits"][i] = t
+                        profile["cognitive_traits"][i] = t
                         break
-        profile.setdefault("traits", []).extend(new_traits)
+        profile.setdefault("cognitive_traits", []).extend(new_cog_traits)
+
+        # Pulizia retroattiva: rimuovi dict eventualmente finiti in traits nelle versioni precedenti
+        raw_traits = profile.get("traits", [])
+        clean_traits = [t for t in raw_traits if isinstance(t, str)]
+        if len(clean_traits) != len(raw_traits):
+            profile["traits"] = clean_traits
 
         profile["last_consolidation"] = datetime.now().isoformat()
         await semantic.save_user_profile(user_id, profile)

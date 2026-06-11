@@ -1,12 +1,60 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Registrazione — Genesi</title>
     <link rel="stylesheet" href="/static/auth.css">
+    <!-- Iubenda Widget -->
+    <script type="text/javascript"
+        src="https://embeds.iubenda.com/widgets/c29c96b8-4972-4418-b50c-83741eaa22d4.js"></script>
 </head>
+
+<style>
+#platform-popup {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+#platform-popup.show { display: flex; }
+#platform-popup .popup-box {
+    background: #1e1e2e;
+    border-radius: 16px;
+    padding: 32px 28px;
+    text-align: center;
+    max-width: 320px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+#platform-popup .popup-box h2 { margin: 0 0 8px; font-size: 1.3rem; color: #fff; }
+#platform-popup .popup-box p  { margin: 0 0 24px; color: #aaa; font-size: 0.95rem; }
+#platform-popup .popup-btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: #fff;
+}
+#platform-popup .popup-btn.whatsapp { background: #25D366; }
+#platform-popup .popup-btn.telegram  { background: #2AABEE; }
+</style>
+
 <body>
+<div id="platform-popup">
+    <div class="popup-box">
+        <h2>✅ Registrazione completata!</h2>
+        <p id="popup-msg">Torna alla chat per iniziare.</p>
+        <a id="popup-btn" href="#" class="popup-btn">Torna alla chat</a>
+    </div>
+</div>
     <div class="auth-card">
         <h1>Crea il tuo account</h1>
         <p class="subtitle">Entra in Genesi. Il tuo spazio personale.</p>
@@ -14,15 +62,17 @@
         <form id="register-form">
             <div class="field">
                 <label for="email">Email</label>
-                <input type="email" id="email" placeholder="la-tua@email.com" required autocomplete="email">
+                <input type="email" id="email" name="email" placeholder="la-tua@email.com" required autocomplete="email">
             </div>
             <div class="field">
                 <label for="password">Password</label>
-                <input type="password" id="password" placeholder="Minimo 8 caratteri, 1 maiuscola, 1 numero" required autocomplete="new-password">
+                <input type="password" id="password" name="password" placeholder="Minimo 8 caratteri, 1 maiuscola, 1 numero" required
+                    autocomplete="new-password">
             </div>
             <div class="field">
                 <label for="password2">Conferma password</label>
-                <input type="password" id="password2" placeholder="Ripeti la password" required autocomplete="new-password">
+                <input type="password" id="password2" name="password_confirm" placeholder="Ripeti la password" required
+                    autocomplete="new-password">
             </div>
             <button type="submit" class="btn" id="submit-btn">Registrati</button>
         </form>
@@ -34,53 +84,7 @@
         </div>
     </div>
 
-    <script>
-    const form = document.getElementById('register-form');
-    const msg = document.getElementById('msg');
-    const btn = document.getElementById('submit-btn');
-
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        msg.className = 'msg';
-        msg.style.display = 'none';
-
-        const email = document.getElementById('email').value.trim();
-        const password = document.getElementById('password').value;
-        const password2 = document.getElementById('password2').value;
-
-        if (password !== password2) {
-            msg.textContent = 'Le password non coincidono.';
-            msg.className = 'msg error';
-            return;
-        }
-
-        btn.disabled = true;
-        btn.textContent = 'Registrazione...';
-
-        try {
-            const res = await fetch('/auth/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
-            });
-            const data = await res.json();
-
-            if (res.ok) {
-                msg.textContent = data.message || 'Registrazione completata! Controlla la tua email.';
-                msg.className = 'msg success';
-                form.reset();
-            } else {
-                msg.textContent = data.detail || 'Errore durante la registrazione.';
-                msg.className = 'msg error';
-            }
-        } catch (err) {
-            msg.textContent = 'Errore di connessione.';
-            msg.className = 'msg error';
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Registrati';
-        }
-    });
-    </script>
+    <script src="/static/register.js?v={{ build_version }}"></script>
 </body>
+
 </html>

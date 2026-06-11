@@ -19,6 +19,8 @@ INTENT_EMOJI_MAP: Dict[str, str] = {
     "relational": "🤝",
     "admin": "🛠️",
     "weather": "☀️",
+    "tecnica": "💻🛠️",
+    "multi": "✨",
 }
 
 # Context-specific emoji mapping for certain patterns
@@ -153,7 +155,7 @@ def _add_intent_emoji(text: str, intent: str, emoji: str) -> str:
     elif intent == "question":
         # Add emoji at the end
         lines[-1] = lines[-1] + " " + emoji
-    elif intent in ["neutral", "relational", "admin"]:
+    elif intent in ["neutral", "relational", "admin", "tecnica", "multi"]:
         # Add emoji at the beginning
         lines[0] = emoji + " " + lines[0]
     

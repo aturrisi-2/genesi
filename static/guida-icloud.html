@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guida iCloud - Genesi</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700&family=Inter:wght@300;400&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --gold: #D4AF37;
+            --dark: #0A0A0B;
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --text: #E0E0E0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--dark);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+
+        header {
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.2rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #fff 0%, var(--gold) 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p.subtitle {
+            opacity: 0.6;
+            font-weight: 300;
+        }
+
+        .guide-image {
+            width: 100%;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+            margin: 2rem 0;
+            background: #111;
+        }
+
+        .actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 1rem;
+        }
+
+        .btn {
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 700;
+            transition: all 0.3s;
+            cursor: pointer;
+            border: none;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: var(--gold);
+            color: #000;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(212, 175, 55, 0.2);
+        }
+
+        footer {
+            margin-top: 4rem;
+            opacity: 0.3;
+            font-size: 0.8rem;
+        }
+
+        @media print {
+            .btn {
+                display: none;
+            }
+
+            body {
+                background: white;
+                color: black;
+                padding: 0;
+            }
+
+            .guide-image {
+                border: none;
+                box-shadow: none;
+            }
+
+            h1 {
+                -webkit-text-fill-color: black !important;
+            }
+        }
+    </style>
+    <!-- Iubenda Widget -->
+    <script type="text/javascript"
+        src="https://embeds.iubenda.com/widgets/c29c96b8-4972-4418-b50c-83741eaa22d4.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Guida iCloud</h1>
+            <p class="subtitle">Segui lo schema qui sotto con le immagini reali per attivare la connessione.</p>
+        </header>
+
+        <img src="/static/assets/icloud/guide.png" alt="Infografica Guida iCloud" class="guide-image">
+
+        <div class="actions">
+            <button onclick="window.print()" class="btn btn-primary">Salva Guida / Stampa</button>
+            <a href="https://appleid.apple.com/account/manage" target="_blank" class="btn btn-secondary">Apri Apple
+                ID</a>
+        </div>
+
+        <footer>
+            Genesi - Faro nell'Oceano &copy; 2026
+        </footer>
+    </div>
+</body>
+
+</html>

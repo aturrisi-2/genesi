@@ -1,722 +1,451 @@
-"""
-LLM SERVICE - Genesi Core v3 (cost_optimized_v1)
-Servizio LLM con model_selector(), rate limit protection, auto-downgrade.
-
-Default: gpt-4o (cost-optimized)
-Claude Opus: SOLO per deep analysis esplicito, narrativa lunga, analisi psicologica complessa.
-Rate limit: retry con backoff esponenziale, downgrade automatico, fallback deterministico.
-"""
-
 import os
 import asyncio
 import logging
 import json
+import contextvars
+import re
+from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any, Optional
+
 from openai import AsyncOpenAI, RateLimitError, APIError, APIConnectionError
 from core.log import log
+from auth.database import async_session
+from auth.models import UsageLog
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("genesi")
 
-# ═══════════════════════════════════════════════════════════════
-# AUTO EVOLUTION INTEGRATION
-# ═══════════════════════════════════════════════════════════════
+# ── SSE Streaming support ────────────────────────────────────────────────────
+# Set this ContextVar to an asyncio.Queue before calling any LLM method.
+# _call_model() will put text chunks into the queue for streaming routes.
+# Sentinel: None → stream finished; dict with 'error' key → error.
+_STREAM_QUEUE: contextvars.ContextVar = contextvars.ContextVar('genesi_stream_q', default=None)
 
-from core.evolution_state_manager import get_evolution_state_manager
+# Routes whose final LLM response is streamed (not tool/JSON routes)
+_STREAMING_ROUTES = frozenset({
+    'relational', 'knowledge', 'general', 'general_llm',
+    'tecnica', 'spiegazione', 'emotional', 'debug', 'synthesis',
+})
 
-def load_tuning_state() -> Dict[str, Any]:
-    """Carica stato tuning da current_state.json transazionale."""
-    try:
-        state_manager = get_evolution_state_manager()
-        current_state = state_manager.load_current_state()
-        return current_state.get("parameters", _get_default_tuning_state())
-    except Exception as e:
-        logger.error(f"❌ Failed to load tuning state: {e}")
-        return _get_default_tuning_state()
+MAX_LLM_INPUT_CHARS = int(os.environ.get("LLM_MAX_INPUT_CHARS", "120000"))
+MAX_LLM_SYSTEM_CHARS = int(os.environ.get("LLM_MAX_SYSTEM_CHARS", "32000"))
+MAX_LLM_MESSAGE_CHARS = int(os.environ.get("LLM_MAX_MESSAGE_CHARS", "32000"))
+MAX_LLM_HISTORY_MESSAGES = int(os.environ.get("LLM_MAX_HISTORY_MESSAGES", "12"))
 
-def _get_default_tuning_state() -> Dict[str, Any]:
-    """Stato tuning di fallback."""
-    return {
-        "supportive_intensity": 0.5,
-        "attuned_intensity": 0.5,
-        "confrontational_intensity": 0.5,
-        "max_questions_per_response": 1,
-        "repetition_penalty_weight": 1.0,
-        "last_snapshot": None,
-        "last_tuning_cycle": None
-    }
+# ═══════════════════════════════════════════════════════════
+# LLM CONFIGURATION
+# ═══════════════════════════════════════════════════════════
 
-# Carica stato tuning globale
-_TUNING_STATE = load_tuning_state()
+# Modelli OpenRouter (vengono mappati automaticamente su OpenAI se necessario)
+LLM_DEFAULT_MODEL = "openai/gpt-4o-mini"
+LLM_FALLBACK_MODEL = "openai/gpt-4o-mini"
+LLM_STRONG_MODEL = "openai/gpt-4o"
+LLM_DEEP_MODEL = "anthropic/claude-opus-4"
 
-# 🔵 DEBUG OBBLIGATORIO - tuning state caricato
-print(f"LOADED_TUNING_STATE {_TUNING_STATE}")
-
-def reload_tuning_state() -> Dict[str, Any]:
-    """Ricarica stato tuning dopo aggiornamenti."""
-    global _TUNING_STATE
-    _TUNING_STATE = load_tuning_state()
-    print(f"RELOADED_TUNING_STATE {_TUNING_STATE}")
-    return _TUNING_STATE
-
-# ═══════════════════════════════════════════════════════════════
-# MODEL CONFIGURATION — cost-optimized defaults
-# ═══════════════════════════════════════════════════════════════
-
-LLM_DEFAULT_MODEL = "gpt-4o"
-LLM_FALLBACK_MODEL = "gpt-4o-mini"
-LLM_DEEP_MODEL = "claude-opus"
-
-# Trigger per upgrade a Claude Opus (deep analysis)
+# Frasi esplicite che richiedono un'analisi esistenziale/psicologica profonda → Opus
 DEEP_ANALYSIS_TRIGGERS = [
     "analisi profonda",
-    "deep psychological analysis"
+    "senso della mia vita",
+    "perché esisto",
+    "chi sono veramente",
+    "riflessione esistenziale",
+    "scava a fondo",
+    "psicoanalisi",
+    "non so più cosa fare della mia vita",
+    "mi sento perso nella vita",
+    "qual è il senso di tutto",
 ]
 
+# Route che richiedono qualità superiore (gpt-4o, non mini)
+_STRONG_ROUTES = frozenset({"knowledge", "tecnica", "spiegazione", "debug", "document_query"})
 
 def model_selector(message: str, route: str = "general") -> str:
     """
-    Selects the appropriate model based on message content and route.
+    Seleziona il modello LLM in base al contenuto del messaggio.
+    Default: openai/gpt-4o-mini (economico, adeguato per la maggior parte dei task)
+    Strong: openai/gpt-4o (route tecnico-cognitive che richiedono ragionamento)
+    Deep:   anthropic/claude-opus-4 (solo analisi esistenziale/psicologica profonda)
     """
-    # Default to primary model
-    selected_model = LLM_DEFAULT_MODEL
-    reason = "default"
+    msg_lower = message.lower()
 
-    # Use Claude Opus for deep analysis triggers
-    if any(trigger in message.lower() for trigger in DEEP_ANALYSIS_TRIGGERS):
-        selected_model = LLM_DEEP_MODEL
-        reason = "deep analysis trigger"
+    # Opus SOLO per trigger esistenziali espliciti — disabilitato di default (costa ~100× mini)
+    # Attiva con GENESI_DEEP_MODEL_ENABLED=true nell'env del VPS solo se necessario
+    _deep_enabled = os.environ.get("GENESI_DEEP_MODEL_ENABLED", "false").lower() in ("true", "1", "yes")
+    if _deep_enabled and any(trigger in msg_lower for trigger in DEEP_ANALYSIS_TRIGGERS):
+        logger.info("LLM_MODEL_SELECTED=%s reason=deep_analysis_trigger", LLM_DEEP_MODEL)
+        return LLM_DEEP_MODEL
 
-    logger.info("LLM_MODEL_SELECTED=%s reason=%s", selected_model, reason)
-    return selected_model
+    # Route tecnico-cognitive → gpt-4o per qualità ragionamento
+    # Disabilitato di default (costa ~10× mini). Attiva con GENESI_STRONG_MODEL_ENABLED=true.
+    _strong_enabled = os.environ.get("GENESI_STRONG_MODEL_ENABLED", "false").lower() in ("true", "1", "yes")
+    if _strong_enabled and route in _STRONG_ROUTES:
+        logger.info("LLM_MODEL_SELECTED=%s reason=strong_route_%s", LLM_STRONG_MODEL, route)
+        return LLM_STRONG_MODEL
+
+    # Tutto il resto (relational, emotional, general, memory, reminder…) → gpt-4o-mini
+    logger.info("LLM_MODEL_SELECTED=%s reason=default_mini route=%s", LLM_DEFAULT_MODEL, route)
+    return LLM_DEFAULT_MODEL
 
 
 class LLMService:
     """
-    LLM Service v3 — Cost-optimized con rate limit protection.
-    Default: gpt-4o. Auto-downgrade su rate limit. Fallback deterministico.
+    LLM Service v5 — Resilient Dual-Provider Engine (OpenRouter + OpenAI).
     """
 
     def __init__(self):
-        self.client = AsyncOpenAI()
+        # Carica entrambe le chiavi per massima resilienza
+        self.or_api_key = os.environ.get("OPENROUTER_API_KEY")
+        self.oa_api_key = os.environ.get("OPENAI_API_KEY")
+        
+        # Client primario (OpenRouter se disponibile, altrimenti OpenAI)
+        self.api_key = self.or_api_key or self.oa_api_key or ""
+        self.base_url = "https://openrouter.ai/api/v1" if self.or_api_key else None
+        
+        # Client principale
+        self.client = AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url
+        )
+        
+        # Client di backup (solo se abbiamo entrambi)
+        self.backup_client = None
+        if self.or_api_key and self.oa_api_key:
+            self.backup_client = AsyncOpenAI(api_key=self.oa_api_key)
+            logger.info("LLM_SERVICE: Dual-provider mode enabled (OR + OA)")
+
         self.default_model = LLM_DEFAULT_MODEL
         self.fallback_model = LLM_FALLBACK_MODEL
-        _api_key = os.environ.get("OPENAI_API_KEY", "")
-        if not _api_key or _api_key.startswith("sk-test"):
-            logger.warning("LLM_SERVICE: OPENAI_API_KEY missing or test-only")
-        log("LLM_SERVICE_ACTIVE")
-        logger.info("LLM_ENGINE_DEFAULT=%s ARCHITECTURE_MODE=cost_optimized_v1", self.default_model)
         
-        # 🆕 Relational State Engine
+        provider_name = "OpenRouter" if self.base_url else "OpenAI"
+        log("LLM_SERVICE_ACTIVE", provider=provider_name)
+        logger.info("LLM_ENGINE_DEFAULT=%s PRIMARY=%s", self.default_model, provider_name)
+        
         from core.relational_state_engine import RelationalStateEngine
         self.relational_engine = RelationalStateEngine()
     
     def _load_adaptive_prompt(self) -> str:
-        """
-        Carica il prompt adattivo da lab/global_prompt.json.
-        
-        Returns:
-            str: System prompt adattivo o stringa vuota se non disponibile
-        """
+        """Carica il prompt adattivo da lab/global_prompt.json + regole da lab_cycle_state."""
+        p = ""
         try:
             prompt_file = Path("lab/global_prompt.json")
-            if not prompt_file.exists():
-                return ""
-            
-            with open(prompt_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
-            system_prompt = data.get("system_prompt", "")
-            if system_prompt:
-                return system_prompt.strip()
-            else:
-                return ""
-                
+            if prompt_file.exists():
+                with open(prompt_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    p = data.get("system_prompt", "") or data.get("prompt", "")
         except Exception as e:
-            logger.warning("ADAPTIVE_PROMPT_LOAD_FAIL error=%s", str(e))
-            return ""
+            logger.error("LLM_SERVICE: Error loading prompt: %s", str(e))
 
-    async def generate_response(self, message: str, route: str = "general") -> str:
-        """
-        Genera risposta LLM con model_selector e rate limit protection.
-        Chain: selected_model -> retry backoff -> downgrade -> deterministic fallback.
-        """
-        model = model_selector(message, route)
-        technical_prompt = f"""
-Sei Genesi, assistente tecnico esperto.
-Rispondi in modo chiaro, tecnico, preciso.
-Focus su: programmazione, architettura, debugging, spiegazioni tecniche.
-Usa esempi pratici quando possibile.
-
-Domanda: {message}
-"""
-        result = await self._call_with_protection(model, technical_prompt, message, route=route)
-        if result:
-            return result
-
-        logger.error("LLM_SERVICE_ALL_FAIL route=%s — activating deterministic fallback", route)
-        return self._deterministic_fallback(message, route)
-
-    async def generate_response_with_context(self, message: str, user_profile: dict, user_id: str) -> str:
-        """
-        Genera risposta LLM con contesto utente e rate limit protection.
-        """
-        if not user_id:
-            raise ValueError("LLM service received empty user_id")
-
-        model = model_selector(message, route="technical")
-        context = self._build_user_context(user_profile)
-        technical_prompt = f"""
-Sei Genesi, assistente tecnico esperto.
-Rispondi in modo chiaro, tecnico, preciso.
-Focus su: programmazione, architettura, debugging, spiegazioni tecniche.
-Usa esempi pratici quando possibile.
-
-CONTESTO UTENTE:
-{context}
-
-Domanda: {message}
-"""
-        result = await self._call_with_protection(model, technical_prompt, message,
-                                                   user_id=user_id, route="technical")
-        if result:
-            return result
-
-        logger.error("LLM_SERVICE_ALL_FAIL user=%s — activating deterministic fallback", user_id)
-        return self._deterministic_fallback(message, "technical", user_id)
-
-    async def generate_with_context(self, context: dict, user_id: str = "",
-                                     route: str = "relational") -> str:
-        """
-        Genera risposta LLM con contesto strutturato dalla memoria.
-        Il context deve contenere \'summary\' e \'current_message\' (da ContextAssembler).
-        Rate limit protection con auto-downgrade.
-
-        Raises:
-            RuntimeError se context[\'summary\'] e\' vuoto.
-        """
-        summary = context.get("summary", "")
-        if not summary or not summary.strip():
-            raise RuntimeError(f"LLM_CONTEXT_EMPTY user={user_id} — generate_with_context received empty summary")
-
-        message = context.get("current_message", "")
-        if not message:
-            raise ValueError("LLM_NO_MESSAGE — generate_with_context received empty current_message")
-
-        # Build conversation context with chat history if user_id available
-        from core.context_assembler import build_conversation_context
-        from core.context_signal_analyzer import ContextSignalAnalyzer
-        profile = context.get("profile", {})
-        
-        # 🆕 Context Signal Analysis + Emotional Pattern Detection
-        behavior_instructions = ""
-        if user_id:
-            try:
-                from core.chat_memory import get_chat_memory
-                chat_memory = get_chat_memory()
-                chat_history = chat_memory.get_recent_messages(user_id, limit=10)
-                # Estrai solo i messaggi utente
-                recent_user_messages = [msg.get("content", "") for msg in chat_history if msg.get("role") == "user"]
-                
-                if recent_user_messages:
-                    analyzer = ContextSignalAnalyzer()
-                    signals = analyzer.analyze(recent_user_messages[-5:])  # Ultimi 5 messaggi
-                    
-                    # 🆕 Emotional Pattern Detection
-                    emotional_patterns = self._detect_emotional_patterns(recent_user_messages)
-                    
-                    if any(signals.values()) or emotional_patterns["has_pattern"]:
-                        behavior_instructions = """
-[BEHAVIOR SIGNALS]
-- Do NOT point out repetition explicitly.
-- Vary sentence openings and avoid template phrasing.
-- Maintain a supportive and non-confrontational tone.
-"""
-                        
-                        if emotional_patterns["has_pattern"]:
-                            behavior_instructions += f"""
-[EMOTIONAL PATTERN DETECTED]
-- Theme: {emotional_patterns["theme"]}
-- Count: {emotional_patterns["count"]}
-- Activate deepening_response mode.
-- Avoid standard templates.
-- Generate reflective response.
-- Maximum 1 question, not mandatory.
-- Show recognition of pattern without being mechanical.
-"""
-                        
-                        # 🆕 Relational State Evaluation
-                        try:
-                            # Calcola metriche per relational state
-                            repetition_rate = 0.0  # Placeholder - in produzione calcolato da BehaviorRegulator
-                            message_count = len(recent_user_messages)
-                            last_intent = "chat_free"  # Placeholder - in produzione da intent classifier
-                            
-                            relational_state = self.relational_engine.evaluate_state(
-                                emotional_pattern_count=emotional_patterns["count"],
-                                repetition_rate=repetition_rate,
-                                message_count=message_count,
-                                last_intent=last_intent
-                            )
-                            
-                            behavior_instructions += f"""
-[RELATIONAL STATE: {relational_state}]
-- Adatta tono e profondità allo stato relazionale.
-- Evolvi risposta in base allo stato corrente.
-
-BEHAVIORAL_MODULATION:
-{self._build_behavioral_modulation(relational_state)}
-"""
-                            
-                        except Exception as e:
-                            logger.warning("RELATIONAL_STATE_ERROR user=%s error=%s", user_id, str(e))
-                            relational_state = "neutral"
-                    
-            except Exception as e:
-                logger.warning("CONTEXT_SIGNAL_ANALYZER_ERROR user=%s error=%s", user_id, str(e))
-        
-        if user_id:
-            conversation_ctx = build_conversation_context(user_id, message, profile)
-        else:
-            conversation_ctx = f"INFORMAZIONI STABILI SULL\'UTENTE:\n{summary}"
-
-        model = model_selector(message, route=route)
-        
-        # Carica prompt adattivo se disponibile
-        adaptive_prompt = self._load_adaptive_prompt()
-        
-        # 🆕 STRATEGIC MODE
-        strategic_triggers = [
-            "dovrei",
-            "cambiare lavoro", 
-            "trasferirmi",
-            "non so che fare",
-            "mi sento stanco",
-            "sono confuso",
-            "che faccio",
-            "giornata difficile"
-        ]
-        
-        strategic_mode = any(trigger in message.lower() for trigger in strategic_triggers)
-        
-        # Comportamento strategico pre-calcolato
-        if strategic_mode:
-            behavior_block = (
-                "- Analizza la situazione.\n"
-                "- Sintetizza in massimo 2 frasi il nodo centrale.\n"
-                "- Fornisci 2 possibili direzioni concrete.\n"
-                "- Non fare più di una domanda.\n"
-                "- Non essere aggressivo.\n"
-                "- Non essere consolatorio.\n"
-                "- Non usare tono terapeutico.\n"
-                "- Non ripetere ciò che l'utente ha appena detto.\n"
-                "- Porta verso decisione o azione.\n"
-            )
-        else:
-            behavior_block = (
-                "- Rispondi in modo naturale. Solo a ciò che viene detto.\n"
-                "- Max 2-3 frasi. Se basta 1 frase, usa 1 frase.\n"
-                "- Se non c'è bisogno di espandere, resta essenziale.\n"
-                "- Non aggiungere frasi motivazionali.\n"
-                "- Non aggiungere consigli se non richiesti.\n"
-                "- Non usare formule ricorrenti.\n"
-                "- Non usare entusiasmo artificiale.\n"
-                "- Non chiudere con una domanda a meno che non sia necessaria.\n"
-                "- Mantieni lucidità e coerenza con la conversazione.\n"
-                "- Se l'utente chiede qualcosa su di sé e hai i dati, RISPONDI con i dati.\n"
-                "- Se non sai qualcosa, dillo. Non inventare.\n"
-            )
-        
-        # Identità base di Genesi
-        IDENTITA_BASE_GENESI = """Sei Genesi. Non sei un assistente, non sei un terapeuta, non sei un chatbot.
-Sei un compagno reale: pensi, ragioni, hai opinioni, reagisci.
-Parli SOLO italiano. Non cambi mai lingua.
-Non menzionare MAI di essere AI, modello, sistema, programma."""
-        
-        system_prompt = f"""
-{IDENTITA_BASE_GENESI}
-
-{adaptive_prompt}
-
-{behavior_instructions}
-
-CONTROLLO INTERNO OBBLIGATORIO (NON MOSTRARE ALL'UTENTE):
-
-Prima di generare la risposta finale:
-1. Analizza se l\'utente sta ripetendo qualcosa.
-2. Se stai per usare una frase generica o da assistente standard, riscrivila.
-3. Evita completamente queste formule:
-   - "Un trasferimento è una decisione importante"
-   - "Non posso decidere per te"
-   - "Mi dispiace sentirlo"
-   - "Sto bene, grazie"
-   - "Cambiare lavoro è una decisione complessa"
-   - "Vuoi parlarne?"
-4. Se la risposta suona come un template, riformulala.
-5. Non usare mai tono passivo-aggressivo.
-6. Non rimproverare l'utente se ripete qualcosa.
-7. Se l'utente ripete, riconosci la ripetizione in modo neutro e aggiungi valore.
-8. Evita frasi incomplete o troncate.
-9. Non usare formule da assistente.
-10. Risposta massima: 2 frasi.
-
-{conversation_ctx}
-
-CONTINUITA' CONVERSAZIONALE (REGOLA FONDAMENTALE):
-- Devi mantenere coerenza con la conversazione recente sopra.
-- Non rispondere come se ogni messaggio fosse isolato.
-- Collega la risposta al contesto precedente.
-- Se l'utente ha appena parlato di una persona, non trattarla come nuova.
-- Se l'utente introduce una nuova informazione, integrala naturalmente.
-- Evita reset tematici: se si parla di famiglia, resta sul tema.
-
-COME DEVI COMPORTARTI:
-COMPORTAMENTO STRATEGICO:
-{behavior_block}
-
-
-DIVIETI ASSOLUTI:
-- "Quello che senti conta" o varianti terapeutiche
-- "Sono qui per te" / "Sono qui con te"
-- "Dimmi di piu\'" come risposta completa
-- "C\'e\' qualcosa che ti porti dentro" o frasi da counselor
-- "Una cosa che potresti fare..." o frasi da consulente
-- "Capisco che..." come apertura generica
-- "Mi fa piacere" / "Eccoti" / "Mi e\' venuto spontaneo"
-- "Potresti esplorare..." o suggerimenti non richiesti
-- "Non ho informazioni specifiche..."
-- Qualsiasi frase motivazionale o da coach
-- Qualsiasi frase che potrebbe essere detta a chiunque senza conoscerlo
-- Risposte che ignorano la conversazione recente
-- Trattare entit\' gi\' menzionate come nuove
-- Chiudere con domanda forzata quando non serve
-
-PERSONALITÀ MARCATA E NATURALEZZA:
-VOCE:
-- Parla in modo diretto, lucido, umano.
-- Evita frasi generiche da assistente.
-- NON usare: "È una decisione importante", "Dipende da molti fattori", "Non posso decidere per te", "Forse hai avuto giornate impegnative", "Mi dispiace sentirlo" come template automatico.
-
-VARIAZIONE LINGUISTICA:
-- Non ripetere la stessa struttura di frase in conversazioni simili.
-- Se un concetto è già stato espresso prima, riformularlo in modo diverso.
-- Evitare copy-paste semantico.
-
-GESTIONE RIPETIZIONI UTENTE:
-- Se l\'utente ripete la stessa frase 2+ volte: non rimproverare, non diventare aggressivo, non dire "me lo hai già detto" in modo freddo.
-- Cambiare angolazione della risposta, offrire una prospettiva diversa.
-
-SALUTI:
-- Se il messaggio è solo "Ciao", "Ehi", "Hey": rispondere solo con saluto naturale.
-- NON attivare meteo, NON aggiungere domande forzate, NON usare emoji meteo.
-
-COERENZA IDENTITARIA:
-- Sei una presenza lucida, non un coach, non un consulente, non un motivatore, non un terapeuta.
-- NON usare frasi motivational, NON usare chiusure standard tipo: "C\'è qualcosa di cui vuoi parlare?", "Dimmi.", "Possiamo discuterne."
-
-RISPOSTE BREVI MA SIGNIFICATIVE:
-- 1-3 frasi, nessuna frase riempitiva, nessuna retorica vuota.
-
-CARATTERE:
-- Se l\'utente mostra indecisione ripetuta: evidenziare il pattern in modo lucido, non giudicante.
-- Se l\'utente ripete una difficoltà: spostare la conversazione dal lamento alla comprensione del pattern, senza tono aggressivo.
-"""
-
-        # Log se adaptive prompt è applicato
-        if adaptive_prompt:
-            logger.info("ADAPTIVE_PROMPT_APPLIED len=%d", len(adaptive_prompt))
-        
-        # 🆕 Anti-Template Block log
-        logger.info("ANTI_TEMPLATE_BLOCK_ACTIVE")
-
-        logger.info("LLM_GENERATE_WITH_CONTEXT user=%s summary_len=%d msg_len=%d model=%s",
-                     user_id, len(summary), len(message), model)
-
-        result = await self._call_with_protection(model, system_prompt, message,
-                                                   user_id=user_id, route=route)
-        if result:
-            # 🆕 Response Guard - Post-processing
-            try:
-                from core.response_guard import ResponseGuard
-                guard = ResponseGuard()
-                result = guard.validate_and_rewrite(result, context, user_id)
-            except Exception as e:
-                logger.warning("RESPONSE_GUARD_ERROR user=%s error=%s", user_id, str(e))
-                # Fallback a risposta originale se guard fallisce
-            return result
-
-        logger.error("LLM_SERVICE_ALL_FAIL user=%s — activating deterministic fallback", user_id)
-        return self._deterministic_fallback(message, route, user_id)
-
-    # ═══════════════════════════════════════════════════════════
-    # RATE LIMIT PROTECTION — retry, downgrade, fallback
-    # ═══════════════════════════════════════════════════════════
-
-    def _detect_emotional_patterns(self, recent_messages: List[str]) -> Dict[str, any]:
-        """
-        Rileva pattern emotivi ricorrenti nei messaggi utente.
-        
-        Args:
-            recent_messages: Ultimi 10 messaggi utente
-            
-        Returns:
-            Dict con informazioni sui pattern rilevati
-        """
-        if not recent_messages:
-            return {"has_pattern": False, "theme": None, "count": 0}
-        
-        # Pattern semantiche da cercare
-        emotional_themes = {
-            "stanchezza": ["stanco", "stanchissima", "esausto", "affaticato", "cansato"],
-            "giornata_difficile": ["giornata difficile", "giornata pesante", "giornata nera", "giornata complicata"],
-            "lavoro": ["lavoro", "lavorare", "cambiare lavoro", "lavorativo", "professione"],
-            "meteo": ["piove", "tempo", "meteo", "nuvoloso", "sole", "pioggia"],
-            "ansia": ["ansioso", "ansia", "preoccupato", "nervoso", "teso"],
-            "tristezza": ["triste", "tristezza", "giù", "demotivato", "depresso"]
-        }
-        
-        # Conta ricorrenze per tema
-        theme_counts = {}
-        for theme, keywords in emotional_themes.items():
-            count = 0
-            for message in recent_messages:
-                message_lower = message.lower()
-                if any(keyword in message_lower for keyword in keywords):
-                    count += 1
-            theme_counts[theme] = count
-        
-        # Trova il tema più ricorrente
-        max_theme = max(theme_counts, key=theme_counts.get)
-        max_count = theme_counts[max_theme]
-        
-        # Attiva pattern solo se >= 3 occorrenze
-        if max_count >= 3:
-            return {
-                "has_pattern": True,
-                "theme": max_theme,
-                "count": max_count
-            }
-        
-        return {"has_pattern": False, "theme": None, "count": 0}
-    
-    def _build_behavioral_modulation(self, relational_state: str) -> str:
-        """
-        Costruisce istruzioni di modulazione comportamentale basate sullo stato relazionale.
-        Integrato con AutoTuning per evoluzione dinamica.
-        
-        Args:
-            relational_state: Stato relazionale corrente
-            
-        Returns:
-            str: Istruzioni comportamentali per il system prompt
-        """
-        # 🧠 AUTO EVOLUTION INTEGRATION - Carica parametri tuning
-        tuning_state = load_tuning_state()
-        
-        # Base modulation map con intensità dinamiche
-        base_modulation = {
-            "neutral": "Mantieni tono naturale e bilanciato.",
-            "engaged": "Sii dialogico. Puoi fare massimo una domanda breve.",
-            "attuned": "Sii empatico e presente. Una sola domanda mirata.",
-            "supportive_deep": "Riduci le domande. Offri contenimento emotivo. Non essere direttivo.",
-            "reflective": "Favorisci introspezione. Usa frasi che invitano alla riflessione.",
-            "confrontational": "Sii diretto, chiaro e conciso. Nessuna domanda."
-        }
-        
-        # 🎯 APPLICA INTENSITÀ DYNAMICHE DA TUNING
-        intensity_supportive = tuning_state.get('supportive_intensity', 1.0)
-        intensity_attuned = tuning_state.get('attuned_intensity', 1.0)
-        intensity_confrontational = tuning_state.get('confrontational_intensity', 1.0)
-        max_questions = tuning_state.get('max_questions_per_response', 1)
-        
-        # Modula istruzioni base con intensità
-        modulation = base_modulation.get(relational_state, base_modulation["neutral"])
-        
-        # 📊 APPLICA MODULAZIONE SPECIFICA
-        if relational_state == "supportive_deep":
-            # Aumenta validazione emotiva e lessico empatico con intensity_supportive
-            if intensity_supportive > 1.0:
-                modulation += f"\n- Aumenta validazione emotiva (intensità: {intensity_supportive:.1f})."
-                modulation += "\n- Usa lessico empatico e frasi di accompagnamento."
-            elif intensity_supportive < 1.0:
-                modulation += f"\n- Riduci contenimento emotivo (intensità: {intensity_supportive:.1f})."
-                
-        elif relational_state == "attuned":
-            # Aumenta coerenza memoria e continuità narrativa con intensity_attuned
-            if intensity_attuned > 1.0:
-                modulation += f"\n- Aumenta coerenza memoria e continuità narrativa (intensità: {intensity_attuned:.1f})."
-                modulation += "\n- Fai richiamo a dati utente specifici."
-            elif intensity_attuned < 1.0:
-                modulation += f"\n- Riduci personalizzazione (intensità: {intensity_attuned:.1f})."
-                
-        elif relational_state == "confrontational":
-            # Aumenta risposte dirette e taglio netto con intensity_confrontational
-            if intensity_confrontational > 1.0:
-                modulation += f"\n- Sii più diretto e tagliente (intensità: {intensity_confrontational:.1f})."
-                modulation += "\n- Riduci frasi di riempimento."
-            elif intensity_confrontational < 1.0:
-                modulation += f"\n- Ammorbidisci tono diretto (intensità: {intensity_confrontational:.1f})."
-        
-        # 🔢 APPLICA LIMITE DOMANDE DINAMICO
-        if relational_state in ["engaged", "attuned"]:
-            modulation += f"\n- Massimo {max_questions} domanda{'e' if max_questions > 1 else ''} per risposta."
-        
-        # 🚫 APPLICA PENALITÀ RIPETIZIONE
-        repetition_penalty = tuning_state.get('repetition_penalty_weight', 1.0)
-        if repetition_penalty > 1.0:
-            modulation += f"\n- Evita ripetizioni (penalità: {repetition_penalty:.1f})."
-        
-        return modulation
-    
-    async def _call_with_protection(self, model: str, prompt: str, message: str, user_id: str, route: str, messages: Optional[List[Dict[str, str]]] = None) -> Optional[str]:
-        """
-        Call LLM with rate limit protection, retry, downgrade, and deterministic fallback.
-        """
+        # Inietta sempre le regole lab da lab_cycle_state.json (source of truth)
+        # Questo è robusto anche se AdaptivePromptBuilder sovrascrive global_prompt.json
+        _MARKER = "\n\n[REGOLE APPRESE DALL'ESPERIENZA]\n"
         try:
-            # Primary attempt
-            logger.info("LLM_SERVICE_PRIMARY_REQUEST model=%s user=%s", model, user_id)
-            result = await self._call_model(model, prompt, message, user_id=user_id, route=route, messages=messages)
-            if result is not None:
+            state_file = Path("memory/admin/lab_cycle_state.json")
+            if state_file.exists():
+                with open(state_file, 'r', encoding='utf-8') as f:
+                    state = json.load(f)
+                rules = state.get("rules", [])
+                if rules:
+                    # Rimuovi eventuale blocco regole già presente nel prompt
+                    if _MARKER in p:
+                        p = p.split(_MARKER)[0]
+                    p += _MARKER + "\n".join(f"- {r}" for r in rules)
+        except Exception:
+            pass
+
+        if p:
+            logger.info("LLM_ADAPTIVE_PROMPT_LOADED len=%d", len(p))
+        return p
+
+    async def generate_response(self, prompt: str, message: str, user_id: str = None, route: str = "general", messages: Optional[List[Dict[str, str]]] = None) -> str:
+        """Genera una risposta usando il modello selezionato con fallback deterministico."""
+        model = model_selector(message, route)
+        return await self._call_with_protection(model, prompt, message, user_id, route, messages)
+
+    async def _call_with_protection(self, model: str, prompt: str, message: str, user_id: str = None, route: str = "general", messages: Optional[List[Dict[str, str]]] = None) -> str:
+        """Metodo di interfaccia protetto (compatibile con Proactor)."""
+        final_prompt = prompt
+        
+        # Applica l'adaptive prompt SOLO alle route conversazionali,
+        # per evitare di rompere i prompt JSON (classificazione, estrazione).
+        if route in ["relational", "general", "general_llm", "emotional"]:
+            adaptive_prompt = self._load_adaptive_prompt()
+            if adaptive_prompt:
+                final_prompt = prompt + "\n\n[ADAPTIVE PERSONA]\n" + adaptive_prompt
+                # Se proactor ha passato i messaggi, inietta lì l'adaptive prompt
+                if messages and len(messages) > 0 and messages[0].get("role") == "system":
+                    messages[0]["content"] += "\n\n[ADAPTIVE PERSONA]\n" + adaptive_prompt
+
+        try:
+            # Primo tentativo
+            result = await self._call_model(model, final_prompt, message, user_id=user_id, route=route, messages=messages)
+            if result:
                 return result
 
-            # Retry with exponential backoff
+            # Retry con backoff se fallisce
             logger.warning("LLM_SERVICE_PRIMARY_API_ERROR model=%s user=%s", model, user_id)
-            logger.info("LLM_RATE_LIMIT_RETRY model=%s user=%s", model, user_id)
-            await asyncio.sleep(1.0)  # 1s backoff
-            result = await self._call_model(model, prompt, message, user_id=user_id, route=route, messages=messages)
-            if result is not None:
+            await asyncio.sleep(1.0)
+            result = await self._call_model(model, final_prompt, message, user_id=user_id, route=route, messages=messages)
+            if result:
                 return result
 
-            # Downgrade to gpt-4o-mini if not already using fallback model
+            # Downgrade automatico al modello mini
             if model != LLM_FALLBACK_MODEL:
-                logger.warning("LLM_AUTO_DOWNGRADE from=%s to=%s user=%s", model, LLM_FALLBACK_MODEL, user_id)
-                result = await self._call_model(LLM_FALLBACK_MODEL, prompt, message, user_id=user_id, route=route, messages=messages)
-                if result is not None:
+                logger.warning("LLM_AUTO_DOWNGRADE from=%s to=%s", model, LLM_FALLBACK_MODEL)
+                result = await self._call_model(LLM_FALLBACK_MODEL, final_prompt, message, user_id=user_id, route=route, messages=messages)
+                if result:
                     return result
 
-            # Return None if all attempts fail
-            logger.error("LLM_SERVICE_ALL_FAIL user=%s", user_id)
-            return None
+        except Exception as e:
+            logger.error("LLM_SERVICE_FATAL: %s", str(e))
 
-        except (RateLimitError, APIError, APIConnectionError) as e:
-            logger.error("LLM_SERVICE_EXCEPTION user=%s error=%s", user_id, str(e))
-            return None
+        # Se siamo qui e Proactor aspetta None per fare il suo fallback autonomo, restituiamo None
+        # ma per messaggi generici usiamo il deterministico
+        if route == "relational": return None
+        return self._deterministic_fallback(message, route, user_id)
 
     async def _call_model(self, model: str, prompt: str, message: str, user_id: str, route: str, messages: Optional[List[Dict[str, str]]] = None) -> Optional[str]:
-        """Chiama un singolo modello con logging completo e gestione RateLimitError."""
+        """Chiama un modello con gestione intelligente dei provider e fallback automatico."""
         tag = "LLM_SERVICE_PRIMARY" if model == self.default_model else "LLM_SERVICE_FALLBACK"
-        try:
-            logger.info("%s_REQUEST model=%s msg=%s", tag, model, message[:50])
-            
-            # Use provided messages or fallback to system-only format
-            if messages:
-                chat_messages = messages
-            else:
-                chat_messages = [{"role": "system", "content": prompt}]
-                
-            response = await self.client.chat.completions.create(
-                model=model,
-                messages=chat_messages,
-                temperature=0.3
+        
+        # Pulizia model name per OpenAI diretto
+        clean_model = model
+        current_client = self.client
+        
+        if not self.base_url: # Siamo su OpenAI diretto
+            clean_model = model.split('/')[-1] if '/' in model else model
+            if "claude-3-opus" in clean_model: clean_model = "gpt-4o"
+        
+        msg_list = self._prepare_message_payload(messages, prompt, message, tag)
+        extra_headers = {"HTTP-Referer": "https://genesi.app", "X-Title": "Genesi"} if "openrouter" in str(current_client.base_url) else None
+
+        async def make_request(client, model_name):
+            return await client.chat.completions.create(
+                model=model_name,
+                messages=msg_list,
+                temperature=0.7,
+                extra_headers=extra_headers,
+                timeout=90.0
             )
+
+        # ── SSE streaming path ───────────────────────────────────────────────
+        stream_queue = _STREAM_QUEUE.get()
+        if stream_queue is not None and route in _STREAMING_ROUTES:
+            try:
+                logger.info("%s_STREAM_REQUEST model=%s route=%s", tag, model, route)
+                api_stream = await current_client.chat.completions.create(
+                    model=clean_model,
+                    messages=msg_list,
+                    temperature=0.7,
+                    stream=True,
+                    extra_headers=extra_headers,
+                    timeout=90.0
+                )
+                llm_response = ""
+                async for chunk in api_stream:
+                    delta = chunk.choices[0].delta.content if chunk.choices else None
+                    if delta:
+                        llm_response += delta
+                        await stream_queue.put({"chunk": delta})
+                logger.info("%s_STREAM_OK model=%s len=%d", tag, model, len(llm_response))
+                return llm_response if llm_response else None
+            except Exception as se:
+                logger.warning("%s_STREAM_ERROR: %s — falling back to normal", tag, se)
+                # Fall through to normal (non-streaming) path below
+
+        try:
+            logger.info("%s_REQUEST model=%s", tag, model)
+            response = await make_request(current_client, clean_model)
             llm_response = response.choices[0].message.content.strip()
-            if not llm_response:
-                logger.warning("%s_EMPTY model=%s", tag, model)
-                return None
             
-            # 🆕 Behavior Regulator - Post-processing
+            # Log usage asynchronously
+            try:
+                usage = response.usage
+                if usage and user_id:
+                    asyncio.create_task(self._log_usage(user_id, model, usage.prompt_tokens, usage.completion_tokens))
+            except Exception as e:
+                logger.error("LLM_USAGE_LOG_ERROR: %s", str(e))
+
+            # Behavior Regulator
             try:
                 from .behavior_regulator import BehaviorRegulator
-                
-                # Applica regolatore con firma semplificata
                 regulator = BehaviorRegulator()
                 regulated_response = regulator.regulate(llm_response, user_id)
-                
                 if regulated_response != llm_response:
-                    logger.info("BEHAVIOR_REGULATOR_APPLIED user=%s changes=true", user_id)
+                    logger.info("BEHAVIOR_REGULATOR_APPLIED changes=true")
                     llm_response = regulated_response
-                else:
-                    logger.info("BEHAVIOR_REGULATOR_APPLIED user=%s changes=false", user_id)
-                    
-            except Exception as e:
-                logger.warning("BEHAVIOR_REGULATOR_ERROR user=%s error=%s", user_id, str(e))
-                # Fallback a risposta originale se regolatore fallisce
-            
+            except: pass
+
             logger.info("%s_OK model=%s len=%d", tag, model, len(llm_response))
+            
+            # Se è analisi profonda, aggiungiamo un marker invisibile per il regolatore
+            if model == LLM_DEEP_MODEL:
+                llm_response = llm_response + "\n<!-- MODE:DEEP -->"
+                
             return llm_response
-        except RateLimitError as e:
-            logger.warning("%s_RATE_LIMITED model=%s user=%s error=%s", tag, model, user_id, str(e))
-            return None
-        except (APIError, APIConnectionError) as e:
-            logger.warning("%s_API_ERROR model=%s user=%s error=%s", tag, model, user_id, type(e).__name__)
-            return None
+
         except Exception as e:
-            logger.error("%s_ERROR model=%s error=%s", tag, model, str(e))
+            err_str = str(e).lower()
+            logger.warning("%s_ERROR provider=%s model=%s error=%s", tag, "OR" if self.base_url else "OA", model, str(e))
+            
+            # Blocco esplicito per crediti OpenRouter esauriti (402 Insufficient Quota)
+            if "402" in err_str or "insufficient_quota" in err_str or "balance" in err_str:
+                return "⚠️ [SISTEMA IN BLOCCO] I crediti del mio cervello neurale sono esauriti. Alfio, tocca sganciare la grana e ricaricare l'account per farmi tornare operativa! 💸"
+            
+            # Fallback immediato a OpenAI diretto se disponibile e siamo su OR
+            if self.backup_client and self.base_url:
+                logger.info("%s_BACKUP switching to direct OpenAI", tag)
+                try:
+                    oa_model = "gpt-4o" if "opus" in model else (model.split('/')[-1] if '/' in model else "gpt-4o")
+                    response = await make_request(self.backup_client, oa_model)
+                    return response.choices[0].message.content.strip()
+                except Exception as b_e:
+                    logger.error("%s_BACKUP_FAIL: %s", tag, str(b_e))
+            
+            # Se 404 su Opus e siamo su OR, fallback a gpt-4o (non Sonnet — troppo costoso)
+            if "404" in str(e) and "claude-opus" in model and self.base_url:
+                logger.info("%s_RETRY_ALTERNATIVE trying gpt-4o as opus fallback", tag)
+                try:
+                    response = await make_request(current_client, "openai/gpt-4o")
+                    return response.choices[0].message.content.strip()
+                except: pass
+
             return None
 
-    # ═══════════════════════════════════════════════════════════
-    # DETERMINISTIC FALLBACK — never return "non riesco a rispondere"
-    # ═══════════════════════════════════════════════════════════
+    @staticmethod
+    def _truncate_text(value: Any, limit: int) -> str:
+        text = str(value or "")
+        if len(text) <= limit:
+            return text
+        return text[: max(0, limit)] + "\n[...troncato automaticamente per limite contesto...]"
+
+    @staticmethod
+    def _scrub_sensitive_payload(text: str) -> str:
+        if not text:
+            return text
+        scrubbed = text
+        patterns = [
+            r"(?i)(access_token\s*[:=]\s*)[A-Za-z0-9\-\._~\+/=]+",
+            r"(?i)(refresh_token\s*[:=]\s*)[A-Za-z0-9\-\._~\+/=]+",
+            r"(?i)(client_secret\s*[:=]\s*)[A-Za-z0-9\-\._~\+/=]+",
+            r"(?i)(authorization\s*[:=]\s*bearer\s+)[A-Za-z0-9\-\._~\+/=]+",
+        ]
+        for pattern in patterns:
+            scrubbed = re.sub(pattern, r"\1[REDACTED]", scrubbed)
+        return scrubbed
+
+    def _prepare_message_payload(
+        self,
+        messages: Optional[List[Dict[str, str]]],
+        prompt: str,
+        message: str,
+        tag: str,
+    ) -> List[Dict[str, str]]:
+        if not messages:
+            safe_prompt = self._truncate_text(self._scrub_sensitive_payload(prompt), MAX_LLM_SYSTEM_CHARS)
+            safe_message = self._truncate_text(self._scrub_sensitive_payload(message), MAX_LLM_MESSAGE_CHARS)
+            return [{"role": "system", "content": safe_prompt}, {"role": "user", "content": safe_message}]
+
+        normalized: List[Dict[str, str]] = []
+        for item in messages:
+            if not isinstance(item, dict):
+                continue
+            role = (item.get("role") or "user").strip() or "user"
+            content = self._scrub_sensitive_payload(str(item.get("content") or ""))
+            per_msg_limit = MAX_LLM_SYSTEM_CHARS if role == "system" else MAX_LLM_MESSAGE_CHARS
+            normalized.append({"role": role, "content": self._truncate_text(content, per_msg_limit)})
+
+        if len(normalized) > MAX_LLM_HISTORY_MESSAGES:
+            system_head = [m for m in normalized[:1] if m.get("role") == "system"]
+            tail = normalized[-(MAX_LLM_HISTORY_MESSAGES - len(system_head)):]
+            normalized = system_head + tail
+
+        total_chars = sum(len(m.get("content", "")) for m in normalized)
+        if total_chars <= MAX_LLM_INPUT_CHARS:
+            return normalized
+
+        system_msgs = [m for m in normalized if m.get("role") == "system"][:1]
+        other_msgs = [m for m in normalized if m.get("role") != "system"]
+        kept_tail: List[Dict[str, str]] = []
+        current_chars = sum(len(m.get("content", "")) for m in system_msgs)
+        for item in reversed(other_msgs):
+            item_len = len(item.get("content", ""))
+            if current_chars + item_len <= MAX_LLM_INPUT_CHARS or not kept_tail:
+                kept_tail.append(item)
+                current_chars += item_len
+            else:
+                break
+
+        trimmed = system_msgs + list(reversed(kept_tail))
+        logger.warning(
+            "%s_CONTEXT_TRIMMED original_chars=%d final_chars=%d messages=%d->%d",
+            tag,
+            total_chars,
+            sum(len(m.get("content", "")) for m in trimmed),
+            len(normalized),
+            len(trimmed),
+        )
+        return trimmed
 
     @staticmethod
     def _deterministic_fallback(message: str, route: str, user_id: str = None) -> str:
-        """
-        Fallback deterministico quando tutti i modelli LLM falliscono.
-        Mai restituire 'Non riesco a rispondere'. Sempre una risposta utile.
-        """
-        from core.log import log
-        
-        # Log del fallback GPT
-        log("GPT_FALLBACK", reason="all_models_failed", user_id=user_id)
-        
-        msg_lower = message.lower().strip()
-
-        if route == "knowledge":
-            # Try fallback_knowledge dictionary
-            from core.fallback_knowledge import lookup_fallback
-            fb = lookup_fallback(message)
-            if fb:
-                return fb
-            return "Al momento non ho accesso alle informazioni richieste. Riprova tra qualche minuto."
-
+        """Risposta di emergenza se gli LLM sono offline."""
         if route == "relational":
-            return "Capisco. Dimmi qualcosa in piu\' su quello che stai vivendo."
-
-        if route == "technical":
-            return "Il servizio tecnico e\' temporaneamente sovraccarico. Riprova tra qualche minuto."
-
-        # General fallback
-        return "Scusa, sto avendo qualche difficolta\'. Riproviamo tra un momento."
+            return "Capisco quello che dici. Dimmi ancora qualcosa di piu' su quello che stai provando."
+        if route == "knowledge":
+            return "Al momento non riesco ad accedere alle mie conoscenze. Riprova tra poco."
+        return "Scusa, sto avendo difficolta' tecniche. Riproviamo tra un istante."
 
     @staticmethod
     def _build_user_context(user_profile: dict) -> str:
-        """
-        Costruisci contesto utente per LLM
-        
-        Args:
-            user_profile: Profilo utente
-            
-        Returns:
-            Contesto formattato
-        """
-        context_parts = []
-        
-        if user_profile.get("name"):
-            context_parts.append(f"Nome: {user_profile['name']}")
-        
-        if user_profile.get("profession"):
-            context_parts.append(f"Professione: {user_profile['profession']}")
-        
-        if user_profile.get("city"):
-            context_parts.append(f"Citt\': {user_profile['city']}")
-        
-        if user_profile.get("age"):
-            context_parts.append(f"Eta\': {user_profile['age']}")
-        
-        if user_profile.get("traits"):
-            context_parts.append(f"Caratteristiche: {', '.join(user_profile['traits'])}")
-        
-        return "\n".join(context_parts) if context_parts else "Nessun contesto utente disponibile."
+        """Costruisce contesto utente formattato."""
+        parts = [f"{k.capitalize()}: {v}" for k, v in user_profile.items() if v and k in ['name', 'profession', 'city', 'age']]
+        return "\n".join(parts) if parts else "Nessun contesto utente disponibile."
+
+    async def _log_usage(self, user_id: str, model: str, prompt: int, completion: int):
+        """Salva l'utilizzo dei token nel database."""
+        try:
+            async with async_session() as session:
+                log_entry = UsageLog(
+                    user_id=user_id,
+                    model=model,
+                    prompt_tokens=prompt,
+                    completion_tokens=completion
+                )
+                session.add(log_entry)
+                await session.commit()
+        except Exception as e:
+            logger.error("LLM_USAGE_DB_ERROR: %s", str(e))
+
+
+_TUNING_STATE: dict = {}
+
+
+def load_tuning_state() -> dict:
+    """Carica i parametri di tuning dall'evolution state (data/evolution/current_state.json)."""
+    try:
+        state_file = Path("data/evolution/current_state.json")
+        if state_file.exists():
+            with open(state_file, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+            # Restituisce i parametri piatti (supportive_intensity, ecc.)
+            return state.get("parameters", state)
+    except Exception as e:
+        logger.error("LOAD_TUNING_STATE_ERROR: %s", str(e))
+    return {}
+
+
+def reload_tuning_state() -> dict:
+    """Ricarica i parametri di tuning nell'istanza LLM globale. Chiamata dopo ogni evoluzione."""
+    global _TUNING_STATE
+    try:
+        state = load_tuning_state()
+        _TUNING_STATE.update(state)
+        logger.info("RELOAD_TUNING_STATE: state reloaded, keys=%s", list(state.keys()))
+        return state
+    except Exception as e:
+        logger.error("RELOAD_TUNING_STATE_ERROR: %s", str(e))
+        return {}
+
 
 # Istanza globale
 llm_service = LLMService()

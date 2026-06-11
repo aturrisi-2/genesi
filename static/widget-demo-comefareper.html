@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Come Fare Per — Procedure e Guide — C-Place</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f4f4; color: #222; font-size: 14px; }
+    a { text-decoration: none; color: inherit; }
+    .topbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; height:56px; gap:16px; position:sticky; top:0; z-index:100; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+    .logo { display:flex; align-items:center; gap:6px; font-size:22px; font-weight:800; letter-spacing:-1px; color:#222; }
+    .logo-c { background:#c41230; color:#fff; width:32px; height:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900; }
+    .topbar-actions { margin-left:auto; display:flex; align-items:center; gap:18px; }
+    .avatar { width:32px; height:32px; border-radius:50%; background:#c41230; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+    .navbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; gap:2px; height:40px; }
+    .navbar a { padding:0 12px; height:40px; display:flex; align-items:center; font-size:12.5px; font-weight:600; color:#444; border-bottom:2px solid transparent; white-space:nowrap; }
+    .navbar a:hover, .navbar a.active { color:#c41230; border-bottom-color:#c41230; }
+    .breadcrumb { background:#fff; border-bottom:1px solid #eee; padding:8px 20px; font-size:12px; color:#888; }
+    .breadcrumb a { color:#c41230; }
+    .breadcrumb span { margin:0 6px; }
+    .page { max-width:1100px; margin:24px auto; padding:0 16px; display:flex; flex-direction:column; gap:24px; }
+    .sec-title { font-size:16px; font-weight:700; color:#c41230; padding-bottom:10px; border-bottom:2px solid #c41230; margin-bottom:16px; }
+    .card { background:#fff; border-radius:6px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+    .grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+    .grid-2 { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+    table { width:100%; border-collapse:collapse; }
+    thead th { background:#c41230; color:#fff; padding:11px 14px; text-align:left; font-size:13px; font-weight:600; }
+    tbody tr:nth-child(even) { background:#fafafa; }
+    tbody tr:hover { background:#fff3f3; }
+    td { padding:10px 14px; border-bottom:1px solid #f0f0f0; font-size:13px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:600; }
+    .badge-red { background:#fce4e4; color:#c41230; }
+    .badge-green { background:#e8f5e9; color:#2e7d32; }
+    .badge-blue { background:#e3f2fd; color:#1565c0; }
+    .badge-yellow { background:#fff8e1; color:#e65100; }
+    footer { background:#c41230; color:#fff; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; margin-top:32px; }
+    .footer-btn { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.4); color:#fff; padding:8px 16px; border-radius:4px; font-size:12px; cursor:pointer; text-decoration:none; display:inline-block; }
+    .link-red { color:#c41230; font-weight:600; }
+
+    .proc-card { background:#fff; border:2px solid #eee; border-radius:8px; padding:18px 16px; cursor:pointer; display:flex; flex-direction:column; gap:8px; transition:border-color .15s, box-shadow .15s; }
+    .proc-card:hover { border-color:#c41230; box-shadow:0 2px 10px rgba(196,18,48,.12); }
+    .proc-icon { font-size:28px; }
+    .proc-title { font-size:14px; font-weight:700; color:#222; }
+    .proc-desc { font-size:12px; color:#888; line-height:1.4; }
+
+    .steps { display:flex; flex-direction:column; gap:14px; }
+    .step { display:flex; align-items:flex-start; gap:14px; }
+    .step-num { background:#c41230; color:#fff; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex-shrink:0; margin-top:1px; }
+    .step-content { flex:1; }
+    .step-title { font-weight:700; font-size:13px; margin-bottom:3px; }
+    .step-desc { color:#555; font-size:13px; line-height:1.5; }
+
+    .warn-banner { background:#fff8e1; border-left:4px solid #f9a825; padding:12px 16px; border-radius:4px; font-size:13px; color:#5d4037; margin-top:14px; display:flex; align-items:center; gap:10px; }
+
+    .support-item { display:flex; align-items:center; gap:16px; padding:12px 0; border-bottom:1px solid #f2f2f2; }
+    .support-item:last-child { border-bottom:none; }
+    .support-icon { width:38px; height:38px; background:#fce4e4; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+    .support-info { flex:1; }
+    .support-name { font-weight:700; font-size:13px; }
+    .support-contact { font-size:12.5px; color:#555; margin-top:3px; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/widget-demo" class="logo"><div class="logo-c">C</div>Place</a>
+  <div class="topbar-actions"><div class="avatar">AT</div></div>
+</div>
+<div class="navbar">
+  <a href="/widget-demo">ULTIME NEWS ▾</a>
+  <a href="#">AZIENDA ▾</a>
+  <a href="#" class="active">AREE ▾</a>
+  <a href="/widget-demo-attivita">ATTIVITÀ E TEMPO LIBERO ▾</a>
+  <a href="#">AZIONI VELOCI ▾</a>
+  <a href="/widget-demo-rubrica">RUBRICA ▾</a>
+  <a href="#">BU ▾</a>
+</div>
+
+<div class="breadcrumb">
+  <a href="/widget-demo">Home</a><span>›</span>
+  Come Fare Per
+</div>
+
+<div class="page">
+
+  <!-- PROCEDURE PIU' CERCATE -->
+  <div class="card">
+    <div class="sec-title">Procedure più cercate</div>
+    <div class="grid-3">
+      <div class="proc-card">
+        <div class="proc-icon">🗓️</div>
+        <div class="proc-title">Richiedere ferie e permessi</div>
+        <div class="proc-desc">Come inserire una richiesta su ADP, tempi di approvazione e tipi di assenza disponibili.</div>
+      </div>
+      <div class="proc-card">
+        <div class="proc-icon">🧾</div>
+        <div class="proc-title">Nota spese e rimborsi</div>
+        <div class="proc-desc">Compilazione nota spese su CyberPlan, allegare scontrini, tempi di rimborso.</div>
+      </div>
+      <div class="proc-card">
+        <div class="proc-icon">🪪</div>
+        <div class="proc-title">Richiesta badge e accessi</div>
+        <div class="proc-desc">Come richiedere un nuovo badge, sblocco accessi e abilitazioni alle aree riservate.</div>
+      </div>
+      <div class="proc-card">
+        <div class="proc-icon">💻</div>
+        <div class="proc-title">Segnalare un guasto IT</div>
+        <div class="proc-desc">Apertura ticket su ServiceDesk, priorità e tempi di intervento dell'IT Helpdesk.</div>
+      </div>
+      <div class="proc-card">
+        <div class="proc-icon">🛒</div>
+        <div class="proc-title">Richiedere un acquisto</div>
+        <div class="proc-desc">Procedura di richiesta materiale e attrezzature tramite il sistema di approvvigionamento.</div>
+      </div>
+      <div class="proc-card">
+        <div class="proc-icon">👤</div>
+        <div class="proc-title">Cambio dati personali</div>
+        <div class="proc-desc">Come aggiornare recapiti, IBAN, domicilio e dati anagrafici sul portale HR.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GUIDA FERIE -->
+  <div class="card">
+    <div class="sec-title">Guida: Richiedere le ferie e i permessi</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">Accedi al portale ADP</div>
+          <div class="step-desc">Vai su <a href="https://adp.cefla.it" class="link-red">adp.cefla.it</a> con le tue credenziali aziendali. Il portale è disponibile da rete interna e VPN. Accesso mobile disponibile tramite app ADP Mobile.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">Vai alla sezione "Assenze"</div>
+          <div class="step-desc">Dal menu principale seleziona "Assenze e Presenze" → "Richiesta assenza". Scegli il tipo: Ferie, Permesso ROL, Permesso breve (ore), Congedo.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">Seleziona le date e inserisci le note</div>
+          <div class="step-desc">Indica il periodo (data inizio e data fine). Per i permessi orari specifica le ore. Puoi aggiungere una nota al responsabile nel campo "Motivo" (facoltativo).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <div class="step-title">Invia la richiesta</div>
+          <div class="step-desc">Clicca su "Invia richiesta". La richiesta viene automaticamente inoltrata al tuo responsabile diretto per approvazione. I tempi di risposta sono <strong>entro 3 giorni lavorativi</strong>.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-content">
+          <div class="step-title">Ricevi la conferma via email</div>
+          <div class="step-desc">Riceverai una notifica email di approvazione o rifiuto. In caso di rifiuto, il responsabile indicherà il motivo. Puoi visualizzare lo stato della richiesta in qualsiasi momento su ADP.</div>
+        </div>
+      </div>
+    </div>
+    <div class="warn-banner">
+      <span>⚠️</span>
+      <span>Le richieste di ferie devono essere inserite con <strong>almeno 5 giorni lavorativi di anticipo</strong>. Per periodi superiori a 5 giorni consecutivi, il termine minimo è di 15 giorni.</span>
+    </div>
+  </div>
+
+  <!-- GUIDA NOTA SPESE -->
+  <div class="card">
+    <div class="sec-title">Guida: Nota spese e rimborsi</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">Accedi a CyberPlan</div>
+          <div class="step-desc">Vai su <a href="https://cyberplan.cefla.it" class="link-red">cyberplan.cefla.it</a> e seleziona "Nota spese" dal menu. Il sistema è accessibile anche da remoto tramite VPN aziendale.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">Crea una nuova nota spese</div>
+          <div class="step-desc">Clicca su "+ Nuova nota" e compila: data, tipo di spesa (vitto, alloggio, trasporto, pedaggi, parcheggi), importo e valuta. Per le trasferte estere indica il cambio valuta.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">Allega gli scontrini e le ricevute</div>
+          <div class="step-desc">Ogni voce di spesa deve avere uno scontrino o ricevuta allegata (scansione o foto). <strong>Gli scontrini sono obbligatori</strong> per ogni importo. Spese non documentate non verranno rimborsate.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <div class="step-title">Invia per approvazione e attendi il rimborso</div>
+          <div class="step-desc">Invia la nota al responsabile. Dopo l'approvazione, l'Amministrazione processa il rimborso. I tempi di accredito sul conto corrente sono <strong>entro 15 giorni lavorativi</strong> dalla data di approvazione.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTATTI SUPPORTO -->
+  <div class="card">
+    <div class="sec-title">Contatti supporto procedure</div>
+    <div class="support-item">
+      <div class="support-icon">💻</div>
+      <div class="support-info">
+        <div class="support-name">IT Helpdesk</div>
+        <div class="support-contact">int. 2200 &nbsp;|&nbsp; <a href="mailto:helpdesk@cefla.it" class="link-red">helpdesk@cefla.it</a> &nbsp;|&nbsp; Lun–Ven 08:00–18:00</div>
+      </div>
+      <span class="badge badge-green">Attivo</span>
+    </div>
+    <div class="support-item">
+      <div class="support-icon">👥</div>
+      <div class="support-info">
+        <div class="support-name">HR — People &amp; Organization</div>
+        <div class="support-contact">int. 2100 &nbsp;|&nbsp; <a href="mailto:hr@cefla.it" class="link-red">hr@cefla.it</a> &nbsp;|&nbsp; Lun–Ven 09:00–17:00</div>
+      </div>
+      <span class="badge badge-green">Attivo</span>
+    </div>
+    <div class="support-item">
+      <div class="support-icon">💰</div>
+      <div class="support-info">
+        <div class="support-name">Amministrazione</div>
+        <div class="support-contact">int. 2050 &nbsp;|&nbsp; <a href="mailto:amministrazione@cefla.it" class="link-red">amministrazione@cefla.it</a> &nbsp;|&nbsp; Lun–Ven 09:00–17:00</div>
+      </div>
+      <span class="badge badge-green">Attivo</span>
+    </div>
+    <div class="support-item">
+      <div class="support-icon">📧</div>
+      <div class="support-info">
+        <div class="support-name">Helpdesk generale</div>
+        <div class="support-contact"><a href="mailto:helpdesk@cefla.it" class="link-red">helpdesk@cefla.it</a> &nbsp;|&nbsp; Risposta entro 4 ore lavorative</div>
+      </div>
+      <span class="badge badge-blue">Email</span>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <a href="/widget-demo" class="footer-btn">← Torna alla Home</a>
+  <span style="font-size:12px; opacity:.8;">C-Place © 2026 — Cefla S.C. — Tutti i diritti riservati</span>
+</footer>
+
+<script src="/widget.js"
+  data-api-url=""
+  data-api-key="demo_cplace_2026"
+  data-name="Assistente C-Place"
+  data-color="#c41230"
+  data-welcome="Sei nella sezione Come Fare Per. Posso guidarti su procedure di ferie, trasferte, rimborsi, IT e molto altro. Come posso aiutarti?"
+  data-placeholder="Come posso aiutarti?"
+  data-page-context="true">
+</script>
+</body>
+</html>

@@ -34,6 +34,10 @@ def should_search(message: str) -> bool:
         # Inglese
         'latest', 'version', 'how to', 'example', 'docs',
         'install', 'setup', 'release', 'update', 'import',
+        # Coding & Debugging
+        'fix', 'error', 'traceback', 'exception', 'debug', 'undefined', 
+        'null', 'import error', 'syntax', 'typeerror', 'attributeerror',
+        'cannot', 'failed', 'not working', 'broken'
     ]
     msg_lower = message.lower()
     return any(kw in msg_lower for kw in keywords)
@@ -53,6 +57,20 @@ def build_search_query(message: str) -> str:
     # Limita lunghezza query
     return query[:150]
 
+def build_github_query(message: str) -> str:
+    """Estrae keywords tecniche in inglese per GitHub search."""
+    import re
+    # Espandi le stopwords per rimuovere query "chattate" e preposizioni
+    stopwords = {'come', 'si', 'implementa', 'un', 'con', 'cercami', 
+                 'esempi', 'su', 'il', 'la', 'lo', 'ho', 'una',
+                 'che', 'per', 'del', 'della', 'dei', 'quale', 'cosa',
+                 'spiegami', 'github', 'repo', 'repository', "l'ultima",
+                 'ultimo', 'ultima', 'cerca', 'di', 'e', 'è', 'sono', 'un',
+                 "l'", "all'"}
+    # Usa regexp per separare meglio le parole (mantiene trattini e underscore per github reponames)
+    words = re.findall(r'\b[\w-]+\b', message.lower())
+    keywords = [w for w in words if w not in stopwords and len(w) > 2]
+    return ' '.join(keywords[:4])  # max 4 parole
 
 async def search_web(query: str, max_results: int = 4) -> Optional[str]:
     """
@@ -96,4 +114,40 @@ async def search_web(query: str, max_results: int = 4) -> Optional[str]:
     
     except Exception as e:
         logger.warning(f"WEB_SEARCH_ERROR query='{query}' error={e}")
+        return None
+
+def search_github(query: str) -> Optional[str]:
+    """
+    Cerca su GitHub via Search API senza auth.
+    I risultati vengono integrati dopo quelli di web search.
+    """
+    import urllib.parse
+    import requests
+    try:
+        q = urllib.parse.quote(query)
+        url = f"https://api.github.com/search/repositories?q={q}&sort=stars&per_page=3"
+        headers = {
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "Genesi-AI-Engineer-OS"
+        }
+        resp = requests.get(url, headers=headers, timeout=5.0)
+        if resp.status_code != 200:
+            return None
+            
+        items = resp.json().get("items", [])
+        if not items:
+            return None
+            
+        risultati = []
+        for item in items:
+            name = item.get("full_name", "")
+            description = item.get("description", "")
+            repo_url = item.get("html_url", "")
+            stars = item.get("stargazers_count", 0)
+            risultati.append(f"- [{name}]({repo_url}) ⭐{stars}: {description}")
+            
+        logger.info(f"GITHUB_SEARCH_OK results={len(items)}")
+        return "GitHub repos trovati:\n" + "\n".join(risultati)
+    except Exception as e:
+        logger.warning(f"GITHUB_SEARCH_ERROR query='{query}' error={e}")
         return None

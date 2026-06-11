@@ -5,10 +5,7 @@ Filtro post-processing per rimuovere riferimenti AI e mantenere identità relazi
 
 import re
 from typing import List
-from openai import AsyncOpenAI
 from core.log import log
-
-client = AsyncOpenAI()
 
 # Pattern vietati - frasi che rivelano natura AI
 FORBIDDEN_PATTERNS = [
@@ -146,13 +143,11 @@ Niente consigli non richiesti. Niente entusiasmo artificiale.
 Messaggio utente: {message}
 """
 
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "system", "content": correction_prompt}],
-            temperature=0.7
+        from core.llm_service import llm_service
+        corrected_response = await llm_service._call_with_protection(
+            "gpt-4o-mini", correction_prompt, "", user_id=user_id, route="identity_filter"
         )
-        
-        corrected_response = response.choices[0].message.content.strip()
+        corrected_response = (corrected_response or "").strip()
         
         # Log correzione
         log("IDENTITY_FILTER_CORRECTION", 

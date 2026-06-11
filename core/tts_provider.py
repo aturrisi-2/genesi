@@ -75,7 +75,7 @@ class PiperTTSProvider(TTSProvider):
             return None
         
         cleaned = text.strip()[:2000]
-        print(f"TTS_PROVIDER=piper text_len={len(cleaned)}")
+        logger.info("TTS_PROVIDER=piper text_len=%d", len(cleaned))
         
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -125,7 +125,7 @@ class PiperTTSProvider(TTSProvider):
 class EdgeTTSProvider(TTSProvider):
     """Provider TTS basato su Edge TTS (Microsoft)."""
     
-    def __init__(self, voice: str = "it-IT-DiegoNeural", rate: str = "+0%", volume: str = "+0%"):
+    def __init__(self, voice: str = "it-IT-IsabellaNeural", rate: str = "+0%", volume: str = "+0%"):
         self.voice = voice
         self.rate = rate
         self.volume = volume
@@ -153,11 +153,11 @@ class EdgeTTSProvider(TTSProvider):
             if not result:
                 raise ValueError("Audio buffer vuoto")
                 
-            print(f"TTS_EDGE_OK voice={self.voice} bytes={len(result)}")
+            logger.info("TTS_EDGE_OK voice=%s bytes=%d", self.voice, len(result))
             return result
 
         except Exception as e:
-            print(f"TTS_EDGE_FALLBACK reason={e}")
+            logger.warning("TTS_EDGE_FALLBACK reason=%s", e)
             return None
     
     def name(self) -> str:
@@ -167,7 +167,10 @@ class EdgeTTSProvider(TTSProvider):
 class OpenAITTSProvider(TTSProvider):
     """Provider TTS usando OpenAI API — voce onyx profonda e naturale."""
 
-    def __init__(self, voice: str = "onyx", model: str = "tts-1", speed: float = 1.0):
+    # Classe-level: salta OpenAI se quota esaurita fino a questo timestamp
+    _quota_exceeded_until: float = 0.0
+
+    def __init__(self, voice: str = "nova", model: str = "tts-1", speed: float = 1.0):
         import os
         self.voice = voice
         self.model = model
@@ -175,7 +178,7 @@ class OpenAITTSProvider(TTSProvider):
         self.api_key = os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY non trovata nelle variabili d'ambiente")
-        print(f"TTS_PROVIDER=openai voice={self.voice} model={self.model}")
+        logger.info("TTS_PROVIDER=openai voice=%s model=%s", self.voice, self.model)
 
     def _pad_tts_text(self, text: str) -> str:
         """
@@ -200,12 +203,19 @@ class OpenAITTSProvider(TTSProvider):
     async def synthesize(self, text: str) -> bytes:
         """Sintetizza con OpenAI TTS e ritorna MP3 bytes."""
         import httpx
+        import time
+
+        # Skip OpenAI se quota esaurita di recente (evita attesa inutile)
+        if time.time() < OpenAITTSProvider._quota_exceeded_until:
+            logger.info("TTS_OPENAI_SKIP quota_exceeded remaining=%.0fs",
+                        OpenAITTSProvider._quota_exceeded_until - time.time())
+            return None
 
         try:
-            # Applica padding solo per Onyx
-            if self.voice == "onyx":
+            # Applica padding per limitare i tagli
+            if self.voice in ["onyx", "nova"]:
                 text = self._pad_tts_text(text)
-            
+
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(
                     "https://api.openai.com/v1/audio/speech",
@@ -221,13 +231,17 @@ class OpenAITTSProvider(TTSProvider):
                         "response_format": "mp3"
                     }
                 )
+                if response.status_code == 429:
+                    OpenAITTSProvider._quota_exceeded_until = time.time() + 3600
+                    logger.warning("TTS_OPENAI_429 quota_exceeded will_skip_for=3600s")
+                    return None
                 response.raise_for_status()
                 result = response.content
-                print(f"TTS_OPENAI_OK voice={self.voice} bytes={len(result)}")
+                logger.info("TTS_OPENAI_OK voice=%s bytes=%d", self.voice, len(result))
                 return result
 
         except Exception as e:
-            print(f"TTS_OPENAI_FALLBACK reason={e}")
+            logger.warning("TTS_OPENAI_FALLBACK reason=%s", e)
             return None
 
 
@@ -263,7 +277,7 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
             config = json.load(f)
         providers_cfg = config.get("providers", {})
     except Exception as e:
-        print(f"TTS_ROUTING_CONFIG_ERROR reason={e} fallback=piper")
+        logger.error("TTS_ROUTING_CONFIG_ERROR reason=%s fallback=piper", e)
         return _build_piper(providers_cfg={})
 
     # Determina categoria
@@ -293,7 +307,7 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
         primary = "openai"
         secondary = "edge_tts"
 
-    print(f"TTS_ROUTING intent={intent} route={route} category={category} provider={primary}")
+    logger.info("TTS_ROUTING intent=%s route=%s category=%s provider=%s", intent, route, category, primary)
 
     # Prova primary
     try:
@@ -301,26 +315,26 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
             import os
             cfg = providers_cfg.get("openai", {})
             return OpenAITTSProvider(
-                voice=cfg.get("voice", "onyx"),
+                voice=cfg.get("voice", "nova"),
                 model=os.getenv("OPENAI_TTS_MODEL", cfg.get("model", "tts-1")),
                 speed=float(os.getenv("ONYX_SPEED", str(cfg.get("speed", 1.0))))
             )
         elif primary == "edge_tts":
             cfg = providers_cfg.get("edge_tts", {})
             return EdgeTTSProvider(
-                voice=cfg.get("voice", "it-IT-DiegoNeural"),
+                voice=cfg.get("voice", "it-IT-IsabellaNeural"),
                 rate=cfg.get("rate", "+0%"),
                 volume=cfg.get("volume", "+0%")
             )
     except Exception as e:
-        print(f"TTS_ROUTING_PRIMARY_FAIL provider={primary} reason={e}")
+        logger.warning("TTS_ROUTING_PRIMARY_FAIL provider=%s reason=%s", primary, e)
 
     # Prova secondary
     try:
         if secondary == "edge_tts":
             cfg = providers_cfg.get("edge_tts", {})
             return EdgeTTSProvider(
-                voice=cfg.get("voice", "it-IT-DiegoNeural"),
+                voice=cfg.get("voice", "it-IT-IsabellaNeural"),
                 rate=cfg.get("rate", "+0%"),
                 volume=cfg.get("volume", "+0%")
             )
@@ -328,15 +342,15 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
             import os
             cfg = providers_cfg.get("openai", {})
             return OpenAITTSProvider(
-                voice=cfg.get("voice", "onyx"),
+                voice=cfg.get("voice", "nova"),
                 model=os.getenv("OPENAI_TTS_MODEL", cfg.get("model", "tts-1")),
                 speed=float(os.getenv("ONYX_SPEED", str(cfg.get("speed", 1.0))))
             )
     except Exception as e:
-        print(f"TTS_ROUTING_SECONDARY_FAIL provider={secondary} reason={e}")
+        logger.warning("TTS_ROUTING_SECONDARY_FAIL provider=%s reason=%s", secondary, e)
 
     # Fallback finale: Piper (sempre offline)
-    print("TTS_ROUTING_FALLBACK_PIPER")
+    logger.warning("TTS_ROUTING_FALLBACK_PIPER")
     return _build_piper(providers_cfg)
 
 
@@ -349,7 +363,7 @@ def _build_piper(providers_cfg: dict) -> TTSProvider:
             speed=cfg.get("speed", 1.0)
         )
     except Exception as e:
-        print(f"TTS_PIPER_FALLBACK_ERROR reason={e}")
+        logger.error("TTS_PIPER_FALLBACK_ERROR reason=%s", e)
         return PiperTTSProvider()
 # TTS-ROUTING END
 
@@ -378,7 +392,7 @@ def get_tts_provider() -> TTSProvider:
             active_provider = config.get("active_provider", "piper")
             providers = config.get("providers", {})
             
-            print(f"TTS_PROVIDER_LOADED provider={active_provider}")
+            logger.info("TTS_PROVIDER_LOADED provider=%s", active_provider)
             
             # Istanzia il provider corretto
             if active_provider == "piper":
@@ -390,14 +404,14 @@ def get_tts_provider() -> TTSProvider:
             elif active_provider == "edge_tts":
                 edge_config = providers.get("edge_tts", {})
                 _tts_provider_instance = EdgeTTSProvider(
-                    voice=edge_config.get("voice", "it-IT-DiegoNeural"),
+                    voice=edge_config.get("voice", "it-IT-IsabellaNeural"),
                     rate=edge_config.get("rate", "+0%"),
                     volume=edge_config.get("volume", "+0%")
                 )
             elif active_provider == "openai":
                 cfg = providers.get("openai", {})
                 _tts_provider_instance = OpenAITTSProvider(
-                    voice=cfg.get("voice", "onyx"),
+                    voice=cfg.get("voice", "nova"),
                     model=cfg.get("model", "tts-1"),
                     speed=cfg.get("speed", 1.0)
                 )

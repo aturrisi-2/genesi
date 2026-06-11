@@ -2,6 +2,7 @@ import logging
 import re
 from core.storage import storage
 from core.brain_state import brain_state
+from core.log import log as _structured_log
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ class CognitiveMemoryEngine:
         
         # Load existing profile data (sync)
         try:
-            existing_profile_data = storage._storage.get(f"long_term_profile:{user_id}", {})
+            existing_profile_data = storage._storage.get(f"profile:{user_id}", {})
         except:
             existing_profile_data = {}
         
@@ -55,18 +56,38 @@ class CognitiveMemoryEngine:
         if existing_profile_data:
             extracted_profile_data.update(existing_profile_data)
         
+        # GUARD: Non cercare di estrarre identità da domande esplicite sulla propria identità
+        if "?" in message or any(q in message.lower() for q in ["chi sono", "come mi chiamo", "che lavoro", "dove vivo", "cosa sai di me"]):
+            logger.info("COGNITIVE_IDENTITY_QUESTION_SKIP reason=question_detected message=%s", message)
+            return {"persist": False, "memory_type": None, "key": None, "value": None, "confidence": 0.0}
+
         # Check for strong emotional patterns first
         if _is_strong_emotional(message):
-            return {"persist": True}
+            return {
+                "persist": True,
+                "memory_type": "emotional",
+                "key": "emotional_state",
+                "value": message.strip(),
+                "confidence": 0.9
+            }
 
         # Semantic classification using regex
-        name_match = re.search(r"mi chiamo (\w+)", message, re.IGNORECASE)
-        profession_match = re.search(r"(?:faccio|sono|lavoro come)\s+(?:il\s+|la\s+|l\s+)?([^.\s]+(?:\s+[^.\s]+)*)", message, re.IGNORECASE)
-        city_match = re.search(r"vivo a (\w+)", message, re.IGNORECASE)
-        spouse_match = re.search(r"(?:mia moglie|mio marito) si chiama (\w+)", message, re.IGNORECASE)
-        children_match = re.search(r"i miei figli si chiamano (\w+) e (\w+)", message, re.IGNORECASE)
-        dog_match = re.search(r"il mio cane si chiama (\w+)", message, re.IGNORECASE)
-        cat_match = re.search(r"la mia gatta si chiama (\w+)", message, re.IGNORECASE)
+        name_match = re.search(r"mi chiamo (?:un |il )?(\w+(?:\s+\w+)?)", message, re.IGNORECASE)
+        # Limita la cattura a max 3 parole per evitare di salvare frasi di contesto come professione
+        profession_match = re.search(
+            r"(?:"
+            r"(?:faccio|lavoro come)\s+(?:il\s+|la\s+|lo\s+|l'|l\s+|un\s+|una\s+|uno\s+|un'\s+)?"
+            r"|sono\s+(?:il\s+|la\s+|lo\s+|l'|l\s+|un\s+|una\s+|uno\s+|un'\s+)"
+            r"|(?:il mio|la mia)\s+lavoro\s+[eè]\s+(?:il\s+|la\s+|lo\s+|un\s+|una\s+|uno\s+)?"
+            r")(\w+(?:\s+\w+){0,2})",
+            message, re.IGNORECASE)
+        city_match = re.search(r"(?:vivo|abito|mi trovo) a ([A-Za-zÀ-ÿ\-]+)", message, re.IGNORECASE)
+        spouse_match = re.search(r"(?:mia moglie|mio marito|il mio partner|la mia compagna) si chiama (\w+)", message, re.IGNORECASE)
+        children_match = re.search(r"i miei figli si chiamano ([A-Z][a-zÀ-ÿ]+) e ([A-Z][a-zÀ-ÿ]+)", message, re.IGNORECASE)
+        son_match = re.search(r"mio figlio si chiama ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
+        daughter_match = re.search(r"mia figlia si chiama ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
+        dog_match = re.search(r"il mio cane si chiama ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
+        cat_match = re.search(r"(?:la mia gatta|il mio gatto) si chiama ([A-Z][a-zÀ-ÿ]+(?: [A-Z][a-zÀ-ÿ]+)*)", message, re.IGNORECASE)
 
         # Preference extraction — categorized
         pref_result = self._extract_preference(message)
@@ -93,11 +114,12 @@ class CognitiveMemoryEngine:
             field = "name"
             value = extracted_name
             logger.info("COGNITIVE_NAME_EXTRACT value=%s", value)
+            _structured_log("COGNITIVE_NAME_EXTRACT", value=value)
             
             # FIX DEFINITIVO: Scrittura diretta su storage
-            profile = await storage.load(f"long_term_profile:{user_id}", default={}) or {}
+            profile = await storage.load(f"profile:{user_id}", default={}) or {}
             profile["name"] = extracted_name
-            await storage.save(f"long_term_profile:{user_id}", profile)
+            await storage.save(f"profile:{user_id}", profile)
             logger.info("STORAGE_DIRECT_WRITE user=%s name=%s", user_id, extracted_name)
             
         if city_match:
@@ -107,58 +129,139 @@ class CognitiveMemoryEngine:
             field = "city"
             value = city_match.group(1)
             logger.info("COGNITIVE_CITY_EXTRACT value=%s", value)
+            _structured_log("COGNITIVE_CITY_EXTRACT", value=value)
             
+        # Parole/frasi che indicano situazioni o attività — NON professioni
+        _PROFESSION_STOPWORDS = {
+            "account", "collega", "miei", "quali", "appuntamento", "promemoria",
+            "a cena", "a casa", "a lavoro", "in giro", "in vacanza", "in viaggio", "in ritardo",
+            "tempo", "fuori", "qui", "bene", "male", "stanco", "stanca", "innervosito", "innervosita",
+            "arrabbiato", "arrabbiata", "triste", "felice", "contento", "contenta", "nervoso", "nervosa",
+            "andato", "andata", "tornato", "pronto", "pronta", "sveglio", "sveglia",
+            "adesso", "ora", "oggi", "ieri", "domani", "io", "tu", "lui", "lei",
+            "noi", "voi", "loro", "qui", "lì", "qua", "là", "dove",
+            "nato", "nata",   # "sono nato a..." non è una professione
+            "razza",           # "sono di razza X" = razza animale, non professione
+            # Falsi positivi da "sono un po'..." o simili
+            "po", "pò", "poco", "tanto", "molto", "abbastanza", "piuttosto",
+            "sempre", "spesso", "mai", "ancora", "già", "solo", "anche",
+            "stesso", "stessa", "sicuro", "sicura", "convinto", "convinta",
+        }
+        # Preposizioni/articoli che non possono aprire una professione
+        _PROFESSION_BAD_STARTERS = {
+            "a", "da", "con", "per", "di", "in", "su", "tra", "fra",
+            "un", "una", "dello", "della", "delle", "degli",
+            "il", "lo", "la", "i", "gli", "le", "io", "tu", "lui", "lei",
+            "noi", "voi", "loro", "qui", "lì", "qua", "là", "dove", "adesso", "ora"
+        }
+        # Connettori da escludere nel check nomi propri
+        _CONNECTORS = {"e", "o", "ma", "però", "quindi", "che", "di", "a", "il", "la", "lo", "i", "gli", "le"}
+
         if profession_match:
-            new_profession = profession_match.group(1).strip().lower()  # lowercase come richiesto
-            old_profession = extracted_profile_data.get("profession")
-            
-            # Handle profession contradiction
-            if old_profession and old_profession != new_profession:
-                # Update to new profession
-                extracted_profile_data["profession"] = new_profession
-                field = "profession"
-                value = new_profession
-                persist = True
-                memory_type = "profile"
-                logger.info("COGNITIVE_PROFESSION_UPDATED old=%s new=%s", old_profession, new_profession)
+            _profession_raw = profession_match.group(1).strip()  # Case originale per check nomi propri
+            new_profession = _profession_raw.lower()  # lowercase per storage
+            _alpha_sig = [w for w in _profession_raw.split() if w.isalpha() and w.lower() not in _CONNECTORS]
+            _text_before_match = message[:profession_match.start()].lower().rstrip()
+
+            # GUARD: negazione ("non sono X" → non è una professione)
+            if _text_before_match.endswith("non"):
+                logger.info("COGNITIVE_PROFESSION_SKIP value=%s reason=negation", new_profession)
+            # GUARD: lista di nomi propri ("Leclerc e Hamilton") — tutte le parole alfa significative sono maiuscole
+            elif len(_alpha_sig) >= 2 and all(w[0].isupper() for w in _alpha_sig):
+                logger.info("COGNITIVE_PROFESSION_SKIP value=%s reason=proper_names_list", new_profession)
+            # GUARD: evita di salvare situazioni/attività come professione
+            elif any(kw in new_profession.split() for kw in _PROFESSION_STOPWORDS) or any(new_profession == kw for kw in _PROFESSION_STOPWORDS):
+                logger.info("COGNITIVE_PROFESSION_SKIP value=%s reason=stopword", new_profession)
+            elif new_profession.split()[0].lower() in _PROFESSION_BAD_STARTERS:
+                logger.info("COGNITIVE_PROFESSION_SKIP value=%s reason=bad_starter", new_profession)
+            elif len(new_profession.split()) > 3:
+                logger.info("COGNITIVE_PROFESSION_SKIP value=%s reason=too_long", new_profession)
             else:
-                # First time setting profession
-                extracted_profile_data["profession"] = new_profession
-                field = "profession"
-                value = new_profession
-                persist = True
-                memory_type = "profile"
-            
-            logger.info("COGNITIVE_PROFESSION_EXTRACT value=%s", value)
-            
-            # FIX DEFINITIVO: Scrittura diretta su storage
-            profile = await storage.load(f"long_term_profile:{user_id}", default={}) or {}
-            profile["profession"] = new_profession
-            await storage.save(f"long_term_profile:{user_id}", profile)
-            logger.info("STORAGE_DIRECT_WRITE user=%s profession=%s", user_id, new_profession)
+                old_profession = extracted_profile_data.get("profession")
+                
+                # Handle profession contradiction
+                if old_profession and old_profession != new_profession:
+                    # Update to new profession
+                    extracted_profile_data["profession"] = new_profession
+                    field = "profession"
+                    value = new_profession
+                    persist = True
+                    memory_type = "profile"
+                    logger.info("COGNITIVE_PROFESSION_UPDATED old=%s new=%s", old_profession, new_profession)
+                else:
+                    # First time setting profession
+                    extracted_profile_data["profession"] = new_profession
+                    field = "profession"
+                    value = new_profession
+                    persist = True
+                    memory_type = "profile"
+                
+                logger.info("COGNITIVE_PROFESSION_EXTRACT value=%s", value)
+                _structured_log("COGNITIVE_PROFESSION_EXTRACT", value=value)
+                
+                # FIX DEFINITIVO: Scrittura diretta su storage
+                profile = await storage.load(f"profile:{user_id}", default={}) or {}
+                profile["profession"] = new_profession
+                await storage.save(f"profile:{user_id}", profile)
+                logger.info("STORAGE_DIRECT_WRITE user=%s profession=%s", user_id, new_profession)
 
         if spouse_match:
-            extracted_spouse = spouse_match.group(1)
-            extracted_profile_data["spouse"] = extracted_spouse
-            persist = True
-            memory_type = "profile"
-            field = "spouse"
-            value = extracted_spouse
-            logger.info("COGNITIVE_SPOUSE_EXTRACT value=%s", value)
-            
-            # FIX DEFINITIVO: Scrittura diretta su storage
-            profile = await storage.load(f"long_term_profile:{user_id}", default={}) or {}
-            profile["spouse"] = extracted_spouse
-            await storage.save(f"long_term_profile:{user_id}", profile)
-            logger.info("STORAGE_DIRECT_WRITE user=%s spouse=%s", user_id, extracted_spouse)
+            from core.name_utils import sanitize_profile_name
+            extracted_spouse = sanitize_profile_name(spouse_match.group(1))
+            if extracted_spouse:
+                extracted_profile_data["spouse"] = extracted_spouse
+                persist = True
+                memory_type = "profile"
+                field = "spouse"
+                value = extracted_spouse
+                logger.info("COGNITIVE_SPOUSE_EXTRACT value=%s", value)
+                _structured_log("COGNITIVE_SPOUSE_EXTRACT", value=value)
+                profile = await storage.load(f"profile:{user_id}", default={}) or {}
+                profile["spouse"] = extracted_spouse
+                await storage.save(f"profile:{user_id}", profile)
+                logger.info("STORAGE_DIRECT_WRITE user=%s spouse=%s", user_id, extracted_spouse)
+            else:
+                logger.info("COGNITIVE_SPOUSE_SKIP raw=%s reason=relational_descriptor", spouse_match.group(1))
 
         if children_match:
-            extracted_profile_data["children"] = [{"name": children_match.group(1)}, {"name": children_match.group(2)}]
-            persist = True
-            memory_type = "profile"
-            field = "children"
-            value = [{"name": children_match.group(1)}, {"name": children_match.group(2)}]
-            logger.info("COGNITIVE_CHILDREN_EXTRACT value=%s", value)
+            from core.name_utils import sanitize_profile_name
+            n1 = sanitize_profile_name(children_match.group(1))
+            n2 = sanitize_profile_name(children_match.group(2))
+            valid = [{"name": n} for n in [n1, n2] if n]
+            if valid:
+                extracted_profile_data["children"] = valid
+                persist = True
+                memory_type = "profile"
+                field = "children"
+                value = valid
+                logger.info("COGNITIVE_CHILDREN_EXTRACT value=%s", value)
+                _structured_log("COGNITIVE_CHILDREN_EXTRACT", value=str(value))
+
+        if son_match:
+            from core.name_utils import sanitize_profile_name
+            name = sanitize_profile_name(son_match.group(1))
+            if name:
+                persist = True
+                memory_type = "profile"
+                field = "children"
+                value = {"name": name, "gender": "M"}
+                logger.info("COGNITIVE_CHILDREN_EXTRACT son_name=%s", name)
+                _structured_log("COGNITIVE_CHILDREN_EXTRACT", son_name=name)
+            else:
+                logger.info("COGNITIVE_CHILDREN_SKIP raw=%s reason=relational_descriptor", son_match.group(1))
+
+        if daughter_match:
+            from core.name_utils import sanitize_profile_name
+            name = sanitize_profile_name(daughter_match.group(1))
+            if name:
+                persist = True
+                memory_type = "profile"
+                field = "children"
+                value = {"name": name, "gender": "F"}
+                logger.info("COGNITIVE_CHILDREN_EXTRACT daughter_name=%s", name)
+                _structured_log("COGNITIVE_CHILDREN_EXTRACT", daughter_name=name)
+            else:
+                logger.info("COGNITIVE_CHILDREN_SKIP raw=%s reason=relational_descriptor", daughter_match.group(1))
 
         if dog_match:
             extracted_profile_data["pets"] = {"type": "dog", "name": dog_match.group(1)}
@@ -195,6 +298,7 @@ class CognitiveMemoryEngine:
                 field = "emotional_state"
                 value = message.strip()
                 logger.info("COGNITIVE_EMOTIONAL_EVENT detected keyword=%s", k)
+                _structured_log("COGNITIVE_EMOTIONAL_EVENT", keyword=k)
                 break
 
         # Ensure field and value are initialized
@@ -209,25 +313,40 @@ class CognitiveMemoryEngine:
                 logger.info("COGNITIVE_DECISION persist=true")
                 logger.info("COGNITIVE_MEMORY_UPDATE field=%s value=%s", field, value)
             
-            # Handle list types
-            if field == "children" or field == "pets":
-                existing_value = extracted_profile_data.get(field, [])
-                if isinstance(existing_value, list):
-                    existing_value.extend(value)
-                else:
-                    extracted_profile_data[field] = value
+            # Handle list types — deduplication by name
+            if field == "children":
+                existing = extracted_profile_data.get("children", [])
+                if not isinstance(existing, list):
+                    existing = []
+                existing_names = {c.get("name", "").lower() for c in existing if isinstance(c, dict)}
+                new_items = value if isinstance(value, list) else [value]
+                for item in new_items:
+                    if isinstance(item, dict) and item.get("name", "").lower() not in existing_names:
+                        existing.append(item)
+                        existing_names.add(item.get("name", "").lower())
+                extracted_profile_data["children"] = existing
+            elif field == "pets":
+                existing = extracted_profile_data.get("pets", [])
+                if not isinstance(existing, list):
+                    existing = []
+                new_item = value if isinstance(value, dict) else (value[0] if isinstance(value, list) and value else None)
+                if new_item:
+                    existing_names = {p.get("name", "").lower() for p in existing if isinstance(p, dict)}
+                    if new_item.get("name", "").lower() not in existing_names:
+                        existing.append(new_item)
+                extracted_profile_data["pets"] = existing
             else:
                 extracted_profile_data[field] = value
             
             # Save to storage if persist=True
             if persist and memory_type == "profile":
                 # Save to sync storage for immediate persistence
-                storage._storage[f"long_term_profile:{user_id}"] = extracted_profile_data
+                storage._storage[f"profile:{user_id}"] = extracted_profile_data
                 # Also trigger async save in background (fire and forget)
                 import asyncio
                 try:
                     loop = asyncio.get_running_loop()
-                    asyncio.create_task(storage.save(f"long_term_profile:{user_id}", extracted_profile_data))
+                    asyncio.create_task(storage.save(f"profile:{user_id}", extracted_profile_data))
                 except RuntimeError:
                     # No event loop, skip async save - sync storage is enough
                     pass
@@ -277,7 +396,7 @@ class CognitiveMemoryEngine:
             if m:
                 return ("food", m.group(1).strip())
 
-        # General preferences (catch-all "mi piace X")
+        # General preferences (catch-all "mi piace X") — NON catturare se preceduto da "non"
         general_patterns = [
             r"mi piace (?:molto |tanto )?(\w[\w\s]{2,30})",
             r"adoro (\w[\w\s]{2,30})",
@@ -286,6 +405,10 @@ class CognitiveMemoryEngine:
         for pat in general_patterns:
             m = re.search(pat, msg_lower)
             if m:
+                # Controlla che "non" non preceda immediatamente il match
+                preceding = msg_lower[max(0, m.start() - 5):m.start()]
+                if re.search(r'\bnon\s*$', preceding):
+                    continue
                 val = m.group(1).strip()
                 # Skip if it's a person reference or too short
                 if len(val) < 3 or val in ("il", "la", "le", "lo", "un", "una"):

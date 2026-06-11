@@ -8,21 +8,28 @@ from datetime import datetime
 from typing import Dict, Optional
 from core.proactor import proactor
 from core.log import log
+from core.fallback_engine import fallback_engine
+import asyncio
 
 async def handle_greeting(message: str) -> str:
     """Handler per saluti - Qwen2.5-7B-Instruct"""
+    import random
     response = proactor.generate_response("greeting", message)
-    return response or "Ciao! Come posso aiutarti?"
+    if not response:
+        asyncio.create_task(fallback_engine.log_event("system", message, "hardcoded_fallback", "fallback_greeting", "Handler: greeting"))
+        response = random.choice(["Ehi, dimmi.", "Ciao. Come va?", "Eccomi. Che succede?"])
+    return response
 
 async def handle_how_are_you(message: str) -> str:
     """Handler per 'come stai' - Qwen2.5-7B-Instruct"""
+    import random
     response = proactor.generate_response("how_are_you", message)
-    return response or "Sto bene, grazie! E tu?"
+    return response or random.choice(["Bene. E tu, come stai davvero?", "Tutto ok da parte mia. Tu?"])
 
 async def handle_identity(message: str) -> str:
     """Handler per identità - Qwen2.5-7B-Instruct"""
     response = proactor.generate_response("identity", message)
-    return response or "Sono Genesi, la tua assistente personale."
+    return response or "Sono Genesi."
 
 async def handle_time(message: str) -> str:
     """Handler per ora - non usa LLM"""
@@ -56,6 +63,8 @@ async def handle_chat_free(message: str) -> str:
     Chat libera, presenza umana, relazione
     """
     response = proactor.generate_response("chat_free", message)
+    if not response:
+        asyncio.create_task(fallback_engine.log_event("user_id_needed", message, "hardcoded_fallback", "Mi dispiace, ho avuto un problema. Riprova più tardi.", "Handler: chat_free"))
     return response or "Mi dispiace, ho avuto un problema. Riprova più tardi."
 
 async def handle_technical(message: str) -> str:

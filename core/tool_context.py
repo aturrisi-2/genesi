@@ -38,10 +38,10 @@ _GEO_FOLLOWUP_PATTERNS = [
 _GEO_FOLLOWUP_COMPILED = [re.compile(p, re.UNICODE) for p in _GEO_FOLLOWUP_PATTERNS]
 
 # Intents that support inheritance
-INHERITABLE_INTENTS = {"weather", "news"}
+INHERITABLE_INTENTS = {"weather", "news", "image_search"}
 
 # Strong intents that must NOT be overridden by inheritance
-_STRONG_INTENTS = {"identity", "time", "date", "tecnica", "debug", "spiegazione"}
+_STRONG_INTENTS = {"identity", "time", "date", "tecnica", "debug", "spiegazione", "greeting", "emotional", "how_are_you"}
 
 # Elliptical follow-up patterns (Italian)
 ELLIPTICAL_NEWS = [
@@ -66,6 +66,39 @@ ELLIPTICAL_WEATHER = [
     "e adesso", "e ora",
     "e là", "e la",
 ]
+
+ELLIPTICAL_IMAGE = [
+    "adesso ", "ora ", "e ", "invece ", "mostrami ", "cerca "
+]
+
+def is_elliptical_image_followup(message: str) -> bool:
+    """Check if message looks like a short follow-up for images."""
+    msg_lower = message.lower().strip()
+    return any(msg_lower.startswith(p) for p in ELLIPTICAL_IMAGE)
+
+def resolve_elliptical_image(user_id: str, message: str) -> Optional[str]:
+    """If last intent was image_search and message is short, extract the new subject."""
+    ctx = get_tool_context(user_id)
+    if not ctx or ctx.get("intent") != "image_search":
+        return None
+
+    if not is_elliptical_image_followup(message):
+        return None
+
+    msg_lower = message.lower().strip()
+    stops = {"no", "si", "sì", "ok", "grazie", "basta", "ciao", "perfetto"}
+    words = msg_lower.split()
+    if len(words) > 5 or msg_lower in stops:
+        return None
+
+    import re
+    q = re.sub(r'^(adesso|ora|e|invece|mostrami|cerca)\s+', '', msg_lower).strip()
+    if q:
+        logger.info("TOOL_CONTEXT_IMAGE_REUSE user=%s query=%s", user_id, q)
+        return q
+
+    return None
+
 
 
 def save_tool_context(user_id: str, intent: str, **kwargs):
@@ -154,6 +187,14 @@ def is_geo_followup(message: str) -> bool:
     word_count = len(msg.split())
     if word_count >= 6:
         return False
+    
+    # Exclude common short conversational words that are definitely NOT cities
+    conversational_stops = {"no", "si", "sì", "ok", "okay", "grazie", "grazie mille", "va bene", "perfetto", "ottimo", "grazie!", "no.",
+                            "ciao", "salve", "hey", "hello", "hi", "hola", "ehi",
+                            "buongiorno", "buonasera", "buonanotte", "buon pomeriggio"}
+    if msg.lower().strip() in conversational_stops:
+        return False
+
     return any(p.search(msg) for p in _GEO_FOLLOWUP_COMPILED)
 
 

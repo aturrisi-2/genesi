@@ -1,0 +1,26 @@
+[Unit]
+Description=Genesi Widget Core (istanza stabile per C-Place)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=genesi
+Group=genesi
+WorkingDirectory=/opt/genesi-widget
+ExecStart=/opt/genesi-widget/.venv/bin/python main.py
+EnvironmentFile=/etc/genesi-widget-core.env
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=genesi-widget-core
+
+# Sicurezza
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+ReadWritePaths=/opt/genesi-widget/data /opt/genesi-widget/logs /opt/genesi-widget/memory
+
+[Install]
+WantedBy=multi-user.target

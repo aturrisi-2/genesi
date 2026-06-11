@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C-Place — Portale Aziendale</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f4f4; color: #222; font-size: 14px; }
+    a { text-decoration: none; color: inherit; }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      height: 56px;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      color: #222;
+    }
+    .logo-c {
+      background: #c41230;
+      color: #fff;
+      width: 32px; height: 32px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 900;
+    }
+    .topbar-search {
+      flex: 0 0 220px;
+      display: flex;
+      align-items: center;
+      background: #f4f4f4;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 5px 10px;
+      gap: 6px;
+      margin-left: 12px;
+    }
+    .topbar-search input {
+      border: none; background: none; outline: none;
+      font-size: 13px; width: 100%; color: #444;
+    }
+    .topbar-search svg { width:14px; height:14px; fill:#888; flex-shrink:0; }
+    .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+    .topbar-actions svg { width:20px; height:20px; fill:#555; cursor:pointer; }
+    .avatar {
+      width:32px; height:32px; border-radius:50%;
+      background: #c41230; color:#fff;
+      display:flex; align-items:center; justify-content:center;
+      font-size:13px; font-weight:700; cursor:pointer;
+    }
+    .date-info { font-size:11px; color:#888; text-align:right; line-height:1.4; }
+
+    /* ── NAVBAR ── */
+    .navbar {
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      height: 40px;
+    }
+    .navbar a {
+      padding: 0 12px;
+      height: 40px;
+      display: flex; align-items: center;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #444;
+      letter-spacing: .2px;
+      border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+      white-space: nowrap;
+    }
+    .navbar a:hover { color: #c41230; border-bottom-color: #c41230; }
+    .navbar a.active { color: #c41230; border-bottom-color: #c41230; }
+
+    /* ── LAYOUT MAIN ── */
+    .page { max-width: 1100px; margin: 20px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 24px; }
+
+    /* ── SECTION HEADER ── */
+    .sec-title {
+      font-size: 16px; font-weight: 700; color: #c41230;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #c41230;
+      margin-bottom: 14px;
+    }
+
+    /* ── NEWS GRID ── */
+    .news-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .news-card {
+      background: #fff;
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      cursor: pointer;
+      transition: box-shadow .15s;
+    }
+    .news-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.13); }
+    .news-img {
+      width: 100%; height: 150px; object-fit: cover;
+      background: #ddd;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px;
+    }
+    .news-body { padding: 12px; }
+    .news-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+    .tag {
+      font-size: 10px; font-weight: 600; padding: 2px 7px;
+      border: 1px solid #c41230; border-radius: 99px;
+      color: #c41230; white-space: nowrap;
+    }
+    .tag.blue { border-color: #1a5faa; color: #1a5faa; }
+    .tag.green { border-color: #2e7d32; color: #2e7d32; }
+    .news-date { font-size: 11px; color: #999; margin-bottom: 5px; }
+    .news-title { font-size: 13px; font-weight: 700; line-height: 1.4; color: #222; }
+
+    /* ── TOP NEWS (grande + piccolo) ── */
+    .top-news { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .top-news-big {
+      background: #222; border-radius: 4px; overflow: hidden;
+      position: relative; cursor: pointer;
+    }
+    .top-news-big .img {
+      width: 100%; height: 220px;
+      background: linear-gradient(135deg, #8b0000, #c41230);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 48px;
+    }
+    .top-news-big .overlay {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 12px;
+      background: linear-gradient(transparent, rgba(0,0,0,.85));
+      color: #fff;
+    }
+    .top-news-big .overlay .tag { border-color: #fff; color: #fff; }
+    .top-news-big .overlay .news-date { color: rgba(255,255,255,.6); }
+    .top-news-big .overlay .news-title { color: #fff; font-size: 14px; }
+
+    /* ── LINK UTILI ── */
+    .links-row {
+      display: flex; gap: 12px; flex-wrap: wrap;
+    }
+    .link-card {
+      background: #fff; border-radius: 4px; padding: 14px 16px;
+      min-width: 120px; flex: 1;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      cursor: pointer;
+      transition: box-shadow .15s;
+    }
+    .link-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,.12); }
+    .link-icon {
+      width: 40px; height: 40px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 900; color: #fff;
+    }
+    .link-card span { font-size: 12px; font-weight: 600; text-align: center; color: #333; }
+    .link-card .star { color: #ccc; font-size: 14px; }
+
+    /* ── IN EVIDENZA ── */
+    .evidenza-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .ev-card {
+      border-radius: 4px; overflow: hidden;
+      cursor: pointer;
+      position: relative;
+      height: 100px;
+    }
+    .ev-img {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px;
+    }
+    .ev-overlay {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: rgba(196, 18, 48, .82);
+      color: #fff; padding: 7px 10px;
+      font-size: 12px; font-weight: 700;
+    }
+
+    /* ── VIDEO ── */
+    .video-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .video-card {
+      background: #111; border-radius: 4px; overflow: hidden;
+      position: relative; cursor: pointer; height: 120px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .video-card .play {
+      width: 40px; height: 40px; background: rgba(255,0,0,.85);
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    }
+    .video-card .play svg { width:16px; height:16px; fill:#fff; margin-left:3px; }
+    .video-label {
+      padding: 8px;
+      background: #fff;
+      font-size: 12px; font-weight: 600; color: #222;
+      border: 1px solid #eee; border-top: none;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      background: #c41230; color: #fff;
+      padding: 16px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    footer .footer-logo { display:flex; align-items:center; gap:10px; font-size:13px; }
+    footer .footer-logo strong { font-size:15px; }
+    footer .footer-btn {
+      background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.4);
+      color: #fff; padding: 8px 16px; border-radius: 4px;
+      font-size: 12px; cursor: pointer;
+    }
+    footer .footer-support {
+      background: #fff; color: #c41230; padding: 8px 14px;
+      border-radius: 4px; font-size: 12px; font-weight: 700; cursor:pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-c">C</div>
+      Place
+    </div>
+    <div class="topbar-search">
+      <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <input type="text" placeholder="Cerca">
+    </div>
+    <div class="topbar-actions">
+      <div class="date-info">ven, marzo 24<br><small>Offerto da OpenWeather™</small></div>
+      <svg viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>
+      <div class="avatar">AT</div>
+    </div>
+  </div>
+
+  <!-- NAVBAR -->
+  <div class="navbar">
+    <a href="/widget-demo" class="active">ULTIME NEWS ▾</a>
+    <a href="#">AZIENDA ▾</a>
+    <a href="#">AREE ▾</a>
+    <a href="/widget-demo-attivita">ATTIVITÀ E TEMPO LIBERO ▾</a>
+    <a href="#">AZIONI VELOCI ▾</a>
+    <a href="/widget-demo-rubrica">RUBRICA ▾</a>
+    <a href="/widget-demo-engineering">BU ▾</a>
+  </div>
+
+  <div class="page">
+
+    <!-- ULTIME NEWS -->
+    <div>
+      <div class="sec-title">Ultime news</div>
+      <div class="top-news">
+        <div class="top-news-big">
+          <div class="img">🎄</div>
+          <div class="overlay">
+            <div class="news-tags"><span class="tag">CGIA</span><span class="tag">Natale</span></div>
+            <div class="news-date">Pubblicato il 14 dicembre 2025</div>
+            <div class="news-title">Natale 2025: un regalo per te da parte dell'Azienda</div>
+          </div>
+        </div>
+        <div class="top-news-big">
+          <div class="img" style="background:linear-gradient(135deg,#1a3a6b,#1a5faa)">📋</div>
+          <div class="overlay">
+            <div class="news-tags"><span class="tag">SALES_CO_03M_2026</span></div>
+            <div class="news-date">Pubblicato il 19 febbraio 2026</div>
+            <div class="news-title">Assegnazione di responsabilità e revisione organizzativa in ambito SALES_CO_03M_2026</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEWS DI AREA -->
+    <div>
+      <div class="sec-title">News di area</div>
+      <div class="news-row">
+        <a href="/widget-demo-salute" class="news-card">
+          <div class="news-img" style="background:#e8f5e9">🦺</div>
+          <div class="news-body">
+            <div class="news-tags"><span class="tag">News Salute Sicurezza e Ambiente</span><span class="tag">Infortuni</span><span class="tag">Statistiche</span></div>
+            <div class="news-date">Pubblicato il 11 marzo 2026</div>
+            <div class="news-title">Aggiornamento statistiche infortuni Febbraio 2026</div>
+          </div>
+        </a>
+        <a href="/widget-demo-engineering" class="news-card">
+          <div class="news-img" style="background:#fff3e0">👷</div>
+          <div class="news-body">
+            <div class="news-tags"><span class="tag blue">News Comunicazione Corporate</span><span class="tag blue">BU Engineering</span><span class="tag blue">Digital Workplace</span></div>
+            <div class="news-date">Pubblicato il 10 marzo 2026</div>
+            <div class="news-title">Nuova sezione su C-Place per la Business Unit ENGINEERING</div>
+          </div>
+        </a>
+        <a href="/widget-demo-welfare" class="news-card">
+          <div class="news-img" style="background:#fce4ec; font-size:28px; font-weight:900; color:#c41230; letter-spacing:-2px;">AON</div>
+          <div class="news-body">
+            <div class="news-tags"><span class="tag green">News People & Organization</span><span class="tag green">Welfare</span></div>
+            <div class="news-date">Pubblicato il 4 marzo 2026</div>
+            <div class="news-title">Da oggi il tuo portale welfare è ancora più sicuro con l'autenticazione Multi-fattore</div>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <!-- NEWS ATTIVITÀ E TEMPO LIBERO -->
+    <div>
+      <div class="sec-title">News Attività e tempo libero</div>
+      <div class="news-row">
+        <a href="/widget-demo-attivita" class="news-card">
+          <div class="news-img">🏨</div>
+          <div class="news-body">
+            <div class="news-tags"><span class="tag">Convenzioni</span></div>
+            <div class="news-date">Pubblicato il 16 marzo 2026</div>
+            <div class="news-title">Una Hotels - promo flash: 16 > 31 marzo 2026</div>
+          </div>
+        </a>
+        <a href="/widget-demo-attivita" class="news-card">
+          <div class="news-img">🎾</div>
+          <div class="news-body">
+            <div class="news-tags"><span class="tag green">Attività sportive</span></div>
+            <div class="news-date">Pubblicato il 12 marzo 2026</div>
+            <div class="news-title">Corso di Nordic Walking - Aprile 2026</div>
+          </div>
+        </a>
+        <a href="/widget-demo-attivita" class="news-card">
+          <div class="news-img">🏹</div>
+          <div class="news-body">
+            <div class="news-tags"><span class="tag">Attività</span></div>
+            <div class="news-date">Pubblicato il 11 marzo 2026</div>
+            <div class="news-title">FOTO - Torneo di Tiro con l'arco</div>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <!-- LINK UTILI -->
+    <div>
+      <div class="sec-title">Link utili</div>
+      <div class="links-row">
+        <div class="link-card">
+          <div class="link-icon" style="background:#c41230">C</div>
+          <span>CyberPlan</span>
+          <span class="star">☆</span>
+        </div>
+        <div class="link-card">
+          <div class="link-icon" style="background:#1a5faa">J</div>
+          <span>Jira Claim Ticketing - Medical Equipment</span>
+          <span class="star">☆</span>
+        </div>
+        <div class="link-card">
+          <div class="link-icon" style="background:#888">A</div>
+          <span>Adiuto</span>
+          <span class="star">☆</span>
+        </div>
+        <div class="link-card">
+          <div class="link-icon" style="background:#444">A</div>
+          <span>ADP</span>
+          <span class="star">★</span>
+        </div>
+        <a href="/widget-demo-welfare" class="link-card">
+          <div class="link-icon" style="background:#555">A</div>
+          <span>AON Welfare</span>
+          <span class="star">★</span>
+        </a>
+        <a href="/widget-demo-rubrica" class="link-card">
+          <div class="link-icon" style="background:#2e7d32">R</div>
+          <span>Rubrica</span>
+          <span class="star">☆</span>
+        </a>
+        <a href="/widget-demo-comefareper" class="link-card">
+          <div class="link-icon" style="background:#e65100">?</div>
+          <span>Come fare per</span>
+          <span class="star">☆</span>
+        </a>
+        <a href="/widget-demo-menu" class="link-card">
+          <div class="link-icon" style="background:#6a1b9a">🍽</div>
+          <span>Menù del giorno</span>
+          <span class="star">☆</span>
+        </a>
+        <a href="/widget-demo-rassegna" class="link-card">
+          <div class="link-icon" style="background:#1565c0">📰</div>
+          <span>Rassegna stampa</span>
+          <span class="star">☆</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- IN EVIDENZA -->
+    <div>
+      <div class="sec-title">In evidenza</div>
+      <div class="evidenza-grid">
+        <div class="ev-card">
+          <div class="ev-img" style="background:#e3f2fd">📧</div>
+          <div class="ev-overlay">Vai alla tua mail</div>
+        </div>
+        <a href="/widget-demo-organigrammi" class="ev-card">
+          <div class="ev-img" style="background:#e8eaf6">🏢</div>
+          <div class="ev-overlay">Organigrammi</div>
+        </a>
+        <div class="ev-card">
+          <div class="ev-img" style="background:#fce4ec">🎨</div>
+          <div class="ev-overlay">Materiali grafici</div>
+        </div>
+        <a href="/widget-demo-comefareper" class="ev-card">
+          <div class="ev-img" style="background:#e8f5e9">❓</div>
+          <div class="ev-overlay">Come fare per</div>
+        </a>
+        <a href="/widget-demo-menu" class="ev-card">
+          <div class="ev-img" style="background:#fff8e1">🍽️</div>
+          <div class="ev-overlay">Menù del giorno</div>
+        </a>
+        <a href="/widget-demo-rassegna" class="ev-card">
+          <div class="ev-img" style="background:#f3e5f5">📰</div>
+          <div class="ev-overlay">Rassegna stampa</div>
+        </a>
+      </div>
+    </div>
+
+    <!-- ULTIMI VIDEO -->
+    <div>
+      <div class="sec-title">Ultimi video</div>
+      <div class="video-row">
+        <div>
+          <div class="video-card" style="background:linear-gradient(135deg,#1a0000,#8b0000)">
+            <div class="play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+          </div>
+          <div class="video-label">Cefla Education: cosa abbia...<br><small style="color:#c41230">Guarda su ▶ YouTube</small></div>
+        </div>
+        <div>
+          <div class="video-card" style="background:linear-gradient(135deg,#001a40,#1a5faa)">
+            <div class="play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+          </div>
+          <div class="video-label">Best wishes for 2026, a new year t...<br><small style="color:#c41230">Guarda su ▶ YouTube</small></div>
+        </div>
+        <div>
+          <div class="video-card" style="background:linear-gradient(135deg,#0d0d0d,#444)">
+            <div class="play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+          </div>
+          <div class="video-label">Cefla's 2025 was a journey of Inno...<br><small style="color:#c41230">Guarda su ▶ YouTube</small></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /page -->
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-logo">
+      <div style="background:#fff;color:#c41230;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;">C</div>
+      <div>
+        <strong>cefla.</strong><br>
+        <small style="opacity:.7">Making Your Life Better.</small>
+      </div>
+    </div>
+    <button class="footer-btn">Visita il nostro sito pubblico</button>
+    <button class="footer-btn">Social Wall</button>
+    <button class="footer-support">Hai bisogno di aiuto su C-Place?<br>Contatta qui il supporto</button>
+  </footer>
+
+  <!-- ══════════════════════════════════════════════════════════
+       WIDGET — una sola riga nel <body> della intranet reale
+       ══════════════════════════════════════════════════════ -->
+  <script
+    src="/widget.js"
+    data-api-url=""
+    data-api-key="demo_cplace_2026"
+    data-name="Assistente C-Place"
+    data-color="#c41230"
+    data-welcome="Ciao! Sono l'assistente virtuale di C-Place. Posso aiutarti a trovare informazioni aziendali, procedure, contatti e molto altro. Come posso aiutarti?"
+    data-placeholder="Es: come richiedo le ferie?"
+    data-page-context="true">
+  </script>
+
+</body>
+</html>

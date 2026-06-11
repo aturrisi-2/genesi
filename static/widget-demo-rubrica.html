@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rubrica Aziendale — C-Place</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f4f4; color: #222; font-size: 14px; }
+    a { text-decoration: none; color: inherit; }
+    .topbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; height:56px; gap:16px; position:sticky; top:0; z-index:100; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+    .logo { display:flex; align-items:center; gap:6px; font-size:22px; font-weight:800; letter-spacing:-1px; color:#222; }
+    .logo-c { background:#c41230; color:#fff; width:32px; height:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900; }
+    .topbar-actions { margin-left:auto; display:flex; align-items:center; gap:18px; }
+    .avatar { width:32px; height:32px; border-radius:50%; background:#c41230; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+    .navbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; gap:2px; height:40px; }
+    .navbar a { padding:0 12px; height:40px; display:flex; align-items:center; font-size:12.5px; font-weight:600; color:#444; border-bottom:2px solid transparent; white-space:nowrap; }
+    .navbar a:hover, .navbar a.active { color:#c41230; border-bottom-color:#c41230; }
+    .breadcrumb { background:#fff; border-bottom:1px solid #eee; padding:8px 20px; font-size:12px; color:#888; }
+    .breadcrumb a { color:#c41230; }
+    .breadcrumb span { margin:0 6px; }
+    .page { max-width:1100px; margin:24px auto; padding:0 16px; display:flex; flex-direction:column; gap:24px; }
+    .sec-title { font-size:16px; font-weight:700; color:#c41230; padding-bottom:10px; border-bottom:2px solid #c41230; margin-bottom:16px; }
+    .card { background:#fff; border-radius:6px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+    table { width:100%; border-collapse:collapse; }
+    thead th { background:#c41230; color:#fff; padding:11px 14px; text-align:left; font-size:13px; font-weight:600; }
+    tbody tr:nth-child(even) { background:#fafafa; }
+    tbody tr:hover { background:#fff3f3; }
+    td { padding:10px 14px; border-bottom:1px solid #f0f0f0; font-size:13px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:600; }
+    .badge-red { background:#fce4e4; color:#c41230; }
+    .badge-green { background:#e8f5e9; color:#2e7d32; }
+    .badge-blue { background:#e3f2fd; color:#1565c0; }
+    .badge-yellow { background:#fff8e1; color:#e65100; }
+    footer { background:#c41230; color:#fff; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; margin-top:32px; }
+    .footer-btn { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.4); color:#fff; padding:8px 16px; border-radius:4px; font-size:12px; cursor:pointer; text-decoration:none; display:inline-block; }
+    .link-red { color:#c41230; font-weight:600; }
+
+    .search-bar { display:flex; align-items:center; gap:12px; padding:12px 16px; background:#f9f9f9; border:2px solid #e0e0e0; border-radius:8px; margin-bottom:20px; }
+    .search-bar input { flex:1; border:none; background:transparent; font-size:14px; color:#999; font-family:inherit; cursor:not-allowed; outline:none; }
+    .search-icon { color:#bbb; font-size:18px; }
+
+    .person-avatar { width:32px; height:32px; border-radius:50%; background:#c41230; color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; }
+    .person-cell { display:flex; align-items:center; gap:10px; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/widget-demo" class="logo"><div class="logo-c">C</div>Place</a>
+  <div class="topbar-actions"><div class="avatar">AT</div></div>
+</div>
+<div class="navbar">
+  <a href="/widget-demo">ULTIME NEWS ▾</a>
+  <a href="#">AZIENDA ▾</a>
+  <a href="#">AREE ▾</a>
+  <a href="/widget-demo-attivita">ATTIVITÀ E TEMPO LIBERO ▾</a>
+  <a href="#">AZIONI VELOCI ▾</a>
+  <a href="/widget-demo-rubrica" class="active">RUBRICA ▾</a>
+  <a href="#">BU ▾</a>
+</div>
+
+<div class="breadcrumb">
+  <a href="/widget-demo">Home</a><span>›</span>
+  Rubrica
+</div>
+
+<div class="page">
+
+  <!-- RICERCA -->
+  <div class="card">
+    <div class="sec-title">Cerca un collega</div>
+    <div class="search-bar">
+      <span class="search-icon">🔍</span>
+      <input type="text" placeholder="Cerca per nome, reparto o interno..." disabled>
+    </div>
+    <p style="font-size:12.5px; color:#888;">La ricerca avanzata è disponibile tramite l'assistente virtuale Genesi — clicca sull'icona in basso a destra per fare una domanda.</p>
+  </div>
+
+  <!-- CONTATTI PRINCIPALI -->
+  <div class="card">
+    <div class="sec-title">Contatti principali</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Reparto</th>
+          <th>Interno</th>
+          <th>Email</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">RC</div>
+              <strong>Roberto Casamenti</strong>
+            </div>
+          </td>
+          <td>Direzione Generale</td>
+          <td>int. 2000</td>
+          <td><a href="mailto:r.casamenti@cefla.it" class="link-red">r.casamenti@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">CL</div>
+              <strong>Chiara Lambertini</strong>
+            </div>
+          </td>
+          <td>People &amp; Organization</td>
+          <td>int. 2001</td>
+          <td><a href="mailto:c.lambertini@cefla.it" class="link-red">c.lambertini@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">LB</div>
+              <strong>Laura Bianchi</strong>
+            </div>
+          </td>
+          <td>Welfare &amp; Benefits</td>
+          <td>int. 2105</td>
+          <td><a href="mailto:l.bianchi@cefla.it" class="link-red">l.bianchi@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">SP</div>
+              <strong>Stefano Pirini</strong>
+            </div>
+          </td>
+          <td>IT &amp; Digital</td>
+          <td>int. 2200</td>
+          <td><a href="mailto:s.pirini@cefla.it" class="link-red">s.pirini@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">ET</div>
+              <strong>Elena Tosi</strong>
+            </div>
+          </td>
+          <td>Marketing &amp; Comunicazione</td>
+          <td>int. 2050</td>
+          <td><a href="mailto:e.tosi@cefla.it" class="link-red">e.tosi@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">MF</div>
+              <strong>Marco Ferretti</strong>
+            </div>
+          </td>
+          <td>BU Engineering — R&amp;D</td>
+          <td>int. 3101</td>
+          <td><a href="mailto:m.ferretti@cefla.it" class="link-red">m.ferretti@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">GR</div>
+              <strong>Giovanni Rossi</strong>
+            </div>
+          </td>
+          <td>Previdenza Complementare</td>
+          <td>int. 2108</td>
+          <td><a href="mailto:g.rossi@cefla.it" class="link-red">g.rossi@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">PV</div>
+              <strong>Paolo Veronesi</strong>
+            </div>
+          </td>
+          <td>Sicurezza &amp; Ambiente</td>
+          <td>int. 2090</td>
+          <td><a href="mailto:p.veronesi@cefla.it" class="link-red">p.veronesi@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">DG</div>
+              <strong>Davide Gentili</strong>
+            </div>
+          </td>
+          <td>Finance &amp; Controlling</td>
+          <td>int. 2010</td>
+          <td><a href="mailto:d.gentili@cefla.it" class="link-red">d.gentili@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">FL</div>
+              <strong>Fabrizio Longo</strong>
+            </div>
+          </td>
+          <td>Acquisti &amp; Supply Chain</td>
+          <td>int. 2035</td>
+          <td><a href="mailto:f.longo@cefla.it" class="link-red">f.longo@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">SG</div>
+              <strong>Simona Guerra</strong>
+            </div>
+          </td>
+          <td>BU Dental — Operations</td>
+          <td>int. 4050</td>
+          <td><a href="mailto:s.guerra@cefla.it" class="link-red">s.guerra@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">RF</div>
+              <strong>Roberto Fava</strong>
+            </div>
+          </td>
+          <td>BU Retail — Key Account</td>
+          <td>int. 5020</td>
+          <td><a href="mailto:r.fava@cefla.it" class="link-red">r.fava@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">MC</div>
+              <strong>Marta Conti</strong>
+            </div>
+          </td>
+          <td>Assicurazione Sanitaria</td>
+          <td>int. 2112</td>
+          <td><a href="mailto:m.conti@cefla.it" class="link-red">m.conti@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">RM</div>
+              <strong>Reception Imola</strong>
+            </div>
+          </td>
+          <td>Reception — Edificio A</td>
+          <td>int. 0</td>
+          <td><a href="mailto:reception@cefla.it" class="link-red">reception@cefla.it</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="person-cell">
+              <div class="person-avatar">MS</div>
+              <strong>Mensa Aziendale</strong>
+            </div>
+          </td>
+          <td>Servizi — Edificio C</td>
+          <td>int. 2250</td>
+          <td><a href="mailto:prenotazione-mensa@cefla.it" class="link-red">prenotazione-mensa@cefla.it</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- NUMERI EMERGENZA -->
+  <div class="card">
+    <div class="sec-title">Numeri di emergenza</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Servizio</th>
+          <th>Interno</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>🚑 Pronto Soccorso interno</strong></td>
+          <td><span class="badge badge-red">int. 2300</span></td>
+          <td>Disponibile 24/7 — per emergenze mediche in sede</td>
+        </tr>
+        <tr>
+          <td><strong>🔒 Guardia Giurata</strong></td>
+          <td><span class="badge badge-red">int. 2301</span></td>
+          <td>Disponibile 24/7 — accessi, sicurezza, incidenti</td>
+        </tr>
+        <tr>
+          <td><strong>📞 Reception</strong></td>
+          <td><span class="badge badge-blue">int. 0</span></td>
+          <td>Lun–Ven 07:30–19:00 — smistamento chiamate</td>
+        </tr>
+        <tr>
+          <td><strong>💻 IT Urgenze</strong></td>
+          <td><span class="badge badge-blue">int. 2201</span></td>
+          <td>Lun–Ven 07:30–20:00 — guasti critici sistemi</td>
+        </tr>
+        <tr>
+          <td><strong>🏢 Direzione Generale</strong></td>
+          <td><span class="badge badge-yellow">int. 2000</span></td>
+          <td>Solo per comunicazioni urgenti alla Direzione</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- REPARTI E UFFICI -->
+  <div class="card">
+    <div class="sec-title">Reparti e uffici</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Reparto</th>
+          <th>Piano / Edificio</th>
+          <th>Responsabile</th>
+          <th>Interno principale</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Direzione Generale</td>
+          <td>Piano 3 — Edificio A</td>
+          <td>R. Casamenti</td>
+          <td>int. 2000</td>
+        </tr>
+        <tr>
+          <td>People &amp; Organization</td>
+          <td>Piano 2 — Edificio A</td>
+          <td>C. Lambertini</td>
+          <td>int. 2100</td>
+        </tr>
+        <tr>
+          <td>IT &amp; Digital</td>
+          <td>Piano 1 — Edificio B</td>
+          <td>S. Pirini</td>
+          <td>int. 2200</td>
+        </tr>
+        <tr>
+          <td>Finance &amp; Controlling</td>
+          <td>Piano 2 — Edificio A</td>
+          <td>D. Gentili</td>
+          <td>int. 2010</td>
+        </tr>
+        <tr>
+          <td>BU Engineering</td>
+          <td>Piano 1-2 — Edificio B</td>
+          <td>S. Montanari</td>
+          <td>int. 3100</td>
+        </tr>
+        <tr>
+          <td>BU Dental</td>
+          <td>Piano 3 — Edificio C</td>
+          <td>F. Castellucci</td>
+          <td>int. 4000</td>
+        </tr>
+        <tr>
+          <td>BU Retail</td>
+          <td>Piano 2 — Edificio C</td>
+          <td>M. Giovannini</td>
+          <td>int. 5000</td>
+        </tr>
+        <tr>
+          <td>Marketing &amp; Comunicazione</td>
+          <td>Piano 3 — Edificio A</td>
+          <td>E. Tosi</td>
+          <td>int. 2050</td>
+        </tr>
+        <tr>
+          <td>Sicurezza &amp; Ambiente</td>
+          <td>Piano T — Edificio A</td>
+          <td>P. Veronesi</td>
+          <td>int. 2090</td>
+        </tr>
+        <tr>
+          <td>Mensa Aziendale</td>
+          <td>Piano T — Edificio C</td>
+          <td>Resp. Mensa</td>
+          <td>int. 2250</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<footer>
+  <a href="/widget-demo" class="footer-btn">← Torna alla Home</a>
+  <span style="font-size:12px; opacity:.8;">C-Place © 2026 — Cefla S.C. — Tutti i diritti riservati</span>
+</footer>
+
+<script src="/widget.js"
+  data-api-url=""
+  data-api-key="demo_cplace_2026"
+  data-name="Assistente C-Place"
+  data-color="#c41230"
+  data-welcome="Sei nella Rubrica aziendale. Posso aiutarti a trovare colleghi, interni telefonici, email e reparti. Come posso aiutarti?"
+  data-placeholder="Come posso aiutarti?"
+  data-page-context="true">
+</script>
+</body>
+</html>

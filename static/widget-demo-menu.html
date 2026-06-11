@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Menù del Giorno — Mensa Aziendale — C-Place</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f4f4; color: #222; font-size: 14px; }
+    a { text-decoration: none; color: inherit; }
+    .topbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; height:56px; gap:16px; position:sticky; top:0; z-index:100; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+    .logo { display:flex; align-items:center; gap:6px; font-size:22px; font-weight:800; letter-spacing:-1px; color:#222; }
+    .logo-c { background:#c41230; color:#fff; width:32px; height:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900; }
+    .topbar-actions { margin-left:auto; display:flex; align-items:center; gap:18px; }
+    .avatar { width:32px; height:32px; border-radius:50%; background:#c41230; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+    .navbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; gap:2px; height:40px; }
+    .navbar a { padding:0 12px; height:40px; display:flex; align-items:center; font-size:12.5px; font-weight:600; color:#444; border-bottom:2px solid transparent; white-space:nowrap; }
+    .navbar a:hover, .navbar a.active { color:#c41230; border-bottom-color:#c41230; }
+    .breadcrumb { background:#fff; border-bottom:1px solid #eee; padding:8px 20px; font-size:12px; color:#888; }
+    .breadcrumb a { color:#c41230; }
+    .breadcrumb span { margin:0 6px; }
+    .page { max-width:1100px; margin:24px auto; padding:0 16px; display:flex; flex-direction:column; gap:24px; }
+    .sec-title { font-size:16px; font-weight:700; color:#c41230; padding-bottom:10px; border-bottom:2px solid #c41230; margin-bottom:16px; }
+    .card { background:#fff; border-radius:6px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+    .grid-2 { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+    table { width:100%; border-collapse:collapse; }
+    thead th { background:#c41230; color:#fff; padding:11px 14px; text-align:left; font-size:13px; font-weight:600; }
+    tbody tr:nth-child(even) { background:#fafafa; }
+    tbody tr:hover { background:#fff3f3; }
+    td { padding:10px 14px; border-bottom:1px solid #f0f0f0; font-size:13px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:600; }
+    .badge-red { background:#fce4e4; color:#c41230; }
+    .badge-green { background:#e8f5e9; color:#2e7d32; }
+    .badge-blue { background:#e3f2fd; color:#1565c0; }
+    .badge-yellow { background:#fff8e1; color:#e65100; }
+    footer { background:#c41230; color:#fff; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; margin-top:32px; }
+    .footer-btn { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.4); color:#fff; padding:8px 16px; border-radius:4px; font-size:12px; cursor:pointer; text-decoration:none; display:inline-block; }
+    .link-red { color:#c41230; font-weight:600; }
+
+    .orari-banner { background:#c41230; color:#fff; border-radius:8px; padding:18px 24px; display:flex; align-items:center; gap:32px; }
+    .orari-item { display:flex; flex-direction:column; align-items:center; gap:4px; }
+    .orari-label { font-size:11px; text-transform:uppercase; letter-spacing:.5px; opacity:.8; }
+    .orari-value { font-size:20px; font-weight:800; }
+    .orari-separator { width:1px; height:40px; background:rgba(255,255,255,.3); }
+
+    .veg-banner { background:#e8f5e9; border:1px solid #a5d6a7; border-radius:6px; padding:14px 18px; display:flex; align-items:center; gap:14px; }
+    .veg-icon { font-size:24px; }
+    .veg-text strong { font-size:14px; color:#2e7d32; }
+    .veg-text p { font-size:13px; color:#555; margin-top:4px; }
+
+    .allerg-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; }
+
+    .steps { display:flex; flex-direction:column; gap:12px; }
+    .step { display:flex; align-items:flex-start; gap:14px; }
+    .step-num { background:#c41230; color:#fff; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex-shrink:0; margin-top:1px; }
+    .step-content { flex:1; }
+    .step-title { font-weight:600; font-size:13px; margin-bottom:3px; }
+    .step-desc { color:#666; font-size:12.5px; line-height:1.5; }
+
+    .today-row { background:#fff3f3 !important; font-weight:600; }
+    .today-row td:first-child::after { content: ' ← oggi'; color:#c41230; font-size:11px; font-weight:700; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/widget-demo" class="logo"><div class="logo-c">C</div>Place</a>
+  <div class="topbar-actions"><div class="avatar">AT</div></div>
+</div>
+<div class="navbar">
+  <a href="/widget-demo">ULTIME NEWS ▾</a>
+  <a href="#">AZIENDA ▾</a>
+  <a href="#" class="active">AREE ▾</a>
+  <a href="/widget-demo-attivita">ATTIVITÀ E TEMPO LIBERO ▾</a>
+  <a href="#">AZIONI VELOCI ▾</a>
+  <a href="/widget-demo-rubrica">RUBRICA ▾</a>
+  <a href="#">BU ▾</a>
+</div>
+
+<div class="breadcrumb">
+  <a href="/widget-demo">Home</a><span>›</span>
+  <a href="#">Servizi</a><span>›</span>
+  Menù del Giorno
+</div>
+
+<div class="page">
+
+  <!-- ORARI BANNER -->
+  <div class="orari-banner">
+    <div class="orari-item">
+      <div class="orari-label">Orario mensa</div>
+      <div class="orari-value">12:00 – 14:30</div>
+    </div>
+    <div class="orari-separator"></div>
+    <div class="orari-item">
+      <div class="orari-label">Costo pasto</div>
+      <div class="orari-value">€4,50</div>
+    </div>
+    <div class="orari-separator"></div>
+    <div class="orari-item">
+      <div class="orari-label">Pagamento</div>
+      <div class="orari-value" style="font-size:15px;">Badge aziendale</div>
+    </div>
+    <div class="orari-separator"></div>
+    <div class="orari-item">
+      <div class="orari-label">Sede</div>
+      <div class="orari-value" style="font-size:15px;">Edificio C — Piano terra</div>
+    </div>
+  </div>
+
+  <!-- MENU SETTIMANA -->
+  <div class="card">
+    <div class="sec-title">Menù della settimana — 24/28 marzo 2026</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Giorno</th>
+          <th>Primo</th>
+          <th>Secondo</th>
+          <th>Contorno</th>
+          <th>Dessert</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="today-row">
+          <td><strong>Lunedì 24</strong></td>
+          <td>Pasta al ragù di carne</td>
+          <td>Pollo arrosto con rosmarino</td>
+          <td>Insalata mista di stagione</td>
+          <td>Frutta fresca di stagione</td>
+        </tr>
+        <tr>
+          <td><strong>Martedì 25</strong></td>
+          <td>Risotto ai funghi porcini</td>
+          <td>Merluzzo al vapore con capperi</td>
+          <td>Patate al forno con erbe</td>
+          <td>Budino al cioccolato</td>
+        </tr>
+        <tr>
+          <td><strong>Mercoledì 26</strong></td>
+          <td>Minestrone di verdure</td>
+          <td>Cotoletta di vitello panata</td>
+          <td>Zucchine trifolate</td>
+          <td>Torta della casa</td>
+        </tr>
+        <tr>
+          <td><strong>Giovedì 27</strong></td>
+          <td>Tagliatelle al pesto genovese</td>
+          <td>Filetto di salmone al limone</td>
+          <td>Spinaci al burro</td>
+          <td>Yogurt con granola</td>
+        </tr>
+        <tr>
+          <td><strong>Venerdì 28</strong></td>
+          <td>Zuppa di legumi e cereali</td>
+          <td>Vitello tonnato con salsa</td>
+          <td>Finocchi gratinati</td>
+          <td>Crostata di marmellata</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px; font-size:12px; color:#888;">* Il menù può subire variazioni per motivi logistici. Ogni giorno è disponibile anche un'opzione vegetariana/vegana su richiesta.</p>
+  </div>
+
+  <!-- ALLERGENI -->
+  <div class="card">
+    <div class="sec-title">Informazioni allergeni</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Allergene</th>
+          <th>Presenti in (questa settimana)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>🌾 Glutine (cereali)</td>
+          <td>Pasta al ragù, Tagliatelle al pesto, Cotoletta panata, Zuppa cereali, Crostata</td>
+        </tr>
+        <tr>
+          <td>🥛 Latte e latticini</td>
+          <td>Risotto ai funghi, Cotoletta panata, Torta della casa, Spinaci al burro, Finocchi gratinati</td>
+        </tr>
+        <tr>
+          <td>🥚 Uova</td>
+          <td>Cotoletta panata, Vitello tonnato, Crostata, Budino al cioccolato</td>
+        </tr>
+        <tr>
+          <td>🐟 Pesce</td>
+          <td>Merluzzo al vapore, Salmone al limone, Vitello tonnato (salsa)</td>
+        </tr>
+        <tr>
+          <td>🌰 Frutta a guscio</td>
+          <td>Pesto genovese (pinoli), Torta della casa (possibili tracce)</td>
+        </tr>
+        <tr>
+          <td>🌱 Sedano</td>
+          <td>Minestrone, Zuppa di legumi</td>
+        </tr>
+        <tr>
+          <td>🫘 Senape</td>
+          <td>Salsa vitello tonnato</td>
+        </tr>
+        <tr>
+          <td>🌻 Semi di sesamo</td>
+          <td>Pane in servizio (possibili tracce)</td>
+        </tr>
+        <tr>
+          <td>🐚 Molluschi</td>
+          <td>Non presenti questa settimana</td>
+        </tr>
+        <tr>
+          <td>🦐 Crostacei</td>
+          <td>Non presenti questa settimana</td>
+        </tr>
+        <tr>
+          <td>🥜 Arachidi</td>
+          <td>Non presenti questa settimana</td>
+        </tr>
+        <tr>
+          <td>🫘 Lupini</td>
+          <td>Non presenti questa settimana</td>
+        </tr>
+        <tr>
+          <td>🌿 Anidride solforosa / solfiti</td>
+          <td>Non presenti questa settimana</td>
+        </tr>
+        <tr>
+          <td>🫘 Soia</td>
+          <td>Possibili tracce — consulta il personale della mensa</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px; font-size:12px; color:#888;">Per informazioni specifiche su allergie e intolleranze, rivolgiti al personale della mensa al momento del pasto o contatta int. 2250.</p>
+  </div>
+
+  <!-- PRENOTAZIONE -->
+  <div class="card">
+    <div class="sec-title">Prenotazione pasto</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">Scarica o accedi all'app mensa</div>
+          <div class="step-desc">Usa l'app "Cefla Mensa" disponibile su App Store e Google Play oppure accedi dal portale interno. Login con le credenziali aziendali.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">Prenota entro le 10:00 del giorno stesso</div>
+          <div class="step-desc">Seleziona il giorno, scegli il menù (standard o vegetariano) e conferma. La prenotazione è obbligatoria per i giorni con capienza ridotta (segnalati in rosso).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">Presenta il badge alla cassa</div>
+          <div class="step-desc">Il costo di €4,50 viene scalato automaticamente dal credito badge. Ricarica il badge presso le postazioni self-service in Reception o Mensa.</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:16px; display:flex; gap:16px; flex-wrap:wrap;">
+      <div style="background:#f9f9f9; border-radius:6px; padding:12px 16px; flex:1; min-width:180px;">
+        <div style="font-size:11px; color:#888; font-weight:600; margin-bottom:4px;">PRENOTAZIONE EMAIL</div>
+        <a href="mailto:prenotazione-mensa@cefla.it" class="link-red">prenotazione-mensa@cefla.it</a>
+      </div>
+      <div style="background:#f9f9f9; border-radius:6px; padding:12px 16px; flex:1; min-width:180px;">
+        <div style="font-size:11px; color:#888; font-weight:600; margin-bottom:4px;">TELEFONO MENSA</div>
+        <span style="font-weight:700;">int. 2250</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MENU SPECIALE -->
+  <div class="veg-banner">
+    <div class="veg-icon">🥗</div>
+    <div class="veg-text">
+      <strong>Menu speciale: opzione vegetariana e vegana sempre disponibile</strong>
+      <p>La mensa garantisce ogni giorno un'alternativa vegetariana e, su richiesta anticipata, vegana. Per esigenze dietetiche particolari (allergie certificate, intolleranze, religione) comunicare in anticipo al personale della mensa o scrivere a <a href="mailto:prenotazione-mensa@cefla.it" class="link-red">prenotazione-mensa@cefla.it</a>.</p>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <a href="/widget-demo" class="footer-btn">← Torna alla Home</a>
+  <span style="font-size:12px; opacity:.8;">C-Place © 2026 — Cefla S.C. — Tutti i diritti riservati</span>
+</footer>
+
+<script src="/widget.js"
+  data-api-url=""
+  data-api-key="demo_cplace_2026"
+  data-name="Assistente C-Place"
+  data-color="#c41230"
+  data-welcome="Sei nella sezione Mensa. Posso aiutarti con il menù della settimana, allergeni, orari e prenotazioni. Come posso aiutarti?"
+  data-placeholder="Come posso aiutarti?"
+  data-page-context="true">
+</script>
+</body>
+</html>

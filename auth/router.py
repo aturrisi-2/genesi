@@ -1,19 +1,21 @@
 import re
 import os
+import secrets
+import hashlib
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.config import (
     ADMIN_EMAILS, VERIFY_TOKEN_EXPIRE_HOURS, RESET_TOKEN_EXPIRE_HOURS,
 )
 from auth.database import get_db
-from auth.models import AuthUser, AuthToken, Visit
+from auth.models import AuthUser, AuthToken, Visit, UsageLog, ApiKey
 from auth.security import (
     hash_password, verify_password,
     create_access_token, create_refresh_token,
@@ -115,16 +117,24 @@ async def register(req: RegisterRequest, http_request: Request, db: AsyncSession
     _validate_password(req.password)
 
     # Check duplicato
-    existing = await db.execute(select(AuthUser).where(AuthUser.email == email))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Email già registrata.")
+    existing_result = await db.execute(select(AuthUser).where(AuthUser.email == email))
+    existing = existing_result.scalar_one_or_none()
+    if existing:
+        _log("AUTH_REGISTER_FAIL", email=email, reason="duplicate", user_id=existing.id)
+        if existing.is_verified:
+            raise HTTPException(status_code=409, detail="Email già registrata. Prova ad accedere.")
+        else:
+            raise HTTPException(status_code=409, detail="Email registrata ma non verificata. Controlla la tua posta o richiedi un nuovo invio.")
 
     # Crea utente
     is_admin = email in ADMIN_EMAILS
+    # Auto-verifica: DEV_MODE oppure account virtuali del gruppo Telegram
+    auto_verify = DEV_MODE or email.endswith("@genesi.group")
+    
     user = AuthUser(
         email=email,
         password_hash=hash_password(req.password),
-        is_verified=False,
+        is_verified=auto_verify,
         is_admin=is_admin,
         preferences=req.preferences or {
             "language": "it",
@@ -137,7 +147,18 @@ async def register(req: RegisterRequest, http_request: Request, db: AsyncSession
     db.add(user)
     await db.flush()  # Assegna user.id prima di creare il token
 
-    # Token verifica email
+    if auto_verify:
+         _log("AUTH_REGISTER_AUTO_VERIFIED", user_id=user.id, email=email)
+         # Inizializza ambiente subito se auto-verificato
+         initialize_user_environment(user.id, user.email, user.preferences)
+         await db.commit()
+         return {
+             "message": "Registrazione completata con successo (Accesso immediato abilitato).",
+             "user_id": user.id,
+             "auto_verified": True
+         }
+
+    # Token verifica email (solo se non auto-verificato)
     token_str = generate_secure_token()
     token = AuthToken(
         user_id=user.id,
@@ -203,7 +224,7 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
     _log("AUTH_VERIFY", user_id=user.id, email=user.email)
 
     # Inizializza ambiente Genesi
-    initialize_user_environment(user.id, user.preferences)
+    initialize_user_environment(user.id, user.email, user.preferences)
 
     return HTMLResponse(
         content=_html_page(
@@ -246,8 +267,6 @@ async def login(req: LoginRequest, http_request: Request, db: AsyncSession = Dep
     refresh = create_refresh_token(user.id)
 
     _log("AUTH_LOGIN", user_id=user.id, email=email)
-    print(f"[DEBUG AUTH LOGIN] User ID created: {user.id}")  # DEBUG TEMPORANEO
-    print(f"[DEBUG AUTH LOGIN] DB URL: {db.bind.url}")  # DEBUG TEMPORANEO
 
     return {
         "access_token": access,
@@ -496,6 +515,65 @@ async def admin_stats(http_request: Request, db: AsyncSession = Depends(get_db))
         for row in recent_logins_result
     ]
 
+    # User List with Usage
+    # We join AuthUser with a subquery that sums UsageLog
+    from sqlalchemy import outerjoin
+    usage_sub = (
+        select(
+            UsageLog.user_id,
+            func.sum(UsageLog.prompt_tokens).label("p_sum"),
+            func.sum(UsageLog.completion_tokens).label("c_sum")
+        )
+        .group_by(UsageLog.user_id)
+        .subquery()
+    )
+    
+    users_result = await db.execute(
+        select(
+            AuthUser.email,
+            AuthUser.created_at,
+            AuthUser.last_login,
+            usage_sub.c.p_sum,
+            usage_sub.c.c_sum
+        )
+        .outerjoin(usage_sub, AuthUser.id == usage_sub.c.user_id)
+        .order_by(AuthUser.created_at.desc())
+    )
+    
+    user_list = []
+    for row in users_result:
+        user_list.append({
+            "email": row.email,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "last_login": row.last_login.isoformat() if row.last_login else None,
+            "prompt_tokens": int(row.p_sum or 0),
+            "completion_tokens": int(row.c_sum or 0),
+            "total_tokens": int((row.p_sum or 0) + (row.c_sum or 0))
+        })
+
+    # OpenRouter Balance (Optional)
+    or_balance = None
+    import httpx
+    or_key = os.getenv("OPENROUTER_API_KEY")
+    if or_key:
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.get(
+                    "https://openrouter.ai/api/v1/auth/key",
+                    headers={"Authorization": f"Bearer {or_key}"}
+                )
+                if res.status_code == 200:
+                    or_balance = res.json().get("data", {}).get("usage", 0) # This is limit/usage info
+                    # Note: OpenRouter key info usually has 'usage' and 'limit'
+                    key_data = res.json().get("data", {})
+                    or_balance = {
+                        "usage": key_data.get("usage", 0),
+                        "limit": key_data.get("limit", 0),
+                        "is_free_tier": key_data.get("is_free_tier", False)
+                    }
+        except:
+            pass
+
     _log("ADMIN_STATS", admin_id=user.id)
 
     return {
@@ -506,6 +584,8 @@ async def admin_stats(http_request: Request, db: AsyncSession = Depends(get_db))
         "registrations_today": registrations_today,
         "visits_24h": visits_24h,
         "recent_logins": recent_logins,
+        "user_list": user_list,
+        "or_balance": or_balance,
         "timestamp": now.isoformat(),
     }
 
@@ -566,31 +646,29 @@ async def logout(http_request: Request):
 async def require_auth(request: Request, db: AsyncSession = Depends(get_db)) -> AuthUser:
     """FastAPI dependency: extracts and validates JWT, returns AuthUser."""
     auth_header = request.headers.get("Authorization", "")
-    print("AUTH HEADER:", auth_header)  # DEBUG TEMPORANEO
-    if not auth_header.startswith("Bearer "):
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+    else:
+        # Fallback to query param for link-based flows (OAuth)
+        token = request.query_params.get("token")
+
+    if not token:
         raise HTTPException(status_code=401, detail="Autenticazione richiesta.")
 
-    token = auth_header.split(" ")[1]
-    print(f"TOKEN RECEIVED: {token}")  # DEBUG TEMPORANEO
-    
     try:
         payload = decode_token(token)
-        print(f"DECODED PAYLOAD: {payload}")  # DEBUG TEMPORANEO
-    except Exception as e:
-        print(f"JWT ERROR: {type(e)} - {str(e)}")  # DEBUG TEMPORANEO
+    except Exception:
         raise HTTPException(status_code=401, detail="Token non valido o scaduto.")
-    
+
     if not payload or payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="Token non valido o scaduto.")
 
     user_id = payload.get("sub")
-    print(f"[DEBUG GET_CURRENT_USER] Looking for user_id: {user_id}")  # DEBUG TEMPORANEO
     result = await db.execute(select(AuthUser).where(AuthUser.id == user_id))
     user = result.scalar_one_or_none()
-    print(f"[DEBUG GET_CURRENT_USER] User found: {user}")  # DEBUG TEMPORANEO
 
     if not user or (not user.is_verified and not DEV_MODE):
-        print(f"[DEBUG GET_CURRENT_USER] User verification failed - user: {user}, is_verified: {user.is_verified if user else 'None'}, DEV_MODE: {DEV_MODE}")  # DEBUG TEMPORANEO
         raise HTTPException(status_code=401, detail="Utente non valido.")
 
     return user
@@ -602,6 +680,158 @@ async def require_admin(request: Request, db: AsyncSession = Depends(get_db)) ->
     if not user.is_admin or user.email not in ADMIN_EMAILS:
         raise HTTPException(status_code=403, detail="Accesso negato.")
     return user
+
+
+# ===============================
+# API KEY — utility
+# ===============================
+
+def _hash_key(raw_key: str) -> str:
+    return hashlib.sha256(raw_key.encode()).hexdigest()
+
+def _generate_raw_key() -> str:
+    return "gns_" + secrets.token_urlsafe(32)
+
+# Rate limiting per API key (in-memory, stesso pattern del JWT rate limit)
+_api_key_rate: dict = {}
+
+def _check_api_key_rate(key_id: str, limit_per_min: int):
+    now = datetime.utcnow()
+    entries = _api_key_rate.get(key_id, [])
+    entries = [t for t in entries if (now - t).total_seconds() < 60]
+    if len(entries) >= limit_per_min:
+        raise HTTPException(status_code=429, detail="Rate limit API key superato. Riprova tra poco.")
+    entries.append(now)
+    _api_key_rate[key_id] = entries
+
+
+# ===============================
+# API KEY — dependency
+# ===============================
+
+async def require_api_key(request: Request, db: AsyncSession = Depends(get_db)) -> AuthUser:
+    """
+    FastAPI dependency per endpoint /v1/*.
+    Accetta header:  X-API-Key: gns_xxxxx
+    Ritorna l'AuthUser proprietario della chiave.
+    """
+    raw_key = request.headers.get("X-API-Key", "").strip()
+    if not raw_key or not raw_key.startswith("gns_"):
+        raise HTTPException(status_code=401, detail="API key mancante o non valida. Usa l'header X-API-Key.")
+
+    key_hash = _hash_key(raw_key)
+    result = await db.execute(select(ApiKey).where(ApiKey.key_hash == key_hash))
+    api_key_obj: Optional[ApiKey] = result.scalar_one_or_none()
+
+    if not api_key_obj or not api_key_obj.is_active:
+        raise HTTPException(status_code=403, detail="API key non valida o revocata.")
+
+    # Rate limiting
+    _check_api_key_rate(api_key_obj.id, api_key_obj.rate_limit_per_min)
+
+    # Aggiorna statistiche (fire-and-forget via update)
+    await db.execute(
+        update(ApiKey)
+        .where(ApiKey.id == api_key_obj.id)
+        .values(last_used_at=datetime.utcnow(),
+                requests_total=ApiKey.requests_total + 1)
+    )
+    await db.commit()
+
+    # Carica l'utente proprietario
+    user_result = await db.execute(select(AuthUser).where(AuthUser.id == api_key_obj.user_id))
+    user: Optional[AuthUser] = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=403, detail="Utente associato alla API key non trovato.")
+
+    _log("API_KEY_AUTH", key_id=api_key_obj.id, user_id=user.id, name=api_key_obj.name)
+    return user
+
+
+# ===============================
+# API KEY — CRUD endpoints (richiedono JWT)
+# ===============================
+
+class ApiKeyCreateRequest(BaseModel):
+    name: Optional[str] = None
+    rate_limit_per_min: int = 30
+
+class ApiKeyResponse(BaseModel):
+    id: str
+    name: Optional[str]
+    is_active: bool
+    rate_limit_per_min: int
+    created_at: str
+    last_used_at: Optional[str]
+    requests_total: int
+
+
+@router.post("/api-keys", summary="Crea una nuova API key")
+async def create_api_key(
+    body: ApiKeyCreateRequest,
+    user: AuthUser = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    raw_key = _generate_raw_key()
+    key_hash = _hash_key(raw_key)
+    api_key = ApiKey(
+        user_id=user.id,
+        key_hash=key_hash,
+        name=body.name or f"Key {datetime.utcnow().strftime('%Y-%m-%d')}",
+        rate_limit_per_min=max(1, min(body.rate_limit_per_min, 300)),
+    )
+    db.add(api_key)
+    await db.commit()
+    _log("API_KEY_CREATED", user_id=user.id, key_id=api_key.id, name=api_key.name)
+    return {
+        "id": api_key.id,
+        "key": raw_key,   # mostrata UNA SOLA VOLTA — non viene mai più restituita
+        "name": api_key.name,
+        "rate_limit_per_min": api_key.rate_limit_per_min,
+        "created_at": api_key.created_at.isoformat(),
+        "warning": "Salva la chiave ora: non sarà più visibile.",
+    }
+
+
+@router.get("/api-keys", summary="Lista le tue API key", response_model=List[ApiKeyResponse])
+async def list_api_keys(
+    user: AuthUser = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(ApiKey).where(ApiKey.user_id == user.id).order_by(ApiKey.created_at.desc())
+    )
+    keys = result.scalars().all()
+    return [
+        ApiKeyResponse(
+            id=k.id,
+            name=k.name,
+            is_active=k.is_active,
+            rate_limit_per_min=k.rate_limit_per_min,
+            created_at=k.created_at.isoformat(),
+            last_used_at=k.last_used_at.isoformat() if k.last_used_at else None,
+            requests_total=k.requests_total,
+        )
+        for k in keys
+    ]
+
+
+@router.delete("/api-keys/{key_id}", summary="Revoca una API key")
+async def revoke_api_key(
+    key_id: str,
+    user: AuthUser = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(ApiKey).where(ApiKey.id == key_id, ApiKey.user_id == user.id)
+    )
+    api_key = result.scalar_one_or_none()
+    if not api_key:
+        raise HTTPException(status_code=404, detail="API key non trovata.")
+    api_key.is_active = False
+    await db.commit()
+    _log("API_KEY_REVOKED", user_id=user.id, key_id=key_id)
+    return {"message": "API key revocata."}
 
 
 # ===============================

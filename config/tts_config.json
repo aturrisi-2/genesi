@@ -8,13 +8,13 @@
     },
     "edge_tts": {
       "enabled": true,
-      "voice": "it-IT-DiegoNeural",
+      "voice": "it-IT-IsabellaNeural",
       "rate": "+0%",
       "volume": "+0%"
     },
     "openai": {
       "enabled": true,
-      "voice": "onyx",
+      "voice": "nova",
       "model": "tts-1",
       "speed": 1.0
     }

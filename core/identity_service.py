@@ -7,22 +7,76 @@ logger = logging.getLogger(__name__)
 def normalize_profile_dict(data: dict) -> dict:
     """
     Normalize legacy profile data to match the Pydantic model schema.
+    Also repairs data corruption introduced by memory_correction bugs.
     """
-    # Normalize pets
+    # Rimuove chiave italiana 'professione' (bug storico del parser LLM)
+    data.pop("professione", None)
+
+    # Normalize pets — converte stringhe "type name" → {'type':..., 'name':...}
     pets = data.get("pets", [])
     if isinstance(pets, dict):
         pets = [pets]
     elif not isinstance(pets, list):
         pets = []
-    data["pets"] = pets
+    normalized_pets = []
+    for pet in pets:
+        if isinstance(pet, dict):
+            # Assicura che 'type' e 'name' esistano
+            if "name" in pet:
+                normalized_pets.append({"type": pet.get("type", "?"), "name": pet["name"]})
+        elif isinstance(pet, str) and pet.strip():
+            # Formato "type name" generato da bug LLM (es. "cat Prof", "dog Rio")
+            parts = pet.strip().split(" ", 1)
+            if len(parts) == 2:
+                normalized_pets.append({"type": parts[0], "name": parts[1]})
+            else:
+                normalized_pets.append({"type": "?", "name": pet.strip()})
+    data["pets"] = normalized_pets
 
     # Normalize children
     children = data.get("children", [])
-    if isinstance(children, list) and all(isinstance(c, str) for c in children):
-        children = [{"name": c} for c in children]
-    elif not isinstance(children, list):
-        children = []
-    data["children"] = children
+    normalized_children = []
+    seen = set()
+    if isinstance(children, list):
+        for child in children:
+            if isinstance(child, dict):
+                name = str(child.get("name", "")).strip()
+            else:
+                name = str(child).strip()
+            if not name:
+                continue
+            key = name.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized_children.append({"name": name})
+    data["children"] = normalized_children
+
+    # Normalize traits: rimuove valori che sembrano professioni (finiti lì per bug LLM)
+    traits = data.get("traits", [])
+    if isinstance(traits, list) and traits:
+        _PROF_KW_IN_TRAITS = [
+            "manager", "medico", "architetto", "ingegnere", "avvocato", "dottore",
+            "comandante", "direttore", "tecnico", "analista", "developer", "programmer",
+            "designer", "consulente", "construction", "project", "responsabile",
+            "chirurgo", "infermiere", "infermiera", "farmacista", "fisioterapista",
+        ]
+        current_profession = (data.get("profession") or "").lower().strip()
+        cleaned_traits = []
+        for t in traits:
+            if not isinstance(t, str):
+                continue
+            t_low = t.lower().strip()
+            # Salta se contiene keyword di professione
+            if any(kw in t_low for kw in _PROF_KW_IN_TRAITS):
+                logger.info("NORMALIZE_TRAITS_CLEANUP removed_profession_value=%s", t)
+                continue
+            # Salta se coincide con la professione attuale
+            if current_profession and t_low == current_profession:
+                logger.info("NORMALIZE_TRAITS_CLEANUP removed_duplicate_profession=%s", t)
+                continue
+            cleaned_traits.append(t)
+        data["traits"] = cleaned_traits
 
     return data
 

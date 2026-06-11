@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genesi — Mini Guida Tecnica</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0b0d10;
+            --panel: #12161b;
+            --panel-2: #151b21;
+            --border: #27313b;
+            --text: #e8edf3;
+            --muted: #a8b3bf;
+            --accent: #6fb7ff;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.55;
+        }
+
+        .container {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 28px 18px 48px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 22px;
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .title {
+            font-size: 1.35rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+        }
+
+        .subtitle {
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 0.95rem;
+        }
+
+        .back-link {
+            color: var(--accent);
+            text-decoration: none;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            background: var(--panel);
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+
+        .close-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            color: #c7d2de;
+            text-decoration: none;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--panel);
+            font-size: 1rem;
+            line-height: 1;
+            font-weight: 600;
+        }
+
+        .section {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px;
+            margin-bottom: 14px;
+        }
+
+        h2 {
+            font-size: 1.02rem;
+            margin-bottom: 10px;
+        }
+
+        p,
+        li {
+            color: #d8e0e9;
+            font-size: 0.94rem;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        ul {
+            margin-left: 18px;
+        }
+
+        li {
+            margin: 6px 0;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .card {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .card h3 {
+            font-size: 0.95rem;
+            margin-bottom: 7px;
+            color: #cfe3ff;
+        }
+
+        .flow {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            background: #0f1318;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 0.85rem;
+            color: #c8d3de;
+            white-space: pre-wrap;
+        }
+
+        .kbd {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.82rem;
+            background: #0f1318;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 2px 6px;
+            color: #cdd7e2;
+        }
+
+        @media (max-width: 820px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+
+            .topbar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .top-actions {
+                align-self: flex-end;
+            }
+        }
+    </style>
+    <script type="text/javascript"
+        src="https://embeds.iubenda.com/widgets/c29c96b8-4972-4418-b50c-83741eaa22d4.js"></script>
+</head>
+
+<body>
+    <main class="container">
+        <div class="topbar">
+            <div>
+                <div class="title">Genesi — Mini Guida Tecnica</div>
+                <div class="subtitle">Funzionalità, skill operative e linee guida d'uso in produzione</div>
+            </div>
+            <div class="top-actions">
+                <a href="/" class="back-link">Apri Chat</a>
+                <a href="/" class="close-link" aria-label="Chiudi brochure">×</a>
+            </div>
+        </div>
+
+        <section class="section">
+            <h2>1) Cos'è Genesi</h2>
+            <p>Genesi è un assistente conversazionale orchestrato da router deterministici e servizi LLM con fallback,
+                pensato per supportare operazioni personali, memoria contestuale e task quotidiani.</p>
+            <p class="muted">Obiettivo: risposte coerenti, continuità di contesto, integrazione con strumenti esterni e
+                comportamento robusto in caso di errori API/provider.</p>
+        </section>
+
+        <section class="section">
+            <h2>2) Skill principali</h2>
+            <div class="grid-2">
+                <div class="card">
+                    <h3>Conversazione Relazionale</h3>
+                    <ul>
+                        <li>Gestione stato conversazionale multi-turno.</li>
+                        <li>Contesto da memoria recente + profilo + episodi rilevanti.</li>
+                        <li>Output ottimizzato per TTS e chat streaming.</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>Memoria e Identità</h3>
+                    <ul>
+                        <li>Profilo utente persistente (preferenze, interessi, relazioni).</li>
+                        <li>Episodi e fatti personali richiamabili nei turni successivi.</li>
+                        <li>Merge identità senza overwrite distruttivo.</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>Calendario e Reminder</h3>
+                    <ul>
+                        <li>Promemoria unificati (locale + integrazioni cloud).</li>
+                        <li>Sincronizzazione Google/iCloud con fallback e cache.</li>
+                        <li>Recupero non bloccante nel prompt conversazionale.</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>Tooling e Utilità</h3>
+                    <ul>
+                        <li>Meteo, news, gestione file, OCR, upload contestuale.</li>
+                        <li>Routing intenzioni tool-first quando applicabile.</li>
+                        <li>Risposte strutturate con degradazione controllata.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>3) Flusso operativo (semplificato)</h2>
+            <div class="flow">Input utente
+→ Classificazione intento
+→ Router (identity / tool / knowledge / relational)
+→ Costruzione contesto (memoria + profilo + eventuali documenti)
+→ Chiamata LLM (provider primario, fallback su backup)
+→ Filtro risposta + persistenza memoria
+→ Rendering chat + eventuale TTS</div>
+        </section>
+
+        <section class="section">
+            <h2>4) Come usarla al meglio</h2>
+            <ul>
+                <li>Usa richieste esplicite e orientate a risultato: “controlla X”, “riassumi Y”, “crea reminder Z”.</li>
+                <li>Per task multi-step, separa i passaggi in messaggi brevi per migliorare latenza e precisione.</li>
+                <li>Quando serve continuità, mantieni la stessa conversazione invece di aprirne una nuova.</li>
+                <li>Per comandi con integrazioni cloud, indica sempre il contesto temporale (oggi/domani/orario).</li>
+                <li>Se una risposta è lenta, invia un follow-up breve: riduce payload e accelera il round successivo.</li>
+            </ul>
+        </section>
+
+        <section class="section">
+            <h2>5) Esempi pratici di prompt</h2>
+            <ul>
+                <li><span class="kbd">Operativo</span> “Elenca i miei impegni di domani e segnala conflitti.”</li>
+                <li><span class="kbd">Memoria</span> “Recupera cosa abbiamo deciso ieri sul VPS e fammi un piano in 3 step.”</li>
+                <li><span class="kbd">Sintesi</span> “Riassumi questa discussione in massimo 8 righe con azioni concrete.”</li>
+                <li><span class="kbd">Tool</span> “Controlla meteo e proponi la fascia migliore per uscire oggi.”</li>
+            </ul>
+        </section>
+
+        <section class="section">
+            <h2>6) Limiti e buone pratiche di stabilità</h2>
+            <ul>
+                <li>Payload troppo grandi aumentano latenza e rischio di rate-limit: preferire richieste sintetiche.</li>
+                <li>Le integrazioni esterne possono introdurre ritardi variabili; è consigliata cache attiva.</li>
+                <li>In caso di degradazione provider, Genesi usa fallback automatici per continuità del servizio.</li>
+            </ul>
+            <p class="muted" style="margin-top:10px;">Documento tecnico sintetico. Per dettagli operativi avanzati,
+                usare la chat con comandi mirati o consultare la documentazione interna del progetto.</p>
+        </section>
+    </main>
+</body>
+
+</html>

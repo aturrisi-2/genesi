@@ -3,58 +3,89 @@ Proactor orchestrator centrale - intent classification + routing.
 Identity filtering handled internally by evolution_engine.
 """
 
+import re as _re
 from typing import Optional
 from core.intent_classifier import intent_classifier
 from core.proactor import proactor
 from core.user_manager import user_manager
 from core.chat_memory import chat_memory
 from core.log import log
-from core.group_context import GroupContext
+from core.fallback_engine import fallback_engine
 
+# ── Helper condiviso ───────────────────────────────────────────────────────────
+_GROUP_CTX_RE = _re.compile(
+    r"\s*\[GRUPPO(?:\s+FAMILIARE)?:.*",
+    _re.DOTALL | _re.IGNORECASE,
+)
 
-async def simple_chat_handler(user_id: str, message: str, group_context: Optional[GroupContext] = None) -> str:
+def strip_group_ctx(message: str) -> str:
+    """
+    Rimuove il blocco [GRUPPO FAMILIARE: ...] / [GRUPPO: ...]
+    lasciando solo il testo scritto dall'utente.
+    Usato da tutti i sistemi di memoria per evitare contaminazione
+    del group_ctx (storico messaggi del gruppo, istruzioni di prompt)
+    nei log di chat_memory, episodi, personal_facts, behavioral.
+    """
+    return _GROUP_CTX_RE.sub("", message).strip()
+
+async def simple_chat_handler(user_id: str, message: str, conversation_id: str = None, platform: str = None):
     """
     Chat handler — Proactor orchestrator centrale.
     Identity filtering avviene dentro evolution_engine (no doppio filtro).
-    Returns: response_text (string only)
+    Returns: (response_text, primary_intent) tuple
     """
     try:
         # Validazione user_id
         if not user_id:
             raise ValueError("simple_chat_handler received empty user_id")
-        
+
         if len(user_id) > 50:
             raise ValueError("Invalid user_id: too long")
-        
+
         if " " in user_id:
             raise ValueError("Invalid user_id: contains spaces")
-        
+
         log("CHAT_INPUT", message=message[:100], user_id=user_id)
 
-        # 1. Intent classification
-        intent = intent_classifier.classify(message)
+        # Classifica intent qui per passarlo al proactor (evita doppia classificazione)
+        # e per poterlo ritornare al chiamante senza modificare proactor.handle()
+        intents = await intent_classifier.classify_async(message, user_id)
+        primary_intent = intents[0] if intents else "chat_free"
 
         # 2. Proactor orchestration (brain update + evolution engine)
         response = await proactor.handle(
             user_id=user_id,
             message=message,
-            intent=intent,
-            group_context=group_context,
+            intent=intents,
+            conversation_id=conversation_id,
+            platform=platform,
         )
-        
+
         # Ensure we return only the response string, not the tuple
         if isinstance(response, tuple):
             response = response[0]
 
         # 3. Chat memory logging (volatile, per UI history)
+        # strip_group_ctx: evita che il group_ctx (storico gruppo + istruzioni prompt)
+        # venga salvato come testo utente e inquini behavioral, global_insights, topic_map
         if not user_manager.get_user(user_id):
             user_manager.create_user(user_id)
         user_manager.increment_messages(user_id)
-        chat_memory.add_message(user_id, message, response, intent)
+        chat_memory.add_message(user_id, strip_group_ctx(message), response, primary_intent)
 
-        log("CHAT_OUTPUT", response=response[:100], intent=intent, user_id=user_id)
-        return response
+        log("CHAT_OUTPUT", response=response[:100], intent=primary_intent, user_id=user_id)
+        return response, primary_intent
 
     except Exception as e:
         log("CHAT_ERROR", error=str(e), user_id=user_id)
-        return "Mi dispiace, ho avuto un problema. Riprova più tardi."
+        msg_error = "Mi dispiace, ho avuto un problema. Riprova più tardi."
+        import asyncio
+        asyncio.create_task(fallback_engine.log_event(
+            user_id=user_id,
+            message=message,
+            fallback_type="simple_chat_fatal",
+            response_given=msg_error,
+            reason=str(e)
+        ))
+        return msg_error, "chat_free"
+

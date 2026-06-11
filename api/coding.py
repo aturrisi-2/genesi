@@ -21,7 +21,7 @@ from core.proactor import proactor
 from genesi.ai_engineer_os.shadow_orchestrator import ShadowOrchestrator
 from genesi.ai_engineer_os.feature_flags import ai_engineer_os_flags
 from genesi.ai_engineer_os.feature_flags import FeatureFlag
-from genesi.ai_engineer_os.web_search import should_search, build_search_query, search_web
+from genesi.ai_engineer_os.web_search import should_search, build_search_query, search_web, search_github, build_github_query
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ async def coding_endpoint(request: Request, body: CodingRequest):
                 await shadow_orchestrator.stop()
         else:
             # Direct call if AI Engineer OS is disabled
-            result = await proactor.handle(user_id, message)
+            result = await proactor.handle(user_id, message, skip_document_mode=True)
         
         processing_time = time.time() - start_time
         
@@ -126,22 +126,51 @@ async def _call_proactor_with_shadow(
     Chiama il proactor con contesto web search iniettato se rilevante.
     La ricerca è invisibile all'utente — solo nel contesto LLM.
     """
-    enriched_message = message
+    system_prompt = (
+        "Sei un assistente tecnico senior specializzato in debugging e sviluppo software.\n"
+        "Quando ricevi un problema:\n"
+        "- Fai domande mirate per capire il contesto se mancano informazioni\n"
+        "- Proponi sempre 2-3 soluzioni alternative con pro/contro\n"
+        "- Fornisci codice completo, pronto da incollare, correttamente indentato\n"
+        "- Indica esattamente DOVE incollare il codice (file, riga, funzione)\n"
+        "- Se hai bisogno di vedere un file o un log, chiedilo esplicitamente\n"
+        "- Usa markdown per formattare codice con syntax highlighting\n"
+        "- Sii conciso nell'analisi, preciso nel codice\n\n"
+        "RISPONDI IN MODO NATURALE. Puoi ispirarti a questa traccia:\n"
+        "- Analisi iniziale del problema (breve)\n"
+        "- Codice pronto all'uso (in blocchi ```language)\n"
+        "- Istruzioni chiare su dove/come applicarlo\n"
+        "Non inserire mai rigide intestazioni come 'Prima:', 'Poi:' o 'Infine:'."
+    )
+
+    enriched_message = f"{system_prompt}\n\nRichiesta utente:\n{message}"
     web_context = None
+    github_context = None
 
     # Cerca solo se il messaggio lo richiede
     if should_search(message):
         query = build_search_query(message)
+        github_query = build_github_query(message)  # query breve in inglese
         web_context = await search_web(query)
         
+        import asyncio
+        loop = asyncio.get_event_loop()
+        github_context = await loop.run_in_executor(None, lambda: search_github(github_query))
+        
+        combined_contexts = []
         if web_context:
-            # Inietta contesto nel messaggio — invisibile all'utente
-            enriched_message = f"Rispondi a questa domanda usando il contesto web qui sotto.\n\nDomanda: {message}\n\n{web_context}"
+            combined_contexts.append(web_context)
+        if github_context:
+            combined_contexts.append(github_context)
+            
+        if combined_contexts:
+            ctx_str = "\n\n".join(combined_contexts)
+            enriched_message += f"\n\nContesto web trovato:\n{ctx_str}"
             
             # Logga che la ricerca è avvenuta
-            await _log_web_search(observation_id, query, bool(web_context))
+            await _log_web_search(observation_id, query, True)
 
-    result = await proactor.handle(user_id, enriched_message)
+    result = await proactor.handle(user_id, enriched_message, skip_document_mode=True)
 
     # Shadow processing in background
     await shadow_orchestrator.submit_background_task(

@@ -7,7 +7,7 @@ Supporto mondiale. Italia ultra-dettagliata.
 import os
 import re
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from typing import Optional
 from xml.etree import ElementTree
@@ -34,6 +34,84 @@ TIMEZONE = ZoneInfo("Europe/Rome")
 GIORNI_IT = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]
 MESI_IT = ["", "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
            "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"]
+
+# ═══════════════════════════════════════════════════════════════
+# FESTIVITÀ E GIORNI SPECIALI ITALIANI
+# ═══════════════════════════════════════════════════════════════
+
+def _compute_easter(year: int) -> datetime:
+    """Pasqua con algoritmo Gregoriano anonimo."""
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    return datetime(year, month, day)
+
+
+def get_italian_day_events(dt: datetime) -> list[str]:
+    """
+    Restituisce la lista di festività/giorni speciali italiani per la data dt.
+    Fail-safe: non lancia mai eccezioni.
+    """
+    try:
+        month, day, year = dt.month, dt.day, dt.year
+        weekday = dt.weekday()  # 0=lun, 6=dom
+        events = []
+
+        # ── Festività nazionali fisse ──────────────────────────────────
+        _FIXED = {
+            (1,  1):  "Capodanno",
+            (1,  6):  "Epifania",
+            (2,  14): "San Valentino",
+            (3,  8):  "Festa della Donna",
+            (3,  19): "Festa del Papà (San Giuseppe)",
+            (4,  25): "Festa della Liberazione",
+            (5,  1):  "Festa del Lavoro",
+            (6,  2):  "Festa della Repubblica",
+            (8,  15): "Ferragosto",
+            (10, 31): "Halloween",
+            (11, 1):  "Ognissanti",
+            (11, 2):  "Giorno dei Morti",
+            (12, 8):  "Immacolata Concezione",
+            (12, 24): "Vigilia di Natale",
+            (12, 25): "Natale",
+            (12, 26): "Santo Stefano",
+            (12, 31): "San Silvestro",
+        }
+        if (month, day) in _FIXED:
+            events.append(_FIXED[(month, day)])
+
+        # ── Pasqua e derivate ──────────────────────────────────────────
+        easter = _compute_easter(year)
+        easter_monday = easter + timedelta(days=1)
+        martedi_grasso = easter - timedelta(days=47)
+        if dt.date() == easter.date():
+            events.append("Pasqua")
+        elif dt.date() == easter_monday.date():
+            events.append("Pasquetta (Lunedì dell'Angelo)")
+        elif dt.date() == martedi_grasso.date():
+            events.append("Martedì Grasso (Carnevale)")
+
+        # ── Festa della Mamma: seconda domenica di maggio ───────────────
+        if month == 5 and weekday == 6:
+            sundays = sorted(
+                d for d in range(1, 32)
+                if d <= 31 and datetime(year, 5, d).weekday() == 6
+            )
+            if len(sundays) >= 2 and day == sundays[1]:
+                events.append("Festa della Mamma")
+
+        return events
+    except Exception:
+        return []
+
 
 # Descrizioni meteo OpenWeather → italiano
 WEATHER_DESC_IT = {
@@ -245,13 +323,38 @@ class ToolService:
             except AmbiguousLocationError as e:
                 return str(e)
             except LocationNotFoundError as e:
-                # Se la città estratta non è valida, prova dal tool context
-                if user_id:
+                # Se geocoding fallisce, controlla se è una richiesta locale (qui, fuori, da me)
+                msg_low = message.lower()
+                is_local = any(kw in msg_low for kw in ["qui", "fuori", "da me", "vicino a me", "qui da me"])
+
+                if is_local and user_id:
+                    try:
+                        # Legge direttamente da storage (fresco, non cached) per avere GPS aggiornati
+                        from core.storage import storage as _storage
+                        raw_profile = await _storage.load(f"profile:{user_id}", default={}) or {}
+                        gps_lat = raw_profile.get("gps_lat")
+                        gps_lon = raw_profile.get("gps_lon")
+                        profile_city = raw_profile.get("city")
+
+                        if gps_lat and gps_lon:
+                            # Usa coordinate GPS dirette — nessun geocoding necessario
+                            geo = {"lat": gps_lat, "lon": gps_lon,
+                                   "name": profile_city or "la tua posizione", "country": "IT"}
+                            log("WEATHER_GPS_DIRECT", city=profile_city)
+                        elif profile_city:
+                            geo = await resolve_location(profile_city, http_client=client)
+                            log("WEATHER_LOCAL_FALLBACK", city=profile_city)
+                        else:
+                            return "Apri l'app e abilita la posizione per ricevere il meteo locale."
+                    except Exception as ex:
+                        logger.error("WEATHER_LOCAL_ERROR: %s", ex)
+                        return str(e)
+                elif user_id:
+                    # Se la città estratta non è valida, prova dal tool context
                     try:
                         from core.tool_context import get_tool_context
                         ctx = get_tool_context(user_id)
                         if ctx and ctx.get('intent') == 'weather' and ctx.get('city'):
-                            # Riprova con la città dal context
                             city_from_ctx = ctx['city']
                             geo = await resolve_location(city_from_ctx, http_client=client)
                             log("WEATHER_CITY_FROM_CONTEXT", city=city_from_ctx)
@@ -341,23 +444,45 @@ class ToolService:
         return self._format_forecast_it(data, display_name, message)
 
     def _format_weather_it(self, data: dict, city: str) -> str:
-        """Formatta risposta OpenWeather in italiano naturale."""
+        """Formatta risposta OpenWeather in italiano narrativo e naturale."""
         try:
-            desc_it = data.get("weather", [{}])[0].get("description", "")
-            if not desc_it:
-                desc_en = data.get("weather", [{}])[0].get("description", "")
-                desc_it = WEATHER_DESC_IT.get(desc_en, desc_en)
+            desc_en = data.get("weather", [{}])[0].get("description", "")
+            desc_it = WEATHER_DESC_IT.get(desc_en, desc_en) or desc_en
 
             temp = round(data.get("main", {}).get("temp", 0))
             humidity = data.get("main", {}).get("humidity", 0)
             wind_ms = data.get("wind", {}).get("speed", 0)
             wind_kmh = round(wind_ms * 3.6)
 
-            # Strict format: "A {City}: {descrizione}, {temp}°C, umidità {hum}%, vento {wind} km/h."
-            weather_info = f"A {city}: {desc_it}, {temp}°C, umidità {humidity}%, vento {wind_kmh} km/h."
+            # Frase temperatura contestuale
+            if temp >= 32:
+                temp_phrase = f"fa caldo — {temp}°C"
+            elif temp >= 27:
+                temp_phrase = f"ci sono {temp}°C, è una bella giornata calda"
+            elif temp >= 20:
+                temp_phrase = f"ci sono {temp}°C, temperatura piacevole"
+            elif temp >= 13:
+                temp_phrase = f"ci sono {temp}°C, un po' fresco"
+            elif temp >= 5:
+                temp_phrase = f"ci sono {temp}°C, fa abbastanza freddo"
+            else:
+                temp_phrase = f"ci sono {temp}°C, fa davvero freddo"
 
+            # Nota vento (solo se significativo)
+            wind_note = ""
+            if wind_kmh >= 45:
+                wind_note = " con vento forte"
+            elif wind_kmh >= 22:
+                wind_note = " e un po' di vento"
+
+            # Nota umidità (solo se molto alta)
+            hum_note = ""
+            if humidity >= 80:
+                hum_note = ", aria piuttosto umida"
+
+            city_prefix = f"A {city}" if city and city != "la tua posizione" else "Fuori"
             log("TOOL_WEATHER_RESPONSE", city=city, temp=temp, desc=desc_it)
-            return weather_info
+            return f"{city_prefix} {temp_phrase}{wind_note}. {desc_it.capitalize()}{hum_note}."
 
         except Exception as e:
             logger.error("TOOL_WEATHER_FORMAT_ERROR error=%s", str(e))
@@ -485,7 +610,8 @@ class ToolService:
                 # General news
                 topic = self._extract_topic(message)
                 query = topic if topic else "Italia"
-                return await self._news_rss_search(client, query, "IT", "Italia")
+                display_topic = topic if topic else "Italia"
+                return await self._news_rss_search(client, query, "IT", display_topic)
 
         except httpx.TimeoutException:
             logger.error("TOOL_NEWS_HTTP_ERROR error=timeout")
@@ -739,7 +865,12 @@ class ToolService:
 
             date_info = f"Oggi è {weekday} {giorno} {mese} {anno}."
 
-            log("TOOL_DATE_RESPONSE", weekday_it=weekday, date=f"{giorno} {mese} {anno}", timezone="Europe/Rome")
+            events = get_italian_day_events(now)
+            if events:
+                date_info += f" Oggi è anche: {', '.join(events)}."
+
+            log("TOOL_DATE_RESPONSE", weekday_it=weekday, date=f"{giorno} {mese} {anno}",
+                timezone="Europe/Rome", special_days=events if events else None)
             logger.info("TOOL_DATE_RESPONSE date=%d %s %d weekday_it=%s timezone=Europe/Rome",
                         giorno, mese, anno, weekday)
             return date_info
@@ -762,6 +893,15 @@ class ToolService:
         for topic in NEWS_CATEGORIES:
             if topic in message_lower:
                 return topic
+        
+        import re
+        # Rimuove parole chiave generiche per estrarre l'argomento reale
+        clean_msg = re.sub(r'(?i)(notizie|news|ultime|aggiornamenti|cosa succede|cosa sta succedendo|novità|novita\'|di|su|sulla|sui|sulle|sull\')\b', ' ', message)
+        clean_msg = " ".join(clean_msg.split())
+        
+        if len(clean_msg) > 3:
+            return clean_msg
+            
         return None
 
 

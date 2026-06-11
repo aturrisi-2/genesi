@@ -4,16 +4,24 @@ Architettura: Chat libera (Qwen) vs Tecnica (GPT) con Proactor
 1 intent → 1 funzione con orchestratore centrale
 """
 
+import os
+from dotenv import load_dotenv
+
+# Carica variabili d'ambiente IMMEDIATAMENTE (prima degli import che le usano)
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from pathlib import Path
 import uvicorn
 import asyncio
+import random
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Import base
 from api.user import router as user_router
@@ -27,11 +35,29 @@ from auth.router import router as auth_router
 from api.notifications import router as notifications_router
 from api.conversations import router as conversations_router
 from api.coding import coding_router
+from api.calendar_auth import router as calendar_auth_router
+from api.admin_fallback import router as admin_fallback_router
+from api.admin.training import router as admin_training_router
+from api.admin.logs import router as admin_logs_router
+from api.admin.moltbook import router as admin_moltbook_router
+from api.admin.improvement_score import router as admin_improvement_router
+from api.admin.capability_gaps import router as admin_capability_gaps_router
+from api.admin.facebook import router as admin_facebook_router
+from api.integrations import router as integrations_router
+from api.news import router as news_router
+from api.telegram import router as telegram_router
+from api.whatsapp import router as whatsapp_router
+from api.meta_messaging import router as meta_messaging_router
+from api.widget import router as widget_router
 from auth.database import init_db, async_session
 from auth.models import Visit
 from core.log import log
 from core.reminder_engine import reminder_engine
+from core.training_autopilot import autopilot as training_autopilot
+from core.moltbook_service import moltbook_service
+from core.improvement_health import improvement_health
 from lab.supervisor import SupervisorEngine
+from calendar_manager import calendar_manager
 
 # ===============================
 # Applicazione FastAPI
@@ -45,26 +71,53 @@ async def lifespan(app: FastAPI):
     await init_db()
     log("AUTH_DB_INIT", status="ok")
     
-    # Start reminder checker background task
-    reminder_task = asyncio.create_task(reminder_checker_background())
-    
-    # Start evolution scheduler (12 hours)
-    evolution_task = asyncio.create_task(evolution_scheduler())
-    log("REMINDER_CHECKER_STARTED", status="ok")
-    
+    # Start background tasks — keep strong refs in a set to prevent GC
+    _bg_tasks: set = set()
+    from core.birthday_service import birthday_scheduler as _birthday_scheduler
+    for coro, label in [
+        (reminder_checker_background(),        "REMINDER_CHECKER"),
+        (calendar_checker_background(),        "CALENDAR_CHECKER"),
+        (lab_cycle_scheduler(),                "LAB_CYCLE_SCHEDULER"),
+        (evolution_scheduler(),                "EVOLUTION_SCHEDULER"),
+        (training_autopilot.run_background_loop(), "TRAINING_AUTOPILOT"),
+        (moltbook_heartbeat_background(),      "MOLTBOOK_HEARTBEAT"),
+        (improvement_health.run_background_loop(), "IMPROVEMENT_HEALTH"),
+        (facebook_heartbeat_background(),      "FACEBOOK_HEARTBEAT"),
+        (_birthday_scheduler(),                "BIRTHDAY_SCHEDULER"),
+    ]:
+        t = asyncio.create_task(coro)
+        _bg_tasks.add(t)
+        t.add_done_callback(_bg_tasks.discard)
+        log(f"{label}_STARTED", status="ok")
+
+    # Registra webhook Telegram
+    from core.telegram_bot import set_webhook
+    asyncio.create_task(set_webhook("https://genesi.lucadigitale.eu/api/telegram/webhook"))
+
     yield  # ← app in esecuzione
-    
-    # SHUTDOWN
-    reminder_task.cancel()
-    evolution_task.cancel()
-    try:
-        await reminder_task
-        await evolution_task
-    except asyncio.CancelledError:
-        pass
-    log("REMINDER_CHECKER_STOPPED", status="ok")
+
+    # SHUTDOWN — cancella tutti i background task
+    for t in list(_bg_tasks):
+        t.cancel()
+    if _bg_tasks:
+        await asyncio.gather(*_bg_tasks, return_exceptions=True)
+    log("BACKGROUND_TASKS_STOPPED", count=len(_bg_tasks), status="ok")
 
 app = FastAPI(title="Genesi Core v2 - Proactor Architecture", redirect_slashes=False, lifespan=lifespan)
+
+# CORS — origini configurabili via CORS_ORIGINS env var
+_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000").split(",")
+    if o.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 # Static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -128,14 +181,19 @@ async def reminder_checker_background():
                     try:
                         from core.notification_email import send_reminder_email
                         from auth.database import get_user_by_id
+                        from core.storage import storage
 
                         user = await get_user_by_id(user_id)
                         if user and user.email:
+                            # Tenta di recuperare il nome dal profilo
+                            profile = await storage.load(f"profile:{user_id}", default={})
+                            user_name = profile.get("name", "")
+                            
                             asyncio.create_task(
                                 send_reminder_email(
                                     user_email=user.email,
                                     reminder_text=reminder_text,
-                                    user_name=user.username or ""
+                                    user_name=user_name
                                 )
                             )
                     except Exception as e:
@@ -165,15 +223,95 @@ async def reminder_checker_background():
             await asyncio.sleep(30)
 
 
+async def calendar_checker_background():
+    """
+    Background task that checks for calendar reminders every 5 minutes.
+    """
+    while True:
+        try:
+            # Check imminent events for all users
+            reminders_path = Path("data/reminders")
+            if reminders_path.exists():
+                for file_path in reminders_path.glob("*.json"):
+                    user_id = file_path.stem
+                    rems = calendar_manager.list_reminders(user_id, days=1)
+                    now = datetime.now()
+                    window = timedelta(minutes=10)
+                    for r in rems:
+                        dt_str = r.get("due")
+                        if not dt_str: continue
+                        try:
+                            clean_dt = dt_str.replace("Z", "+00:00").split(".")[0] if "T" in dt_str else dt_str
+                            dt = datetime.fromisoformat(clean_dt)
+                            if dt.tzinfo: dt = dt.replace(tzinfo=None)
+                            if now <= dt <= now + window:
+                                log("CALENDAR_EVENT_IMMINENT", user_id=user_id, summary=r["summary"])
+                        except: continue
+
+
+            await asyncio.sleep(300) # 5 minuti
+        except Exception as e:
+            log("CALENDAR_CHECKER_ERROR", error=str(e))
+            await asyncio.sleep(60)
+
+
+async def facebook_heartbeat_background():
+    """Facebook heartbeat ogni 2-4 ore con jitter casuale. Fail-silent."""
+    await asyncio.sleep(120)   # attendi 2 min dopo startup
+    while True:
+        try:
+            from core.facebook_service import facebook_service as _fb
+            await _fb.heartbeat()
+        except Exception as e:
+            log("FACEBOOK_LOOP_ERROR", error=str(e))
+        interval = random.randint(7200, 14400)   # 2-4 ore
+        await asyncio.sleep(interval)
+
+
+async def moltbook_heartbeat_background():
+    """Moltbook heartbeat ogni 4 ore: rispondi a commenti, upvota feed."""
+    await asyncio.sleep(60)  # attendi 1 min dopo startup
+    while True:
+        try:
+            await moltbook_service.heartbeat()
+        except Exception as e:
+            log("MOLTBOOK_LOOP_ERROR", error=str(e))
+        await asyncio.sleep(14400)   # ogni 4 ore (14400s)
+
+
+async def lab_cycle_scheduler():
+    """Controlla ogni 6h se ci sono eventi pending nel lab feedback cycle e li processa."""
+    # 🚨 DISABLED TO PREVENT CREDIT DRAIN
+    log("LAB_CYCLE_SCHEDULER_DISABLED", status="disabled")
+    await asyncio.sleep(1)
+    return
+    # Original code (disabled):
+    # await asyncio.sleep(300)  # attendi 5 min dopo startup
+    # while True:
+    #     try:
+    #         from core.lab_feedback_cycle import lab_feedback_cycle as _lfc
+    #         if _lfc._should_run():
+    #             log("LAB_CYCLE_SCHEDULED_TRIGGER", pending=_lfc._count_pending_events())
+    #             await _lfc.run()
+    #     except Exception as e:
+    #         log("LAB_CYCLE_SCHEDULER_ERROR", error=str(e))
+    #     await asyncio.sleep(21600)  # 6 ore
+
+
 async def evolution_scheduler():
     """Evolution scheduler that runs every 12 hours."""
-    supervisor = SupervisorEngine()
-    while True:
-        await asyncio.sleep(43200)  # 12 ore
-        try:
-            supervisor.run()
-        except Exception as e:
-            print(f"EVOLUTION_SCHEDULER_ERROR {e}")
+    # 🚨 DISABLED TO PREVENT CREDIT DRAIN
+    log("EVOLUTION_SCHEDULER_DISABLED", status="disabled")
+    await asyncio.sleep(1)
+    return
+    # Original code (disabled):
+    # supervisor = SupervisorEngine()
+    # while True:
+    #     await asyncio.sleep(43200)  # 12 ore
+    #     try:
+    #         supervisor.run()
+    #     except Exception as e:
+    #         log("EVOLUTION_SCHEDULER_ERROR", error=str(e))
 
 
 # ===============================
@@ -221,7 +359,117 @@ async def serve_reset_password():
 
 @app.get("/admin")
 async def serve_admin():
-    return FileResponse(BASE_DIR / "static" / "admin.html")
+    return FileResponse(BASE_DIR / "static" / "admin.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
+@app.get("/training-admin")
+async def serve_training_admin():
+    return FileResponse(BASE_DIR / "static" / "admin-training.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
+@app.get("/admin-logs")
+async def serve_admin_logs():
+    return FileResponse(BASE_DIR / "static" / "admin-logs.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
+@app.get("/admin-widget")
+async def serve_admin_widget():
+    return FileResponse(BASE_DIR / "static" / "admin-widget.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
+@app.get("/intranet-test")
+async def serve_intranet_test():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/intranet-test/index.html", status_code=301)
+
+@app.get("/intranet-test/")
+async def serve_intranet_test_slash():
+    return FileResponse(BASE_DIR / "static" / "intranet" / "index.html")
+
+@app.get("/intranet-test/{page}")
+async def serve_intranet_page(page: str):
+    path = BASE_DIR / "static" / "intranet" / page
+    if not path.exists() or path.suffix != ".html":
+        raise HTTPException(status_code=404)
+    return FileResponse(path)
+
+@app.get("/install-widget.sh")
+async def serve_install_script():
+    return FileResponse(
+        BASE_DIR / "static" / "install_widget.sh",
+        media_type="text/plain",
+        headers={"Content-Disposition": "inline; filename=install_widget.sh"},
+    )
+
+@app.get("/brochure")
+async def serve_brochure():
+    return FileResponse(
+        BASE_DIR / "static" / "brochure.html",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+@app.get("/guida-icloud")
+async def serve_guida_icloud():
+    return FileResponse(BASE_DIR / "static" / "guida-icloud.html")
+
+@app.get("/widget.js")
+async def serve_widget_js():
+    return FileResponse(
+        BASE_DIR / "static" / "widget.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+@app.get("/widget-demo")
+async def serve_widget_demo():
+    return FileResponse(BASE_DIR / "static" / "widget-demo.html")
+
+@app.get("/widget-demo-salute")
+async def serve_widget_demo_salute():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-salute.html")
+
+@app.get("/widget-demo-welfare")
+async def serve_widget_demo_welfare():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-welfare.html")
+
+@app.get("/widget-demo-engineering")
+async def serve_widget_demo_engineering():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-engineering.html")
+
+@app.get("/widget-demo-attivita")
+async def serve_widget_demo_attivita():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-attivita.html")
+
+@app.get("/widget-demo-organigrammi")
+async def serve_widget_demo_organigrammi():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-organigrammi.html")
+
+@app.get("/widget-demo-comefareper")
+async def serve_widget_demo_comefareper():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-comefareper.html")
+
+@app.get("/widget-demo-menu")
+async def serve_widget_demo_menu():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-menu.html")
+
+@app.get("/widget-demo-rubrica")
+async def serve_widget_demo_rubrica():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-rubrica.html")
+
+@app.get("/widget-demo-rassegna")
+async def serve_widget_demo_rassegna():
+    return FileResponse(BASE_DIR / "static" / "widget-demo-rassegna.html")
+
+@app.get("/sw.js")
+async def serve_sw():
+    return FileResponse(
+        BASE_DIR / "static" / "sw.js",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 @app.get("/")
 async def serve_index(request: Request):
@@ -245,7 +493,27 @@ app.include_router(stt_router, prefix="/api")
 app.include_router(upload_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")
+app.include_router(calendar_auth_router, prefix="/api")
+app.include_router(admin_fallback_router, prefix="/api")
+app.include_router(admin_training_router, prefix="/api")
+app.include_router(admin_logs_router, prefix="/api")
+app.include_router(admin_moltbook_router, prefix="/api")
+app.include_router(admin_improvement_router, prefix="/api")
+app.include_router(admin_capability_gaps_router, prefix="/api")
+app.include_router(admin_facebook_router, prefix="/api")
+app.include_router(integrations_router, prefix="/api")
+app.include_router(news_router)
 app.include_router(coding_router)
+app.include_router(telegram_router)
+app.include_router(whatsapp_router)
+app.include_router(meta_messaging_router)
+app.include_router(widget_router)
+from api.weather_widget import router as weather_widget_router
+app.include_router(weather_widget_router)
+from api.push import router as push_router
+app.include_router(push_router)
+from api.v1.router import router as v1_router
+app.include_router(v1_router, prefix="/v1")
 
 # ===============================
 # Health check
@@ -256,4 +524,4 @@ async def health_check():
     return {"status": "healthy", "version": "v2", "architecture": "proactor", "storage": "in-memory"}
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8000")))

@@ -17,7 +17,7 @@ async def get_pending_notifications(current_user: AuthUser = Depends(require_aut
     user_id = str(current_user.id)
     
     try:
-        triggered = reminder_engine.list_reminders(user_id, status_filter="triggered")
+        triggered = await reminder_engine.list_reminders(user_id, status_filter="triggered")
         
         notifications = [
             {

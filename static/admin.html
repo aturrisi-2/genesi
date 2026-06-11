@@ -1,105 +1,1322 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin — Genesi</title>
     <link rel="stylesheet" href="/static/auth.css">
+    <style>
+        body {
+            align-items: flex-start;
+            padding-top: 72px;
+            padding-bottom: 40px;
+        }
+        .admin-topbar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 999;
+            background: rgba(10,10,20,0.92);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 18px;
+            height: 52px;
+        }
+        .admin-topbar a, .admin-topbar button {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 6px 13px;
+            border-radius: 6px;
+            font-size: 0.83rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            border: 1px solid transparent;
+            background: transparent;
+            color: #ccc;
+            transition: background .15s, color .15s;
+            white-space: nowrap;
+        }
+        .admin-topbar a:hover { background: rgba(255,255,255,0.07); color:#fff; }
+        .admin-topbar .tb-home { color: #a5f3fc; border-color: rgba(6,182,212,0.3); }
+        .admin-topbar .tb-home:hover { background: rgba(6,182,212,0.12); color:#67e8f9; }
+        .admin-topbar .tb-train { color: #c4b5fd; border-color: rgba(124,77,255,0.3); }
+        .admin-topbar .tb-train:hover { background: rgba(124,77,255,0.12); color:#ddd6fe; }
+        .admin-topbar .tb-logs { color: #67e8f9; border-color: rgba(6,182,212,0.25); }
+        .admin-topbar .tb-logs:hover { background: rgba(6,182,212,0.1); color:#a5f3fc; }
+        .admin-topbar .tb-logout { margin-left: auto; color: #9ca3af; }
+        .admin-topbar .tb-logout:hover { color: #f87171; }
+        .admin-topbar .tb-sep { color: rgba(255,255,255,0.12); font-size: 1.1rem; user-select:none; }
+    </style>
+    <!-- Iubenda Widget -->
+    <script type="text/javascript"
+        src="https://embeds.iubenda.com/widgets/c29c96b8-4972-4418-b50c-83741eaa22d4.js"></script>
 </head>
+
 <body>
+    <nav class="admin-topbar">
+        <a href="/" class="tb-home">← Genesi</a>
+        <span class="tb-sep">|</span>
+        <a href="/admin" class="tb-home" style="color:#e2e8f0; border-color:rgba(255,255,255,0.15);">Admin</a>
+        <a href="/training-admin" class="tb-train">🎓 Training</a>
+        <a href="/admin-logs" class="tb-logs">📋 Log Live</a>
+        <a href="/admin-widget" class="tb-widget" style="color:#4ade80;border-color:rgba(34,197,94,0.35);background:rgba(34,197,94,0.08);">🧩 Widget</a>
+        <button class="tb-logout" id="topbar-logout-link">Logout</button>
+    </nav>
+
     <div class="auth-card" style="max-width:520px;">
         <h1>Pannello Admin</h1>
         <p class="subtitle" id="subtitle">Caricamento statistiche...</p>
+
+        <!-- ── GAUGE AUTO-MIGLIORAMENTO ─────────────────────────── -->
+        <div id="gauge-section" style="margin: 18px 0 8px; text-align:center;">
+            <div style="font-size:0.78rem; text-transform:uppercase; letter-spacing:.08em; color:#9ca3af; margin-bottom:6px;">
+                Indice Auto-Miglioramento
+            </div>
+            <!-- SVG gauge 300×170 -->
+            <svg id="gauge-svg" viewBox="0 0 300 170" width="300" height="170"
+                 style="display:block; margin:0 auto; overflow:visible;">
+                <defs>
+                    <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%"   stop-color="#ef4444"/>
+                        <stop offset="35%"  stop-color="#f97316"/>
+                        <stop offset="65%"  stop-color="#eab308"/>
+                        <stop offset="100%" stop-color="#22c55e"/>
+                    </linearGradient>
+                    <!-- clip mask for value arc -->
+                    <clipPath id="arcClip">
+                        <rect id="arcClipRect" x="0" y="0" width="0" height="170"/>
+                    </clipPath>
+                </defs>
+                <!-- Background arc (gray) -->
+                <path id="arc-bg"
+                      d="M 20 150 A 130 130 0 0 1 280 150"
+                      fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="20"
+                      stroke-linecap="round"/>
+                <!-- Value arc (gradient, clipped) -->
+                <path id="arc-val"
+                      d="M 20 150 A 130 130 0 0 1 280 150"
+                      fill="none" stroke="url(#arcGrad)" stroke-width="20"
+                      stroke-linecap="round"
+                      stroke-dasharray="0 408"
+                      style="transition: stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1)"/>
+                <!-- Previous score tick (hold) -->
+                <line id="needle-prev"
+                      x1="150" y1="150" x2="150" y2="30"
+                      stroke="rgba(255,255,255,0.25)" stroke-width="2"
+                      stroke-dasharray="4 3"
+                      style="transform-origin:150px 150px; transform:rotate(-90deg); transition: transform 1s ease"/>
+                <!-- Previous score dot -->
+                <circle id="dot-prev" cx="150" cy="30" r="4"
+                        fill="rgba(255,255,255,0.3)"
+                        style="transform-origin:150px 150px; transform:rotate(-90deg); transition: transform 1s ease"/>
+                <!-- Main needle -->
+                <line id="needle-main"
+                      x1="150" y1="155" x2="150" y2="35"
+                      stroke="#f8fafc" stroke-width="3" stroke-linecap="round"
+                      style="transform-origin:150px 150px; transform:rotate(-90deg); transition: transform 1.2s cubic-bezier(.4,0,.2,1)"/>
+                <!-- Center pivot -->
+                <circle cx="150" cy="150" r="8" fill="#1e293b" stroke="#f8fafc" stroke-width="2"/>
+                <!-- Score text -->
+                <text id="gauge-score" x="150" y="130"
+                      text-anchor="middle" font-size="32" font-weight="700"
+                      fill="#f8fafc" font-family="system-ui, sans-serif">—</text>
+                <text id="gauge-delta" x="150" y="148"
+                      text-anchor="middle" font-size="11" fill="#9ca3af"
+                      font-family="system-ui, sans-serif"></text>
+                <!-- Scale labels -->
+                <text x="14"  y="168" text-anchor="middle" font-size="9" fill="#6b7280">0</text>
+                <text x="150" y="20"  text-anchor="middle" font-size="9" fill="#6b7280">50</text>
+                <text x="286" y="168" text-anchor="middle" font-size="9" fill="#6b7280">100</text>
+            </svg>
+
+            <!-- Component bars -->
+            <div id="gauge-components"
+                 style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:5px 14px; text-align:left;">
+            </div>
+            <div id="gauge-loading" style="font-size:0.8rem; color:#6b7280; margin-top:4px;">
+                Calcolo in corso...
+            </div>
+        </div>
 
         <div id="stats" style="display:none;">
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="value" id="s-total">-</div>
-                    <div class="label">Utenti totali</div>
+                    <div class="label">Utenti</div>
                 </div>
                 <div class="stat-card">
-                    <div class="value" id="s-verified">-</div>
-                    <div class="label">Verificati</div>
-                </div>
-                <div class="stat-card">
-                    <div class="value" id="s-7d">-</div>
-                    <div class="label">Attivi 7g</div>
-                </div>
-                <div class="stat-card">
-                    <div class="value" id="s-30d">-</div>
-                    <div class="label">Attivi 30g</div>
-                </div>
-                <div class="stat-card" style="grid-column: 1 / -1;">
                     <div class="value" id="s-today">-</div>
-                    <div class="label">Registrazioni oggi</div>
+                    <div class="label">Nuovi oggi</div>
                 </div>
+                <div class="stat-card" id="or-card"
+                    style="grid-column: 1 / -1; background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.2);">
+                    <div class="value" id="or-usage" style="font-size: 1.2rem; color: #00e5ff;">Caricamento...</div>
+                    <div class="label">Consumo OpenRouter ($)</div>
+                </div>
+            </div>
+
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Monitoraggio Fallback</h2>
+            <div id="fb-summary"
+                style="background: rgba(255, 171, 0, 0.05); border: 1px solid rgba(255, 171, 0, 0.2); border-radius: 8px; padding: 15px; margin-top: 15px;">
+                <div id="fb-loading">Caricamento fallbacks...</div>
+                <div id="fb-stats" style="display:none;">
+                    <p style="font-size: 0.9rem; color: #ffab00; margin-bottom: 10px;">
+                        Trovati <strong id="fb-count">0</strong> gruppi di eventi simili.
+                    </p>
+                    <div id="fb-list"
+                        style="font-size: 0.8rem; color: #ccc; max-height: 200px; overflow-y: auto; margin-bottom: 15px;">
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="downloadFallbacks()" class="btn-external"
+                            style="background: #ffab00; color: #000; border: none; cursor: pointer;">Download
+                            CSV</button>
+                        <button onclick="clearFallbacks()" class="btn-external"
+                            style="background: rgba(255,0,0,0.1); color: #ff4444; border: 1px solid #ff4444; cursor: pointer;">Pulisci
+                            Log</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─── SEZIONE SUGGERIMENTI ──────────────────────────── -->
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Suggerimenti per Genesi</h2>
+            <div
+                style="background:rgba(0,229,255,0.04); border:1px solid rgba(0,229,255,0.2); border-radius:8px; padding:15px; margin-top:15px;">
+                <p style="font-size:0.85rem; color:#aaa; margin-bottom:12px;">
+                    Inserisci un suggerimento di miglioramento. Viene salvato e può essere
+                    usato per affinare il comportamento di Genesi.
+                </p>
+                <select id="sug-cat"
+                    style="width:100%; padding:7px; background:#1a1a2e; color:#ccc; border:1px solid rgba(0,229,255,0.3); border-radius:5px; margin-bottom:8px; font-size:0.85rem;">
+                    <option value="generale">Generale</option>
+                    <option value="prompt">Prompt / Risposta</option>
+                    <option value="memoria">Memoria</option>
+                    <option value="tool">Tool / Calendario / Reminder</option>
+                </select>
+                <textarea id="sug-text" rows="3"
+                    placeholder="Es: Genesi dovrebbe ricordare le preferenze musicali anche dopo giorni..."
+                    style="width:100%; padding:8px; background:#1a1a2e; color:#fff; border:1px solid rgba(0,229,255,0.3); border-radius:5px; font-size:0.85rem; resize:vertical; box-sizing:border-box;"></textarea>
+                <div style="display:flex; gap:10px; margin-top:8px; align-items:center;">
+                    <button onclick="submitSuggestion()"
+                        style="padding:7px 16px; background:#00e5ff; color:#000; border:none; border-radius:5px; cursor:pointer; font-size:0.85rem; font-weight:600;">Invia
+                        Suggerimento</button>
+                    <span id="sug-msg" style="font-size:0.8rem; color:#00e5ff;"></span>
+                </div>
+                <div id="sug-list"
+                    style="margin-top:14px; font-size:0.8rem; color:#ccc; max-height:180px; overflow-y:auto;"></div>
+            </div>
+
+            <!-- ─── SEZIONE AUTO-MIGLIORAMENTO ──────────────────────── -->
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Auto-Miglioramento Prompt</h2>
+            <div id="lab-cycle-box"
+                style="background:rgba(98,0,234,0.06); border:1px solid rgba(98,0,234,0.3); border-radius:8px; padding:15px; margin-top:15px;">
+                <p style="font-size:0.85rem; color:#aaa; margin-bottom:12px;">
+                    Genesi analizza automaticamente i fallback e i suggerimenti per aggiornare il suo system prompt
+                    interno.
+                    Il ciclo si avvia da solo ogni volta che ci sono almeno <strong style="color:#b388ff;">5 eventi non
+                        processati</strong>.
+                </p>
+                <div id="lab-cycle-status" style="font-size:0.82rem; color:#ccc; margin-bottom:12px; min-height:40px;">
+                    Caricamento stato...
+                </div>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <button onclick="runLabCycle()" id="lab-run-btn"
+                        style="padding:7px 16px; background:#7c4dff; color:#fff; border:none; border-radius:5px; cursor:pointer; font-size:0.85rem; font-weight:600;">
+                        Avvia Ciclo Ora
+                    </button>
+                    <span id="lab-cycle-msg" style="font-size:0.8rem; color:#b388ff;"></span>
+                </div>
+                <div id="lab-rules-list" style="margin-top:14px; font-size:0.8rem; color:#ccc;"></div>
+            </div>
+
+            <!-- ── MOLTBOOK AUTO-MIGLIORAMENTO ─────────────────────────── -->
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Moltbook — Auto-Apprendimento</h2>
+            <div id="mb-section"
+                style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.22); border-radius:8px; padding:15px; margin-top:12px;">
+                <div id="mb-loading" style="font-size:0.85rem; color:#6ee7b7;">Caricamento dati Moltbook...</div>
+                <div id="mb-data" style="display:none;">
+                    <!-- Stats row -->
+                    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px;">
+                        <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                            <div id="mb-hb" style="font-size:1.3rem; font-weight:700; color:#6ee7b7;">—</div>
+                            <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Heartbeat</div>
+                        </div>
+                        <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                            <div id="mb-interactions" style="font-size:1.3rem; font-weight:700; color:#6ee7b7;">—</div>
+                            <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Interazioni</div>
+                        </div>
+                        <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                            <div id="mb-agents" style="font-size:1.3rem; font-weight:700; color:#6ee7b7;">—</div>
+                            <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Agenti noti</div>
+                        </div>
+                        <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                            <div id="mb-lab-obs" style="font-size:1.3rem; font-weight:700; color:#6ee7b7;">—</div>
+                            <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Obs. → Lab</div>
+                        </div>
+                    </div>
+                    <!-- Profilo live Moltbook -->
+                    <div id="mb-live-profile" style="font-size:0.85rem; color:#d1fae5; margin-bottom:10px; padding:6px 10px; background:rgba(110,231,183,0.07); border-radius:6px; border-left:3px solid #6ee7b7;">—</div>
+                    <!-- Interaction breakdown -->
+                    <div id="mb-breakdown" style="font-size:0.78rem; color:#9ca3af; margin-bottom:12px; display:flex; flex-wrap:wrap; gap:8px;"></div>
+                    <!-- Engagement locale -->
+                    <div id="mb-engagement" style="font-size:0.82rem; color:#9ca3af; margin-bottom:12px;"></div>
+                    <!-- Last consolidation -->
+                    <div id="mb-consolidation" style="font-size:0.8rem; color:#ccc;"></div>
+                    <!-- Insights -->
+                    <div id="mb-insights-wrap" style="margin-top:12px; display:none;">
+                        <div style="font-size:0.78rem; font-weight:600; color:#6ee7b7; margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em;">
+                            Insights ricavati dalle interazioni
+                        </div>
+                        <ul id="mb-insights" style="margin:0; padding-left:16px; font-size:0.8rem; color:#d1d5db; line-height:1.6;"></ul>
+                        <div id="mb-topics" style="margin-top:8px; font-size:0.78rem; color:#9ca3af;"></div>
+                        <div id="mb-next" style="margin-top:6px; font-size:0.8rem; color:#fcd34d; font-style:italic;"></div>
+                    </div>
+                    <div id="mb-techfb-wrap" style="margin-top:12px; display:none;">
+                        <div style="font-size:0.78rem; font-weight:600; color:#fb923c; margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em;">
+                            Feedback tecnico da altri agenti AI
+                        </div>
+                        <ul id="mb-techfb" style="margin:0; padding-left:16px; font-size:0.8rem; color:#fed7aa; line-height:1.6;"></ul>
+                    </div>
+                    <!-- Last lab observation -->
+                    <div id="mb-last-obs" style="margin-top:10px; font-size:0.78rem; color:#9ca3af; display:none;"></div>
+                </div>
+                <div id="mb-error" style="display:none; font-size:0.82rem; color:#f87171;">Errore nel caricamento dati Moltbook.</div>
+            </div>
+
+            <!-- ── TACCUINO GAP CAPACITÀ ───────────────────────────────── -->
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Taccuino Gap — Richieste non soddisfatte</h2>
+            <div id="gaps-section"
+                style="background:rgba(251,191,36,0.05); border:1px solid rgba(251,191,36,0.2); border-radius:8px; padding:15px; margin-top:12px;">
+                <div id="gaps-loading" style="font-size:0.85rem; color:#fbbf24;">Caricamento taccuino...</div>
+                <div id="gaps-data" style="display:none;">
+                    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:14px;">
+                        <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                            <div id="gaps-total" style="font-size:1.3rem; font-weight:700; color:#fbbf24;">—</div>
+                            <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Gap totali</div>
+                        </div>
+                        <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                            <div id="gaps-feature" style="font-size:1.3rem; font-weight:700; color:#fb923c;">—</div>
+                            <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Feature mancanti</div>
+                        </div>
+                        <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                            <div id="gaps-limit" style="font-size:1.3rem; font-weight:700; color:#f87171;">—</div>
+                            <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Limiti espliciti</div>
+                        </div>
+                    </div>
+                    <div id="gaps-list" style="font-size:0.8rem; color:#d1d5db; max-height:220px; overflow-y:auto;"></div>
+                    <div style="margin-top:12px; display:flex; gap:10px; align-items:center;">
+                        <button id="gaps-propose-btn"
+                            style="background:rgba(251,191,36,0.15); border:1px solid rgba(251,191,36,0.35); color:#fbbf24; border-radius:6px; padding:6px 14px; font-size:0.8rem; cursor:pointer;">
+                            Genera proposte integrazione (LLM)
+                        </button>
+                        <span id="gaps-propose-msg" style="font-size:0.78rem; color:#9ca3af;"></span>
+                    </div>
+                    <div id="gaps-proposals" style="margin-top:12px; display:none;"></div>
+                </div>
+                <div id="gaps-error" style="display:none; font-size:0.82rem; color:#f87171;">Errore nel caricamento taccuino gap.</div>
+            </div>
+
+            <!-- ── FACEBOOK ────────────────────────────────────────────── -->
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Facebook — Partecipazione Gruppi</h2>
+            <div id="fb-section"
+                style="background:rgba(59,130,246,0.05); border:1px solid rgba(59,130,246,0.22); border-radius:8px; padding:15px; margin-top:12px;">
+
+                <!-- Controlli modalità -->
+                <div style="display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
+                    <button id="fb-btn-semi"
+                        style="padding:7px 16px; border-radius:6px; border:1px solid rgba(59,130,246,0.5); font-size:0.82rem; cursor:pointer; background:rgba(59,130,246,0.18); color:#93c5fd;">
+                        Semi-auto
+                    </button>
+                    <button id="fb-btn-full"
+                        style="padding:7px 16px; border-radius:6px; border:1px solid rgba(251,191,36,0.5); font-size:0.82rem; cursor:pointer; background:rgba(251,191,36,0.1); color:#fbbf24;">
+                        Full-auto
+                    </button>
+                    <button id="fb-btn-enable"
+                        style="padding:7px 16px; border-radius:6px; border:1px solid rgba(52,211,153,0.5); font-size:0.82rem; cursor:pointer; background:rgba(52,211,153,0.1); color:#6ee7b7;">
+                        Abilita
+                    </button>
+                    <button id="fb-btn-disable"
+                        style="padding:7px 16px; border-radius:6px; border:1px solid rgba(248,113,113,0.5); font-size:0.82rem; cursor:pointer; background:rgba(248,113,113,0.08); color:#f87171;">
+                        Disabilita
+                    </button>
+                    <button id="fb-btn-hb"
+                        style="padding:7px 16px; border-radius:6px; border:1px solid rgba(167,139,250,0.5); font-size:0.82rem; cursor:pointer; background:rgba(167,139,250,0.08); color:#c4b5fd;">
+                        Heartbeat manuale
+                    </button>
+                    <span id="fb-action-msg" style="font-size:0.78rem; color:#9ca3af;"></span>
+                </div>
+
+                <!-- Stato corrente -->
+                <div id="fb-status-row" style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px;">
+                    <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                        <div id="fb-mode-badge" style="font-size:1rem; font-weight:700; color:#93c5fd;">—</div>
+                        <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Modalità</div>
+                    </div>
+                    <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                        <div id="fb-enabled-badge" style="font-size:1rem; font-weight:700; color:#6b7280;">—</div>
+                        <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Stato</div>
+                    </div>
+                    <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                        <div id="fb-pending-count" style="font-size:1.3rem; font-weight:700; color:#fbbf24;">—</div>
+                        <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Post da approvare</div>
+                    </div>
+                    <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:8px;">
+                        <div id="fb-hb-count" style="font-size:1.3rem; font-weight:700; color:#c4b5fd;">—</div>
+                        <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Heartbeat</div>
+                    </div>
+                </div>
+
+                <!-- Sessione + gruppi -->
+                <div id="fb-session-row" style="font-size:0.8rem; color:#9ca3af; margin-bottom:10px;"></div>
+                <div id="fb-groups-row" style="font-size:0.8rem; color:#d1d5db; margin-bottom:14px;"></div>
+
+                <!-- Aggiungi gruppo -->
+                <div style="display:flex; gap:8px; margin-bottom:14px; align-items:center;">
+                    <input id="fb-group-input" type="text" placeholder="Nome gruppo Facebook..."
+                        style="flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); color:#fff; border-radius:6px; padding:6px 10px; font-size:0.8rem;">
+                    <button id="fb-add-group"
+                        style="padding:6px 12px; border-radius:6px; border:1px solid rgba(59,130,246,0.4); color:#93c5fd; background:rgba(59,130,246,0.1); font-size:0.8rem; cursor:pointer;">
+                        + Aggiungi
+                    </button>
+                    <button id="fb-remove-group"
+                        style="padding:6px 12px; border-radius:6px; border:1px solid rgba(248,113,113,0.4); color:#f87171; background:rgba(248,113,113,0.05); font-size:0.8rem; cursor:pointer;">
+                        - Rimuovi
+                    </button>
+                </div>
+
+                <!-- Bacheca + menzioni -->
+                <div style="margin-bottom:14px; padding:10px; background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.2); border-radius:6px;">
+                    <div style="font-size:0.78rem; font-weight:600; color:#c4b5fd; margin-bottom:8px;">Bacheca personale + Menzioni</div>
+                    <div style="font-size:0.78rem; color:#9ca3af; margin-bottom:8px;">
+                        Aggiungi <b style="color:#e5e7eb;">timeline</b> come gruppo per postare sulla bacheca di Giada.
+                        Le menzioni sono persone che verranno taggate nei post bacheca.
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <input id="fb-mention-input" type="text" placeholder="Nome su Facebook (es. Alfio Turrisi)..."
+                            style="flex:1; min-width:180px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); color:#fff; border-radius:6px; padding:6px 10px; font-size:0.8rem;">
+                        <button id="fb-add-mention"
+                            style="padding:6px 12px; border-radius:6px; border:1px solid rgba(167,139,250,0.4); color:#c4b5fd; background:rgba(167,139,250,0.08); font-size:0.8rem; cursor:pointer;">
+                            + Menzione
+                        </button>
+                        <button id="fb-remove-mention"
+                            style="padding:6px 12px; border-radius:6px; border:1px solid rgba(248,113,113,0.4); color:#f87171; background:rgba(248,113,113,0.05); font-size:0.8rem; cursor:pointer;">
+                            - Rimuovi
+                        </button>
+                    </div>
+                    <div id="fb-mentions-list" style="margin-top:8px; font-size:0.78rem; color:#d1d5db;"></div>
+                </div>
+
+                <!-- Import sessione (VPS senza display) -->
+                <details style="margin-bottom:14px;">
+                    <summary style="font-size:0.8rem; color:#6b7280; cursor:pointer;">
+                        Importa sessione da Cookie-Editor (VPS senza display)
+                    </summary>
+                    <div style="margin-top:8px;">
+                        <textarea id="fb-cookies-json" rows="4" placeholder='Incolla qui il JSON dei cookie di facebook.com...'
+                            style="width:100%; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); color:#ccc; border-radius:6px; padding:8px; font-size:0.75rem; font-family:monospace; box-sizing:border-box;"></textarea>
+                        <button id="fb-import-session"
+                            style="margin-top:6px; padding:6px 14px; border-radius:6px; border:1px solid rgba(59,130,246,0.4); color:#93c5fd; background:rgba(59,130,246,0.1); font-size:0.8rem; cursor:pointer;">
+                            Importa Cookie
+                        </button>
+                        <div id="fb-import-msg" style="font-size:0.75rem; color:#9ca3af; margin-top:4px;"></div>
+                    </div>
+                </details>
+
+                <!-- Post in attesa approvazione -->
+                <div id="fb-pending-section" style="display:none; margin-top:4px;">
+                    <div style="font-size:0.8rem; font-weight:600; color:#fbbf24; margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em;">
+                        Post in attesa di approvazione
+                    </div>
+                    <div id="fb-pending-list"></div>
+                </div>
+            </div>
+
+            <!-- ── DEEP CONVERSATION TRAINING ──────────────────────────── -->
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">🧠 Deep Conversation Training</h2>
+            <div id="dc-section"
+                style="background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:15px; margin-top:12px;">
+                <p style="font-size:0.82rem; color:#aaa; margin-bottom:12px;">
+                    Si attiva automaticamente quando i pattern distillati scendono sotto la soglia.
+                    Simula conversazioni umane profonde per rigenerare gli insights di Genesi.
+                </p>
+                <div id="dc-stats" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:12px;">
+                    <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:10px;">
+                        <div id="dc-count" style="font-size:1.5rem; font-weight:700; color:#818cf8;">—</div>
+                        <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Sessioni auto</div>
+                    </div>
+                    <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:10px;">
+                        <div id="dc-status-badge" style="font-size:0.9rem; font-weight:700; color:#6b7280;">—</div>
+                        <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Stato</div>
+                    </div>
+                    <div style="text-align:center; background:rgba(0,0,0,0.2); border-radius:6px; padding:10px;">
+                        <div id="dc-threshold" style="font-size:0.9rem; font-weight:700; color:#a5b4fc;">—</div>
+                        <div style="font-size:0.7rem; color:#aaa; margin-top:2px;">Soglia pattern</div>
+                    </div>
+                </div>
+                <div id="dc-last" style="font-size:0.75rem; color:#6b7280;"></div>
+            </div>
+
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Dettaglio Utenti</h2>
+            <div class="user-table-container">
+                <table id="user-table">
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Registrazione</th>
+                            <th>Token Totali</th>
+                        </tr>
+                    </thead>
+                    <tbody id="user-tbody"></tbody>
+                </table>
+            </div>
+
+            <div style="margin-top:20px; text-align:center;">
+                <a href="https://openrouter.ai/activity" target="_blank" class="btn-external"
+                    style="display:inline-block; padding:8px 16px; background:rgba(255,255,255,0.05); border-radius:6px; color:#00e5ff; text-decoration:none; font-size:0.9rem;">Apri
+                    Grafici OpenRouter ↪</a>
             </div>
         </div>
 
         <div id="msg" class="msg"></div>
 
-        <div class="links" style="margin-top:28px;">
+        <div class="links" style="margin-top:20px;">
             <a href="/">Torna a Genesi</a>
             <span>·</span>
             <a href="#" id="logout-link">Logout</a>
         </div>
     </div>
 
-    <script>
-    const token = localStorage.getItem('genesi_access_token');
-    const isAdmin = localStorage.getItem('genesi_is_admin');
-    const msg = document.getElementById('msg');
-    const subtitle = document.getElementById('subtitle');
-
-    if (!token || isAdmin !== 'true') {
-        subtitle.textContent = '';
-        msg.textContent = 'Accesso negato. Devi essere admin per visualizzare questa pagina.';
-        msg.className = 'msg error';
-    } else {
-        loadStats();
-    }
-
-    async function loadStats() {
-        try {
-            const res = await fetch('/auth/admin/stats', {
-                headers: { 'Authorization': 'Bearer ' + token },
-            });
-
-            if (res.status === 401 || res.status === 403) {
-                subtitle.textContent = '';
-                msg.textContent = 'Sessione scaduta o accesso negato.';
-                msg.className = 'msg error';
-                return;
-            }
-
-            const data = await res.json();
-
-            if (res.ok) {
-                subtitle.textContent = 'Ultimo aggiornamento: ' + new Date(data.timestamp).toLocaleString('it-IT');
-                document.getElementById('s-total').textContent = data.total_users;
-                document.getElementById('s-verified').textContent = data.verified_users;
-                document.getElementById('s-7d').textContent = data.active_7d;
-                document.getElementById('s-30d').textContent = data.active_30d;
-                document.getElementById('s-today').textContent = data.registrations_today;
-                document.getElementById('stats').style.display = 'block';
-            } else {
-                msg.textContent = data.detail || 'Errore nel caricamento.';
-                msg.className = 'msg error';
-            }
-        } catch (err) {
-            msg.textContent = 'Errore di connessione.';
-            msg.className = 'msg error';
+    <style>
+        .user-table-container {
+            margin-top: 15px;
+            max-height: 280px;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.1);
         }
-    }
 
-    document.getElementById('logout-link').addEventListener('click', (e) => {
-        e.preventDefault();
-        localStorage.removeItem('genesi_access_token');
-        localStorage.removeItem('genesi_refresh_token');
-        localStorage.removeItem('genesi_user_id');
-        localStorage.removeItem('genesi_is_admin');
-        window.location.href = '/login';
-    });
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+            color: #ccc;
+        }
+
+        th {
+            text-align: left;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            position: sticky;
+            top: 0;
+            color: #888;
+            text-transform: uppercase;
+            font-size: 0.65rem;
+            letter-spacing: 1px;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .token-count {
+            font-weight: 700;
+            color: #00e5ff;
+            font-family: monospace;
+        }
+
+        .email-cell {
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    </style>
+
+    <script>
+        const token = localStorage.getItem('genesi_access_token');
+        const isAdmin = localStorage.getItem('genesi_is_admin');
+        const msg = document.getElementById('msg');
+        const subtitle = document.getElementById('subtitle');
+
+        if (!token || isAdmin !== 'true') {
+            subtitle.textContent = '';
+            msg.textContent = 'Accesso negato. Devi essere admin per visualizzare questa pagina.';
+            msg.className = 'msg error';
+        } else {
+            loadStats();
+            loadDeepConvoStatus();
+            loadSuggestions();
+            loadLabCycleStatus();
+            loadMoltbookStatus();
+            loadImprovementScore();
+            loadCapabilityGaps();
+            loadFacebookStatus();
+        }
+
+        async function loadStats() {
+            try {
+                const res = await fetch('/auth/admin/stats', {
+                    headers: { 'Authorization': 'Bearer ' + token },
+                });
+
+                if (res.status === 401 || res.status === 403) {
+                    subtitle.textContent = '';
+                    msg.textContent = 'Sessione scaduta o accesso negato.';
+                    msg.className = 'msg error';
+                    return;
+                }
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    subtitle.textContent = 'Ultimo aggiornamento: ' + new Date(data.timestamp).toLocaleString('it-IT');
+                    document.getElementById('s-total').textContent = data.total_users;
+                    document.getElementById('s-today').textContent = data.registrations_today;
+
+                    // OpenRouter Usage
+                    const orEl = document.getElementById('or-usage');
+                    if (data.or_balance) {
+                        const spent = (data.or_balance.usage || 0).toFixed(4);
+                        orEl.textContent = `$ ${spent}`;
+                    } else {
+                        orEl.textContent = 'N/A';
+                    }
+
+                    // Fallbacks
+                    loadFallbacks();
+
+                    // User Table
+                    const tbody = document.getElementById('user-tbody');
+                    tbody.innerHTML = '';
+                    if (data.user_list) {
+                        data.user_list.forEach(u => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td class="email-cell" title="${u.email}">${u.email}</td>
+                                <td style="color:#666;">${new Date(u.created_at).toLocaleDateString('it-IT')}</td>
+                                <td class="token-count" style="text-align:right;">${u.total_tokens.toLocaleString()}</td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+                    }
+
+                    document.getElementById('stats').style.display = 'block';
+                } else {
+                    msg.textContent = data.detail || 'Errore nel caricamento.';
+                    msg.className = 'msg error';
+                }
+            } catch (err) {
+                msg.textContent = 'Errore di connessione.';
+                msg.className = 'msg error';
+            }
+        }
+
+        async function loadFallbacks() {
+            try {
+                const res = await fetch('/api/admin/fallbacks/summary', {
+                    headers: { 'Authorization': 'Bearer ' + token },
+                });
+                const data = await res.json();
+
+                document.getElementById('fb-loading').style.display = 'none';
+                document.getElementById('fb-stats').style.display = 'block';
+
+                if (data.groups) {
+                    document.getElementById('fb-count').textContent = data.groups.length;
+                    const list = document.getElementById('fb-list');
+                    list.innerHTML = '';
+                    data.groups.forEach(g => {
+                        const div = document.createElement('div');
+                        div.style.padding = '8px';
+                        div.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                        div.innerHTML = `
+                            <div style="color:#ffab00; font-weight:bold;">${g.count}x — ${g.type}</div>
+                            <div style="font-style:italic;">"${g.examples[0]}"</div>
+                            <div style="color:#00e5ff; margin-top:4px;">Soluzione: ${g.possible_solution}</div>
+                        `;
+                        list.appendChild(div);
+                    });
+                }
+            } catch (err) {
+                console.error("FB_LOAD_FAIL", err);
+            }
+        }
+
+        async function downloadFallbacks() {
+            try {
+                const response = await fetch('/api/admin/fallbacks/download', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `fallbacks_${new Date().toISOString().slice(0, 10)}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                }
+            } catch (err) {
+                alert("Errore nel download");
+            }
+        }
+
+        async function clearFallbacks() {
+            if (!confirm("Sei sicuro di voler pulire tutti i log dei fallback?")) return;
+            try {
+                await fetch('/api/admin/fallbacks/clear', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                loadFallbacks();
+            } catch (err) {
+                alert("Errore nella pulizia");
+            }
+        }
+
+
+        async function submitSuggestion() {
+            const content = document.getElementById('sug-text').value.trim();
+            const category = document.getElementById('sug-cat').value;
+            const msgEl = document.getElementById('sug-msg');
+            if (!content) { msgEl.style.color = '#ff4444'; msgEl.textContent = 'Testo vuoto.'; return; }
+            try {
+                const res = await fetch('/api/admin/fallbacks/suggestions', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, category })
+                });
+                if (res.ok) {
+                    document.getElementById('sug-text').value = '';
+                    msgEl.style.color = '#00e5ff';
+                    msgEl.textContent = 'Suggerimento inviato!';
+                    setTimeout(() => { msgEl.textContent = ''; }, 3000);
+                    loadSuggestions();
+                } else {
+                    msgEl.style.color = '#ff4444'; msgEl.textContent = 'Errore invio.';
+                }
+            } catch (e) { msgEl.style.color = '#ff4444'; msgEl.textContent = 'Errore di rete.'; }
+        }
+
+        async function loadSuggestions() {
+            try {
+                const res = await fetch('/api/admin/fallbacks/suggestions', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                const list = document.getElementById('sug-list');
+                list.innerHTML = '';
+                if (!data.suggestions || data.suggestions.length === 0) {
+                    list.innerHTML = '<em style="color:#666;">Nessun suggerimento ancora.</em>';
+                    return;
+                }
+                data.suggestions.forEach(s => {
+                    const div = document.createElement('div');
+                    div.style.cssText = 'border-top:1px solid rgba(255,255,255,0.07); padding:8px 0; display:flex; justify-content:space-between; gap:8px;';
+                    const catColor = { prompt: '#00e5ff', memoria: '#b388ff', tool: '#ffab00', generale: '#aaa' }[s.category] || '#aaa';
+                    div.innerHTML = `
+                        <div style="flex:1;">
+                            <span style="font-size:0.7rem; color:${catColor}; text-transform:uppercase; margin-right:6px;">${s.category}</span>
+                            <span>${s.content}</span>
+                            <div style="color:#555; font-size:0.72rem; margin-top:2px;">${s.timestamp.slice(0, 16).replace('T', ' ')}</div>
+                        </div>
+                        <button onclick="deleteSuggestion('${s.id}')" style="background:none; border:none; color:#ff4444; cursor:pointer; font-size:0.8rem; padding:0 4px;">✕</button>
+                    `;
+                    list.appendChild(div);
+                });
+            } catch (e) { }
+        }
+
+        async function deleteSuggestion(id) {
+            try {
+                await fetch('/api/admin/fallbacks/suggestions/' + id, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                loadSuggestions();
+            } catch (e) { }
+        }
+
+        async function loadLabCycleStatus() {
+            try {
+                const res = await fetch('/api/admin/fallbacks/lab-cycle/status', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) return;
+                const d = await res.json();
+                const el = document.getElementById('lab-cycle-status');
+                const pending = d.pending_events || 0;
+                const threshold = d.min_events_to_trigger || 5;
+                const isRunning = d.is_running || false;
+
+                let html = '';
+                if (isRunning) {
+                    html = '<span style="color:#b388ff;">Ciclo in esecuzione...</span>';
+                } else if (d.last_run) {
+                    const dt = new Date(d.last_run).toLocaleString('it-IT');
+                    html = `Ultimo ciclo: <strong style="color:#b388ff;">${dt}</strong> — `;
+                    html += `${d.events_processed || 0} eventi processati, ${d.rules_generated || 0} regole generate.<br>`;
+                    html += `<span style="color:${pending >= threshold ? '#ffab00' : '#555'};">`;
+                    html += `${pending} eventi pending (soglia: ${threshold})</span>`;
+                } else {
+                    html = `<span style="color:#555;">Nessun ciclo eseguito ancora.</span> `;
+                    html += `<span style="color:${pending >= threshold ? '#ffab00' : '#555'};">${pending} eventi pending (soglia: ${threshold})</span>`;
+                }
+                el.innerHTML = html;
+
+                // Mostra regole attive se ci sono
+                const rulesEl = document.getElementById('lab-rules-list');
+                if (d.rules && d.rules.length > 0) {
+                    rulesEl.innerHTML = '<div style="color:#7c4dff; margin-bottom:6px; font-weight:600;">Regole attive nel prompt:</div>'
+                        + d.rules.map(r => `<div style="padding:4px 0; border-top:1px solid rgba(124,77,255,0.15);">• ${r}</div>`).join('');
+                } else {
+                    rulesEl.innerHTML = '';
+                }
+            } catch (e) { }
+        }
+
+        async function runLabCycle() {
+            const btn = document.getElementById('lab-run-btn');
+            const msgEl = document.getElementById('lab-cycle-msg');
+            btn.disabled = true;
+            btn.textContent = 'Esecuzione...';
+            msgEl.textContent = '';
+            try {
+                const res = await fetch('/api/admin/fallbacks/lab-cycle/run', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const d = await res.json();
+                if (d.status === 'success') {
+                    msgEl.style.color = '#b388ff';
+                    msgEl.textContent = `✓ ${d.rules_generated} regole generate da ${d.events_processed} eventi.`;
+                } else if (d.status === 'nothing_to_process') {
+                    msgEl.style.color = '#888';
+                    msgEl.textContent = 'Nessun dato da processare.';
+                } else if (d.status === 'already_running') {
+                    msgEl.style.color = '#ffab00';
+                    msgEl.textContent = 'Ciclo già in corso.';
+                } else {
+                    msgEl.style.color = '#ff4444';
+                    msgEl.textContent = d.error || 'Errore durante il ciclo.';
+                }
+                setTimeout(() => { msgEl.textContent = ''; }, 6000);
+                loadLabCycleStatus();
+            } catch (e) {
+                msgEl.style.color = '#ff4444';
+                msgEl.textContent = 'Errore di rete.';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Avvia Ciclo Ora';
+            }
+        }
+
+        // ── GAUGE AUTO-MIGLIORAMENTO ────────────────────────────────────────
+        const ARC_LEN = 408; // lunghezza semicerchio r=130
+
+        function scoreToAngle(score) {
+            // score 0→100 mappa a -90°→+90° (semiciclo)
+            return -90 + score * 1.8;
+        }
+
+        function setNeedle(id, score) {
+            const angle = scoreToAngle(score);
+            document.getElementById(id).style.transform = `rotate(${angle}deg)`;
+        }
+
+        async function loadImprovementScore() {
+            try {
+                const res = await fetch('/api/admin/improvement/score', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error(res.status);
+                const d = await res.json();
+
+                document.getElementById('gauge-loading').style.display = 'none';
+
+                const score = d.score;
+                const prev  = d.previous;
+                const delta = d.delta;
+
+                // Arc value: stroke-dasharray = filled empty
+                const filled = ARC_LEN * score / 100;
+                document.getElementById('arc-val').setAttribute(
+                    'stroke-dasharray', `${filled} ${ARC_LEN - filled}`
+                );
+
+                // Main needle
+                setTimeout(() => setNeedle('needle-main', score), 80);
+
+                // Score text
+                document.getElementById('gauge-score').textContent = score.toFixed(1);
+
+                // Delta
+                if (delta !== null) {
+                    const sign = delta >= 0 ? '+' : '';
+                    const color = delta >= 0 ? '#22c55e' : '#ef4444';
+                    const el = document.getElementById('gauge-delta');
+                    el.textContent = `${sign}${delta} vs precedente`;
+                    el.setAttribute('fill', color);
+                }
+
+                // Previous hold needle
+                if (prev !== null) {
+                    document.getElementById('needle-prev').style.display = 'block';
+                    document.getElementById('dot-prev').style.display = 'block';
+                    setTimeout(() => {
+                        setNeedle('needle-prev', prev);
+                        setNeedle('dot-prev', prev);
+                    }, 80);
+                } else {
+                    document.getElementById('needle-prev').style.display = 'none';
+                    document.getElementById('dot-prev').style.display = 'none';
+                }
+
+                // Component bars
+                const wrap = document.getElementById('gauge-components');
+                const colors = {
+                    lab_rules: '#818cf8', global_insights: '#34d399',
+                    moltbook: '#6ee7b7', training: '#c4b5fd', memory_depth: '#fbbf24'
+                };
+                wrap.innerHTML = Object.entries(d.components).map(([k, c]) => {
+                    const pct = Math.round(c.score);
+                    const col = colors[k] || '#9ca3af';
+                    return `<div style="font-size:0.72rem;">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+                            <span style="color:#d1d5db;">${c.label}</span>
+                            <span style="color:${col};font-weight:600;">${pct}%</span>
+                        </div>
+                        <div style="height:4px;background:rgba(255,255,255,0.07);border-radius:2px;">
+                            <div style="height:4px;width:${pct}%;background:${col};border-radius:2px;
+                                        transition:width 1s ease;max-width:100%;"></div>
+                        </div>
+                        <div style="color:#6b7280;font-size:0.65rem;margin-top:1px;">${c.detail}</div>
+                    </div>`;
+                }).join('');
+
+            } catch(e) {
+                document.getElementById('gauge-loading').textContent = 'Indice non disponibile.';
+            }
+        }
+
+        async function loadDeepConvoStatus() {
+            try {
+                const res = await fetch('/api/admin/training/autopilot-status', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) return;
+                const ap = await res.json();
+                const dc = ap.deep_convo || {};
+
+                const count = dc.auto_count ?? 0;
+                document.getElementById('dc-count').textContent = count;
+                document.getElementById('dc-count').style.color = count > 0 ? '#818cf8' : '#6b7280';
+
+                // Stato corrente dal deep convo status
+                const res2 = await fetch('/api/admin/training/deep-convo-status', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const dcStatus = res2.ok ? await res2.json() : {};
+                const st = dcStatus.status || 'idle';
+                const stColors = { running: '#22c55e', starting: '#22c55e', completed: '#818cf8', failed: '#ef4444', idle: '#6b7280' };
+                const stLabels = { running: '● In corso', starting: '● Avvio...', completed: '✓ Completato', failed: '✗ Errore', idle: '○ Inattivo' };
+                const badge = document.getElementById('dc-status-badge');
+                badge.textContent = stLabels[st] || st;
+                badge.style.color = stColors[st] || '#6b7280';
+
+                document.getElementById('dc-threshold').textContent = `< ${dc.min_patterns_threshold ?? 4} pattern`;
+
+                const parts = [];
+                if (dc.last_end) parts.push('Ultima: ' + new Date(dc.last_end).toLocaleString('it-IT'));
+                if (dc.cooldown_h) parts.push(`Cooldown: ${dc.cooldown_h}h`);
+                if (dcStatus.triggered_by) parts.push('Trigger: ' + dcStatus.triggered_by);
+                document.getElementById('dc-last').textContent = parts.join('  ·  ');
+
+            } catch(e) {
+                // fail silently
+            }
+        }
+
+        async function loadMoltbookStatus() {
+            try {
+                const res = await fetch('/api/admin/moltbook/status', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error(res.status);
+                const d = await res.json();
+
+                document.getElementById('mb-loading').style.display = 'none';
+                document.getElementById('mb-data').style.display = 'block';
+
+                document.getElementById('mb-hb').textContent = d.heartbeat_count;
+                document.getElementById('mb-interactions').textContent = d.interaction_stats.total;
+                document.getElementById('mb-agents').textContent = d.agent_memory.agents_known;
+                document.getElementById('mb-lab-obs').textContent = d.lab_cycle.moltbook_observations_fed;
+
+                // Breakdown by type
+                const bdEl = document.getElementById('mb-breakdown');
+                const typeLabels = { post_insight:'Post', post_showcase:'Showcase', comment_given:'Commenti dati',
+                    comment_received:'Risposte ricevute', follow_received:'Follow ricevuti' };
+                bdEl.innerHTML = Object.entries(d.interaction_stats.by_type)
+                    .map(([k,v]) => `<span style="background:rgba(16,185,129,0.12);padding:2px 8px;border-radius:4px;">${typeLabels[k]||k}: <b>${v}</b></span>`)
+                    .join('');
+
+                // Profilo live da Moltbook (fonte autoritativa)
+                const lp = d.live_profile || {};
+                const liveEl = document.getElementById('mb-live-profile');
+                if (liveEl) {
+                    const karma = lp.karma != null ? lp.karma : '—';
+                    const posts = lp.posts_count != null ? lp.posts_count : '—';
+                    const comms = lp.comments_count != null ? lp.comments_count : '—';
+                    const follows = lp.followers != null ? lp.followers : '—';
+                    liveEl.innerHTML =
+                        `<b style="color:#6ee7b7">${karma}</b> karma &nbsp;·&nbsp; ` +
+                        `<b>${posts}</b> post su Moltbook &nbsp;·&nbsp; ` +
+                        `<b>${comms}</b> commenti su Moltbook &nbsp;·&nbsp; ` +
+                        `<b>${follows}</b> follower`;
+                }
+
+                // Engagement locale (upvotes/commenti sui nostri post)
+                const eng = d.engagement;
+                document.getElementById('mb-engagement').innerHTML =
+                    `<b>${eng.posts_published}</b> post tracciati localmente · <b>${eng.total_upvotes}</b> upvote · <b>${eng.total_comments}</b> commenti ricevuti`;
+
+                // Last consolidation
+                const lc = d.last_consolidation;
+                const lcEl = document.getElementById('mb-consolidation');
+                if (lc.consolidated_at) {
+                    const dt = new Date(lc.consolidated_at).toLocaleString('it-IT');
+                    lcEl.textContent = `Ultima consolidazione: ${dt} (${lc.interactions_analyzed} interazioni analizzate)`;
+                } else {
+                    lcEl.textContent = 'Nessuna consolidazione ancora (serve ~2h di attività)';
+                }
+
+                // Insights
+                if (lc.insights && lc.insights.length > 0) {
+                    document.getElementById('mb-insights-wrap').style.display = 'block';
+                    const ul = document.getElementById('mb-insights');
+                    ul.innerHTML = lc.insights.map(i => `<li>${i}</li>`).join('');
+                    if (lc.top_topics.length)
+                        document.getElementById('mb-topics').textContent = 'Topic: ' + lc.top_topics.join(', ');
+                    if (lc.recommended_next)
+                        document.getElementById('mb-next').textContent = '→ ' + lc.recommended_next;
+                    if (lc.technical_feedback && lc.technical_feedback.length > 0) {
+                        document.getElementById('mb-techfb-wrap').style.display = 'block';
+                        document.getElementById('mb-techfb').innerHTML =
+                            lc.technical_feedback.map(f => `<li>${f}</li>`).join('');
+                    }
+                }
+
+                // Last lab observation
+                if (d.lab_cycle.last_observation) {
+                    const lo = document.getElementById('mb-last-obs');
+                    lo.style.display = 'block';
+                    lo.textContent = 'Ultima obs. → Lab: "' + d.lab_cycle.last_observation + '"';
+                }
+
+            } catch(e) {
+                document.getElementById('mb-loading').style.display = 'none';
+                document.getElementById('mb-error').style.display = 'block';
+            }
+        }
+
+        // ── Facebook ────────────────────────────────────────────────────────
+        async function loadFacebookStatus() {
+            try {
+                const res = await fetch('/api/admin/facebook/status', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error(res.status);
+                const d = await res.json();
+
+                const modeEl   = document.getElementById('fb-mode-badge');
+                const enableEl = document.getElementById('fb-enabled-badge');
+                modeEl.textContent = d.mode === 'full' ? 'FULL AUTO' : 'SEMI AUTO';
+                modeEl.style.color = d.mode === 'full' ? '#fbbf24' : '#93c5fd';
+
+                enableEl.textContent = d.enabled ? 'ATTIVO' : 'DISABILITATO';
+                enableEl.style.color = d.enabled ? '#6ee7b7' : '#f87171';
+
+                document.getElementById('fb-pending-count').textContent = d.pending_count || 0;
+                document.getElementById('fb-hb-count').textContent = d.heartbeat_count || 0;
+
+                const sessEl = document.getElementById('fb-session-row');
+                if (d.has_session) {
+                    const ts = d.session_saved_at ? new Date(d.session_saved_at).toLocaleString('it-IT') : '?';
+                    sessEl.innerHTML = `<span style="color:#6ee7b7;">✓ Sessione salvata</span> — ultima: ${ts}`;
+                } else {
+                    sessEl.innerHTML = '<span style="color:#f87171;">✗ Nessuna sessione — usa Importa Cookie o Login manuale</span>';
+                }
+
+                const grpEl = document.getElementById('fb-groups-row');
+                const groups = d.groups || [];
+                grpEl.innerHTML = 'Gruppi monitorati: ' + (groups.length
+                    ? groups.map(g => `<span style="background:rgba(59,130,246,0.12);padding:2px 8px;border-radius:4px;margin-right:4px;">${g}</span>`).join('')
+                    : '<span style="color:#6b7280;">nessuno</span>');
+
+                // Menzioni configurate
+                const mentionsEl = document.getElementById('fb-mentions-list');
+                if (mentionsEl && d.mentions && d.mentions.length > 0) {
+                    mentionsEl.innerHTML = 'Menzioni: ' + d.mentions.map(m => `<span style="background:rgba(167,139,250,0.12);padding:2px 8px;border-radius:4px;margin-right:4px;">${m}</span>`).join('');
+                }
+
+                // Post pending
+                if (d.pending_count > 0) {
+                    loadFacebookPending();
+                }
+            } catch(e) {
+                // fail silently
+            }
+        }
+
+        async function loadFacebookPending() {
+            try {
+                const res = await fetch('/api/admin/facebook/pending', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const d = await res.json();
+                const pendingSection = document.getElementById('fb-pending-section');
+                const pendingList    = document.getElementById('fb-pending-list');
+                if (d.count > 0) {
+                    pendingSection.style.display = 'block';
+                    pendingList.innerHTML = d.pending.map(p => `
+                        <div style="background:rgba(0,0,0,0.2); border:1px solid rgba(251,191,36,0.2); border-radius:6px; padding:10px; margin-bottom:8px;">
+                            <div style="font-size:0.72rem; color:#9ca3af; margin-bottom:4px;">
+                                Gruppo: <b style="color:#fbbf24">${p.group}</b> &nbsp;·&nbsp; ${new Date(p.created_at).toLocaleString('it-IT')}
+                            </div>
+                            <div style="font-size:0.85rem; color:#e5e7eb; margin-bottom:8px; white-space:pre-wrap;">${p.content}</div>
+                            <div style="display:flex; gap:8px;">
+                                <button onclick="fbApprove('${p.id}')"
+                                    style="padding:5px 14px; border-radius:5px; border:1px solid rgba(52,211,153,0.5); color:#6ee7b7; background:rgba(52,211,153,0.1); font-size:0.78rem; cursor:pointer;">
+                                    Approva e Pubblica
+                                </button>
+                                <button onclick="fbReject('${p.id}')"
+                                    style="padding:5px 14px; border-radius:5px; border:1px solid rgba(248,113,113,0.4); color:#f87171; background:rgba(248,113,113,0.05); font-size:0.78rem; cursor:pointer;">
+                                    Rifiuta
+                                </button>
+                            </div>
+                        </div>`).join('');
+                } else {
+                    pendingSection.style.display = 'none';
+                }
+            } catch(e) {}
+        }
+
+        async function fbApprove(id) {
+            const msg = document.getElementById('fb-action-msg');
+            msg.textContent = 'Pubblicazione in corso...';
+            try {
+                const res = await fetch(`/api/admin/facebook/pending/${id}/approve`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const d = await res.json();
+                msg.textContent = d.success ? '✓ Pubblicato!' : `✗ ${d.error}`;
+                setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 2000);
+            } catch(e) { msg.textContent = 'Errore'; }
+        }
+
+        async function fbReject(id) {
+            const msg = document.getElementById('fb-action-msg');
+            try {
+                await fetch(`/api/admin/facebook/pending/${id}/reject`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                msg.textContent = '✓ Rifiutato';
+                setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 1500);
+            } catch(e) {}
+        }
+
+        // Bottoni controllo
+        document.getElementById('fb-btn-semi').addEventListener('click', async () => {
+            const msg = document.getElementById('fb-action-msg');
+            await fetch('/api/admin/facebook/mode', { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body: JSON.stringify({mode:'semi'}) });
+            msg.textContent = '✓ Modalità semi-auto attivata';
+            setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-btn-full').addEventListener('click', async () => {
+            if (!confirm('Attivare FULL AUTO? Genesi pubblicherà e commenterà senza approvazione.')) return;
+            const msg = document.getElementById('fb-action-msg');
+            await fetch('/api/admin/facebook/mode', { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body: JSON.stringify({mode:'full'}) });
+            msg.textContent = '✓ Modalità full-auto attivata';
+            setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-btn-enable').addEventListener('click', async () => {
+            const msg = document.getElementById('fb-action-msg');
+            await fetch('/api/admin/facebook/enable', { method:'POST', headers:{'Authorization':'Bearer '+token} });
+            msg.textContent = '✓ Servizio abilitato';
+            setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-btn-disable').addEventListener('click', async () => {
+            const msg = document.getElementById('fb-action-msg');
+            await fetch('/api/admin/facebook/disable', { method:'POST', headers:{'Authorization':'Bearer '+token} });
+            msg.textContent = '✓ Servizio disabilitato';
+            setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-btn-hb').addEventListener('click', async () => {
+            const msg = document.getElementById('fb-action-msg');
+            msg.textContent = 'Heartbeat in corso...';
+            const res = await fetch('/api/admin/facebook/heartbeat', { method:'POST', headers:{'Authorization':'Bearer '+token} });
+            const d = await res.json();
+            msg.textContent = d.skipped ? `Skip: ${d.reason}` : `✓ Heartbeat OK — ${(d.actions||[]).join(', ')||'nessuna azione'}`;
+            setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 4000);
+        });
+        document.getElementById('fb-add-mention').addEventListener('click', async () => {
+            const name = document.getElementById('fb-mention-input').value.trim();
+            if (!name) return;
+            const msg = document.getElementById('fb-action-msg');
+            const res = await fetch('/api/admin/facebook/mentions', { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body: JSON.stringify({action:'add',mention:name}) });
+            const d = await res.json();
+            document.getElementById('fb-mention-input').value = '';
+            document.getElementById('fb-mentions-list').innerHTML = 'Menzioni: ' + (d.mentions.length ? d.mentions.map(m => `<span style="background:rgba(167,139,250,0.12);padding:2px 8px;border-radius:4px;margin-right:4px;">${m}</span>`).join('') : 'nessuna');
+            msg.textContent = `✓ Menzione aggiunta: ${name}`;
+            setTimeout(() => { msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-remove-mention').addEventListener('click', async () => {
+            const name = document.getElementById('fb-mention-input').value.trim();
+            if (!name) return;
+            const msg = document.getElementById('fb-action-msg');
+            const res = await fetch('/api/admin/facebook/mentions', { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body: JSON.stringify({action:'remove',mention:name}) });
+            const d = await res.json();
+            document.getElementById('fb-mention-input').value = '';
+            document.getElementById('fb-mentions-list').innerHTML = 'Menzioni: ' + (d.mentions.length ? d.mentions.map(m => `<span style="background:rgba(167,139,250,0.12);padding:2px 8px;border-radius:4px;margin-right:4px;">${m}</span>`).join('') : 'nessuna');
+            msg.textContent = `✓ Menzione rimossa`;
+            setTimeout(() => { msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-add-group').addEventListener('click', async () => {
+            const name = document.getElementById('fb-group-input').value.trim();
+            if (!name) return;
+            const msg = document.getElementById('fb-action-msg');
+            await fetch('/api/admin/facebook/groups', { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body: JSON.stringify({action:'add',group:name}) });
+            document.getElementById('fb-group-input').value = '';
+            msg.textContent = `✓ Gruppo aggiunto: ${name}`;
+            setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-remove-group').addEventListener('click', async () => {
+            const name = document.getElementById('fb-group-input').value.trim();
+            if (!name) return;
+            const msg = document.getElementById('fb-action-msg');
+            await fetch('/api/admin/facebook/groups', { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body: JSON.stringify({action:'remove',group:name}) });
+            document.getElementById('fb-group-input').value = '';
+            msg.textContent = `✓ Gruppo rimosso: ${name}`;
+            setTimeout(() => { loadFacebookStatus(); msg.textContent = ''; }, 1500);
+        });
+        document.getElementById('fb-import-session').addEventListener('click', async () => {
+            const raw  = document.getElementById('fb-cookies-json').value.trim();
+            const msgEl = document.getElementById('fb-import-msg');
+            try {
+                const cookies = JSON.parse(raw);
+                const res = await fetch('/api/admin/facebook/import-session', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cookies })
+                });
+                const d = await res.json();
+                msgEl.style.color = d.ok ? '#6ee7b7' : '#f87171';
+                msgEl.textContent = d.ok ? `✓ ${d.cookies_imported} cookie importati` : '✗ Errore importazione';
+                if (d.ok) setTimeout(() => loadFacebookStatus(), 1500);
+            } catch(e) {
+                msgEl.style.color = '#f87171';
+                msgEl.textContent = '✗ JSON non valido';
+            }
+        });
+
+        async function loadCapabilityGaps() {
+            try {
+                const res = await fetch('/api/admin/capability-gaps', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error(res.status);
+                const d = await res.json();
+
+                document.getElementById('gaps-loading').style.display = 'none';
+                document.getElementById('gaps-data').style.display = 'block';
+
+                document.getElementById('gaps-total').textContent = d.total || 0;
+                document.getElementById('gaps-feature').textContent =
+                    (d.by_type && d.by_type.feature_requested || 0) + (d.by_type && d.by_type.missing_integration || 0);
+                document.getElementById('gaps-limit').textContent = d.by_type && d.by_type.explicit_limit || 0;
+
+                const listEl = document.getElementById('gaps-list');
+                const recent = (d.recent || []).slice().reverse();
+                if (recent.length === 0) {
+                    listEl.innerHTML = '<span style="color:#6b7280; font-style:italic;">Nessun gap registrato ancora.</span>';
+                } else {
+                    const typeColors = { feature_requested:'#fb923c', missing_integration:'#fbbf24', explicit_limit:'#f87171' };
+                    listEl.innerHTML = recent.map(g => {
+                        const col = typeColors[g.gap_type] || '#9ca3af';
+                        const ts = g.ts ? new Date(g.ts).toLocaleString('it-IT', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+                        return `<div style="padding:5px 8px; border-left:2px solid ${col}; margin-bottom:5px; background:rgba(0,0,0,0.15); border-radius:0 4px 4px 0;">
+                            <span style="color:${col}; font-size:0.72rem; text-transform:uppercase; font-weight:600;">${g.gap_type}</span>
+                            <span style="color:#6b7280; font-size:0.7rem; float:right;">${ts} · ${g.platform||''}</span>
+                            <div style="color:#e5e7eb; margin-top:2px;">${g.user_message_snippet}</div>
+                        </div>`;
+                    }).join('');
+                }
+
+                document.getElementById('gaps-propose-btn').addEventListener('click', async () => {
+                    const btn = document.getElementById('gaps-propose-btn');
+                    const msgEl = document.getElementById('gaps-propose-msg');
+                    btn.disabled = true;
+                    msgEl.textContent = 'Generazione in corso...';
+                    try {
+                        const pr = await fetch('/api/admin/capability-gaps/generate-proposals', {
+                            method: 'POST',
+                            headers: { 'Authorization': 'Bearer ' + token }
+                        });
+                        const pd = await pr.json();
+                        msgEl.textContent = '';
+                        const proposals = pd.proposals || [];
+                        const propEl = document.getElementById('gaps-proposals');
+                        propEl.style.display = 'block';
+                        if (proposals.length === 0) {
+                            propEl.innerHTML = '<div style="font-size:0.8rem; color:#9ca3af; font-style:italic;">Nessuna proposta generata (gap insufficienti).</div>';
+                        } else {
+                            const complexColors = { bassa:'#6ee7b7', media:'#fbbf24', alta:'#f87171' };
+                            propEl.innerHTML = '<div style="font-size:0.78rem; font-weight:600; color:#fbbf24; margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em;">Proposte di integrazione</div>' +
+                                proposals.map(p => `
+                                <div style="background:rgba(251,191,36,0.07); border:1px solid rgba(251,191,36,0.2); border-radius:6px; padding:10px; margin-bottom:8px;">
+                                    <div style="font-weight:700; color:#fde68a; margin-bottom:4px;">${p.title}</div>
+                                    <div style="font-size:0.78rem; color:#d1d5db; margin-bottom:4px;">${p.rationale}</div>
+                                    <div style="font-size:0.72rem; color:#9ca3af;">
+                                        Complessità: <span style="color:${complexColors[p.complexity]||'#9ca3af'}">${p.complexity}</span>
+                                        &nbsp;·&nbsp; Gap collegati: <b>${p.gap_count||'?'}</b>
+                                        &nbsp;·&nbsp; Es: <i>"${p.example_request||''}"</i>
+                                    </div>
+                                </div>`).join('');
+                        }
+                    } catch(e) {
+                        msgEl.textContent = 'Errore generazione proposte.';
+                    }
+                    btn.disabled = false;
+                });
+
+            } catch(e) {
+                document.getElementById('gaps-loading').style.display = 'none';
+                document.getElementById('gaps-error').style.display = 'block';
+            }
+        }
+
+        function doLogout(e) {
+            e && e.preventDefault();
+            localStorage.removeItem('genesi_access_token');
+            localStorage.removeItem('genesi_refresh_token');
+            localStorage.removeItem('genesi_user_id');
+            localStorage.removeItem('genesi_is_admin');
+            window.location.href = '/login';
+        }
+        document.getElementById('logout-link').addEventListener('click', doLogout);
+        document.getElementById('topbar-logout-link').addEventListener('click', doLogout);
     </script>
 </body>
+
 </html>

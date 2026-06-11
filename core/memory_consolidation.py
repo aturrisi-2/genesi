@@ -561,14 +561,16 @@ class MemoryConsolidation:
             new_patterns = [p for p in patterns if (p["type"], p.get("subtype", "")) not in existing_pattern_keys]
             profile["patterns"].extend(new_patterns)
             
-            # Aggiungi tratti al profilo
-            if "traits" not in profile:
-                profile["traits"] = []
-            
-            # Aggiungi solo nuovi tratti
-            existing_trait_types = {t["type"] for t in profile["traits"]}
-            new_traits = [t for t in traits if t["type"] not in existing_trait_types]
-            profile["traits"].extend(new_traits)
+            # Tratti cognitivi (dict) → campo separato per non inquinare profile["traits"] (stringhe)
+            existing_cog_types = {t["type"] for t in profile.get("cognitive_traits", []) if isinstance(t, dict)}
+            new_cog_traits = [t for t in traits if isinstance(t, dict) and t.get("type") not in existing_cog_types]
+            for t in traits:
+                if isinstance(t, dict) and t.get("type") in existing_cog_types:
+                    for i, existing in enumerate(profile.get("cognitive_traits", [])):
+                        if isinstance(existing, dict) and existing.get("type") == t.get("type"):
+                            profile["cognitive_traits"][i] = t
+                            break
+            profile.setdefault("cognitive_traits", []).extend(new_cog_traits)
             
             # Aggiorna timestamp consolidamento
             profile["last_consolidation"] = datetime.now().isoformat()

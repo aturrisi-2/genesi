@@ -58,6 +58,8 @@ _EXT_MAP = {
     ".php": "text",
     ".swift": "text",
     ".kt": "text",
+    ".heic": "image",
+    ".heif": "image",
 }
 
 _SUPPORTED_EXTENSIONS = set(_EXT_MAP.keys())
@@ -116,6 +118,12 @@ async def analyze_file(file: UploadFile) -> dict:
             result = await _handle_pdf(tmp_path, file.filename)
         elif file_type == "image":
             result = await _handle_image(tmp_path, file.filename)
+            # Salva il base64 dell'immagine per supportare image editing
+            import base64
+            ext_clean = ext.lstrip('.') or 'jpeg'
+            mime = f"image/{ext_clean}" if ext_clean in ('png','webp','gif') else "image/jpeg"
+            b64 = base64.b64encode(data).decode('ascii')
+            result["meta"]["image_data_url"] = f"data:{mime};base64,{b64}"
         elif file_type == "text":
             result = await _handle_text(data, file.filename)
         else:
@@ -190,19 +198,45 @@ async def _handle_image(path: str, filename: str) -> dict:
         logger.warning("IMAGE_OCR_FAILED error=%s", str(e))
 
     # Vision description
+    vision_result = None
+    gender_hints = []
     try:
         from core.image_vision_service import describe_image
-        description = await describe_image(path)
+        vision_result = await describe_image(path)
+        if isinstance(vision_result, dict):
+            description = vision_result.get("description", "")
+            gender_hints = vision_result.get("gender_hints", [])
+        else:
+            # Backward compatibility: if it returns a string
+            description = str(vision_result)
+            gender_hints = []
     except Exception as e:
         logger.warning("IMAGE_VISION_FAILED error=%s", str(e))
+        description = ""
+        gender_hints = []
 
-    # Combine: prefer OCR text if substantial, otherwise use vision description
-    if ocr_text and len(ocr_text.strip()) > 20:
-        content = ocr_text
-    elif description:
-        content = description
-    elif ocr_text:
-        content = ocr_text
+    # Combina OCR + vision: entrambi nel contenuto per massima ricchezza
+    ocr_clean = ocr_text.strip() if ocr_text else ""
+    desc_clean = description.strip() if description else ""
+    
+    # Aggiungi i gender_hints alla descrizione se presenti
+    if gender_hints and isinstance(gender_hints, list):
+        hints_text = " | ".join([
+            f"{hint.get('gender', '?')} a {hint.get('position', 'posizione ignota')}"
+            for hint in gender_hints if isinstance(hint, dict)
+        ])
+        if hints_text:
+            desc_clean = f"{desc_clean} [GENDER_VISUAL_HINTS: {hints_text}]"
+
+    if ocr_clean and len(ocr_clean) > 20 and desc_clean:
+        # Immagine con testo E descrizione visiva — massima qualità
+        content = f"TESTO ESTRATTO DALL'IMMAGINE:\n{ocr_clean}\n\nDESCRIZIONE VISIVA:\n{desc_clean}"
+    elif desc_clean:
+        # Immagine pura — solo descrizione visiva
+        content = desc_clean
+    elif ocr_clean:
+        # Solo OCR (vision fallita)
+        content = ocr_clean
     else:
         content = ""
 
@@ -211,8 +245,9 @@ async def _handle_image(path: str, filename: str) -> dict:
         "content": content,
         "meta": {
             "filename": filename,
-            "ocr_text": ocr_text[:500] if ocr_text else "",
-            "description": description[:500] if description else "",
+            "ocr_text": ocr_clean[:500],
+            "description": desc_clean[:500],
+            "gender_hints": gender_hints,
             "chars": len(content),
         }
     }

@@ -12,10 +12,49 @@ from core.storage import storage
 from core.chat_memory import chat_memory
 from core.document_memory import load_document
 from core.document_selector import resolve_documents
+from core.log import log as _structured_log
 
 logger = logging.getLogger(__name__)
 
 cognitive_engine = CognitiveMemoryEngine()
+
+
+# Gender inference dai personal facts
+import re as _re
+
+_GF_F = _re.compile(r"""(?i)su[ao] (sorella|madre|mamma|moglie|figlia|nonna|zia|cugina|cognata|nuora|fidanzata) (\w{3,})""")
+_GF_M = _re.compile(r"""(?i)su[ao] (fratello|padre|pap[aoà]|marito|figlio|nonno|zio|cugino|cognato|genero|fidanzato) (\w{3,})""")
+_GFN_F = _re.compile(r"""(?i)su[ao] (sorella|madre|mamma|moglie|figlia|nonna|zia|cugina|cognata|nuora|fidanzata)""")
+_GFN_M = _re.compile(r"""(?i)su[ao] (fratello|padre|pap[aoà]|marito|figlio|nonno|zio|cugino|cognato|genero|fidanzato)""")
+_GF_LABEL = {"F": "femminile - usa aggettivi/pronomi al femminile", "M": "maschile - usa aggettivi/pronomi al maschile"}
+_GF_STOP = {"quattro","cinque","sei","tre","due","anni","mesi","giorni","fa","scorso","volta","molto","poco","ogni","stato","stata"}
+
+
+def _build_gender_map_from_facts(facts: list) -> list:
+    seen = set()
+    result = []
+    for fact in facts:
+        text = fact.get("text", "")
+        for pat, g in ((_GF_F, "F"), (_GF_M, "M")):
+            for m in pat.finditer(text):
+                rel, name = m.group(1).lower(), m.group(2)
+                if not name[0].isupper() or name.lower() in _GF_STOP:
+                    continue
+                key = name + g
+                if key in seen:
+                    continue
+                seen.add(key)
+                result.append(rel + " " + name + ": " + _GF_LABEL[g])
+        for pat, g in ((_GFN_F, "F"), (_GFN_M, "M")):
+            for m in pat.finditer(text):
+                rel = m.group(1).lower()
+                key = rel + g
+                if key in seen:
+                    continue
+                seen.add(key)
+                result.append(rel + " dell'utente: " + _GF_LABEL[g])
+    return result
+
 
 class ContextAssembler:
     """
@@ -27,14 +66,18 @@ class ContextAssembler:
         self.memory_brain = memory_brain
         self.latent_state_engine = latent_state_engine
 
-    async def build(self, user_id: str, user_message: str) -> Dict[str, Any]:
+    async def build(self, user_id: str, user_message: str, platform: str = "") -> Dict[str, Any]:
         """
         Costruisce contesto completo per LLM.
         NON chiama update_brain — quello e' gia' fatto dal proactor.
 
+        platform="widget" → esclude storico conversazioni personali (past_conversations,
+        emotional_trend) per evitare contaminazione di nomi da altre piattaforme (Telegram ecc.)
+
         Returns:
             dict con: summary, long_term_profile, relational_state, recent_episodes, memory_v2, current_message
         """
+        is_widget = (platform == "widget")
         import asyncio
         
         # Load from persistent storage - use asyncio.run for sync wrapper
@@ -44,7 +87,7 @@ class ContextAssembler:
             # For now, use direct storage access for compatibility
             profile = storage._storage.get(f"profile:{user_id}", {})
             relational_state = storage._storage.get(f"relational_state:{user_id}", {})
-            recent_episodes = storage._storage.get(f"episodes/{user_id}", [])
+            recent_episodes = storage._storage.get(f"episodes:{user_id}", [])
             # For latent_state, create a new event loop
             try:
                 import concurrent.futures
@@ -58,7 +101,7 @@ class ContextAssembler:
             # No event loop, safe to use asyncio.run
             profile = asyncio.run(storage.load(f"profile:{user_id}", default={}))
             relational_state = asyncio.run(storage.load(f"relational_state:{user_id}", default={}))
-            recent_episodes = asyncio.run(storage.load(f"episodes/{user_id}", default=[]))
+            recent_episodes = asyncio.run(storage.load(f"episodes:{user_id}", default=[]))
             latent_state = asyncio.run(self.latent_state_engine.load(user_id))
 
         logger.info("CONTEXT_ASSEMBLER_LOADED user=%s", user_id)
@@ -127,6 +170,153 @@ class ContextAssembler:
 
         if not summary or not summary.strip():
             summary = "No relevant memory found."
+
+        # Global cross-conversation insights (fail-silent)
+        try:
+            from core.global_memory_service import global_memory_service
+            insights = await global_memory_service.get_insights(user_id)
+            if insights:
+                insights_block = "\n".join(f"• {i}" for i in insights)
+                context["global_insights"] = insights_block
+                summary += f"\n[PATTERN OSSERVATI NEL TEMPO]\n{insights_block}"
+        except Exception:
+            pass
+
+        # Episodic memory: eventi personali specifici (fail-silent)
+        try:
+            from core.episode_memory import episode_memory as _em
+            # Passa current_emotion per mood-congruent retrieval
+            _current_emotion = context.get("current_emotion", None)
+            relevant_episodes = await _em.get_relevant(user_id, user_message, limit=3,
+                                                       current_emotion=_current_emotion)
+            if relevant_episodes:
+                ep_lines = []
+                for ep in relevant_episodes:
+                    line = f"• {ep['text']}"
+                    if ep.get('event_date'):
+                        line += f" ({ep['event_date']})"
+                    # Evento futuro con data passata → suggerisci follow-up
+                    if ep.get('is_future') and ep.get('event_date'):
+                        try:
+                            from datetime import date as _date
+                            if _date.fromisoformat(ep['event_date']) <= _date.today():
+                                line += " [puoi chiedere com'è andata]"
+                        except Exception:
+                            pass
+                    ep_lines.append(line)
+                episodes_block = "\n".join(ep_lines)
+                context["personal_episodes"] = episodes_block
+                summary += f"\n[EPISODI PERSONALI RICORDATI]\n{episodes_block}"
+                # Marca episodi usati in background
+                import asyncio as _aio_ep
+                for ep in relevant_episodes:
+                    _aio_ep.create_task(_em.mark_used(user_id, ep['id']))
+        except Exception as _ep_exc:
+            logging.getLogger(__name__).warning("EPISODE_CONTEXT_ERROR user=%s err=%s", user_id, _ep_exc)
+
+        # Personal facts: fatti appresi dalla conversazione (abitudini, preferenze, familiari...)
+        try:
+            from core.personal_facts_service import personal_facts_service as _pfs
+            relevant_pf = await _pfs.get_relevant(user_id, user_message, limit=8)
+            if not relevant_pf:
+                # Fallback: inject most recent 5 facts regardless of topic match
+                all_pf = await _pfs.get_all(user_id)
+                relevant_pf = sorted(all_pf, key=lambda f: f.get("saved_at", ""), reverse=True)[:5]
+            if relevant_pf:
+                pf_lines = [f"• {pf['text']}" for pf in relevant_pf]
+                pf_block = "\n".join(pf_lines)
+                context["personal_facts"] = pf_block
+                summary += f"\n[FATTI PERSONALI APPRESI]\n{pf_block}"
+                try:
+                    _gmap = _build_gender_map_from_facts(relevant_pf)
+                    if _gmap:
+                        _gh = chr(10) + "[GENERE PERSONE MENZIONATE (usa accordo grammaticale corretto)]" + chr(10)
+                        summary += _gh + chr(10).join("  " + e for e in _gmap)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Past conversation summaries: cosa è stato discusso nelle sessioni precedenti (fail-silent)
+        # WIDGET: escluso — lo storico può contenere nomi da Telegram/WhatsApp e altri canali personali
+        if not is_widget:
+            try:
+                from core.conversation_summary_service import conv_summary_service
+                past_block = await conv_summary_service.get_context_block(user_id)
+                if past_block:
+                    context["past_conversations"] = past_block
+                    summary += f"\n[CONVERSAZIONI PRECEDENTI]\n{past_block}"
+            except Exception:
+                pass
+
+        # Emotional history: andamento emotivo recente (fail-silent)
+        # WIDGET: escluso — il trend può essere influenzato da conversazioni di gruppo con altri utenti
+        if not is_widget:
+            try:
+                from core.emotional_memory import get_emotion_trend_summary as _get_trend
+                trend = await _get_trend(user_id)
+                if trend:
+                    context["emotional_trend"] = trend
+                    summary += f"\n[ANDAMENTO EMOTIVO RECENTE]\n{trend}"
+            except Exception:
+                pass
+
+        # Behavioral memory: stile interazione appreso (fail-silent)
+        try:
+            from core.behavioral_memory import behavioral_memory as _bm
+            beh_snippet = _bm.get_context_snippet(user_id)
+            if beh_snippet:
+                context["behavioral_style"] = beh_snippet
+                summary += f"\n[STILE INTERAZIONE APPRESO]\n{beh_snippet}"
+        except Exception:
+            pass
+
+        # Predictive hint: tendenza prossimo turno (fail-silent, shadow phase per primi 12 turni)
+        # Soppresso per telegram_group: il predictive è basato su chat personali e
+        # inietta argomenti stantii (es. "Leo ha la febbre") in risposte di gruppo non correlate.
+        if platform != "telegram_group":
+            try:
+                from core.predictive_engine import predictive_engine as _pe
+                pred_hint = await _pe.get_context_hint(user_id)
+                if pred_hint:
+                    context["predictive_hint"] = pred_hint
+                    summary += f"\n{pred_hint}"
+            except Exception:
+                pass
+
+        # Few-shot lessons from training engine (fail-silent)
+        try:
+            from core.training_engine import training_engine as _te
+            lessons_block = await _te.get_context_lessons(user_message)
+            if lessons_block:
+                context["training_lessons"] = lessons_block
+                summary += f"\n{lessons_block}"
+        except Exception:
+            pass
+
+        # Famiglia dal gruppo Telegram: iniettato nel contesto privato del proprietario (fail-silent)
+        try:
+            from core.telegram_group_memory import get_family_context_block
+            family_block = await get_family_context_block(user_id)
+            if family_block:
+                context["family_group"] = family_block
+                summary += f"\n{family_block}"
+        except Exception:
+            pass
+
+        # Giorni speciali italiani: iniezione fail-silent (presente in tutti i route)
+        try:
+            from datetime import datetime as _dt
+            from zoneinfo import ZoneInfo as _ZI
+            from core.tool_services import get_italian_day_events as _gide
+            _now = _dt.now(tz=_ZI("Europe/Rome"))
+            _events = _gide(_now)
+            if _events:
+                _label = ", ".join(_events)
+                context["special_day"] = _label
+                summary += f"\n[GIORNO SPECIALE] Oggi è {_label}."
+        except Exception:
+            pass
 
         context["summary"] = summary
         context["current_message"] = user_message
@@ -224,7 +414,8 @@ def detect_topic(message: str, history: List[Dict] = None) -> str:
 
 
 def build_conversation_context(user_id: str, current_message: str,
-                                profile: Dict[str, Any]) -> str:
+                                profile: Dict[str, Any], conversation_id: str = None,
+                                assembled_summary: str = None) -> str:
     """
     Builds structured conversation context for LLM:
     A) Last 15 messages (user/assistant alternating)
@@ -234,33 +425,63 @@ def build_conversation_context(user_id: str, current_message: str,
     sections = []
 
     # --- A) Chat history thread ---
-    history = chat_memory.get_messages(user_id, limit=15)
-    if history:
-        thread_lines = []
-        for entry in history:
-            user_msg = entry.get("user_message", "")
-            sys_resp = entry.get("system_response", "")
-            if user_msg:
-                thread_lines.append(f"Utente: {user_msg}")
-            if sys_resp:
-                thread_lines.append(f"Genesi: {sys_resp}")
-        if thread_lines:
-            sections.append("CONVERSAZIONE RECENTE:\n" + "\n".join(thread_lines))
+    thread_lines = []
+    history = []
+    
+    if conversation_id:
+        try:
+            from api.conversations import _load_conv
+            conv = _load_conv(user_id, conversation_id)
+            if conv and "messages" in conv:
+                msgs = conv["messages"][-15:]
+                for m in msgs:
+                    if m.get("role") == "user":
+                        thread_lines.append(f"Utente: {m.get('content', '')}")
+                        history.append({"user_message": m.get('content', '')})
+                    elif m.get("role") in ("assistant", "genesi", "system", "model"):
+                        thread_lines.append(f"Genesi: {m.get('content', '')}")
+                        if history:
+                            history[-1]["system_response"] = m.get('content', '')
+        except Exception as e:
+            logger.error(f"Error loading conversation {conversation_id}: {e}")
+
+    # Fallback and topic detection history
+    if not thread_lines:
+        history = chat_memory.get_messages(user_id, limit=15)
+        if history:
+            for entry in history:
+                user_msg = entry.get("user_message", "")
+                sys_resp = entry.get("system_response", "")
+                if user_msg:
+                    thread_lines.append(f"Utente: {user_msg}")
+                if sys_resp:
+                    thread_lines.append(f"Genesi: {sys_resp}")
+                    
+    if thread_lines:
+        sections.append("CONVERSAZIONE RECENTE:\n" + "\n".join(thread_lines))
 
     # --- B) Stable identity summary ---
-    assembler = ContextAssembler(None, None)
-    profile_summary = assembler._summarize_profile(profile)
-    if profile_summary:
-        sections.append("INFORMAZIONI STABILI SULL'UTENTE:\n" + profile_summary)
+    if assembled_summary:
+        sections.append("MEMORIA E PROFILO DELL'UTENTE:\n" + assembled_summary)
+    else:
+        assembler = ContextAssembler(None, None)
+        profile_summary = assembler._summarize_profile(profile)
+        if profile_summary:
+            sections.append("INFORMAZIONI STABILI SULL'UTENTE:\n" + profile_summary)
 
     # --- C) Topic detection ---
     topic = detect_topic(current_message, history)
     sections.append(f"TEMA CORRENTE DELLA CONVERSAZIONE: {topic}")
 
-    # --- D) Narrative continuity: link last 2 user messages if related ---
-    continuity = _detect_narrative_continuity(current_message, history)
-    if continuity:
-        sections.append(continuity)
+    # --- D) Collegamento Neurale: se è una continuazione esplicita, inietta FILO DIRETTO ---
+    neural_link = _detect_continuation(current_message, history)
+    if neural_link:
+        sections.append(neural_link)
+    else:
+        # --- D2) Narrative continuity: link last 2 user messages if related ---
+        continuity = _detect_narrative_continuity(current_message, history)
+        if continuity:
+            sections.append(continuity)
 
     # --- E) Active document context ---
     doc_section = _inject_document_context(user_id, current_message, profile)
@@ -268,6 +489,61 @@ def build_conversation_context(user_id: str, current_message: str,
         sections.append(doc_section)
 
     return "\n\n".join(sections)
+
+
+# ═══════════════════════════════════════════════════════════════
+# COLLEGAMENTO NEURALE — rileva continuazione esplicita e inietta
+# l'ultima risposta come FILO DIRETTO nel contesto LLM
+# ═══════════════════════════════════════════════════════════════
+
+import re as _re_cont
+
+# Messaggi che sono esplicitamente una richiesta di continuazione
+_CONTINUATION_PATTERNS = _re_cont.compile(
+    r"^(continua\.?|puoi approfondire\??|approfondisci\.?|spiega(mi)? meglio\.?|"
+    r"dimmi di più\.?|e (poi|quindi|allora)\??|come arrivi a (questa |questa )?conclusione\??|"
+    r"perché\??|e come\??|e quindi\??|ma quindi\??|e poi\??|interessante\.?\s*(puoi)?\s*(approfondire|continuare|spiegare)?\??|"
+    r"non (mi è|è) chiaro\.?|puoi chiarire\??|chiariscimi\.?|spiegami\.?|"
+    r"sì,?\s*(ma)?\s*(come|perché|cosa intendi)\??|va bene,?\s*ma\s*(quindi|poi)\??|"
+    r"mi stai dicendo che\??|quindi stai dicendo\??|in che senso\??|"
+    r"questo mi fa pensare\.?\s*(continua\.?)?)$",
+    _re_cont.IGNORECASE
+)
+
+
+def _detect_continuation(current_message: str, history: List[Dict]) -> str:
+    """
+    Se il messaggio è una continuazione esplicita, inietta l'ultima risposta
+    di Genesi come FILO DIRETTO — istruisce l'LLM a non perdere il filo.
+    """
+    if not _CONTINUATION_PATTERNS.match(current_message.strip()):
+        return ""
+    if not history:
+        return ""
+
+    # Cerca l'ultima risposta di Genesi
+    last_genesi = ""
+    for entry in reversed(history):
+        resp = entry.get("system_response", "")
+        if resp and len(resp) > 20:
+            last_genesi = resp
+            break
+
+    if not last_genesi:
+        return ""
+
+    # Tronca se troppo lunga
+    preview = last_genesi[:400] + ("..." if len(last_genesi) > 400 else "")
+
+    return (
+        f"COLLEGAMENTO NEURALE — FILO DIRETTO OBBLIGATORIO:\n"
+        f"Stavi dicendo: \"{preview}\"\n"
+        f"L'utente dice: \"{current_message}\"\n"
+        f"DEVI continuare ESATTAMENTE da dove ti eri fermata — stessa conversazione, stesso argomento, stessa profondità.\n"
+        f"NON ricominciare da capo. NON cambiare tema. NON rispondere con frasi generiche.\n"
+        f"Se l'utente dice 'continua' → sviluppa il punto precedente ulteriormente.\n"
+        f"Se chiede 'perché/come' → spiega il ragionamento che ha portato a quella risposta."
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -354,7 +630,7 @@ def is_document_reference(message: str) -> bool:
     return any(trigger in msg_lower for trigger in _DOCUMENT_TRIGGERS)
 
 
-def _format_doc_block(doc: Dict[str, Any]) -> str:
+def _format_doc_block(doc: Dict[str, Any], is_most_recent: bool = False) -> str:
     """Format a single document as a [DOCUMENT_CONTEXT] block (max 2000 chars content)."""
     raw_content = doc.get("content", "")
     summary = doc.get("summary", "")
@@ -367,7 +643,8 @@ def _format_doc_block(doc: Dict[str, Any]) -> str:
     else:
         content_section = raw_content
 
-    return (f"[DOCUMENT_CONTEXT]\n"
+    recency_tag = " (PIÙ RECENTE)" if is_most_recent else ""
+    return (f"[DOCUMENT_CONTEXT{recency_tag}]\n"
             f"filename: {doc.get('filename', '?')}\n"
             f"type: {doc.get('type', '?')}\n"
             f"content:\n<<<\n{content_section}\n>>>\n"
@@ -391,31 +668,35 @@ def _inject_document_context(user_id: str, message: str,
     if not active_docs:
         return ""
 
-    if not is_document_reference(message):
-        return ""
+    # I più recenti sono in fondo — invertiamo per dargli priorità nel selector
+    active_docs_recent_first = list(reversed(active_docs))
 
     # Use document selector to pick relevant docs
-    selected = resolve_documents(message, user_id, active_docs)
+    selected = resolve_documents(message, user_id, active_docs_recent_first)
     if not selected:
         return ""
 
-    # Build context blocks
+    # Il primo nella lista è il più recente (dopo il reverse)
+    most_recent_id = active_docs_recent_first[0] if active_docs_recent_first else None
+
+    # Build context blocks — più recente per primo
     blocks = []
-    for doc in selected:
-        blocks.append(_format_doc_block(doc))
-        logger.info("DOCUMENT_CONTEXT_INJECTED doc_id=%s type=%s",
-                    doc.get("doc_id"), doc.get("type"))
+    for i, doc in enumerate(selected):
+        is_most_recent = (doc.get("doc_id") == most_recent_id)
+        blocks.append(_format_doc_block(doc, is_most_recent=is_most_recent))
+        logger.info("DOCUMENT_CONTEXT_INJECTED doc_id=%s type=%s recent=%s",
+                    doc.get("doc_id"), doc.get("type"), is_most_recent)
+        _structured_log("DOCUMENT_CONTEXT_INJECTED", doc_id=doc.get("doc_id"),
+                        doc_type=doc.get("type"), most_recent=is_most_recent)
 
     doc_count = len(selected)
     instruction = (
-        f"ISTRUZIONE: L'utente si riferisce a {'questi documenti' if doc_count > 1 else 'questo documento'}. "
-        f"Rispondi usando il contenuto {'dei documenti' if doc_count > 1 else 'del documento'} sopra. "
+        f"ISTRUZIONE: L'utente si riferisce a {'questi file' if doc_count > 1 else 'questo file'}. "
+        f"Rispondi usando il contenuto {'dei file' if doc_count > 1 else 'del file'} sopra. "
         f"NON dire che non hai accesso al file. HAI il contenuto. "
-        f"NON rispondere con frasi generiche. USA i dati {'dei documenti' if doc_count > 1 else 'del documento'}."
+        f"NON rispondere con frasi generiche. USA i dati {'dei file' if doc_count > 1 else 'del file'}. "
+        f"Il file contrassegnato come (PIÙ RECENTE) è quello caricato per ultimo — dagli priorità se l'utente non specifica quale. "
+        f"Se l'utente chiede di confrontare più file o immagini, usa tutti quelli disponibili qui sopra."
     )
-    if doc_count > 1:
-        instruction += (
-            " Se l'utente chiede un confronto, analizza le differenze e similitudini tra i documenti."
-        )
 
     return "\n\n".join(blocks) + "\n\n" + instruction

@@ -17,7 +17,18 @@ from auth.models import AuthUser
 router = APIRouter(prefix="/stt")
 logger = logging.getLogger(__name__)
 
-_client = AsyncOpenAI()
+# Client inizializzato pigramente per evitare crash all'avvio se manca la chiave
+_client_instance = None
+
+def get_stt_client():
+    global _client_instance
+    if _client_instance is None:
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            logger.warning("STT_INIT_WARNING: OPENAI_API_KEY non trovata. Il servizio STT non funzionerà.")
+            return None
+        _client_instance = AsyncOpenAI(api_key=api_key)
+    return _client_instance
 
 # Estensioni supportate da OpenAI Whisper API
 _SUPPORTED_EXTENSIONS = {
@@ -61,8 +72,12 @@ async def transcribe_audio(audio_data: bytes, content_type: str, filename: str =
             tmp_path = tmp.name
 
         # Call OpenAI Whisper API
+        client = get_stt_client()
+        if not client:
+            return {"text": "", "stt_status": "error", "error": "OPENAI_API_KEY non configurata"}
+            
         with open(tmp_path, "rb") as audio_file:
-            transcript = await _client.audio.transcriptions.create(
+            transcript = await client.audio.transcriptions.create(
                 model="whisper-1",
                 file=audio_file,
                 language="it",

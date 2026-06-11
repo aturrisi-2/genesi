@@ -188,9 +188,9 @@ class DriftModulator:
 
     def _apply_warmth(self, text: str, warmth: float) -> str:
         """Aggiunge chiusura calda con probabilita' proporzionale a warmth."""
-        # Probability of adding warm suffix scales with warmth
-        p = _sigmoid(warmth, center=0.55, steepness=8.0) * 0.35
-        if random.random() > p:
+        # Probability scales with warmth: 0.3 at low warmth → 0.65 at high warmth
+        p = min(0.65, 0.30 + warmth * 0.35)
+        if random.random() >= p:
             return text
 
         # Don't add if text already ends with a warm phrase
@@ -206,12 +206,12 @@ class DriftModulator:
                 return text
 
         # Select suffix weighted by warmth level
-        if warmth > 0.7:
-            suffixes = [" Sono qui con te.", " Ci sono, sempre.", " Non sei solo."]
-        elif warmth > 0.5:
-            suffixes = [" Sono qui.", " Ci sono.", " Ti ascolto."]
+        if warmth > 0.8:
+            suffixes = [" Dimmi pure.", " Ti seguo.", ""]
+        elif warmth > 0.6:
+            suffixes = ["", " Dimmi."]
         else:
-            suffixes = [" Dimmi.", " Continua."]
+            suffixes = [""]
 
         suffix = random.choice(suffixes)
         # Avoid repetition: don't add if last word of text matches first word of suffix
@@ -229,7 +229,7 @@ class DriftModulator:
 
         if expansiveness > 0.6 and len(sentences) == 1 and len(text) < 60:
             # Probabilistic expansion
-            p = _sigmoid(expansiveness, center=0.6, steepness=8.0) * 0.30
+            p = 0.3
             if random.random() < p:
                 bridges = [
                     "Raccontami di piu'.",
@@ -255,10 +255,10 @@ class DriftModulator:
                               groundedness: float) -> str:
         """Aggiunge qualita' riflessiva/evocativa."""
         # Only trigger with meaningful probability at high evocativeness + low groundedness
-        p = _sigmoid(evocativeness, center=0.6, steepness=8.0) * \
-            (1.0 - _sigmoid(groundedness, center=0.6, steepness=6.0)) * 0.20
+        # Disabilitato (0.0) per evitare monologhi fissi artefatti 
+        p = 0.0
 
-        if random.random() > p:
+        if random.random() >= p:
             return text
 
         # Reflective insertions — context-free, universally applicable
@@ -291,8 +291,6 @@ class DriftModulator:
         # Probabilistic word-level substitutions
         # Each substitution has its own probability scaled by temp
         substitutions = [
-            ("sono qui", ["ci sono", "sono presente", "sono qui"]),
-            ("ti ascolto", ["ti sento", "ti ascolto", "sono in ascolto"]),
             ("raccontami", ["dimmi", "parlami", "raccontami"]),
             ("capisco", ["comprendo", "sento", "capisco"]),
             ("dimmi", ["parlami", "raccontami", "dimmi"]),

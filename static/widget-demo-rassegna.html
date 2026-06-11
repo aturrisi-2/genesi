@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rassegna Stampa — C-Place</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f4f4; color: #222; font-size: 14px; }
+    a { text-decoration: none; color: inherit; }
+    .topbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; height:56px; gap:16px; position:sticky; top:0; z-index:100; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+    .logo { display:flex; align-items:center; gap:6px; font-size:22px; font-weight:800; letter-spacing:-1px; color:#222; }
+    .logo-c { background:#c41230; color:#fff; width:32px; height:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900; }
+    .topbar-actions { margin-left:auto; display:flex; align-items:center; gap:18px; }
+    .avatar { width:32px; height:32px; border-radius:50%; background:#c41230; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+    .navbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; gap:2px; height:40px; }
+    .navbar a { padding:0 12px; height:40px; display:flex; align-items:center; font-size:12.5px; font-weight:600; color:#444; border-bottom:2px solid transparent; white-space:nowrap; }
+    .navbar a:hover, .navbar a.active { color:#c41230; border-bottom-color:#c41230; }
+    .breadcrumb { background:#fff; border-bottom:1px solid #eee; padding:8px 20px; font-size:12px; color:#888; }
+    .breadcrumb a { color:#c41230; }
+    .breadcrumb span { margin:0 6px; }
+    .page { max-width:1100px; margin:24px auto; padding:0 16px; display:flex; flex-direction:column; gap:24px; }
+    .sec-title { font-size:16px; font-weight:700; color:#c41230; padding-bottom:10px; border-bottom:2px solid #c41230; margin-bottom:16px; }
+    .card { background:#fff; border-radius:6px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+    .grid-2 { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+    table { width:100%; border-collapse:collapse; }
+    thead th { background:#c41230; color:#fff; padding:11px 14px; text-align:left; font-size:13px; font-weight:600; }
+    tbody tr:nth-child(even) { background:#fafafa; }
+    tbody tr:hover { background:#fff3f3; }
+    td { padding:10px 14px; border-bottom:1px solid #f0f0f0; font-size:13px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:600; }
+    .badge-red { background:#fce4e4; color:#c41230; }
+    .badge-green { background:#e8f5e9; color:#2e7d32; }
+    .badge-blue { background:#e3f2fd; color:#1565c0; }
+    .badge-yellow { background:#fff8e1; color:#e65100; }
+    .badge-purple { background:#ede7f6; color:#4527a0; }
+    .badge-teal { background:#e0f2f1; color:#00695c; }
+    footer { background:#c41230; color:#fff; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; margin-top:32px; }
+    .footer-btn { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.4); color:#fff; padding:8px 16px; border-radius:4px; font-size:12px; cursor:pointer; text-decoration:none; display:inline-block; }
+    .link-red { color:#c41230; font-weight:600; }
+
+    .article-item { border-bottom:1px solid #f0f0f0; padding:18px 0; }
+    .article-item:last-child { border-bottom:none; padding-bottom:0; }
+    .article-header { display:flex; align-items:flex-start; gap:14px; margin-bottom:8px; }
+    .article-source { background:#222; color:#fff; border-radius:4px; padding:3px 8px; font-size:11px; font-weight:700; white-space:nowrap; flex-shrink:0; }
+    .article-title { font-size:15px; font-weight:700; color:#222; line-height:1.4; flex:1; }
+    .article-title:hover { color:#c41230; cursor:pointer; }
+    .article-meta { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+    .article-date { font-size:11.5px; color:#888; }
+    .article-excerpt { font-size:13px; color:#555; line-height:1.6; }
+
+    .doc-item { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid #f2f2f2; }
+    .doc-item:last-child { border-bottom:none; }
+    .doc-icon { width:38px; height:38px; background:#fce4e4; border-radius:6px; display:flex; align-items:center; justify-content:center; color:#c41230; font-size:18px; flex-shrink:0; }
+    .doc-info { flex:1; }
+    .doc-name { font-weight:600; font-size:13px; }
+    .doc-meta { font-size:11.5px; color:#888; margin-top:2px; }
+
+    .contact-card { display:flex; align-items:center; gap:16px; background:#f9f9f9; border-radius:8px; padding:16px 18px; }
+    .contact-avatar { width:52px; height:52px; border-radius:50%; background:#c41230; color:#fff; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:700; flex-shrink:0; }
+    .contact-name { font-size:15px; font-weight:700; margin-bottom:4px; }
+    .contact-role { font-size:12.5px; color:#888; margin-bottom:8px; }
+    .contact-info { display:flex; flex-direction:column; gap:3px; }
+    .contact-row { font-size:13px; color:#555; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/widget-demo" class="logo"><div class="logo-c">C</div>Place</a>
+  <div class="topbar-actions"><div class="avatar">AT</div></div>
+</div>
+<div class="navbar">
+  <a href="/widget-demo">ULTIME NEWS ▾</a>
+  <a href="#">AZIENDA ▾</a>
+  <a href="#" class="active">AREE ▾</a>
+  <a href="/widget-demo-attivita">ATTIVITÀ E TEMPO LIBERO ▾</a>
+  <a href="#">AZIONI VELOCI ▾</a>
+  <a href="/widget-demo-rubrica">RUBRICA ▾</a>
+  <a href="#">BU ▾</a>
+</div>
+
+<div class="breadcrumb">
+  <a href="/widget-demo">Home</a><span>›</span>
+  <a href="#">Comunicazione</a><span>›</span>
+  Rassegna Stampa
+</div>
+
+<div class="page">
+
+  <!-- ULTIME USCITE STAMPA -->
+  <div class="card">
+    <div class="sec-title">Ultime uscite stampa — Marzo 2026</div>
+
+    <div class="article-item">
+      <div class="article-header">
+        <div class="article-source" style="background:#c41230;">IL SOLE 24 ORE</div>
+        <div class="article-title">Cefla punta sull'automazione industriale nel 2026: investimenti per 40 milioni</div>
+      </div>
+      <div class="article-meta">
+        <span class="article-date">18 marzo 2026</span>
+        <span class="badge badge-blue">Innovazione</span>
+      </div>
+      <div class="article-excerpt">Il gruppo cooperativo imolese annuncia un piano di investimenti in automazione e robotica industriale da 40 milioni di euro per il biennio 2026-2027. Il progetto SMART-LINE rappresenta il pilastro della strategia di trasformazione digitale della Business Unit Engineering, con l'obiettivo di aumentare la produttività del 30% entro fine anno.</div>
+    </div>
+
+    <div class="article-item">
+      <div class="article-header">
+        <div class="article-source" style="background:#1a237e;">IL RESTO DEL CARLINO</div>
+        <div class="article-title">Cefla: 200 nuove assunzioni previste entro l'estate, forte segnale per il territorio</div>
+      </div>
+      <div class="article-meta">
+        <span class="article-date">12 marzo 2026</span>
+        <span class="badge badge-green">HR</span>
+      </div>
+      <div class="article-excerpt">Il colosso cooperativo di Imola si conferma tra i maggiori datori di lavoro della Romagna. Il piano assunzioni 2026 prevede 200 nuovi ingressi nei settori Engineering, IT e Healthcare. La direttrice People &amp; Organization, Chiara Lambertini, sottolinea l'impegno verso i giovani laureati e i profili tecnici specializzati.</div>
+    </div>
+
+    <div class="article-item">
+      <div class="article-header">
+        <div class="article-source" style="background:#2e7d32;">CORRIERE DI BOLOGNA</div>
+        <div class="article-title">Premio innovazione per il progetto SMART-LINE di Cefla alla fiera di Hannover</div>
+      </div>
+      <div class="article-meta">
+        <span class="article-date">8 marzo 2026</span>
+        <span class="badge badge-blue">Innovazione</span>
+      </div>
+      <div class="article-excerpt">Il progetto SMART-LINE sviluppato dalla BU Engineering ha ricevuto il riconoscimento "Best Innovation Award" alla fiera internazionale di Hannover. Il sistema integra intelligenza artificiale e robotica collaborativa per l'ottimizzazione delle linee di produzione industriale, distinguendosi tra oltre 300 candidature europee.</div>
+    </div>
+
+    <div class="article-item">
+      <div class="article-header">
+        <div class="article-source" style="background:#b71c1c;">REPUBBLICA BOLOGNA</div>
+        <div class="article-title">Cefla rafforza la divisione healthcare: nuova partnership con Ospedale Sant'Orsola</div>
+      </div>
+      <div class="article-meta">
+        <span class="article-date">4 marzo 2026</span>
+        <span class="badge badge-teal">Healthcare</span>
+      </div>
+      <div class="article-excerpt">La Business Unit Healthcare di Cefla annuncia una partnership strategica con il Policlinico Sant'Orsola di Bologna per lo sviluppo di soluzioni tecnologiche per la diagnostica ospedaliera. L'accordo quinquennale include fornitura di attrezzature, formazione del personale sanitario e supporto tecnico continuativo.</div>
+    </div>
+
+    <div class="article-item">
+      <div class="article-header">
+        <div class="article-source" style="background:#37474f;">FORBES ITALIA</div>
+        <div class="article-title">Le 50 aziende italiane più innovative del 2026: Cefla entra nella classifica al 12° posto</div>
+      </div>
+      <div class="article-meta">
+        <span class="article-date">1 marzo 2026</span>
+        <span class="badge badge-purple">Premio</span>
+      </div>
+      <div class="article-excerpt">Forbes Italia ha pubblicato la classifica annuale delle aziende italiane più innovative. Cefla entra per la prima volta in top 15, classificandosi al 12° posto grazie agli investimenti in R&amp;D, alla strategia di sostenibilità cooperativa e ai risultati della divisione Engineering nel mercato globale dell'automazione industriale.</div>
+    </div>
+
+    <div class="article-item">
+      <div class="article-header">
+        <div class="article-source" style="background:#4a148c;">IL MESSAGGERO</div>
+        <div class="article-title">Dental division: Cefla apre nuovi mercati in Asia con accordo distributivo Giappone-Corea</div>
+      </div>
+      <div class="article-meta">
+        <span class="article-date">25 febbraio 2026</span>
+        <span class="badge badge-yellow">Dental</span>
+      </div>
+      <div class="article-excerpt">La divisione Dental di Cefla firma due accordi distributivi con partner locali in Giappone e Corea del Sud per la commercializzazione delle unità dentali di nuova generazione. Il direttore Fabio Castellucci stima un incremento del fatturato Asia-Pacifico del 25% entro il 2027, consolidando la presenza internazionale del gruppo.</div>
+    </div>
+  </div>
+
+  <!-- COMUNICATI STAMPA UFFICIALI -->
+  <div class="card">
+    <div class="sec-title">Comunicati stampa ufficiali</div>
+    <div class="doc-item">
+      <div class="doc-icon">📄</div>
+      <div class="doc-info">
+        <div class="doc-name">Comunicato stampa — Piano investimenti automazione 2026-2027</div>
+        <div class="doc-meta">PDF — 18/03/2026 — Ufficio stampa Cefla S.C.</div>
+      </div>
+      <span class="badge badge-green">Scarica</span>
+    </div>
+    <div class="doc-item">
+      <div class="doc-icon">📄</div>
+      <div class="doc-info">
+        <div class="doc-name">Comunicato stampa — Partnership Cefla Healthcare / Sant'Orsola</div>
+        <div class="doc-meta">PDF — 04/03/2026 — Ufficio stampa Cefla S.C.</div>
+      </div>
+      <span class="badge badge-green">Scarica</span>
+    </div>
+    <div class="doc-item">
+      <div class="doc-icon">📄</div>
+      <div class="doc-info">
+        <div class="doc-name">Comunicato stampa — Accordi distributivi Asia-Pacifico BU Dental</div>
+        <div class="doc-meta">PDF — 25/02/2026 — Ufficio stampa Cefla S.C.</div>
+      </div>
+      <span class="badge badge-green">Scarica</span>
+    </div>
+  </div>
+
+  <!-- CONTATTO UFFICIO STAMPA -->
+  <div class="card">
+    <div class="sec-title">Contatto ufficio stampa</div>
+    <div class="contact-card">
+      <div class="contact-avatar">ET</div>
+      <div>
+        <div class="contact-name">Elena Tosi</div>
+        <div class="contact-role">Responsabile Marketing &amp; Comunicazione — Ufficio Stampa</div>
+        <div class="contact-info">
+          <div class="contact-row">📧 <a href="mailto:ufficiostampa@cefla.it" class="link-red">ufficiostampa@cefla.it</a></div>
+          <div class="contact-row">📞 int. 2050 &nbsp;|&nbsp; +39 0542 653111 (esterno)</div>
+          <div class="contact-row" style="color:#888; font-size:12px; margin-top:4px;">Per richieste stampa, interviste e accrediti media. Risposta garantita entro 24 ore lavorative.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <a href="/widget-demo" class="footer-btn">← Torna alla Home</a>
+  <span style="font-size:12px; opacity:.8;">C-Place © 2026 — Cefla S.C. — Tutti i diritti riservati</span>
+</footer>
+
+<script src="/widget.js"
+  data-api-url=""
+  data-api-key="demo_cplace_2026"
+  data-name="Assistente C-Place"
+  data-color="#c41230"
+  data-welcome="Sei nella sezione Rassegna Stampa. Posso aiutarti a trovare articoli recenti su Cefla, comunicati stampa e uscite sui media. Come posso aiutarti?"
+  data-placeholder="Come posso aiutarti?"
+  data-page-context="true">
+</script>
+</body>
+</html>

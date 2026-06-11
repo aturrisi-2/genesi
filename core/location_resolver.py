@@ -91,17 +91,20 @@ _PREP_PATTERN_CI = re.compile(
     re.UNICODE
 )
 
+# Case-insensitive: capture until a stop word or end of string
+_TIME_STOP_WORDS = r"(?:oggi|domani|stasera|pomeriggio|mattina|ora|adesso|lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica|settimana)"
+
 _DIRECT_PATTERN_CI = re.compile(
-    r"(?:meteo|tempo|previsioni|notizie|news|clima)\s+(?:a|di|per|in|da|su)?\s*"
-    rf"({_CI_WORD}(?:\s+{_CI_WORD})*)",
-    re.UNICODE
+    r"(?:meteo|tempo|previsioni|notizie|news|clima)\s+(?:a|di|per|in|da|su|farà)?\s*"
+    rf"((?:(?!{_TIME_STOP_WORDS}|fa\b|fuori\b){_CI_WORD}(?:\s+(?!{_TIME_STOP_WORDS}|fa\b|fuori\b){_CI_WORD})*))",
+    re.UNICODE | re.IGNORECASE
 )
 
 _TRAILING_PATTERN_CI = re.compile(
     r"(?:che\s+(?:tempo|meteo)\s+fa|com'è\s+il\s+(?:tempo|meteo)|piove|nevica|fa\s+(?:caldo|freddo))"
-    rf"\s+(?:a|ad|in|di|da|su|per)\s+"
-    rf"({_CI_WORD}(?:\s+{_CI_WORD})*)",
-    re.UNICODE
+    rf"\s+(?:a|ad|in|di|da|su|per)?\s*"
+    rf"((?:(?!{_TIME_STOP_WORDS}|fa\b|fuori\b){_CI_WORD}(?:\s+(?!{_TIME_STOP_WORDS}|fa\b|fuori\b){_CI_WORD})*))",
+    re.UNICODE | re.IGNORECASE
 )
 
 # Words to skip — common Italian words that aren't cities
@@ -114,6 +117,8 @@ _SKIP_WORDS = {
     "molto", "poco", "tutto", "niente", "qualcosa", "qualcuno",
     "fa", "fatto", "fare", "bene", "male", "così", "cosi", "tanto",
     "questo", "quello", "qui", "qua", "là", "la", "li", "lo",
+    # Copula italiana — mai nomi di città
+    "è", "e'", "fuori", "ci", "c'", "c'è", "c'e'", "adesso", "sai",
 }
 
 # STT-specific stop words to remove for robust parsing
@@ -183,6 +188,20 @@ def _clean_stt_input(message: str) -> str:
     return ""
 
 
+# Rileva "qui a X" / "io sono a X" — indica la città del mittente, NON quella richiesta
+_QUI_CITY_RE = re.compile(
+    r"\b(?:qui|qua|io\s+sono|io\s+sto|mi\s+trovo|siamo)\s+(?:a|ad|in)\s+([A-ZÀ-Ú][a-zà-ú]+)",
+    re.IGNORECASE
+)
+# Rileva domande su "dove siete/sei voi" — il mittente chiede la posizione di chi legge
+_DA_QUELLE_PARTI_RE = re.compile(
+    r"\b(?:da\s+quelle\s+parti|da\s+quella\s+parte|da\s+voi|dove\s+siete|dove\s+sei|"
+    r"da\s+te|da\s+lui|da\s+loro|voi\s+dove|com'è\s+(?:il\s+)?(?:tempo|meteo)\s+da|"
+    r"tempo\s+da\s+(?:te|voi|quelle?|loro))\b",
+    re.IGNORECASE
+)
+
+
 def extract_city_from_message(message: str) -> Optional[str]:
     """
     Extract a city/location name from a user message.
@@ -196,6 +215,14 @@ def extract_city_from_message(message: str) -> Optional[str]:
         if m:
             candidate = m.group(1).strip().rstrip("?!.,;:")
             if candidate.lower() not in _SKIP_WORDS and len(candidate) >= 2:
+                # Controlla: se la città trovata è in "qui a X" e la domanda è "da quelle parti",
+                # la città è quella del mittente — non quella richiesta → salta
+                qui_m = _QUI_CITY_RE.search(message)
+                if qui_m and qui_m.group(1).lower() == candidate.lower():
+                    if _DA_QUELLE_PARTI_RE.search(message):
+                        log("LOCATION_SENDER_CITY_SKIP", city=candidate,
+                            reason="qui_a_X_with_da_quelle_parti")
+                        return None
                 return candidate
 
     # Pass 1.5: STT robust parsing ONLY for noisy input (contains "genesis" or multiple capitalized words)
@@ -395,6 +422,44 @@ async def resolve_location(message: str, http_client: Optional[httpx.AsyncClient
         if close_after:
             await client.aclose()
 
+async def reverse_geocode(lat: float, lon: float, http_client: Optional[httpx.AsyncClient] = None) -> Optional[str]:
+    """
+    Risoluzione inversa di coordinate in nome città (preferenza IT).
+    Nessuna eccezione sollevata, fail-silent.
+    """
+    if not OPENWEATHER_API_KEY:
+        return None
+
+    client = http_client
+    close_after = False
+    if client is None:
+        client = httpx.AsyncClient(timeout=10.0)
+        close_after = True
+
+    try:
+        url = "https://api.openweathermap.org/geo/1.0/reverse"
+        params = {"lat": lat, "lon": lon, "limit": 1, "appid": OPENWEATHER_API_KEY}
+        resp = await client.get(url, params=params)
+
+        if resp.status_code != 200:
+            logger.error("LOCATION_REVERSE_GEOCODE_HTTP_ERROR status=%d lat=%s lon=%s", resp.status_code, lat, lon)
+            return None
+
+        results = resp.json()
+        if not results:
+            return None
+
+        r = results[0]
+        name = r.get("local_names", {}).get("it", r.get("name", ""))
+        log("LOCATION_REVERSE_GEOCODE_RESULT", lat=lat, lon=lon, city=name)
+        return name
+    except Exception as e:
+        logger.error("LOCATION_REVERSE_GEOCODE_ERROR error=%s", str(e))
+        return None
+    finally:
+        if close_after:
+            await client.aclose()
+
 
 def _disambiguate(city: str, results: list, message: str) -> dict:
     """
@@ -407,10 +472,12 @@ def _disambiguate(city: str, results: list, message: str) -> dict:
     if len(results) == 1:
         return _format_result(results[0])
 
+    # Check if all results are in the same country → just pick first
+    countries = set(r.get("country", "") for r in results)
+
     # Check if there's an IT result
     it_results = [r for r in results if r.get("country") == "IT"]
     non_it_results = [r for r in results if r.get("country") != "IT"]
-    countries = set(r.get("country", "") for r in results)
 
     # If exactly one IT result and message looks Italian → prefer IT
     if len(it_results) == 1 and non_it_results:
@@ -428,8 +495,6 @@ def _disambiguate(city: str, results: list, message: str) -> dict:
         if city_lower in [c.lower() for c in ITALIAN_CITIES]:
             log("LOCATION_IT_PRIORITY", city=city, reason="known_italian_city")
             return _format_result(it_results[0])
-
-    # Check if all results are in the same country → just pick first
     if len(countries) == 1:
         return _format_result(results[0])
 

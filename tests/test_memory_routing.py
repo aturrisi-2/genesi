@@ -201,7 +201,7 @@ class TestMemoryRoutingIntegration:
         user_id = setup_user_history
 
         with patch('core.chat_memory.chat_memory.get_messages') as mock_get, \
-             patch('core.chat_memory.chat_memory.get_message_count', return_value=3) as mock_count, \
+             patch('core.chat_memory.chat_memory.get_message_count', return_value=3), \
              patch('core.memory_brain.memory_brain.update_brain', new_callable=AsyncMock) as mock_brain, \
              patch.object(proactor.context_assembler, 'build', new_callable=AsyncMock) as mock_ctx_build:
             mock_get.side_effect = Exception("Memory error")

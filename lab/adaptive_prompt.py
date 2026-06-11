@@ -235,14 +235,36 @@ Obiettivo: Fornire assistenza di alta qualità che sia sia accurata che piacevol
     
     def _save_prompt(self, prompt_data: Dict[str, Any]) -> None:
         """
-        Salva il prompt migliorato su file JSON.
-        
+        Salva il prompt migliorato su file JSON preservando le chiavi del lab cycle.
+
         Args:
             prompt_data: Dati del prompt da salvare
         """
         try:
+            # Leggi file esistente per preservare chiavi del lab feedback cycle
+            existing = {}
+            if self.prompt_file.exists():
+                try:
+                    with open(self.prompt_file, 'r', encoding='utf-8') as f:
+                        existing = json.load(f)
+                except Exception:
+                    pass
+            # Merge: le chiavi lab cycle non vengono mai sovrascritte
+            merged = {**prompt_data}
+            for key in ("feedback_rules", "feedback_cycle_date",
+                        "feedback_events_processed", "feedback_suggestions_processed"):
+                if key in existing:
+                    merged[key] = existing[key]
+            # Inietta le feedback_rules nel system_prompt così vengono lette da _load_adaptive_prompt
+            rules = merged.get("feedback_rules", [])
+            if rules:
+                _MARKER = "\n\n[REGOLE APPRESE DALL'ESPERIENZA]\n"
+                base = merged.get("system_prompt", "")
+                if _MARKER in base:
+                    base = base.split(_MARKER)[0]
+                merged["system_prompt"] = base + _MARKER + "\n".join(f"- {r}" for r in rules)
             with open(self.prompt_file, 'w', encoding='utf-8') as f:
-                json.dump(prompt_data, f, indent=2, ensure_ascii=False)
+                json.dump(merged, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Warning: Failed to save adaptive prompt: {e}")
     

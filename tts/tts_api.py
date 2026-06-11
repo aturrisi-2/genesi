@@ -5,7 +5,7 @@ Piper TTS locale. Zero cloud. Zero quota. Zero fallback.
 
 import io
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from tts.piper_tts import piper_tts_engine
@@ -22,17 +22,17 @@ class TTSRequest(BaseModel):
 
 
 @router.post("/")
-async def tts_endpoint(request: TTSRequest, user: AuthUser = Depends(require_auth)):
+async def tts_endpoint(request: Request, tts_request: TTSRequest, user: AuthUser = Depends(require_auth)):
     """
     TTS multi-provider con routing automatico basato su intent.
     Onyx per conversazione, Edge per contenuto, Piper fallback.
     """
     try:
-        logger.info("TTS_REQUEST text_len=%d", len(request.text))
+        logger.info("TTS_REQUEST text_len=%d", len(tts_request.text))
 
         # Sanitize text for TTS before synthesis
         from core.tts_sanitizer import sanitize_for_tts
-        clean_text = sanitize_for_tts(request.text)
+        clean_text = sanitize_for_tts(tts_request.text)
         
         # TTS-ROUTING-CALL START
         # Recupera ultimo intent dalla chat memory per routing
@@ -69,7 +69,10 @@ async def tts_endpoint(request: TTSRequest, user: AuthUser = Depends(require_aut
         # OpenAI restituisce MP3, non WAV
         if provider.name() == "openai":
             filename = f"{provider.name()}_tts.mp3"
-            media_type = "audio/mpeg"
+            
+            # Override mime_type su Safari iPhone poiché mpeg non decodifica in Web Audio
+            user_agent = request.headers.get("user-agent", "").lower()
+            media_type = "audio/mp4" if "iphone" in user_agent else "audio/mpeg"
 
         return StreamingResponse(
             io.BytesIO(audio),

@@ -18,6 +18,7 @@ __pycache__/
 venv/
 .env/
 .env.*
+.env
 
 # ===============================
 # Runtime / data
@@ -25,6 +26,8 @@ venv/
 data/
 memory/
 memory_v2/
+scratch/
+.agents/scratch/
 # --- LAB RUNTIME (state, reports, evolution memory) ---
 # --- LAB RUNTIME ---
 lab/prompt_history/
@@ -34,8 +37,10 @@ lab/*history*
 lab/*metrics*.json
 lab/supervisor_logs.json
 
-# Allow stable global prompt
-!lab/global_prompt.json
+# global_prompt.json è un file RUNTIME modificato dal lab_feedback_cycle
+# Non va tracciato — viene creato da core/lab_feedback_cycle.py al primo ciclo
+# o dal template lab/global_prompt.template.json al primo avvio
+lab/global_prompt.json
 
 
 storage/
@@ -56,9 +61,22 @@ data/tts_cache/
 # ===============================
 .vscode/
 .idea/
+.claude/
 
 # ===============================
 # Logs
 # ===============================
 *.log
 nohup.out
+_cestino_/
+
+# ===============================
+# Intranet demo — file modificati dall'installer (non tracciati)
+# I template puliti rimangono in static/intranet/templates/
+# ===============================
+static/intranet/*.html
+
+# ===============================
+# Widget Service — progetto separato in genesi-widget/
+# ===============================
+widget-service/

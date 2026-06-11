@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Business Unit Engineering — C-Place</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f4f4; color: #222; font-size: 14px; }
+    a { text-decoration: none; color: inherit; }
+    .topbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; height:56px; gap:16px; position:sticky; top:0; z-index:100; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+    .logo { display:flex; align-items:center; gap:6px; font-size:22px; font-weight:800; letter-spacing:-1px; color:#222; }
+    .logo-c { background:#c41230; color:#fff; width:32px; height:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900; }
+    .topbar-actions { margin-left:auto; display:flex; align-items:center; gap:18px; }
+    .avatar { width:32px; height:32px; border-radius:50%; background:#c41230; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+    .navbar { background:#fff; border-bottom:1px solid #e0e0e0; padding:0 20px; display:flex; align-items:center; gap:2px; height:40px; }
+    .navbar a { padding:0 12px; height:40px; display:flex; align-items:center; font-size:12.5px; font-weight:600; color:#444; border-bottom:2px solid transparent; white-space:nowrap; }
+    .navbar a:hover, .navbar a.active { color:#c41230; border-bottom-color:#c41230; }
+    .breadcrumb { background:#fff; border-bottom:1px solid #eee; padding:8px 20px; font-size:12px; color:#888; }
+    .breadcrumb a { color:#c41230; }
+    .breadcrumb span { margin:0 6px; }
+    .page { max-width:1100px; margin:24px auto; padding:0 16px; display:flex; flex-direction:column; gap:24px; }
+    .sec-title { font-size:16px; font-weight:700; color:#c41230; padding-bottom:10px; border-bottom:2px solid #c41230; margin-bottom:16px; }
+    .card { background:#fff; border-radius:6px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+    .grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+    .grid-2 { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+    table { width:100%; border-collapse:collapse; }
+    thead th { background:#c41230; color:#fff; padding:11px 14px; text-align:left; font-size:13px; font-weight:600; }
+    tbody tr:nth-child(even) { background:#fafafa; }
+    tbody tr:hover { background:#fff3f3; }
+    td { padding:10px 14px; border-bottom:1px solid #f0f0f0; font-size:13px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:600; }
+    .badge-red { background:#fce4e4; color:#c41230; }
+    .badge-green { background:#e8f5e9; color:#2e7d32; }
+    .badge-blue { background:#e3f2fd; color:#1565c0; }
+    .badge-yellow { background:#fff8e1; color:#e65100; }
+    footer { background:#c41230; color:#fff; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; margin-top:32px; }
+    .footer-btn { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.4); color:#fff; padding:8px 16px; border-radius:4px; font-size:12px; cursor:pointer; text-decoration:none; display:inline-block; }
+    .link-red { color:#c41230; font-weight:600; }
+
+    .news-card { background:#fff; border:1px solid #eee; border-radius:6px; padding:16px; display:flex; flex-direction:column; gap:8px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+    .news-date { font-size:11px; color:#888; font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
+    .news-title { font-size:14px; font-weight:700; color:#222; line-height:1.4; }
+    .news-excerpt { font-size:12.5px; color:#555; line-height:1.5; }
+
+    .doc-item { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #f2f2f2; }
+    .doc-item:last-child { border-bottom:none; }
+    .doc-icon { width:36px; height:36px; background:#fce4e4; border-radius:6px; display:flex; align-items:center; justify-content:center; color:#c41230; font-size:18px; flex-shrink:0; }
+    .doc-info { flex:1; }
+    .doc-name { font-weight:600; font-size:13px; }
+    .doc-meta { font-size:11.5px; color:#888; margin-top:2px; }
+
+    .team-card { background:#f9f9f9; border-radius:6px; padding:14px 16px; display:flex; align-items:center; gap:14px; }
+    .team-avatar { width:42px; height:42px; border-radius:50%; background:#c41230; color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700; flex-shrink:0; }
+    .team-name { font-weight:700; font-size:13px; }
+    .team-role { font-size:12px; color:#888; margin-top:2px; }
+    .team-contacts { font-size:12px; color:#555; margin-top:4px; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/widget-demo" class="logo"><div class="logo-c">C</div>Place</a>
+  <div class="topbar-actions"><div class="avatar">AT</div></div>
+</div>
+<div class="navbar">
+  <a href="/widget-demo">ULTIME NEWS ▾</a>
+  <a href="#">AZIENDA ▾</a>
+  <a href="#">AREE ▾</a>
+  <a href="/widget-demo-attivita">ATTIVITÀ E TEMPO LIBERO ▾</a>
+  <a href="#">AZIONI VELOCI ▾</a>
+  <a href="/widget-demo-rubrica">RUBRICA ▾</a>
+  <a href="#" class="active">BU ▾</a>
+</div>
+
+<div class="breadcrumb">
+  <a href="/widget-demo">Home</a><span>›</span>
+  <a href="#">BU</a><span>›</span>
+  Engineering
+</div>
+
+<div class="page">
+
+  <!-- NEWS BU ENGINEERING -->
+  <div class="card">
+    <div class="sec-title">News BU Engineering</div>
+    <div class="grid-3">
+      <div class="news-card">
+        <div class="news-date">Marzo 2026</div>
+        <div class="news-title">Nuova sezione C-Place Engineering disponibile</div>
+        <div class="news-excerpt">Online la nuova sezione dedicata alla Business Unit Engineering su C-Place. Documenti tecnici, progetti in corso e contatti del team ora accessibili in un unico spazio.</div>
+        <span class="badge badge-blue">Novità</span>
+      </div>
+      <div class="news-card">
+        <div class="news-date">Febbraio 2026</div>
+        <div class="news-title">Aggiornamento sistema CAD — migrazione a SolidWorks 2026</div>
+        <div class="news-excerpt">Completata la migrazione del parco licenze CAD a SolidWorks 2026. Disponibile la guida alla nuova interfaccia nella sezione Documenti tecnici. Formazione obbligatoria entro aprile.</div>
+        <span class="badge badge-yellow">Aggiornamento</span>
+      </div>
+      <div class="news-card">
+        <div class="news-date">Gennaio 2026</div>
+        <div class="news-title">Kick-off progetto SMART-LINE: avviata la fase di progettazione</div>
+        <div class="news-excerpt">Avviato ufficialmente il progetto SMART-LINE per l'automazione della linea produttiva 4. Il team è guidato da M. Ferretti. Prima milestone fissata per Q2 2026.</div>
+        <span class="badge badge-green">Progetto</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROGETTI IN CORSO -->
+  <div class="card">
+    <div class="sec-title">Progetti in corso</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Progetto</th>
+          <th>Responsabile</th>
+          <th>Stato</th>
+          <th>Scadenza</th>
+          <th>Priorità</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>SMART-LINE</strong></td>
+          <td>M. Ferretti</td>
+          <td><span class="badge badge-blue">In corso</span></td>
+          <td>Q3 2026</td>
+          <td><span class="badge badge-red">Alta</span></td>
+        </tr>
+        <tr>
+          <td><strong>RETROFIT-X2</strong></td>
+          <td>A. Conti</td>
+          <td><span class="badge badge-blue">In corso</span></td>
+          <td>Q2 2026</td>
+          <td><span class="badge badge-red">Alta</span></td>
+        </tr>
+        <tr>
+          <td><strong>DESIGN-3D</strong></td>
+          <td>L. Greco</td>
+          <td><span class="badge badge-yellow">Pianificato</span></td>
+          <td>Q4 2026</td>
+          <td><span class="badge badge-blue">Media</span></td>
+        </tr>
+        <tr>
+          <td><strong>SUPPLY-OPT</strong></td>
+          <td>R. Neri</td>
+          <td><span class="badge badge-green">Completato</span></td>
+          <td>Feb 2026</td>
+          <td><span class="badge badge-blue">Media</span></td>
+        </tr>
+        <tr>
+          <td><strong>ISO-UPDATE</strong></td>
+          <td>P. Ricci</td>
+          <td><span class="badge badge-blue">In corso</span></td>
+          <td>Q1 2026</td>
+          <td><span class="badge badge-yellow">Normale</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- DOCUMENTI TECNICI -->
+  <div class="card">
+    <div class="sec-title">Documenti tecnici</div>
+    <div class="doc-item">
+      <div class="doc-icon">📄</div>
+      <div class="doc-info">
+        <div class="doc-name">Manuale qualità Rev. 8</div>
+        <div class="doc-meta">PDF — Aggiornato: 15/01/2026 — 2,4 MB</div>
+      </div>
+      <span class="badge badge-green">Disponibile</span>
+    </div>
+    <div class="doc-item">
+      <div class="doc-icon">📄</div>
+      <div class="doc-info">
+        <div class="doc-name">Specifica tecnica SMART-LINE v1.2</div>
+        <div class="doc-meta">PDF — Aggiornato: 20/02/2026 — 5,1 MB</div>
+      </div>
+      <span class="badge badge-green">Disponibile</span>
+    </div>
+    <div class="doc-item">
+      <div class="doc-icon">📊</div>
+      <div class="doc-info">
+        <div class="doc-name">Listino componenti 2026</div>
+        <div class="doc-meta">Excel — Aggiornato: 01/01/2026 — 890 KB</div>
+      </div>
+      <span class="badge badge-green">Disponibile</span>
+    </div>
+    <div class="doc-item">
+      <div class="doc-icon">📋</div>
+      <div class="doc-info">
+        <div class="doc-name">Piano formazione tecnica 2026</div>
+        <div class="doc-meta">PDF — Aggiornato: 10/03/2026 — 1,2 MB</div>
+      </div>
+      <span class="badge badge-yellow">In revisione</span>
+    </div>
+  </div>
+
+  <!-- TEAM LEADS -->
+  <div class="card">
+    <div class="sec-title">Team Leads Engineering</div>
+    <div class="grid-2">
+      <div class="team-card">
+        <div class="team-avatar">MF</div>
+        <div>
+          <div class="team-name">Marco Ferretti</div>
+          <div class="team-role">Lead Engineer — Automazione</div>
+          <div class="team-contacts">int. 3101 &nbsp;|&nbsp; <a href="mailto:m.ferretti@cefla.it" class="link-red">m.ferretti@cefla.it</a></div>
+        </div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">AC</div>
+        <div>
+          <div class="team-name">Andrea Conti</div>
+          <div class="team-role">Lead Engineer — Retrofit</div>
+          <div class="team-contacts">int. 3108 &nbsp;|&nbsp; <a href="mailto:a.conti@cefla.it" class="link-red">a.conti@cefla.it</a></div>
+        </div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">LG</div>
+        <div>
+          <div class="team-name">Luca Greco</div>
+          <div class="team-role">Lead Designer — 3D/CAD</div>
+          <div class="team-contacts">int. 3115 &nbsp;|&nbsp; <a href="mailto:l.greco@cefla.it" class="link-red">l.greco@cefla.it</a></div>
+        </div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">PR</div>
+        <div>
+          <div class="team-name">Paolo Ricci</div>
+          <div class="team-role">Quality Manager — Engineering</div>
+          <div class="team-contacts">int. 3120 &nbsp;|&nbsp; <a href="mailto:p.ricci@cefla.it" class="link-red">p.ricci@cefla.it</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <a href="/widget-demo" class="footer-btn">← Torna alla Home</a>
+  <span style="font-size:12px; opacity:.8;">C-Place © 2026 — Cefla S.C. — Tutti i diritti riservati</span>
+</footer>
+
+<script src="/widget.js"
+  data-api-url=""
+  data-api-key="demo_cplace_2026"
+  data-name="Assistente C-Place"
+  data-color="#c41230"
+  data-welcome="Sei nella sezione BU Engineering. Posso aiutarti con news, progetti, documenti tecnici e contatti del team. Come posso aiutarti?"
+  data-placeholder="Come posso aiutarti?"
+  data-page-context="true">
+</script>
+</body>
+</html>
