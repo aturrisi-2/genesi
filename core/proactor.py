@@ -1014,10 +1014,19 @@ class Proactor:
 
                 elif current_intent in SKIP_RELATIONAL_INTENTS:
                     # Knowledge/Technical Strict (tecnica, debug)
-                    # live_search non va MAI scavalcato verso relational: il LLM
-                    # risponderebbe dalla memoria di addestramento (stantia)
-                    # invece di cercare sul web — es. "mondiali" → dati 2022
-                    if current_intent != "live_search" and self._should_override_to_relational(processed_message, user_id):
+                    # live_search non va scavalcato verso relational (il LLM
+                    # risponderebbe dalla memoria di addestramento stantia —
+                    # es. "mondiali" → dati 2022). UNICA eccezione: il messaggio
+                    # menziona un nome personale del profilo ("Chi è Laura?" dove
+                    # Laura è la moglie) → la risposta è nella memoria personale.
+                    _ls_personal = (
+                        current_intent == "live_search"
+                        and self._mentions_personal_name(
+                            processed_message,
+                            (brain_state or {}).get("profile") if isinstance(brain_state, dict) else None,
+                        )
+                    )
+                    if (current_intent != "live_search" or _ls_personal) and self._should_override_to_relational(processed_message, user_id):
                         log("ROUTING_DECISION", route="relational_override", user_id=user_id)
                         current_response = await self._handle_relational(user_id, processed_message, brain_state, conversation_id)
                         final_source = "relational"
@@ -4406,7 +4415,11 @@ Messaggio utente: {message}"""
         live_source_instruction = ""
         try:
             from core.live_search_service import needs_live_data, search_for_answer
-            if intent == "live_search" or needs_live_data(_search_query):
+            # Guard nomi personali: "Chi è Laura?" dove Laura è la moglie NON
+            # va cercato sul web — la risposta è nel profilo/memoria personale
+            if self._mentions_personal_name(_search_query, profile):
+                log("LIVE_SEARCH_SKIP_PERSONAL", user_id=user_id, query=_search_query)
+            elif intent == "live_search" or needs_live_data(_search_query):
                 log("LIVE_SEARCH_TRIGGERED", user_id=user_id, query=_search_query)
                 live_result = await search_for_answer(_search_query)
                 if live_result:
@@ -4563,6 +4576,33 @@ Messaggio utente: {message}"""
     # ═══════════════════════════════════════════════════════════
     # UTILITY
     # ═══════════════════════════════════════════════════════════
+
+    def _mentions_personal_name(self, message: str, profile: dict | None) -> bool:
+        """
+        True se il messaggio menziona un nome personale del profilo
+        (utente, coniuge, figli, animali). Usato per evitare che domande
+        su persone care finiscano nella ricerca web ("Chi è Laura?" dove
+        Laura è la moglie) invece che nella memoria personale.
+        """
+        if not message or not isinstance(profile, dict):
+            return False
+        names: set[str] = set()
+        for key in ("name", "spouse"):
+            v = profile.get(key)
+            if isinstance(v, str) and v.strip():
+                names.add(v.strip())
+        for coll in ("children", "pets"):
+            for item in profile.get(coll, []) or []:
+                n = item.get("name") if isinstance(item, dict) else item
+                if isinstance(n, str) and n.strip():
+                    names.add(n.strip())
+        if not names:
+            return False
+        msg_lower = message.lower()
+        return any(
+            re.search(rf"\b{re.escape(n.lower())}\b", msg_lower)
+            for n in names if len(n) >= 3
+        )
 
     def _should_override_to_relational(self, message: str, user_id: str) -> bool:
         """
