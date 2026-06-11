@@ -39,6 +39,9 @@ logger = logging.getLogger(__name__)
 
 # ── Credenziali Meta (env-only: mai hardcoded) ───────────────────────────────
 META_APP_SECRET    = os.getenv("META_APP_SECRET", "")
+# La "Instagram API with Instagram Login" firma i webhook con l'Instagram App
+# Secret (Instagram → API setup), DIVERSO dall'App Secret principale.
+IG_APP_SECRET      = os.getenv("IG_APP_SECRET", "")
 META_VERIFY_TOKEN  = os.getenv("META_VERIFY_TOKEN", "genesi_meta_verify")
 FB_PAGE_ACCESS_TOKEN = os.getenv("FB_PAGE_ACCESS_TOKEN", "")
 IG_ACCESS_TOKEN      = os.getenv("IG_ACCESS_TOKEN", "")
@@ -104,26 +107,42 @@ def verify_webhook(mode: str, token: str, challenge: str) -> str | None:
 
 # ── Verifica firma payload (POST) ────────────────────────────────────────────
 
-def verify_signature(payload: bytes, signature_header: str) -> bool:
+def _secrets_for_platform(platform: str) -> list[str]:
+    """
+    Secret candidati per la verifica firma, in ordine di priorità.
+    Instagram (Instagram Login) firma con l'Instagram App Secret; se non
+    configurato si tenta comunque l'App Secret principale (app via Facebook Login).
+    """
+    ig_secret = os.getenv("IG_APP_SECRET", IG_APP_SECRET)
+    main_secret = os.getenv("META_APP_SECRET", META_APP_SECRET)
+    if platform == "instagram":
+        return [s for s in (ig_secret, main_secret) if s]
+    return [s for s in (main_secret,) if s]
+
+
+def verify_signature(payload: bytes, signature_header: str,
+                     platform: str = "messenger") -> bool:
     """
     Verifica X-Hub-Signature-256 (HMAC-SHA256 del body con l'app secret).
-    Se META_APP_SECRET non è configurato accetta (dev mode) ma logga warning.
+    Se nessun secret è configurato accetta (dev mode) ma logga warning.
     Confronto constant-time per evitare timing attack.
     """
-    if not META_APP_SECRET:
+    secrets = _secrets_for_platform(platform)
+    if not secrets:
         logger.warning("META_SIGNATURE_SKIPPED app_secret non configurato")
         return True
     if not signature_header or not signature_header.startswith("sha256="):
         logger.warning("META_SIGNATURE_MISSING")
         return False
     provided = signature_header.split("=", 1)[1].strip()
-    expected = hmac.new(
-        META_APP_SECRET.encode("utf-8"), payload, hashlib.sha256
-    ).hexdigest()
-    valid = hmac.compare_digest(provided, expected)
-    if not valid:
-        logger.warning("META_SIGNATURE_INVALID")
-    return valid
+    for secret in secrets:
+        expected = hmac.new(
+            secret.encode("utf-8"), payload, hashlib.sha256
+        ).hexdigest()
+        if hmac.compare_digest(provided, expected):
+            return True
+    logger.warning("META_SIGNATURE_INVALID platform=%s", platform)
+    return False
 
 
 # ── Invio messaggi (Graph API Send) ──────────────────────────────────────────

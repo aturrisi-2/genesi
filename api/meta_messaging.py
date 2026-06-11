@@ -30,7 +30,7 @@ async def _receive(request: Request, platform: str):
     """Gestione comune POST webhook: firma → parse → dispatch background."""
     body = await request.body()
     signature = request.headers.get("X-Hub-Signature-256", "")
-    if not verify_signature(body, signature):
+    if not verify_signature(body, signature, platform):
         return Response(status_code=403)
     try:
         payload = json.loads(body)
