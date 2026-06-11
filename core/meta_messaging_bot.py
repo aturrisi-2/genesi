@@ -186,7 +186,7 @@ async def send_message(platform: str, recipient_id: str, text: str) -> bool:
 
     chunks = [text[i:i + MSG_CHUNK_LEN] for i in range(0, len(text), MSG_CHUNK_LEN)]
     ok = True
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         for chunk in chunks:
             payload = {
                 "recipient": {"id": recipient_id},
@@ -204,7 +204,8 @@ async def send_message(platform: str, recipient_id: str, text: str) -> bool:
                                  platform, res.status_code, res.text)
                     ok = False
             except Exception as e:
-                logger.error("META_SEND_ERROR platform=%s err=%s", platform, e)
+                logger.error("META_SEND_ERROR platform=%s err_type=%s err=%r",
+                             platform, type(e).__name__, e)
                 ok = False
             if len(chunks) > 1:
                 await asyncio.sleep(0.3)
