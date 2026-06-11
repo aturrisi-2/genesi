@@ -437,16 +437,23 @@ def extract_webapp_urls(text: str) -> list[str]:
                 valid_urls.append(url_clean)
     return valid_urls
 
-def build_webapp_inline_keyboard(urls: list[str]) -> dict:
+def build_webapp_inline_keyboard(urls: list[str], is_private: bool = True) -> dict:
+    """
+    Bottoni per i link delle fonti.
+    - Chat private: bottone web_app → la pagina si apre DENTRO Telegram
+    - Gruppi: bottone url classico (Telegram non supporta web_app nei gruppi)
+    """
     keyboard = []
     for url in urls:
         domain = get_domain_name(url)
-        keyboard.append([
-            {
-                "text": f"🌐 Apri {domain}",
-                "url": url
-            }
-        ])
+        if is_private:
+            keyboard.append([
+                {"text": f"🌐 Apri {domain}", "web_app": {"url": url}}
+            ])
+        else:
+            keyboard.append([
+                {"text": f"🌐 Apri {domain}", "url": url}
+            ])
     return {"inline_keyboard": keyboard}
 
 # Stati conversazionali
@@ -800,7 +807,7 @@ async def _send_response(chat_id: int, reply: str, reply_to_message_id: int = No
     webapp_urls = extract_webapp_urls(reply)
     reply_markup = None
     if webapp_urls:
-        reply_markup = build_webapp_inline_keyboard(webapp_urls)
+        reply_markup = build_webapp_inline_keyboard(webapp_urls, is_private=(chat_id > 0))
     else:
         reply_markup = get_default_reply_markup(
             chat_type="private" if chat_id > 0 else "group",
