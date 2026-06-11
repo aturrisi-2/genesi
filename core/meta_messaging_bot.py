@@ -271,8 +271,85 @@ async def handle_update(payload: dict, platform: str):
                     await _process_event(event, platform, cfg)
                 except Exception as e:
                     logger.error("META_PROCESS_EVENT_ERROR platform=%s err=%s", platform, e)
+            # Eventi non-messaging (commenti sui post, menzioni)
+            for change in entry.get("changes", []) or []:
+                try:
+                    await _process_change(change, platform)
+                except Exception as e:
+                    logger.error("META_PROCESS_CHANGE_ERROR platform=%s err=%s", platform, e)
     except Exception as e:
         logger.error("META_HANDLE_UPDATE_ERROR platform=%s err=%s", platform, e)
+
+
+_COMMENT_REPLY_PROMPT = (
+    "Sei Genesi, assistente AI familiare italiana. Qualcuno ha commentato un tuo "
+    "post Instagram. Rispondi al commento in modo caldo, breve (1-2 frasi), genuino "
+    "e mai da marketing. Se il commento è una domanda, rispondi. Se è un complimento, "
+    "ringrazia con personalità. Niente hashtag nelle risposte ai commenti."
+)
+
+
+async def _process_change(change: dict, platform: str):
+    """
+    Processa eventi 'changes' (non-messaging): commenti sui post Instagram.
+    Risponde automaticamente ai commenti ricevuti sui propri post.
+    """
+    field = change.get("field", "")
+    if field != "comments" or platform != "instagram":
+        logger.info("META_CHANGE_SKIPPED platform=%s field=%s", platform, field)
+        return
+
+    value = change.get("value") or {}
+    comment_id = value.get("id", "")
+    text = (value.get("text") or "").strip()
+    from_user = value.get("from") or {}
+    from_id = str(from_user.get("id", ""))
+
+    if not comment_id or not text:
+        return
+
+    # Anti-loop: ignora i commenti scritti da Genesi stessa
+    try:
+        from core.instagram_publisher import get_ig_user_id
+        own_id = await get_ig_user_id()
+        if own_id and from_id == str(own_id):
+            logger.info("META_COMMENT_OWN_SKIP")
+            return
+    except Exception:
+        pass
+
+    # Deduplica (i webhook possono essere ri-consegnati)
+    if _is_duplicate_mid(f"comment_{comment_id}"):
+        return
+
+    logger.info("META_COMMENT_RECEIVED from=%s text=%.80s", from_user.get("username", "?"), text)
+
+    try:
+        from core.llm_service import llm_service
+        username = from_user.get("username", "")
+        ctx = f"Commento di @{username}: {text}" if username else f"Commento: {text}"
+        reply = await llm_service._call_model(
+            "openai/gpt-4o-mini", _COMMENT_REPLY_PROMPT, ctx, route="memory",
+        )
+        reply = (reply or "").strip()
+        if not reply:
+            return
+
+        token = _get_access_token("instagram")
+        api_base = _get_api_base("instagram")
+        async with httpx.AsyncClient(timeout=30) as client:
+            res = await client.post(
+                f"{api_base}/{comment_id}/replies",
+                data={"message": reply[:900], "access_token": token},
+            )
+            if res.status_code == 200:
+                log("META_COMMENT_REPLIED", comment_id=comment_id, user=username)
+                logger.info("META_COMMENT_REPLIED comment_id=%s", comment_id)
+            else:
+                logger.error("META_COMMENT_REPLY_FAIL status=%d body=%.200s",
+                             res.status_code, res.text)
+    except Exception as e:
+        logger.error("META_COMMENT_REPLY_ERROR err=%s", e)
 
 
 async def _process_event(event: dict, platform: str, cfg: dict):
