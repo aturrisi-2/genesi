@@ -147,12 +147,31 @@ def verify_signature(payload: bytes, signature_header: str,
 
 # ── Invio messaggi (Graph API Send) ──────────────────────────────────────────
 
+def _ig_via_page() -> bool:
+    """
+    True se Instagram opera in modalità "Messenger API for Instagram":
+    account IG collegato alla pagina Facebook, messaggi gestiti con il
+    token della pagina su graph.facebook.com. Attivata con IG_VIA_PAGE=1
+    nel .env (usata quando il flusso Instagram Login diretto non è
+    disponibile, es. toggle 'accesso ai messaggi' assente nell'app IG).
+    """
+    return os.getenv("IG_VIA_PAGE", "") in ("1", "true", "yes")
+
+
 def _get_access_token(platform: str) -> str:
     cfg = PLATFORMS.get(platform)
     if not cfg:
         return ""
+    if platform == "instagram" and _ig_via_page():
+        return os.getenv("FB_PAGE_ACCESS_TOKEN", "")
     # Lettura runtime dall'env: consente rotazione token senza restart import
     return os.getenv(cfg["token_env"], "")
+
+
+def _get_api_base(platform: str) -> str:
+    if platform == "instagram" and _ig_via_page():
+        return META_API_BASE  # graph.facebook.com (flusso via pagina)
+    return PLATFORMS.get(platform, {}).get("api_base", META_API_BASE)
 
 
 async def send_message(platform: str, recipient_id: str, text: str) -> bool:
@@ -163,7 +182,7 @@ async def send_message(platform: str, recipient_id: str, text: str) -> bool:
     if not token:
         logger.warning("META_SEND_NO_TOKEN platform=%s", platform)
         return False
-    api_base = PLATFORMS.get(platform, {}).get("api_base", META_API_BASE)
+    api_base = _get_api_base(platform)
 
     chunks = [text[i:i + MSG_CHUNK_LEN] for i in range(0, len(text), MSG_CHUNK_LEN)]
     ok = True
