@@ -49,6 +49,11 @@ _GROUP_EMAIL    = os.getenv("TELEGRAM_GROUP_EMAIL", "")
 _GROUP_PASSWORD = os.getenv("TELEGRAM_GROUP_PASSWORD", "")
 # Segreto per derivare le password degli account virtuali dei membri del gruppo
 _GROUP_MEMBER_SECRET = os.getenv("TELEGRAM_GROUP_MEMBER_SECRET", "genesi-family-group-2026")
+# Gruppi familiari: "Casa Turrisi" (-318483633, famiglia allargata attiva)
+# e "Alfio and Alfio" (-5007188402, chat storica/test). Genesi vi partecipa
+# da familiare: saluta, risponde senza menzione, estrae relazioni e memoria.
+_FAMILY_GROUP_IDS = {-318483633, -5007188402}
+# Retrocompatibilità per eventuali import esterni
 _FAMILY_GROUP_ID = -5007188402
 
 
@@ -234,7 +239,7 @@ async def _group_should_intervene(
     # Fast-path: saluto di gruppo -> controlla limite temporale per-utente
     category = _get_greeting_category(combined_lower)
     if category:
-        if chat_id == _FAMILY_GROUP_ID or bot_mentioned:
+        if chat_id in _FAMILY_GROUP_IDS or bot_mentioned:
             should_greet, is_late_wakeup = await _check_and_register_greeting(chat_id, str(from_id), category)
             if should_greet:
                 # Registra il saluto: handle_update lo gestirà con il servizio
@@ -955,12 +960,12 @@ async def handle_update(update: dict):
                     message=(text or caption or ""),
                     platform="telegram",
                     group_id=str(chat_id),
-                    is_family_group=(chat_id == _FAMILY_GROUP_ID),
+                    is_family_group=(chat_id in _FAMILY_GROUP_IDS),
                 ))
             except Exception as _gge:
                 logger.warning("GROUP_GREETING_EXTRACT_TASK_FAIL err=%s", _gge)
             # Estrai relazioni familiari e aggiorna albero genealogico di Alfio solo nel gruppo famiglia
-            if chat_id == _FAMILY_GROUP_ID:
+            if chat_id in _FAMILY_GROUP_IDS:
                 asyncio.create_task(extract_family_relationship(str(from_id), first_name, text or caption, "telegram"))
 
         # ── Logica gruppi ──────────────────────────────────────────────────────
@@ -1234,7 +1239,7 @@ async def handle_update(update: dict):
             _pending_greet = _PENDING_GREETINGS.pop(chat_id, None)
             if (_pending_greet and _pending_greet.get("from_id") == from_id
                     and time.time() - _pending_greet.get("ts", 0) < 60):
-                _is_family = (chat_id == _FAMILY_GROUP_ID)
+                _is_family = (chat_id in _FAMILY_GROUP_IDS)
                 try:
                     from core.group_greeting_service import group_greeting_service
                     # Estrai info membro in background (non blocca la risposta)
@@ -1294,7 +1299,7 @@ async def handle_update(update: dict):
             if not _group_ctx_cache:
                 ctx = await build_group_context(
                     chat_id, from_id, first_name, current_message=text,
-                    is_family_group=(chat_id == _FAMILY_GROUP_ID)
+                    is_family_group=(chat_id in _FAMILY_GROUP_IDS)
                 )
                 _group_ctx_cache.append(ctx)
             return _group_ctx_cache[0]
@@ -1303,7 +1308,7 @@ async def handle_update(update: dict):
             if not is_group or not first_name:
                 return message
             
-            is_family_group = (chat_id == _FAMILY_GROUP_ID)
+            is_family_group = (chat_id in _FAMILY_GROUP_IDS)
             group_type_label = "GRUPPO FAMILIARE" if is_family_group else "GRUPPO ESTERNO"
             role_label = "naturale da familiare (non da assistente)" if is_family_group else "da assistente AI educata, utile e mai invadente"
             
@@ -1408,7 +1413,7 @@ async def handle_update(update: dict):
                 asyncio.create_task(consolidate_group_insights_if_needed(chat_id))
                 asyncio.create_task(summarize_group_discussion_if_needed(chat_id))
                 
-                is_family_group = (chat_id == _FAMILY_GROUP_ID)
+                is_family_group = (chat_id in _FAMILY_GROUP_IDS)
                 if is_family_group:
                     asyncio.create_task(_sync_family_background(chat_id))
 

@@ -149,7 +149,7 @@ async def get_group_members_locations(chat_id: int) -> dict[str, str]:
     
     # Inserisci i fallback solo se stiamo processando il gruppo famiglia (-5007188402) o se è globale (0)
     # Se è WhatsApp, supponiamo sia il gruppo famiglia per ora
-    is_family_context = (chat_id == 0) or (chat_id == -5007188402)
+    is_family_context = (chat_id == 0) or (chat_id in (-5007188402, -318483633))
     
     for k, v in known_fallbacks.items():
         if k not in locations:
@@ -710,7 +710,7 @@ async def _generate_proactive_greeting(birthdays: list, event_type: str, today_d
                 "- Integra nel saluto un rapidissimo cenno al tempo attuale nelle città degli sviluppatori presenti nel gruppo, basandoti sui dati forniti.\n"
                 "- Se oggi ci sono compleanni nel gruppo, fai gli auguri."
             )
-        elif chat_id == -5007188402 or platform == "whatsapp":
+        elif chat_id in (-5007188402, -318483633) or platform == "whatsapp":
             system_prompt = (
                 "Sei Genesi, il GUARDIANO EMOTIVO della famiglia. Vegli con affetto, calore e attenzione sui membri della famiglia.\n"
                 f"Ogni mattina sei la prima a inviare un saluto spontaneo nel gruppo familiare '{group_title}'.\n"
@@ -796,7 +796,7 @@ async def _generate_proactive_greeting(birthdays: list, event_type: str, today_d
         logger.warning("PROACTIVE_MSG_GEN_ERROR err=%s", exc)
         
     # Fallbacks deterministici caldi
-    is_fam = (chat_id == -5007188402 or platform == "whatsapp")
+    is_fam = (chat_id in (-5007188402, -318483633) or platform == "whatsapp")
     if event_type == "birthday":
         names = ", ".join(n for n, _ in birthdays)
         if is_fam:
