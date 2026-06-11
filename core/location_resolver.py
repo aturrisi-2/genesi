@@ -410,6 +410,7 @@ def _disambiguate(city: str, results: list, message: str) -> dict:
     # Check if there's an IT result
     it_results = [r for r in results if r.get("country") == "IT"]
     non_it_results = [r for r in results if r.get("country") != "IT"]
+    countries = set(r.get("country", "") for r in results)
 
     # If exactly one IT result and message looks Italian → prefer IT
     if len(it_results) == 1 and non_it_results:
@@ -429,7 +430,6 @@ def _disambiguate(city: str, results: list, message: str) -> dict:
             return _format_result(it_results[0])
 
     # Check if all results are in the same country → just pick first
-    countries = set(r.get("country", "") for r in results)
     if len(countries) == 1:
         return _format_result(results[0])
 

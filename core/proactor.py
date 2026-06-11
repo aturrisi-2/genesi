@@ -17,6 +17,7 @@ import re
 from typing import Dict, Any, Optional, List, Tuple, Union
 from datetime import datetime
 from core.log import log
+from core.group_context import GroupContext, build_group_prompt_block
 from core.memory_brain import memory_brain
 from core.latent_state import latent_state_engine
 from core.drift_modulator import drift_modulator
@@ -155,7 +156,8 @@ class Proactor:
     # HANDLE — Entry point, routing obbligatorio
     # ═══════════════════════════════════════════════════════════════
 
-    async def handle(self, user_id: str, message: str = None, intent: str = None) -> str:
+    async def handle(self, user_id: str, message: str = None, intent: str = None,
+                     group_context: Optional[GroupContext] = None) -> str:
         """
         Orchestrazione centrale v4.
         Returns: response_text (SOLO stringa - nessuna tupla, nessun dict)
@@ -164,10 +166,10 @@ class Proactor:
             2. Tool Router      (deterministico)
             3. Knowledge Router (deterministico)
             4. Relational Router (deterministico)
-        
+
         NOTE: user_id validation for empty values is handled in _handle_internal
         """
-        result = await self._handle_internal(user_id, message, intent)
+        result = await self._handle_internal(user_id, message, intent, group_context=group_context)
         # Handle nested tuples: ((response, source), source) -> response
         if isinstance(result, tuple):
             if len(result) == 2 and isinstance(result[0], tuple):
@@ -197,7 +199,8 @@ class Proactor:
             response, _ = asyncio.run(self.handle(user_id, message, intent))
             return response
     
-    async def _handle_internal(self, user_id: str, message: str = None, intent: str = None) -> tuple[str, str]:
+    async def _handle_internal(self, user_id: str, message: str = None, intent: str = None,
+                                group_context: Optional[GroupContext] = None) -> tuple[str, str]:
         try:
             # STEP 0.5: Image Search detection (prima del routing normale)
             image_query = extract_image_query(message)
@@ -364,7 +367,7 @@ class Proactor:
                 # in a relational conversation should stay relational
                 if self._should_override_to_relational(message, user_id):
                     logger.info("PROACTOR_INTENT_OVERRIDE user=%s intent=%s->relational reason=short_contextual", user_id, intent)
-                    response = await self._handle_relational(user_id, message, brain_state)
+                    response = await self._handle_relational(user_id, message, brain_state, group_context=group_context)
                     return response, "tool"
                 log("ROUTING_DECISION", route="knowledge_strict", user_id=user_id)
                 response = await self._handle_knowledge(user_id, message)
@@ -373,12 +376,12 @@ class Proactor:
             # STEP 7: RELATIONAL / GENERAL
             if is_relational_message(message):
                 log("ROUTING_DECISION", route="relational", user_id=user_id)
-                response = await self._handle_relational(user_id, message, brain_state)
+                response = await self._handle_relational(user_id, message, brain_state, group_context=group_context)
                 return response, "tool"
 
             # STEP 8: DEFAULT — relational pipeline (chat libera)
             log("ROUTING_DECISION", route="default_relational", user_id=user_id)
-            response = await self._handle_relational(user_id, message, brain_state)
+            response = await self._handle_relational(user_id, message, brain_state, group_context=group_context)
             return response, "relational"
 
         except Exception as e:
@@ -1119,7 +1122,8 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
     # RELATIONAL ROUTER — GPT controllato con contesto limitato
     # ═══════════════════════════════════════════════════════════
 
-    async def _handle_relational(self, user_id: str, message: str, brain_state: Dict[str, Any]) -> str:
+    async def _handle_relational(self, user_id: str, message: str, brain_state: Dict[str, Any],
+                                  group_context: Optional[GroupContext] = None) -> str:
         """
         Pipeline relazionale con GPT controllato.
         GPT riceve: conversation thread, identity summary, topic, latent state.
@@ -1150,7 +1154,8 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
 
         # 3. GPT call with conversation-aware prompt
         logger.info("PROACTOR_LLM_CALL user=%s route=relational messages_count=%d", user_id, len(messages))
-        gpt_prompt = self._build_relational_gpt_prompt(conversation_ctx, latent_synopsis, message, user_id)
+        gpt_prompt = self._build_relational_gpt_prompt(conversation_ctx, latent_synopsis, message, user_id,
+                                                        group_context=group_context)
         
         # Add system message to messages list
         messages.insert(0, {"role": "system", "content": gpt_prompt})
@@ -1294,7 +1299,8 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
         
         return messages
 
-    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str, user_id: str = None) -> str:
+    def _build_relational_gpt_prompt(self, conversation_context: str, latent_synopsis: str, message: str,
+                                      user_id: str = None, group_context: Optional[GroupContext] = None) -> str:
         """Prompt GPT per relational router. Conversazione continua, comportamento umano."""
         user_boundaries = self._detect_user_boundaries(conversation_context, message)
         user_name = conversation_context.split("NOME: ")[1].split("\n")[0] if "NOME: " in conversation_context else "l'utente"
@@ -1309,6 +1315,9 @@ Sii coerente con quanto abbiamo detto. Non dire che non puoi aiutare."""
                     system_prompt = doc_context + "\n\n"
                     print(f"DOCUMENT_CONTEXT_INJECTED user={user_id} chars={len(doc_context)}")
         
+        group_block = build_group_prompt_block(group_context)
+        group_section = f"\n{group_block}\n" if group_block else ""
+
         system_prompt += f"""Sei Genesi. Non sei un assistente, non sei un terapeuta, non sei un chatbot.
 Sei un compagno reale: pensi, ragioni, hai opinioni, reagisci.
 Parli SOLO italiano. Non cambi mai lingua.
@@ -1316,8 +1325,7 @@ Non menzionare MAI di essere AI, modello, sistema, programma.
 
 {conversation_context}
 
-STATO LATENTE: {latent_synopsis}
-
+STATO LATENTE: {latent_synopsis}{group_section}
 🔥 CONTESTO CONVERSAZIONALE OBBLIGATORIO:
 Stai conversando con {user_name}. Leggi l'intera cronologia della conversazione 
 prima di rispondere. I messaggi brevi come "no", "sì", "dimmene uno", "va bene" 

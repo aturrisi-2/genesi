@@ -199,13 +199,18 @@ class TestMemoryRoutingIntegration:
     async def test_memory_context_error_handling(self, proactor, setup_user_history):
         """Test error handling in memory context."""
         user_id = setup_user_history
-        
-        with patch('core.chat_memory.chat_memory.get_messages') as mock_get:
+
+        with patch('core.chat_memory.chat_memory.get_messages') as mock_get, \
+             patch('core.chat_memory.chat_memory.get_message_count', return_value=3) as mock_count, \
+             patch('core.memory_brain.memory_brain.update_brain', new_callable=AsyncMock) as mock_brain, \
+             patch.object(proactor.context_assembler, 'build', new_callable=AsyncMock) as mock_ctx_build:
             mock_get.side_effect = Exception("Memory error")
-            
+            mock_brain.return_value = {"profile": {}, "latent": {}, "relational": {}}
+            mock_ctx_build.return_value = {"summary": "ctx", "profile": {}, "current_message": "di cosa abbiamo detto?"}
+
             response = await proactor.handle(user_id, "di cosa abbiamo detto?")
-            
-            # Should get error fallback
+
+            # Should get error fallback from _handle_memory_context's inner try/except
             assert "dispiace" in response.lower() or "problema" in response.lower()
 
     @pytest.mark.asyncio
