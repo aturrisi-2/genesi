@@ -44,6 +44,9 @@ FB_PAGE_ACCESS_TOKEN = os.getenv("FB_PAGE_ACCESS_TOKEN", "")
 IG_ACCESS_TOKEN      = os.getenv("IG_ACCESS_TOKEN", "")
 META_API_VERSION   = "v19.0"
 META_API_BASE      = f"https://graph.facebook.com/{META_API_VERSION}"
+# I token Instagram "Instagram API with Instagram Login" (formato IGAA...)
+# funzionano SOLO su graph.instagram.com, non su graph.facebook.com.
+IG_API_BASE        = f"https://graph.instagram.com/{META_API_VERSION}"
 
 # ── Configurazione piattaforme (isolamento garantito dal namespace) ──────────
 PLATFORMS = {
@@ -51,11 +54,13 @@ PLATFORMS = {
         "object": "page",          # campo "object" atteso nel payload Meta
         "user_prefix": "fb_",      # namespace user_id → memorie isolate
         "token_env": "FB_PAGE_ACCESS_TOKEN",
+        "api_base": META_API_BASE,
     },
     "instagram": {
         "object": "instagram",
         "user_prefix": "ig_",
         "token_env": "IG_ACCESS_TOKEN",
+        "api_base": IG_API_BASE,
     },
 }
 
@@ -139,6 +144,7 @@ async def send_message(platform: str, recipient_id: str, text: str) -> bool:
     if not token:
         logger.warning("META_SEND_NO_TOKEN platform=%s", platform)
         return False
+    api_base = PLATFORMS.get(platform, {}).get("api_base", META_API_BASE)
 
     chunks = [text[i:i + MSG_CHUNK_LEN] for i in range(0, len(text), MSG_CHUNK_LEN)]
     ok = True
@@ -151,7 +157,7 @@ async def send_message(platform: str, recipient_id: str, text: str) -> bool:
             }
             try:
                 res = await client.post(
-                    f"{META_API_BASE}/me/messages",
+                    f"{api_base}/me/messages",
                     params={"access_token": token},
                     json=payload,
                 )
