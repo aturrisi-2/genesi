@@ -40,8 +40,12 @@ def test_profile_with_identity_fields():
     assert "musica elettronica" in reconstructed.interests
     assert "lavorare di notte" in reconstructed.preferences
     assert "introverso" in reconstructed.traits
-    assert len(data.keys() - {"name", "profession", "spouse", "pets", "children",
-                               "interests", "preferences", "traits", "updated_at"}) == 0
+    # Campi legittimi del modello UserProfile attuale: include anche
+    # user_id, email, city, timezone e google_token
+    assert len(data.keys() - {"user_id", "email", "name", "city", "timezone",
+                               "profession", "spouse", "pets", "children",
+                               "interests", "preferences", "traits",
+                               "google_token", "updated_at"}) == 0
 
 
 def test_identity_merge_deduplication():

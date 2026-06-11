@@ -112,12 +112,12 @@ def _secrets_for_platform(platform: str) -> list[str]:
     Secret candidati per la verifica firma, in ordine di priorità.
     Instagram (Instagram Login) firma con l'Instagram App Secret; se non
     configurato si tenta comunque l'App Secret principale (app via Facebook Login).
+    Usa le costanti di modulo (caricate dall'env all'import): il servizio viene
+    riavviato ad ogni deploy e i test le patchano via monkeypatch.
     """
-    ig_secret = os.getenv("IG_APP_SECRET", IG_APP_SECRET)
-    main_secret = os.getenv("META_APP_SECRET", META_APP_SECRET)
     if platform == "instagram":
-        return [s for s in (ig_secret, main_secret) if s]
-    return [s for s in (main_secret,) if s]
+        return [s for s in (IG_APP_SECRET, META_APP_SECRET) if s]
+    return [s for s in (META_APP_SECRET,) if s]
 
 
 def verify_signature(payload: bytes, signature_header: str,

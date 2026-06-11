@@ -66,7 +66,13 @@ async def process_incoming_photo(
             tmp.write(img_bytes)
             tmp_path = tmp.name
 
-        analysis = await describe_image(tmp_path)
+        vision_result = await describe_image(tmp_path)
+        # describe_image ritorna un dict {"description", "gender_hints", ...};
+        # la pipeline lavora sulla descrizione testuale (stessa logica di file_analyzer)
+        if isinstance(vision_result, dict):
+            analysis = vision_result.get("description", "") or ""
+        else:
+            analysis = str(vision_result or "")
         log("PIPELINE_PHOTO_ANALYZED", platform=platform, session=session_id, len=len(analysis))
 
         face_result = await handle_photo_identification(session_id, img_bytes, analysis, caption)
