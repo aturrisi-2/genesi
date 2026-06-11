@@ -117,21 +117,39 @@ def merge_identity_update(profile, update: IdentityUpdate):
                 existing.append(normalized)
                 existing_lower.add(normalized)
 
+    # Sanitizzazione centralizzata: mai descrittori relazionali ("madre",
+    # "mia figlia") o specie/razze come nomi propri (regola d'oro name_utils)
+    from core.name_utils import sanitize_profile_name, sanitize_pet_name
+
     if update.spouse:
-        profile.spouse = update.spouse
+        _clean_spouse = sanitize_profile_name(update.spouse)
+        if _clean_spouse:
+            profile.spouse = _clean_spouse
+        else:
+            logger.info("IDENTITY_MERGE_SPOUSE_SKIP raw=%r reason=relational_or_invalid", update.spouse)
 
     if update.pets:
         from core.models.profile_model import Pet
         existing_pets_names = [p.name.lower() for p in profile.pets]
         for p in update.pets:
-            if "name" in p and p["name"].lower() not in existing_pets_names:
-                profile.pets.append(Pet(type=p.get("type", "unknown"), name=p["name"]))
+            raw_name = p.get("name", "")
+            clean = sanitize_pet_name(raw_name) if raw_name else None
+            if clean and clean.lower() not in existing_pets_names:
+                profile.pets.append(Pet(type=p.get("type", "unknown"), name=clean))
+                existing_pets_names.append(clean.lower())
+            elif raw_name and not clean:
+                logger.info("IDENTITY_MERGE_PET_SKIP raw=%r reason=species_or_invalid", raw_name)
 
     if update.children:
         from core.models.profile_model import Child
         existing_children_names = [c.name.lower() for c in profile.children]
         for c in update.children:
-            if "name" in c and c["name"].lower() not in existing_children_names:
-                profile.children.append(Child(name=c["name"]))
+            raw_name = c.get("name", "")
+            clean = sanitize_profile_name(raw_name) if raw_name else None
+            if clean and clean.lower() not in existing_children_names:
+                profile.children.append(Child(name=clean))
+                existing_children_names.append(clean.lower())
+            elif raw_name and not clean:
+                logger.info("IDENTITY_MERGE_CHILD_SKIP raw=%r reason=relational_or_invalid", raw_name)
 
     return profile
