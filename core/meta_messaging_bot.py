@@ -241,7 +241,11 @@ async def handle_update(payload: dict, platform: str):
         return
 
     try:
-        for entry in payload.get("entry", []):
+        entries = payload.get("entry", [])
+        n_events = sum(len(e.get("messaging", []) or []) for e in entries)
+        logger.info("META_UPDATE_RECEIVED platform=%s entries=%d messaging_events=%d",
+                    platform, len(entries), n_events)
+        for entry in entries:
             for event in entry.get("messaging", []) or []:
                 try:
                     await _process_event(event, platform, cfg)
@@ -256,9 +260,12 @@ async def _process_event(event: dict, platform: str, cfg: dict):
     msg = event.get("message") or {}
     if not msg:
         # delivery, read, postback, reaction: non sono messaggi utente
+        other = [k for k in event.keys() if k not in ("sender", "recipient", "timestamp")]
+        logger.info("META_EVENT_SKIPPED platform=%s type=%s", platform, other)
         return
     if msg.get("is_echo"):
         # Messaggio inviato dalla pagina stessa → ignorare (previene loop)
+        logger.info("META_EVENT_ECHO platform=%s", platform)
         return
 
     sender_id = (event.get("sender") or {}).get("id", "")
