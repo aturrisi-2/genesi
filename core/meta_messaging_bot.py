@@ -329,7 +329,8 @@ async def _process_change(change: dict, platform: str):
         username = from_user.get("username", "")
         ctx = f"Commento di @{username}: {text}" if username else f"Commento: {text}"
         reply = await llm_service._call_model(
-            "openai/gpt-4o-mini", _COMMENT_REPLY_PROMPT, ctx, route="memory",
+            "openai/gpt-4o-mini", _COMMENT_REPLY_PROMPT, ctx,
+            user_id="ig_comments", route="memory",
         )
         reply = (reply or "").strip()
         if not reply:

@@ -145,7 +145,8 @@ async def _generate_content(state: dict) -> dict | None:
         prompt = _CONTENT_PROMPT.format(insights_block=insights_block)
         raw = await llm_service._call_model(
             "openai/gpt-4o-mini", prompt,
-            "Genera il prossimo post Instagram.", route="memory",
+            "Genera il prossimo post Instagram.",
+            user_id="ig_publisher", route="memory",
         )
         clean = (raw or "").strip()
         if clean.startswith("```"):
