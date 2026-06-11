@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
 from typing import Dict, Optional
 from core.simple_chat import simple_chat_handler
+from core.group_context import GroupContext
 from core.user_manager import user_manager
 from core.chat_memory import chat_memory
 from core.log import log
@@ -29,6 +30,10 @@ router = APIRouter(prefix="/chat")
 
 class ChatRequest(BaseModel):
     message: str
+    platform: Optional[str] = None      # "telegram", "whatsapp", "web"
+    group_id: Optional[str] = None      # slug gruppo, es. "casa_turrisi"
+    group_name: Optional[str] = None    # nome leggibile, es. "Casa Turrisi"
+    member_count: Optional[int] = None  # numero membri nel gruppo, se noto
 
 class ChatResponse(BaseModel):
     response: str
@@ -93,7 +98,14 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
             await storage.save(f"profile:{user_id}", profile.model_dump(mode="json"))
             log("STORAGE_SAVE", key=f"profile:{user_id}")
 
-        response = await simple_chat_handler(user_id, request.message)
+        group_ctx = GroupContext(
+            platform=request.platform or "web",
+            group_id=request.group_id or "",
+            group_name=request.group_name or "",
+            member_count=request.member_count,
+        ) if (request.platform or request.group_id or request.group_name) else None
+
+        response = await simple_chat_handler(user_id, request.message, group_context=group_ctx)
         
         # Defensive normalization: ensure response is always a string
         if isinstance(response, tuple):
