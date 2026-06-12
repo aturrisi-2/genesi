@@ -1057,9 +1057,27 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     if not is_group:
                         await send_message(wa_id, f"🎤 _{transcription}_")
                 else:
-                    if not is_group:
-                        await send_message(wa_id, "Non sono riuscita a capire il vocale. Prova a scrivere.")
-                    return
+                    # Niente parlato? Forse musica o suoni → analisi audio universale
+                    _audio_analysis = ""
+                    try:
+                        from core.message_pipeline import process_incoming_audio
+                        _ares = await process_incoming_audio(
+                            session_id=_wa_session,
+                            user_id=chat_id if is_group else wa_id,
+                            audio_bytes=audio_bytes,
+                            platform="whatsapp",
+                            content_type=mime or "audio/ogg",
+                        )
+                        _audio_analysis = _ares.get("analysis", "")
+                    except Exception as _ae:
+                        logger.warning("WA_AUDIO_PIPELINE_ERR wa_id=%s err=%s", wa_id, _ae)
+                    if _audio_analysis:
+                        text = f"Ascolta questo audio.\n\n[Contenuto audio: {_audio_analysis}]"
+                        voice_id = ""
+                    else:
+                        if not is_group:
+                            await send_message(wa_id, "Non sono riuscita a capire il vocale. Prova a scrivere.")
+                        return
             else:
                 if not is_group:
                     await send_message(wa_id, "Non sono riuscita a scaricare il vocale.")

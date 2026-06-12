@@ -125,7 +125,8 @@ async def describe_video(path: str) -> dict:
                 )
                 description = (res.choices[0].message.content or "").strip()
                 # Rifiuto del modello → prova provider successivo
-                _refusals = ("i'm sorry", "i can't assist", "non posso aiutarti")
+                _refusals = ("i'm sorry", "i can't assist", "non posso aiutarti",
+                             "non posso vedere", "i can't view", "i cannot view")
                 if description and not (len(description) < 150 and
                                         any(m in description.lower() for m in _refusals)):
                     break

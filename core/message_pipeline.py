@@ -199,6 +199,50 @@ async def process_incoming_video(
             pass
 
 
+# ─── AUDIO PROCESSING ────────────────────────────────────────────────────────
+
+async def process_incoming_audio(
+    session_id: str,
+    user_id: str,
+    audio_bytes: bytes,
+    platform: str,
+    content_type: str = "audio/ogg",
+    caption: str | None = None,
+) -> dict:
+    """
+    Elabora un audio in arrivo da QUALSIASI piattaforma.
+
+    Capisce: parlato (trascrizione + traduzione IT), musica (genere/mood/brano),
+    suoni di vita quotidiana (traffico, pioggia, animali, ambienti...).
+
+    Returns:
+        {
+          "kind": "speech|music|sound|mixed|unknown",
+          "transcription": str|None,   # se parlato
+          "analysis": str,             # blocco descrittivo per il LLM
+          "augmented_caption": str,
+        }
+    """
+    from core.audio_analysis_service import analyze_audio, build_audio_context
+
+    try:
+        result = await analyze_audio(audio_bytes, content_type)
+        analysis = build_audio_context(result)
+        log("PIPELINE_AUDIO_DONE", platform=platform, session=session_id,
+            kind=result.get("kind"), len=len(analysis))
+        return {
+            "kind": result.get("kind", "unknown"),
+            "transcription": result.get("transcription"),
+            "analysis": analysis,
+            "augmented_caption": caption or "",
+        }
+    except Exception as e:
+        logger.error("PIPELINE_AUDIO_ERROR platform=%s session=%s err=%s",
+                     platform, session_id, e)
+        return {"kind": "unknown", "transcription": None,
+                "analysis": "", "augmented_caption": caption or ""}
+
+
 # ─── TEXT PROCESSING ──────────────────────────────────────────────────────────
 
 async def process_incoming_text(

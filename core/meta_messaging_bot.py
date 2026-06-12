@@ -72,6 +72,9 @@ MAX_TEXT_LEN       = 12000          # allineato a ChatRequest (api/chat.py)
 MAX_IMAGE_BYTES    = 20 * 1024 * 1024
 MAX_VIDEO_BYTES    = 50 * 1024 * 1024
 _ALLOWED_VIDEO_MIME = ("video/mp4", "video/quicktime", "video/webm", "video/3gpp")
+MAX_AUDIO_BYTES    = 25 * 1024 * 1024
+_ALLOWED_AUDIO_MIME = ("audio/mpeg", "audio/mp4", "audio/ogg", "audio/wav",
+                       "audio/x-wav", "audio/aac", "audio/webm", "audio/amr")
 MSG_CHUNK_LEN      = 1900           # limite messaggio Messenger ~2000 char
 _ALLOWED_IMG_MIME  = ("image/jpeg", "image/png", "image/webp", "image/gif")
 
@@ -535,6 +538,7 @@ async def _process_event(event: dict, platform: str, cfg: dict):
 
     image_url = ""
     video_url = ""
+    audio_url = ""
     other_types: list[str] = []
     for att in attachments:
         att_type = att.get("type", "")
@@ -544,6 +548,8 @@ async def _process_event(event: dict, platform: str, cfg: dict):
         elif att_type in ("video", "ig_reel", "reel", "animated_image_share") and not video_url:
             # Reel Instagram condivisi e video diretti
             video_url = att_url
+        elif att_type == "audio" and not audio_url:
+            audio_url = att_url
         elif att_type:
             other_types.append(att_type)
 
@@ -555,12 +561,16 @@ async def _process_event(event: dict, platform: str, cfg: dict):
         await _handle_video(user_id, sender_id, platform, video_url, caption=text)
         return
 
+    if audio_url:
+        await _handle_audio(user_id, sender_id, platform, audio_url, caption=text)
+        return
+
     if not text:
         if other_types:
             # MAI silenzio: qualsiasi allegato non gestito riceve una risposta
             logger.info("META_ATTACHMENT_UNSUPPORTED platform=%s types=%s", platform, other_types)
             await send_message(platform, sender_id,
-                "Per ora su questo canale gestisco testo, foto e video/Reel. "
+                "Per ora su questo canale gestisco testo, foto, video/Reel e audio. "
                 "Questo contenuto non riesco ancora ad aprirlo!")
         return
 
@@ -637,6 +647,69 @@ async def _handle_image(user_id: str, sender_id: str, platform: str,
         platform=platform,
         intent=intent,
         is_group=False,
+    ))
+
+
+async def _handle_audio(user_id: str, sender_id: str, platform: str,
+                        audio_url: str, caption: str = ""):
+    """Pipeline audio: download sicuro → analisi (parlato/musica/suoni) → chat → memoria."""
+    from core.message_pipeline import process_incoming_audio, schedule_memory_tasks
+    from core.simple_chat import simple_chat_handler
+
+    asyncio.create_task(show_typing(platform, sender_id))
+
+    # Download con allowlist audio
+    audio_bytes = None
+    mime = "audio/ogg"
+    try:
+        if audio_url and audio_url.startswith("https://"):
+            async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+                res = await client.get(audio_url)
+                if res.status_code == 200 and len(res.content) <= MAX_AUDIO_BYTES:
+                    mime = (res.headers.get("content-type", "") or "audio/ogg").split(";")[0].strip().lower()
+                    if not mime.startswith("audio/") and mime not in _ALLOWED_AUDIO_MIME:
+                        mime = "audio/ogg"
+                    audio_bytes = res.content
+    except Exception as e:
+        logger.error("META_AUDIO_DOWNLOAD_ERROR err=%s", e)
+
+    if not audio_bytes:
+        await send_message(platform, sender_id,
+            "Non sono riuscita a scaricare l'audio. Riprova!")
+        return
+
+    audio = await process_incoming_audio(
+        session_id=user_id, user_id=user_id,
+        audio_bytes=audio_bytes, platform=platform,
+        content_type=mime, caption=caption,
+    )
+    analysis = audio.get("analysis", "")
+    transcription = audio.get("transcription")
+
+    if transcription and audio.get("kind") == "speech":
+        # Vocale parlato: la trascrizione È il messaggio dell'utente
+        user_msg = transcription
+        if caption:
+            user_msg = f"{caption}\n{transcription}"
+        if analysis and analysis != transcription:
+            user_msg += f"\n\n[Contesto audio: {analysis}]"
+    elif analysis:
+        user_msg = (caption or "Ascolta questo audio che ti ho inviato.") + \
+                   f"\n\n[Contenuto audio: {analysis}]"
+    else:
+        user_msg = ((caption or "Ti ho inviato un audio.") +
+                    "\n\n[SISTEMA: l'utente ha inviato un audio ma l'analisi non è "
+                    "riuscita. Rispondi con curiosità, senza fingere di averlo sentito.]")
+
+    response, intent = await simple_chat_handler(
+        user_id=user_id, message=user_msg, platform=platform,
+    )
+    await send_message(platform, sender_id, response)
+    log("META_AUDIO_OK", platform=platform, user_id=user_id, kind=audio.get("kind"))
+
+    asyncio.create_task(schedule_memory_tasks(
+        user_id=user_id, user_message=user_msg, response=response,
+        platform=platform, intent=intent, is_group=False,
     ))
 
 

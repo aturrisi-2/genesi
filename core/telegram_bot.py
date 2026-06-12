@@ -1644,7 +1644,7 @@ async def handle_update(update: dict):
             logger.info("TELEGRAM_VIDEO_OK chat_id=%s analyzed=%s", chat_id, bool(_video_analysis))
             return
 
-        # ── VOCALE ─────────────────────────────────────────────────────────────
+        # ── VOCALE / AUDIO ─────────────────────────────────────────────────────
         if voice or audio:
             await send_typing(chat_id)
             media      = voice or audio
@@ -1654,6 +1654,45 @@ async def handle_update(update: dict):
                 return
 
             mime = (voice or audio).get("mime_type", "audio/ogg")
+
+            # Analisi audio universale: parlato, ma anche musica e suoni
+            try:
+                from core.message_pipeline import process_incoming_audio
+                _ares = await process_incoming_audio(
+                    session_id=str(chat_id) if is_group else str(from_id),
+                    user_id=session_uid,
+                    audio_bytes=audio_bytes,
+                    platform="telegram",
+                    content_type=mime,
+                    caption=caption,
+                )
+                _akind = _ares.get("kind")
+                _atrans = _ares.get("transcription")
+                _aanalysis = _ares.get("analysis", "")
+                if _akind == "speech" and _atrans:
+                    # Parlato: comportamento classico (eco trascrizione + chat)
+                    await send_message(chat_id, f"🎤 {_atrans}")
+                    _audio_msg = _atrans
+                    if _aanalysis and _aanalysis != _atrans:
+                        _audio_msg += f"\n\n[Contesto audio: {_aanalysis}]"
+                    reply = await _do_chat(_audio_msg)
+                    if not await _handle_reply(reply):
+                        return
+                    logger.info("TELEGRAM_AUDIO_OK chat_id=%s kind=speech", chat_id)
+                    return
+                elif _aanalysis:
+                    # Musica o suoni: rispondi alla descrizione
+                    reply = await _do_chat(
+                        (caption or "Ascolta questo audio.") +
+                        f"\n\n[Contenuto audio: {_aanalysis}]")
+                    if not await _handle_reply(reply):
+                        return
+                    logger.info("TELEGRAM_AUDIO_OK chat_id=%s kind=%s", chat_id, _akind)
+                    return
+            except Exception as _ae:
+                logger.warning("TELEGRAM_AUDIO_PIPELINE_ERR chat_id=%s err=%s", chat_id, _ae)
+
+            # Fallback: flusso STT classico (zero regressioni)
             transcription = await _transcribe(token, audio_bytes, mime)
             if transcription == "__TOKEN_EXPIRED__":
                 new_token = await _auto_refresh(session_uid, session)
