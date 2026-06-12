@@ -915,6 +915,12 @@ class Proactor:
                     self._emit_status("Recupero i tuoi ricordi...")
                     current_response = await self._handle_memory_context(user_id, processed_message, brain_state, conversation_id)
                     final_source = "tool"
+
+                elif current_intent == "create_reel":
+                    log("ROUTING_DECISION", route="create_reel", user_id=user_id)
+                    self._emit_status("Preparo il Reel...")
+                    current_response = await self._handle_create_reel(user_id, processed_message, brain_state)
+                    final_source = "tool"
                 
                 elif current_intent == "calendar_sync_all":
                     log("ROUTING_DECISION", route="calendar_sync_all", user_id=user_id)
@@ -4606,6 +4612,73 @@ Messaggio utente: {message}"""
             re.search(rf"\b{re.escape(n.lower())}\b", msg_lower)
             for n in names if len(n) >= 3
         )
+
+    async def _handle_create_reel(self, user_id: str, message: str,
+                                  brain_state: dict) -> str:
+        """
+        Reel su comando via chat ("crea un reel" / "crea un reel su X").
+        - Solo utenti autorizzati (admin: comporta costi reali)
+        - Cooldown 30 min anti spese accidentali
+        - Senza tema → logica autonoma (notizie del giorno)
+        - Con tema → le istruzioni dell'utente hanno priorità assoluta
+        La pubblicazione gira in background: la risposta è immediata.
+        """
+        profile = (brain_state or {}).get("profile") or {}
+        email = (profile.get("email") or "").lower()
+        allowed_env = os.getenv(
+            "REEL_CREATOR_EMAILS",
+            "alfio.turrisi@gmail.com,idappleturrisi@gmail.com,"
+            "telegram_494065944@genesi.group")
+        allowed = {e.strip().lower() for e in allowed_env.split(",") if e.strip()}
+        try:
+            from auth.config import ADMIN_EMAILS
+            allowed |= {e.lower() for e in ADMIN_EMAILS}
+        except Exception:
+            pass
+        if email not in allowed:
+            logger.info("CREATE_REEL_DENIED user=%s email=%s", user_id, email)
+            return ("La creazione dei Reel sul mio profilo è riservata ad Alfio! "
+                    "Posso però raccontarti come funziona, se ti incuriosisce.")
+
+        from core.instagram_publisher import (
+            publish_one_reel, manual_reel_allowed, mark_manual_reel)
+        ok_cd, rem = manual_reel_allowed()
+        if not ok_cd:
+            return (f"Ho creato un Reel da poco: per prudenza sui costi aspetto "
+                    f"ancora {rem // 60 + 1} minuti prima del prossimo. "
+                    "Riprova tra poco!")
+
+        # Estrai il tema: tutto ciò che segue "reel su/che/con..."
+        clean_msg = message.split("\n\n[")[0].strip()  # rimuovi blocchi contesto
+        theme = ""
+        m = re.search(
+            r"\b(?:reel|real)\b[\s,]*(?:su(?:l|lla|gli|lle|i)?|che parli? d[i']|"
+            r"riguardo(?:\s+a)?|a tema|dedicato a|con(?:tenuto)?|:)?\s*(.+)$",
+            clean_msg, re.IGNORECASE)
+        if m and m.group(1):
+            theme = m.group(1).strip().strip(".!?\"' ")
+            if len(theme) < 4:
+                theme = ""
+
+        mark_manual_reel()
+        log("CREATE_REEL_TRIGGERED", user_id=user_id, theme=theme[:80] or "auto")
+
+        async def _bg_publish(_theme=theme):
+            try:
+                ok = await publish_one_reel(custom_theme=_theme)
+                log("CREATE_REEL_DONE", ok=ok, theme=_theme[:60] or "auto")
+            except Exception as e:
+                logger.error("CREATE_REEL_BG_ERROR err=%s", e)
+
+        asyncio.create_task(_bg_publish())
+
+        if theme:
+            return (f'Perfetto! Creo un Reel su "{theme}": genero le scene, '
+                    "registro la narrazione con la mia voce e lo pubblico. "
+                    "Sarà su Instagram tra 3-5 minuti! 🎬")
+        return ("Perfetto! Leggo le notizie di oggi, scelgo la più adatta e "
+                "costruisco il Reel: scene, narrazione e pubblicazione. "
+                "Sarà su Instagram tra 3-5 minuti! 🎬")
 
     def _should_override_to_relational(self, message: str, user_id: str) -> bool:
         """

@@ -746,6 +746,11 @@ class IntentClassifier:
             log("INTENT_CLASSIFIED", intent="memory_correction", user_id=user_id, engine="regex_priority", message=message[:50])
             return ["memory_correction"]
 
+        # PRIORITÀ ALTA: creazione Reel su comando (guard admin nel proactor)
+        if re.search(r"\b(crea|creami|fai|fammi|genera|generami|prepara|pubblica)\w*\s+(un\s+|un'|uno\s+|il\s+)?(reel|real)\b", message_lower):
+            log("INTENT_CLASSIFIED", intent="create_reel", user_id=user_id, engine="regex_priority", message=message[:50])
+            return ["create_reel"]
+
         # PRIORITÀ ALTA: identity — domande dirette dell'utente sul PROPRIO profilo
         # (messo DOPO memory_correction così "non ho figli" è già catturato dalla correzione)
         _identity_first_person = [

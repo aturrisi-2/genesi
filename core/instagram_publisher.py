@@ -302,6 +302,25 @@ def _reels_times() -> list[str]:
     return [t.strip() for t in raw.split(",") if t.strip()]
 
 
+def manual_reel_allowed() -> tuple[bool, int]:
+    """
+    Cooldown per i Reel su comando (anti spese accidentali):
+    default 30 min tra una richiesta e l'altra (IG_REEL_MANUAL_COOLDOWN sec).
+    Ritorna (consentito, secondi_rimanenti).
+    """
+    state = _load_state()
+    last = state.get("last_manual_reel_ts", 0)
+    wait = int(os.getenv("IG_REEL_MANUAL_COOLDOWN", "1800"))
+    rem = int(last + wait - time.time())
+    return (rem <= 0, max(rem, 0))
+
+
+def mark_manual_reel():
+    state = _load_state()
+    state["last_manual_reel_ts"] = int(time.time())
+    _save_state(state)
+
+
 def _reel_due(state: dict) -> bool:
     """
     True se è passato l'intervallo configurato dall'ultimo Reel
@@ -394,8 +413,12 @@ Rispondi SOLO con JSON valido:
  "scene_prompts": ["scena 1", "scena 2", "scena 3", "scena 4"]}}"""
 
 
-async def _generate_reel_content(state: dict) -> dict | None:
-    """LLM progetta il Reel: tema, caption e 4 prompt di scena coerenti."""
+async def _generate_reel_content(state: dict, custom_theme: str = "") -> dict | None:
+    """
+    LLM progetta il Reel: tema, caption e 4 prompt di scena coerenti.
+    custom_theme (richiesta diretta dell'utente via chat) ha priorità
+    ASSOLUTA su notizie ed evergreen.
+    """
     try:
         from core.llm_service import llm_service
         recent = [p for p in state.get("posts", []) if p.get("type") == "reel"][-6:]
@@ -406,13 +429,21 @@ async def _generate_reel_content(state: dict) -> dict | None:
         else:
             insights_block = "Nessun Reel precedente: scegli liberamente."
 
-        # Notizie reali del giorno: il Reel si ancora all'attualità
-        news = await _fetch_current_news()
-        news_block = (f"NOTIZIE REALI DI OGGI (fonte GNews):\n{news}" if news
-                      else "Nessuna notizia disponibile oggi.")
-
-        user_msg = ("Progetta il prossimo Reel basandolo su UNA delle notizie elencate."
-                    if news else "Progetta il prossimo Reel.")
+        # Richiesta diretta dell'utente → vince su notizie ed evergreen
+        if custom_theme:
+            news = ""
+            news_block = ("RICHIESTA DIRETTA DELL'UTENTE (priorità assoluta, ignora "
+                          f"notizie ed evergreen):\n{custom_theme}\n"
+                          "Costruisci il Reel ESATTAMENTE su questo tema/istruzioni. "
+                          "news_ref=null.")
+            user_msg = "Progetta il Reel seguendo la richiesta dell'utente."
+        else:
+            # Notizie reali del giorno: il Reel si ancora all'attualità
+            news = await _fetch_current_news()
+            news_block = (f"NOTIZIE REALI DI OGGI (fonte GNews):\n{news}" if news
+                          else "Nessuna notizia disponibile oggi.")
+            user_msg = ("Progetta il prossimo Reel basandolo su UNA delle notizie elencate."
+                        if news else "Progetta il prossimo Reel.")
         data = None
         for attempt in range(2):
             raw = await llm_service._call_model(
@@ -583,8 +614,11 @@ def _build_reel_video(image_paths: list[str], out_path: str,
         return False
 
 
-async def publish_one_reel() -> bool:
-    """Genera e pubblica un Reel completo. Ritorna True se pubblicato."""
+async def publish_one_reel(custom_theme: str = "") -> bool:
+    """
+    Genera e pubblica un Reel completo. Ritorna True se pubblicato.
+    custom_theme: tema/istruzioni dell'utente (richiesta diretta via chat).
+    """
     token = _page_token()
     ig_id = await get_ig_user_id()
     if not token or not ig_id:
@@ -592,7 +626,7 @@ async def publish_one_reel() -> bool:
         return False
 
     state = _load_state()
-    content = await _generate_reel_content(state)
+    content = await _generate_reel_content(state, custom_theme=custom_theme)
     if not content:
         return False
 
