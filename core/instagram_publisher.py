@@ -298,11 +298,15 @@ LINEE GUIDA:
   senza testo nell'immagine, senza persone riconoscibili, stile coerente
   (warm tones, italian aesthetic, cinematic light). Ripeti lo stile in ogni prompt.
 - caption: italiana, calda, 2-3 frasi + domanda + 5-8 hashtag.
+- narration: il testo che la voce di Genesi narra sopra il video — italiano,
+  caldo e poetico, MASSIMO 30 parole (deve stare in ~11 secondi), segue il
+  ritmo delle 4 scene. Niente hashtag, niente emoji: solo parole da ascoltare.
 
 {insights_block}
 
 Rispondi SOLO con JSON valido:
 {{"theme": "tema", "caption": "caption con hashtag",
+ "narration": "testo narrato max 30 parole",
  "scene_prompts": ["scena 1", "scena 2", "scena 3", "scena 4"]}}"""
 
 
@@ -335,10 +339,31 @@ async def _generate_reel_content(state: dict) -> dict | None:
         return None
 
 
-def _build_reel_video(image_paths: list[str], out_path: str) -> bool:
+def _synthesize_narration(text: str, out_wav: str) -> bool:
+    """
+    Voce di Genesi (Piper TTS locale, it_IT-paola) per la narrazione del Reel.
+    Costo zero, nessun problema di copyright musicale.
+    """
+    import subprocess
+    try:
+        piper_bin = os.getenv("PIPER_BINARY", "/opt/piper/piper/piper")
+        piper_model = os.getenv("PIPER_MODEL", "/opt/piper/voices/it_IT-paola-medium.onnx")
+        if not (os.path.exists(piper_bin) and os.path.exists(piper_model)):
+            return False
+        r = subprocess.run([piper_bin, "--model", piper_model, "--output_file", out_wav],
+                           input=text.encode(), capture_output=True, timeout=90)
+        return r.returncode == 0 and os.path.exists(out_wav) and os.path.getsize(out_wav) > 1000
+    except Exception as e:
+        logger.warning("IG_REEL_TTS_ERROR err=%s", e)
+        return False
+
+
+def _build_reel_video(image_paths: list[str], out_path: str,
+                      narration_wav: str = "") -> bool:
     """
     Monta le immagini in un video verticale 1080x1920 con effetto Ken Burns
-    (zoom lento) — 3s a scena, 25fps, silenzioso. Costo zero (ffmpeg locale).
+    (zoom lento) — 3s a scena, 25fps. Se narration_wav è presente, la voce
+    di Genesi viene muxata sull'audio. Costo zero (ffmpeg+Piper locali).
     """
     import subprocess
     try:
@@ -367,12 +392,33 @@ def _build_reel_video(image_paths: list[str], out_path: str) -> bool:
         with open(list_path, "w") as f:
             for s in seg_paths:
                 f.write(f"file '{os.path.abspath(s)}'\n")
+        # Senza narrazione: concat diretto. Con narrazione: concat in un file
+        # intermedio, poi mux della voce (apad riempie di silenzio fino alla
+        # fine del video, -shortest taglia alla durata del video)
+        concat_out = out_path + ".noaudio.mp4" if narration_wav else out_path
         rc = subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0",
-                             "-i", list_path, "-c", "copy", out_path],
+                             "-i", list_path, "-c", "copy", concat_out],
                             capture_output=True, timeout=60)
         if rc.returncode != 0:
             logger.error("IG_REEL_CONCAT_FAIL rc=%s stderr=%.300s",
                          rc.returncode, rc.stderr.decode(errors="replace")[-300:])
+
+        if narration_wav and os.path.exists(concat_out):
+            rc2 = subprocess.run(
+                ["ffmpeg", "-y", "-i", concat_out, "-i", narration_wav,
+                 "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
+                 "-af", "apad", "-shortest", out_path],
+                capture_output=True, timeout=60)
+            if rc2.returncode != 0:
+                logger.error("IG_REEL_MUX_FAIL rc=%s stderr=%.300s",
+                             rc2.returncode, rc2.stderr.decode(errors="replace")[-300:])
+                # Fallback: pubblica senza audio piuttosto che fallire
+                os.replace(concat_out, out_path)
+            else:
+                try:
+                    os.unlink(concat_out)
+                except Exception:
+                    pass
 
         for s in seg_paths + [list_path]:
             try:
@@ -431,10 +477,26 @@ async def publish_one_reel() -> bool:
                 pass
         return False
 
+    # Voce di Genesi (narrazione) — locale, costo zero
+    narration_wav = ""
+    narration_text = (content.get("narration") or "").strip()
+    if narration_text:
+        _wav = os.path.join(IMG_DIR, f"reel_voice_{uuid.uuid4().hex[:8]}.wav")
+        if await asyncio.to_thread(_synthesize_narration, narration_text, _wav):
+            narration_wav = _wav
+            logger.info("IG_REEL_NARRATION ok=True words=%d", len(narration_text.split()))
+        else:
+            logger.info("IG_REEL_NARRATION ok=False (video senza audio)")
+
     # Monta il video
     video_name = f"reel_{uuid.uuid4().hex}.mp4"
     video_path = os.path.join(IMG_DIR, video_name)
-    ok = await asyncio.to_thread(_build_reel_video, frame_paths, video_path)
+    ok = await asyncio.to_thread(_build_reel_video, frame_paths, video_path, narration_wav)
+    if narration_wav:
+        try:
+            os.unlink(narration_wav)
+        except Exception:
+            pass
     logger.info("IG_REEL_BUILD ok=%s size=%s", ok,
                 os.path.getsize(video_path) if os.path.exists(video_path) else "missing")
     for fp in frame_paths:
