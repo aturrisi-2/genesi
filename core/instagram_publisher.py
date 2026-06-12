@@ -417,13 +417,38 @@ async def _generate_reel_content(state: dict) -> dict | None:
         return None
 
 
+_REEL_TTS_INSTRUCTIONS = (
+    "Voce sussurrata, intima e teatrale, come la narrazione di un documentario "
+    "poetico o di un trailer cinematografico. Italiano madrelingua, accento "
+    "italiano naturale. Ritmo lento, pause espressive, intensità emotiva "
+    "crescente. Quasi un sussurro confidenziale all'orecchio di chi ascolta."
+)
+
+
 async def _synthesize_narration(text: str, out_path: str) -> bool:
     """
-    Voce di Genesi per la narrazione del Reel. Costo zero.
-    Primaria: EdgeTTS neurale (it-IT-IsabellaNeural — fluida e calda).
-    Fallback: Piper locale (it_IT-paola, più meccanica ma sempre disponibile).
+    Voce di Genesi per la narrazione del Reel.
+    Primaria: OpenAI gpt-4o-mini-tts voce Fable con istruzioni TEATRALI
+    (sussurrata, da trailer — scelta utente). Costo: centesimi per ~15s.
+    Fallback: EdgeTTS (gratis) → Piper locale.
     """
-    # 1° tentativo: EdgeTTS (voce neurale naturale)
+    # 1° tentativo: OpenAI Fable teatrale
+    try:
+        from core.tts_provider import OpenAITTSProvider
+        voice = os.getenv("IG_REEL_OPENAI_VOICE", "fable")
+        instructions = os.getenv("IG_REEL_TTS_INSTRUCTIONS", _REEL_TTS_INSTRUCTIONS)
+        p = OpenAITTSProvider(voice=voice, model="gpt-4o-mini-tts",
+                              instructions=instructions)
+        audio = await p.synthesize(text)
+        if audio and len(audio) > 1000:
+            with open(out_path, "wb") as f:
+                f.write(audio)
+            logger.info("IG_REEL_TTS_OPENAI_OK voice=%s bytes=%d", voice, len(audio))
+            return True
+    except Exception as e:
+        logger.warning("IG_REEL_TTS_OPENAI_ERR err=%s", e)
+
+    # 2° tentativo: EdgeTTS (voce neurale gratuita)
     try:
         from core.tts_provider import EdgeTTSProvider
         voice = os.getenv("IG_REEL_VOICE", "it-IT-IsabellaNeural")
