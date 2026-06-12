@@ -339,20 +339,35 @@ async def _generate_reel_content(state: dict) -> dict | None:
         return None
 
 
-def _synthesize_narration(text: str, out_wav: str) -> bool:
+async def _synthesize_narration(text: str, out_path: str) -> bool:
     """
-    Voce di Genesi (Piper TTS locale, it_IT-paola) per la narrazione del Reel.
-    Costo zero, nessun problema di copyright musicale.
+    Voce di Genesi per la narrazione del Reel. Costo zero.
+    Primaria: EdgeTTS neurale (it-IT-IsabellaNeural — fluida e calda).
+    Fallback: Piper locale (it_IT-paola, più meccanica ma sempre disponibile).
     """
+    # 1° tentativo: EdgeTTS (voce neurale naturale)
+    try:
+        from core.tts_provider import EdgeTTSProvider
+        voice = os.getenv("IG_REEL_VOICE", "it-IT-IsabellaNeural")
+        audio = await EdgeTTSProvider(voice=voice).synthesize(text)
+        if audio and len(audio) > 1000:
+            with open(out_path, "wb") as f:
+                f.write(audio)
+            logger.info("IG_REEL_TTS_EDGE_OK voice=%s bytes=%d", voice, len(audio))
+            return True
+    except Exception as e:
+        logger.warning("IG_REEL_TTS_EDGE_ERR err=%s", e)
+
+    # Fallback: Piper locale
     import subprocess
     try:
         piper_bin = os.getenv("PIPER_BINARY", "/opt/piper/piper/piper")
         piper_model = os.getenv("PIPER_MODEL", "/opt/piper/voices/it_IT-paola-medium.onnx")
         if not (os.path.exists(piper_bin) and os.path.exists(piper_model)):
             return False
-        r = subprocess.run([piper_bin, "--model", piper_model, "--output_file", out_wav],
+        r = subprocess.run([piper_bin, "--model", piper_model, "--output_file", out_path],
                            input=text.encode(), capture_output=True, timeout=90)
-        return r.returncode == 0 and os.path.exists(out_wav) and os.path.getsize(out_wav) > 1000
+        return r.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 1000
     except Exception as e:
         logger.warning("IG_REEL_TTS_ERROR err=%s", e)
         return False
@@ -481,8 +496,9 @@ async def publish_one_reel() -> bool:
     narration_wav = ""
     narration_text = (content.get("narration") or "").strip()
     if narration_text:
-        _wav = os.path.join(IMG_DIR, f"reel_voice_{uuid.uuid4().hex[:8]}.wav")
-        if await asyncio.to_thread(_synthesize_narration, narration_text, _wav):
+        # Edge produce MP3, Piper WAV — ffmpeg li accetta entrambi
+        _wav = os.path.join(IMG_DIR, f"reel_voice_{uuid.uuid4().hex[:8]}.audio")
+        if await _synthesize_narration(narration_text, _wav):
             narration_wav = _wav
             logger.info("IG_REEL_NARRATION ok=True words=%d", len(narration_text.split()))
         else:
