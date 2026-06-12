@@ -286,12 +286,60 @@ def _reel_due(state: dict) -> bool:
     return (time.time() - last_ts) >= (every_days * 86400 - 3600)
 
 
+async def _fetch_current_news(limit: int = 8) -> str:
+    """
+    Legge le notizie REALI del giorno (GNews: cronaca, politica, tecnologia,
+    attualità italiana) per ancorare i Reel al presente. Fail-silent.
+    """
+    key = os.getenv("GNEWS_API_KEY", "")
+    if not key:
+        return ""
+    lines: list[str] = []
+    try:
+        # nation vincolato all'Italia; tecnologia/mondo/scienza in italiano
+        # senza vincolo country (le testate tech italiane coprono temi globali)
+        queries = [
+            ("nation",     {"lang": "it", "country": "it", "category": "nation"}),
+            ("technology", {"lang": "it", "category": "technology"}),
+            ("world",      {"lang": "it", "category": "world"}),
+            ("science",    {"lang": "it", "category": "science"}),
+        ]
+        async with httpx.AsyncClient(timeout=20) as client:
+            for qi, (topic, params) in enumerate(queries):
+                if qi:
+                    await asyncio.sleep(1.5)  # GNews free: rate limit sul burst
+                try:
+                    params = dict(params, max=3, apikey=key)
+                    res = await client.get(
+                        "https://gnews.io/api/v4/top-headlines", params=params)
+                    for a in (res.json().get("articles") or [])[:3]:
+                        t = (a.get("title") or "").strip()
+                        d = (a.get("description") or "").strip()
+                        if t:
+                            lines.append(f"- [{topic}] {t}" + (f" — {d[:140]}" if d else ""))
+                except Exception:
+                    continue
+        log("IG_REEL_NEWS_FETCHED", count=len(lines))
+    except Exception as e:
+        logger.warning("IG_REEL_NEWS_ERR err=%s", e)
+    return "\n".join(lines[:limit])
+
+
 _REEL_CONTENT_PROMPT = """Sei il social media manager di "Genesi", assistente AI familiare italiana
-(@genesiai_official). Progetta un REEL breve (12 secondi, 4 scene visive in sequenza).
+(@genesiai_official). Progetta un REEL breve (15 secondi, 4 scene visive in sequenza).
+
+{news_block}
 
 LINEE GUIDA:
-- Temi: vita quotidiana italiana, natura e stagioni, famiglia e ricordi, curiosità AI,
-  benessere, cucina e tradizioni, paesaggi italiani.
+- Se ci sono NOTIZIE REALI sopra, DEVI costruire il Reel su una di esse
+  (preferisci tecnologia, scienza, mondo, eventi positivi o di interesse
+  pubblico): il Reel deve sembrare ATTUALE, ancorato all'oggi. Nel campo
+  "news_ref" riporta il titolo della notizia scelta.
+- Tono sempre rispettoso e costruttivo; per fatti drammatici usa scene
+  simboliche/evocative, MAI esplicite o macabre. SOLO se TUTTE le notizie
+  sono cronaca nera inadatta, usa un tema evergreen e metti news_ref=null.
+- Temi evergreen di riserva: vita quotidiana italiana, natura e stagioni,
+  famiglia e ricordi, curiosità AI, benessere, cucina, paesaggi.
 - Le 4 scene devono raccontare una mini-storia visiva COERENTE (stesso stile, stessa
   palette): es. alba → mattina → tramonto → notte sullo stesso luogo.
 - scene_prompts: in inglese, fotografici/cinematografici, formato VERTICALE,
@@ -299,14 +347,16 @@ LINEE GUIDA:
   (warm tones, italian aesthetic, cinematic light). Ripeti lo stile in ogni prompt.
 - caption: italiana, calda, 2-3 frasi + domanda + 5-8 hashtag.
 - narration: il testo che la voce di Genesi narra sopra il video — italiano,
-  caldo e poetico, MASSIMO 30 parole (deve stare in ~11 secondi), segue il
-  ritmo delle 4 scene. Niente hashtag, niente emoji: solo parole da ascoltare.
+  caldo e poetico, tra 35 e 45 parole (~15 secondi di parlato), una frase
+  per ciascuna delle 4 scene, in sequenza. Niente hashtag, niente emoji:
+  solo parole da ascoltare.
 
 {insights_block}
 
 Rispondi SOLO con JSON valido:
-{{"theme": "tema", "caption": "caption con hashtag",
- "narration": "testo narrato max 30 parole",
+{{"theme": "tema", "news_ref": "titolo notizia scelta oppure null",
+ "caption": "caption con hashtag",
+ "narration": "testo narrato 35-45 parole",
  "scene_prompts": ["scena 1", "scena 2", "scena 3", "scena 4"]}}"""
 
 
@@ -322,8 +372,15 @@ async def _generate_reel_content(state: dict) -> dict | None:
         else:
             insights_block = "Nessun Reel precedente: scegli liberamente."
 
+        # Notizie reali del giorno: il Reel si ancora all'attualità
+        news = await _fetch_current_news()
+        news_block = (f"NOTIZIE REALI DI OGGI (fonte GNews):\n{news}" if news
+                      else "Nessuna notizia disponibile oggi.")
+
         raw = await llm_service._call_model(
-            "openai/gpt-4o-mini", _REEL_CONTENT_PROMPT.format(insights_block=insights_block),
+            "openai/gpt-4o-mini",
+            _REEL_CONTENT_PROMPT.format(insights_block=insights_block,
+                                        news_block=news_block),
             "Progetta il prossimo Reel.", user_id="ig_publisher", route="memory")
         clean = (raw or "").strip()
         if clean.startswith("```"):
@@ -374,24 +431,28 @@ async def _synthesize_narration(text: str, out_path: str) -> bool:
 
 
 def _build_reel_video(image_paths: list[str], out_path: str,
-                      narration_wav: str = "") -> bool:
+                      narration_wav: str = "", seg_seconds: float = 3.0) -> bool:
     """
     Monta le immagini in un video verticale 1080x1920 con effetto Ken Burns
-    (zoom lento) — 3s a scena, 25fps. Se narration_wav è presente, la voce
-    di Genesi viene muxata sull'audio. Costo zero (ffmpeg+Piper locali).
+    (zoom lento) — seg_seconds a scena, 25fps. Se narration_wav è presente,
+    la voce di Genesi viene muxata sull'audio. Costo zero (ffmpeg locale).
     """
     import subprocess
     try:
+        seg_seconds = max(2.0, min(float(seg_seconds or 3.0), 6.0))
+        d_frames = int(seg_seconds * 25)
+        zoom_step = round(0.15 / d_frames, 6)
         seg_paths = []
         for i, img in enumerate(image_paths):
             seg = out_path + f".seg{i}.mp4"
-            zoom_dir = "min(zoom+0.0015,1.15)" if i % 2 == 0 else "if(eq(on,1),1.15,max(zoom-0.0015,1.0))"
+            zoom_dir = (f"min(zoom+{zoom_step},1.15)" if i % 2 == 0
+                        else f"if(eq(on,1),1.15,max(zoom-{zoom_step},1.0))")
             r = subprocess.run([
-                "ffmpeg", "-y", "-loop", "1", "-i", img, "-t", "3",
+                "ffmpeg", "-y", "-loop", "1", "-i", img, "-t", f"{seg_seconds:.2f}",
                 "-vf", (f"scale=1080:1920:force_original_aspect_ratio=increase,"
-                        f"crop=1080:1920,zoompan=z='{zoom_dir}':d=75:s=1080x1920:fps=25"),
+                        f"crop=1080:1920,zoompan=z='{zoom_dir}':d={d_frames}:s=1080x1920:fps=25"),
                 "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", seg,
-            ], capture_output=True, timeout=120)
+            ], capture_output=True, timeout=180)
             if os.path.exists(seg) and os.path.getsize(seg) > 1000:
                 seg_paths.append(seg)
             else:
@@ -504,10 +565,25 @@ async def publish_one_reel() -> bool:
         else:
             logger.info("IG_REEL_NARRATION ok=False (video senza audio)")
 
+    # La durata delle scene si adatta alla voce: il video dura quanto la
+    # narrazione (+0.8s di coda), così non resta mai silenzio
+    seg_seconds = 3.0
+    if narration_wav:
+        try:
+            from core.video_vision_service import _ffprobe_duration
+            audio_dur = _ffprobe_duration(narration_wav)
+            if audio_dur > 1.0:
+                seg_seconds = (audio_dur + 0.8) / max(len(frame_paths), 1)
+                logger.info("IG_REEL_TIMING audio=%.1fs scenes=%d seg=%.2fs",
+                            audio_dur, len(frame_paths), seg_seconds)
+        except Exception as _te:
+            logger.debug("IG_REEL_TIMING_ERR %s", _te)
+
     # Monta il video
     video_name = f"reel_{uuid.uuid4().hex}.mp4"
     video_path = os.path.join(IMG_DIR, video_name)
-    ok = await asyncio.to_thread(_build_reel_video, frame_paths, video_path, narration_wav)
+    ok = await asyncio.to_thread(_build_reel_video, frame_paths, video_path,
+                                 narration_wav, seg_seconds)
     if narration_wav:
         try:
             os.unlink(narration_wav)
@@ -571,12 +647,14 @@ async def publish_one_reel() -> bool:
         state.setdefault("posts", []).append({
             "media_id": media_id, "type": "reel",
             "theme": content.get("theme", ""),
+            "news_ref": content.get("news_ref") or None,
             "caption": content["caption"][:200],
             "ts": int(time.time()), "likes": 0, "comments_count": 0,
         })
         state["posts"] = state["posts"][-100:]
         _save_state(state)
-        log("IG_REEL_PUBLISHED", media_id=media_id, theme=content.get("theme", ""))
+        log("IG_REEL_PUBLISHED", media_id=media_id, theme=content.get("theme", ""),
+            news_ref=(content.get("news_ref") or "")[:80])
         return True
 
     except Exception as e:
