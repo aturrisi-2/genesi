@@ -1154,16 +1154,39 @@ async def handle_update(update: dict):
             audio_bytes = await download_file(media["file_id"])
             if audio_bytes:
                 mime = media.get("mime_type", "audio/ogg")
-                transcription = await _transcribe(token, audio_bytes, mime)
-                if transcription == "__TOKEN_EXPIRED__":
-                    if is_group:
-                        new_token = await _refresh_member_token(from_id)
-                    else:
-                        new_token = await _auto_refresh(session_uid, session)
-                    if new_token:
-                        token = new_token
-                        transcription = await _transcribe(token, audio_bytes, mime)
-                
+
+                # Pipeline sensoriale universale: parlato, MA ANCHE musica e suoni
+                transcription = ""
+                _audio_desc = ""
+                try:
+                    from core.message_pipeline import process_incoming_audio
+                    _ares = await process_incoming_audio(
+                        session_id=str(chat_id) if is_group else str(from_id),
+                        user_id=session_uid,
+                        audio_bytes=audio_bytes,
+                        platform="telegram",
+                        content_type=mime,
+                        caption=caption,
+                    )
+                    if _ares.get("kind") == "speech" and _ares.get("transcription"):
+                        transcription = _ares["transcription"]
+                    elif _ares.get("analysis"):
+                        _audio_desc = _ares["analysis"]
+                except Exception as _ape:
+                    logger.warning("TELEGRAM_AUDIO_PIPELINE_ERR chat_id=%s err=%s", chat_id, _ape)
+
+                # Fallback whisper classico se la pipeline non ha prodotto nulla
+                if not transcription and not _audio_desc:
+                    transcription = await _transcribe(token, audio_bytes, mime)
+                    if transcription == "__TOKEN_EXPIRED__":
+                        if is_group:
+                            new_token = await _refresh_member_token(from_id)
+                        else:
+                            new_token = await _auto_refresh(session_uid, session)
+                        if new_token:
+                            token = new_token
+                            transcription = await _transcribe(token, audio_bytes, mime)
+
                 if transcription and transcription != "__TOKEN_EXPIRED__":
                     _transcribed_voice_text = transcription
                     text = transcription  # Aggiorna per i filtri successivi
@@ -1171,6 +1194,13 @@ async def handle_update(update: dict):
                     audio = None
                     if not is_group:
                         await send_message(chat_id, f"🎤 {transcription}")
+                elif _audio_desc:
+                    # Musica o suoni: il contenuto descritto diventa il messaggio
+                    text = ((caption or "Ascolta questo audio.") +
+                            f"\n\n[Contenuto audio: {_audio_desc}]")
+                    _transcribed_voice_text = text
+                    voice = None
+                    audio = None
                 else:
                     if not is_group:
                         await send_message(chat_id, "Non sono riuscita a capire il vocale. Prova a scrivere.")
