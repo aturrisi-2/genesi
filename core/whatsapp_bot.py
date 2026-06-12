@@ -1363,6 +1363,53 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             if not doc_bytes:
                 await send_message(wa_id, "Non riuscito a scaricare il documento.")
                 return
+
+            # Audio/video inviati come FILE → pipeline sensoriale, non documenti
+            if mime and (mime.startswith("audio/") or mime.startswith("video/")):
+                try:
+                    from core.message_pipeline import process_incoming_audio, process_incoming_video
+                    _sess = str(chat_id) if is_group else str(wa_id)
+                    _uid = chat_id if is_group else wa_id
+                    if mime.startswith("audio/"):
+                        _mres = await process_incoming_audio(
+                            session_id=_sess, user_id=_uid,
+                            audio_bytes=doc_bytes, platform="whatsapp",
+                            content_type=mime, caption=caption)
+                        _manalysis = _mres.get("analysis", "")
+                        if _mres.get("kind") == "speech" and _mres.get("transcription"):
+                            reply = await _do_chat(_mres["transcription"])
+                        elif _manalysis:
+                            reply = await _do_chat(
+                                (caption or f"Ascolta questo audio ({doc_name}).") +
+                                f"\n\n[Contenuto audio: {_manalysis}]")
+                        else:
+                            reply = await _do_chat(
+                                (caption or f"Ti ho inviato un audio ({doc_name}).") +
+                                "\n\n[SISTEMA: analisi audio non riuscita — rispondi con "
+                                "curiosità, senza fingere di averlo sentito.]")
+                    else:
+                        _mres = await process_incoming_video(
+                            session_id=_sess, user_id=_uid,
+                            video_bytes=doc_bytes, platform="whatsapp", caption=caption)
+                        _manalysis = _mres.get("analysis", "")
+                        if _manalysis:
+                            reply = await _do_chat(
+                                (caption or f"Guarda questo video ({doc_name}).") +
+                                f"\n\n[Contenuto video: {_manalysis}]" +
+                                (_mres.get("sistema_msg") or ""))
+                        else:
+                            reply = await _do_chat(
+                                (caption or f"Ti ho inviato un video ({doc_name}).") +
+                                "\n\n[SISTEMA: analisi video non riuscita — rispondi con "
+                                "curiosità, senza fingere di averlo visto.]")
+                    if not await _handle_reply(reply):
+                        return
+                    logger.info("WA_MEDIA_DOC_OK wa_id=%s mime=%s", wa_id, mime)
+                    return
+                except Exception as _mde:
+                    logger.warning("WA_MEDIA_DOC_ERR wa_id=%s err=%s", wa_id, _mde)
+                    # fall-through al percorso documenti classico
+
             analysis = await _upload_file(token, doc_bytes, doc_name, mime)
             if analysis == "__TOKEN_EXPIRED__":
                 new_token = await _auto_refresh(wa_id, session)

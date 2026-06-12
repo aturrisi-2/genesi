@@ -803,7 +803,15 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                     auth_header = req.headers.get("Authorization", "")
                     token = auth_header.replace("Bearer ", "").strip()
 
-                    if request.media_type == "audio":
+                    # Documenti con mime audio/video (es. inoltri) → pipeline sensoriale
+                    _eff_type = request.media_type
+                    if _eff_type == "document" and media_mime:
+                        if media_mime.startswith("audio/"):
+                            _eff_type = "audio"
+                        elif media_mime.startswith("video/"):
+                            _eff_type = "video"
+
+                    if _eff_type == "audio":
                         from core.message_pipeline import process_incoming_audio
                         _ares = await process_incoming_audio(
                             session_id=str(group_int), user_id=str(group_int),
@@ -814,7 +822,7 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                             media_analysis = f"[Nota vocale trascritta: {_ares['transcription']}]"
                         elif _ares.get("analysis"):
                             media_analysis = _ares["analysis"]
-                    elif request.media_type == "video":
+                    elif _eff_type == "video":
                         from core.message_pipeline import process_incoming_video
                         _vres = await process_incoming_video(
                             session_id=str(group_int), user_id=str(group_int),

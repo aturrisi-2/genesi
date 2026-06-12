@@ -1556,6 +1556,53 @@ async def handle_update(update: dict):
                 await send_message(chat_id, "Non riuscito a scaricare il documento.")
                 return
 
+            # Audio/video inviati come FILE (es. inoltri da WhatsApp):
+            # vanno alla pipeline sensoriale, non al percorso documenti
+            if mime.startswith("audio/") or mime.startswith("video/"):
+                try:
+                    from core.message_pipeline import process_incoming_audio, process_incoming_video
+                    _sess = str(chat_id) if is_group else str(from_id)
+                    if mime.startswith("audio/"):
+                        _mres = await process_incoming_audio(
+                            session_id=_sess, user_id=session_uid,
+                            audio_bytes=doc_bytes, platform="telegram",
+                            content_type=mime, caption=caption)
+                        _manalysis = _mres.get("analysis", "")
+                        if _mres.get("kind") == "speech" and _mres.get("transcription"):
+                            await send_message(chat_id, f"🎤 {_mres['transcription']}")
+                            reply = await _do_chat(_mres["transcription"])
+                        elif _manalysis:
+                            reply = await _do_chat(
+                                (caption or f"Ascolta questo audio ({filename}).") +
+                                f"\n\n[Contenuto audio: {_manalysis}]")
+                        else:
+                            reply = await _do_chat(
+                                (caption or f"Ti ho inviato un audio ({filename}).") +
+                                "\n\n[SISTEMA: analisi audio non riuscita — rispondi con "
+                                "curiosità, senza fingere di averlo sentito.]")
+                    else:
+                        _mres = await process_incoming_video(
+                            session_id=_sess, user_id=session_uid,
+                            video_bytes=doc_bytes, platform="telegram", caption=caption)
+                        _manalysis = _mres.get("analysis", "")
+                        if _manalysis:
+                            reply = await _do_chat(
+                                (caption or f"Guarda questo video ({filename}).") +
+                                f"\n\n[Contenuto video: {_manalysis}]" +
+                                (_mres.get("sistema_msg") or ""))
+                        else:
+                            reply = await _do_chat(
+                                (caption or f"Ti ho inviato un video ({filename}).") +
+                                "\n\n[SISTEMA: analisi video non riuscita — rispondi con "
+                                "curiosità, senza fingere di averlo visto.]")
+                    if not await _handle_reply(reply):
+                        return
+                    logger.info("TELEGRAM_MEDIA_DOC_OK chat_id=%s mime=%s", chat_id, mime)
+                    return
+                except Exception as _mde:
+                    logger.warning("TELEGRAM_MEDIA_DOC_ERR chat_id=%s err=%s", chat_id, _mde)
+                    # fall-through al percorso documenti classico
+
             analysis = await _upload_file(token, doc_bytes, filename, mime)
             if analysis == "__TOKEN_EXPIRED__":
                 if is_group:
