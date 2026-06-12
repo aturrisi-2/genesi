@@ -790,22 +790,37 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                 except Exception as ex:
                     log("WA_GROUP_MEMBER_PRESEED_FAIL", error=str(ex))
 
-        # 3cc. Analisi file/media per gruppi WhatsApp (Immagini, Documenti, Audio)
+        # 3cc. Analisi file/media per gruppi WhatsApp (Immagini, Documenti, Audio, Video)
+        # Audio e video passano dalla pipeline sensoriale universale (message_pipeline):
+        # stesse capacità di Telegram/Messenger/Instagram — parlato, musica, suoni,
+        # narrazione video + biometria sui frame.
         media_analysis = ""
         if request.media_id and request.media_type:
             try:
-                from core.whatsapp_bot import download_media, _upload_file, _transcribe
+                from core.whatsapp_bot import download_media, _upload_file
                 media_bytes, media_mime = await download_media(request.media_id)
                 if media_bytes:
                     auth_header = req.headers.get("Authorization", "")
                     token = auth_header.replace("Bearer ", "").strip()
-                    
+
                     if request.media_type == "audio":
-                        transcription = await _transcribe(token, media_bytes, media_mime)
-                        if transcription:
-                            media_analysis = f"[Nota vocale trascritta: {transcription}]"
+                        from core.message_pipeline import process_incoming_audio
+                        _ares = await process_incoming_audio(
+                            session_id=str(group_int), user_id=str(group_int),
+                            audio_bytes=media_bytes, platform="whatsapp",
+                            content_type=media_mime or "audio/ogg",
+                        )
+                        if _ares.get("kind") == "speech" and _ares.get("transcription"):
+                            media_analysis = f"[Nota vocale trascritta: {_ares['transcription']}]"
+                        elif _ares.get("analysis"):
+                            media_analysis = _ares["analysis"]
                     elif request.media_type == "video":
-                        media_analysis = "[File Video/Animazione]"
+                        from core.message_pipeline import process_incoming_video
+                        _vres = await process_incoming_video(
+                            session_id=str(group_int), user_id=str(group_int),
+                            video_bytes=media_bytes, platform="whatsapp",
+                        )
+                        media_analysis = _vres.get("analysis", "") or "[File Video/Animazione]"
                     else:
                         ext = "jpg" if "jpeg" in media_mime else media_mime.split("/")[-1]
                         filename = f"photo.{ext}" if request.media_type == "image" else f"doc.{ext}"
