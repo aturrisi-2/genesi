@@ -162,16 +162,29 @@ async def _generate_content(state: dict) -> dict | None:
 
         prompt = _CONTENT_PROMPT.format(insights_block=insights_block,
                                         news_block=news_block)
-        raw = await llm_service._call_model(
-            "openai/gpt-4o-mini", prompt,
-            "Genera il prossimo post Instagram.",
-            user_id="ig_publisher", route="memory",
-        )
-        clean = (raw or "").strip()
-        if clean.startswith("```"):
-            clean = clean.strip("`").lstrip("json").strip()
-        data = json.loads(clean)
-        if data.get("caption") and data.get("image_prompt"):
+        user_msg = ("Genera il prossimo post basandolo su UNA delle notizie elencate."
+                    if news else "Genera il prossimo post Instagram.")
+        data = None
+        for attempt in range(2):
+            raw = await llm_service._call_model(
+                "openai/gpt-4o-mini", prompt, user_msg,
+                user_id="ig_publisher", route="memory",
+            )
+            clean = (raw or "").strip()
+            if clean.startswith("```"):
+                clean = clean.strip("`").lstrip("json").strip()
+            try:
+                data = json.loads(clean)
+            except Exception:
+                data = None
+            _nref = (data or {}).get("news_ref")
+            if news and (not _nref or str(_nref).lower() == "null") and attempt == 0:
+                logger.info("IG_PUB_NEWS_ENFORCE retry: news_ref mancante")
+                user_msg = ("OBBLIGATORIO: scegli una notizia dall'elenco e compila "
+                            "news_ref con il suo titolo. Non usare temi evergreen.")
+                continue
+            break
+        if data and data.get("caption") and data.get("image_prompt"):
             return data
         return None
     except Exception as e:
@@ -398,15 +411,32 @@ async def _generate_reel_content(state: dict) -> dict | None:
         news_block = (f"NOTIZIE REALI DI OGGI (fonte GNews):\n{news}" if news
                       else "Nessuna notizia disponibile oggi.")
 
-        raw = await llm_service._call_model(
-            "openai/gpt-4o-mini",
-            _REEL_CONTENT_PROMPT.format(insights_block=insights_block,
-                                        news_block=news_block),
-            "Progetta il prossimo Reel.", user_id="ig_publisher", route="memory")
-        clean = (raw or "").strip()
-        if clean.startswith("```"):
-            clean = clean.strip("`").lstrip("json").strip()
-        data = json.loads(clean)
+        user_msg = ("Progetta il prossimo Reel basandolo su UNA delle notizie elencate."
+                    if news else "Progetta il prossimo Reel.")
+        data = None
+        for attempt in range(2):
+            raw = await llm_service._call_model(
+                "openai/gpt-4o-mini",
+                _REEL_CONTENT_PROMPT.format(insights_block=insights_block,
+                                            news_block=news_block),
+                user_msg, user_id="ig_publisher", route="memory")
+            clean = (raw or "").strip()
+            if clean.startswith("```"):
+                clean = clean.strip("`").lstrip("json").strip()
+            try:
+                data = json.loads(clean)
+            except Exception:
+                data = None
+            # Enforcement: con notizie disponibili news_ref è OBBLIGATORIO
+            _nref = (data or {}).get("news_ref")
+            if news and (not _nref or str(_nref).lower() == "null") and attempt == 0:
+                logger.info("IG_REEL_NEWS_ENFORCE retry: news_ref mancante")
+                user_msg = ("OBBLIGATORIO: scegli una notizia dall'elenco e compila "
+                            "news_ref con il suo titolo. Non usare temi evergreen.")
+                continue
+            break
+        if not data:
+            return None
         scenes = data.get("scene_prompts") or []
         if data.get("caption") and len(scenes) >= 3:
             data["scene_prompts"] = scenes[:4]
