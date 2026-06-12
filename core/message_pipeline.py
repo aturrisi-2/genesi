@@ -144,6 +144,27 @@ async def process_incoming_video(
         log("PIPELINE_VIDEO_ANALYZED", platform=platform, session=session_id,
             frames=video_result.get("frames_count", 0), len=len(analysis))
 
+        # File "video" senza frame (es. audio .mpeg rinominato/inoltrato):
+        # fallback all'analisi AUDIO sugli stessi bytes
+        if not analysis and video_result.get("frames_count", 0) == 0:
+            try:
+                from core.audio_analysis_service import analyze_audio, build_audio_context
+                _ares = await analyze_audio(video_bytes, "audio/mpeg")
+                _actx = build_audio_context(_ares)
+                if _actx:
+                    log("PIPELINE_VIDEO_AUDIO_FALLBACK", platform=platform,
+                        kind=_ares.get("kind"))
+                    return {
+                        "analysis": _actx,
+                        "sistema_msg": "",
+                        "faces_saved": False,
+                        "saved_names": [],
+                        "remaining": 0,
+                        "augmented_caption": caption or "",
+                    }
+            except Exception as _afe:
+                logger.debug("PIPELINE_VIDEO_AUDIO_FALLBACK_ERR %s", _afe)
+
         # Biometria sul frame centrale (volti umani + animali, come le foto)
         sistema_msg = ""
         faces_saved, saved_names, remaining = False, [], 0

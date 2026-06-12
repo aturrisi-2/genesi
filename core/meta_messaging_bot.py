@@ -349,6 +349,42 @@ async def download_image(url: str) -> tuple[bytes | None, str]:
         return None, ""
 
 
+async def _resolve_media_permalink(page_url: str) -> dict:
+    """
+    Quando l'allegato è un PERMALINK (es. instagram.com/reel/...) invece del
+    file CDN, estrae dai meta tag della pagina: og:video (URL video reale),
+    og:image (thumbnail) e og:description/title (testo del post).
+    """
+    out = {"video_url": "", "image_url": "", "text": ""}
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers={
+            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                           "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"),
+        }) as client:
+            res = await client.get(page_url)
+            if res.status_code != 200:
+                return out
+            html = res.text
+        for prop, key in (("og:video:secure_url", "video_url"), ("og:video", "video_url"),
+                          ("og:image", "image_url"),
+                          ("og:description", "text"), ("og:title", "text")):
+            if out[key]:
+                continue
+            m = re.search(
+                rf'<meta[^>]+property=["\']{re.escape(prop)}["\'][^>]+content=["\']([^"\']+)["\']', html)
+            if not m:
+                m = re.search(
+                    rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']{re.escape(prop)}["\']', html)
+            if m:
+                import html as _html
+                out[key] = _html.unescape(m.group(1))
+        logger.info("META_PERMALINK_RESOLVED video=%s image=%s text_len=%d",
+                    bool(out["video_url"]), bool(out["image_url"]), len(out["text"]))
+    except Exception as e:
+        logger.warning("META_PERMALINK_RESOLVE_ERR err=%s", e)
+    return out
+
+
 async def download_video(url: str) -> bytes | None:
     """
     Scarica un video allegato (Reel/video diretto).
@@ -724,10 +760,28 @@ async def _handle_video(user_id: str, sender_id: str, platform: str,
     # Puntini "sta scrivendo" — l'analisi video può durare 20-30s
     asyncio.create_task(show_typing(platform, sender_id))
 
+    permalink_text = ""
     video_bytes = await download_video(video_url)
+
+    # L'URL può essere un PERMALINK (pagina instagram.com/reel/...) invece
+    # del file CDN: risolvi i meta tag per ottenere il video reale
+    if not video_bytes and "instagram.com" in (video_url or ""):
+        resolved = await _resolve_media_permalink(video_url)
+        permalink_text = resolved.get("text", "")
+        if resolved.get("video_url"):
+            video_bytes = await download_video(resolved["video_url"])
+        if not video_bytes and resolved.get("image_url"):
+            # Fallback: analizza la thumbnail del Reel + testo del post
+            _cap = caption or "Guarda questo Reel che ti ho condiviso."
+            if permalink_text:
+                _cap += f"\n[Testo del post: {permalink_text[:500]}]"
+            await _handle_image(user_id, sender_id, platform,
+                                resolved["image_url"], caption=_cap)
+            return
+
     if not video_bytes:
         await send_message(platform, sender_id,
-            "Non sono riuscita a scaricare il video. Riprova!")
+            "Non sono riuscita ad aprire questo contenuto. Riprova!")
         return
 
     video = await process_incoming_video(
@@ -735,6 +789,8 @@ async def _handle_video(user_id: str, sender_id: str, platform: str,
         video_bytes=video_bytes, platform=platform, caption=caption,
     )
     user_msg = caption or "Guarda questo video che ti ho condiviso."
+    if permalink_text:
+        user_msg += f"\n[Testo del post: {permalink_text[:500]}]"
     analysis = video.get("analysis", "")
     if analysis:
         user_msg = f"{user_msg}\n\n[Contenuto video: {analysis}]"
