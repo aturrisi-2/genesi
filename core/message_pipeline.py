@@ -109,6 +109,96 @@ async def process_incoming_photo(
                 pass
 
 
+# ─── VIDEO PROCESSING ────────────────────────────────────────────────────────
+
+async def process_incoming_video(
+    session_id: str,
+    user_id: str,
+    video_bytes: bytes,
+    platform: str,
+    caption: str | None = None,
+) -> dict:
+    """
+    Elabora un video in arrivo da QUALSIASI piattaforma (incl. Reel Instagram).
+
+    1. ffmpeg estrae i frame chiave
+    2. GPT-4o vision descrive il video in modo narrativo
+    3. Sul frame centrale gira il riconoscimento biometrico (volti + animali)
+       con la STESSA pipeline delle foto
+
+    Returns (stessa forma di process_incoming_photo):
+        {analysis, sistema_msg, faces_saved, saved_names, remaining, augmented_caption}
+    """
+    from core.video_vision_service import describe_video, cleanup_video_tmp
+    from core.face_memory_service import handle_photo_identification
+
+    tmp_path = None
+    video_result = {}
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False, prefix="genesi_vid_") as tmp:
+            tmp.write(video_bytes)
+            tmp_path = tmp.name
+
+        video_result = await describe_video(tmp_path)
+        analysis = video_result.get("description", "") or ""
+        log("PIPELINE_VIDEO_ANALYZED", platform=platform, session=session_id,
+            frames=video_result.get("frames_count", 0), len=len(analysis))
+
+        # Biometria sul frame centrale (volti umani + animali, come le foto)
+        sistema_msg = ""
+        faces_saved, saved_names, remaining = False, [], 0
+        best_frame = video_result.get("best_frame")
+        if best_frame and os.path.exists(best_frame):
+            try:
+                with open(best_frame, "rb") as f:
+                    frame_bytes = f.read()
+                from core.image_vision_service import describe_image
+                frame_vision = await describe_image(best_frame)
+                frame_analysis = (frame_vision.get("description", "")
+                                  if isinstance(frame_vision, dict) else str(frame_vision or ""))
+                face_result = await handle_photo_identification(
+                    session_id, frame_bytes, frame_analysis, caption)
+                sistema_msg = face_result.get("sistema_msg", "")
+                faces_saved = face_result.get("faces_saved", False)
+                saved_names = face_result.get("saved_names", [])
+                remaining = face_result.get("remaining", 0)
+                if frame_analysis:
+                    analysis = f"{analysis}\n[Dettaglio frame centrale: {frame_analysis}]"
+            except Exception as e:
+                logger.debug("PIPELINE_VIDEO_BIOMETRIC_ERR %s", e)
+
+        augmented_caption = (caption or "") + (sistema_msg or "")
+        log("PIPELINE_VIDEO_DONE", platform=platform, faces_saved=faces_saved,
+            saved=saved_names, remaining=remaining)
+
+        return {
+            "analysis": analysis,
+            "sistema_msg": sistema_msg,
+            "faces_saved": faces_saved,
+            "saved_names": saved_names,
+            "remaining": remaining,
+            "augmented_caption": augmented_caption,
+        }
+
+    except Exception as e:
+        logger.error("PIPELINE_VIDEO_ERROR platform=%s session=%s err=%s", platform, session_id, e)
+        return {
+            "analysis": "", "sistema_msg": "", "faces_saved": False,
+            "saved_names": [], "remaining": 0, "augmented_caption": caption or "",
+        }
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+        try:
+            from core.video_vision_service import cleanup_video_tmp as _cleanup
+            _cleanup(video_result)
+        except Exception:
+            pass
+
+
 # ─── TEXT PROCESSING ──────────────────────────────────────────────────────────
 
 async def process_incoming_text(

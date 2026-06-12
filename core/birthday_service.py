@@ -944,7 +944,14 @@ async def birthday_scheduler():
                             if _BAILEYS_SEND_SECRET:
                                 payload["secret"] = _BAILEYS_SEND_SECRET
                             async with httpx.AsyncClient(timeout=10) as client:
-                                await client.post(_BAILEYS_SEND_URL, json=payload)
+                                _wa_res = await client.post(_BAILEYS_SEND_URL, json=payload)
+                                # Logga SEMPRE l'esito: un "forbidden" silenzioso
+                                # ha nascosto per giorni il saluto WA mai recapitato
+                                if _wa_res.status_code == 200:
+                                    log("PROACTIVE_GREETING_WA_OK", jid=_WA_GROUP_JID)
+                                else:
+                                    log("PROACTIVE_GREETING_WA_FAIL", jid=_WA_GROUP_JID,
+                                        status=_wa_res.status_code, body=_wa_res.text[:120])
                             # Registra il timestamp del saluto proattivo per il gap globale di 1 ora
                             wa_global_key = f"relational_state:last_group_greeting_ts_{wa_chat_id}"
                             await storage.save(wa_global_key, now_ts)

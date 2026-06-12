@@ -1374,10 +1374,35 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
         if video_id:
             await send_typing(wa_id, msg_id)
             user_msg = caption or "Guarda questo video."
-            reply = await _do_chat(f"{user_msg}\n\n[Inviato un file video/animazione]")
+
+            # Analisi reale del video (frame + vision + biometria) — pipeline universale
+            _video_analysis = ""
+            _video_sistema = ""
+            try:
+                _vbytes, _vmime = await download_media(video_id)
+                if _vbytes and len(_vbytes) <= 50 * 1024 * 1024:
+                    from core.message_pipeline import process_incoming_video
+                    _vres = await process_incoming_video(
+                        session_id=_wa_session,
+                        user_id=chat_id if is_group else wa_id,
+                        video_bytes=_vbytes,
+                        platform="whatsapp",
+                        caption=caption,
+                    )
+                    _video_analysis = _vres.get("analysis", "")
+                    _video_sistema = _vres.get("sistema_msg", "")
+            except Exception as _ve:
+                logger.warning("WA_VIDEO_ANALYSIS_ERR wa_id=%s err=%s", wa_id, _ve)
+
+            if _video_analysis:
+                reply = await _do_chat(f"{user_msg}\n\n[Contenuto video: {_video_analysis}]{_video_sistema}")
+            else:
+                reply = await _do_chat(
+                    f"{user_msg}\n\n[SISTEMA: l'utente ha inviato un video ma l'analisi "
+                    "non è riuscita. Rispondi con curiosità, senza fingere di averlo visto.]")
             if not await _handle_reply(reply):
                 return
-            logger.info("WA_VIDEO_OK wa_id=%s", wa_id)
+            logger.info("WA_VIDEO_OK wa_id=%s analyzed=%s", wa_id, bool(_video_analysis))
             return
 
         # ── VOCALE ────────────────────────────────────────────────────────────

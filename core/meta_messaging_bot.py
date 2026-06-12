@@ -70,6 +70,8 @@ PLATFORMS = {
 # Limiti di sicurezza
 MAX_TEXT_LEN       = 12000          # allineato a ChatRequest (api/chat.py)
 MAX_IMAGE_BYTES    = 20 * 1024 * 1024
+MAX_VIDEO_BYTES    = 50 * 1024 * 1024
+_ALLOWED_VIDEO_MIME = ("video/mp4", "video/quicktime", "video/webm", "video/3gpp")
 MSG_CHUNK_LEN      = 1900           # limite messaggio Messenger ~2000 char
 _ALLOWED_IMG_MIME  = ("image/jpeg", "image/png", "image/webp", "image/gif")
 
@@ -344,6 +346,32 @@ async def download_image(url: str) -> tuple[bytes | None, str]:
         return None, ""
 
 
+async def download_video(url: str) -> bytes | None:
+    """
+    Scarica un video allegato (Reel/video diretto).
+    Sicurezza: solo https, content-type allowlist, max 50 MB.
+    """
+    if not url or not url.startswith("https://"):
+        logger.warning("META_VIDEO_REJECTED_SCHEME url=%.80s", url or "")
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+            res = await client.get(url)
+            if res.status_code != 200:
+                return None
+            mime = (res.headers.get("content-type", "") or "").split(";")[0].strip().lower()
+            if mime and mime not in _ALLOWED_VIDEO_MIME:
+                logger.warning("META_VIDEO_REJECTED_MIME mime=%s", mime)
+                return None
+            if len(res.content) > MAX_VIDEO_BYTES:
+                logger.warning("META_VIDEO_REJECTED_SIZE bytes=%d", len(res.content))
+                return None
+            return res.content
+    except Exception as e:
+        logger.error("META_VIDEO_DOWNLOAD_ERROR err=%s", e)
+        return None
+
+
 # ── Main update handler ──────────────────────────────────────────────────────
 
 async def handle_update(payload: dict, platform: str):
@@ -506,23 +534,34 @@ async def _process_event(event: dict, platform: str, cfg: dict):
     attachments = msg.get("attachments") or []
 
     image_url = ""
-    unsupported = False
+    video_url = ""
+    other_types: list[str] = []
     for att in attachments:
         att_type = att.get("type", "")
+        att_url = (att.get("payload") or {}).get("url", "")
         if att_type == "image" and not image_url:
-            image_url = (att.get("payload") or {}).get("url", "")
-        elif att_type in ("audio", "video", "file", "template", "fallback"):
-            unsupported = True
+            image_url = att_url
+        elif att_type in ("video", "ig_reel", "reel", "animated_image_share") and not video_url:
+            # Reel Instagram condivisi e video diretti
+            video_url = att_url
+        elif att_type:
+            other_types.append(att_type)
 
     if image_url:
         await _handle_image(user_id, sender_id, platform, image_url, caption=text)
         return
 
+    if video_url:
+        await _handle_video(user_id, sender_id, platform, video_url, caption=text)
+        return
+
     if not text:
-        if unsupported:
+        if other_types:
+            # MAI silenzio: qualsiasi allegato non gestito riceve una risposta
+            logger.info("META_ATTACHMENT_UNSUPPORTED platform=%s types=%s", platform, other_types)
             await send_message(platform, sender_id,
-                "Per ora su questo canale posso gestire testo e immagini. "
-                "Scrivimi pure, o mandami una foto!")
+                "Per ora su questo canale gestisco testo, foto e video/Reel. "
+                "Questo contenuto non riesco ancora ad aprirlo!")
         return
 
     await _handle_text(user_id, sender_id, platform, text)
@@ -590,6 +629,54 @@ async def _handle_image(user_id: str, sender_id: str, platform: str,
     )
     await send_message(platform, sender_id, response)
     log("META_PHOTO_OK", platform=platform, user_id=user_id)
+
+    asyncio.create_task(schedule_memory_tasks(
+        user_id=user_id,
+        user_message=user_msg,
+        response=response,
+        platform=platform,
+        intent=intent,
+        is_group=False,
+    ))
+
+
+async def _handle_video(user_id: str, sender_id: str, platform: str,
+                        video_url: str, caption: str = ""):
+    """Pipeline video/Reel: download sicuro → frame/vision/biometria → chat → memoria."""
+    from core.message_pipeline import (
+        process_incoming_video, schedule_memory_tasks,
+    )
+    from core.simple_chat import simple_chat_handler
+
+    # Puntini "sta scrivendo" — l'analisi video può durare 20-30s
+    asyncio.create_task(show_typing(platform, sender_id))
+
+    video_bytes = await download_video(video_url)
+    if not video_bytes:
+        await send_message(platform, sender_id,
+            "Non sono riuscita a scaricare il video. Riprova!")
+        return
+
+    video = await process_incoming_video(
+        session_id=user_id, user_id=user_id,
+        video_bytes=video_bytes, platform=platform, caption=caption,
+    )
+    user_msg = caption or "Guarda questo video che ti ho condiviso."
+    analysis = video.get("analysis", "")
+    if analysis:
+        user_msg = f"{user_msg}\n\n[Contenuto video: {analysis}]"
+        if video.get("sistema_msg"):
+            user_msg += video["sistema_msg"]
+    else:
+        user_msg = (f"{user_msg}\n\n[SISTEMA: l'utente ha condiviso un video ma "
+                    "l'analisi non è riuscita. Rispondi con curiosità chiedendo "
+                    "di cosa parla, senza fingere di averlo visto.]")
+
+    response, intent = await simple_chat_handler(
+        user_id=user_id, message=user_msg, platform=platform,
+    )
+    await send_message(platform, sender_id, response)
+    log("META_VIDEO_OK", platform=platform, user_id=user_id)
 
     asyncio.create_task(schedule_memory_tasks(
         user_id=user_id,

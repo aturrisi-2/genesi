@@ -1609,11 +1609,39 @@ async def handle_update(update: dict):
         # ── VIDEO / ANIMATION / VIDEO_NOTE ─────────────────────────────────────
         if video or animation or video_note:
             await send_typing(chat_id)
+            media = video or animation or video_note
             user_msg = caption or "Guarda questo video/animazione."
-            reply = await _do_chat(f"{user_msg}\n\n[Inviato un file video/animazione]")
+
+            # Analisi reale del video (frame + vision + biometria) — pipeline universale
+            _video_analysis = ""
+            _video_sistema = ""
+            try:
+                _size = media.get("file_size", 0)
+                if _size and _size <= 50 * 1024 * 1024:
+                    _vbytes = await download_file(media["file_id"])
+                    if _vbytes:
+                        from core.message_pipeline import process_incoming_video
+                        _vres = await process_incoming_video(
+                            session_id=str(chat_id) if is_group else str(from_id),
+                            user_id=session_uid,
+                            video_bytes=_vbytes,
+                            platform="telegram",
+                            caption=caption,
+                        )
+                        _video_analysis = _vres.get("analysis", "")
+                        _video_sistema = _vres.get("sistema_msg", "")
+            except Exception as _ve:
+                logger.warning("TELEGRAM_VIDEO_ANALYSIS_ERR chat_id=%s err=%s", chat_id, _ve)
+
+            if _video_analysis:
+                reply = await _do_chat(f"{user_msg}\n\n[Contenuto video: {_video_analysis}]{_video_sistema}")
+            else:
+                reply = await _do_chat(
+                    f"{user_msg}\n\n[SISTEMA: l'utente ha inviato un video ma l'analisi "
+                    "non è riuscita. Rispondi con curiosità, senza fingere di averlo visto.]")
             if not await _handle_reply(reply):
                 return
-            logger.info("TELEGRAM_VIDEO_OK chat_id=%s", chat_id)
+            logger.info("TELEGRAM_VIDEO_OK chat_id=%s analyzed=%s", chat_id, bool(_video_analysis))
             return
 
         # ── VOCALE ─────────────────────────────────────────────────────────────
