@@ -238,12 +238,16 @@ async function startBaileys() {
                         filename = msg.message.documentMessage.fileName || "document";
                         mime = msg.message.documentMessage.mimetype || "application/octet-stream";
                         finalMsgType = "document";
+                    } else if (mType === "videoMessage") {
+                        caption = msg.message.videoMessage.caption || "";
+                        mime = msg.message.videoMessage.mimetype || "video/mp4";
+                        finalMsgType = "video";
                     } else {
                         continue;
                     }
 
                     // Se ha un media, scaricalo localmente
-                    if (["imageMessage", "audioMessage", "documentMessage"].includes(mType)) {
+                    if (["imageMessage", "audioMessage", "documentMessage", "videoMessage"].includes(mType)) {
                         try {
                             const buffer = await downloadMediaMessage(
                                 msg,
@@ -307,6 +311,8 @@ async function startBaileys() {
                         messageObj.voice = { id: msg.key.id, mime_type: mime };
                     } else if (finalMsgType === "document") {
                         messageObj.document = { id: msg.key.id, filename: filename, caption: caption.trim(), mime_type: mime };
+                    } else if (finalMsgType === "video") {
+                        messageObj.video = { id: msg.key.id, caption: caption.trim(), mime_type: mime };
                     }
 
                     // Invia a Python FastAPI locale
