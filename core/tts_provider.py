@@ -288,9 +288,17 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
 
     # Determina categoria
     target = intent or route or ""
-    
+
+    # VOCE UNICA (scelta utente, budget pay-as-you-go attivo): OpenAI Fable
+    # madrelingua è la voce di Genesi su TUTTE le route della web app.
+    # EdgeTTS resta come fallback automatico se OpenAI è giù o senza quota.
+    # Per ripristinare il routing risparmia-costi: TTS_SINGLE_VOICE=0 nel .env.
+    if os.getenv("TTS_SINGLE_VOICE", "1") != "0":
+        category = "conversational"
+        primary = "openai"
+        secondary = "edge_tts"
     # chat_free con risposta lunga (>150 chars) → probabile risposta tecnica → edge
-    if intent == "chat_free" and text_len > 150:
+    elif intent == "chat_free" and text_len > 150:
         category = "informational"
         primary = "edge_tts"
         secondary = "openai"
