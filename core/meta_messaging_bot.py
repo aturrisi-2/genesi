@@ -26,6 +26,7 @@ Sicurezza:
 import asyncio
 import hashlib
 import hmac
+import json
 import logging
 import os
 import re
@@ -356,15 +357,8 @@ async def _resolve_media_permalink(page_url: str) -> dict:
     og:image (thumbnail) e og:description/title (testo del post).
     """
     out = {"video_url": "", "image_url": "", "text": ""}
-    try:
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers={
-            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                           "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"),
-        }) as client:
-            res = await client.get(page_url)
-            if res.status_code != 200:
-                return out
-            html = res.text
+
+    def _extract_og(html: str):
         for prop, key in (("og:video:secure_url", "video_url"), ("og:video", "video_url"),
                           ("og:image", "image_url"),
                           ("og:description", "text"), ("og:title", "text")):
@@ -378,10 +372,48 @@ async def _resolve_media_permalink(page_url: str) -> dict:
             if m:
                 import html as _html
                 out[key] = _html.unescape(m.group(1))
-        logger.info("META_PERMALINK_RESOLVED video=%s image=%s text_len=%d",
-                    bool(out["video_url"]), bool(out["image_url"]), len(out["text"]))
-    except Exception as e:
-        logger.warning("META_PERMALINK_RESOLVE_ERR err=%s", e)
+
+    # Instagram serve gli og-tag SOLO ai crawler di link preview:
+    # prova prima con lo UA di facebookexternalhit, poi browser classico
+    for ua in ("facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+               "(KHTML, like Gecko) Chrome/124 Safari/537.36"):
+        try:
+            async with httpx.AsyncClient(timeout=30, follow_redirects=True,
+                                         headers={"User-Agent": ua}) as client:
+                res = await client.get(page_url)
+                if res.status_code == 200:
+                    _extract_og(res.text)
+            if out["video_url"] or out["image_url"]:
+                break
+        except Exception as e:
+            logger.debug("META_PERMALINK_UA_ERR ua=%.20s err=%s", ua, e)
+
+    # Fallback ufficiale: Instagram oEmbed (thumbnail + autore + titolo)
+    if not out["video_url"] and not out["image_url"]:
+        try:
+            app_secret = os.getenv("META_APP_SECRET", META_APP_SECRET)
+            if app_secret:
+                app_token = f"959976033273333|{app_secret}"
+                async with httpx.AsyncClient(timeout=20) as client:
+                    res = await client.get(
+                        f"{META_API_BASE}/instagram_oembed",
+                        params={"url": page_url, "access_token": app_token,
+                                "fields": "thumbnail_url,author_name,title"})
+                    if res.status_code == 200:
+                        d = res.json()
+                        out["image_url"] = d.get("thumbnail_url", "")
+                        _t = " — ".join(x for x in (d.get("author_name"), d.get("title")) if x)
+                        if _t and not out["text"]:
+                            out["text"] = _t
+                    else:
+                        logger.info("META_OEMBED_FAIL status=%d body=%.150s",
+                                    res.status_code, res.text)
+        except Exception as e:
+            logger.debug("META_OEMBED_ERR err=%s", e)
+
+    logger.info("META_PERMALINK_RESOLVED video=%s image=%s text_len=%d",
+                bool(out["video_url"]), bool(out["image_url"]), len(out["text"]))
     return out
 
 
@@ -571,6 +603,10 @@ async def _process_event(event: dict, platform: str, cfg: dict):
 
     text = (msg.get("text") or "").strip()[:MAX_TEXT_LEN]
     attachments = msg.get("attachments") or []
+
+    if attachments:
+        logger.info("META_ATTACHMENTS platform=%s raw=%.500s",
+                    platform, json.dumps(attachments, ensure_ascii=False))
 
     image_url = ""
     video_url = ""
