@@ -109,18 +109,31 @@ async def get_ig_user_id() -> str:
 _CONTENT_PROMPT = """Sei il social media manager di "Genesi", un'assistente AI familiare italiana
 (account Instagram @genesiai_official). Genera UN post Instagram.
 
+{news_block}
+
 LINEE GUIDA:
-- Temi possibili: tecnologia e vita quotidiana, famiglia e ricordi, curiosità sull'AI,
-  benessere digitale, momenti di vita italiana, natura e stagioni, motivazione, cucina e tradizioni.
-- La caption: in italiano, calda e genuina, 2-4 frasi, MAI piatta o da marketing aggressivo.
-  Chiudi con una domanda che invita al commento. Aggiungi 5-8 hashtag pertinenti in italiano.
-- Il prompt immagine: in inglese, descrittivo e fotografico/artistico, senza testo nell'immagine,
-  senza persone riconoscibili, stile coerente (warm, cozy, italian lifestyle, soft light).
+- Se ci sono NOTIZIE REALI sopra, DEVI costruire il post su una di esse
+  (preferisci tecnologia, scienza, mondo, eventi positivi o di interesse
+  pubblico): il post deve sembrare ATTUALE, ancorato all'oggi. Nel campo
+  "news_ref" riporta il titolo della notizia scelta.
+- Tono sempre rispettoso e costruttivo; per fatti drammatici usa immagini
+  simboliche/evocative, MAI esplicite o macabre. SOLO se TUTTE le notizie
+  sono cronaca nera inadatta, usa un tema evergreen e metti news_ref=null.
+- Temi evergreen di riserva: tecnologia e vita quotidiana, famiglia e ricordi,
+  curiosità sull'AI, benessere digitale, momenti di vita italiana, natura e
+  stagioni, motivazione, cucina e tradizioni.
+- La caption: in italiano, calda e genuina, 2-4 frasi, MAI piatta o da marketing
+  aggressivo. Se basata su una notizia, raccontala con la voce di Genesi.
+  Chiudi con una domanda che invita al commento. Aggiungi 5-8 hashtag pertinenti.
+- Il prompt immagine: in inglese, descrittivo e fotografico/artistico, senza testo
+  nell'immagine, senza persone riconoscibili, stile coerente (warm, cozy,
+  italian lifestyle, soft light).
 
 {insights_block}
 
 Rispondi SOLO con JSON valido:
-{{"theme": "tema breve", "caption": "testo caption con hashtag", "image_prompt": "english image prompt"}}"""
+{{"theme": "tema breve", "news_ref": "titolo notizia scelta oppure null",
+ "caption": "testo caption con hashtag", "image_prompt": "english image prompt"}}"""
 
 
 async def _generate_content(state: dict) -> dict | None:
@@ -142,7 +155,13 @@ async def _generate_content(state: dict) -> dict | None:
         else:
             insights_block = "Nessun post precedente: scegli liberamente un tema."
 
-        prompt = _CONTENT_PROMPT.format(insights_block=insights_block)
+        # Notizie reali del giorno: anche i post si ancorano all'attualità
+        news = await _fetch_current_news()
+        news_block = (f"NOTIZIE REALI DI OGGI (fonte GNews):\n{news}" if news
+                      else "Nessuna notizia disponibile oggi.")
+
+        prompt = _CONTENT_PROMPT.format(insights_block=insights_block,
+                                        news_block=news_block)
         raw = await llm_service._call_model(
             "openai/gpt-4o-mini", prompt,
             "Genera il prossimo post Instagram.",
@@ -243,6 +262,7 @@ async def publish_one_post() -> bool:
         state.setdefault("posts", []).append({
             "media_id": media_id,
             "theme": content.get("theme", ""),
+            "news_ref": content.get("news_ref") or None,
             "caption": content["caption"][:200],
             "image_url": image_url,
             "ts": int(time.time()),
@@ -252,7 +272,8 @@ async def publish_one_post() -> bool:
         state["posts"] = state["posts"][-100:]
         _save_state(state)
 
-        log("IG_POST_PUBLISHED", media_id=media_id, theme=content.get("theme", ""))
+        log("IG_POST_PUBLISHED", media_id=media_id, theme=content.get("theme", ""),
+            news_ref=(content.get("news_ref") or "")[:80])
         logger.info("IG_POST_PUBLISHED media_id=%s theme=%s", media_id, content.get("theme"))
         return True
 
