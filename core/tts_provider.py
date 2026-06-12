@@ -170,11 +170,15 @@ class OpenAITTSProvider(TTSProvider):
     # Classe-level: salta OpenAI se quota esaurita fino a questo timestamp
     _quota_exceeded_until: float = 0.0
 
-    def __init__(self, voice: str = "nova", model: str = "tts-1", speed: float = 1.0):
+    def __init__(self, voice: str = "nova", model: str = "tts-1", speed: float = 1.0,
+                 instructions: str = ""):
         import os
         self.voice = voice
         self.model = model
         self.speed = speed
+        # Istruzioni di stile (solo modelli gpt-4o-*-tts, es. accento italiano
+        # madrelingua) — i modelli tts-1 le ignorano
+        self.instructions = instructions
         self.api_key = os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY non trovata nelle variabili d'ambiente")
@@ -228,7 +232,9 @@ class OpenAITTSProvider(TTSProvider):
                         "input": text,
                         "voice": self.voice,
                         "speed": self.speed,
-                        "response_format": "mp3"
+                        "response_format": "mp3",
+                        **({"instructions": self.instructions}
+                           if self.instructions and self.model.startswith("gpt-") else {}),
                     }
                 )
                 if response.status_code == 429:
@@ -317,7 +323,8 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
             return OpenAITTSProvider(
                 voice=cfg.get("voice", "nova"),
                 model=os.getenv("OPENAI_TTS_MODEL", cfg.get("model", "tts-1")),
-                speed=float(os.getenv("ONYX_SPEED", str(cfg.get("speed", 1.0))))
+                speed=float(os.getenv("ONYX_SPEED", str(cfg.get("speed", 1.0)))),
+                instructions=cfg.get("instructions", "")
             )
         elif primary == "edge_tts":
             cfg = providers_cfg.get("edge_tts", {})
@@ -344,7 +351,8 @@ def get_tts_provider_for_intent(intent: str = None, route: str = None, user_id: 
             return OpenAITTSProvider(
                 voice=cfg.get("voice", "nova"),
                 model=os.getenv("OPENAI_TTS_MODEL", cfg.get("model", "tts-1")),
-                speed=float(os.getenv("ONYX_SPEED", str(cfg.get("speed", 1.0))))
+                speed=float(os.getenv("ONYX_SPEED", str(cfg.get("speed", 1.0)))),
+                instructions=cfg.get("instructions", "")
             )
     except Exception as e:
         logger.warning("TTS_ROUTING_SECONDARY_FAIL provider=%s reason=%s", secondary, e)
