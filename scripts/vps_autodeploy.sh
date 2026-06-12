@@ -96,7 +96,10 @@ if ! git reset --hard "origin/$BRANCH"; then
   repair_repo_ownership || true
   git reset --hard "origin/$BRANCH"
 fi
-git clean -fd -e .venv/ -e data/ -e logs/
+# static/ig_posts: media pubblicati su Instagram (IG li scarica dal nostro URL
+# anche minuti dopo la publish) — MAI cancellarli col clean.
+# static/voice_test: campioni vocali. memory/: stato runtime (profili, episodi).
+git clean -fd -e .venv/ -e data/ -e logs/ -e memory/ -e static/ig_posts/ -e static/voice_test/
 
 if [[ -f requirements.txt ]]; then
   log "Syncing Python dependencies"
