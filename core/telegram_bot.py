@@ -552,6 +552,106 @@ async def send_photo(chat_id: int, photo_url: str, caption: str = "", reply_mark
             return False
 
 
+async def _handle_group_join(chat_id: int, msg: dict):
+    """
+    Genesi è appena stata aggiunta a un gruppo: dà un'occhiata ai
+    partecipanti (admin visibili via API + profili membri già noti),
+    capisce dove si trova (titolo) e si presenta ringraziando chi
+    l'ha aggiunta e salutando per nome le persone che conosce.
+    """
+    try:
+        title = msg.get("chat", {}).get("title", "questo gruppo")
+        adder = msg.get("from", {}).get("first_name", "")
+        is_family = chat_id in _FAMILY_GROUP_IDS
+        log("TELEGRAM_GROUP_JOIN", chat_id=chat_id, title=title, adder=adder)
+
+        # Registra il gruppo tra quelli noti (saluti proattivi futuri)
+        try:
+            from core.telegram_group_memory import register_known_group, get_member
+            await register_known_group(chat_id, "telegram", title=title)
+        except Exception:
+            get_member = None
+
+        # "Rapida occhiata ai partecipanti": l'API bot espone solo gli admin
+        known_names: list[str] = []
+        other_names: list[str] = []
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                res = await client.get(f"{TELEGRAM_API}/getChatAdministrators",
+                                       params={"chat_id": chat_id})
+                for adm in (res.json().get("result") or []):
+                    u = adm.get("user", {})
+                    if u.get("is_bot"):
+                        continue
+                    name = u.get("first_name", "")
+                    if not name:
+                        continue
+                    known = False
+                    if get_member:
+                        try:
+                            prof = await get_member(u.get("id"))
+                            known = bool(prof and prof.get("first_name"))
+                        except Exception:
+                            pass
+                    (known_names if known else other_names).append(name)
+        except Exception as _pe:
+            logger.debug("TELEGRAM_JOIN_PARTICIPANTS_ERR %s", _pe)
+
+        await send_typing(chat_id)
+
+        # Presentazione generata dal LLM, su misura per il gruppo
+        from core.llm_service import llm_service
+        ctx = (
+            f"Sei appena stata aggiunta al gruppo Telegram '{title}'"
+            + (f" da {adder}" if adder else "") + ".\n"
+            + (f"Persone che CONOSCI GIÀ presenti: {', '.join(known_names)}.\n" if known_names else "")
+            + (f"Altre persone presenti: {', '.join(other_names)}.\n" if other_names else "")
+            + ("Questo è un gruppo della tua FAMIGLIA: tono affettuoso da familiare.\n"
+               if is_family else
+               "Gruppo nuovo: tono cordiale e simpatico, da ospite educata.\n")
+        )
+        prompt = (
+            "Sei Genesi, assistente AI italiana. Scrivi il tuo PRIMO messaggio in un "
+            "gruppo a cui sei appena stata aggiunta. REGOLE:\n"
+            "- Ringrazia per nome chi ti ha aggiunta\n"
+            "- Se conosci già qualcuno, salutalo per nome con piacere genuino\n"
+            "- Deduci il contesto dal nome del gruppo e fai un cenno simpatico\n"
+            "- Presentati in 1 frase (cosa sai fare: chiacchierare, meteo, notizie, "
+            "ricordare le cose importanti, capire foto vocali e video)\n"
+            "- Massimo 4 frasi, calorosa, niente elenchi puntati, 1-2 emoji"
+        )
+        intro = await llm_service._call_model(
+            "openai/gpt-4o-mini", prompt, ctx,
+            user_id=f"tg_join_{chat_id}", route="memory")
+        if not intro or not intro.strip():
+            intro = (f"Ciao a tutti! Grazie {adder} per avermi aggiunta 😊 "
+                     "Sono Genesi: chiacchiero, ricordo le cose importanti e "
+                     "capisco foto, vocali e video. Felice di essere qui!")
+        await send_message(chat_id, intro.strip())
+        log("TELEGRAM_GROUP_JOIN_GREETED", chat_id=chat_id,
+            known=len(known_names), others=len(other_names))
+    except Exception as e:
+        logger.error("TELEGRAM_GROUP_JOIN_ERROR chat_id=%s err=%s", chat_id, e)
+
+
+async def _welcome_new_member(chat_id: int, names: list[str]):
+    """Benvenuto a un nuovo membro umano nel gruppo familiare."""
+    try:
+        await send_typing(chat_id)
+        from core.llm_service import llm_service
+        intro = await llm_service._call_model(
+            "openai/gpt-4o-mini",
+            "Sei Genesi, membro AI della famiglia in questo gruppo Telegram. "
+            "Dai un benvenuto caloroso e breve (max 2 frasi, 1 emoji) ai nuovi "
+            "arrivati, per nome.",
+            f"Nuovi membri appena entrati: {', '.join(names)}",
+            user_id=f"tg_welcome_{chat_id}", route="memory")
+        if intro and intro.strip():
+            await send_message(chat_id, intro.strip())
+    except Exception as e:
+        logger.debug("TELEGRAM_WELCOME_ERR %s", e)
+
+
 async def send_typing(chat_id: int):
     """
     Mostra i puntini "sta scrivendo" e li mantiene attivi in background.
@@ -925,6 +1025,24 @@ async def handle_update(update: dict):
         # Normalizzazione dei comandi rapidi (bottoni ReplyKeyboard)
         if text in ("🌦️ Meteo", "📍 Meteo (GPS)"):
             text = "Che tempo fa oggi?"
+        # ── GENESI AGGIUNTA A UN GRUPPO: presentazione + ringraziamenti ──────
+        _new_members = msg.get("new_chat_members") or []
+        if _new_members and is_group:
+            try:
+                _bot_id = int(TELEGRAM_TOKEN.split(":")[0])
+            except Exception:
+                _bot_id = 0
+            if any(m.get("id") == _bot_id for m in _new_members):
+                asyncio.create_task(_handle_group_join(chat_id, msg))
+                return
+            # Nuovo membro umano nel gruppo familiare → benvenuto caloroso
+            if chat_id in _FAMILY_GROUP_IDS:
+                _names = [m.get("first_name", "") for m in _new_members
+                          if not m.get("is_bot") and m.get("first_name")]
+                if _names:
+                    asyncio.create_task(_welcome_new_member(chat_id, _names))
+                return
+
         photo      = msg.get("photo")       # lista di dimensioni
         voice      = msg.get("voice")       # messaggio vocale
         audio      = msg.get("audio")       # file audio generico

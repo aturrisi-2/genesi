@@ -261,15 +261,28 @@ async def publish_one_post() -> bool:
                 if st.json().get("status_code") == "FINISHED":
                     break
 
-            # 3. Pubblica
-            res = await client.post(
-                f"{GRAPH}/{ig_id}/media_publish",
-                data={"creation_id": creation_id, "access_token": token},
-            )
-            pdata = res.json()
-            media_id = pdata.get("id")
-            if not media_id:
+            # 3. Pubblica — con retry sugli errori transitori di Instagram
+            # (capita un 500 "is_transient: please retry" che perdeva il post)
+            media_id = None
+            for _try in range(4):
+                res = await client.post(
+                    f"{GRAPH}/{ig_id}/media_publish",
+                    data={"creation_id": creation_id, "access_token": token},
+                )
+                pdata = res.json()
+                media_id = pdata.get("id")
+                if media_id:
+                    break
+                _err = (pdata.get("error") or {})
+                if _err.get("is_transient") or res.status_code >= 500:
+                    logger.warning("IG_PUB_PUBLISH_TRANSIENT try=%d body=%.200s",
+                                   _try, res.text)
+                    await asyncio.sleep(15 * (_try + 1))
+                    continue
                 logger.error("IG_PUB_PUBLISH_FAIL body=%.300s", res.text)
+                return False
+            if not media_id:
+                logger.error("IG_PUB_PUBLISH_FAIL retries_exhausted")
                 return False
 
         state.setdefault("posts", []).append({
@@ -745,12 +758,25 @@ async def publish_one_reel(custom_theme: str = "") -> bool:
                 logger.error("IG_REEL_PROCESSING_TIMEOUT")
                 return False
 
-            # 3. Pubblica
-            res = await client.post(f"{GRAPH}/{ig_id}/media_publish",
-                                    data={"creation_id": creation_id, "access_token": token})
-            media_id = res.json().get("id")
-            if not media_id:
+            # 3. Pubblica — con retry sugli errori transitori di Instagram
+            media_id = None
+            for _try in range(4):
+                res = await client.post(f"{GRAPH}/{ig_id}/media_publish",
+                                        data={"creation_id": creation_id, "access_token": token})
+                pdata = res.json()
+                media_id = pdata.get("id")
+                if media_id:
+                    break
+                _err = (pdata.get("error") or {})
+                if _err.get("is_transient") or res.status_code >= 500:
+                    logger.warning("IG_REEL_PUBLISH_TRANSIENT try=%d body=%.200s",
+                                   _try, res.text)
+                    await asyncio.sleep(15 * (_try + 1))
+                    continue
                 logger.error("IG_REEL_PUBLISH_FAIL body=%.300s", res.text)
+                return False
+            if not media_id:
+                logger.error("IG_REEL_PUBLISH_FAIL retries_exhausted")
                 return False
 
         state = _load_state()

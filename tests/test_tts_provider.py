@@ -20,8 +20,17 @@ class TestTTSRouting:
             assert provider.name() == "openai"
 
     def test_routing_informational_returns_edge(self):
-        provider = get_tts_provider_for_intent(intent="weather")
-        assert provider.name() == "edge_tts"
+        # Il routing misto risparmia-costi è legacy: di default vige
+        # TTS_SINGLE_VOICE=1 (Fable ovunque). Qui testiamo il path legacy.
+        with patch.dict(os.environ, {'TTS_SINGLE_VOICE': '0'}):
+            provider = get_tts_provider_for_intent(intent="weather")
+            assert provider.name() == "edge_tts"
+
+    def test_single_voice_default_routes_openai(self):
+        # Default attuale: voce unica OpenAI su tutte le route
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-key'}):
+            provider = get_tts_provider_for_intent(intent="weather")
+            assert provider.name() == "openai"
 
     def test_routing_unknown_intent_defaults_conversational(self):
         with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-key'}):

@@ -192,6 +192,49 @@ async function startBaileys() {
         }
     });
 
+    // ── Genesi aggiunta a un gruppo: occhiata ai partecipanti + presentazione ──
+    sock.ev.on("group-participants.update", async (update) => {
+        try {
+            if (update.action !== "add") return;
+            const myJid = sock.user?.id?.replace(/:.*@/, "@") || "";
+            const myLid = sock.user?.lid?.replace(/:.*@/, "@") || "";
+            const added = (update.participants || []).map(p => String(p).replace(/:.*@/, "@"));
+            const meAdded = added.some(p => p === myJid || p === myLid);
+            if (!meAdded) return;
+
+            console.log(`[Baileys] Genesi aggiunta al gruppo ${update.id} — mi presento`);
+            const meta = await sock.groupMetadata(update.id);
+            const subject = meta?.subject || "questo gruppo";
+            const partNames = (meta?.participants || [])
+                .map(p => {
+                    const pid = String(p.id || "").replace(/:.*@/, "@");
+                    if (pid === myJid || pid === myLid) return null;
+                    return contactCache[pid] || p.name || null;
+                })
+                .filter(Boolean);
+            const adderId = String(update.author || "").replace(/:.*@/, "@");
+            const adderName = contactCache[adderId] || "";
+
+            const sysText =
+                `[SISTEMA] Sei appena stata aggiunta a questo gruppo WhatsApp chiamato "${subject}"` +
+                (adderName ? ` da ${adderName}` : "") + `. ` +
+                (partNames.length ? `Partecipanti visibili: ${partNames.join(", ")}. ` : "") +
+                `Scrivi il tuo PRIMO messaggio: ringrazia per nome chi ti ha aggiunta, ` +
+                `saluta per nome le persone che conosci, deduci il contesto dal nome del gruppo ` +
+                `e presentati in 1 frase (chiacchiere, meteo, notizie, memoria, foto/vocali/video). ` +
+                `Massimo 4 frasi, calorosa, 1-2 emoji, niente elenchi.`;
+
+            const reply = await askGenesiGroup(sysText, "Sistema", "system",
+                update.id, subject, null);
+            if (reply) {
+                await sock.sendMessage(update.id, { text: reply });
+                console.log(`[Baileys] Presentazione inviata in ${subject}`);
+            }
+        } catch (e) {
+            console.error("[Baileys] Errore presentazione gruppo:", e.message);
+        }
+    });
+
     sock.ev.on("messages.upsert", async ({ messages, type }) => {
         if (type !== "notify") return;
 
