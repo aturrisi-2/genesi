@@ -261,6 +261,251 @@ async def publish_one_post() -> bool:
         return False
 
 
+# ── REELS: generazione e pubblicazione video originali ──────────────────────
+
+def _reels_times() -> list[str]:
+    raw = os.getenv("IG_REELS_TIMES", "13:00")
+    return [t.strip() for t in raw.split(",") if t.strip()]
+
+
+def _reel_due(state: dict) -> bool:
+    """
+    True se è passato l'intervallo configurato dall'ultimo Reel
+    (IG_REELS_EVERY_DAYS, default 3 giorni). Contiene i costi:
+    ~4 immagini AI a Reel.
+    """
+    try:
+        every_days = int(os.getenv("IG_REELS_EVERY_DAYS", "3"))
+    except Exception:
+        every_days = 3
+    reels = [p for p in state.get("posts", []) if p.get("type") == "reel"]
+    if not reels:
+        return True
+    last_ts = max(p.get("ts", 0) for p in reels)
+    # margine di 1h: il Reel del giorno N esce allo slot anche con piccoli ritardi
+    return (time.time() - last_ts) >= (every_days * 86400 - 3600)
+
+
+_REEL_CONTENT_PROMPT = """Sei il social media manager di "Genesi", assistente AI familiare italiana
+(@genesiai_official). Progetta un REEL breve (12 secondi, 4 scene visive in sequenza).
+
+LINEE GUIDA:
+- Temi: vita quotidiana italiana, natura e stagioni, famiglia e ricordi, curiosità AI,
+  benessere, cucina e tradizioni, paesaggi italiani.
+- Le 4 scene devono raccontare una mini-storia visiva COERENTE (stesso stile, stessa
+  palette): es. alba → mattina → tramonto → notte sullo stesso luogo.
+- scene_prompts: in inglese, fotografici/cinematografici, formato VERTICALE,
+  senza testo nell'immagine, senza persone riconoscibili, stile coerente
+  (warm tones, italian aesthetic, cinematic light). Ripeti lo stile in ogni prompt.
+- caption: italiana, calda, 2-3 frasi + domanda + 5-8 hashtag.
+
+{insights_block}
+
+Rispondi SOLO con JSON valido:
+{{"theme": "tema", "caption": "caption con hashtag",
+ "scene_prompts": ["scena 1", "scena 2", "scena 3", "scena 4"]}}"""
+
+
+async def _generate_reel_content(state: dict) -> dict | None:
+    """LLM progetta il Reel: tema, caption e 4 prompt di scena coerenti."""
+    try:
+        from core.llm_service import llm_service
+        recent = [p for p in state.get("posts", []) if p.get("type") == "reel"][-6:]
+        if recent:
+            lines = [f"- tema '{p.get('theme')}': {p.get('likes', 0)} like" for p in recent]
+            insights_block = ("PERFORMANCE REEL RECENTI (favorisci i temi con più like, "
+                              "non ripetere l'ultimo tema):\n" + "\n".join(lines))
+        else:
+            insights_block = "Nessun Reel precedente: scegli liberamente."
+
+        raw = await llm_service._call_model(
+            "openai/gpt-4o-mini", _REEL_CONTENT_PROMPT.format(insights_block=insights_block),
+            "Progetta il prossimo Reel.", user_id="ig_publisher", route="memory")
+        clean = (raw or "").strip()
+        if clean.startswith("```"):
+            clean = clean.strip("`").lstrip("json").strip()
+        data = json.loads(clean)
+        scenes = data.get("scene_prompts") or []
+        if data.get("caption") and len(scenes) >= 3:
+            data["scene_prompts"] = scenes[:4]
+            return data
+        return None
+    except Exception as e:
+        logger.error("IG_REEL_CONTENT_ERROR err=%s", e)
+        return None
+
+
+def _build_reel_video(image_paths: list[str], out_path: str) -> bool:
+    """
+    Monta le immagini in un video verticale 1080x1920 con effetto Ken Burns
+    (zoom lento) — 3s a scena, 25fps, silenzioso. Costo zero (ffmpeg locale).
+    """
+    import subprocess
+    try:
+        seg_paths = []
+        for i, img in enumerate(image_paths):
+            seg = out_path + f".seg{i}.mp4"
+            zoom_dir = "min(zoom+0.0015,1.15)" if i % 2 == 0 else "if(eq(on,1),1.15,max(zoom-0.0015,1.0))"
+            r = subprocess.run([
+                "ffmpeg", "-y", "-loop", "1", "-i", img, "-t", "3",
+                "-vf", (f"scale=1080:1920:force_original_aspect_ratio=increase,"
+                        f"crop=1080:1920,zoompan=z='{zoom_dir}':d=75:s=1080x1920:fps=25"),
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", seg,
+            ], capture_output=True, timeout=120)
+            if os.path.exists(seg) and os.path.getsize(seg) > 1000:
+                seg_paths.append(seg)
+            else:
+                logger.error("IG_REEL_SEG_FAIL i=%d rc=%s stderr=%.300s",
+                             i, r.returncode, r.stderr.decode(errors="replace")[-300:])
+
+        if len(seg_paths) < 2:
+            return False
+
+        # Concatenazione — path ASSOLUTI: ffmpeg risolve i path del file-lista
+        # relativi alla directory della lista, non alla cwd
+        list_path = out_path + ".list.txt"
+        with open(list_path, "w") as f:
+            for s in seg_paths:
+                f.write(f"file '{os.path.abspath(s)}'\n")
+        rc = subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                             "-i", list_path, "-c", "copy", out_path],
+                            capture_output=True, timeout=60)
+        if rc.returncode != 0:
+            logger.error("IG_REEL_CONCAT_FAIL rc=%s stderr=%.300s",
+                         rc.returncode, rc.stderr.decode(errors="replace")[-300:])
+
+        for s in seg_paths + [list_path]:
+            try:
+                os.unlink(s)
+            except Exception:
+                pass
+        return os.path.exists(out_path) and os.path.getsize(out_path) > 10000
+    except Exception as e:
+        logger.error("IG_REEL_VIDEO_BUILD_ERROR err=%s", e)
+        return False
+
+
+async def publish_one_reel() -> bool:
+    """Genera e pubblica un Reel completo. Ritorna True se pubblicato."""
+    token = _page_token()
+    ig_id = await get_ig_user_id()
+    if not token or not ig_id:
+        logger.warning("IG_REEL_SKIP no_token_or_ig_id")
+        return False
+
+    state = _load_state()
+    content = await _generate_reel_content(state)
+    if not content:
+        return False
+
+    # Genera le immagini delle scene (il grosso del costo: ~4 immagini)
+    frame_paths: list[str] = []
+    try:
+        from core.openrouter_image_service import openrouter_image_service
+        os.makedirs(IMG_DIR, exist_ok=True)
+        for i, prompt in enumerate(content["scene_prompts"]):
+            data_url = None
+            for attempt in range(2):  # 1 retry per scena
+                data_url = await openrouter_image_service.generate_image(
+                    prompt + " — vertical 9:16 composition", user_id="ig_publisher")
+                if data_url and "," in data_url:
+                    break
+                await asyncio.sleep(3)
+            logger.info("IG_REEL_FRAME scene=%d ok=%s", i, bool(data_url and "," in data_url))
+            if not data_url or "," not in data_url:
+                continue
+            img_bytes = base64.b64decode(data_url.split(",", 1)[1])
+            fp = os.path.join(IMG_DIR, f"reel_{uuid.uuid4().hex[:8]}_{i}.jpg")
+            with open(fp, "wb") as f:
+                f.write(img_bytes)
+            frame_paths.append(fp)
+    except Exception as e:
+        logger.error("IG_REEL_FRAMES_ERROR err=%s", e)
+
+    if len(frame_paths) < 3:
+        logger.warning("IG_REEL_FRAMES_INSUFFICIENT got=%d need=3", len(frame_paths))
+        for fp in frame_paths:
+            try:
+                os.unlink(fp)
+            except Exception:
+                pass
+        return False
+
+    # Monta il video
+    video_name = f"reel_{uuid.uuid4().hex}.mp4"
+    video_path = os.path.join(IMG_DIR, video_name)
+    ok = await asyncio.to_thread(_build_reel_video, frame_paths, video_path)
+    logger.info("IG_REEL_BUILD ok=%s size=%s", ok,
+                os.path.getsize(video_path) if os.path.exists(video_path) else "missing")
+    for fp in frame_paths:
+        try:
+            os.unlink(fp)
+        except Exception:
+            pass
+    if not ok:
+        return False
+
+    video_url = f"{_public_base()}/static/ig_posts/{video_name}"
+    logger.info("IG_REEL_VIDEO_URL url=%s", video_url)
+
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            # 1. Container REELS
+            res = await client.post(
+                f"{GRAPH}/{ig_id}/media",
+                data={"media_type": "REELS", "video_url": video_url,
+                      "caption": content["caption"][:2200], "access_token": token})
+            creation_id = res.json().get("id")
+            if not creation_id:
+                logger.error("IG_REEL_CONTAINER_FAIL body=%.300s", res.text)
+                return False
+
+            logger.info("IG_REEL_CONTAINER id=%s", creation_id)
+            # 2. Attendi l'elaborazione video (più lunga delle foto)
+            published = False
+            for _poll in range(30):
+                await asyncio.sleep(6)
+                st = await client.get(f"{GRAPH}/{creation_id}",
+                                      params={"fields": "status_code,status", "access_token": token})
+                code = st.json().get("status_code")
+                if _poll % 5 == 0 or code in ("FINISHED", "ERROR"):
+                    logger.info("IG_REEL_STATUS poll=%d code=%s detail=%.150s",
+                                _poll, code, str(st.json().get("status", "")))
+                if code == "FINISHED":
+                    published = True
+                    break
+                if code == "ERROR":
+                    logger.error("IG_REEL_PROCESSING_ERROR body=%.200s", st.text)
+                    return False
+            if not published:
+                logger.error("IG_REEL_PROCESSING_TIMEOUT")
+                return False
+
+            # 3. Pubblica
+            res = await client.post(f"{GRAPH}/{ig_id}/media_publish",
+                                    data={"creation_id": creation_id, "access_token": token})
+            media_id = res.json().get("id")
+            if not media_id:
+                logger.error("IG_REEL_PUBLISH_FAIL body=%.300s", res.text)
+                return False
+
+        state = _load_state()
+        state.setdefault("posts", []).append({
+            "media_id": media_id, "type": "reel",
+            "theme": content.get("theme", ""),
+            "caption": content["caption"][:200],
+            "ts": int(time.time()), "likes": 0, "comments_count": 0,
+        })
+        state["posts"] = state["posts"][-100:]
+        _save_state(state)
+        log("IG_REEL_PUBLISHED", media_id=media_id, theme=content.get("theme", ""))
+        return True
+
+    except Exception as e:
+        logger.error("IG_REEL_ERROR err=%s", e)
+        return False
+
+
 # ── Dedup risposte commenti (condiviso webhook + polling) ───────────────────
 
 def is_comment_replied(comment_id: str) -> bool:
@@ -374,6 +619,25 @@ async def instagram_publisher_scheduler():
 
                 state = _load_state()
                 slots_done = state.setdefault("published_slots", {}).get(today, [])
+
+                # Reel ogni IG_REELS_EVERY_DAYS giorni (default 3) allo slot orario
+                for slot in _reels_times():
+                    _rslot = f"reel@{slot}"
+                    if _rslot not in slots_done and now_hm >= slot:
+                        if not _reel_due(state):
+                            # Non è ancora il giorno del Reel: marca lo slot e salta
+                            state.setdefault("published_slots", {}).setdefault(today, []).append(_rslot)
+                            _save_state(state)
+                            slots_done = state["published_slots"].get(today, [])
+                            log("IG_REEL_SLOT_SKIP", slot=slot, reason="interval_not_due")
+                            continue
+                        logger.info("IG_REEL_SLOT_TRIGGER slot=%s", slot)
+                        rok = await publish_one_reel()
+                        state = _load_state()
+                        state.setdefault("published_slots", {}).setdefault(today, []).append(_rslot)
+                        _save_state(state)
+                        log("IG_REEL_SLOT_DONE", slot=slot, published=rok)
+                        slots_done = state["published_slots"].get(today, [])
 
                 for slot in _publish_times():
                     if slot not in slots_done and now_hm >= slot:
