@@ -1081,6 +1081,26 @@ async def group_present(request: GroupPresentRequest, user: AuthUser = Depends(r
         return GroupPresentResponse(response="", presented=False)
 
 
+class BirthdayDMRequest(BaseModel):
+    wa_id: str
+    name: str = ""
+    text: str
+
+@router.post("/group/birthday-dm")
+async def group_birthday_dm(request: BirthdayDMRequest, user: AuthUser = Depends(require_auth)):
+    """
+    Risposta di un membro al DM di raccolta compleanni: estrae la data (qualsiasi
+    formato) e la salva per quella persona. Ritorna {found, date, reply}.
+    """
+    try:
+        from core.birthday_service import collect_birthday_dm
+        res = await collect_birthday_dm(request.wa_id, request.name, request.text)
+        return res
+    except Exception as e:
+        log("BIRTHDAY_DM_ENDPOINT_ERROR", error=str(e))
+        return {"found": False, "date": "", "reply": ""}
+
+
 class GroupForgetRequest(BaseModel):
     group_id: str
 

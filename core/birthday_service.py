@@ -401,6 +401,87 @@ async def try_extract_birthday(from_id: int | str, first_name: str, text: str):
                 return
 
 
+_MONTH_NAMES_IT = ["", "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
+                   "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"]
+
+
+async def parse_birthdate_freeform(text: str) -> str:
+    """
+    Estrae una data di nascita da testo libero in QUALSIASI formato.
+    Ritorna ISO 'YYYY-MM-DD', oppure '????-MM-DD' se l'anno manca, oppure '' se assente.
+    Prima i pattern regex; poi fallback LLM per formati liberi ("il dodici marzo del '78").
+    """
+    if not text or not text.strip():
+        return ""
+    # 1. Pattern regex esistenti
+    for pattern in _BDAY_PATTERNS:
+        m = pattern.search(text)
+        if m:
+            g = m.groups()
+            iso = _parse_date_from_match(
+                g[0] if len(g) > 0 else "",
+                g[1] if len(g) > 1 else "",
+                g[2] if len(g) > 2 and g[2] else "",
+            )
+            if iso:
+                return iso
+    # 2. Fallback LLM per formati liberi
+    try:
+        from core.llm_service import llm_service
+        import json as _json
+        import re as _re
+        raw = await llm_service._call_model(
+            "openai/gpt-4o-mini",
+            ("Estrai la DATA DI NASCITA dal messaggio dell'utente. "
+             "Rispondi SOLO con JSON valido: {\"day\":N|null,\"month\":N|null,\"year\":N|null}. "
+             "month è il numero del mese (1-12). Se l'anno non è indicato metti year=null. "
+             "Se non c'è alcuna data, metti tutti i campi a null."),
+            text.strip()[:300],
+            user_id="bday-parse",
+            route="memory",
+        )
+        if raw:
+            mt = _re.search(r"\{.*\}", raw, _re.S)
+            if mt:
+                d = _json.loads(mt.group(0))
+                day, month, year = d.get("day"), d.get("month"), d.get("year")
+                if day and month and 1 <= int(month) <= 12 and 1 <= int(day) <= 31:
+                    yy = f"{int(year):04d}" if year and 1900 <= int(year) <= date.today().year else "????"
+                    return f"{yy}-{int(month):02d}-{int(day):02d}"
+    except Exception as e:
+        logger.warning("BDAY_FREEFORM_PARSE_ERROR err=%s", e)
+    return ""
+
+
+async def collect_birthday_dm(wa_id: str, name: str, text: str) -> dict:
+    """
+    Gestisce la risposta di un membro al DM di raccolta compleanni.
+    Salva la data (sotto member_id 'wa:{wa_id}') e ritorna {found, date, reply}.
+    """
+    wa_clean = (wa_id or "").split("@")[0].replace("+", "")
+    member_id = f"wa:{wa_clean}"
+    iso = await parse_birthdate_freeform(text)
+    if iso:
+        existing = await get_birthday(member_id)
+        await save_birthday(member_id, iso, name or existing.get("name", ""), "whatsapp_dm")
+        log("BIRTHDAY_DM_SAVED", wa_id=wa_clean, name=name, birthdate=iso)
+        try:
+            parts = iso.split("-")
+            quando = f"{int(parts[2])} {_MONTH_NAMES_IT[int(parts[1])]}"
+            if parts[0] != "????":
+                quando += f" {parts[0]}"
+        except Exception:
+            quando = iso
+        nm = f", {name}" if name else ""
+        return {"found": True, "date": iso,
+                "reply": (f"Perfetto{nm}! 🎂 Ho segnato il tuo compleanno: {quando}. "
+                          "Ti farò gli auguri quel giorno. Grazie!")}
+    return {"found": False, "date": "",
+            "reply": ("Scusa, non sono riuscita a capire la data 😅 "
+                      "Scrivimela pure come preferisci, anche semplice: "
+                      "\"12 marzo 1985\" oppure solo \"12 marzo\".")}
+
+
 # ── Calcolo età e messaggio ───────────────────────────────────────────────────
 
 def _calc_age(birthdate_iso: str, today: date = None) -> int | None:
