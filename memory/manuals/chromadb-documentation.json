@@ -1,0 +1,1052 @@
+[
+  {
+    "title": "Introduction - Chroma Docs - Documentation Index",
+    "text": "Fetch the complete documentation index at: /llms.txt",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - Documentation Index",
+    "text": "Use this file to discover all available pages before exploring further.",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - Documentation Index",
+    "text": "Skip to main content Chroma Docs home page Search... ⌘ K Ask Assistant Search... Navigation Overview Introduction Docs Chroma Cloud Guides Integrations Reference Overview",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - Introduction",
+    "text": "Chroma is the open-source data infrastructure for AI. It comes with everything you need to get started built-in.",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - Introduction",
+    "text": "Copy page Chroma gives you everything you need for retrieval: store embeddings with metadata, search with dense and sparse vectors, filter by metadata, and retrieve across text, images, and more.",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - Embeddings",
+    "text": "Use any embedding model. OpenAI, Cohere, Hugging Face, sentence-transformers, and more.",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - Vector Search",
+    "text": "Dense, sparse, and hybrid search. Query by similarity and combine multiple search strategies.",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - Full-Text & Regex Search",
+    "text": "Keyword and regex search over your data without embeddings.",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - Metadata Filtering",
+    "text": "Filter results at query time by metadata conditions.",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - Multi-Modal Retrieval",
+    "text": "Index and search images, audio, and other modalities alongside text.",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - Getting Started with the Chroma SDK",
+    "text": "Create a self-hosted or cloud database and add data to it using the Chroma SDK.",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - Create a Chroma Cloud Database",
+    "text": "Create a scalable, zero-ops Chroma Cloud database to store your AI data.",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - Agentic Search",
+    "text": "Build agents that iteratively search and refine results for complex queries.",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - Code Search",
+    "text": "Index codebases to power coding agents using AST-aware chunking.",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - ​ Open Source",
+    "text": "Chroma is licensed under Apache 2.0 . Run it locally, self-host, or use Chroma Cloud for a managed, serverless experience.",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Introduction - Chroma Docs - ​ Open Source",
+    "text": "Yes No Suggest edits Getting Started Next ⌘ I Assistant Responses are generated using AI and may contain mistakes.",
+    "url": "https://docs.trychroma.com/docs/overview/introduction"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Documentation Index",
+    "text": "Fetch the complete documentation index at: /llms.txt",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Documentation Index",
+    "text": "Use this file to discover all available pages before exploring further.",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Documentation Index",
+    "text": "Skip to main content Chroma Docs home page Search... ⌘ K Ask Assistant Search... Navigation Overview Getting Started Docs Chroma Cloud Guides Integrations Reference Overview",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Getting Started",
+    "text": "Chroma is the open-source data infrastructure for AI. It comes with everything you need to get started built-in, and runs on your machine.",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Getting Started",
+    "text": "• Rust For production, Chroma offers Chroma Cloud - a fast, scalable, and serverless database-as-a-service. Get started in 30 seconds - $5 in free credits included.",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Install with AI",
+    "text": "Give the following prompt to Claude Code, Cursor, Codex, or your favorite AI agent. It will quickly set you up with Chroma. Chroma Cloud OSS In this directory create a new Python project with Chroma set up. Use a virtual environment. Write a small example that adds some data to a collection and queries it. Do not delete the data from the collection when it's complete. Run the script when you are done setting up the environment and writing the script. The output should show what data was ingested, what was the query, and the results. Your own summary should include this output so the user can see it. First, install `chromadb`. The project should be set up with Chroma Cloud. When you install `chromadb`, you get access to the Chroma CLI. You can run `chroma login` to authenticate. This will open a browser for authentication and save a connection profile locally. You can also use `chroma profile show` to see if the user already has an active profile saved locally. If so, you can skip the login step. Then create a DB using the CLI with `chroma db create chroma-getting-started`. This will create a DB with this name. Then use the CLI command `chroma db connect chroma-getting-started --env-file`. This will create a .env file in the current directory with the connection variables for this DB and account, so the CloudClient can be instantiated with chromadb.CloudClient(api_key=os.getenv(\"CHROMA_API_KEY\"), ...). See all 28 lines",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Create a Chroma Client",
+    "text": "Python import chromadb chroma_client = chromadb.Client() 3",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Create a collection",
+    "text": "Collections are where you’ll store your embeddings, documents, and any additional metadata. Collections index your embeddings and documents, and enable efficient retrieval and filtering. You can create a collection with a name: Python collection = chroma_client.create_collection( name = \"my_collection\" ) 4",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Add some text documents to the collection",
+    "text": "Chroma will store your text and handle embedding and indexing automatically. You can also customize the embedding model. You must provide unique string IDs for your documents. Python collection.add( ids = [ \"id1\" , \"id2\" ], documents = [ \"This is a document about pineapple\" , \"This is a document about oranges\" ] ) 5",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Query the collection",
+    "text": "You can query the collection with a list of query texts, and Chroma will return the n most similar results. It’s that easy! Python results = collection.query( query_texts = [ \"This is a query document about hawaii\" ], # Chroma will embed this for you n_results = 2 # how many results to return ) print (results) If n_results is not provided, Chroma will return 10 results by default. Here we only added 2 documents, so we set n_results=2. 6",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Inspect Results",
+    "text": "From the above - you can see that our query about hawaii is semantically most similar to the document about pineapple. Python { 'documents' : [[ 'This is a document about pineapple' , 'This is a document about oranges' ]], 'ids' : [[ 'id1' , 'id2' ]], 'distances' : [[ 1.0404009819030762 , 1.243080496788025 ]], 'uris' : None , 'data' : None , 'metadatas' : [[ None , None ]], 'embeddings' : None , } 7",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Try it out yourself",
+    "text": "What if we tried querying with “This is a document about florida”? Here is a full example. Python import chromadb chroma_client = chromadb.Client() # switch \\`create_collection\\` to \\`get_or_create_collection\\` to avoid creating a new collection every time collection = chroma_client.get_or_create_collection( name = \"my_collection\" ) # switch \\`add\\` to \\`upsert\\` to avoid adding the same documents every time collection.upsert( documents = [ \"This is a document about pineapple\" , \"This is a document about oranges\" ], ids = [ \"id1\" , \"id2\" ] ) results = collection.query( query_texts = [ \"This is a query document about florida\" ], # Chroma will embed this for you n_results = 2 # how many results to return ) print (results) See all 21 lines",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Next steps",
+    "text": "In this guide we used Chroma’s in-memory client for simplicity. It starts a Chroma server in-memory, so any data you ingest will be lost when your program terminates. You can use the persistent client or run Chroma in client-server mode if you need data persistence.",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Next steps",
+    "text": "• Learn how to Deploy Chroma to a server",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Next steps",
+    "text": "• Join Chroma’s Discord Community to ask questions and get help",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Next steps",
+    "text": "• Follow Chroma on X (@trychroma) for updates",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Next steps",
+    "text": "For production, Chroma offers Chroma Cloud - a fast, scalable, and serverless database-as-a-service. Get started in 30 seconds - $5 in free credits included.",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Install with AI",
+    "text": "Give the following prompt to Claude Code, Cursor, Codex, or your favorite AI agent. It will quickly set you up with Chroma. Chroma Cloud OSS In this directory create a new Typescript project with Chroma set up. Write a small example that adds some data to a collection and queries it. Do not delete the data from the collection when it's complete. Run the script when you are done setting up the environment and writing the script. The output should show what data was ingested, what was the query, and the results. Your own summary should include this output so the user can see it. First, install `chromadb`. The project should be set up with Chroma Cloud. When you install `chromadb`, you get access to the Chroma CLI. You can run `chroma login` to authenticate. This will open a browser for authentication and save a connection profile locally. You can also use `chroma profile show` to see if the user already has an active profile saved locally. If so, you can skip the login step. Then create a DB using the CLI with `chroma db create chroma-getting-started`. This will create a DB with this name. Then use the CLI command `chroma db connect chroma-getting-started --env-file`. This will create a .env file in the current directory with the connection variables for this DB and account, so the CloudClient can be instantiated with: new CloudClient(). See all 27 lines",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Install",
+    "text": "npm pnpm bun yarn npm install chromadb @chroma-core/default-embed 2",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Create a Chroma Client",
+    "text": "Run the Chroma backend: npm pnpm bun yarn docker npx chroma run --path ./getting-started Then create a client which connects to it: TypeScript ESM TypeScript CJS import { ChromaClient } from \"chromadb\" ; const client = new ChromaClient (); 3",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Create a collection",
+    "text": "Collections are where you’ll store your embeddings, documents, and any additional metadata. Collections index your embeddings and documents, and enable efficient retrieval and filtering. You can create a collection with a name: TypeScript const collection = await client . createCollection ({ name: \"my_collection\" , }); 4",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Add some text documents to the collection",
+    "text": "Chroma will store your text and handle embedding and indexing automatically. You can also customize the embedding model. You must provide unique string IDs for your documents. TypeScript await collection . add ({ ids: [ \"id1\" , \"id2\" ], documents: [ \"This is a document about pineapple\" , \"This is a document about oranges\" , ], }); 5",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Query the collection",
+    "text": "You can query the collection with a list of query texts, and Chroma will return the n most similar results. It’s that easy! TypeScript const results = await collection . query ({ queryTexts: [ \"This is a query document about hawaii\" ], // Chroma will embed this for you nResults: 2 , // how many results to return }); console . log ( results ); If n_results is not provided, Chroma will return 10 results by default. Here we only added 2 documents, so we set n_results=2. 6",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Inspect Results",
+    "text": "From the above - you can see that our query about hawaii is semantically most similar to the document about pineapple. TypeScript { documents : [ [ 'This is a document about pineapple' , 'This is a document about oranges' ] ], ids : [ [ 'id1' , 'id2' ] ], distances : [[ 1.0404009819030762 , 1.243080496788025 ]], uris : null , data : null , metadatas : [[ null , null ]], embeddings : null } 7",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - Try it out yourself",
+    "text": "What if we tried querying with “This is a document about florida”? Here is a full example. TypeScript import { ChromaClient } from \"chromadb\" ; const client = new ChromaClient (); // switch `createCollection` to `getOrCreateCollection` to avoid creating a new collection every time const collection = await client . getOrCreateCollection ({ name: \"my_collection\" , }); // switch `addRecords` to `upsertRecords` to avoid adding the same documents every time await collection . upsert ({ documents: [ \"This is a document about pineapple\" , \"This is a document about oranges\" , ], ids: [ \"id1\" , \"id2\" ], }); const results = await collection . query ({ queryTexts: [ \"This is a query document about florida\" ], // Chroma will embed this for you nResults: 2 , // how many results to return }); console . log ( results ); See all 23 lines",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Next steps",
+    "text": "• We offer first class support for various embedding providers via our embedding function interface. Each embedding function ships in its own npm package.",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Next steps",
+    "text": "• Learn how to Deploy Chroma to a server",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Next steps",
+    "text": "• Join Chroma’s Discord Community to ask questions and get help",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Next steps",
+    "text": "• Follow Chroma on X (@trychroma) for updates",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Create a Chroma Client",
+    "text": "Run the Chroma backend: chroma run --path ./getting-started Then create a client which connects to it: use chroma :: ChromaHttpClient ; let client = ChromaHttpClient :: new ( Default :: default ());",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Create a collection",
+    "text": "let collection = client . create_collection ( \"my_collection\" , None , None ) . await ? ;",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Add some text documents to the collection",
+    "text": "The Rust client expects embeddings to be provided directly. Generate embeddings with your provider SDK, then pass them along with documents. let embeddings = vec! [ vec! [ 0.1 , 0.2 , 0.3 ], vec! [ 0.4 , 0.5 , 0.6 ]]; collection . add ( vec! [ \"id1\" . to_string (), \"id2\" . to_string ()], embeddings , Some ( vec! [ Some ( \"This is a document about pineapple\" . to_string ()), Some ( \"This is a document about oranges\" . to_string ()), ]), None , None , ) . await ? ;",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Query the collection",
+    "text": "let results = collection . query ( vec! [ vec! [ 0.1 , 0.2 , 0.3 ]], Some ( 2 ), None , None , None ) . await ? ;",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Next steps",
+    "text": "• Learn how to Deploy Chroma to a server",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Next steps",
+    "text": "• Join Chroma’s Discord Community to ask questions and get help",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Getting Started - Chroma Docs - ​ Next steps",
+    "text": "Yes No Suggest edits Introduction Previous Chroma Clients Next ⌘ I Assistant Responses are generated using AI and may contain mistakes.",
+    "url": "https://docs.trychroma.com/docs/overview/getting-started"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - Documentation Index",
+    "text": "Fetch the complete documentation index at: /llms.txt",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - Documentation Index",
+    "text": "Use this file to discover all available pages before exploring further.",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - Documentation Index",
+    "text": "Skip to main content Chroma Docs home page Search... ⌘ K Ask Assistant Search... Navigation Collections Manage Collections Docs Chroma Cloud Guides Integrations Reference Collections",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - Manage Collections",
+    "text": "Learn how to create, get, modify, and delete Chroma collections.",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - Manage Collections",
+    "text": "Copy page Chroma lets you manage collections of embeddings, using the collection primitive. Collections are the fundamental unit of storage and querying in Chroma.",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Creating Collections",
+    "text": "Chroma collections are created with a name. Collection names are used in the url, so there are a few restrictions on them:",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Creating Collections",
+    "text": "• The length of the name must be between 3 and 512 characters.",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Creating Collections",
+    "text": "• The name must start and end with a lowercase letter or a digit, and it can contain dots, dashes, and underscores in between.",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Creating Collections",
+    "text": "• The name must not contain two consecutive dots.",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Creating Collections",
+    "text": "• The name must not be a valid IP address.",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Creating Collections",
+    "text": "Python TypeScript Rust collection = client.create_collection( name = \"my_collection\" ) Note that collection names must be unique inside a Chroma database. If you try to create a collection with a name of an existing one, you will see an exception.",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Embedding Functions",
+    "text": "When you add documents to a collection, Chroma will embed them for you by using the collection’s embedding function . Chroma will use sentence transformer embedding function as a default. Chroma also offers various embedding function, which you can provide upon creating a collection. For example, you can create a collection using the OpenAIEmbeddingFunction : • Python",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Embedding Functions",
+    "text": "• Rust Install the openai package: pip poetry uv pip install openai Create your collection with the OpenAIEmbeddingFunction : import os from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction collection = client.create_collection( name = \"my_collection\" , embedding_function = OpenAIEmbeddingFunction( api_key = os.getenv( \"OPENAI_API_KEY\" ), model_name = \"text-embedding-3-small\" ) ) Instead of having Chroma embed documents, you can also provide embeddings directly when adding data to a collection. In this case, your collection will not have an embedding function set, and you will be responsible for providing embeddings directly when adding data and querying. collection = client.create_collection( name = \"my_collection\" , embedding_function = None ) Install the @chroma-core/openai package to get access to the OpenAIEmbeddingFunction : npm pnpm bun yarn npm install @chroma-core/openai Create your collection with the OpenAIEmbeddingFunction : import { OpenAIEmbeddingFunction } from \"@chroma-core/openai\" ; const collection = await client . createCollection ({ name: \"my_collection\" , embeddingFunction: new OpenAIEmbeddingFunction ({ apiKey: process . env . OPENAI_API_KEY , modelName: \"text-embedding-3-small\" , }), }); Instead of having Chroma embed documents, you can also provide embeddings directly when adding data to a collection. In this case, your collection will not have an embedding function set, and you will be responsible for providing embeddings directly when adding data and querying. const collection = await client . createCollection ({ name: \"my_collection\" , embeddingFunction: null , }); The Rust client expects embeddings to be provided directly when using add , get , search and other functions. Use your provider SDK to generate embeddings, then pass them to Chroma. collection . add ( vec! [ \"id1\" . to_string (), \"id2\" . to_string (), \"id3\" . to_string ()], vec! [ vec! [ 1.1 , 2.3 , 3.2 ], vec! [ 4.5 , 6.9 , 4.4 ], vec! [ 1.1 , 2.3 , 3.2 ], ], Some ( vec! [ Some ( \"lorem ipsum...\" . to_string ()), Some ( \"doc2\" . to_string ()), Some ( \"doc3\" . to_string ()), ]), None , None , ) . await ? ;",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Collection Metadata",
+    "text": "When creating collections, you can pass the optional metadata argument to add a mapping of metadata key-value pairs to your collections. This can be useful for adding general information about the collection like creation time, description of the data stored in the collection, and more. Python TypeScript Rust from datetime import datetime collection = client.create_collection( name = \"my_collection\" , embedding_function = emb_fn, metadata = { \"description\" : \"my first Chroma collection\" , \"created\" : str (datetime.now()) } )",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Getting Collections",
+    "text": "• Rust There are several ways to get a collection after it was created. The get_collection function will get a collection from Chroma by name. It returns a Collection object with name , metadata , configuration , and embedding_function . collection = client.get_collection( name = \"my-collection\" ) The get_or_create_collection function behaves similarly, but will create the collection if it doesn’t exist. You can pass to it the same arguments create_collection expects, and the client will ignore them if the collection already exists. collection = client.get_or_create_collection( name = \"my-collection\" , metadata = { \"description\" : \"...\" } ) The list_collections function returns the collections you have in your Chroma database. The collections will be ordered by creation time from oldest to newest. collections = client.list_collections() By default, list_collections returns up to 100 collections. If you have more than 100 collections, or need to get only a subset of your collections, you can use the limit and offset arguments: first_collections_batch = client.list_collections( limit = 100 ) # get the first 100 collections second_collections_batch = client.list_collections( limit = 100 , offset = 100 ) # get the next 100 collections collections_subset = client.list_collections( limit = 20 , offset = 50 ) # get 20 collections starting from the 50th Current versions of Chroma store the embedding function you used to create a collection on the server, so the client can resolve it for you on subsequent “get” operations. If you are running an older version of the Chroma client or server (earlier than 1.1.13), you will need to provide the same embedding function you used to create a collection when using get_collection : collection = client.get_collection( name = 'my-collection' , embedding_function = ef ) There are several ways to get a collection after it was created. The getCollection function will get a collection from Chroma by name. It returns a collection object with name , metadata , configuration , and embeddingFunction . If you did not provide an embedding function to createCollection , you can provide it to getCollection . const collection = await client . getCollection ({ name: \"my-collection \" }); The getOrCreate function behaves similarly, but will create the collection if it doesn’t exist. You can pass to it the same arguments createCollection expects, and the client will ignore them if the collection already exists. const collection = await client . getOrCreateCollection ({ name: \"my-collection\" , metadata: { description: \"...\" }, }); If you need to get multiple collections at once, you can use getCollections() : const [ col1 , col2 ] = client . getCollections ([ \"col1\" , \"col2\" ]); The listCollections function returns all the collections you have in your Chroma database. The collections will be ordered by creation time from oldest to newest. const collections = await client . listCollections (); By default, listCollections returns up to 100 collections. If you have more than 100 collections, or need to get only a subset of your collections, you can use the limit and offset arguments: const firstCollectionsBatch = await client . listCollections ({ limit: 100 }); // get the first 100 collections const secondCollectionsBatch = await client . listCollections ({ limit: 100 , offset: 100 , }); // get the next 100 collections const collectionsSubset = await client . listCollections ({ limit: 20 , offset: 50 , }); // get 20 collections starting from the 50th Current versions of Chroma store the embedding function you used to create a collection on the server, so the client can resolve it for you on subsequent “get” operations. If you are running an older version of the Chroma JS/TS client (earlier than 3.04) or server (earlier than 1.1.13), you will need to provide the same embedding function you used to create a collection when using getCollection and getCollections : const collection = await client . getCollection ({ name: \"my-collection\" , embeddingFunction: ef , }); const [ col1 , col2 ] = client . getCollections ([ { name: \"col1\" , embeddingFunction: openaiEF }, { name: \"col2\" , embeddingFunction: defaultEF }, ]); Use the client to get collections or list them with pagination. let collection = client . get_collection ( \"my-collection\" ) . await ? ; let collection = client . get_or_create_collection ( \"my-collection\" , None , None ) . await ? ; let collections = client . list_collections ( 100 , Some ( 0 )) . await ? ;",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Modifying Collections",
+    "text": "After a collection is created, you can modify its name, metadata and elements of its index configuration with the modify method: Python TypeScript collection.modify( name = \"new-name\" , metadata = { \"description\" : \"new description\" } )",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Deleting Collections",
+    "text": "You can delete a collection by name. This action will delete a collection, all of its embeddings, and associated documents and records’ metadata. Python TypeScript client.delete_collection( name = \"my-collection\" )",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Convenience Methods",
+    "text": "Collections also offer a few useful convenience methods:",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Convenience Methods",
+    "text": "• count - returns the number of records in the collection.",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Convenience Methods",
+    "text": "• peek - returns the first 10 records in the collection.",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Convenience Methods",
+    "text": "Python TypeScript collection.count() collection.peek()",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Manage Collections - Chroma Docs - ​ Convenience Methods",
+    "text": "Yes No Suggest edits Client-Server Mode Previous Adding Data to Chroma Collections Next ⌘ I Assistant Responses are generated using AI and may contain mistakes.",
+    "url": "https://docs.trychroma.com/docs/collections/manage-collections"
+  },
+  {
+    "title": "Adding Data to Chroma Collections - Chroma Docs - Documentation Index",
+    "text": "Fetch the complete documentation index at: /llms.txt",
+    "url": "https://docs.trychroma.com/docs/collections/add-data"
+  },
+  {
+    "title": "Adding Data to Chroma Collections - Chroma Docs - Documentation Index",
+    "text": "Use this file to discover all available pages before exploring further.",
+    "url": "https://docs.trychroma.com/docs/collections/add-data"
+  },
+  {
+    "title": "Adding Data to Chroma Collections - Chroma Docs - Documentation Index",
+    "text": "Skip to main content Chroma Docs home page Search... ⌘ K Ask Assistant Search... Navigation Collections Adding Data to Chroma Collections Docs Chroma Cloud Guides Integrations Reference Collections",
+    "url": "https://docs.trychroma.com/docs/collections/add-data"
+  },
+  {
+    "title": "Adding Data to Chroma Collections - Chroma Docs - Adding Data to Chroma Collections",
+    "text": "Learn how to add data to Chroma collections.",
+    "url": "https://docs.trychroma.com/docs/collections/add-data"
+  },
+  {
+    "title": "Adding Data to Chroma Collections - Chroma Docs - ​ Adding Data",
+    "text": "Use .add to insert new records into a collection. Each record needs a unique string id . Python TypeScript Rust collection.add( ids = [ \"id1\" , \"id2\" , \"id3\" ], documents = [ \"lorem ipsum...\" , \"doc2\" , \"doc3\" ], metadatas = [{ \"chapter\" : 3 , \"verse\" : 16 }, { \"chapter\" : 3 , \"verse\" : 5 }, { \"chapter\" : 29 , \"verse\" : 11 }], ) You must provide either documents , embeddings , or both. metadatas are always optional. When only providing documents , Chroma will generate embeddings for you using the collection’s embedding function . If you’ve already computed embeddings, pass them alongside documents . Chroma will store both as-is without re-embedding the documents. Python TypeScript Rust collection.add( ids = [ \"id1\" , \"id2\" , \"id3\" ], embeddings = [[ 1.1 , 2.3 , 3.2 ], [ 4.5 , 6.9 , 4.4 ], [ 1.1 , 2.3 , 3.2 ]], documents = [ \"doc1\" , \"doc2\" , \"doc3\" ], metadatas = [{ \"chapter\" : 3 , \"verse\" : 16 }, { \"chapter\" : 3 , \"verse\" : 5 }, { \"chapter\" : 29 , \"verse\" : 11 }], ) If your documents are stored elsewhere, you can add just embeddings and metadata. Use the ids to associate records with your external documents. This is a useful pattern if your documents are very large, such as high-resolution images or videos. Python TypeScript Rust collection.add( ids = [ \"id1\" , \"id2\" , \"id3\" ], embeddings = [[ 1.1 , 2.3 , 3.2 ], [ 4.5 , 6.9 , 4.4 ], [ 1.1 , 2.3 , 3.2 ]], metadatas = [{ \"chapter\" : 3 , \"verse\" : 16 }, { \"chapter\" : 3 , \"verse\" : 5 }, { \"chapter\" : 29 , \"verse\" : 11 }], )",
+    "url": "https://docs.trychroma.com/docs/collections/add-data"
+  },
+  {
+    "title": "Adding Data to Chroma Collections - Chroma Docs - ​ Metadata",
+    "text": "Metadata values can be strings, integers, floats, or booleans. Additionally, you can store arrays of these types. Python TypeScript Rust collection.add( ids = [ \"id1\" ], documents = [ \"lorem ipsum...\" ], metadatas = [{ \"chapter\" : 3 , \"tags\" : [ \"fiction\" , \"adventure\" ], \"scores\" : [ 1 , 2 , 3 ], }], ) All elements in an array must be the same type, and empty arrays are not allowed. You can filter on array metadata using the $contains and $not_contains operators — see Metadata Filtering for details.",
+    "url": "https://docs.trychroma.com/docs/collections/add-data"
+  },
+  {
+    "title": "Adding Data to Chroma Collections - Chroma Docs - ​ Behaviors",
+    "text": "• If you add a record with an ID that already exists in the collection, it will be ignored without throwing an error. In order to overwrite data in your collection, you must update the data.",
+    "url": "https://docs.trychroma.com/docs/collections/add-data"
+  },
+  {
+    "title": "Adding Data to Chroma Collections - Chroma Docs - ​ Behaviors",
+    "text": "• If the supplied embeddings don’t match the dimensionality of embeddings already in the collection, an exception will be raised.",
+    "url": "https://docs.trychroma.com/docs/collections/add-data"
+  },
+  {
+    "title": "Adding Data to Chroma Collections - Chroma Docs - ​ Behaviors",
+    "text": "Yes No Suggest edits Manage Collections Previous Update Data Next ⌘ I Assistant Responses are generated using AI and may contain mistakes.",
+    "url": "https://docs.trychroma.com/docs/collections/add-data"
+  },
+  {
+    "title": "Update Data - Chroma Docs - Documentation Index",
+    "text": "Fetch the complete documentation index at: /llms.txt",
+    "url": "https://docs.trychroma.com/docs/collections/update-data"
+  },
+  {
+    "title": "Update Data - Chroma Docs - Documentation Index",
+    "text": "Use this file to discover all available pages before exploring further.",
+    "url": "https://docs.trychroma.com/docs/collections/update-data"
+  },
+  {
+    "title": "Update Data - Chroma Docs - Documentation Index",
+    "text": "Skip to main content Chroma Docs home page Search... ⌘ K Ask Assistant Search... Navigation Collections Update Data Docs Chroma Cloud Guides Integrations Reference Collections",
+    "url": "https://docs.trychroma.com/docs/collections/update-data"
+  },
+  {
+    "title": "Update Data - Chroma Docs - Update Data",
+    "text": "Learn how to update and upsert data in Chroma collections.",
+    "url": "https://docs.trychroma.com/docs/collections/update-data"
+  },
+  {
+    "title": "Update Data - Chroma Docs - Update Data",
+    "text": "Copy page Any property of records in a collection can be updated with .update : Python TypeScript Rust collection.update( ids = [ \"id1\" , \"id2\" , \"id3\" , ... ], embeddings = [[ 1.1 , 2.3 , 3.2 ], [ 4.5 , 6.9 , 4.4 ], [ 1.1 , 2.3 , 3.2 ], ... ], metadatas = [{ \"chapter\" : 3 , \"verse\" : 16 }, { \"chapter\" : 3 , \"verse\" : 5 }, { \"chapter\" : 29 , \"verse\" : 11 }, ... ], documents = [ \"doc1\" , \"doc2\" , \"doc3\" , ... ], ) If an id is not found in the collection, an error will be logged and the update will be ignored. If documents are supplied without corresponding embeddings , the embeddings will be recomputed with the collection’s embedding function. Metadata values can include arrays — see Adding Data for supported metadata types. If the supplied embeddings are not the same dimension as the collection, an exception will be raised. Chroma also supports an upsert operation, which updates existing items, or adds them if they don’t yet exist. Python TypeScript Rust collection.upsert( ids = [ \"id1\" , \"id2\" , \"id3\" , ... ], embeddings = [[ 1.1 , 2.3 , 3.2 ], [ 4.5 , 6.9 , 4.4 ], [ 1.1 , 2.3 , 3.2 ], ... ], metadatas = [{ \"chapter\" : 3 , \"verse\" : 16 }, { \"chapter\" : 3 , \"verse\" : 5 }, { \"chapter\" : 29 , \"verse\" : 11 }, ... ], documents = [ \"doc1\" , \"doc2\" , \"doc3\" , ... ], ) If an id is not present in the collection, the corresponding items will be created as per add . Items with existing id s will be updated as per update .",
+    "url": "https://docs.trychroma.com/docs/collections/update-data"
+  },
+  {
+    "title": "Update Data - Chroma Docs - Update Data",
+    "text": "Yes No Suggest edits Adding Data to Chroma Collections Previous Delete Data Next ⌘ I Assistant Responses are generated using AI and may contain mistakes.",
+    "url": "https://docs.trychroma.com/docs/collections/update-data"
+  },
+  {
+    "title": "Delete Data - Chroma Docs - Documentation Index",
+    "text": "Fetch the complete documentation index at: /llms.txt",
+    "url": "https://docs.trychroma.com/docs/collections/delete-data"
+  },
+  {
+    "title": "Delete Data - Chroma Docs - Documentation Index",
+    "text": "Use this file to discover all available pages before exploring further.",
+    "url": "https://docs.trychroma.com/docs/collections/delete-data"
+  },
+  {
+    "title": "Delete Data - Chroma Docs - Documentation Index",
+    "text": "Skip to main content Chroma Docs home page Search... ⌘ K Ask Assistant Search... Navigation Collections Delete Data Docs Chroma Cloud Guides Integrations Reference Collections",
+    "url": "https://docs.trychroma.com/docs/collections/delete-data"
+  },
+  {
+    "title": "Delete Data - Chroma Docs - Delete Data",
+    "text": "Learn how to delete data from Chroma collections.",
+    "url": "https://docs.trychroma.com/docs/collections/delete-data"
+  },
+  {
+    "title": "Delete Data - Chroma Docs - Delete Data",
+    "text": "Copy page Chroma supports deleting items from a collection by id using .delete . The embeddings, documents, and metadata associated with each item will be deleted. Python TypeScript Rust collection.delete( ids = [ \"id1\" , \"id2\" , \"id3\" , ... ], ) .delete also supports the where filter. It will delete all items in the collection that match the where filter. Python TypeScript Rust collection.delete( where = { \"chapter\" : \"20\" } )",
+    "url": "https://docs.trychroma.com/docs/collections/delete-data"
+  },
+  {
+    "title": "Delete Data - Chroma Docs - Delete Data",
+    "text": "Yes No Suggest edits Update Data Previous Configure Collections Next ⌘ I Assistant Responses are generated using AI and may contain mistakes.",
+    "url": "https://docs.trychroma.com/docs/collections/delete-data"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - Documentation Index",
+    "text": "Fetch the complete documentation index at: /llms.txt",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - Documentation Index",
+    "text": "Use this file to discover all available pages before exploring further.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - Documentation Index",
+    "text": "Skip to main content Chroma Docs home page Search... ⌘ K Ask Assistant Search... Navigation Collections Configure Collections Docs Chroma Cloud Guides Integrations Reference Collections",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - Configure Collections",
+    "text": "Learn how to configure Chroma collection index settings and embedding functions.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - Configure Collections",
+    "text": "Copy page Chroma collections have a configuration that determines how their embeddings index is constructed and used. We use default values for these index configurations that should give you great performance for most use cases out-of-the-box. The embedding function you choose to use in your collection also affects its index construction, and is included in the configuration. When you create a collection, you can customize these index configuration values for different data, accuracy and performance requirements. Some query-time configurations can also be customized after the collection’s creation using the .modify function. • Single Node",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ HNSW Index Configuration",
+    "text": "In Single Node Chroma collections, we use an HNSW (Hierarchical Navigable Small World) index to perform approximate nearest neighbor (ANN) search.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ HNSW Index Configuration",
+    "text": "An HNSW (Hierarchical Navigable Small World) index is a graph-based data structure designed for efficient approximate nearest neighbor search in high-dimensional vector spaces. It works by constructing a multi-layered graph where each layer contains a subset of the data points, with higher layers being sparser and serving as “highways” for faster navigation. The algorithm builds connections between nearby points at each layer, creating “small-world” properties that allow for efficient search complexity. During search, the algorithm starts at the top layer and navigates toward the query point in the embedding space, then moves down through successive layers, refining the search at each level until it finds the final nearest neighbors. The HNSW index parameters include:",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ HNSW Index Configuration",
+    "text": "• space defines the distance function of the embedding space, and hence how similarity is defined. The default is l2 (squared L2 norm), and other possible values are cosine (cosine similarity), and ip (inner product).",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ HNSW Index Configuration",
+    "text": "Distance parameter Equation Intuition Squared L2 l2 d = ∑ ( A i − B i ) 2 d = \\sum\\left(A_i-B_i\\right)^2 d = ∑ ( A i ​ − B i ​ ) 2 measures absolute geometric distance between vectors, making it suitable when you want true spatial proximity. Inner product ip d = 1.0 − ∑ ( A i × B i ) d = 1.0 - \\sum\\left(A_i \\times B_i\\right) d = 1.0 − ∑ ( A i ​ × B i ​ ) focuses on vector alignment and magnitude, often used for recommendation systems where larger values indicate stronger preferences Cosine similarity cosine d = 1.0 − ∑ ( A i × B i ) ∑ ( A i 2 ) ⋅ ∑ ( B i 2 ) d = 1.0 - \\frac{\\sum\\left(A_i \\times B_i\\right)}{\\sqrt{\\sum\\left(A_i^2\\right)} \\cdot \\sqrt{\\sum\\left(B_i^2\\right)}} d = 1.0 − ∑ ( A i 2 ​ ) ​ ⋅ ∑ ( B i 2 ​ ) ​ ∑ ( A i ​ × B i ​ ) ​ measures only the angle between vectors (ignoring magnitude), making it ideal for text embeddings or cases where you care about direction rather than scale You should make sure that the space you choose is supported by your collection’s embedding function. Every Chroma embedding function specifies its default space and a list of supported spaces.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ HNSW Index Configuration",
+    "text": "• ef_construction determines the size of the candidate list used to select neighbors during index creation. A higher value improves index quality at the cost of more memory and time, while a lower value speeds up construction with reduced accuracy. The default value is 100 .",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ HNSW Index Configuration",
+    "text": "• ef_search determines the size of the dynamic candidate list used while searching for the nearest neighbors. A higher value improves recall and accuracy by exploring more potential neighbors but increases query time and computational cost, while a lower value results in faster but less accurate searches. The default value is 100 . This field can be modified after creation.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ HNSW Index Configuration",
+    "text": "• max_neighbors is the maximum number of neighbors (connections) that each node in the graph can have during the construction of the index. A higher value results in a denser graph, leading to better recall and accuracy during searches but increases memory usage and construction time. A lower value creates a sparser graph, reducing memory usage and construction time but at the cost of lower search accuracy and recall. The default value is 16 .",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ HNSW Index Configuration",
+    "text": "• num_threads specifies the number of threads to use during index construction or search operations. The default value is multiprocessing.cpu_count() (available CPU cores). This field can be modified after creation.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ HNSW Index Configuration",
+    "text": "• batch_size controls the number of vectors to process in each batch during index operations. The default value is 100 . This field can be modified after creation.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ HNSW Index Configuration",
+    "text": "• sync_threshold determines when to synchronize the index with persistent storage. The default value is 1000 . This field can be modified after creation.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ HNSW Index Configuration",
+    "text": "• resize_factor controls how much the index grows when it needs to be resized. The default value is 1.2 . This field can be modified after creation.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ HNSW Index Configuration",
+    "text": "For example, here we create a collection with customized values for space and ef_construction : Python TypeScript collection = client.create_collection( name = \"my-collection\" , embedding_function = OpenAIEmbeddingFunction( model_name = \"text-embedding-3-small\" ), configuration = { \"hnsw\" : { \"space\" : \"cosine\" , \"ef_construction\" : 200 } } )",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ Fine-Tuning HNSW Parameters",
+    "text": "In the context of approximate nearest neighbors search, recall refers to how many of the true nearest neighbors were retrieved. Increasing ef_search normally improves recall, but slows down query time. Similarly, increasing ef_construction improves recall, but increases the memory usage and runtime when creating the index. Choosing the right values for your HNSW parameters depends on your data, embedding function, and requirements for recall, and performance. You may need to experiment with different construction and search values to find the values that meet your requirements. For example, for a dataset with 50,000 embeddings of 2048 dimensions, generated by embeddings = np.random.randn( 50000 , 2048 ).astype(np.float32).tolist() we set up two Chroma collections:",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ Fine-Tuning HNSW Parameters",
+    "text": "• The first is configured with ef_search: 10 . When querying using a specific embedding from the set (with id = 1 ), the query takes 0.00529 seconds, and we get back embeddings with distances:",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ Fine-Tuning HNSW Parameters",
+    "text": "[3629.019775390625, 3666.576904296875, 3684.57080078125]",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ Fine-Tuning HNSW Parameters",
+    "text": "• The second collection is configured with ef_search: 100 and ef_construction: 1000 . When issuing the same query, this time it takes 0.00753 seconds (about 42% slower), but with better results as measured by their distance:",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ Fine-Tuning HNSW Parameters",
+    "text": "[0.0, 3620.593994140625, 3623.275390625] In this example, when querying with the test embedding ( id=1 ), the first collection failed to find the embedding itself, despite it being in the collection (where it should have appeared as a result with a distance of 0.0 ). The second collection, while slightly slower, successfully found the query embedding itself (shown by the 0.0 distance) and returned closer neighbors overall, demonstrating better accuracy at the cost of performance.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ SPANN Index Configuration",
+    "text": "In Distributed Chroma and Chroma Cloud collections, we use a SPANN (Spacial Approximate Nearest Neighbors) index to perform approximate nearest neighbor (ANN) search.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ SPANN Index Configuration",
+    "text": "A SPANN index is a data structure used to efficiently find approximate nearest neighbors in large sets of high-dimensional vectors. It works by dividing the set into broad clusters (so we can ignore most of the data during search) and then building efficient, smaller indexes within each cluster for fast local lookups. This two-level approach helps reduce both memory use and search time, making it practical to search billions of vectors stored even on hard drives or separate machines in a distributed system. We currently don’t allow customization or modification of SPANN configuration. If you set these values they will be ignored by the server. The SPANN index parameters include:",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ SPANN Index Configuration",
+    "text": "• space defines the distance function of the embedding space, and hence how similarity is defined. The default is l2 (squared L2 norm), and other possible values are cosine (cosine similarity), and ip (inner product).",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ SPANN Index Configuration",
+    "text": "Distance parameter Equation Intuition Squared L2 l2 d = ∑ ( A i − B i ) 2 d = \\sum\\left(A_i-B_i\\right)^2 d = ∑ ( A i ​ − B i ​ ) 2 measures absolute geometric distance between vectors, making it suitable when you want true spatial proximity. Inner product ip d = 1.0 − ∑ ( A i × B i ) d = 1.0 - \\sum\\left(A_i \\times B_i\\right) d = 1.0 − ∑ ( A i ​ × B i ​ ) focuses on vector alignment and magnitude, often used for recommendation systems where larger values indicate stronger preferences Cosine similarity cosine d = 1.0 − ∑ ( A i × B i ) ∑ ( A i 2 ) ⋅ ∑ ( B i 2 ) d = 1.0 - \\frac{\\sum\\left(A_i \\times B_i\\right)}{\\sqrt{\\sum\\left(A_i^2\\right)} \\cdot \\sqrt{\\sum\\left(B_i^2\\right)}} d = 1.0 − ∑ ( A i 2 ​ ) ​ ⋅ ∑ ( B i 2 ​ ) ​ ∑ ( A i ​ × B i ​ ) ​ measures only the angle between vectors (ignoring magnitude), making it ideal for text embeddings or cases where you care about direction rather than scale",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ SPANN Index Configuration",
+    "text": "• search_nprobe is the number of centers that are probed for a query. The higher the value the more accurate the result will be. The query response time also increases as search_nprobe increases. Recommended values are 64/128. We don’t allow setting a value higher than 128 today. The default value is 64.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ SPANN Index Configuration",
+    "text": "• write_nprobe is the same as search_nprobe but for the index construction phase. It is the number of centers searched when appending or reassigning a point. It has the same limits as search_nprobe . The default value is 64.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ SPANN Index Configuration",
+    "text": "• ef_construction determines the size of the candidate list used to select neighbors during index creation. A higher value improves index quality at the cost of more memory and time, while a lower value speeds up construction with reduced accuracy. The default value is 200.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ SPANN Index Configuration",
+    "text": "• ef_search determines the size of the dynamic candidate list used while searching for the nearest neighbors. A higher value improves recall and accuracy by exploring more potential neighbors but increases query time and computational cost, while a lower value results in faster but less accurate searches. The default value is 200.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ SPANN Index Configuration",
+    "text": "• max_neighbors defines the maximum number of neighbors for a node. The default value is 64.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ SPANN Index Configuration",
+    "text": "• reassign_neighbor_count is the number of closest neighboring clusters of a split cluster whose points are considered for reassignment. The default value is 64.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ Embedding Function Configuration",
+    "text": "The embedding function you choose when creating a collection, along with the parameters you instantiate it with, is persisted in the collection’s configuration. This allows us to reconstruct it correctly when you use collection across different clients. You can set your embedding function as an argument to the “create” methods, or directly in the configuration: • Python",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ Embedding Function Configuration",
+    "text": "• TypeScript Install the openai and cohere packages: pip poetry uv pip install openai cohere Creating collections with embedding function and custom configuration: import os from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction, CohereEmbeddingFunction # Using the `embedding_function` argument openai_collection = client.create_collection( name = \"my_openai_collection\" , embedding_function = OpenAIEmbeddingFunction( model_name = \"text-embedding-3-small\" ), configuration = { \"hnsw\" : { \"space\" : \"cosine\" }} ) # Setting `embedding_function` in the collection's `configuration` cohere_collection = client.get_or_create_collection( name = \"my_cohere_collection\" , configuration = { \"embedding_function\" : CohereEmbeddingFunction( model_name = \"embed-english-light-v2.0\" , truncate = \"NONE\" ), \"hnsw\" : { \"space\" : \"cosine\" } } ) Note: Many embedding functions require API keys to interface with the third party embeddings providers. The Chroma embedding functions will automatically look for the standard environment variable used to store a provider’s API key. For example, the Chroma OpenAIEmbeddingFunction will set its api_key argument to the value of the OPENAI_API_KEY environment variable if it is set. If your API key is stored in an environment variable with a non-standard name, you can configure your embedding function to use your custom environment variable by setting the api_key_env_var argument. In order for the embedding function to operate correctly, you will have to set this variable in every environment where you use your collection. cohere_ef = CohereEmbeddingFunction( api_key_env_var = \"MY_CUSTOM_COHERE_API_KEY\" , model_name = \"embed-english-light-v2.0\" , truncate = \"NONE\" , ) Install the @chroma-core/openai and @chroma-core/cohere packages: npm pnpm bun yarn npm install @chroma-core/openai @chroma-core/cohere Creating collections with embedding function and custom configuration: import { OpenAIEmbeddingFunction } from \"@chroma-core/openai\" ; import { CohereEmbeddingFunction } from \"@chroma-core/cohere\" ; // Using the `embedding_function` argument const openAICollection = await client . createCollection ({ name: \"my_openai_collection\" , embedding_function: new OpenAIEmbeddingFunction ({ model_name: \"text-embedding-3-small\" , }), configuration: { hnsw: { space: \"cosine\" } }, }); // Setting `embedding_function` in the collection's `configuration` const cohereCollection = await client . getOrCreateCollection ({ name: \"my_cohere_collection\" , configuration: { embeddingFunction: new CohereEmbeddingFunction ({ modelName: \"embed-english-light-v2.0\" , truncate: \"NONE\" , }), hnsw: { space: \"cosine\" }, }, }); Note: Many embedding functions require API keys to interface with the third party embeddings providers. The Chroma embedding functions will automatically look for the standard environment variable used to store a provider’s API key. For example, the Chroma OpenAIEmbeddingFunction will set its api_key argument to the value of the OPENAI_API_KEY environment variable if it is set. If your API key is stored in an environment variable with a non-standard name, you can configure your embedding function to use your custom environment variable by setting the apiKeyEnvVar argument. In order for the embedding function to operate correctly, you will have to set this variable in every environment where you use your collection. cohere_ef = CohereEmbeddingFunction ({ apiKeyEnvVar: \"MY_CUSTOM_COHERE_API_KEY\" , modelName: \"embed-english-light-v2.0\" , truncate: \"NONE\" , });",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Configure Collections - Chroma Docs - ​ Embedding Function Configuration",
+    "text": "Yes No Suggest edits Delete Data Previous Query and Get Next ⌘ I Assistant Responses are generated using AI and may contain mistakes.",
+    "url": "https://docs.trychroma.com/docs/collections/configure"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - Documentation Index",
+    "text": "Fetch the complete documentation index at: /llms.txt",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - Documentation Index",
+    "text": "Use this file to discover all available pages before exploring further.",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - Documentation Index",
+    "text": "Skip to main content Chroma Docs home page Search... ⌘ K Ask Assistant Search... Navigation Querying Collections Query and Get Docs Chroma Cloud Guides Integrations Reference Querying Collections",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - Query and Get",
+    "text": "Learn how to query and retrieve data from Chroma collections.",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - Query and Get",
+    "text": "Copy page The Query API enables nearest-neighbor similarity search over dense embeddings. Use the Get API when you want to retrieve records without similarity ranking. • Python",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - ​ Query",
+    "text": "You can query a collection to run a similarity search using .query : collection.query( query_texts = [ \"thus spake zarathustra\" , \"the oracle speaks\" ] ) Chroma will use the collection’s embedding function to embed your text queries, and use the output to run a vector similarity search against your collection. Instead of providing query_texts , you can provide query_embeddings directly. You will be required to do so if your collection does not have an embedding function attached to it. The dimension of your query embedding must match the dimension of the embeddings in your collection. Python also supports query_images and query_uris as query inputs. collection.query( query_embeddings = [[ 11.1 , 12.1 , 13.1 ], [ 1.1 , 2.3 , 3.2 ]] ) By default, Chroma will return 10 results per input query. You can modify this number using the n_results argument: collection.query( query_embeddings = [[ 11.1 , 12.1 , 13.1 ], [ 1.1 , 2.3 , 3.2 ]], n_results = 100 ) The ids argument lets you constrain the search only to records with the IDs from the provided list: collection.query( query_embeddings = [[ 11.1 , 12.1 , 13.1 ], [ 1.1 , 2.3 , 3.2 ]], n_results = 100 , ids = [ \"id1\" , \"id2\" ] ) Both query and get support where for metadata filtering and where_document for full-text search and regex : collection.query( query_embeddings = [[ 11.1 , 12.1 , 13.1 ], [ 1.1 , 2.3 , 3.2 ]], n_results = 100 , where = { \"page\" : 10 }, # query records with metadata field 'page' equal to 10 where_document = { \"$contains\" : \"search string\" } # query records with the search string in the records' document )",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - ​ Get",
+    "text": "Use .get to retrieve records by ID and/or filters without similarity ranking: collection.get( ids = [ \"id1\" , \"id2\" ]) # by IDs collection.get( limit = 100 , offset = 0 ) # with pagination",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - ​ Query",
+    "text": "You can query a collection to run a similarity search using .query : await collection . query ({ queryTexts: [ \"thus spake zarathustra\" , \"the oracle speaks\" ], }); Chroma will use the collection’s embedding function to embed your text queries, and use the output to run a vector similarity search against your collection. Instead of providing queryTexts , you can provide queryEmbeddings directly. You will be required to do so if your collection does not have an embedding function attached to it. The dimension of your query embedding must match the dimension of the embeddings in your collection. await collection . query ({ queryEmbeddings: [ [ 11.1 , 12.1 , 13.1 ], [ 1.1 , 2.3 , 3.2 ], ], }); By default, Chroma will return 10 results per input query. You can modify this number using the nResults argument: await collection . query ({ queryEmbeddings: [ [ 11.1 , 12.1 , 13.1 ], [ 1.1 , 2.3 , 3.2 ], ], nResults: 100 , }); The ids argument lets you constrain the search only to records with the IDs from the provided list: await collection . query ({ queryEmbeddings: [ [ 11.1 , 12.1 , 13.1 ], [ 1.1 , 2.3 , 3.2 ], ], nResults: 100 , ids: [ \"id1\" , \"id2\" ], }); Both query and get support where for metadata filtering and whereDocument for full-text search and regex : await collection . query ({ queryEmbeddings: [ [ 11.1 , 12.1 , 13.1 ], [ 1.1 , 2.3 , 3.2 ], ], nResults: 5 , where: { page: 10 }, // metadata field 'page' equal to 10 whereDocument: { $contains: \"search string\" }, // documents containing \"search string\" });",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - ​ Get",
+    "text": "Use .get to retrieve records by ID and/or filters without similarity ranking: await collection . get ({ ids: [ \"id1\" , \"id2\" ] }); // By IDs await collection . get ({ limit: 100 , offset: 0 }); // With pagination",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - ​ Type inference",
+    "text": "You can also pass type arguments to .get and .query for the shape of your metadata. This gives you type inference for your metadata objects: const results = await collection . get <{ page : number ; title : string }>({ ids: [ \"id1\" , \"id2\" ], }); const rows = results . rows (); rows . forEach (( row ) => { console . log ( row . id , row . metadata ?. page ); });",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - ​ Query",
+    "text": "You can query a collection to run a similarity search using .query : use chroma_types :: IncludeList ; // pub async fn query( // &self, // query_embeddings: Vec<Vec<f32>>, // n_results: Option<u32>, // where: Option<Where>, // ids: Option<Vec<String>>, // include: Option<IncludeList>, // ) -> Result<QueryResponse, ChromaHttpClientError> let results = collection . query ( vec! [ vec! [ 11.1 , 12.1 , 13.1 ], vec! [ 1.1 , 2.3 , 3.2 ]], None , None , None , None , ) . await ? ; Embeddings must be provided directly to the Rust client. By default, Chroma returns 10 results per input query. You can modify this number using n_results : let results = collection . query ( vec! [ vec! [ 11.1 , 12.1 , 13.1 ], vec! [ 1.1 , 2.3 , 3.2 ]], Some ( 100 ), // n_results None , None , None , ) . await ? ; The ids argument lets you constrain the search only to records with the IDs from the provided list: let results = collection . query ( vec! [ vec! [ 11.1 , 12.1 , 13.1 ], vec! [ 1.1 , 2.3 , 3.2 ]], Some ( 5 ), None , Some ( vec! [ \"id1\" . to_string (), \"id2\" . to_string ()]), // ids None , ) . await ? ;",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - ​ Get",
+    "text": "Use .get to retrieve records by ID and/or filters without similarity ranking: let response = collection . get ( Some ( vec! [ \"id1\" . to_string (), \"id2\" . to_string ()]), None , Some ( 10 ), Some ( 0 ), Some ( IncludeList :: default_get ()), ) . await ? ;",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - ​ Results Shape",
+    "text": "Chroma returns .query and .get results in column-major form (arrays per field). .query results are grouped per input query; .get results are a flat list of records. Python TypeScript Rust class QueryResult ( TypedDict ): ids: List[IDs] embeddings: Optional[List[Embeddings]] documents: Optional[List[List[Document]]] uris: Optional[List[List[ URI ]]] metadatas: Optional[List[List[Metadata]]] distances: Optional[List[List[ float ]]] included: Include class GetResult ( TypedDict ): ids: List[ ID ] embeddings: Optional[Embeddings] documents: Optional[List[Document]] uris: Optional[URIs] metadatas: Optional[List[Metadata]] included: Include Here is a concrete example of what these responses look like in practice: // Query result { \"ids\" : [[ \"doc_1\" , \"doc_7\" ]], \"embeddings\" : [[[ 1 , 2 , 3 , 4 ], [ 1 , 2 , 3 , 4 ]]], \"documents\" : [[ \"Chroma stores vectors.\" , \"Embeddings power semantic search.\" ]], \"metadatas\" : [[ { \"source\" : \"docs\" , \"topic\" : \"intro\" }, { \"source\" : \"blog\" , \"topic\" : \"search\" } ]], \"distances\" : [[ 0.12 , 0.21 ]], \"included\" : [ \"embeddings\" , \"documents\" , \"metadatas\" , \"distances\" ] } // Get result { \"ids\" : [ \"doc_1\" , \"doc_7\" ], \"embeddings\" : [[ 1 , 2 , 3 , 4 ], [ 1 , 2 , 3 , 4 ]], \"documents\" : [ \"Chroma stores vectors.\" , \"Embeddings power semantic search.\" ], \"metadatas\" : [ { \"source\" : \"docs\" , \"topic\" : \"intro\" }, { \"source\" : \"blog\" , \"topic\" : \"search\" } ], \"included\" : [ \"documents\" , \"metadatas\" ] } In the results from the Get operation, corresponding elements in each array belong to the same document. Python TypeScript Rust result = collection.get( include = [ \"documents\" , \"metadatas\" ]) for id , document, metadata in zip (result[ \"ids\" ], result[ \"documents\" ], result[ \"metadatas\" ]): print ( id , document, metadata) Query is a batch API and returns results grouped per input. A common pattern is to iterate over each query’s “batch” of results, then iterate within that batch. Python TypeScript Rust result = collection.query( query_texts = [ \"first query\" , \"second query\" ]) for ids, documents, metadatas in zip (result[ \"ids\" ], result[ \"documents\" ], result[ \"metadatas\" ]): for id , document, metadata in zip (ids, documents, metadatas): print ( id , document, metadata)",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - ​ Choosing Which Data is Returned",
+    "text": "By default, Query returns documents , metadatas , and distances , and Get returns documents and metadatas . Use include to control what comes back. ids are always returned. Python TypeScript Rust collection.query( query_texts = [ \"my query\" ], include = [ \"documents\" , \"metadatas\" , \"embeddings\" ], ) collection.get( include = [ \"documents\" ])",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Query and Get - Chroma Docs - ​ Choosing Which Data is Returned",
+    "text": "Yes No Suggest edits Configure Collections Previous Metadata Filtering Next ⌘ I Assistant Responses are generated using AI and may contain mistakes.",
+    "url": "https://docs.trychroma.com/docs/querying-collections/query-and-get"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - Documentation Index",
+    "text": "Fetch the complete documentation index at: /llms.txt",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - Documentation Index",
+    "text": "Use this file to discover all available pages before exploring further.",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - Documentation Index",
+    "text": "Skip to main content Chroma Docs home page Search... ⌘ K Ask Assistant Search... Navigation Querying Collections Metadata Filtering Docs Chroma Cloud Guides Integrations Reference Querying Collections",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - Metadata Filtering",
+    "text": "Learn how to filter query results by metadata in Chroma collections.",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - Metadata Filtering",
+    "text": "Copy page The where argument in get and query is used to filter records by their metadata. For example, in this query operation, Chroma will only query records that have the page metadata field with the value 10 : Python TypeScript Rust collection.query( query_texts = [ \"first query\" , \"second query\" ], where = { \"page\" : 10 } ) In order to filter on metadata, you must supply a where filter dictionary to the query. The dictionary must have the following structure: Python TypeScript Rust { \"metadata_field\" : { < Operator > : < Value > } } Using the $eq operator is equivalent to using the metadata field directly in your where filter. Python TypeScript Rust { \"metadata_field\" : \"search_string\" } # is equivalent to { \"metadata_field\" : { \"$eq\" : \"search_string\" } } For example, here we query all records whose page metadata field is greater than 10: Python TypeScript Rust collection.query( query_texts = [ \"first query\" , \"second query\" ], where = { \"page\" : { \"$gt\" : 10 }} )",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - ​ Using Logical Operators",
+    "text": "You can also use the logical operators $and and $or to combine multiple filters. An $and operator will return results that match all the filters in the list. Python TypeScript Rust { \"$and\" : [ { \"metadata_field\" : { < Operator > : < Value > } }, { \"metadata_field\" : { < Operator > : < Value > } } ] } For example, here we query all records whose page metadata field is between 5 and 10: Python TypeScript Rust collection.query( query_texts = [ \"first query\" , \"second query\" ], where = { \"$and\" : [ { \"page\" : { \"$gte\" : 5 }}, { \"page\" : { \"$lte\" : 10 }}, ] } ) An $or operator will return results that match any of the filters in the list. Python TypeScript Rust { \"$or\" : [ { \"metadata_field\" : { < Operator > : < Value > } }, { \"metadata_field\" : { < Operator > : < Value > } } ] } For example, here we get all records whose color metadata field is red or blue : Python TypeScript Rust collection.get( where = { \"$or\" : [ { \"color\" : \"red\" }, { \"color\" : \"blue\" }, ] } )",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - ​ Using Inclusion Operators",
+    "text": "The following inclusion operators are supported:",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - ​ Using Inclusion Operators",
+    "text": "• $in - a value is in predefined list (string, int, float, bool)",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - ​ Using Inclusion Operators",
+    "text": "• $nin - a value is not in predefined list (string, int, float, bool)",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - ​ Using Inclusion Operators",
+    "text": "An $in operator will return results where the metadata attribute is part of a provided list: Python TypeScript Rust { \"metadata_field\" : { \"$in\" : [ \"value1\" , \"value2\" , \"value3\" ] } } An $nin operator will return results where the metadata attribute is not part of a provided list (or the attribute’s key is not present): Python TypeScript Rust { \"metadata_field\" : { \"$nin\" : [ \"value1\" , \"value2\" , \"value3\" ] } } For example, here we get all records whose author metadata field is in a list of possible values: Python TypeScript Rust collection.get( where = { \"author\" : { \"$in\" : [ \"Rowling\" , \"Fitzgerald\" , \"Herbert\" ]} } )",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - ​ Using Array Metadata",
+    "text": "Chroma supports storing arrays of values in metadata fields. You can use the $contains and $not_contains operators to filter records based on whether an array field includes a specific value.",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - ​ Adding Array Metadata",
+    "text": "Metadata arrays can contain strings, integers, floats, or booleans. All elements in an array must be the same type. Python TypeScript Rust collection.add( ids = [ \"m1\" , \"m2\" , \"m3\" ], embeddings = [[ 1 , 0 , 0 ], [ 0 , 1 , 0 ], [ 0 , 0 , 1 ]], metadatas = [ { \"genres\" : [ \"action\" , \"comedy\" ], \"year\" : 2020 }, { \"genres\" : [ \"drama\" ], \"year\" : 2021 }, { \"genres\" : [ \"action\" , \"thriller\" ], \"year\" : 2022 }, ], )",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - ​ Filtering with $contains and $not_contains",
+    "text": "Use $contains to check if a metadata array includes a specific scalar value, and $not_contains to check that it does not. Python TypeScript Rust # Get all records where genres contains \"action\" collection.get( where = { \"genres\" : { \"$contains\" : \"action\" }} ) # Get all records where genres does NOT contain \"action\" collection.get( where = { \"genres\" : { \"$not_contains\" : \"action\" }} ) # Works with integer arrays too collection.get( where = { \"scores\" : { \"$contains\" : 20 }} ) # Combine with other filters collection.get( where = { \"$and\" : [ { \"genres\" : { \"$contains\" : \"action\" }}, { \"year\" : { \"$gte\" : 2021 }}, ] } )",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - ​ Supported Array Types",
+    "text": "Type Python TypeScript Rust String [\"a\", \"b\"] [\"a\", \"b\"] MetadataValue::StringArray(...) Integer [1, 2, 3] [1, 2, 3] MetadataValue::IntArray(...) Float [1.5, 2.5] [1.5, 2.5] MetadataValue::FloatArray(...) Boolean [true, false] [true, false] MetadataValue::BoolArray(...) Constraints:",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - ​ Supported Array Types",
+    "text": "• All elements in an array must be the same type.",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - ​ Supported Array Types",
+    "text": "• Nested arrays (arrays of arrays) are not supported.",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - ​ Supported Array Types",
+    "text": "• The $contains value must be a scalar that matches the array’s element type.",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - ​ Combining with Document Search",
+    "text": ".get and .query can handle metadata filtering combined with document search : Python TypeScript Rust collection.query( query_texts = [ \"doc10\" , \"thus spake zarathustra\" , ... ], n_results = 10 , where = { \"metadata_field\" : \"is_equal_to_this\" }, where_document = { \"$contains\" : \"search_string\" } )",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Metadata Filtering - Chroma Docs - ​ Combining with Document Search",
+    "text": "Yes No Suggest edits Query and Get Previous Full Text Search Next ⌘ I Assistant Responses are generated using AI and may contain mistakes.",
+    "url": "https://docs.trychroma.com/docs/querying-collections/metadata-filtering"
+  },
+  {
+    "title": "Embedding Functions - Chroma Docs - Documentation Index",
+    "text": "Fetch the complete documentation index at: /llms.txt",
+    "url": "https://docs.trychroma.com/docs/embeddings/embedding-functions"
+  },
+  {
+    "title": "Embedding Functions - Chroma Docs - Documentation Index",
+    "text": "Use this file to discover all available pages before exploring further.",
+    "url": "https://docs.trychroma.com/docs/embeddings/embedding-functions"
+  },
+  {
+    "title": "Embedding Functions - Chroma Docs - Documentation Index",
+    "text": "Skip to main content Chroma Docs home page Search... ⌘ K Ask Assistant Search... Navigation Embeddings Embedding Functions Docs Chroma Cloud Guides Integrations Reference Embeddings",
+    "url": "https://docs.trychroma.com/docs/embeddings/embedding-functions"
+  },
+  {
+    "title": "Embedding Functions - Chroma Docs - Embedding Functions",
+    "text": "Learn how to use embedding functions in Chroma to create vector representations of your data.",
+    "url": "https://docs.trychroma.com/docs/embeddings/embedding-functions"
+  },
+  {
+    "title": "Embedding Functions - Chroma Docs - Embedding Functions",
+    "text": "Copy page Embeddings are numeric representations of your data that capture meaning in a form AI models can work with. They can represent text, images, and eventually audio and video. Chroma stores and indexes embeddings so you can efficiently search for similar content. You can generate them locally with an installed library or remotely through an API. • Python",
+    "url": "https://docs.trychroma.com/docs/embeddings/embedding-functions"
+  },
+  {
+    "title": "Embedding Functions - Chroma Docs - ​ Using Embedding Functions",
+    "text": "Embedding functions can be linked to a collection and used whenever you call add , update , upsert or query . For example, this is how you use the OpenAI embedding function: # Set your OPENAI_API_KEY environment variable from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction collection = client.create_collection( name = \"my_collection\" , embedding_function = OpenAIEmbeddingFunction( model_name = \"text-embedding-3-small\" ) ) # Chroma will use OpenAIEmbeddingFunction to embed your documents collection.add( ids = [ \"id1\" , \"id2\" ], documents = [ \"doc1\" , \"doc2\" ] ) You can also use embedding functions directly which can be handy for debugging. from chromadb.utils.embedding_functions import DefaultEmbeddingFunction default_ef = DefaultEmbeddingFunction() embeddings = default_ef([ \"foo\" ]) print (embeddings) # [[0.05035809800028801, 0.0626462921500206, -0.061827320605516434...]] collection.query( query_embeddings = embeddings)",
+    "url": "https://docs.trychroma.com/docs/embeddings/embedding-functions"
+  },
+  {
+    "title": "Embedding Functions - Chroma Docs - ​ Custom Embedding Functions",
+    "text": "You can create your own embedding function to use with Chroma; it just needs to implement EmbeddingFunction . from typing import Dict, Any from chromadb import Documents, EmbeddingFunction, Embeddings from chromadb.utils.embedding_functions import register_embedding_function @register_embedding_function class MyEmbeddingFunction ( EmbeddingFunction ): def __init__ ( self , model ): self .model = model def __call__ ( self , input : Documents) -> Embeddings: # embed the documents somehow return embeddings @ staticmethod def name () -> str : return \"my-ef\" def get_config ( self ) -> Dict[ str , Any]: return dict ( model = self .model) @ staticmethod def build_from_config ( config : Dict[ str , Any]) -> \"EmbeddingFunction\" : return MyEmbeddingFunction(config[ 'model' ])",
+    "url": "https://docs.trychroma.com/docs/embeddings/embedding-functions"
+  },
+  {
+    "title": "Embedding Functions - Chroma Docs - ​ Default: all-MiniLM-L6-v2",
+    "text": "Chroma’s default embedding function uses the Sentence Transformers all-MiniLM-L6-v2 model to create embeddings. This embedding model can create sentence and document embeddings that can be used for a wide variety of tasks. This embedding function runs locally on your machine, and may require you to download the model files (this will happen automatically). If you don’t specify an embedding function when creating a collection, Chroma will set it to be the DefaultEmbeddingFunction : collection = client.create_collection( name = \"my_collection\" )",
+    "url": "https://docs.trychroma.com/docs/embeddings/embedding-functions"
+  },
+  {
+    "title": "Embedding Functions - Chroma Docs - ​ Using Embedding Functions",
+    "text": "Embedding functions can be linked to a collection and used whenever you call add , update , upsert or query . For example, this is how you use the OpenAI embedding function: Install the @chroma-core/openai package: npm pnpm bun yarn npm install @chroma-core/openai Create a collection with the OpenAIEmbeddingFunction : // Set your OPENAI_API_KEY environment variable import { OpenAIEmbeddingFunction } from \"@chroma-core/openai\" ; collection = await client . createCollection ({ name: \"my_collection\" , embedding_function: new OpenAIEmbeddingFunction ({ modelName: \"text-embedding-3-small\" , }), }); // Chroma will use OpenAIEmbeddingFunction to embed your documents await collection . add ({ ids: [ \"id1\" , \"id2\" ], documents: [ \"doc1\" , \"doc2\" ], }); You can also use embedding functions directly which can be handy for debugging. import { DefaultEmbeddingFunction } from \"@chroma-core/default-embed\" ; const defaultEF = new DefaultEmbeddingFunction (); const embeddings = await defaultEF . generate ([ \"foo\" ]); console . log ( embeddings ); // [[0.05035809800028801, 0.0626462921500206, -0.061827320605516434...]] await collection . query ({ queryEmbeddings: embeddings });",
+    "url": "https://docs.trychroma.com/docs/embeddings/embedding-functions"
+  },
+  {
+    "title": "Embedding Functions - Chroma Docs - ​ Custom Embedding Functions",
+    "text": "You can create your own embedding function to use with Chroma; it just needs to implement EmbeddingFunction . export interface MyEmbeddingConfig { model : string ; } export class MyEmbeddingFunction implements EmbeddingFunction { public readonly name = \"my-embedding-function\" ; private readonly model : string ; constructor ( args : { model : string }) { this . model = args . model ; } async generate ( texts : string []) : Promise < number [][]> { // embed the documents somehow return []; } getConfig () : MyEmbeddingConfig { return { model: this . model , }; } validateConfigUpdate ( config : Record < string , any >) { if ( \"model\" in config ) { throw new ChromaValueError ( \"Model cannot be updated\" ); } } static buildFromConfig ( config : MyEmbeddingConfig , _client ?: ChromaClient , ) : MyEmbeddingFunction { return new MyEmbeddingFunction ( config ); } } We welcome contributions! If you create an embedding function that you think would be useful to others, please consider submitting a pull request .",
+    "url": "https://docs.trychroma.com/docs/embeddings/embedding-functions"
+  },
+  {
+    "title": "Embedding Functions - Chroma Docs - ​ Default: all-MiniLM-L6-v2",
+    "text": "Chroma’s default embedding function uses the Sentence Transformers all-MiniLM-L6-v2 model to create embeddings. This embedding model can create sentence and document embeddings that can be used for a wide variety of tasks. This embedding function runs locally on your machine, and may require you to download the model files (this will happen automatically). If you don’t specify an embedding function when creating a collection, install the @chroma-core/default-embed package: npm pnpm bun yarn npm install @chroma-core/default-embed Create a collection without providing an embedding function. It will automatically be set with the DefaultEmbeddingFunction : const collection = await client . createCollection ({ name: \"my-collection\" }); The Rust client expects embeddings to be provided directly. Use your provider SDK to generate embeddings, then pass them to add , query , and other methods. let embeddings = vec! [ vec! [ 0.05 , 0.06 , - 0.06 ]]; collection . add ( vec! [ \"id1\" . to_string ()], embeddings , Some ( vec! [ Some ( \"doc1\" . to_string ())]), None , None , ) . await ? ;",
+    "url": "https://docs.trychroma.com/docs/embeddings/embedding-functions"
+  },
+  {
+    "title": "Embedding Functions - Chroma Docs - ​ All Embedding Functions",
+    "text": "Chroma provides lightweight wrappers around popular embedding providers, making it easy to use them in your apps. You can set an embedding function when you create a Chroma collection, to be automatically used when adding and querying data, or you can call them directly yourself. Python Typescript Cloudflare Workers AI ✓ ✓ Cohere ✓ ✓ Google Generative AI ✓ ✓ Hugging Face ✓ - Hugging Face Embedding Server ✓ ✓ Jina AI ✓ ✓ Mistral ✓ ✓ Morph ✓ ✓ OpenAI ✓ ✓ Sentence Transformers ✓ ✓ Together AI ✓ ✓ For TypeScript users, Chroma provides packages for a number of embedding model providers. The Chromadb python package ships with all embedding functions included. Provider Embedding Function Package All (installs all packages) @chroma-core/all Cloudflare Workers AI @chroma-core/cloudflare-worker-ai Cohere @chroma-core/cohere Google Gemini @chroma-core/google-gemini Hugging Face Server @chroma-core/huggingface-server Jina @chroma-core/jina Mistral @chroma-core/mistral Morph @chroma-core/morph Ollama @chroma-core/ollama OpenAI @chroma-core/openai Perplexity @chroma-core/perplexity Qwen (via Chroma Cloud) @chroma-core/chroma-cloud-qwen Sentence Transformers @chroma-core/sentence-transformer Together AI @chroma-core/together-ai Voyage AI @chroma-core/voyageai We welcome contributions! If you create an embedding function that you think would be useful to others, please consider submitting a pull request .",
+    "url": "https://docs.trychroma.com/docs/embeddings/embedding-functions"
+  },
+  {
+    "title": "Embedding Functions - Chroma Docs - ​ All Embedding Functions",
+    "text": "Yes No Suggest edits Full Text Search Previous Multimodal Embeddings Next ⌘ I Assistant Responses are generated using AI and may contain mistakes.",
+    "url": "https://docs.trychroma.com/docs/embeddings/embedding-functions"
+  },
+  {
+    "title": "Multimodal Embeddings - Chroma Docs - Documentation Index",
+    "text": "Fetch the complete documentation index at: /llms.txt",
+    "url": "https://docs.trychroma.com/docs/embeddings/multimodal"
+  },
+  {
+    "title": "Multimodal Embeddings - Chroma Docs - Documentation Index",
+    "text": "Use this file to discover all available pages before exploring further.",
+    "url": "https://docs.trychroma.com/docs/embeddings/multimodal"
+  },
+  {
+    "title": "Multimodal Embeddings - Chroma Docs - Documentation Index",
+    "text": "Skip to main content Chroma Docs home page Search... ⌘ K Ask Assistant Search... Navigation Embeddings Multimodal Embeddings Docs Chroma Cloud Guides Integrations Reference Embeddings",
+    "url": "https://docs.trychroma.com/docs/embeddings/multimodal"
+  },
+  {
+    "title": "Multimodal Embeddings - Chroma Docs - Multimodal Embeddings",
+    "text": "Learn how to work with multimodal data in Chroma collections.",
+    "url": "https://docs.trychroma.com/docs/embeddings/multimodal"
+  },
+  {
+    "title": "Multimodal Embeddings - Chroma Docs - Multimodal Embeddings",
+    "text": "Copy page Multimodal support is currently available only in Python. Javascript/Typescript support coming soon! You can create multimodal Chroma collections; these are collections which can store, and can be queried by, multiple modalities of data. Try it out in Colab",
+    "url": "https://docs.trychroma.com/docs/embeddings/multimodal"
+  },
+  {
+    "title": "Multimodal Embeddings - Chroma Docs - ​ Multi-modal Embedding Functions",
+    "text": "Chroma supports multi-modal embedding functions, which can be used to embed data from multiple modalities into a single embedding space. Chroma ships with the OpenCLIP embedding function built in, which supports both text and images. from chromadb.utils.embedding_functions import OpenCLIPEmbeddingFunction embedding_function = OpenCLIPEmbeddingFunction()",
+    "url": "https://docs.trychroma.com/docs/embeddings/multimodal"
+  },
+  {
+    "title": "Multimodal Embeddings - Chroma Docs - ​ Adding Multimodal Data and Data Loaders",
+    "text": "You can add embedded data of modalities different from text directly to Chroma. For now images are supported: collection.add( ids = [ 'id1' , 'id2' , 'id3' ], images = [[ 1.0 , 1.1 , 2.1 , ... ], ... ] # A list of numpy arrays representing images ) Unlike with text documents, which are stored in Chroma, we will not store your original images, or data of other modalities. Instead, for each of your multimodal records you can specify a URI where the original format is stored, and a data loader . For each URI you add, Chroma will use the data loader to retrieve the original data, embed it, and store the embedding. For example, Chroma ships with a data loader, ImageLoader , for loading images from a local filesystem. We can create a collection set up with the ImageLoader : import chromadb from chromadb.utils.data_loaders import ImageLoader from chromadb.utils.embedding_functions import OpenCLIPEmbeddingFunction client = chromadb.Client() data_loader = ImageLoader() embedding_function = OpenCLIPEmbeddingFunction() collection = client.create_collection( name = 'multimodal_collection' , embedding_function = embedding_function, data_loader = data_loader ) Now, we can use the .add method to add records to this collection. The collection’s data loader will grab the images using the URIs, embed them using the OpenCLIPEmbeddingFunction , and store the embeddings in Chroma. collection.add( ids = [ \"id1\" , \"id2\" ], uris = [ \"path/to/file/1\" , \"path/to/file/2\" ] ) If the embedding function you use is multi-modal (like OpenCLIPEmbeddingFunction ), you can also add text to the same collection: collection.add( ids = [ \"id3\" , \"id4\" ], documents = [ \"This is a document\" , \"This is another document\" ] )",
+    "url": "https://docs.trychroma.com/docs/embeddings/multimodal"
+  },
+  {
+    "title": "Multimodal Embeddings - Chroma Docs - ​ Querying",
+    "text": "You can query a multi-modal collection with any of the modalities that it supports. For example, you can query with images: results = collection.query( query_images = [ ... ] # A list of numpy arrays representing images ) Or with text: results = collection.query( query_texts = [ \"This is a query document\" , \"This is another query document\" ] ) If a data loader is set for the collection, you can also query with URIs which reference data stored elsewhere of the supported modalities: results = collection.query( query_uris = [ ... ] # A list of strings representing URIs to data ) Additionally, if a data loader is set for the collection, and URIs are available, you can include the data in the results: results = collection.query( query_images = [ ... ], # # list of numpy arrays representing images include = [ 'data' ] ) This will automatically call the data loader for any available URIs, and include the data in the results. uris are also available as an include field.",
+    "url": "https://docs.trychroma.com/docs/embeddings/multimodal"
+  },
+  {
+    "title": "Multimodal Embeddings - Chroma Docs - ​ Updating",
+    "text": "You can update a multi-modal collection by specifying the data modality, in the same way as add . For now, images are supported: collection.update( ids = [ 'id1' , 'id2' , 'id3' ], images = [ ... ] # A list of numpy arrays representing images ) Note that a given entry with a specific ID can only have one associated modality at a time. Updates will over-write the existing modality, so for example, an entry which originally has corresponding text and updated with an image, will no longer have that text after an update with images.",
+    "url": "https://docs.trychroma.com/docs/embeddings/multimodal"
+  },
+  {
+    "title": "Multimodal Embeddings - Chroma Docs - ​ Updating",
+    "text": "Yes No Suggest edits Embedding Functions Previous Installing the CLI Next ⌘ I Assistant Responses are generated using AI and may contain mistakes.",
+    "url": "https://docs.trychroma.com/docs/embeddings/multimodal"
+  },
+  {
+    "title": "Client-Server Mode - Chroma Docs - Documentation Index",
+    "text": "Fetch the complete documentation index at: /llms.txt",
+    "url": "https://docs.trychroma.com/docs/run-chroma/client-server"
+  },
+  {
+    "title": "Client-Server Mode - Chroma Docs - Documentation Index",
+    "text": "Use this file to discover all available pages before exploring further.",
+    "url": "https://docs.trychroma.com/docs/run-chroma/client-server"
+  },
+  {
+    "title": "Client-Server Mode - Chroma Docs - Documentation Index",
+    "text": "Skip to main content Chroma Docs home page Search... ⌘ K Ask Assistant Search... Navigation Run Chroma Client-Server Mode Docs Chroma Cloud Guides Integrations Reference Run Chroma",
+    "url": "https://docs.trychroma.com/docs/run-chroma/client-server"
+  },
+  {
+    "title": "Client-Server Mode - Chroma Docs - Client-Server Mode",
+    "text": "Learn how to run Chroma in client-server mode.",
+    "url": "https://docs.trychroma.com/docs/run-chroma/client-server"
+  },
+  {
+    "title": "Client-Server Mode - Chroma Docs - Client-Server Mode",
+    "text": "Copy page Chroma can also be configured to run in client/server mode. In this mode, the Chroma client connects to a Chroma server running in a separate process. To start the Chroma server, run the following command: chroma run --path /db_path • Python",
+    "url": "https://docs.trychroma.com/docs/run-chroma/client-server"
+  },
+  {
+    "title": "Client-Server Mode - Chroma Docs - Client-Server Mode",
+    "text": "• Rust Then use the Chroma HttpClient to connect to the server: import chromadb chroma_client = chromadb.HttpClient( host = 'localhost' , port = 8000 ) That’s it! Chroma’s API will run in client-server mode with just this change. Chroma also provides the async HTTP client. The behaviors and method signatures are identical to the synchronous client, but all methods that would block are now async. To use it, call AsyncHttpClient instead: import asyncio import chromadb async def main (): client = await chromadb.AsyncHttpClient() collection = await client.create_collection( name = \"my_collection\" ) await collection.add( documents = [ \"hello world\" ], ids = [ \"id1\" ] ) asyncio.run(main()) If you deploy your Chroma server, you can also use our http-only package. Then you can connect to it by instantiating a new ChromaClient : import { ChromaClient } from \"chromadb\" ; const client = new ChromaClient (); If you run your Chroma server using a different configuration, or deploy your Chroma server, you can specify the host , port , and whether the client should connect over ssl : import { ChromaClient } from \"chromadb\" ; const client = new ChromaClient ({ host: \"YOUR-HOST\" , port: \"YOUR-PORT\" , ssl: true , }); You can connect to it by instantiating a new ChromaHttpClient : let options = ChromaHttpClientOptions { endpoint : \"http://localhost:8000\" . parse () ? , .. Default :: default () }; let client = ChromaHttpClient :: new ( options );",
+    "url": "https://docs.trychroma.com/docs/run-chroma/client-server"
+  },
+  {
+    "title": "Client-Server Mode - Chroma Docs - Client-Server Mode",
+    "text": "Yes No Suggest edits Chroma Clients Previous Manage Collections Next ⌘ I Assistant Responses are generated using AI and may contain mistakes.",
+    "url": "https://docs.trychroma.com/docs/run-chroma/client-server"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - Documentation Index",
+    "text": "Fetch the complete documentation index at: /llms.txt",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - Documentation Index",
+    "text": "Use this file to discover all available pages before exploring further.",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - Documentation Index",
+    "text": "Skip to main content Chroma Docs home page Search... ⌘ K Ask Assistant Search... Navigation Run Chroma Chroma Clients Docs Chroma Cloud Guides Integrations Reference Run Chroma",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - Chroma Clients",
+    "text": "Learn how to instantiate Chroma clients for Cloud, in-memory, and persistent use cases.",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - Chroma Clients",
+    "text": "Copy page There are several ways you can instantiate clients to connect to your Chroma database.",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - ​ Cloud Client",
+    "text": "You can use the CloudClient to create a client connecting to Chroma Cloud. Python TypeScript Rust import chromadb client = chromadb.CloudClient( tenant = 'Tenant ID' , database = 'Database name' , api_key = 'Chroma Cloud API key' ) The CloudClient can be instantiated just with the API key argument. In which case, we will resolve the tenant and DB from Chroma Cloud. Note our auto-resolution will work only if the provided API key is scoped to a single DB. If you set the CHROMA_API_KEY , CHROMA_TENANT , and the CHROMA_DATABASE environment variables, you can simply instantiate a CloudClient with no arguments: Python TypeScript Rust client = chromadb.CloudClient()",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - ​ Connecting to a non-default region",
+    "text": "By default, CloudClient connects to api.trychroma.com (AWS us-east-1 ). To target a database in another region — for example, our GCP europe-west1 region — point the client at that region’s hostname. See Regions for the list of available endpoints. Python TypeScript Rust import chromadb client = chromadb.CloudClient( cloud_host = 'europe-west1.gcp.trychroma.com' , cloud_port = 443 , api_key = 'Chroma Cloud API key' , tenant = 'Tenant ID' , database = 'Database name' , ) The dashboard’s Connect panel generates a ready-to-paste snippet for whichever region a database lives in, including the corresponding .env block. For databases outside aws-us-east-1 , the snippet sets CHROMA_HOST to the region-specific host: CHROMA_HOST = europe-west1.gcp.trychroma.com CHROMA_API_KEY = ... CHROMA_TENANT = ... CHROMA_DATABASE = ...",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - ​ In-Memory Client",
+    "text": "In Python, you can run a Chroma server in-memory and connect to it with the ephemeral client: import chromadb client = chromadb.Client() The Client() method starts a Chroma server in-memory and also returns a client with which you can connect to it. This is a great tool for experimenting with different embedding functions and retrieval techniques in a Python notebook, for example. If you don’t need data persistence, the ephemeral client is a good choice for getting up and running with Chroma.",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - ​ Persistent Client",
+    "text": "• Rust You can configure Chroma to save and load the database from your local machine, using the PersistentClient . Data will be persisted automatically and loaded on start (if it exists). import chromadb client = chromadb.PersistentClient( path = \"/path/to/save/to\" ) The path is where Chroma will store its database files on disk, and load them on start. If you don’t provide a path, the default is .chroma The client object has a few useful convenience methods.",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - ​ Persistent Client",
+    "text": "• heartbeat() - returns a nanosecond heartbeat. Useful for making sure the client remains connected.",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - ​ Persistent Client",
+    "text": "• reset() - empties and completely resets the database. WARNING: This is destructive and not reversible.",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - ​ Persistent Client",
+    "text": "client.heartbeat() client.reset() To connect with the JS/TS client, you must connect to a Chroma server. To run a Chroma server locally that will persist your data, install Chroma from npm using any npm compatible client. npm install chromadb And run the server using our CLI: npx chroma run --path ./getting-started The path is where Chroma will store its database files on disk, and load them on start. The default is .chroma . Alternatively, you can also use our official Docker image: docker pull chromadb/chroma docker run -p 8000:8000 chromadb/chroma With a Chroma server running locally, you can connect to it by instantiating a new ChromaClient : import { ChromaClient } from \"chromadb\" ; const client = new ChromaClient (); By default, the ChromaClient is wired to connect to a Chroma server at http://localhost:8000 , with default_tenant and default_database . If you have different settings you can provide them to the ChromaClient constructor: const client = new ChromaClient ({ ssl: false , host: \"localhost\" , port: 9000 , // non-standard port based on your server config database: \"my-db\" , headers: {}, }); The client object has a few useful convenience methods.",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - ​ Persistent Client",
+    "text": "• heartbeat() - returns a nanosecond heartbeat. Useful for making sure the client remains connected.",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - ​ Persistent Client",
+    "text": "• reset() - empties and completely resets the database. WARNING: This is destructive and not reversible.",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - ​ Persistent Client",
+    "text": "await client . heartbeat (); await client . reset (); The Rust client connects to a running Chroma server. For local persistence, run the server with a data path and connect over HTTP. chroma run --path /db_path use chroma :: { ChromaHttpClient , ChromaHttpClientOptions }; let mut options = ChromaHttpClientOptions :: default (); options . endpoint = \"http://localhost:8000\" . parse () ? ; let client = ChromaHttpClient :: new ( options ); client . heartbeat () . await ? ;",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  },
+  {
+    "title": "Chroma Clients - Chroma Docs - ​ Persistent Client",
+    "text": "Yes No Suggest edits Getting Started Previous Client-Server Mode Next ⌘ I Assistant Responses are generated using AI and may contain mistakes.",
+    "url": "https://docs.trychroma.com/docs/run-chroma/clients"
+  }
+]

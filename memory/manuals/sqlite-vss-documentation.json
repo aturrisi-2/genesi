@@ -1,0 +1,357 @@
+[
+  {
+    "title": "Sqlite-vss (Faiss Extension) - sqlite-vss",
+    "text": "> [!WARNING] > `sqlite-vss` is not in active development. Instead, my effort is now going towards [`sqlite-vec`](https://github.com/asg017/sqlite-vec), which is a similar vector search SQLite extension, but should be much easier to install and use than `sqlite-vss`. See [this blog post](https://alexgarcia.xyz/blog/2024/building-new-vector-search-sqlite/index.html) for more info. >",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - sqlite-vss",
+    "text": "`sqlite-vss` (SQLite <b><u>V</u></b>ector <b><u>S</u></b>imilarity <b><u>S</u></b>earch) is a SQLite extension that brings vector search capabilities to SQLite, based on [Faiss](https://faiss.ai/). It can be used to build semantic search engines, recommendations, or questions-and-answering tools.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - sqlite-vss",
+    "text": "See [_Introducing sqlite-vss: A SQLite Extension for Vector Search_](https://observablehq.com/@asg017/introducing-sqlite-vss) (February 2023) for more details and a live example!",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - sqlite-vss",
+    "text": "If your company or organization finds this library useful, consider [supporting my work](#supporting)!",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "`sqlite-vss` has a similar API to the [`fts5` Full-Text Search Extension](https://www.sqlite.org/fts5.html). Use the `vss0` module to create virtual tables that can efficiently store and query your vectors.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "```sql -- 384 == number of dimensions for this example create virtual table vss_articles using vss0( headline_embedding(384), description_embedding(384), ); ```",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "`sqlite-vss` is a **Bring-your-own-vectors** database, it is compatable with any embedding or vector data you have. Consider using [OpenAI's Embeddings API](https://platform.openai.com/docs/guides/embeddings), [HuggingFace's Inference API](https://huggingface.co/blog/getting-started-with-embeddings#1-embedding-a-dataset), [`sentence-transformers`](https://www.sbert.net/), or [any of these open source model](https://github.com/embeddings-benchmark/mteb#leaderboard). In this example, we are using [sentence-transformers/all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) to generate embeddings from our text, which have 384 dimensions.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "You can insert vectors into `vss0` tables as JSON or raw bytes.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "```sql insert into vss_articles(rowid, headline_embedding) select rowid, headline_embedding from articles; ```",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "To query for similar vectors (\"k nearest neighbors\"), use the `vss_search` function in the `WHERE` clause. Here we are searching for the 100 nearest neighbors to the embedding in row #123 in the `articles` table.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "```sql select rowid, distance from vss_articles where vss_search( headline_embedding, (select headline_embedding from articles where rowid = 123) ) limit 100; ```",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "You can `INSERT` and `DELETE` into these tables as necessary, but [`UPDATE` operations aren't supported yet](https://github.com/asg017/sqlite-vss/issues/7). This can be used with triggers for automatically updated indexes. Also note that \"small\" `INSERT`/`DELETE` operations that only insert a few rows can be slow, so batch where necessary.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "delete from vss_articles where rowid between 100 and 200;",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "insert into vss_articles(rowid, headline_embedding, description_embedding) values (:rowid, :headline_embedding, :description_embedding)",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "You can pass in custom [Faiss factory strings](https://github.com/facebookresearch/faiss/wiki/The-index-factory) for specific columns to control how the Faiss index is stored and queried. By default the factory string is `\"Flat,IDMap2\"`, which can be slow to query as your database grows. Here, we add an [inverted file index](https://github.com/facebookresearch/faiss/wiki/The-index-factory#inverted-file-indexes) with 4096 centroids, a non-exhaustive option that makes large database queries much faster.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "```sql create virtual table vss_ivf_articles using vss0( headline_embedding(384) factory=\"IVF4096,Flat,IDMap2\", description_embedding(384) factory=\"IVF4096,Flat,IDMap2\" ); ```",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "This IVF will require training! You can define training data with a `INSERT` command in a single transaction, with the special `operation=\"training\"` constraint.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "```sql insert into vss_ivf_articles(operation, headline_embedding, description_embedding) select 'training', headline_embedding, description_embedding from articles; ```",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Usage",
+    "text": "Beware! Indexes that require training can take a long time. With the [News Category Dataset](./examples/headlines/) (386 dimension over 210k vectors) that this example is based on, the default index would take 8 seconds to build. But with the custom `\"IVF4096,Flat,IDMap2\"` factory, it took 45 minutes to train and 4.5 minutes to insert data! This likely can be reduced with a smaller training set, but the faster queries can be helpful.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Documentation",
+    "text": "See [`docs.md`](./docs.md) for a instructions to compile `sqlite-vss` yourself, as well as a full SQL API reference.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Installing",
+    "text": "The [Releases page](https://github.com/asg017/sqlite-vss/releases) contains pre-built binaries for Linux x86_64 and MacOS x86_64 (MacOS Big Sur 11 or higher). More pre-compiled targets will be available in the future. Additionally, `sqlite-vss` is distributed on common package managers like `pip` for Python and `npm` for Node.js, see below for details.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Installing",
+    "text": "Do note that on Linux machines, you'll have to install some packages to make these options work:",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Installing",
+    "text": "``` sudo apt-get update sudo apt-get install -y libgomp1 libatlas-base-dev liblapack-dev ```",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Installing",
+    "text": "> **Note:** > The `0` in the filename (`vss0.dylib`/ `vss0.so`) denotes the major version of `sqlite-vss`. Currently `sqlite-vss` is pre v1, so expect breaking changes in future versions.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Installing",
+    "text": "| Language | Install | More Info | | | -------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | | Python | `pip install sqlite-vss` | [`sqlite-vss` with Python](https://alexgarcia.xyz/sqlite-vss/python.html) | [![PyPI](https://img.shields.io/pypi/v/sqlite-vss.svg?color=blue&logo=python&logoColor=white)](https://pypi.org/project/sqlite-vss/) | | Datasette | `datasette install datasette-sqlite-vss` | [`sqlite-vss` with Datasette](https://alexgarcia.xyz/sqlite-vss/datasette.html) | [![Datasette](https://img.shields.io/pypi/v/datasette-sqlite-vss.svg?color=B6B6D9&label=Datasette+plugin&logoColor=white&logo=python)](https://datasette.io/plugins/datasette-sqlite-vss) | | Node.js | `npm install sqlite-vss` | [`sqlite-vss` with Node.js](https://alexgarcia.xyz/sqlite-vss/nodejs.html) | [![npm](https://img.shields.io/npm/v/sqlite-vss.svg?color=green&logo=nodedotjs&logoColor=white)](https://www.npmjs.com/package/sqlite-vss) | | Deno | [`deno.land/x/sqlite_vss`](https://deno.land/x/sqlite_vss) | [`sqlite-vss` with Deno](https://alexgarcia.xyz/sqlite-vss/deno.html) | [![deno version](https://deno.land/badge/sqlite_vss/version?color=fef8d2)](https://deno.land/x/sqlite_vss) | | Ruby | `gem install sqlite-vss` | [`sqlite-vss` with Ruby](https://alexgarcia.xyz/sqlite-vss/ruby.html) | ![Gem](https://img.shields.io/gem/v/sqlite-vss?color=red&logo=rubygems&logoColor=white) | | Elixir | [`hex.pm/packages/sqlite_vss`](https://hex.pm/packages/sqlite_vss) | [`sqlite-vss` with Elixir](https://alexgarcia.xyz/sqlite-vss/elixir.html) | [![Hex.pm](https://img.shields.io/hexpm/v/sqlite_vss?color=purple&logo=elixir)](https://hex.pm/packages/sqlite_vss) | | Go | `go get -u github.com/asg017/sqlite-vss/bindings/go` | [`sqlite-vss` with Go](https://alexgarcia.xyz/sqlite-vss/go.html) | [![Go Reference](https://pkg.go.dev/badge/github.com/asg017/sqlite-vss/bindings/go.svg)](https://pkg.go.dev/github.com/asg017/sqlite-vss/bindings/go) | | Rust | `cargo add sqlite-vss` | [`sqlite-vss` with Rust](https://alexgarcia.xyz/sqlite-vss/rust.html) | [![Crates.io](https://img.shields.io/crates/v/sqlite-vss?logo=rust)](https://crates.io/crates/sqlite-vss) | | Github Release | | | ![GitHub tag (latest SemVer pre-release)](https://img.shields.io/github/v/tag/asg017/sqlite-vss?color=lightgrey&include_prereleases&label=Github+release&logo=github) |",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - With the `sqlite3` CLI",
+    "text": "For using `sqlite-vss` with [the official SQLite command line shell](https://www.sqlite.org/cli.html), download the `vector0.dylib`/`vss0.dylib` (for MacOS Big Sur 11 or higher) or `vector0.so`/`vss0.so` (Linux) files from a release and load it into your SQLite environment.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - With the `sqlite3` CLI",
+    "text": "The `vector0` extension is a required dependency, so make sure to load that before `vss0`.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - With the `sqlite3` CLI",
+    "text": "```sql .load ./vector0 .load ./vss0 select vss_version(); -- v0.0.1 ```",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Python",
+    "text": "For Python developers, install the [`sqlite-vss` package](https://pypi.org/package/sqlite-vss/) with:",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Python",
+    "text": "```python import sqlite3 import sqlite_vss",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Python",
+    "text": "db = sqlite3.connect(':memory:') db.enable_load_extension(True) sqlite_vss.load(db)",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Python",
+    "text": "version, = db.execute('select vss_version()').fetchone() print(version) ```",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Python",
+    "text": "See [`bindings/python`](./bindings/python/README.md) for more details.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Node.js",
+    "text": "For Node.js developers, install the [`sqlite-vss` npm package](https://www.npmjs.com/package/sqlite-vss) with:",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Node.js",
+    "text": "```js import Database from \"better-sqlite3\"; // also compatible with node-sqlite3 import * as sqlite_vss from \"sqlite-vss\";",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Node.js",
+    "text": "const db = new Database(\":memory:\"); sqlite_vss.load(db);",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Node.js",
+    "text": "const version = db.prepare(\"select vss_version()\").pluck().get(); console.log(version); ```",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Node.js",
+    "text": "See [`npm/sqlite-vss/README.md`](./npm/sqlite-vss/README.md) for more details.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Deno",
+    "text": "For [Deno](https://deno.land/) developers, use the [deno.land/x/sqlite_vss](https://deno.land/x/sqlite_vss) module:",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Deno",
+    "text": "```ts // Requires all permissions (-A) and the --unstable flag",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Deno",
+    "text": "import { Database } from \"https://deno.land/x/sqlite3@0.8.0/mod.ts\"; import * as sqlite_vss from \"https://deno.land/x/sqlite_vss/mod.ts\";",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Deno",
+    "text": "db.enableLoadExtension = true; sqlite_vss.load(db);",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Deno",
+    "text": "const [version] = db.prepare(\"select vss_version()\").value<[string]>()!;",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Deno",
+    "text": "See [`deno/sqlite-vss/README.md`](./deno/README.md) for more details.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Datasette",
+    "text": "And for [Datasette](https://datasette.io/), install the [`datasette-sqlite-vss` plugin](https://datasette.io/plugins/datasette-sqlite-vss) with:",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Datasette",
+    "text": "``` datasette install datasette-sqlite-vss ```",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Datasette",
+    "text": "See [`bindings/datasette`](./bindings/datasette/README.md) for more details.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Disadvantages",
+    "text": "- The underlying Faiss indicies are capped at 1GB. Follow [#1](https://github.com/asg017/sqlite-vss/issues/1) for updates. - Additional filtering on top of KNN searches aren't supported yet. Follow [#2](https://github.com/asg017/sqlite-vss/issues/2) for updates. - Only CPU Faiss indicies are supported, not GPU yet. Follow [#3](https://github.com/asg017/sqlite-vss/issues/3) for updates. - mmap'ed indices aren't supported yet, so indicies have to fit in RAM. Follow [#4](https://github.com/asg017/sqlite-vss/issues/4) for updates. - This extension is written in C++ and doesn't have fuzzy testing yet. Follow [#5](https://github.com/asg017/sqlite-vss/issues/5) for updates. - `UPDATE` statements on vss0 virtual tables are not supported, though `INSERT` and `DELETE` statements are. Follow [#7](https://github.com/asg017/sqlite-vss/issues/7) for updates.",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - Supporting",
+    "text": "I (Alex 👋🏼) spent a lot of time and energy on this project and [many other open source projects](https://github.com/asg017?tab=repositories&q=&type=&language=&sort=stargazers). If your company or organization uses this library (or you're feeling generous), then please consider [sponsoring my work](https://github.com/sponsors/asg017/), sharing this project with a friend, or [hiring me for contract/consulting work](https://alexgarcia.xyz/work.html)!",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vss (Faiss Extension) - See Also",
+    "text": "- [`sqlite-http`](https://github.com/asg017/sqlite-http), a SQLite extension for making HTTP requests - [`sqlite-xsv`](https://github.com/asg017/sqlite-xsv), a fast SQLite extension for querying CSVs - [`sqlite-loadable-rs`](https://github.com/asg017/sqlite-loadable-rs), a framework for building SQLite extensions in Rust",
+    "url": "https://github.com/asg017/sqlite-vss/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - `sqlite-vec`",
+    "text": "[![](https://dcbadge.vercel.app/api/server/VCtQ8cGhUs)](https://discord.gg/Ve7WeCJFXk)",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - `sqlite-vec`",
+    "text": "An extremely small, \"fast enough\" vector search SQLite extension that runs anywhere! A successor to [`sqlite-vss`](https://github.com/asg017/sqlite-vss)",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - `sqlite-vec`",
+    "text": "> [!IMPORTANT] > _`sqlite-vec` is a pre-v1, so expect breaking changes!_",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - `sqlite-vec`",
+    "text": "- Store and query float, int8, and binary vectors in `vec0` virtual tables - Written in pure C, no dependencies, runs anywhere SQLite runs (Linux/MacOS/Windows, in the browser with WASM, Raspberry Pis, etc.) - Store non-vector data in metadata, auxiliary, or partition key columns",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - `sqlite-vec`",
+    "text": "<p align=\"center\"> <a href=\"https://hacks.mozilla.org/2024/06/sponsoring-sqlite-vec-to-enable-more-powerful-local-ai-applications/\"> <picture> <source media=\"(prefers-color-scheme: dark)\" srcset=\"./.github/logos/mozilla.dark.svg\"> <source media=\"(prefers-color-scheme: light)\" srcset=\"./.github/logos/mozilla.svg\"> <img alt=\"Mozilla Builders logo\" width=400> </picture> </a> </p>",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - `sqlite-vec`",
+    "text": "<p align=\"center\"> <i> <code>sqlite-vec</code> is a <a href=\"https://hacks.mozilla.org/2024/06/sponsoring-sqlite-vec-to-enable-more-powerful-local-ai-applications/\">Mozilla Builders project</a>, with additional sponsorship from <a href=\"https://fly.io/\"><img width=14px src=\"./.github/logos/flyio.small.ico\"/> Fly.io </a>, <a href=\"https://tur.so/sqlite-vec\"><img width=14px src=\"./.github/logos/turso.small.ico\"/> Turso</a>, <a href=\"https://sqlitecloud.io/\"><img width=14px src=\"./.github/logos/sqlitecloud.small.svg\"/> SQLite Cloud</a>, and <a href=\"https://shinkai.com/\"><img width=14px src=\"./.github/logos/shinkai.small.svg\"/> Shinkai</a>. See <a href=\"#sponsors\">the Sponsors section</a> for more details. </i> </p>",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - Installing",
+    "text": "See [Installing `sqlite-vec`](https://alexgarcia.xyz/sqlite-vec/installation.html) for more details.",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - Installing",
+    "text": "| Language | Install | More Info | | | -------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | | Python | `pip install sqlite-vec` | [`sqlite-vec` with Python](https://alexgarcia.xyz/sqlite-vec/python.html) | [![PyPI](https://img.shields.io/pypi/v/sqlite-vec.svg?color=blue&logo=python&logoColor=white)](https://pypi.org/project/sqlite-vec/) | | Node.js | `npm install sqlite-vec` | [`sqlite-vec` with Node.js](https://alexgarcia.xyz/sqlite-vec/js.html) | [![npm](https://img.shields.io/npm/v/sqlite-vec.svg?color=green&logo=nodedotjs&logoColor=white)](https://www.npmjs.com/package/sqlite-vec) | | Ruby | `gem install sqlite-vec` | [`sqlite-vec` with Ruby](https://alexgarcia.xyz/sqlite-vec/ruby.html) | ![Gem](https://img.shields.io/gem/v/sqlite-vec?color=red&logo=rubygems&logoColor=white) | | Go | `go get -u github.com/asg017/sqlite-vec/bindings/go` | [`sqlite-vec` with Go](https://alexgarcia.xyz/sqlite-vec/go.html) | [![Go Reference](https://pkg.go.dev/badge/github.com/asg017/sqlite-vec-go-bindings/cgo.svg)](https://pkg.go.dev/github.com/asg017/asg017/sqlite-vec-go-bindings/cgo) | | Rust | `cargo add sqlite-vec` | [`sqlite-vec` with Rust](https://alexgarcia.xyz/sqlite-vec/rust.html) | [![Crates.io](https://img.shields.io/crates/v/sqlite-vec?logo=rust)](https://crates.io/crates/sqlite-vec) | | Datasette | `datasette install datasette-sqlite-vec` | [`sqlite-vec` with Datasette](https://alexgarcia.xyz/sqlite-vec/datasette.html) | [![Datasette](https://img.shields.io/pypi/v/datasette-sqlite-vec.svg?color=B6B6D9&label=Datasette+plugin&logoColor=white&logo=python)](https://datasette.io/plugins/datasette-sqlite-vec) | | rqlite | `rqlited -extensions-path=sqlite-vec.tar.gz` | [`sqlite-vec` with rqlite](https://alexgarcia.xyz/sqlite-vec/rqlite.html) | [![rqlite](https://img.shields.io/badge/rqlite-sqlite_extensions-blue)](https://rqlite.io/docs/guides/extensions/) | | `sqlite-utils` | `sqlite-utils install sqlite-utils-sqlite-vec` | [`sqlite-vec` with sqlite-utils](https://alexgarcia.xyz/sqlite-vec/sqlite-utils.html) | [![sqlite-utils](https://img.shields.io/pypi/v/sqlite-utils-sqlite-vec.svg?color=B6B6D9&label=sqlite-utils+plugin&logoColor=white&logo=python)](https://datasette.io/plugins/datasette-sqlite-vec) | | Github Release | | | ![GitHub tag (latest SemVer pre-release)](https://img.shields.io/github/v/tag/asg017/sqlite-vec?color=lightgrey&include_prereleases&label=Github+release&logo=github) |",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - Sample usage",
+    "text": "create virtual table vec_examples using vec0( sample_embedding float[8] );",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - Sample usage",
+    "text": "-- vectors can be provided as JSON or in a compact binary format insert into vec_examples(rowid, sample_embedding) values (1, '[-0.200, 0.250, 0.341, -0.211, 0.645, 0.935, -0.316, -0.924]'), (2, '[0.443, -0.501, 0.355, -0.771, 0.707, -0.708, -0.185, 0.362]'), (3, '[0.716, -0.927, 0.134, 0.052, -0.669, 0.793, -0.634, -0.162]'), (4, '[-0.710, 0.330, 0.656, 0.041, -0.990, 0.726, 0.385, -0.958]');",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - Sample usage",
+    "text": "-- KNN style query select rowid, distance from vec_examples where sample_embedding match '[0.890, 0.544, 0.825, 0.961, 0.358, 0.0196, 0.521, 0.175]' order by distance limit 2; /* ┌───────┬──────────────────┐ │ rowid │ distance │ ├───────┼──────────────────┤ │ 2 │ 2.38687372207642 │ │ 1 │ 2.38978505134583 │ └───────┴──────────────────┘ */ ```",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - Sponsors",
+    "text": "Development of `sqlite-vec` is supported by multiple generous sponsors! Mozilla is the main sponsor through the new Builders project. <p align=\"center\"> <a href=\"https://hacks.mozilla.org/2024/06/sponsoring-sqlite-vec-to-enable-more-powerful-local-ai-applications/\"> <picture> <source media=\"(prefers-color-scheme: dark)\" srcset=\"./.github/logos/mozilla.dark.svg\"> <source media=\"(prefers-color-scheme: light)\" srcset=\"./.github/logos/mozilla.svg\"> <img alt=\"Mozilla Builders logo\" width=400> </picture> </a> </p>",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - Sponsors",
+    "text": "`sqlite-vec` is also sponsored by the following companies:",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - Sponsors",
+    "text": "<a href=\"https://fly.io/\"> <picture> <source media=\"(prefers-color-scheme: dark)\" srcset=\"./.github/logos/flyio.dark.svg\"> <source media=\"(prefers-color-scheme: light)\" srcset=\"./.github/logos/flyio.svg\"> <img alt=\"Fly.io logo\" src=\"./.github/logos/flyio.svg\" width=\"48%\"> </picture> </a>",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - Sponsors",
+    "text": "<a href=\"https://tur.so/sqlite-vec\"> <picture> <source media=\"(prefers-color-scheme: dark)\" srcset=\"./.github/logos/turso.svg\"> <source media=\"(prefers-color-scheme: light)\" srcset=\"./.github/logos/turso.svg\"> <img alt=\"Turso logo\" src=\"./.github/logos/turso.svg\" width=\"48%\"> </picture> </a>",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - Sponsors",
+    "text": "<a href=\"https://sqlitecloud.io/\"> <picture> <source media=\"(prefers-color-scheme: dark)\" srcset=\"./.github/logos/sqlitecloud.dark.svg\"> <source media=\"(prefers-color-scheme: light)\" srcset=\"./.github/logos/sqlitecloud.svg\"> <img alt=\"SQLite Cloud logo\" src=\"./.github/logos/flyio.svg\" width=\"48%\"> </picture> </a>",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - Sponsors",
+    "text": "<a href=\"https://shinkai.com\"> <picture> <source media=\"(prefers-color-scheme: dark)\" srcset=\"./.github/logos/shinkai.dark.svg\"> <source media=\"(prefers-color-scheme: light)\" srcset=\"./.github/logos/shinkai.svg\">",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - Sponsors",
+    "text": "<img alt=\"Shinkai logo\" src=\"./.github/logos/shinkai.svg\" width=\"48%\"> </picture> </a>",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - Sponsors",
+    "text": "As well as multiple individual supporters on [Github sponsors](https://github.com/sponsors/asg017/)!",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - Sponsors",
+    "text": "If your company interested in sponsoring `sqlite-vec` development, send me an email to get more info: https://alexgarcia.xyz",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  },
+  {
+    "title": "Sqlite-vec (Newer Extension) - See Also",
+    "text": "- [**`sqlite-ecosystem`**](https://github.com/asg017/sqlite-ecosystem), Maybe more 3rd party SQLite extensions I've developed - [**`sqlite-rembed`**](https://github.com/asg017/sqlite-rembed), Generate text embeddings from remote APIs like OpenAI/Nomic/Ollama, meant for testing and SQL scripts - [**`sqlite-lembed`**](https://github.com/asg017/sqlite-lembed), Generate text embeddings locally from embedding models in the `.gguf` format",
+    "url": "https://github.com/asg017/sqlite-vec/blob/main/README.md"
+  }
+]
