@@ -131,10 +131,10 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 0.75) -> d
         mtcnn, resnet = get_face_models()
         img = Image.open(image_path).convert("RGB")
         
-        # Detect bboxes just to count exactly, though mtcnn() does both
-        boxes, _ = mtcnn.detect(img)
+        # Detect bboxes + PROBABILITÀ di confidenza (servono per scartare i falsi volti)
+        boxes, probs = mtcnn.detect(img)
         faces = mtcnn(img)
-        
+
         if faces is None or len(faces) == 0 or boxes is None:
             return {
                 "recognized_names": [],
@@ -142,13 +142,23 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 0.75) -> d
                 "unknown_faces_positions": [],
                 "total_faces": 0
             }
-            
-        # Filtra i volti di background: tieni solo quelli la cui area è almeno il 5% del volto più grande
+
+        # Filtro 1: CONFIDENZA — scarta i rilevamenti incerti (pattern, cibo, sfondo,
+        # riflessi) che MTCNN segnala come "volti" → evita di contare persone inesistenti
+        # e di chiedere "chi è a destra/sinistra" per facce che non ci sono.
+        FACE_CONF_MIN = 0.93
+        if probs is None:
+            probs = [1.0] * len(boxes)
+        # Filtro 2: AREA — niente volti minuscoli (almeno il 6% del volto più grande)
         areas = [(box[2]-box[0]) * (box[3]-box[1]) for box in boxes]
         max_area = max(areas)
-        min_allowed_area = max_area * 0.05
-        
-        valid_indices = [i for i, area in enumerate(areas) if area >= min_allowed_area]
+        min_allowed_area = max_area * 0.06
+
+        valid_indices = [
+            i for i, area in enumerate(areas)
+            if area >= min_allowed_area
+            and (probs[i] is not None and float(probs[i]) >= FACE_CONF_MIN)
+        ]
         
         if not valid_indices:
             return {
