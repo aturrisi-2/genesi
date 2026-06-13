@@ -225,7 +225,7 @@ async function startBaileys() {
             }
 
             const token = await getToken("group");
-            const res = await axios.post(`${GENESI_URL}/api/group/present`, {
+            const res = await axios.post(`${GENESI_URL}/api/chat/group/present`, {
                 group_id:    update.id,
                 group_name:  subject,
                 participants: participants,
