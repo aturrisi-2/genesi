@@ -75,6 +75,11 @@ _GENESI_RE = re.compile(r'\bgenesi\b', re.IGNORECASE)
 # { chat_id: {"from_id": int, "ts": float, "count": int} }
 _GROUP_CONV_STATE: dict[int, dict] = {}
 
+# Reattività: ultimo timestamp di arrivo messaggio per (chat_id, from_id). Serve a
+# scartare le risposte diventate stantie (la stessa persona ha già scritto qualcosa di
+# nuovo mentre Genesi elaborava → la risposta vecchia ha perso il contesto).
+_GROUP_LAST_USER_MSG: dict[tuple, float] = {}
+
 # Saluti registrati da _group_should_intervene, in attesa di risposta personalizzata
 # { chat_id: {"from_id": int, "category": str, "late_wakeup": bool, "pure": bool, "ts": float} }
 _PENDING_GREETINGS: dict[int, dict] = {}
@@ -1063,6 +1068,11 @@ async def handle_update(update: dict):
         location   = msg.get("location")    # GPS location
         caption    = msg.get("caption", "").strip()
 
+        # Reattività: segna l'arrivo di QUESTO messaggio (per scartare risposte stantie)
+        _msg_arrival = time.time()
+        if is_group:
+            _GROUP_LAST_USER_MSG[(chat_id, from_id)] = _msg_arrival
+
         # Reply diretta a un messaggio di Genesi → fast-path SI + inietta contesto
         _reply_to_genesi = False
         _quoted_genesi_text = ""
@@ -1626,6 +1636,14 @@ async def handle_update(update: dict):
                     "Non riesco ad autenticarti. Usa /login per riconnetterti.")
                 return False
             
+            # Reattività: se mentre Genesi elaborava la STESSA persona ha già scritto un
+            # nuovo messaggio, questa risposta è ormai stantia (ha perso il contesto) →
+            # la scartiamo. Il messaggio nuovo riceverà una risposta fresca e pertinente.
+            if is_group and _GROUP_LAST_USER_MSG.get((chat_id, from_id), 0) > _msg_arrival + 0.3:
+                logger.info("GROUP_STALE_RESPONSE_SKIPPED chat_id=%s from=%s waited=%.1fs",
+                            chat_id, first_name, time.time() - _msg_arrival)
+                return
+
             # Legge il message_id originale per poter rispondere in thread se in gruppo
             reply_to = msg.get("message_id") if is_group else None
             await _send_response(chat_id, reply, reply_to_message_id=reply_to)

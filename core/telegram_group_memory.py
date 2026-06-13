@@ -107,7 +107,7 @@ MAX_HISTORY    = 30   # turni conservati per gruppo (era 20)
 MAX_FACTS      = 40   # fatti per membro
 HISTORY_INJECT = 12   # turni iniettati nel prompt (era 8)
 MAX_RAW_MSGS   = 500  # "diario" del gruppo persistito su disco (era 40): storico profondo
-RAW_INJECT     = 30   # ultimi N messaggi iniettati nel prompt (snello; il resto resta nel diario)
+RAW_INJECT     = 20   # ultimi N messaggi iniettati nel prompt (snello = risposta più reattiva; il diario resta 500)
 SUMMARY_RAW_LIMIT = 150  # quanti messaggi del diario alimentano il riepilogo periodico
 CONSOLIDATION_INTERVAL = 86400  # 24h in secondi
 OBSERVATION_EVERY_N    = 5      # ogni N messaggi di gruppo → 1 osservazione lab
