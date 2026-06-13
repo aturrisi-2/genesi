@@ -203,11 +203,8 @@ async def get_today_events_context(chat_id: int) -> str:
     for name_lower in _PRESEED_TELEGRAM:
         member_ids_to_check.add(f"tg:name:{name_lower}")
     try:
-        all_keys = [k for k in storage._storage.keys() if k.startswith("birthday:")]
-        for k in all_keys:
-            mid = k[len("birthday:"):]
-            if mid not in ("known_groups",) and not mid.startswith("sent:"):
-                member_ids_to_check.add(mid)
+        for _mid in _all_birthday_member_ids():
+            member_ids_to_check.add(_mid)
     except Exception:
         pass
         
@@ -245,6 +242,28 @@ async def get_today_events_context(chat_id: int) -> str:
 def _bday_key(member_id: str) -> str:
     """Chiave universale: può essere user_id webapp, 'tg:{from_id}', 'wa:{wa_id}'."""
     return f"birthday:{member_id}"
+
+
+def _all_birthday_member_ids() -> list[str]:
+    """
+    Enumera TUTTI i compleanni salvati leggendo da DISCO (memory/birthday/*.json),
+    non dalla cache in-memory storage._storage (che dopo un riavvio è vuota e farebbe
+    perdere gli auguri). Ritorna i member_id (es. 'wa:39...', 'tg:123', user_id webapp).
+    """
+    out: list[str] = []
+    try:
+        base = getattr(storage, "base_path", "memory")
+        bdir = os.path.join(base, "birthday")
+        for fn in os.listdir(bdir):
+            if not fn.endswith(".json"):
+                continue
+            mid = fn[:-5]
+            if mid in ("known_groups",) or mid.startswith("sent:"):
+                continue
+            out.append(mid)
+    except Exception:
+        pass
+    return out
 
 def _known_groups_key() -> str:
     return "birthday:known_groups"
@@ -463,7 +482,12 @@ async def collect_birthday_dm(wa_id: str, name: str, text: str) -> dict:
     iso = await parse_birthdate_freeform(text)
     if iso:
         existing = await get_birthday(member_id)
-        await save_birthday(member_id, iso, name or existing.get("name", ""), "whatsapp_dm")
+        try:
+            from core.telegram_group_memory import _sanitize_member_name
+            clean_name = _sanitize_member_name(name) or existing.get("name", "")
+        except Exception:
+            clean_name = name or existing.get("name", "")
+        await save_birthday(member_id, iso, clean_name, "whatsapp_dm")
         log("BIRTHDAY_DM_SAVED", wa_id=wa_clean, name=name, birthdate=iso)
         try:
             parts = iso.split("-")
@@ -631,11 +655,8 @@ async def check_and_send_birthdays():
     # 2. Tutti i birthday:tg:* e birthday:wa:* in storage
     # (storage JSON-file: accediamo alla chiave diretta)
     try:
-        all_keys = [k for k in storage._storage.keys() if k.startswith("birthday:")]
-        for k in all_keys:
-            mid = k[len("birthday:"):]
-            if mid not in ("known_groups",) and not mid.startswith("sent:"):
-                member_ids_to_check.add(mid)
+        for _mid in _all_birthday_member_ids():
+            member_ids_to_check.add(_mid)
     except Exception:
         pass
 
@@ -650,11 +671,11 @@ async def check_and_send_birthdays():
                 # Cerca se esiste un from_id reale
                 real_id = None
                 try:
-                    for k in storage._storage.keys():
-                        if k.startswith("birthday:tg:") and not k.startswith("birthday:tg:name:"):
-                            d = storage._storage[k]
+                    for _mid in _all_birthday_member_ids():
+                        if _mid.startswith("tg:") and not _mid.startswith("tg:name:"):
+                            d = await get_birthday(_mid)
                             if isinstance(d, dict) and d.get("name", "").lower() == name_lower:
-                                real_id = k[len("birthday:"):]
+                                real_id = _mid
                                 break
                 except Exception:
                     pass
@@ -975,11 +996,8 @@ async def birthday_scheduler():
             for name_lower in _PRESEED_TELEGRAM:
                 member_ids_to_check.add(f"tg:name:{name_lower}")
             try:
-                all_keys = [k for k in storage._storage.keys() if k.startswith("birthday:")]
-                for k in all_keys:
-                    mid = k[len("birthday:"):]
-                    if mid not in ("known_groups",) and not mid.startswith("sent:"):
-                        member_ids_to_check.add(mid)
+                for _mid in _all_birthday_member_ids():
+                    member_ids_to_check.add(_mid)
             except Exception:
                 pass
                 
