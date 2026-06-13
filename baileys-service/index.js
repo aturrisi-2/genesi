@@ -222,6 +222,7 @@ async function startBaileys() {
         } else if (connection === "open") {
             _connectAttempts = 0;
             _reconnecting = false;
+            _lastInbound = Date.now();
             console.log("[Baileys] ✅ Connesso a WhatsApp. In ascolto su gruppi e messaggi diretti...");
         }
     });
@@ -232,6 +233,7 @@ async function startBaileys() {
     // ed entrambi sono deduplicati sul registry: niente doppie presentazioni.
     sock.ev.on("group-participants.update", async (update) => {
         try {
+            _lastInbound = Date.now();  // segnale di vita per il watchdog
             // La membership è cambiata: invalida la cache metadata del gruppo
             delete _groupMetaCache[update.id];
 
@@ -296,6 +298,7 @@ async function startBaileys() {
     });
 
     sock.ev.on("messages.upsert", async ({ messages, type }) => {
+        _lastInbound = Date.now();  // segnale di vita per il watchdog
         if (type !== "notify") return;
 
         for (const msg of messages) {
@@ -599,6 +602,7 @@ const SEND_SECRET = process.env.BAILEYS_SEND_SECRET || "";
 let _activeSock = null;  // riferimento al socket Baileys attivo
 let _reconnecting = false;   // guardia: un reconnect è già pianificato
 let _connectAttempts = 0;    // contatore per il backoff esponenziale
+let _lastInbound = Date.now();  // timestamp dell'ultimo evento ricevuto (watchdog anti-zombie)
 
 function startHttpServer() {
     const server = http.createServer(async (req, res) => {
@@ -645,6 +649,38 @@ function startHttpServer() {
         console.log(`[Baileys/HTTP] Send server on 127.0.0.1:${SEND_PORT}`);
     });
 }
+
+// ── Watchdog anti-zombie ──────────────────────────────────────────────────────
+// La connessione WhatsApp può "morire in silenzio" (TCP aperto ma stream eventi
+// morto, senza evento di close → il reconnect normale non scatta). Questo watchdog
+// rileva la situazione e forza la riconnessione: sonda attiva se non arrivano
+// eventi da un po', e reconnect se la sonda fallisce o il silenzio è troppo lungo.
+const WATCHDOG_IDLE_PROBE = 3 * 60 * 1000;   // 3 min senza eventi → sonda
+const WATCHDOG_IDLE_FORCE = 10 * 60 * 1000;  // 10 min senza eventi → reconnect comunque
+setInterval(async () => {
+    const sock = _activeSock;
+    if (!sock || _reconnecting) return;
+    const idle = Date.now() - _lastInbound;
+    if (idle < WATCHDOG_IDLE_PROBE) return;
+
+    let alive = false;
+    try {
+        await Promise.race([
+            sock.sendPresenceUpdate("available"),
+            new Promise((_, rej) => setTimeout(() => rej(new Error("probe timeout")), 10000)),
+        ]);
+        alive = true;
+    } catch (_) { alive = false; }
+
+    if (!alive || idle > WATCHDOG_IDLE_FORCE) {
+        if (_reconnecting) return;
+        console.log(`[Baileys] Watchdog: connessione stale (idle=${Math.round(idle / 1000)}s, probe=${alive}) → forzo reconnect`);
+        _reconnecting = true;  // blocca l'eventuale 'close' dal pianificare un secondo reconnect
+        try { sock.end(new Error("watchdog reconnect")); } catch (_) {}
+        // Riconnessione garantita anche se 'close' non viene emesso
+        setTimeout(() => startBaileys().catch(e => console.error("[Baileys] Watchdog reconnect error:", e.message)), 2000);
+    }
+}, 60000);
 
 // ── Avvio ─────────────────────────────────────────────────────────────────────
 console.log("[Genesi Baileys] Avvio servizio WhatsApp gruppi...");
