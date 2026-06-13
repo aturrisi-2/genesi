@@ -30,6 +30,23 @@ def get_stt_client():
         _client_instance = AsyncOpenAI(api_key=api_key)
     return _client_instance
 
+_local_model_instance = None
+
+def get_local_stt_model():
+    global _local_model_instance
+    if _local_model_instance is None:
+        from faster_whisper import WhisperModel
+        cache_dir = "/opt/models/whisper"
+        if not os.path.exists(cache_dir):
+            try:
+                os.makedirs(cache_dir, exist_ok=True)
+            except Exception:
+                cache_dir = None
+        logger.info("STT_LOCAL_INIT: Loading Whisper 'base' model (device=cpu, compute_type=int8, cache=%s)...", cache_dir)
+        _local_model_instance = WhisperModel("base", device="cpu", compute_type="int8", download_root=cache_dir)
+        logger.info("STT_LOCAL_INIT: Whisper model loaded successfully.")
+    return _local_model_instance
+
 # Estensioni supportate da OpenAI Whisper API
 _SUPPORTED_EXTENSIONS = {
     "audio/webm": ".webm",
@@ -55,7 +72,7 @@ def _ext_for_content_type(content_type: str) -> str:
 
 async def transcribe_audio(audio_data: bytes, content_type: str, filename: str = "audio") -> dict:
     """
-    Transcribe audio bytes via OpenAI Whisper API.
+    Transcribe audio bytes via local Whisper (if STT_LOCAL=true) or OpenAI Whisper API.
     Returns dict with 'text' and optional 'stt_status'.
     """
     if len(audio_data) < 100:
@@ -71,7 +88,32 @@ async def transcribe_audio(audio_data: bytes, content_type: str, filename: str =
             tmp.write(audio_data)
             tmp_path = tmp.name
 
-        # Call OpenAI Whisper API
+        # 1. Local STT Path
+        if os.environ.get("STT_LOCAL", "false").lower() in ("true", "1", "yes"):
+            try:
+                # Runs CPU execution of faster-whisper model
+                model = get_local_stt_model()
+                logger.info("STT_LOCAL_START transcribing %s (size=%d)", filename, len(audio_data))
+                
+                # Execute blocking transcribe in thread pool to avoid blocking async event loop
+                loop = asyncio.get_running_loop()
+                def _run_transcribe():
+                    segments, info = model.transcribe(tmp_path, beam_size=5, language="it")
+                    return list(segments), info
+                
+                segments_list, info = await loop.run_in_executor(None, _run_transcribe)
+                text = "".join(seg.text for seg in segments_list).strip()
+                
+                logger.info("STT_LOCAL_SUCCESS text_len=%d text=%s lang=%s", len(text), repr(text[:80]), info.language)
+                log("STT_TRANSCRIPTION_RESULT", text_len=len(text), source="local")
+                
+                if not text or len(text) < 2:
+                    return {"text": "", "stt_status": "empty"}
+                return {"text": text}
+            except Exception as le:
+                logger.error("STT_LOCAL_ERROR: local transcription failed, trying remote OpenAI fallback: %s", le, exc_info=True)
+
+        # 2. Remote OpenAI Whisper API Fallback
         client = get_stt_client()
         if not client:
             return {"text": "", "stt_status": "error", "error": "OPENAI_API_KEY non configurata"}
@@ -86,7 +128,7 @@ async def transcribe_audio(audio_data: bytes, content_type: str, filename: str =
 
         text = transcript.strip() if isinstance(transcript, str) else str(transcript).strip()
         logger.info("STT_TRANSCRIPTION_RESULT text_len=%d text=%s", len(text), repr(text[:80]))
-        log("STT_TRANSCRIPTION_RESULT", text_len=len(text))
+        log("STT_TRANSCRIPTION_RESULT", text_len=len(text), source="openai")
 
         if not text or len(text) < 2:
             return {"text": "", "stt_status": "empty"}

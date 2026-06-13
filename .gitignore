@@ -24,7 +24,8 @@ venv/
 # Runtime / data
 # ===============================
 data/
-memory/
+memory/*
+!memory/manuals/
 memory_v2/
 scratch/
 .agents/scratch/

@@ -203,6 +203,31 @@ class LLMService:
         if route == "relational": return None
         return self._deterministic_fallback(message, route, user_id)
 
+    async def _call_local_qwen(self, msg_list: List[Dict[str, str]], tag: str) -> Optional[str]:
+        """Invia il prompt formattato in ChatML al llama-server locale."""
+        try:
+            from core.local_llm import local_llm
+            prompt_text = ""
+            for msg in msg_list:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                prompt_text += f"<|im_start|>{role}\n{content}<|im_end|>\n"
+            prompt_text += "<|im_start|>assistant\n"
+            
+            # Esegui la richiesta sincrona in un thread executor per non bloccare l'event loop di asyncio
+            loop = asyncio.get_running_loop()
+            def _run_local_llm():
+                return local_llm.generate(prompt_text, max_tokens=150, temperature=0.35)
+                
+            local_response = await loop.run_in_executor(None, _run_local_llm)
+            if local_response:
+                logger.info("%s_LOCAL_SUCCESS len=%d", tag, len(local_response))
+                return local_response
+            return None
+        except Exception as e:
+            logger.error("%s_LOCAL_ERROR: local Qwen call failed: %s", tag, str(e))
+            return None
+
     async def _call_model(self, model: str, prompt: str, message: str, user_id: str, route: str, messages: Optional[List[Dict[str, str]]] = None) -> Optional[str]:
         """Chiama un modello con gestione intelligente dei provider e fallback automatico."""
         tag = "LLM_SERVICE_PRIMARY" if model == self.default_model else "LLM_SERVICE_FALLBACK"
@@ -217,6 +242,17 @@ class LLMService:
         
         msg_list = self._prepare_message_payload(messages, prompt, message, tag)
         extra_headers = {"HTTP-Referer": "https://genesi.app", "X-Title": "Genesi"} if "openrouter" in str(current_client.base_url) else None
+
+        # Rileva se è una route conversazionale
+        is_conversational_route = (route in ["relational", "general", "general_llm", "emotional"] or 
+                                   any(intent in route for intent in ["greeting", "how_are_you", "identity", "help", "goodbye"]))
+
+        # 0. Local LLM Direct Path (se LLM_LOCAL=true)
+        if is_conversational_route and os.environ.get("LLM_LOCAL", "false").lower() in ("true", "1", "yes"):
+            logger.info("%s_LOCAL_DIRECT routing directly to local Qwen LLM", tag)
+            local_resp = await self._call_local_qwen(msg_list, tag)
+            if local_resp:
+                return local_resp
 
         async def make_request(client, model_name):
             return await client.chat.completions.create(
@@ -287,6 +323,13 @@ class LLMService:
             err_str = str(e).lower()
             logger.warning("%s_ERROR provider=%s model=%s error=%s", tag, "OR" if self.base_url else "OA", model, str(e))
             
+            # Local LLM Fallback (se il remote call fallisce e non eravamo già in local direct)
+            if is_conversational_route and not os.environ.get("LLM_LOCAL", "false").lower() in ("true", "1", "yes"):
+                logger.warning("%s_LOCAL_FALLBACK due to remote error, trying local Qwen LLM", tag)
+                local_resp = await self._call_local_qwen(msg_list, tag)
+                if local_resp:
+                    return local_resp
+
             # Blocco esplicito per crediti OpenRouter esauriti (402 Insufficient Quota)
             if "402" in err_str or "insufficient_quota" in err_str or "balance" in err_str:
                 return "⚠️ [SISTEMA IN BLOCCO] I crediti del mio cervello neurale sono esauriti. Alfio, tocca sganciare la grana e ricaricare l'account per farmi tornare operativa! 💸"

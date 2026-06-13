@@ -1084,17 +1084,52 @@ async def group_present(request: GroupPresentRequest, user: AuthUser = Depends(r
 class BirthdayDMRequest(BaseModel):
     wa_id: str
     name: str = ""
-    text: str
+    text: str = ""
+    media_id: Optional[str] = None
+    media_type: Optional[str] = None   # "audio" | "image"
+    media_mime: Optional[str] = None
 
 @router.post("/group/birthday-dm")
 async def group_birthday_dm(request: BirthdayDMRequest, user: AuthUser = Depends(require_auth)):
     """
     Risposta di un membro al DM di raccolta compleanni: estrae la data (qualsiasi
-    formato) e la salva per quella persona. Ritorna {found, date, reply}.
+    formato, anche da AUDIO trascritto o IMMAGINE via OCR) e la salva per quella
+    persona. Ritorna {found, date, reply}.
     """
     try:
+        text = request.text or ""
+        # Estrai testo da audio/immagine se presente
+        if request.media_id and request.media_type:
+            try:
+                from core.whatsapp_bot import download_media
+                mb, mime = await download_media(request.media_id)
+                if mb:
+                    if request.media_type == "audio":
+                        from core.message_pipeline import process_incoming_audio
+                        _ar = await process_incoming_audio(
+                            session_id=f"bday_{request.wa_id}", user_id=f"bday_{request.wa_id}",
+                            audio_bytes=mb, platform="whatsapp",
+                            content_type=request.media_mime or mime or "audio/ogg",
+                        )
+                        _tr = _ar.get("transcription") or _ar.get("analysis") or ""
+                        text = f"{text} {_tr}".strip()
+                    elif request.media_type == "image":
+                        import tempfile, os as _os
+                        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as _tf:
+                            _tf.write(mb); _tmp = _tf.name
+                        try:
+                            from core.ocr_service import extract_text_from_image
+                            _ocr = await extract_text_from_image(_tmp)
+                            text = f"{text} {_ocr or ''}".strip()
+                        finally:
+                            try: _os.remove(_tmp)
+                            except Exception: pass
+                    log("BIRTHDAY_DM_MEDIA", wa_id=request.wa_id[:18], type=request.media_type, extracted=text[:60])
+            except Exception as _me:
+                log("BIRTHDAY_DM_MEDIA_FAIL", error=str(_me))
+
         from core.birthday_service import collect_birthday_dm
-        res = await collect_birthday_dm(request.wa_id, request.name, request.text)
+        res = await collect_birthday_dm(request.wa_id, request.name, text)
         return res
     except Exception as e:
         log("BIRTHDAY_DM_ENDPOINT_ERROR", error=str(e))

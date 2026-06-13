@@ -35,3 +35,4 @@ pyremindkit @ git+https://github.com/namuan/pyremindkit
 playwright>=1.44.0
 playwright-stealth>=1.0.6
 youtube-transcript-api
+faster-whisper==1.2.1

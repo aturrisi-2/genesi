@@ -488,6 +488,17 @@ def build_conversation_context(user_id: str, current_message: str,
     if doc_section:
         sections.append(doc_section)
 
+    # --- E2) System manuals context (autonomo) ---
+    try:
+        from core.manual_service import manual_service
+        manual_snippet = manual_service.search(current_message, limit_chars=3000)
+        if manual_snippet:
+            sections.append(f"[MANUALI_SISTEMA_CONTESTO]\n{manual_snippet}\n[/MANUALI_SISTEMA_CONTESTO]\n"
+                            f"ISTRUZIONE: Se rilevante, rispondi alla domanda dell'utente attingendo autonomamente dalle informazioni dei manuali sopra.")
+            logger.info("MANUAL_CONTEXT_INJECTED len=%d", len(manual_snippet))
+    except Exception as me:
+        logger.warning("MANUAL_CONTEXT_ERROR err=%s", me)
+
     return "\n\n".join(sections)
 
 
