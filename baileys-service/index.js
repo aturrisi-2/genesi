@@ -85,7 +85,7 @@ function getRecentMessages(groupId, limit = 15) {
 // Fast-path locale solo per menzione diretta — tutto il resto decide l'LLM
 const GENESI_RE = /\bgenesi\b/i;
 
-async function shouldRespond(text, recentMessages, token) {
+async function shouldRespond(text, recentMessages, token, groupId = "", senderName = "") {
     // Fast-path: menzione diretta → sempre sì senza chiamare LLM
     if (GENESI_RE.test(text)) return true;
 
@@ -94,6 +94,8 @@ async function shouldRespond(text, recentMessages, token) {
         const res = await axios.post(`${GENESI_URL}/api/chat/group/should_respond`, {
             text,
             recent_messages: recentMessages,
+            group_id: groupId,
+            sender_name: senderName,
         }, {
             headers: { Authorization: `Bearer ${token}` },
             timeout: 8000,
@@ -589,7 +591,7 @@ async function startBaileys() {
                     console.log(`[Baileys] Conversazione attiva con ${senderName} in ${groupName} → continuo a seguire`);
                 } else {
                     const recentMsgs = getRecentMessages(groupId);
-                    if (!await shouldRespond(text, recentMsgs, token)) continue;
+                    if (!await shouldRespond(text, recentMsgs, token, groupId, senderName)) continue;
                 }
 
                 // Se c'è un messaggio quotato di Genesi, anteponi al testo per dare contesto

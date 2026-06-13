@@ -286,6 +286,17 @@ async def _group_should_intervene(
         logger.info("GROUP_INTERVENE_DECISION chat_id=%s from=%s intervieni=True motivo=follow_up_diretto_stesso_utente", chat_id, first_name)
         return True
 
+    # DOMANDA INEVASA: se nei commenti accumulati c'è una domanda di un'altra persona a
+    # cui nessuno ha risposto, Genesi interviene per risponderle direttamente.
+    try:
+        from core.group_reactivity import find_unanswered_question
+        if find_unanswered_question(await get_raw_messages(chat_id, limit=12),
+                                    current_sender=first_name, group_id=chat_id):
+            logger.info("GROUP_INTERVENE_DECISION chat_id=%s intervieni=True motivo=domanda_inevasa", chat_id)
+            return True
+    except Exception:
+        pass
+
     # ANTI-FLIPPER: Genesi ha parlato da poco (< 3 min) e ora scrive un'ALTRA persona.
     # Tipico di una discussione tra umani (un lutto condiviso, uno sfogo, un racconto):
     # se è un'affermazione/reazione (non una domanda) NON intromettersi a raffica
@@ -1068,10 +1079,11 @@ async def handle_update(update: dict):
         location   = msg.get("location")    # GPS location
         caption    = msg.get("caption", "").strip()
 
-        # Reattività: segna l'arrivo di QUESTO messaggio (per scartare risposte stantie)
+        # Reattività GLOBALE (stesso modulo di WhatsApp): segna l'arrivo del messaggio
         _msg_arrival = time.time()
         if is_group:
-            _GROUP_LAST_USER_MSG[(chat_id, from_id)] = _msg_arrival
+            from core.group_reactivity import mark_arrival as _mark_arrival
+            _msg_arrival = _mark_arrival("telegram", chat_id, from_id)
 
         # Reply diretta a un messaggio di Genesi → fast-path SI + inietta contesto
         _reply_to_genesi = False
@@ -1639,7 +1651,8 @@ async def handle_update(update: dict):
             # Reattività: se mentre Genesi elaborava la STESSA persona ha già scritto un
             # nuovo messaggio, questa risposta è ormai stantia (ha perso il contesto) →
             # la scartiamo. Il messaggio nuovo riceverà una risposta fresca e pertinente.
-            if is_group and _GROUP_LAST_USER_MSG.get((chat_id, from_id), 0) > _msg_arrival + 0.3:
+            from core.group_reactivity import is_superseded as _is_superseded
+            if is_group and not _original_has_media and _is_superseded("telegram", chat_id, from_id, _msg_arrival):
                 logger.info("GROUP_STALE_RESPONSE_SKIPPED chat_id=%s from=%s waited=%.1fs",
                             chat_id, first_name, time.time() - _msg_arrival)
                 return

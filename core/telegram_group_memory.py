@@ -547,6 +547,22 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
             lines.append(f"  {name}: {msg}")
         lines.append("[FINE DISCUSSIONE]")
 
+        # Domanda rimasta SENZA RISPOSTA: se nel mucchio di commenti qualcuno ha
+        # chiesto qualcosa e nessuno gli ha risposto, Genesi si rivolge a quella
+        # persona per nome e le risponde direttamente (logica globale TG+WA).
+        try:
+            from core.group_reactivity import find_unanswered_question, mark_question_handled
+            _uq = find_unanswered_question(raw_msgs, current_sender=first_name, group_id=chat_id)
+            if _uq:
+                lines.append(
+                    f"[DOMANDA RIMASTA SENZA RISPOSTA — {_uq['name']} aveva chiesto: "
+                    f"\"{_uq['text']}\" e nessuno le/gli ha risposto. Se puoi essere utile, "
+                    f"rivolgiti a {_uq['name']} PER NOME e rispondi direttamente alla sua domanda.]"
+                )
+                mark_question_handled(chat_id, _uq['text'])  # evita di rispondere in loop
+        except Exception:
+            pass
+
     # Scambi con Genesi (storia con le risposte date) — sempre mostrata, non in elif
     if history:
         lines.append("[RISPOSTE RECENTI DI GENESI IN QUESTO GRUPPO:]")

@@ -729,6 +729,10 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             sender_int = 0
             group_int  = 0
 
+        # Reattività GLOBALE: segna l'arrivo (per scartare risposte stantie)
+        from core.group_reactivity import mark_arrival, is_superseded
+        _wa_arrival = mark_arrival("whatsapp", group_int, sender_int)
+
         # 0pre. PRIMA volta che Genesi incontra questo gruppo → si presenta.
         # Logica unica/globale (vale per ogni piattaforma), deduplicata sul registry
         # dei gruppi noti: robusta anche se l'evento di join del bridge non scatta.
@@ -953,6 +957,12 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             platform="whatsapp_group",
         )
 
+        # Reattività GLOBALE: se mentre elaborava la STESSA persona ha già scritto un
+        # nuovo messaggio, questa risposta è stantia (ha perso il contesto) → non inviarla.
+        if not request.media_id and is_superseded("whatsapp", group_int, sender_int, _wa_arrival):
+            log("WA_GROUP_STALE_RESPONSE_SKIPPED", group=request.group_id[:20], sender=request.sender_name)
+            return GroupChatResponse(response="", status="stale")
+
         # 6b. Sicurezza: i gruppi gestiscono solo testo. Se arriva un payload JSON
         # di generazione/modifica immagine, estrai il testo e non riversare il JSON grezzo.
         if response and response.lstrip().startswith("{") and '"images"' in response:
@@ -1059,6 +1069,8 @@ Rispondi SOLO con JSON: {"intervieni": true, "motivo": "ragione breve"} oppure {
 class ShouldRespondRequest(BaseModel):
     text: str
     recent_messages: Optional[list] = None  # [{name, text}]
+    group_id: Optional[str] = None
+    sender_name: Optional[str] = ""
 
 class ShouldRespondResponse(BaseModel):
     intervieni: bool
@@ -1187,6 +1199,19 @@ async def group_should_respond(request: ShouldRespondRequest, user: AuthUser = D
     try:
         from core.llm_service import llm_service
         import json as _json
+
+        # DOMANDA INEVASA: se nei commenti accumulati c'è una domanda di un altro
+        # utente rimasta senza risposta, Genesi interviene per risponderle (globale).
+        if request.recent_messages and request.group_id:
+            try:
+                from core.group_reactivity import find_unanswered_question
+                from core.telegram_group_memory import stable_hash as _sh
+                _gid = _sh(request.group_id.split("@")[0].replace("-", ""))
+                if find_unanswered_question(request.recent_messages,
+                                            current_sender=request.sender_name or "", group_id=_gid):
+                    return ShouldRespondResponse(intervieni=True, motivo="domanda inevasa")
+            except Exception:
+                pass
 
         recent = ""
         if request.recent_messages:
