@@ -6,6 +6,7 @@ Restituisce JSON: {"text": "trascrizione"}
 """
 
 from fastapi import APIRouter, UploadFile, File, Depends
+import asyncio
 import logging
 import tempfile
 import os
