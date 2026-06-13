@@ -904,6 +904,18 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             platform="whatsapp_group",
         )
 
+        # 6b. Sicurezza: i gruppi gestiscono solo testo. Se arriva un payload JSON
+        # di generazione/modifica immagine, estrai il testo e non riversare il JSON grezzo.
+        if response and response.lstrip().startswith("{") and '"images"' in response:
+            try:
+                import json as _json
+                _pd = _json.loads(response)
+                response = (_pd.get("text") or "").strip() or \
+                    "Ho preparato un'immagine, ma qui nel gruppo riesco a rispondere solo a parole 😊"
+            except Exception:
+                response = "Ho preparato qualcosa, ma qui nel gruppo riesco a rispondere solo a parole 😊"
+            log("GROUP_CHAT_IMAGE_JSON_STRIPPED", group=request.group_id[:20])
+
         # 7. Post-risposta in background
         _aio.create_task(append_group_history(group_int, sender_int, request.sender_name, request.text, response))
         _aio.create_task(record_group_observation(group_int, sender_int, request.sender_name, request.text, response))

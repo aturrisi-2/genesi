@@ -240,8 +240,13 @@ async function startBaileys() {
             const myJid = sock.user?.id?.replace(/:.*@/, "@") || "";
             const myLid = sock.user?.lid?.replace(/:.*@/, "@") || "";
             const BOT_IDS = ["393313650671@s.whatsapp.net", "69123891531797@lid"];
-            const involved = (update.participants || []).map(p => String(p).replace(/:.*@/, "@"));
-            const meInvolved = involved.some(p => p === myJid || (myLid && p === myLid) || BOT_IDS.includes(p));
+            // Baileys 7.x: update.participants può contenere stringhe JID OPPURE
+            // oggetti {id, jid, lid}. Estrai sempre l'identificativo corretto.
+            const involved = (update.participants || []).map(p => {
+                const raw = (typeof p === "string") ? p : (p?.id || p?.jid || p?.lid || "");
+                return String(raw).replace(/:.*@/, "@");
+            });
+            const meInvolved = involved.some(p => p && (p === myJid || (myLid && p === myLid) || BOT_IDS.includes(p)));
 
             // Genesi RIMOSSA da un gruppo → lo dimentica (così una futura riaggiunta ripresenta)
             if ((update.action === "remove") && meInvolved) {

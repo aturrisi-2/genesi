@@ -691,8 +691,14 @@ class IntentClassifier:
             return ["greeting"]
 
         # PRIORITÀ ASSOLUTA: image generation deterministico (evita false chat_free dal classificatore LLM)
+        # MA: se è allegata una FOTO reale (marker "[Contenuto image:" / "[Contenuto immagine:"),
+        # non è generazione testo→immagine — va analizzata/commentata. Evita che la descrizione
+        # auto-generata della foto faccia scattare per errore l'editing/generazione.
+        _has_attached_image = ("[contenuto image:" in message_lower
+                               or "[contenuto immagine:" in message_lower
+                               or "[contenuto photo:" in message_lower)
         image_keywords = self.gpt_patterns.get("image_generation", [])
-        if any(keyword in message_lower for keyword in image_keywords):
+        if not _has_attached_image and any(keyword in message_lower for keyword in image_keywords):
             log("INTENT_CLASSIFIED", intent="image_generation", user_id=user_id, engine="regex_priority", message=message[:50])
             return ["image_generation"]
 
