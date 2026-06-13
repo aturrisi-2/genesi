@@ -15,6 +15,31 @@ def _trunc(s: str, max_len: int = 80) -> str:
     return s[:max_len] + "..." if len(s) > max_len else s
 
 
+# Chiavi sensibili da mascherare SEMPRE nei log (sicurezza: niente segreti in chiaro)
+_SECRET_HINTS = ("token", "secret", "password", "passwd", "refresh", "api_key", "apikey",
+                 "access_token", "client_secret", "authorization", "credential", "private_key")
+
+
+def _redact(obj, _depth: int = 0):
+    """Maschera ricorsivamente i valori delle chiavi sensibili in dict/list."""
+    if _depth > 6:
+        return obj
+    try:
+        if isinstance(obj, dict):
+            out = {}
+            for k, v in obj.items():
+                if isinstance(k, str) and any(h in k.lower() for h in _SECRET_HINTS):
+                    out[k] = "<redacted>"
+                else:
+                    out[k] = _redact(v, _depth + 1)
+            return out
+        if isinstance(obj, (list, tuple)):
+            return type(obj)(_redact(x, _depth + 1) for x in obj)
+    except Exception:
+        return obj
+    return obj
+
+
 import os
 
 LOG_FILE = "genesi.log"
@@ -40,6 +65,11 @@ def _rotate_if_needed():
 def log(tag: str, **kwargs):
     parts = [f"[{_ts()}] {tag}"]
     for k, v in kwargs.items():
+        # Sicurezza: maschera segreti (chiavi tipo token/secret, anche annidate in dict/list)
+        if isinstance(k, str) and any(h in k.lower() for h in _SECRET_HINTS):
+            v = "<redacted>"
+        elif isinstance(v, (dict, list, tuple)):
+            v = _redact(v)
         if isinstance(v, str) and " " in v:
             parts.append(f'{k}="{_trunc(v)}"')
         elif isinstance(v, str):

@@ -683,6 +683,64 @@ async def _register(email: str, password: str) -> bool:
         return res.status_code in (200, 201)
 
 
+# Numeri del PROPRIETARIO (es. Alfio): da quei numeri il DM usa l'account principale.
+# Tutti gli altri numeri ricevono un account GUEST isolato per-persona (niente piu'
+# contaminazione del profilo di Alfio con i DM altrui). Configurabile via env.
+_WA_OWNER_NUMBERS = set(n.strip() for n in os.environ.get("WA_OWNER_NUMBERS", "393920681099").split(",") if n.strip())
+_OWNER_EMAIL = "alfio.turrisi@gmail.com"
+_OWNER_PASS = "ZOEennio0810"
+
+
+async def _guest_credentials(wa_id: str) -> tuple:
+    """Account guest isolato per numero. Email @genesi.group → auto-verificato. (token, email, pw)."""
+    from core.telegram_group_memory import stable_hash
+    clean = str(wa_id).split("@")[0].replace("+", "")
+    email = f"waguest_{clean}@genesi.group"
+    pw = f"G_{abs(stable_hash(clean))}_2026"
+    tok = await _login(email, pw)
+    if not tok:
+        try:
+            async with httpx.AsyncClient(timeout=15) as c:
+                await c.post(f"{GENESI_URL}/auth/register", json={"email": email, "password": pw})
+        except Exception:
+            pass
+        tok = await _login(email, pw)
+    return tok, email, pw
+
+
+async def _ensure_account_token(wa_id: str, session: dict) -> str | None:
+    """
+    Token ISOLATO per persona. Owner (numeri proprietario) → account principale;
+    tutti gli altri → account guest dedicato al loro numero. Fallback all'account
+    principale solo se il guest fallisce (worst case = comportamento odierno).
+    """
+    if session.get("token"):
+        return session["token"]
+    clean = str(wa_id).split("@")[0].replace("+", "")
+    # Proprietario → account principale (assistente personale con i suoi dati)
+    if clean in _WA_OWNER_NUMBERS:
+        tok = await _login(_OWNER_EMAIL, _OWNER_PASS)
+        if tok:
+            session.update({"token": tok, "email": _OWNER_EMAIL, "password": _OWNER_PASS,
+                            "state": STATE_IDLE, "welcomed": True})
+            await storage.save(_session_key(wa_id), session)
+            return tok
+    # Altri → guest isolato per numero
+    tok, em, pw = await _guest_credentials(wa_id)
+    if tok:
+        session.update({"token": tok, "email": em, "password": pw,
+                        "state": STATE_IDLE, "welcomed": True})
+        await storage.save(_session_key(wa_id), session)
+        logger.info("WA_GUEST_ACCOUNT wa_id=%s", clean)
+        return tok
+    # Fallback estremo (non lasciare l'utente senza risposta)
+    tok = await _login(_OWNER_EMAIL, _OWNER_PASS)
+    if tok:
+        session.update({"token": tok, "email": _OWNER_EMAIL, "password": _OWNER_PASS, "state": STATE_IDLE})
+        await storage.save(_session_key(wa_id), session)
+    return tok
+
+
 # ── Genesi API calls ─────────────────────────────────────────────────────────
 
 async def _chat(token: str, message: str, city: str = "", platform: str = "whatsapp") -> str:
@@ -898,19 +956,8 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
 
         # ── Comandi (testo che inizia con /) ──────────────────────────────────
         if text in ("/start", "ciao", "start"):
-            token = session.get("token")
-            if not token:
-                # Esegui autologin silenzioso con l'account principale di Alfio
-                token = await _login("alfio.turrisi@gmail.com", "ZOEennio0810")
-                if token:
-                    session.update({
-                        "token": token,
-                        "email": "alfio.turrisi@gmail.com",
-                        "password": "ZOEennio0810",
-                        "state": STATE_IDLE,
-                        "welcomed": True
-                    })
-                    await storage.save(_session_key(wa_id), session)
+            # Account ISOLATO per persona (owner→principale, altri→guest dedicato)
+            token = await _ensure_account_token(wa_id, session)
 
             if session.get("token"):
                 name_part = f" {first_name}" if first_name else ""
@@ -1010,27 +1057,17 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             return
 
         # ── Verifica login ────────────────────────────────────────────────────
-        token = session.get("token")
+        # Account ISOLATO per persona: ogni numero ha il SUO profilo/memoria
+        # (niente più contaminazione del profilo di Alfio con i DM altrui).
+        token = await _ensure_account_token(wa_id, session)
         if not token:
-            # Esegui autologin silenzioso con l'account principale di Alfio
-            token = await _login("alfio.turrisi@gmail.com", "ZOEennio0810")
-            if token:
-                session.update({
-                    "token": token,
-                    "email": "alfio.turrisi@gmail.com",
-                    "password": "ZOEennio0810",
-                    "state": STATE_IDLE,
-                    "welcomed": True
-                })
-                await storage.save(_session_key(wa_id), session)
-            else:
-                await send_message(wa_id,
-                    "Per chattare con me hai bisogno di un account.\n\n"
-                    f"• Già registrato? Scrivi: *accedi*\n"
-                    f"  oppure: {_WEBAPP_LINK}login?from=whatsapp&wa_id={wa_id}\n\n"
-                    f"• Nuovo? Scrivi: *registrati*\n"
-                    f"  oppure: {_WEBAPP_LINK}register?from=whatsapp&wa_id={wa_id}")
-                return
+            await send_message(wa_id,
+                "Per chattare con me hai bisogno di un account.\n\n"
+                f"• Già registrato? Scrivi: *accedi*\n"
+                f"  oppure: {_WEBAPP_LINK}login?from=whatsapp&wa_id={wa_id}\n\n"
+                f"• Nuovo? Scrivi: *registrati*\n"
+                f"  oppure: {_WEBAPP_LINK}register?from=whatsapp&wa_id={wa_id}")
+            return
 
 
         city = session.get("city", "")

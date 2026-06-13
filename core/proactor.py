@@ -3752,9 +3752,13 @@ Messaggio: "{message}" """
         # 3. GPT call with conversation-aware prompt
         logger.info("PROACTOR_LLM_CALL user=%s route=relational messages_count=%d", user_id, len(messages))
         
-        # NEW: Fetch calendar summary for prompt (non-blocking, fail-open)
+        # NEW: Fetch calendar summary for prompt (non-blocking, fail-open).
+        # Nei GRUPPI si salta: i reminder sono dell'account-gruppo, non del membro che
+        # scrive → irrilevanti e costano fino a 1.2s di latenza per ogni messaggio.
         calendar_info = ""
+        _skip_personal_cal = self._current_platform in ("telegram_group", "whatsapp_group")
         try:
+          if not _skip_personal_cal:
             from calendar_manager import calendar_manager
             rems = await asyncio.wait_for(
                 asyncio.to_thread(calendar_manager.list_reminders, user_id, 3, False),

@@ -489,15 +489,32 @@ def build_conversation_context(user_id: str, current_message: str,
         sections.append(doc_section)
 
     # --- E2) System manuals context (autonomo) ---
-    try:
-        from core.manual_service import manual_service
-        manual_snippet = manual_service.search(current_message, limit_chars=3000)
-        if manual_snippet:
-            sections.append(f"[MANUALI_SISTEMA_CONTESTO]\n{manual_snippet}\n[/MANUALI_SISTEMA_CONTESTO]\n"
-                            f"ISTRUZIONE: Se rilevante, rispondi alla domanda dell'utente attingendo autonomamente dalle informazioni dei manuali sopra.")
-            logger.info("MANUAL_CONTEXT_INJECTED len=%d", len(manual_snippet))
-    except Exception as me:
-        logger.warning("MANUAL_CONTEXT_ERROR err=%s", me)
+    # Gate: consulta i manuali (ricerca vettoriale = chiamata embedding) SOLO quando il
+    # messaggio è una vera richiesta di conoscenza/aiuto, non per le chiacchiere di gruppo.
+    # Evita ~500ms di latenza per ogni "si", "perché", "anche noi" → niente risposte stantie.
+    def _looks_like_knowledge_query(msg: str) -> bool:
+        m = (msg or "").split("[")[0].strip()  # togli le annotazioni [GRUPPO...]/[Contenuto...]
+        if len(m) < 18:
+            return False
+        ml = m.lower()
+        if "?" in m:
+            return True
+        kw = ("come si", "cosa", "perché", "perche", "quando", "quanto", "sintomi", "cura",
+              "rimedio", "rimedi", "malattia", "dolore", "febbre", "medicin", "farmac",
+              "primo soccorso", "soccorso", "veterinar", "cane", "gatto", "animale",
+              "spiega", "spiegami", "consiglio", "consigli", "aiuto", "significa", "differenza")
+        return any(k in ml for k in kw)
+
+    if _looks_like_knowledge_query(current_message):
+        try:
+            from core.manual_service import manual_service
+            manual_snippet = manual_service.search(current_message, limit_chars=3000)
+            if manual_snippet:
+                sections.append(f"[MANUALI_SISTEMA_CONTESTO]\n{manual_snippet}\n[/MANUALI_SISTEMA_CONTESTO]\n"
+                                f"ISTRUZIONE: Se rilevante, rispondi alla domanda dell'utente attingendo autonomamente dalle informazioni dei manuali sopra.")
+                logger.info("MANUAL_CONTEXT_INJECTED len=%d", len(manual_snippet))
+        except Exception as me:
+            logger.warning("MANUAL_CONTEXT_ERROR err=%s", me)
 
     return "\n\n".join(sections)
 
