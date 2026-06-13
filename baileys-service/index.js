@@ -737,6 +737,7 @@ async function sendOneBirthdayDM() {
     const candidates = (meta.participants || [])
         .map(p => ({
             phone: _phone(p.phoneNumber || ""),
+            lid: _phone(p.id || ""),
             name: contactCache[_phone(p.id)] || p.name || "",
         }))
         .filter(x => x.phone.endsWith("@s.whatsapp.net")
@@ -757,6 +758,9 @@ async function sendOneBirthdayDM() {
         await sock.sendMessage(target.phone, { text: dm });
         c.contacted[target.phone] = Date.now();
         c.pending[target.phone] = { name: target.name, asks: 1, ts: Date.now() };
+        // Mappa LID→numero: le risposte 1:1 arrivano con remoteJid in formato @lid
+        c.lidmap = c.lidmap || {};
+        if (target.lid && target.lid.endsWith("@lid")) c.lidmap[target.lid] = target.phone;
         _bdaySave(c);
         console.log(`[Bday] DM inviato a ${target.name || target.phone} (rimasti ${candidates.length - 1})`);
     } catch (e) {
@@ -767,8 +771,23 @@ async function sendOneBirthdayDM() {
 }
 
 async function handleBirthdayReply(msg, senderJid, name) {
-    const phone = _phone(senderJid);
+    const raw = _phone(senderJid);
     const c = _bdayLoad();
+    // Le risposte 1:1 arrivano con JID @lid: risolvi al numero tramite la mappa
+    let phone = raw;
+    if (!c.pending[phone] && c.lidmap && c.lidmap[raw]) phone = c.lidmap[raw];
+    // Fallback: se è un @lid sconosciuto, risolvi il numero dai metadati del gruppo
+    if (!c.pending[phone] && raw.endsWith("@lid") && _activeSock && BIRTHDAY_CAMPAIGN_GROUP) {
+        try {
+            const meta = await _activeSock.groupMetadata(BIRTHDAY_CAMPAIGN_GROUP);
+            const part = (meta.participants || []).find(p => _phone(p.id) === raw);
+            const ph = part && _phone(part.phoneNumber || "");
+            if (ph && c.pending[ph]) {
+                c.lidmap = c.lidmap || {}; c.lidmap[raw] = ph; _bdaySave(c);
+                phone = ph;
+            }
+        } catch (_) {}
+    }
     if (!c.pending[phone]) return false;  // non è una risposta attesa
 
     const mType = Object.keys(msg.message || {})[0];
