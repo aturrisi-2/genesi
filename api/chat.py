@@ -690,6 +690,7 @@ class GroupChatRequest(BaseModel):
     media_id: Optional[str] = None
     media_type: Optional[str] = None
     media_mime: Optional[str] = None
+    recent_messages: Optional[list] = None  # thread recente [{name, text}] per seguire il contesto
 
 class GroupChatResponse(BaseModel):
     response: str
@@ -714,6 +715,7 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             append_group_history, record_group_observation,
             consolidate_group_insights_if_needed,
             summarize_group_discussion_if_needed,
+            get_raw_messages,
             stable_hash,
         )
 
@@ -868,6 +870,29 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
         except Exception as _e:
             log("GROUP_CHAT_LINK_EXPLORE_FAIL", error=str(_e))
 
+        # 3e. Fonde il thread recente del bridge nel buffer del gruppo PRIMA di costruire
+        # il contesto: include anche i messaggi a cui Genesi non ha risposto (should_respond=NO),
+        # così segue il filo del discorso e non risponde fuori contesto.
+        if request.recent_messages:
+            try:
+                existing = await get_raw_messages(group_int, limit=30)
+                existing_texts = {(m.get("text") or "").strip() for m in existing}
+                merged_any = False
+                for rm in request.recent_messages[-12:]:
+                    rname = (rm.get("name") or "?").strip() if isinstance(rm, dict) else "?"
+                    rtext = (rm.get("text") or "").strip() if isinstance(rm, dict) else ""
+                    if not rtext or rtext == request.text.strip():
+                        continue
+                    if rtext in existing_texts or rname.lower() == "genesi":
+                        continue
+                    await append_raw_message(group_int, stable_hash(rname), rname, rtext)
+                    existing_texts.add(rtext)
+                    merged_any = True
+                if merged_any:
+                    log("WA_GROUP_THREAD_MERGED", group=request.group_id[:20])
+            except Exception as _te:
+                log("WA_GROUP_THREAD_MERGE_FAIL", error=str(_te))
+
         # 4. Costruisci contesto gruppo (sincrono — serve per la risposta)
         group_ctx = await build_group_context(
             group_int,
@@ -878,10 +903,21 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
         )
 
         # 5. Costruisci messaggio arricchito (stesso formato di telegram_bot.py)
+        # Ancora d'identità: evita che Genesi parli di sé in terza persona o si confonda
+        # con un'altra persona, e la tiene aderente al filo del discorso.
+        _identity_anchor = (
+            "[IDENTITÀ — FONDAMENTALE: TU sei Genesi. In questo gruppo \"Genesi\" sei TU. "
+            "Se qualcuno scrive \"Genesi\", ti nomina, ti fa una domanda o ti critica "
+            "(es. \"Genesi non ha capito\"), si rivolge a TE personalmente: rispondi SEMPRE "
+            "in prima persona (\"io\"), non parlare MAI di Genesi in terza persona. "
+            "Segui il filo della conversazione: rispondi davvero a ciò che è stato appena "
+            "detto e chiesto, senza cambiare argomento né dare saluti generici fuori contesto.]"
+        )
         only_emoji = all(ord(c) > 127 or c in (' ', '\n') for c in request.text.strip())
         if only_emoji:
             enriched = (
                 f"{processed_text}\n\n"
+                f"{_identity_anchor}\n"
                 f"[GRUPPO FAMILIARE: scrive {request.sender_name}. "
                 f"Reazione/emoji — risposta brevissima, calore familiare, zero domande.]\n"
                 f"{group_ctx}"
@@ -889,6 +925,7 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
         else:
             enriched = (
                 f"{processed_text}\n\n"
+                f"{_identity_anchor}\n"
                 f"[GRUPPO FAMILIARE: scrive {request.sender_name}. "
                 f"Sei un membro della famiglia — rispondi con calore e concretezza, "
                 f"senza domande superflue. Usa il nome {request.sender_name}.]\n"
@@ -987,10 +1024,13 @@ Deve rimanere SILENZIOSA la maggior parte del tempo per evitare di essere invade
 
 Leggi i messaggi recenti del gruppo e il messaggio attuale. Decidi se Genesi deve rispondere.
 
-RISPONDI "SI" SOLO nei seguenti casi:
+Nei messaggi recenti, le righe "Genesi: ..." sono cose che hai detto TU (sei tu Genesi).
+
+RISPONDI "SI" nei seguenti casi:
 1. INVOCATA DIRETTAMENTE: Qualcuno si rivolge esplicitamente a Genesi, la nomina (es. "Genesi..."), la tagga o le fa una domanda diretta.
 2. DOMANDA GENERICA DI UTILITÀ: Qualcuno fa una domanda oggettiva o informativa rivolta al gruppo (es. "a che ora chiude il supermercato?", "che tempo fa domani?"), a cui un'AI può rispondere con dati certi e utili per tutti.
-3. RISPOSTA DI CONTINUAZIONE: L'utente sta rispondendo direttamente a una domanda o affermazione fatta da Genesi nel turno immediatamente precedente.
+3. CONVERSAZIONE ATTIVA CON TE: Se hai parlato di recente con questa persona (vedi righe "Genesi:" nei messaggi recenti) e il messaggio attuale prosegue quello scambio — una risposta, un follow-up, una domanda, una reazione a ciò che hai detto, o anche una critica del tipo "non hai capito" — rispondi "SI" anche se non vieni nominata esplicitamente. Una volta coinvolta, resta nella conversazione finché non è chiaro che si sono rivolti ad altri.
+4. DOMANDA/RICHIESTA DI CONSIGLIO rivolta a te in un dialogo già aperto (es. "che taglio mi consigli?" subito dopo che ti hanno coinvolta): rispondi "SI".
 
 RISPONDI "NO" in tutti gli altri casi. In particolare, rispondi "NO" per:
 - Chiacchiere, aggiornamenti personali, stati d'animo o aggiornamenti di routine tra i membri del gruppo (es. "sto tornando dalle analisi", "prendo il brufen").

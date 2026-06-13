@@ -42,6 +42,9 @@ const MAX_RAW = 25;
 // { groupId: { text, ts } }
 const lastGenesiReply = {};
 const GENESI_REPLY_TTL = 10 * 60 * 1000; // 10 minuti
+// Finestra di "conversazione attiva": se Genesi ha appena risposto a una persona,
+// continua a seguirla anche senza essere nominata di nuovo, per questo intervallo.
+const ENGAGED_WINDOW = 150 * 1000; // 2,5 minuti
 
 // ── Cache per i nomi dei contatti visti ───────────────────────────────────────
 // { jid/lid: name }
@@ -116,7 +119,7 @@ async function getToken(type = "group") {
 }
 
 // ── Chiamata a Genesi — gruppo ────────────────────────────────────────────────
-async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "WhatsApp Group", participants = null, token = null, mediaId = null, mediaType = null, mediaMime = null) {
+async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "WhatsApp Group", participants = null, token = null, mediaId = null, mediaType = null, mediaMime = null, recentMessages = null) {
     try {
         if (!token) token = await getToken("group");
         const res = await axios.post(`${GENESI_URL}/api/chat/group`, {
@@ -129,6 +132,7 @@ async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "
             media_id:    mediaId,
             media_type:  mediaType,
             media_mime:  mediaMime,
+            recent_messages: recentMessages,
         }, {
             headers: { Authorization: `Bearer ${token}` },
             timeout: 35000,
@@ -558,6 +562,12 @@ async function startBaileys() {
                 let quotedText = "";
                 const hasLink = /https?:\/\/[^\s]+|www\.[^\s]+/i.test(text);
 
+                // Continuità: se Genesi ha appena risposto a QUESTA persona, è una
+                // conversazione attiva → continua a seguirla anche senza essere nominata.
+                const _last = lastGenesiReply[groupId];
+                const _engaged = _last && _last.to === senderName
+                    && (Date.now() - _last.ts < ENGAGED_WINDOW);
+
                 if (isReplyToGenesi) {
                     const qm = contextInfo.quotedMessage;
                     quotedText = (
@@ -570,6 +580,8 @@ async function startBaileys() {
                     console.log(`[Baileys] Messaggio contiene media (${mediaType}) in ${groupName} → bypasso filtro e intervengo`);
                 } else if (hasLink) {
                     console.log(`[Baileys] Messaggio contiene link in ${groupName} → bypasso filtro e intervengo`);
+                } else if (_engaged) {
+                    console.log(`[Baileys] Conversazione attiva con ${senderName} in ${groupName} → continuo a seguire`);
                 } else {
                     const recentMsgs = getRecentMessages(groupId);
                     if (!await shouldRespond(text, recentMsgs, token)) continue;
@@ -583,12 +595,12 @@ async function startBaileys() {
                 console.log(`[Baileys] Intervengo in ${groupName} per: "${textToSend.slice(0, 50)}"`);
 
                 await sock.sendPresenceUpdate("composing", groupId);
-                const reply = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, participants, token, mediaId, mediaType, mediaMime);
+                const reply = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, participants, token, mediaId, mediaType, mediaMime, getRecentMessages(groupId));
                 await sock.sendPresenceUpdate("paused", groupId);
 
                 if (reply) {
                     await sock.sendMessage(groupId, { text: reply });
-                    lastGenesiReply[groupId] = { text: reply, ts: Date.now() };
+                    lastGenesiReply[groupId] = { text: reply, ts: Date.now(), to: senderName };
                     console.log(`[Genesi → ${senderName} in ${groupName}] ${reply.slice(0, 80)}`);
                 }
             } catch (e) {
