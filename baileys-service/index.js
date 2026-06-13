@@ -329,6 +329,13 @@ async function startBaileys() {
                     const mType = Object.keys(msg.message || {})[0];
                     if (!mType) continue;
 
+                    // 1a. Intercetta le risposte alla campagna di raccolta compleanni
+                    const _bdayText = (msg.message?.conversation
+                        || msg.message?.extendedTextMessage?.text || "").trim();
+                    if (_bdayText && await handleBirthdayReply(remoteJid, msg.pushName || "", _bdayText)) {
+                        continue;  // gestito dalla campagna, non inoltrare al flusso normale
+                    }
+
                     let text = "";
                     let caption = "";
                     let filename = "";
@@ -699,9 +706,117 @@ setInterval(async () => {
     }
 }, 60000);
 
+// ── Campagna raccolta compleanni (DM diluiti, anti-ban) ──────────────────────
+// Manda un messaggio privato a ogni membro del gruppo bersaglio chiedendo la data
+// di nascita, con ampie pause casuali tra un invio e l'altro. Le risposte (in
+// qualsiasi formato) vengono interpretate e salvate dall'app. Stato persistente:
+// la campagna riprende dopo i riavvii e contatta ogni persona UNA sola volta.
+const BIRTHDAY_CAMPAIGN_GROUP = process.env.BIRTHDAY_CAMPAIGN_GROUP || "393298879304-1482062977@g.us";
+const BIRTHDAY_CAMPAIGN_FILE  = "/opt/genesi-baileys/birthday-campaign.json";
+const BIRTHDAY_BOT_PHONE      = "393313650671";  // numero di Genesi: non auto-contattarsi
+const _BDAY_MIN_DELAY = 10 * 60 * 1000;  // 10 min
+const _BDAY_MAX_DELAY = 20 * 60 * 1000;  // 20 min
+
+function _bdayLoad() {
+    try { return JSON.parse(fs.readFileSync(BIRTHDAY_CAMPAIGN_FILE, "utf8")); }
+    catch (_) { return { group: BIRTHDAY_CAMPAIGN_GROUP, contacted: {}, pending: {}, done: {} }; }
+}
+function _bdaySave(c) {
+    try { fs.writeFileSync(BIRTHDAY_CAMPAIGN_FILE, JSON.stringify(c)); }
+    catch (e) { console.error("[Bday] errore salvataggio stato:", e.message); }
+}
+function _phone(jid) { return String(jid || "").replace(/:.*@/, "@"); }
+
+async function sendOneBirthdayDM() {
+    if (!BIRTHDAY_CAMPAIGN_GROUP) return;
+    const sock = _activeSock;
+    if (!sock || _reconnecting) return;
+    let meta;
+    try { meta = await sock.groupMetadata(BIRTHDAY_CAMPAIGN_GROUP); }
+    catch (e) { console.error("[Bday] metadata non disponibile:", e.message); return; }
+
+    const c = _bdayLoad();
+    const candidates = (meta.participants || [])
+        .map(p => ({
+            phone: _phone(p.phoneNumber || ""),
+            name: contactCache[_phone(p.id)] || p.name || "",
+        }))
+        .filter(x => x.phone.endsWith("@s.whatsapp.net")
+            && !x.phone.startsWith(BIRTHDAY_BOT_PHONE)
+            && !c.contacted[x.phone]);
+
+    if (!candidates.length) return;  // campagna completata
+    const target = candidates[0];
+    const nm = target.name ? " " + target.name.split(" ")[0] : "";
+    const subject = meta.subject || "famiglia";
+    const dm =
+        `Ciao${nm}! Sono Genesi, l'assistente della famiglia nel gruppo "${subject}" 😊\n` +
+        `Mi piacerebbe ricordare il compleanno di tutti per fare gli auguri il giorno giusto. ` +
+        `Mi scrivi la tua data di nascita? Va benissimo in qualsiasi forma, anche solo giorno e ` +
+        `mese (es. "12 marzo" oppure "12 marzo 1985"). Se preferisci non dirmela, ignora pure ` +
+        `questo messaggio. Grazie! 🎂`;
+    try {
+        await sock.sendMessage(target.phone, { text: dm });
+        c.contacted[target.phone] = Date.now();
+        c.pending[target.phone] = { name: target.name, asks: 1, ts: Date.now() };
+        _bdaySave(c);
+        console.log(`[Bday] DM inviato a ${target.name || target.phone} (rimasti ${candidates.length - 1})`);
+    } catch (e) {
+        console.error(`[Bday] invio fallito a ${target.phone}:`, e.message);
+        c.contacted[target.phone] = Date.now();  // non ritentare all'infinito
+        _bdaySave(c);
+    }
+}
+
+async function handleBirthdayReply(senderJid, name, text) {
+    const phone = _phone(senderJid);
+    const c = _bdayLoad();
+    if (!c.pending[phone]) return false;  // non è una risposta attesa
+    try {
+        const token = await getToken("group");
+        const res = await axios.post(`${GENESI_URL}/api/chat/group/birthday-dm`,
+            { wa_id: phone, name: name || c.pending[phone].name || "", text },
+            { headers: { Authorization: `Bearer ${token}` }, timeout: 20000 });
+        const reply = res.data?.reply || "";
+        if (res.data?.found) {
+            if (reply) await _activeSock.sendMessage(senderJid, { text: reply });
+            delete c.pending[phone]; c.done[phone] = Date.now(); _bdaySave(c);
+            console.log(`[Bday] compleanno salvato per ${name || phone}: ${res.data.date}`);
+            return true;
+        }
+        // Data non capita: insisti gentilmente al massimo 2 volte, poi lascia perdere
+        c.pending[phone].asks = (c.pending[phone].asks || 1) + 1;
+        if (c.pending[phone].asks > 2) {
+            delete c.pending[phone]; c.done[phone] = Date.now(); _bdaySave(c);
+            return false;  // basta insistere: passa al flusso normale
+        }
+        _bdaySave(c);
+        if (reply) await _activeSock.sendMessage(senderJid, { text: reply });
+        return true;
+    } catch (e) {
+        if (e.response?.status === 401) tokens.group = null;
+        console.error("[Bday] errore parse risposta:", e.message);
+        return false;
+    }
+}
+
+function scheduleBirthdayCampaign() {
+    if (!BIRTHDAY_CAMPAIGN_GROUP) return;
+    const delay = _BDAY_MIN_DELAY + Math.random() * (_BDAY_MAX_DELAY - _BDAY_MIN_DELAY);
+    setTimeout(async () => {
+        try { await sendOneBirthdayDM(); } catch (e) { console.error("[Bday] loop err:", e.message); }
+        scheduleBirthdayCampaign();
+    }, delay);
+}
+
 // ── Avvio ─────────────────────────────────────────────────────────────────────
 console.log("[Genesi Baileys] Avvio servizio WhatsApp gruppi...");
 startHttpServer();
+// Primo DM dopo ~90s (verifica rapida), poi diluito 10-20 min tra un invio e l'altro
+if (BIRTHDAY_CAMPAIGN_GROUP) {
+    setTimeout(() => { sendOneBirthdayDM().catch(e => console.error("[Bday] first err:", e.message)); }, 90000);
+    scheduleBirthdayCampaign();
+}
 startBaileys().catch(e => {
     console.error("[Baileys] Errore fatale:", e);
     process.exit(1);
