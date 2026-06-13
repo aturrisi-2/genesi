@@ -367,6 +367,16 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
 
     lines = []
 
+    # [IDENTITÀ — globale per ogni gruppo/piattaforma]
+    lines.append(
+        "[IDENTITÀ — FONDAMENTALE: TU sei Genesi. In questo gruppo \"Genesi\" sei TU. "
+        "Se qualcuno ti nomina, ti fa una domanda o ti critica (es. \"Genesi non ha capito\"), "
+        "si rivolge a TE: rispondi SEMPRE in prima persona (\"io\"), non parlare MAI di Genesi "
+        "in terza persona e non impersonare altri membri. Segui il filo della conversazione: "
+        "rispondi davvero a ciò che è stato appena detto/chiesto, senza cambiare argomento né "
+        "dare saluti generici fuori contesto.]"
+    )
+
     # [INFO GRUPPO CORRENTE]
     lines.append(f"[INFO GRUPPO: Ti trovi nel gruppo '{group_title}']")
     total_members = num_humans + (1 if has_bot else 0)

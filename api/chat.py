@@ -902,22 +902,12 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             participants=[p.dict() for p in request.participants] if request.participants else None
         )
 
-        # 5. Costruisci messaggio arricchito (stesso formato di telegram_bot.py)
-        # Ancora d'identità: evita che Genesi parli di sé in terza persona o si confonda
-        # con un'altra persona, e la tiene aderente al filo del discorso.
-        _identity_anchor = (
-            "[IDENTITÀ — FONDAMENTALE: TU sei Genesi. In questo gruppo \"Genesi\" sei TU. "
-            "Se qualcuno scrive \"Genesi\", ti nomina, ti fa una domanda o ti critica "
-            "(es. \"Genesi non ha capito\"), si rivolge a TE personalmente: rispondi SEMPRE "
-            "in prima persona (\"io\"), non parlare MAI di Genesi in terza persona. "
-            "Segui il filo della conversazione: rispondi davvero a ciò che è stato appena "
-            "detto e chiesto, senza cambiare argomento né dare saluti generici fuori contesto.]"
-        )
+        # 5. Costruisci messaggio arricchito (l'ancora d'identità è globale dentro
+        # build_group_context, valida anche per Telegram).
         only_emoji = all(ord(c) > 127 or c in (' ', '\n') for c in request.text.strip())
         if only_emoji:
             enriched = (
                 f"{processed_text}\n\n"
-                f"{_identity_anchor}\n"
                 f"[GRUPPO FAMILIARE: scrive {request.sender_name}. "
                 f"Reazione/emoji — risposta brevissima, calore familiare, zero domande.]\n"
                 f"{group_ctx}"
@@ -925,7 +915,6 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
         else:
             enriched = (
                 f"{processed_text}\n\n"
-                f"{_identity_anchor}\n"
                 f"[GRUPPO FAMILIARE: scrive {request.sender_name}. "
                 f"Sei un membro della famiglia — rispondi con calore e concretezza, "
                 f"senza domande superflue. Usa il nome {request.sender_name}.]\n"
