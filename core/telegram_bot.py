@@ -274,17 +274,23 @@ async def _group_should_intervene(
 
     last_user_id = state.get("from_id")
     
-    # Bypass LLM: se Genesi ha appena parlato (entro 5 minuti) e a rispondere è lo stesso utente,
-    # assumiamo sia un follow-up diretto e interveniamo a prescindere da punti interrogativi o lunghezza.
+    # Continuità GENUINA: se Genesi stava parlando con QUESTA persona (entro 5 min) e
+    # lei prosegue, è un follow-up diretto → interveniamo. (I trigger forti — nome, reply
+    # in thread, media — sono già stati gestiti sopra e bypassano comunque.)
     if time.time() - last_ts < 300 and last_user_id == from_id:
         logger.info("GROUP_INTERVENE_DECISION chat_id=%s from=%s intervieni=True motivo=follow_up_diretto_stesso_utente", chat_id, first_name)
         return True
 
-    # Bypass LLM: se Genesi ha appena parlato (entro 2 minuti) ed è l'unico utente che sta interagendo, 
-    # o se il messaggio contiene una domanda, assumiamo sia un follow-up diretto.
-    if time.time() - last_ts < 120 and ("?" in combined or len(combined) < 20):
-        logger.info("GROUP_INTERVENE_DECISION chat_id=%s from=%s intervieni=True motivo=follow_up_rapido", chat_id, first_name)
-        return True
+    # ANTI-FLIPPER: Genesi ha parlato da poco (< 3 min) e ora scrive un'ALTRA persona.
+    # Tipico di una discussione tra umani (un lutto condiviso, uno sfogo, un racconto):
+    # se è un'affermazione/reazione (non una domanda) NON intromettersi a raffica
+    # rispondendo a ognuno. Resta in ascolto silenzioso — il messaggio è comunque salvato
+    # nel "diario" del gruppo. I trigger forti (nome, reply in thread, media) sono già
+    # gestiti sopra e bypassano. Se c'è una domanda esplicita, lascia decidere all'LLM
+    # temperato (che distinguerà utilità reale da sfogo emotivo).
+    if time.time() - last_ts < 180 and last_user_id and last_user_id != from_id and "?" not in combined:
+        logger.info("GROUP_INTERVENE_DECISION chat_id=%s from=%s intervieni=False motivo=anti_flipper_discussione_tra_umani", chat_id, first_name)
+        return False
 
     # LLM decision
     try:
