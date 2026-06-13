@@ -329,10 +329,8 @@ async function startBaileys() {
                     const mType = Object.keys(msg.message || {})[0];
                     if (!mType) continue;
 
-                    // 1a. Intercetta le risposte alla campagna di raccolta compleanni
-                    const _bdayText = (msg.message?.conversation
-                        || msg.message?.extendedTextMessage?.text || "").trim();
-                    if (_bdayText && await handleBirthdayReply(remoteJid, msg.pushName || "", _bdayText)) {
+                    // 1a. Intercetta le risposte alla campagna compleanni (testo, vocale o foto)
+                    if (await handleBirthdayReply(msg, remoteJid, msg.pushName || "")) {
                         continue;  // gestito dalla campagna, non inoltrare al flusso normale
                     }
 
@@ -768,15 +766,41 @@ async function sendOneBirthdayDM() {
     }
 }
 
-async function handleBirthdayReply(senderJid, name, text) {
+async function handleBirthdayReply(msg, senderJid, name) {
     const phone = _phone(senderJid);
     const c = _bdayLoad();
     if (!c.pending[phone]) return false;  // non è una risposta attesa
+
+    const mType = Object.keys(msg.message || {})[0];
+    let text = (msg.message?.conversation || msg.message?.extendedTextMessage?.text || "").trim();
+    let mediaId = null, mediaType = null, mediaMime = null;
+    // Se rispondono con un VOCALE o una FOTO, scarica il media e fallo
+    // trascrivere/OCR dall'app per estrarne la data.
+    if (!text && (mType === "audioMessage" || mType === "imageMessage")) {
+        try {
+            const buffer = await downloadMediaMessage(msg, "buffer", {}, { logger });
+            mediaId = msg.key.id;
+            const cacheDir = "/opt/genesi-baileys/media-cache";
+            if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+            mediaType = (mType === "audioMessage") ? "audio" : "image";
+            mediaMime = (mType === "audioMessage")
+                ? (msg.message.audioMessage.mimetype || "audio/ogg")
+                : (msg.message.imageMessage.mimetype || "image/jpeg");
+            fs.writeFileSync(path.join(cacheDir, mediaId), buffer);
+            fs.writeFileSync(path.join(cacheDir, mediaId) + ".mime", mediaMime);
+        } catch (e) {
+            console.error("[Bday] download media risposta fallito:", e.message);
+            return false;
+        }
+    }
+    if (!text && !mediaId) return false;  // niente da interpretare
+
     try {
         const token = await getToken("group");
         const res = await axios.post(`${GENESI_URL}/api/chat/group/birthday-dm`,
-            { wa_id: phone, name: name || c.pending[phone].name || "", text },
-            { headers: { Authorization: `Bearer ${token}` }, timeout: 20000 });
+            { wa_id: phone, name: name || c.pending[phone].name || "", text,
+              media_id: mediaId, media_type: mediaType, media_mime: mediaMime },
+            { headers: { Authorization: `Bearer ${token}` }, timeout: 35000 });
         const reply = res.data?.reply || "";
         if (res.data?.found) {
             if (reply) await _activeSock.sendMessage(senderJid, { text: reply });
