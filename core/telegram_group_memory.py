@@ -73,6 +73,7 @@ import logging
 import time
 from datetime import datetime
 from typing import Optional
+from core.log import log
 
 logger = logging.getLogger(__name__)
 
@@ -201,16 +202,104 @@ async def get_member(from_id: int) -> dict:
     return await s.load(_member_key(from_id), default={}) or {}
 
 
+def _sanitize_member_name(name: str) -> str:
+    """Pulisce un pushName strano: rimuove emoji/simboli, accorcia. NON inventa."""
+    if not name:
+        return ""
+    n = re.sub(r"[^\w\sàèéìòóùÀÈÉÌÒÓÙ'’\-]", "", str(name), flags=re.UNICODE)
+    n = re.sub(r"\s+", " ", n).strip()
+    return n[:40]
+
+
+def member_display_name(member: dict, fallback: str = "") -> str:
+    """Nome con cui Genesi deve chiamare il membro: il preferito (corretto) vince."""
+    return (member.get("preferred_name") or member.get("first_name")
+            or member.get("display_name") or fallback or "").strip()
+
+
+async def set_preferred_name(from_id: int, name: str):
+    """Imposta il nome PREFERITO del membro (da una correzione): vince e non viene sovrascritto."""
+    name = _sanitize_member_name(name)
+    if not name:
+        return
+    s = await _storage()
+    member = await get_member(from_id)
+    member["from_id"]        = from_id
+    member["preferred_name"] = name
+    member["first_name"]     = name
+    member.setdefault("joined_at", int(time.time()))
+    await s.save(_member_key(from_id), member)
+    log("GROUP_MEMBER_NAME_CORRECTED", from_id=from_id, name=name)
+
+
 async def update_member_seen(from_id: int, first_name: str):
     s = await _storage()
     member = await get_member(from_id)
     member["from_id"]       = from_id
-    member["first_name"]    = first_name
+    # Non sovrascrivere mai un nome corretto dall'utente; altrimenti usa il pushName pulito
+    if not member.get("preferred_name"):
+        _clean = _sanitize_member_name(first_name)
+        if _clean:
+            member["first_name"] = _clean
     member["last_seen"]     = int(time.time())
     member["message_count"] = member.get("message_count", 0) + 1
     if "joined_at" not in member:
         member["joined_at"] = int(time.time())
     await s.save(_member_key(from_id), member)
+
+
+async def detect_and_apply_name_correction(from_id: int, sender_name: str, text: str,
+                                           participants: list[dict] | None = None):
+    """
+    Rileva una correzione di nome ("chiamami Pina", "mi chiamo X", "non sono Y sono X",
+    "lei si chiama Z") riferita a sé o a un altro membro, e aggiorna il nome. Fail-silent.
+    """
+    if not text or len(text.strip()) < 5:
+        return
+    tl = text.lower()
+    if not any(k in tl for k in ("chiam", "mi chiamo", "il mio nome", "non sono",
+                                 "si chiama", "nome è", "nome e ", "sarei", "sono io")):
+        return
+    try:
+        from core.llm_service import llm_service
+        import json as _json
+        plist = ", ".join(p.get("name", "") for p in (participants or []) if p.get("name"))
+        raw = await llm_service._call_model(
+            "openai/gpt-4o-mini",
+            ("In un gruppo, l'utente potrebbe indicare come va chiamato LUI STESSO o un'ALTRA "
+             "persona. Estrai SOLO correzioni esplicite di nome (es. \"chiamami Pina\", "
+             "\"mi chiamo Anna\", \"non sono X, sono Y\", \"lei si chiama Maria\"). "
+             "NON dedurre nomi da saluti o menzioni casuali. Rispondi SOLO JSON: "
+             "{\"corrections\":[{\"who\":\"self\"|\"<nome attuale della persona indicata>\",\"name\":\"<nome corretto>\"}]}. "
+             "Se non c'è correzione, {\"corrections\":[]}."),
+            f"Chi scrive si chiama ora: {sender_name}\nPartecipanti: {plist}\nMessaggio: {text.strip()[:300]}",
+            user_id="name-correction", route="memory",
+        )
+        if not raw:
+            return
+        mt = re.search(r"\{.*\}", raw, re.S)
+        if not mt:
+            return
+        corr = _json.loads(mt.group(0)).get("corrections", [])
+        for c in corr:
+            who = (c.get("who") or "").strip()
+            new = (c.get("name") or "").strip()
+            if not new:
+                continue
+            if who.lower() in ("self", "io", sender_name.lower(), ""):
+                await set_preferred_name(from_id, new)
+            else:
+                # Correzione su un altro membro: abbinalo per nome attuale tra i partecipanti
+                for p in (participants or []):
+                    if (p.get("name") or "").lower() == who.lower() and not p.get("is_me"):
+                        pid = str(p.get("id", "")).split("@")[0].replace("+", "")
+                        try:
+                            await set_preferred_name(stable_hash(pid), new)
+                        except Exception:
+                            pass
+                        break
+    except Exception as e:
+        log("GROUP_NAME_CORRECTION_ERROR", error=str(e))
 
 
 async def save_member_city(from_id: int, city: str):
@@ -334,7 +423,7 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
             except Exception:
                 p_member = {}
                 
-            p_name = p_member.get("first_name") or p_member.get("display_name") or p.get("name")
+            p_name = member_display_name(p_member, fallback=_sanitize_member_name(p.get("name") or ""))
             if not p_name:
                 p_name = f"+{clean_jid}"
                 

@@ -804,16 +804,20 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                 p_clean = p.id.split("@")[0].replace("+", "")
                 try:
                     p_int = stable_hash(p_clean)
-                    from core.telegram_group_memory import get_member
+                    from core.telegram_group_memory import get_member, _sanitize_member_name
                     p_member = await get_member(p_int)
-                    if p_member.get("first_name") != p.name:
+                    # Non sovrascrivere un nome corretto dall'utente; pulisci i pushName strani
+                    if p_member.get("preferred_name"):
+                        continue
+                    _pname = _sanitize_member_name(p.name)
+                    if _pname and p_member.get("first_name") != _pname:
                         import time
                         s = storage
                         p_member["from_id"] = p_int
-                        p_member["first_name"] = p.name
+                        p_member["first_name"] = _pname
                         p_member.setdefault("joined_at", int(time.time()))
                         await s.save(_member_key(p_int), p_member)
-                        log("WA_GROUP_MEMBER_PRESEEDED", id=p.id, name=p.name)
+                        log("WA_GROUP_MEMBER_PRESEEDED", id=p.id, name=_pname)
                 except Exception as ex:
                     log("WA_GROUP_MEMBER_PRESEED_FAIL", error=str(ex))
 
@@ -896,11 +900,27 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             except Exception as _te:
                 log("WA_GROUP_THREAD_MERGE_FAIL", error=str(_te))
 
+        # 3f. Nome effettivo del mittente: il nome PREFERITO (corretto dall'utente) vince
+        # sul pushName strano. Se il messaggio sembra una correzione ("chiamami Pina",
+        # "lei si chiama Maria") la applica SUBITO, così Genesi usa già il nome giusto.
+        eff_sender = request.sender_name
+        try:
+            from core.telegram_group_memory import (
+                get_member as _gm, member_display_name as _mdn,
+                _sanitize_member_name as _san, detect_and_apply_name_correction as _danc,
+            )
+            await _danc(sender_int, request.sender_name, request.text,
+                        [p.dict() for p in request.participants] if request.participants else None)
+            _smem = await _gm(sender_int)
+            eff_sender = _mdn(_smem, fallback=_san(request.sender_name)) or request.sender_name
+        except Exception as _ne:
+            log("WA_GROUP_EFF_NAME_FAIL", error=str(_ne))
+
         # 4. Costruisci contesto gruppo (sincrono — serve per la risposta)
         group_ctx = await build_group_context(
             group_int,
             sender_int,
-            request.sender_name,
+            eff_sender,
             current_message=processed_text,
             participants=[p.dict() for p in request.participants] if request.participants else None
         )
@@ -911,16 +931,16 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
         if only_emoji:
             enriched = (
                 f"{processed_text}\n\n"
-                f"[GRUPPO FAMILIARE: scrive {request.sender_name}. "
+                f"[GRUPPO FAMILIARE: scrive {eff_sender}. "
                 f"Reazione/emoji — risposta brevissima, calore familiare, zero domande.]\n"
                 f"{group_ctx}"
             )
         else:
             enriched = (
                 f"{processed_text}\n\n"
-                f"[GRUPPO FAMILIARE: scrive {request.sender_name}. "
+                f"[GRUPPO FAMILIARE: scrive {eff_sender}. "
                 f"Sei un membro della famiglia — rispondi con calore e concretezza, "
-                f"senza domande superflue. Usa il nome {request.sender_name}.]\n"
+                f"senza domande superflue. Usa il nome {eff_sender}.]\n"
                 f"{group_ctx}"
             )
 
