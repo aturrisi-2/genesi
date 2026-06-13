@@ -43,12 +43,30 @@ class ManualService:
         
         # Parole vuote italiane comuni da escludere
         stop_words = {
+            # Articoli e preposizioni
             "il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "del", "dello", "della",
             "dei", "degli", "delle", "al", "allo", "alla", "ai", "agli", "alle", "nel", "nello",
             "nella", "nei", "negli", "nelle", "col", "coi", "sul", "sulla", "sui", "sugli",
             "sulle", "di", "a", "da", "in", "con", "su", "per", "tra", "fra", "e", "o", "ma",
-            "come", "che", "cosa", "chi", "dove", "quando", "perche", "perché", "questo", "questa",
-            "quelli", "quelle", "ho", "ha", "abbiamo", "hanno", "sono", "è", "e'", "era", "erano"
+            "che", "cosa", "chi", "dove", "quando", "perche", "perché", "questo", "questa",
+            "quelli", "quelle", "questi", "queste", "quello", "quella", "ed",
+            
+            # Verbi ausiliari e comuni
+            "ho", "ha", "abbiamo", "hanno", "sono", "è", "e'", "era", "erano", "sia", "siano",
+            "essere", "avere", "fa", "fanno", "fatto", "sta", "stanno", "sto", "stai", "stata",
+            "stato", "state", "stati", "può", "possono", "potrebbe", "deve", "devono", "dovrebbe",
+            
+            # Pronomi e particelle
+            "si", "se", "ci", "vi", "mi", "ti", "lo", "la", "li", "le", "ne", "gli", "suo",
+            "sua", "suoi", "sue", "loro", "mio", "mia", "miei", "mie", "tuo", "tua", "tuoi",
+            "tue", "nostro", "nostra", "nostri", "nostre", "vostro", "vostra", "vostri", "vostre",
+            
+            # Avverbi e quantificatori comuni
+            "non", "più", "meno", "molto", "poco", "troppo", "tutto", "tutti", "tutta", "tutte",
+            "ogni", "qualche", "alcuni", "alcune", "altro", "altra", "altri", "altre", "solo",
+            "sempre", "mai", "già", "ancora", "anche", "come", "invece", "mentre", "qualora",
+            "bene", "meglio", "male", "peggio", "sotto", "sopra", "dentro", "fuori", "prima",
+            "dopo", "contro", "senza", "circa", "sui", "sua", "suo"
         }
         query_keywords = [w for w in words if w not in stop_words and len(w) > 1]
 
@@ -125,19 +143,42 @@ class ManualService:
         for m in matches:
             grouped.setdefault(m["source"], []).append(m["text"])
 
+        limit_reached = False
         for source, texts in grouped.items():
-            source_header = f"--- MANUALE: {source} ---"
-            if current_len + len(source_header) + 10 > limit_chars:
+            if limit_reached:
                 break
-            result_parts.append(source_header)
-            current_len += len(source_header) + 1
-
+            
+            source_parts = []
+            source_header = f"--- MANUALE: {source} ---"
+            
+            # Stima dello spazio rimanente per l'intestazione
+            rem_space = limit_chars - current_len
+            if rem_space < 50:
+                break
+                
             for text in texts:
                 formatted_text = f"• {text}"
-                if current_len + len(formatted_text) + 2 > limit_chars:
+                header_cost = len(source_header) + 1 if not source_parts else 0
+                needed = header_cost + len(formatted_text) + 2
+                
+                if current_len + needed <= limit_chars:
+                    # Ci sta interamente
+                    source_parts.append(formatted_text)
+                    current_len += len(formatted_text) + 1
+                else:
+                    # Non ci sta interamente, proviamo a troncare se c'è spazio sufficiente (almeno 100 caratteri)
+                    avail = limit_chars - current_len - header_cost - 15
+                    if avail >= 100:
+                        truncated = formatted_text[:avail] + "... [TRONCATO]"
+                        source_parts.append(truncated)
+                        current_len += len(truncated) + 1
+                    limit_reached = True
                     break
-                result_parts.append(formatted_text)
-                current_len += len(formatted_text) + 1
+                
+            if source_parts:
+                result_parts.append(source_header)
+                result_parts.extend(source_parts)
+                current_len += len(source_header) + 1
 
         return "\n".join(result_parts)
 
