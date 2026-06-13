@@ -1,0 +1,1379 @@
+[
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Preventative health care includes health surveillance, vaccinations, reproductive and genetic counseling, parasite control, nutrition, behavioral wellness, and end-of-life care.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Historically, veterinary examinations focused on vaccinations and parasite control; now, however, the focus has broadened to overall wellness, including medical, nutritional, and behavioral health. Examinations by a veterinarian are generally recommended every few weeks for puppies and kittens until they are ~20 weeks old, then at least once a year for dogs and cats. More frequent examinations may be recommended for older animals or those with chronic disease. These examinations have the purpose of health surveillance and wellness planning, which includes appropriate vaccination and parasite control, nutrition counseling, behavioral wellness assessment, and reproductive counseling.End-of-life care is also a focus now, as the human-animal bond becomes ever more important in the pet-owning population.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Vaccines are available for a variety of infectious diseases in dogs, including distemper, parvovirus, hepatitis, leptospirosis, tracheobronchitis, rabies, and Lyme disease. Vaccines available against infectious diseases in cats include those for panleukopenia, rhinotracheitis, calicivirus, rabies, and feline leukemia virus.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Vaccination schedules vary, but generally they are guided by the Recommendations for Core and Noncore Canine Vaccines and the 2020 AAHA/AAFP Feline Vaccination Guidelines. Both sites have lifestyle calculators to aid in creating individualized protocols for patients.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Historically, there was some concern about overvaccination or hyperimmunization of both dogs and cats. Vaccine-associated soft-tissue sarcomas, specifically fibrosarcomas, have been an increasing problem in cats. The etiology of these tumors is not completely understood. They appear at vaccine injection sites; non-viral vaccine components have been implicated. In dogs, there has been some correlation between vaccination and immune-mediated disorders such as immune-mediated hemolytic anemia. The guidelines for dog and cat vaccinations mentioned above recommend a triennial vaccination protocol for adult dogs and cats, and that protocol has been adopted by many veterinary practices. In addition, the guidelines suggest vaccinating cats in an area of the body amenable to surgical resection—ie, distal limbs rather than the torso.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "The current canine vaccination guidelines identify core and noncore vaccines. Core vaccines include rabies, distemper, parvovirus, and adenovirus-2. A killed rabies vaccine is available as 1-year and 3-year products. The age of the initial rabies vaccination is dictated by state law or local jurisdiction, as is the frequency of rabies boosters. The distemper, parvovirus, and adenovirus-2 vaccines are available as a combination vaccine.For puppies > 16 weeks old, the vaccine is administered generally at 6–8 weeks, then every 2–4 weeks until they are > 16–20 weeks old.The first booster should be administered no later than 1 year after the final vaccine dose of the initial series. Subsequent boosters should be administered at intervals of ≥ 3 years.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Additional canine vaccines, such as those against _Bordetella bronchiseptica_, _Leptospira_, _Borrelia burgdorferi_, and canine influenza, are considered noncore and are administered according to assessment of the patient’s lifestyle and risk for these diseases. A coronavirus vaccine is also available; however, it is no longer recommended.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Current feline vaccination guidelines also identify core and noncore vaccines.The vaccines against feline panleukopenia (FPV), feline herpesvirus 1 (FHV-1), and feline calicivirus (FCV) are core; new in the current update, the vaccines against rabies and feline leukemia virus (FeLV) are now also considered core. The FPV-FCV-FHV-1 vaccination schedule for kittens starts at 6–8 weeks old, then every 3–4 weeks up to 16–20 weeks old, then again at 6 months old, then every 3 years.The FeLV vaccine is administered at 8–12 weeks, then a booster in 3–4 weeks, and then yearly for high-risk patients and every 2–3 years for patients with less risk.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Additional feline vaccines (against _Chlamydia_ and _Bordetella_) may be suggested, depending on the animal's risk of exposure—eg, multicat situations.The feline infectious peritonitis vaccine is no longer recommended.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Preventive health care measures may include castration or ovariohysterectomy. Historically, it was common to spay and neuter dogs and cats at 4–6 months old in the battle against pet overpopulation.That recommendation now varies for large-breed dogs because some studies have suggested there may be longterm health benefits in waiting to spay and neuter dogs until after they have passed through puberty.1",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "1. Hart BL, Hart LA, Thigpen AP, and Willits NH. Assisting Decision-Making on Age of Neutering for 35 Breeds of Dogs: Associated Joint Disorders, Cancers, and Urinary Incontinence. _Front Vet Sci_; 2020.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Parasite control continues to be important. The primary endoparasites of small animals include GI parasites such as roundworms, whipworms, and tapeworms. Heartworm disease, an important clinical entity in both dogs and cats, is preventable with prophylactic treatment. Although a treatment is currently available for heartworm disease in dogs, no safe or acceptable treatment is available for cats. The American Heartworm Society provides treatment guidelines for canine and feline heartworm disease. The primary ectoparasites include fleas, ticks, and mites. Both oral and topical products are available for flea control in dogs and cats.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Another important aspect of parasite control includes the prevention of zoonotic diseases such as visceral larva migrans and toxoplasmosis. _Bartonella_ infection may also be an important vector-borne disease affecting humans.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Nutrition is an important and often overlooked aspect of pet ownership. The explosion in the number of diets on the market with persuasive marketing claims increases the need for nutritional counseling by the veterinary team. Recommended pet foods have been formulated on the basis of extensive research and development. A potential link between grain-free diets and dilated cardiomyopathy in dogs has been identified and is being investigated.1",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Helping pet owners monitor their pet’s body condition score to keep the animal lean can add years to the life of the pet because overfeeding and oversupplementation may lead to numerous problems. For specialized health needs, specialty diets are available (both over-the-counter and prescription diets) for young, growing, and geriatric pets, as well as for specific disease processes. (Also see Nutrition: Small Animals.)",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Water quality should not be overlooked, especially in rural areas and in kennels and catteries. An unlimited supply of fresh water should be available.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "1. FDA Investigation into Potential Link between Certain Diets and Canine Dilated Cardiomyopathy",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "Behavioral wellness is increasingly important for the well-being of pets and the human-animal bond. Cats and dogs are affected more by behavior problems than by any other condition. Integrating screening for behavior problems with other health surveillance can be critical to prevention and early intervention. Managing patients in the veterinary environment with attention to both the emotional well-being and the physical well-being of the patients can enhance the bond between pet owners and their pets. Helping owners choose professionals for their pets' veterinary care, training, grooming, and boarding or pet-sitting needs can enhance the behavioral and overall wellness of the pets.See Choosing a Pet Professional Team.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Medicina preventiva piccoli animali",
+    "text": "End-of-life care is one of the most difficult and painful experiences that pet owners will face.Sudden death is possible but uncommon. Often, pet owners witness a slow decline of their beloved dog, cat, or other pet.During this period, support from the veterinary professional team is critical to the continued quality of life of the pet. Quality-of-life scales have been developed to assist pet owners in knowing when euthanasia is warranted. It is a great responsibility to make a decision for euthanasia—a decision that should be supported with great empathy from the veterinary professional team.Euthanasia can provide a peaceful, painless death.In cases of animals that are fearful or aggressive, care should be used to select protocols that minimize that fear or aggression.A patient that becomes distressed during euthanasia can leave a heartbreaking impression on an owner that can last for years, even a lifetime.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/preventative-health-care-and-husbandry-in-small-animals/preventative-health-care-for-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Dogs and cats require specific dietary nutrient concentrations based on their life stage. The Association of American Feed Control Officials (AAFCO) publishes nutrient profiles for dogs and cats in the two main life stage categories of nutritional requirements: Adult Maintenance and Growth and Reproduction. AAFCO lists the nutrient requirements on a dry matter basis and on a unit per 1,000 kcal metabolizable energy (ME) basis. The National Research Council (NRC) also published nutrient profiles for dogs, cats, puppies, and kittens (last published in 2006). NRC uses the following life stages when listing nutrient requirements:",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Both AAFCO and NRC list minimum nutrient requirements and maximum nutrient requirements for nutrients with potential toxicity. However, neither AAFCO nor NRC recognizes that nutritional requirements may change in healthy, older adult dogs and cats, Research shows that the adult maintenance life stage for nutrient requirements is not a monolithic life stage applicable to any age of adult dogs or cats. Instead, the adult life stage must be divided into life stages such as young adult, mature adult, and geriatric or super senior life stages to adequately address the differences in metabolic and physiologic changes occurring as adult animals age(1, 2).",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "In higher-income countries, nutritional diseases are rarely seen in dogs and cats when owners feed a good-quality, commercial, complete, and balanced diet or a homemade diet formulated by a Board Certified Veterinary Nutritionist. Nutritional problems occur most commonly when dogs and cats are fed unbalanced homemade diets and when cats are fed diets formulated for dogs, vegetarian diets, or diets (such as grain-free diets) that use ingredients not commonly used in pet food or in higher amounts than have previously been shown to be safe.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Cats have different dietary requirements than dogs and can develop nutritional deficiencies when fed diets formulated for dogs. For example, unlike dogs, cats require dietary sources of vitamin A, arachidonic acid, and taurine. Cats also have higher requirement levels for some amino acids, such as arginine, and the vitamins niacin and pyridoxine (vitamin B 6).",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Dog or cat foods and homemade diets derived from a limited number of food items are often inadequate. For example, feeding predominantly meat or even an exclusive hamburger and rice diet to dogs or cats can induce calcium deficiency and secondary nutritional hyperparathyroidism. Feeding only liver can induce vitamin A toxicity in both dogs and cats. The form in which the food is fed (raw versus cooked) can impact nutrient availability. For example, some raw forms foods contain antinutritional factors that are destroyed by cooking, such as avidin found in raw eggs, which destroys biotin; thiaminases found in raw fish, which destroy thiamine; and trypsin inhibitors found in raw soybeans, which interfere with protein digestion. Alternatively, cooking methods and temperatures can impact nutrient levels and availability. Cooking can improve the availability of certain nutrients, or it may reduce the amount of other nutrients. These factors must be considered when formulating diets.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "The most useful measure of energy for nutritional purposes is **metabolizable energy** (ME), which is defined as that portion of the total energy of a diet that is retained within the body. It is typically measured in calories in the US or joules in many other countries. A calorie is a very small unit of energy, so the unit of measure most commonly used in dog and cat nutrition is kilocalorie, equivalent to 1,000 calories. A kilocalorie is often abbreviated as kcal or Calorie (with the \"c\" capitalized). Dogs and cats require sufficient energy to allow for optimal body weight, body condition score (BCS), and muscle condition score (MCS) throughout the various life stages for that individual animal.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Energy requirements for dogs and cats are not a linear function of body weight. Dogs maintained in households often require fewer calories per day than dogs kept in kennels; however, considerable variability exists. Breed differences also affect caloric needs independent of body size; eg, Newfoundlands appear to require fewer calories/day than Great Danes. Other factors that determine daily energy needs include activity level, life stage, percentage of lean body mass, age, and environment.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Many formulas are available to calculate caloric requirements for dogs and cats. A simple method for healthy dogs and cats starts with calculating the resting energy requirement (RER). The RER is the energy requirement for a healthy but fed animal, at rest in a thermoneutral environment. It includes energy expended for recovery from physical activity and feeding.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "There are two formulas for calculating RER. The **exponential formula** (RER = 70 [body weight in kg 0.75]) can be used for animals of any body weight, whereas the**linear formula**(RER = 30 × [body weight in kg] + 70) is restricted to use in animals that weigh > 2 kg and < 45 kg.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "The maintenance energy requirement (MER) is the energy requirement of a moderately active animal in a thermoneutral environment. It includes energy needed to obtain, digest, and absorb food in amounts to maintain body weight, as well as energy for spontaneous activity. The formulas to calculate MER take into account age and neuter status.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Formulas for daily maintenance energy requirements (kcal/day) are listed in the .Any specific formulas used to calculate energy requirements for dogs or cats should be considered a starting point. As with people, animals of the same weight can vary in their energy requirement needed to maintain an ideal body weight. Any given animal may require as much as 30% more or less of the calories calculated for its body weight than another animal with the same body weight.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "If dogs or cats consuming an adult maintenance diet require significantly less (10%–30% less) weight or volume of food than recommended on the pet food label to maintain an ideal weight and BCS, the diet could be modified to a less energy-dense diet. Standard maintenance diets are formulated to meet the nutrient requirements of a moderately active adult animal consuming a reasonable quantity or volume of the food. If maintenance diets are fed in a calorically restricted fashion, there is a reduction in the intake of all nutrients in the diet, and maintenance diets are not formulated to be fed in that way. Over-the-counter, commercial weight-management diets are formulated to be less energy dense, with the nutrient levels in the diet adjusted to ensure the animal receives all the required nutrients while consuming fewer calories. Nonetheless, severely restricting caloric intake using a weight-management diet may result in nutrient deficiencies as well. It is good practice to check for underlying medical conditions, such as hypothyroidism in dogs, whenever the amount of calories needed to maintain an animal at an ideal body weight and BCS seems unusually low. In some cases, a therapeutic weight-loss diet may need to be fed to ensure the animal is receiving the necessary amounts of nutrients while consuming a limited amount of calories. Unlike adult maintenance diets, these diets are formulated to be low in calories while still providing all the nutrients the animal requires.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "The six classes of nutrients are water, protein, fat, carbohydrates, vitamins, and minerals. Only protein, fat, and carbohydrate provide energy; vitamins, minerals, and water do not.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Water is the most important nutrient; a lack of water can lead to death in a matter of days. Clean, fresh water should be available at all times. Multiple water sources encourage consumption. This is particularly important in cats, which often do not drink a lot of water.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Several approaches have been used to estimate daily water needs. There are general guidelines for daily fluid requirements in dogs and cats, but individual variations exist. The quantity of water required depends on a number of different factors, including the animal’s diet, environment, activity level, and health status.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "The moisture content of canned pet foods varies from 60% to > 87%. Dry pet foods contain 3%–11% water, and semimoist foods contain 25%–35% water. As a result, dogs and cats consuming predominantly canned food generally drink less water than those consuming predominantly dry diets.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "In a thermoneutral environment, most mammalian species need ~44–66 mL/kg body weight.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "When provided ample amounts of water, healthy animals can effectively self-regulate their intake, and in general, water intake should not be restricted. Water deficiency can be seen as a result of poor husbandry or disease. Dehydration is a serious problem in many different disorders, including those of the GI, respiratory, and urinary systems.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Protein is required to increase and renew the nitrogenous components of the body. A primary function of dietary protein is as a source of essential amino acids and nitrogen for the synthesis of nonessential amino acids. Amino acids supply both nitrogen for the synthesis of all other nitrogenous compounds and energy when catabolized.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Ten amino acids are essential in the diet of dogs: arginine, histidine, isoleucine, leucine, lysine, methionine, phenylalanine, threonine, tryptophan, and valine. Cats have a dietary requirement for an additional amino acid, taurine. Other nonessential amino acids may become conditionally essential when an animal has an underlying disorder that either interferes with synthesis of the amino acid or results in its excessive consumption or loss.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Protein requirements of dogs and cats vary with age, activity level, temperament, life stage, health status, and protein quality of the diet. Many commercial dog foods contain a combination of plant- and animal-based proteins, with varying levels of protein digestibility. Digestibility below 80% is classified as low; digestibility between 80% and 85% is classified as average; digestibility between 86% and 93% is classified as high; and digestibility greater than 93% is considered very high.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Heat can have variable effects on dietary protein. For example, heat can inactivate antinutritional factors present in some raw forms of protein. If excessive heat is used when manufacturing food, it can impact protein digestibility. Most cooked commercial dry diets are manufactured using the extrusion method of cooking, and most cooked canned foods are manufactured using a retort method of cooking. Extrusion uses a combination of moisture, pressure,temperature, flow rate, residence time, and mechanical shear from rotating screws. Cooking time in the extruder can vary from 10 to 270 seconds, and cooking temperature can vary from 80°C to 200°C (175°F to 392°F). A minimum temperature of 74°C (165°F) is needed to kill bacteria, parasitic worms, and protozoa in food, and a minimum of 100°C (212°F) is needed to kill bacterial spores in food. Although a small amount of protein may be lost during the cooking process, most manufacturers that meet World Small Animal Veterinary Association (WSAVA) guidelines are aware of this and add additional amounts of protein to the food prior to cooking it.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "The biologic value of a protein is related to the number and types of essential amino acids it contains and to its digestibility and metabolizability. The higher the biologic value of a protein, the less protein is needed in the diet to supply the essential amino acid requirements. Egg has been given the highest biologic value, and organ and skeletal meats have a higher biologic value than plant-based proteins.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Diets for growing puppies and reproduction should contain a minimum of 22.5% protein as dry matter or 56.3 grams per 1,000 kcal ME (AAFCO guidelines) or 45 g protein/1,000 kcal ME for puppies 4–14 weeks old and 35 g protein/1,000 kcal ME for puppies > 14 weeks old (NRC guidelines). Adult dogs require a minimum of 18% protein as dry matter or 45 grams per 1,000 kcal ME (AAFCO guidelines) or ~20 g protein/1,000 kcal of ME required (NRC guidelines).",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Diets for growing kittens and reproduction should contain a minimum of 30% protein as dry matter or 75 grams of protein per 1,000 kcal ME (AAFCO guidelines) or 45 g protein/1,000 kcal ME (NRC guidelines). Diets for adult cats should contain a minimum of 26% protein as dry matter or 65 grams of protein per 1,000 kcal ME (AAFCO guidelines) or 40 g protein/1,000 kcal ME (NRC guidelines). Growing kittens are more sensitive to the quality of dietary protein and amino acid balance than are adult cats.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Taurine is an essential amino acid in diets for cats, and taurine deficiency can cause dilated cardiomyopathy and central retinal degeneration in cats. As a result, cats must have some animal-based protein sources in their diet because plant-based protein sources are devoid of taurine. Alternatively. the diet can be supplemented with synthetic taurine.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Without sufficient energy from dietary fat or carbohydrate, dietary protein ordinarily used for growth or maintenance of body functions is converted to energy instead. To prevent protein deficiency, energy-dense diets must ensure that protein requirements are met in a smaller volume of food.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Signs produced by protein deficiency or an improper protein:calorie ratio may include any or all of the following:",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Triglycerides, also called fatty acids, are divided into short, medium, and long chain, based on the number of carbon atoms in the fatty acid chain. Essential fatty acids are long-chain triglycerides (LCTs) that cannot be synthesized in the body; most fatty acids consumed in the diet are long-chain fatty acids.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "The majority of nutrients consumed in the diet are digested and absorbed in the small intestine, where they then enter the blood supply via the portal vein and are delivered to the liver. When LCTs are consumed, they are digested and absorbed into the small-intestinal epithelial cells. However, they are not transported directly into the portal vein but rather enter the lymphatics before they eventually reach the blood supply. In contrast, medium-chain triglycerides (MCTs) do not appear to require initial transport in the lymphatics and instead can be absorbed from the intestines directly into the blood supply via the portal vein. This offers an advantage in dogs for the management of some GI disorders, such as lymphangiectasia, that involve the lymphatic system.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "More recently, MCTs are being used in dogs with canine cognitive dysfunction. As dogs age, glucose metabolism in the brain becomes less efficient, which can have adverse affects on memory, learning, and awareness, leading to a decline in cognitive function. Certain MCTs from plant-based oils can serve as an alternative energy source for the brain. In addition, MCTs are also being used in dogs with refractory seizures to decrease seizure frequency.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Dietary fats also facilitate the absorption, storage, and transport of the fat-soluble vitamins (A, D, E, and K) and are a source of essential fatty acids (EFAs).",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "All mammals, including dogs and cats, have a dietary requirement for linoleic acid, an omega-6 fatty acid, which is found in appreciable amounts in vegetable oils, such as corn and soy oil. Cats have an additional requirement for arachidonic acid, another omega-6 fatty acid, which is absent in vegetable oils and fats but found in fat from meat, poultry, and eggs. Unlike dogs, cats cannot readily convert linoleic to arachidonic acid.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "More recently, omega-3 fatty acids (alpha-linolenic acid [ALA], eicosapentaenoic acid [EPA], and docosahexaenoic acid [DHA]) have been added to the list of EFAs required during growth and reproduction in both dogs and cats. The best dietary source of ALA is flaxseed oil, and the best dietary sources of EPA and DHA are oily fish, krill oil, and algae oil.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Most commercial adult dog foods typically contain 5%–15% fat (dry-matter basis). Puppy diets usually contain 8%–20% fat (dry-matter basis). The wide range of fat content in different diets provides for the different energy requirements of a given animal, to accommodate the varying demands of work, stress, growth, or lactation as opposed to maintenance. As much as 60% of the calories in a cat’s diet may come from fat, although diets that contain 8%–40% fat (dry-matter basis) have also been fed successfully. Because fat can add considerably more calories to a finished diet, the amount of protein relative to energy must be balanced appropriately to the life stage and typical intakes expected for an animal’s size and needs.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "EFA deficiencies are extremely rare in dogs and cats fed properly preserved complete and balanced diets formulated according to AAFCO profiles. Deficiencies of EFAs induce one or several clinical signs, such as a dry, scaly, lusterless coat; inactivity; or reproductive disorders such as anestrus, testicular underdevelopment, or lack of libido. Fatty acid supplements are often recommended for dogs with dry, flaky skin and dull coats; however, underlying metabolic conditions should always be evaluated first.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Resistant starches are classified as type 1, starches physically inaccessible to digestive enzymes, and type 2, those resistant to digestion due to the nature of the starch granules within the plant, such as the type of starch found in raw potatoes. Fiber is also resistant to digestion by digestive enzymes produced in the GI tract of dogs and cats; however, bacteria in the GI tract can produce enzymes capable of breaking fiber down.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Carbohydrates are the dietary source of glucose, which is required by certain tissues in the body. For example, the brain, nervous tissue, RBCs, renal medulla, testes, pregnant uterus, and the mammary gland during lactation all require glucose for energy. However, because glucose can be produced by the body via gluconeogenesis from amino acids or triglycerides, dietary carbohydrates are not considered essential nutrients in the diet for adult, nonreproducing dogs and cats.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Dogs usually use glucose from dietary carbohydrates, but if adequate amounts of dietary carbohydrates are not provided in their diet, gluconeogenesis will occur, diverting amino acids from functions such as synthesis of nonessential amino acids and building muscle. In contrast, cats are normally in a state of continuous gluconeogenesis, using glucogenic amino acids and glycerol to synthesize glucose, and they cannot downregulate gluconeogenesis during periods of fasting and starvation. Therefore, if adequate levels of protein and fat are not provided in the diet, cats will use endogenous glucogenic amino acids and glycerol to produce glucose.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Both dogs and cats can digest properly cooked starches, such as those from grains, with > 90% efficiency. Postabsorption, both dogs and cats will use the glucose from dietary carbohydrates to help meet their physiologic demand for glucose. Cats are adapted to a moderate intake of dietary complex carbohydrates from which glucose is absorbed into the blood at a slow and steady rate. Cats graze on food, eating as many as 18 small meals per day, resulting in a slow and steady release of glucose into the blood. In many species, including dogs and cats, either poorly digestible carbohydrates or an overload of simple sugars in the GI tract may cause adverse changes in intestinal metabolism, including osmotic diarrhea and flatulence.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Carbohydrates can become conditionally essential in dogs when energy needs are high, such as during growth, gestation, and lactation. Pup survival and metabolic status of the bitch at whelping appear to be improved by a diet in which 20%–30% of the energy is derived from carbohydrates.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Carbohydrates can also become conditionally essential in queens during lactation, protecting against weight loss and improving milk production. For lactating queens, the diet should contain at least 10% dry matter digestible carbohydrates.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Fiber is defined as the edible parts of plants or analogous carbohydrates that are resistant to digestion and absorption in the small intestine and have complete or partial fermentation in the large intestine. Fiber is resistant to hydrolysis by mammalian digestive enzymes in the small intestines; however, beneficial bacteria in the large intestines are capable of fermenting fiber and producing other compounds, such as short-chain fatty acids (SCFAs), also known as volatile fatty acids (VFAs). Fiber also serves as an energy substrate for beneficial bacteria.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Although there is no dietary requirement for fiber in dogs and cats, there are health benefits from having certain fiber sources in the diet. Fiber adsorbs microbial toxins and xenobiotics, both of which can have deleterious effects in the GI tract. Certain types of dietary fiber can reduce bile acid solubility in the water in feces, thereby reducing some of the direct effects these acids can have on the intestinal epithelium. Other types of fiber can also adsorb nutrients, which can be beneficial in situations where slowing down the absorption rate of glucose in the intestines is desired, (eg, diabetic patients). However, fiber can also bind with nutrients, and a diet too high in fiber can interfere with the absorption of nutrients in the GI tract, potentially causing nutrient deficiencies.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "The three primary classification systems of fiber are **solubility, fermentability, and viscosity**. The diverse nature of fiber makes it difficult to make generalized statements applicable to all fiber types, such as that soluble fibers are fermentable fibers and insoluble fibers are nonfermentable fibers. It is also important to realize that two fibers with the same properties in one classification system may have entirely opposite properties in another classification system.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Fiber is categorized as insoluble and soluble. **Insoluble fiber** has no significant interaction with water, and therefore it has no appreciable water-holding capacity as the ingesta passes through the large intestines. It is analogous to ingesting plastic beads: plastic beads increase fecal volume as they pass through the GI tract, but they have no ability to absorb water and increase the moisture content of the feces. Insoluble fiber can have a laxative effect in the GI tract, but it is not due to the fiber interacting with water to increase the moisture content in the feces. One way it produces a laxative effect is promoting peristalsis. Insoluble fiber increases fecal volume or bulk, and in turn this causes stretch in the colonic smooth muscle, thereby stimulating peristalsis and decreasing intestinal transit time. A second way coarse, insoluble fiber can promote a laxative effect is through a mechanically irritating effect on the large intestinal mucosa that stimulates secretion of water and mucus from the intestinal mucosa into the lumen of the large intestine. In contrast, if finely ground, insoluble fiber is fed, it does not cause irritation of the intestinal mucosa, and therefore will not be followed by a laxative effect. Examples of insoluble fiber include cellulose, beet pulp, and rice bran.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Fermentation is the process that occurs when intestinal bacteria convert fiber into other compounds, such as short-chain fatty acids (SCFAs), also known as volatile fatty acids (VFAs), as well as some vitamins, such as vitamin K. Short-chain fatty acid production in the large intestine is important in dogs and cats because SCFAs provide approximately 70% of the energy needs for colonocytes in dogs. SCFAs also lower the pH in the colon, which may enhance colonic peristalsis and decrease transit time, but a more acidic pH may also act as a defense barrier in the GI tract and protect against the colonization of pathogenic bacteria.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "All fiber is fermentable to some degree and ranges from low, or poorly fermentable, to high, or rapidly fermentable. Fermentation of fiber produces desirable compounds, such as SCFAs, but it also produces undesirable compounds, such as methane and hydrogen sulfite gases. As a result, moderately fermentable fiber is often used in pet food to balance the formation of desirable and undesirable compounds. Examples of moderately fermentable fiber include beet pulp, rice bran, and gum arabic.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Manufacturers of fiber-containing diets should be aware of the impact fiber amount and type can have on digestibility of certain nutrients and make sure that the fiber type and amount in the diet do not result in nutritional deficiencies when consumed.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Fiber sources such as beet pulp, cellulose, and rice bran have low solubility, while gum arabic, methylcellulose, and inulin have high solubility. Psyllium, which is found in common over-the-counter products and supplements, contains both low-soluble and high-soluble fiber.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Although the classification of fiber based on its solubility is still used, fiber is also often classified based on its rate of fermentability. Fermentability is defined as the capacity of fiber breakdown by intestinal bacteria, and this definition more accurately assesses the potential benefits of fiber in the GI tract.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Fermentation of fiber produces the SCFAs acetate, propionate, and butyrate. Short-chain fatty acids have numerous benefits, including supplying ~70% of the energy needed by large-intestinal epithelial cells, stimulating intestinal sodium and water absorption, and lowering the pH in the large intestine—an environment that favors survival of beneficial bacteria in the GI tract.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Conversely, fermentation also produces less desirable substances such as gases, ammonia, and phenols. Highly fermentable fibers are rapidly metabolized by intestinal bacteria and produce large amounts of gas that can result in cramping and diarrhea. Production of less desirable fermentation products can be minimized by using a moderately fermentable fiber source; examples include beet pulp, inulin, and psyllium. Beet pulp also provides good fecal quality in dogs without affecting other nutrient digestibility when included at ≤ 7.5% (dry-matter basis).",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Dietary fermentable fiber also functions as a prebiotic in dogs and cats. Prebiotics are defined as nondigestible food ingredients that selectively stimulate the growth or activity of beneficial bacteria in the intestines, such as _Bifidobacterium_ and _Lactobacillus_. They also inhibit the survival and colonization of pathogenic bacteria. The beneficial bacteria produce SCFAs and some nutrients (eg, some B vitamins and vitamin K). Beneficial bacteria can also function as immunomodulators, reduce liver toxins (eg, blood amine and ammonia), and help with anxious behavior in dogs.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Crude fiber, which is listed in the guaranteed analysis on pet food labels, quantifies only some insoluble dietary fiber and none of the soluble dietary fiber. Therefore, crude fiber is unfortunately not an accurate measure of total dietary fiber.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "The physiologic effects of fiber are not uniform across all fiber types, and relying solely on the percentage of crude fiber listed on pet food labels does not accurately reflect fiber content or fiber type in the product, nor the anticipated physiologic effects from a given diet. A more useful method of reporting fiber would be to report total dietary fiber, which includes both insoluble and soluble fibers. Specific types of fiber are often used in the management of certain conditions, and therefore knowing not only the amount of total dietary fiber in the diet but also how much of the fiber is insoluble versus soluble is important.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Vitamins are defined as organic substances present in food that are essential for normal metabolism. They are classified by physical and chemical properties into lipid-soluble vitamins (A, D, E, and K) and water-soluble vitamins (B and C).",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Vitamin A is an essential nutrient required for numerous functions in the body, such as normal vision, growth, reproduction, immune function, maintenance of healthy epithelial tissues, and expression and regulation of many genes. Beta-carotene is a precursor of vitamin A found in plants, and dogs can readily use plant and animal sources of vitamin A. In contrast, cats cannot convert beta-carotene to vitamin A because they lack the intestinal dioxygenase enzyme necessary for beta-carotene cleavage. As a result, cats require a preformed source of vitamin A in their diet, such as that supplied by liver, fish oil, or synthetic vitamin A.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Vitamin A deficiency in dogs and cats can result in ocular changes, such as the following:",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "In addition, dogs may experience anorexia, body weight loss, skin lesions, ataxia, metaplasia of bronchiolar epithelium, pneumonitis, and increased susceptibility to infections. In puppies, vitamin A deficiency can result in defective remodeling of the cranial foramina, resulting in stenosis and degeneration of the cochlear nerve and eventually deafness.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Hypovitaminosis A in cats may also cause stillbirths and congenital anomalies (hydrocephaly, blindness, hairlessness, deafness, ataxia, cerebellar dysplasia, and intestinal hernia), as well as squamous metaplasia of the respiratory tract, conjunctiva, endometrium, and salivary glands.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Hypervitaminosis A (toxicity) is rare in dogs, who appear to be less sensitive than cats to excess intake of dietary vitamin A. The most common clinical signs of vitamin A toxicity in dogs are skeletal malformation, spontaneous fractures, and internal hemorrhage; however, ankylosis of vertebrae and large joints, osseocartilaginous hyperplasia, osteoporosis, inhibited collagen synthesis, decreased chondrogenesis in growth plates of growing dogs, and narrowed intervertebral foramina can also occur.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "In cats, vitamin A toxicity is more commonly seen and can occur when growing kittens are fed a diet high in liver. This results in extensive osseocartilaginous hyperplasia of the first three cervical vertebrae, which restricts neck movement and limits the kittens' ability to effectively groom themselves, resulting in unkempt fur.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "See AAFCO nutrient requirements for cats and dogs and NRC nutrient profiles for cats, dogs, kittens, and puppies for dietary levels of vitamin A and other nutrients.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Vitamin D is an essential nutrient in the diet of both dogs and cats. Unlike humans or many other mammals, both dogs and cats have very limited quantities of 7-dehydrocholesterol, a precursor that is converted into cholecalciferol (D 3) when skin is exposed to UV light.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "The main function of vitamin D is to enhance intestinal absorption and mobilization of calcium and phosphorus, as well as promote retention and bone deposition of both minerals. Excesses or deficiencies of vitamin D can result in changes in serum calcium and phosphorus levels. The biologically active form of vitamin D in the body is 1,25-dihydroxycholecalciferol, also known as calcitriol.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Clinical signs of vitamin D deficiency include rickets in young animals, enlarged costochondral junctions, and osteomalacia and osteoporosis in adult animals. Classic signs of rickets are rare in puppies and kittens fed complete and balanced commercial diets; they are most often present when homemade diets are fed without supplementation.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Hypervitaminosis D has been associated with excessive amounts of vitamin D inadvertently added to commercial pet foods or with ingestion of rodenticides containing cholecalciferol (D 3).Vitamin D toxicity causes hypercalcemia and hyperphosphatemia with irreversible soft tissue calcification of the kidney tubules, heart valves, and large-vessel walls and can eventually be fatal.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Clinical signs of vitamin E deficiency are most often attributed to membrane dysfunction as a result of oxidative degradation of polyunsaturated membrane phospholipids and disruption of other critical cellular processes. In dogs, clinical signs of vitamin E deficiency include the following:",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "In cats, clinical signs of vitamin E deficiency include the following:",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Naturally occurring deficiencies of vitamin E have occurred in cats given large quantities of canned tuna, resulting in the development of pansteatitis (yellow fat disease). Kittens and adult cats may also develop anorexia, listlessness, hyperesthesia on palpation of the ventral abdomen, nodular adipose tissue, and fat depots discolored by brown or orange ceroid pigments.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Vitamin E is generally considered one of the least toxic fat-soluble vitamins; however, very high doses of vitamin E can antagonize absorption of the other fat-soluble vitamins, and clinical signs associated with deficiencies of vitamin A, D, and K can occur.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Although Vitamin K is an essential vitamin in both dogs and cats, gut biota typically can provide adequate amounts. As a result, although vitamin K 1 and K 2 are ingested in the diet, the vitamin K in tissues is most commonly of bacterial origin.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Any condition that alters the intestinal microbiota, such as antimicrobial treatment, may result in vitamin K deficiency.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Vitamin K deficiency in both dogs and cats results in prolonged clotting times and excessive bleeding. Vitamin K toxicity is extremely rare.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Most water-soluble vitamins serve as **enzymatic cofactors**. Water-soluble vitamins have much less potential for toxicity than lipid-soluble vitamins because any oral intake of excessive levels is not readily stored in the body.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Water-soluble vitamins are usually readily excreted if excess amounts are consumed. They are thought to be far less likely to cause toxicity or adverse effects when ingested in megadoses. Vitamin B 12 is the only water-soluble vitamin stored in the liver.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Vitamin C (ascorbic acid) has many functions in the body, including as an antioxidant and free radical scavenger playing a role in collagen synthesis. There is no AAFCO dietary requirement for vitamin C for dogs and cats because they are able to synthesize it from glucose in the liver. Nonetheless, supplementation may provide additional health benefits. Vitamin C may also be used as a natural preservative in pet food to recharge mixed tocopherols used to prevent oxidation and rancidity of fat in the diet.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Excessive supplementation of vitamin C has raised concerns in dogs and cats with a history of calcium oxalate urolithiasis because the breakdown of ascorbic acid occurs nonenzymatically and results in oxalate formation and increased amounts of oxalate excreted in the urine.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Thiamine deficiency generally does not develop in dogs and cats fed properly prepared complete and balanced commercial diets. Thiamine deficiency can be associated with high intake of thiamine antagonists, such as thiaminases, the enzymes that degrade thiamine. Thiaminases are found in raw freshwater fish and clams. They can produce a deficiency by rapid destruction of dietary thiamine.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Thiaminases are destroyed by cooking fish; therefore, although canned commercial cat foods may contain fish, the heat associated with canning is sufficient to destroy thiaminase. Destruction of thiamine has also resulted from treatment of food with sulfur dioxide or overheating during drying or canning, but deficiencies are rare.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Acute thiamine deficiency involves the nervous system and produces severe neurologic signs, while chronic thiamine deficiency produces changes in the myocardium and peripheral nerves. Clinical signs of thiamine deficiency in dogs include ataxia and cardiac hypertrophy, while those in cats include anorexia, failure to grow, neurologic dysfunction, seizures, and muscle weakness. Muscle weakness most commonly appears as ventroflexion of the head, the same clinical sign often seen in cats with potassium deficiency.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Niacin is a generic term used to describe compounds that exhibit vitamin B 3 activity (eg, nicotinic acid and nicotinamide).",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Deficiency of niacin in dogs results in a condition known as black tongue disease, which is characterized by bloody discharge from the GI tract and inflammation of the mucous membranes in dogs fed niacin-deficient diets. Both pellagra in humans and black tongue disease in dogs can be cured by supplementing the diet with niacin.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Deficiency of niacin is rare in dogs fed complete and balanced diets because dogs can synthesize niacin from the essential amino acid tryptophan. Clinical signs that have been reported in dogs with niacin deficiency include the following:",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Cats cannot synthesize substantial amounts of niacin from tryptophan and therefore must have their total niacin requirement provided in the diet.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Niacin deficiency is uncommon in cats fed complete and balanced diets and has primarily been reported in kittens fed a purified diet without niacin. These kittens ceased growing after 10–15 days, developed diarrhea, lost weight, and died by day 50. No skin or oral lesions were observed.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Biotin functions as an essential cofactor for four different carboxylase reactions in mammals. Carboxylases are needed for metabolism of lipids, glucose, and some amino acids. Biotin can be provided in the diet or synthesized by intestinal microbes.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Naturally occurring biotin deficiency is very rare in dogs and cats; however, it can be caused by administering oral antimicrobials that kill intestinal bacteria that synthesize biotin. The other way that biotin deficiency can occur is by feeding raw egg whites. While egg yolks are a good source of biotin, raw egg whites contain a glycoprotein called avidin that binds biotin and prevents its absorption in the GI tract. Clinical signs of biotin deficiency include poor growth, dermatitis, lethargy, and neurologic abnormalities.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Folate functions as a cofactor in nucleotide biosynthesis, phospholipid synthesis, amino acid metabolism, neurotransmitter production, and creatinine formation. Folate is also involved with rapidly dividing cells. Folate, paired with cobalamin (vitamin B 12), is involved in methyl group transfer in the production of methionine from homocysteine.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Folate can be provided in the diet or synthesized from intestinal microbes. One way to diagnose antibiotic-responsive diarrhea (ARD), also known as SIBO (small intestinal bacterial overgrowth), and dysbiosis is to measure folate levels in the blood, which will be increased with ARD.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Clinical signs of folate deficiency in dogs and cats include weight loss, anorexia, anemia, diarrhea, and poor hair coat quality. In cats, longterm folate deficiency may also result in increased plasma iron concentrations and megaloblastic anemia.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Cobalamin is also involved with rapidly dividing cells. Cobalamin can be provided in the diet, primarily via animal products because nonenriched plant products are essentially devoid of cobalamin, or synthesized by some intestinal microbes. The ileum is the major site of cobalamin absorption in mammals.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Cobalamin deficiency can result in anemia and irreversible neurologic damage due to demyelination. Evaluating patients for both folate and cobalamin deficiency is important for appropriate treatment.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Cobalamin deficiency in dogs has been induced by intestinal bacterial overgrowth and due to genetic abnormalities of cobalamin metabolism (intestinal malabsorption of cobalamin) in Giant Schnauzers, Border Collies, Beagles, and Komondors. Puppies with this condition can show clinical signs of anorexia, failure to thrive, neutropenia with hypersegmentation, anemia, giant platelets, and megaloblastic changes in the bone marrow.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Inborn errors of metabolism can be assessed by measuring serum levels of cobalamin or homocysteine or by analysis of urine to detect methylmalonic aciduria. Parenteral administration of cobalamin is required in dogs with this genetic abnormality.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Cobalamin deficiency in cats is primarily a result of inborn errors of metabolism, bacterial overgrowth in the intestines, inflammatory bowel disease, intestinal lymphoma, cholangiohepatitis or cholangitis, and pancreatitis. Clinical signs include weight loss, diarrhea, vomiting, anorexia, unkempt or even greasy-appearing hair coat, and thickened intestines. If cats have subnormal absorption of cobalamin, they may not respond well to oral supplementation and instead may require parenteral administration of cobalamin every two weeks to maintain normal concentrations in the blood.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "A balanced amount of the necessary dietary minerals in relation to the energy density of the diet is important. As intake of a mineral exceeds the requirement, an excessive amount may be absorbed, or a large amount of the unabsorbed mineral may prevent adequate intestinal absorption of other minerals. Indiscriminate mineral supplementation should be avoided because of the likelihood of causing a mineral imbalance.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Mineral deficiency is rare in well-balanced diets. Manipulation of dietary intake of calcium, phosphorus, sodium, magnesium (dogs and cats), and copper (dogs) is common in therapeutic diets intended for the management of specific diseases.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "After birth, calcium absorption mainly occurs by passive transport, and young animals from weaning to about 6 months old may not be able to regulate intestinal absorption of calcium when excess calcium is in the diet. After about 6 months, the contribution of passive transport to total calcium absorption decreases, and active transport becomes more prominent, allowing better regulation of calcium absorption.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Homeostasis of calcium in the body involves several organs and parathyroid hormone and calcitonin, while homeostasis of phosphorus in the body is a coordinated effort between intestinal absorption and renal excretion. Calcium and phosphorus deficiencies are uncommon in dogs and cats consuming complete and balanced diets. However, calcium deficiencies have occurred when feeding high- or all-meat diets high in phosphorus and low in calcium.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "In dogs and cats, the requirements for dietary calcium and phosphorus are increased over maintenance during growth, pregnancy, and lactation. In dogs, the optimal calcium:phosphorus ratio should be ~1.2–1.4:1; however, minimum and maximum ratios by AAFCO are 1:1 to 2.1:1. Less phosphorus is absorbed at the higher ratios, so an appropriate balance of these two minerals is necessary.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Insufficient supplies of calcium or excess amounts of phosphorus decrease calcium absorption and result in irritability, hyperesthesia, and loss of muscle tone, with temporary or permanent paralysis associated with nutritional secondary hyperparathyroidism. Skeletal demineralization, particularly of the pelvis and vertebral bodies, develops with calcium deficiency. By the time there is a pathologic fracture and the condition can be confirmed radiographically, bone demineralization is severe. Often, there is a history of feeding a diet composed almost entirely of meat, liver, fish, or poultry.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Excess intake of calcium is more problematic for growing (weaning to 1 year) large- and giant-breed dogs. Excessive supplementation (> 3% calcium [dry-matter basis]) causes more severe clinical signs of osteochondrosis and decreased skeletal remodeling in young, rapidly growing large-breed dogs than in dogs fed diets with lower dietary calcium (1%–3% [dry-matter basis]). The clinical signs of lameness, pain, and decreased mobility have not been reported in small-breed dogs or more slowly growing breeds that were fed the higher calcium amounts.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Iodine deficiency is rare when complete and balanced diets are fed but may be seen when high-meat diets are used (dogs and cats) or when diets contain saltwater fish (cats). Kittens with iodine deficiency show clinical signs of hyperthyroidism in the early stages, with increased excitability, followed later by hypothyroidism and lethargy. Abnormal calcium metabolism, alopecia, and fetal resorption have been reported. The condition can be confirmed by thyroid size (12 mg/100 g body weight) and histopathology at necropsy.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Iron and copper found in most meats are used efficiently, and nutritional deficiencies are rare except in animals fed a diet composed almost entirely of milk or vegetables. Deficiency of iron or copper is marked by a microcytic, hypochromic anemia and, often, by a reddish tinge to the hair in a white-haired animal.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "Deficiency of zinc results in emesis, keratitis, achromotrichia, delayed growth, and emaciation. Zinc availability can sometimes be reduced by other components in commercial diets. Siberian Huskies and Alaskan Malamutes may have a genetic defect that impairs intestinal absorption of zinc and present with dermatosis that responds to zinc supplementation (canine zinc-responsive dermatosis).",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "1. Purina Institute. Accessed October 12, 2023. https://www.purinainstitute.com",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Fabbisogni nutrizionali di cane e gatto",
+    "text": "2. Cat Care For Life. Accessed October 12, 2023. https://www.catcare4life.org/cat-owners/lifestages/",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutritional-requirements-of-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Nutrition is an important part of disease management, even though few disorders can be cured solely with diet. The interaction between illness, health, and nutritional status is multifactorial and complex. The nutritional requirements of many sick dogs and cats are qualitatively the same as those of healthy ones; however, they differ in the amounts required—certain nutrients may be needed in greater amounts or may need to be restricted.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Dogs and cats with food allergies usually have GI clinical signs (eg, vomiting, diarrhea, or both) or a pruritic skin condition, especially in the regions of the ears, rear, and feet in dogs and around the neck and face in cats. The prevalence of true food allergies relative to atopy and flea allergies remains relatively low. Some dogs and cats with nonseasonal pruritus are having an adverse reaction to food.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Unfortunately, food allergy cannot be differentiated from food intolerance, and skin testing for food allergies is unreliable. Blood and saliva testing for food allergies are also unreliable ways to diagnose food allergies in dogs and cats. Hence, given all the possible etiologies and limited diagnostics available, any animal suspected of having an adverse reaction to food should undergo a food trial.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "The length of time needed for a food trial depends on the condition being managed. Food trials for adverse reactions to food associated with clinical signs involving the GI tract should continue for 2–4 weeks, whereas food trials for clinical signs involving dermatologic conditions should continue for 8–12 weeks.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "During a food trial, the only item fed should be a single novel protein source or a hydrolyzed protein diet. A careful dietary history must be obtained from the pet owner before selecting the type of diet.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "If the owner elects to feed a commercially prepared food, several products are available for dogs that use single novel protein sources (eg, kangaroo, venison, rabbit, duck, or fish). Commercially available diets available for cats use protein sources consisting of rabbit, duck, venison, and lamb. Fish is not a novel option for most cats.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Most importantly, the formulation of whatever product or diet is fed must be fixed to ensure that the ingredient composition is consistent from batch to batch. These products are more expensive not only because of their unique and limited sources of protein but also because of the quality control procedures required to ensure fixed formulations and to eliminate cross-contamination with previous production batches of different foods.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "An alternative diet option for use in dogs and cats with suspected adverse reactions to food is a hydrolyzed protein diet. Protein is the most common nutrient associated with adverse reactions to food because it is needed to bridge two IgE molecules together to cause the release of histamine. The protein in hydrolyzed diets is broken down into smaller peptide fragments that are too short to bridge two IgE molecules.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Although hydrolyzed diets are helpful in many dogs and cats with adverse reactions to food, they are expensive, and the extent of protein hydrolysis among diets also varies. In addition, some animals with allergies to the protein sources in these diets may still react to the typical hydrolyzed protein diet, depending on the level of hydrolysis. The choice between a novel protein diet and a hydrolyzed diet should be individualized for the patient and owner, in coordination with their veterinarian.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Homemade diets are also possible using the same protein sources suggested above (or other ingredient sources the owner wants to test), and they have pros and cons.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Currently, beef, chicken, and dairy products are the most common food allergens in dogs, whereas beef, fish, and dairy products are the most common food allergens in cats. However, dogs and cats can develop an allergy to any protein in the diet. On average, there is no price advantage in making a homemade diet over using commercially prepared foods; in fact, formulating a homemade diet containing hydrolyzed protein is both very difficult and expensive.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "The trial diet should be exclusively fed for the recommended length of time, and all treats, snacks, and table foods eliminated unless they are made of the exact same ingredients as the trial diet or contain a hydrolyzed protein source. All chewable medications and supplements must be eliminated from the trial diet, because most contain the same protein and additive ingredients as pet foods and treats.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Other treatments such as hyposensitization and flea control are necessary in animals with concurrent disease. Testing various suspect ingredients by reintroducing them to the diet one at a time followed by recurrence of clinical signs is affirmation of an adverse reaction to that ingredient. Dietary ingredients reintroduced may reproduce clinical signs as early as 12 hours after ingestion but can take as long as 10 days. Lifelong treatment is dietary avoidance, which may be difficult if the offending ingredients are not positively identified.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Obesity is the most common nutritional health problem in dogs and cats, and obesity-associated health risks continue to increase. Obesity is the excessive accumulation of adipose tissue—for dogs and cats, > 20% above ideal body weight. Dogs and cats 10%–20% above ideal body weight are considered overweight. It is estimated that > 50% of dogs and cats in the US seen by veterinarians are overweight or obese.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Obesity occurs when energy intake exceeds energy expenditure. Risk factors for developing obesity include the following:",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "2. breed predisposition (breeds with an increased risk include Labrador Retrievers, Miniature Schnauzers, Dachshunds, Shetland Sheepdogs, Cocker Spaniels, Beagles, Basset Hounds, and Cairn Terriers)",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "3. increasing age (metabolic rate decreases with age as lean muscle mass decreases and fat mass increases",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Health problems associated with obesity include decreased life expectancy, impaired quality of life, chronic inflammation, pulmonary and cardiovascular problems, exercise and heat intolerance, joint and musculoskeletal problems (eg, arthritis), compromised immune function, pancreatitis (dogs), diabetes mellitus and hepatic lipidosis (cats), and increased morbidity and mortality during and after anesthesia.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Adipose tissue was long considered metabolically inert, and its primary role in disease was attributed to stress on the joints caused by increased weight bearing and increased workload on the heart. However, it is now known that adipose tissue is not inert but rather a major endocrine organ that produces adipokines. The expression, production, and release of many adipokines are increased in obesity, which results in persistent low-grade inflammation and increased oxidative stress that play a role in many chronic diseases, such as osteoarthritis and diabetes mellitus.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Treatment for obesity should include both short- and longterm goals. Short-term goals are to lose weight and reach an ideal body condition score. The longterm goal is to maintain an ideal body condition score. Both of these goals require modification of behaviors that resulted in the dog or cat becoming overweight. Recommendations for lifestyle changes should be made in the context of maintaining the owner-animal bond. If this is ignored, owner compliance is unlikely. If giving treats is an important owner-pet interaction, providing the owner with low-calorie treat options is important. Most treats are not complete and balanced, so they should be restricted to < 10% of the total caloric intake to avoid causing nutrient imbalances.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "The most successful weight loss programs include a combination of caloric restriction and exercise. The first step is to obtain a thorough diet history, followed by calculating the caloric intake appropriate to induce weight loss. Determining 60% of maintenance energy requirement (MER) for dogs and 70% of MER for cats is one way to calculate starting caloric intake for a weight management program. Regardless of the formula used, the calculated caloric intake is only a starting point and may require modification based on response.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "The next step is to decide on a diet for the weight loss program. Maintenance diets are generally not recommended for weight loss programs, because they are formulated to meet the nutritional needs of moderately active adults. Restricting caloric intake using maintenance diets may result in inadequate intake of some nutrients, and one study documented numerous nutritional deficiencies when maintenance or over-the-counter weight management diets were fed in a calorically restricted fashion to induce weight loss.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Therapeutic weight loss diets are formulated to be restricted in calories while providing other nutrients in appropriate amounts. Adequate protein levels are important in any weight loss diet chosen. Most diets formulated for weight loss also have other nutrient modifications, including increased levels of dietary protein and fiber, as well as supplemental L-carnitine. It is better to divide total daily caloric intake into multiple meals rather than one large meal.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "The next step is to decide on a rate of weight loss; a reasonable goal is loss of ~1% of body weight/week. If the animal is losing weight at a slower rate than that chosen but is doing well otherwise and the owner is satisfied, then it may be best to allow weight loss to continue at the slower rate. The animal’s weight should be monitored every 2 weeks and the program modified if needed based on response. Any weight loss is good weight loss, and celebrating successes with the owner helps maintain motivation.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  },
+  {
+    "title": "MSD Veterinario — Nutrizione nella gestione delle malattie",
+    "text": "Obese cats undergoing weight loss are at increased risk of developing hepatic lipidosis. Cats must continue to consume adequate calories and nutrients. If a cat does not like the weight loss diet chosen, then an alternative should be found. Starvation is never a safe or humane way to cause weight loss.",
+    "url": "https://www.msdvetmanual.com/management-and-nutrition/nutrition-small-animals/nutrition-in-disease-management-in-small-animals",
+    "ambience": "veterinario",
+    "source": "MSD_Vet",
+    "allowed_action": "veterinary_info",
+    "lingua": "en"
+  }
+]
