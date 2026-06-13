@@ -748,21 +748,28 @@ async function sendOneBirthdayDM() {
     const target = candidates[0];
     const nm = target.name ? " " + target.name.split(" ")[0] : "";
     const subject = meta.subject || "famiglia";
-    const dm =
-        `Ciao${nm}! Sono Genesi, l'assistente della famiglia nel gruppo "${subject}" 😊\n` +
-        `Mi piacerebbe ricordare il compleanno di tutti per fare gli auguri il giorno giusto. ` +
-        `Mi scrivi la tua data di nascita? Va benissimo in qualsiasi forma, anche solo giorno e ` +
-        `mese (es. "12 marzo" oppure "12 marzo 1985"). Se preferisci non dirmela, ignora pure ` +
-        `questo messaggio. Grazie! 🎂`;
+    const isRe = c.recontact && c.recontact[target.phone];
+    const dm = isRe
+        ? (`Ciao${nm}! Scusami davvero 🙏 Poco fa ti avevo scritto per chiederti la tua data ` +
+           `di nascita, ma per un mio problema tecnico la tua risposta è andata persa e ti ho ` +
+           `risposto a sproposito, senza senso. Ora ho sistemato tutto. Mi riscrivi per favore ` +
+           `la tua data di nascita? Va benissimo in qualsiasi forma (es. "12 marzo" oppure ` +
+           `"12 marzo 1985"). Grazie e scusa per il disguido! 🎂`)
+        : (`Ciao${nm}! Sono Genesi, l'assistente della famiglia nel gruppo "${subject}" 😊\n` +
+           `Mi piacerebbe ricordare il compleanno di tutti per fare gli auguri il giorno giusto. ` +
+           `Mi scrivi la tua data di nascita? Va benissimo in qualsiasi forma, anche solo giorno e ` +
+           `mese (es. "12 marzo" oppure "12 marzo 1985"). Se preferisci non dirmela, ignora pure ` +
+           `questo messaggio. Grazie! 🎂`);
     try {
         await sock.sendMessage(target.phone, { text: dm });
         c.contacted[target.phone] = Date.now();
         c.pending[target.phone] = { name: target.name, asks: 1, ts: Date.now() };
+        if (isRe && c.recontact) delete c.recontact[target.phone];  // scuse inviate una volta sola
         // Mappa LID→numero: le risposte 1:1 arrivano con remoteJid in formato @lid
         c.lidmap = c.lidmap || {};
         if (target.lid && target.lid.endsWith("@lid")) c.lidmap[target.lid] = target.phone;
         _bdaySave(c);
-        console.log(`[Bday] DM inviato a ${target.name || target.phone} (rimasti ${candidates.length - 1})`);
+        console.log(`[Bday] DM ${isRe ? "(scuse) " : ""}inviato a ${target.name || target.phone} (rimasti ${candidates.length - 1})`);
     } catch (e) {
         console.error(`[Bday] invio fallito a ${target.phone}:`, e.message);
         c.contacted[target.phone] = Date.now();  // non ritentare all'infinito
