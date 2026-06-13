@@ -105,8 +105,9 @@ Rispondi SOLO con JSON valido.
 MAX_HISTORY    = 30   # turni conservati per gruppo (era 20)
 MAX_FACTS      = 40   # fatti per membro
 HISTORY_INJECT = 12   # turni iniettati nel prompt (era 8)
-MAX_RAW_MSGS   = 40   # messaggi grezzi conservati per gruppo (era 30)
-RAW_INJECT     = 20   # ultimi N messaggi grezzi iniettati nel contesto (era 15)
+MAX_RAW_MSGS   = 500  # "diario" del gruppo persistito su disco (era 40): storico profondo
+RAW_INJECT     = 30   # ultimi N messaggi iniettati nel prompt (snello; il resto resta nel diario)
+SUMMARY_RAW_LIMIT = 150  # quanti messaggi del diario alimentano il riepilogo periodico
 CONSOLIDATION_INTERVAL = 86400  # 24h in secondi
 OBSERVATION_EVERY_N    = 5      # ogni N messaggi di gruppo → 1 osservazione lab
 SUMMARY_INTERVAL       = 21600  # 6h — riepilogo discussioni giornaliero
@@ -636,7 +637,7 @@ async def summarize_group_discussion_if_needed(chat_id: int):
         if time.time() - last < SUMMARY_INTERVAL:
             return
 
-        raw_msgs = await get_raw_messages(chat_id, limit=MAX_RAW_MSGS)
+        raw_msgs = await get_raw_messages(chat_id, limit=SUMMARY_RAW_LIMIT)
         if len(raw_msgs) < 5:
             return
 
