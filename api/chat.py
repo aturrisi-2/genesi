@@ -929,19 +929,37 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             participants=[p.dict() for p in request.participants] if request.participants else None
         )
 
+        # DOMANDA INEVASA: se nei commenti accumulati c'è una domanda di un'altra persona
+        # a cui nessuno ha risposto, istruzione PRIORITARIA → rispondi a QUELLA persona.
+        _uq_prefix = ""
+        try:
+            from core.group_reactivity import find_unanswered_question, mark_question_handled
+            _uq = find_unanswered_question(request.recent_messages or [],
+                                           current_sender=eff_sender, group_id=group_int)
+            if _uq:
+                _uq_prefix = (
+                    f"[ISTRUZIONE PRIORITARIA: nel gruppo {_uq['name']} aveva chiesto "
+                    f"\"{_uq['text']}\" e nessuno le/gli ha ancora risposto. Rispondi PRIMA "
+                    f"di tutto a {_uq['name']}, chiamandola/o per nome, dando una risposta utile "
+                    f"e concreta alla sua domanda.]\n\n"
+                )
+                mark_question_handled(group_int, _uq['text'])
+        except Exception:
+            pass
+
         # 5. Costruisci messaggio arricchito (l'ancora d'identità è globale dentro
         # build_group_context, valida anche per Telegram).
         only_emoji = all(ord(c) > 127 or c in (' ', '\n') for c in request.text.strip())
         if only_emoji:
             enriched = (
-                f"{processed_text}\n\n"
+                f"{_uq_prefix}{processed_text}\n\n"
                 f"[GRUPPO FAMILIARE: scrive {eff_sender}. "
                 f"Reazione/emoji — risposta brevissima, calore familiare, zero domande.]\n"
                 f"{group_ctx}"
             )
         else:
             enriched = (
-                f"{processed_text}\n\n"
+                f"{_uq_prefix}{processed_text}\n\n"
                 f"[GRUPPO FAMILIARE: scrive {eff_sender}. "
                 f"Sei un membro della famiglia — rispondi con calore e concretezza, "
                 f"senza domande superflue. Usa il nome {eff_sender}.]\n"

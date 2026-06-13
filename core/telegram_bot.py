@@ -1566,7 +1566,23 @@ async def handle_update(update: dict):
                         f"\"{_quoted_genesi_text[:300]}\"]\n{message}"
                     )
                 enriched = _group_msg(msg_with_quote, group_ctx)
-                
+
+                # DOMANDA INEVASA: istruzione PRIORITARIA a rispondere alla persona giusta
+                try:
+                    from core.group_reactivity import find_unanswered_question, mark_question_handled
+                    _uq = find_unanswered_question(await get_raw_messages(chat_id, limit=12),
+                                                   current_sender=first_name, group_id=chat_id)
+                    if _uq:
+                        enriched = (
+                            f"[ISTRUZIONE PRIORITARIA: nel gruppo {_uq['name']} aveva chiesto "
+                            f"\"{_uq['text']}\" e nessuno le/gli ha ancora risposto. Rispondi PRIMA "
+                            f"di tutto a {_uq['name']}, chiamandola/o per nome, con una risposta "
+                            f"utile e concreta.]\n\n" + enriched
+                        )
+                        mark_question_handled(chat_id, _uq['text'])
+                except Exception:
+                    pass
+
                 # Aggiungi il prompt per il risveglio tardivo se necessario
                 if session.pop("late_wakeup", False):
                     await storage.save(_session_key(session_uid), session)
