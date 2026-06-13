@@ -1037,6 +1037,28 @@ async def group_present(request: GroupPresentRequest, user: AuthUser = Depends(r
         return GroupPresentResponse(response="", presented=False)
 
 
+class GroupForgetRequest(BaseModel):
+    group_id: str
+
+@router.post("/group/forget")
+async def group_forget(request: GroupForgetRequest, user: AuthUser = Depends(require_auth)):
+    """
+    Dimentica un gruppo (Genesi è stata rimossa): lo toglie dal registry così una
+    futura riaggiunta fa ripartire la presentazione. Idempotente.
+    """
+    try:
+        from core.telegram_group_memory import stable_hash
+        clean_group = request.group_id.split("@")[0].replace("-", "")
+        group_int = stable_hash(clean_group)
+        from core.group_presentation import forget_group
+        forgotten = await forget_group("whatsapp", group_int)
+        log("WA_GROUP_FORGET", group=request.group_id[:24], forgotten=forgotten)
+        return {"forgotten": forgotten}
+    except Exception as e:
+        log("GROUP_FORGET_ENDPOINT_ERROR", error=str(e))
+        return {"forgotten": False}
+
+
 @router.post("/group/should_respond", response_model=ShouldRespondResponse)
 async def group_should_respond(request: ShouldRespondRequest, user: AuthUser = Depends(require_auth)):
     """LLM decide se Genesi deve intervenire nel gruppo WhatsApp."""

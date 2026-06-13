@@ -47,6 +47,20 @@ const GENESI_REPLY_TTL = 10 * 60 * 1000; // 10 minuti
 // { jid/lid: name }
 const contactCache = {};
 
+// ── Cache groupMetadata (riduce le chiamate di rete a ogni messaggio) ─────────
+// Chiamare groupMetadata su ogni messaggio appesantisce l'event loop e può far
+// scattare rate-limit (errori 503). Cache con TTL: una chiamata per gruppo ogni 5 min.
+const _groupMetaCache = {};  // { groupId: { meta, ts } }
+const GROUP_META_TTL = 5 * 60 * 1000;
+
+async function getGroupMetaCached(sock, groupId) {
+    const c = _groupMetaCache[groupId];
+    if (c && Date.now() - c.ts < GROUP_META_TTL) return c.meta;
+    const meta = await sock.groupMetadata(groupId);
+    _groupMetaCache[groupId] = { meta, ts: Date.now() };
+    return meta;
+}
+
 function addToBuffer(groupId, name, text) {
     if (!rawBuffers[groupId]) rawBuffers[groupId] = [];
     rawBuffers[groupId].push({ name, text: text.slice(0, 200), ts: Date.now() });
@@ -148,6 +162,17 @@ async function askGenesiDirect(text) {
 
 // ── Main Baileys ──────────────────────────────────────────────────────────────
 async function startBaileys() {
+    // Teardown del socket precedente: evita "socket zombie" che continuano a
+    // riconnettersi in parallelo e martellano WhatsApp (cause di 428/503/440).
+    if (_activeSock) {
+        try { _activeSock.ev.removeAllListeners(); } catch (_) {}
+        try { _activeSock.end(undefined); } catch (_) {}
+        _activeSock = null;
+    }
+    // Una nuova connessione è in corso: sblocca la guardia così che, se questa
+    // fallisce ad aprirsi, un'ulteriore chiusura possa rischedulare il reconnect.
+    _reconnecting = false;
+
     const { version } = await fetchLatestBaileysVersion();
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
@@ -161,6 +186,7 @@ async function startBaileys() {
         printQRInTerminal: false,
         browser: ["Ubuntu", "Chrome", "20.0.04"],
         generateHighQualityLinkPreview: false,
+        keepAliveIntervalMs: 25000,  // ping attivo per non farsi chiudere la connessione idle
         getMessage: async () => undefined,
     });
 
@@ -180,14 +206,22 @@ async function startBaileys() {
             const code = lastDisconnect?.error?.output?.statusCode;
             const loggedOut  = code === DisconnectReason.loggedOut;
             const replaced   = code === 440; // sessione sostituita da altro client
-            console.log(`[Baileys] Connessione chiusa (code=${code}). Reconnect: ${!loggedOut && !replaced}`);
             if (loggedOut || replaced) {
-                console.log("[Baileys] Sessione non valida (logout o sostituita). Uscita — systemd riavvierà.");
+                console.log(`[Baileys] Sessione non valida (code=${code}: logout o sostituita). Uscita — systemd riavvierà.`);
                 process.exit(1);
+            } else if (_reconnecting) {
+                // Reconnect già pianificato: ignora le chiusure a raffica (anti-accavallamento)
+                console.log(`[Baileys] Chiusura (code=${code}) ignorata: reconnect già in corso`);
             } else {
-                setTimeout(startBaileys, 5000);
+                _reconnecting = true;
+                _connectAttempts = Math.min(_connectAttempts + 1, 6);
+                const delay = Math.min(5000 * _connectAttempts, 30000);  // backoff 5s→30s
+                console.log(`[Baileys] Connessione chiusa (code=${code}). Riconnetto tra ${delay / 1000}s (tentativo ${_connectAttempts})`);
+                setTimeout(() => startBaileys().catch(e => console.error("[Baileys] Reconnect error:", e.message)), delay);
             }
         } else if (connection === "open") {
+            _connectAttempts = 0;
+            _reconnecting = false;
             console.log("[Baileys] ✅ Connesso a WhatsApp. In ascolto su gruppi e messaggi diretti...");
         }
     });
@@ -198,13 +232,30 @@ async function startBaileys() {
     // ed entrambi sono deduplicati sul registry: niente doppie presentazioni.
     sock.ev.on("group-participants.update", async (update) => {
         try {
-            if (update.action !== "add") return;
+            // La membership è cambiata: invalida la cache metadata del gruppo
+            delete _groupMetaCache[update.id];
+
             const myJid = sock.user?.id?.replace(/:.*@/, "@") || "";
             const myLid = sock.user?.lid?.replace(/:.*@/, "@") || "";
             const BOT_IDS = ["393313650671@s.whatsapp.net", "69123891531797@lid"];
-            const added = (update.participants || []).map(p => String(p).replace(/:.*@/, "@"));
-            const meAdded = added.some(p => p === myJid || (myLid && p === myLid) || BOT_IDS.includes(p));
-            if (!meAdded) return;
+            const involved = (update.participants || []).map(p => String(p).replace(/:.*@/, "@"));
+            const meInvolved = involved.some(p => p === myJid || (myLid && p === myLid) || BOT_IDS.includes(p));
+
+            // Genesi RIMOSSA da un gruppo → lo dimentica (così una futura riaggiunta ripresenta)
+            if ((update.action === "remove") && meInvolved) {
+                try {
+                    const token = await getToken("group");
+                    await axios.post(`${GENESI_URL}/api/chat/group/forget`, { group_id: update.id },
+                        { headers: { Authorization: `Bearer ${token}` }, timeout: 15000 });
+                    console.log(`[Baileys] Genesi rimossa dal gruppo ${update.id} — dimenticato`);
+                } catch (fe) {
+                    if (fe.response?.status === 401) tokens.group = null;
+                    console.error("[Baileys] Errore forget gruppo:", fe.message);
+                }
+                return;
+            }
+
+            if (update.action !== "add" || !meInvolved) return;
 
             console.log(`[Baileys] Genesi aggiunta al gruppo ${update.id} — mi presento`);
             let subject = "questo gruppo";
@@ -454,7 +505,7 @@ async function startBaileys() {
                 let groupName = "WhatsApp Group";
                 let participants = null;
                 try {
-                    const meta = await sock.groupMetadata(groupId);
+                    const meta = await getGroupMetaCached(sock, groupId);
                     if (meta?.subject) groupName = meta.subject;
                     const cleanSender = senderJid.replace(/:.*@/, "@");
                     const p = meta?.participants?.find(x => x.id === senderJid);
@@ -485,7 +536,6 @@ async function startBaileys() {
                 // Salva nel buffer grezzo locale
                 addToBuffer(groupId, senderName, text);
                 console.log(`[${senderName}@${groupName}] ${text.slice(0, 60)}`);
-                console.log(`[Baileys] Group participants in ${groupName} (${groupId}):`, JSON.stringify(participants));
 
                 // Filtra: LLM decide se intervenire
                 const token = await getToken("group");
@@ -547,6 +597,8 @@ const SEND_PORT = parseInt(process.env.BAILEYS_SEND_PORT || "3001", 10);
 const SEND_SECRET = process.env.BAILEYS_SEND_SECRET || "";
 
 let _activeSock = null;  // riferimento al socket Baileys attivo
+let _reconnecting = false;   // guardia: un reconnect è già pianificato
+let _connectAttempts = 0;    // contatore per il backoff esponenziale
 
 function startHttpServer() {
     const server = http.createServer(async (req, res) => {

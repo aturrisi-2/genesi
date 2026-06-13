@@ -63,6 +63,32 @@ async def _already_known(platform: str, group_id_int: int) -> bool:
     return False
 
 
+async def forget_group(platform: str, group_id_int: int) -> bool:
+    """
+    Dimentica un gruppo: lo rimuove dal registry così una futura riaggiunta fa
+    ripartire la presentazione da zero. Chiamato quando Genesi viene rimossa da
+    un gruppo. Ferma anche i saluti proattivi verso un gruppo in cui non è più.
+    """
+    try:
+        from core.birthday_service import get_known_groups, _known_groups_key
+        from core.storage import storage
+        known = await get_known_groups()
+        kept = [g for g in known
+                if not (g.get("chat_id") == group_id_int and g.get("platform") == platform)]
+        if len(kept) != len(known):
+            await storage.save(_known_groups_key(), kept)
+            try:
+                await storage.delete(f"group_title:{group_id_int}")
+            except Exception:
+                pass
+            log("GROUP_FORGOTTEN", platform=platform, group=group_id_int)
+            return True
+        return False
+    except Exception as e:
+        log("GROUP_FORGET_ERROR", platform=platform, error=str(e))
+        return False
+
+
 async def maybe_present_in_group(
     platform: str,
     group_id_int: int,
