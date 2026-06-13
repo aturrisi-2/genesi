@@ -902,12 +902,23 @@ async def instagram_publisher_scheduler():
     Insights aggiornati una volta ogni ~6 ore.
     """
     last_insights = 0.0
+    last_heartbeat = 0.0
     while True:
         try:
             if _enabled():
                 now = datetime.now(TZ_ROME)
                 today = now.strftime("%Y-%m-%d")
                 now_hm = now.strftime("%H:%M")
+
+                # Heartbeat orario: rende lo scheduler osservabile nei log
+                # (conferma che il loop è vivo senza dover attendere uno slot).
+                if time.time() - last_heartbeat > 3600:
+                    state_hb = _load_state()
+                    done_today = state_hb.get("published_slots", {}).get(today, [])
+                    log("IG_PUB_HEARTBEAT", now=now_hm,
+                        slots_done=",".join(done_today) or "-",
+                        next_posts=",".join(_publish_times()))
+                    last_heartbeat = time.time()
 
                 state = _load_state()
                 slots_done = state.setdefault("published_slots", {}).get(today, [])

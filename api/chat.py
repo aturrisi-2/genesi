@@ -723,11 +723,33 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
         try:
             sender_int = stable_hash(clean_sender)
             group_int  = stable_hash(clean_group)
-            from core.birthday_service import register_known_group
-            _aio.create_task(register_known_group(group_int, "whatsapp", title=request.group_name))
         except Exception:
             sender_int = 0
             group_int  = 0
+
+        # 0pre. PRIMA volta che Genesi incontra questo gruppo → si presenta.
+        # Logica unica/globale (vale per ogni piattaforma), deduplicata sul registry
+        # dei gruppi noti: robusta anche se l'evento di join del bridge non scatta.
+        try:
+            from core.group_presentation import maybe_present_in_group
+            _intro = await maybe_present_in_group(
+                platform="whatsapp",
+                group_id_int=group_int,
+                group_name=request.group_name,
+                participants=[p.dict() for p in request.participants] if request.participants else None,
+            )
+            if _intro:
+                log("WA_GROUP_PRESENTED", group=request.group_id[:24], name=request.group_name[:30])
+                return GroupChatResponse(response=_intro, status="presented")
+        except Exception as _pe:
+            log("WA_GROUP_PRESENT_FAIL", error=str(_pe))
+
+        # Registrazione idempotente del gruppo (saluti proattivi futuri)
+        try:
+            from core.birthday_service import register_known_group
+            _aio.create_task(register_known_group(group_int, "whatsapp", title=request.group_name))
+        except Exception:
+            pass
 
         # 0. Auto-match nome → parentela dal family_tree di Alfio
         #    Se il nome corrisponde a un membro noto, pre-popola la relazione subito
@@ -974,6 +996,46 @@ class ShouldRespondRequest(BaseModel):
 class ShouldRespondResponse(BaseModel):
     intervieni: bool
     motivo: str
+
+class GroupPresentRequest(BaseModel):
+    group_id: str
+    group_name: str = "WhatsApp Group"
+    participants: Optional[list[GroupParticipant]] = None
+    adder_name: str = ""
+
+class GroupPresentResponse(BaseModel):
+    response: str = ""
+    presented: bool = False
+
+
+@router.post("/group/present", response_model=GroupPresentResponse)
+async def group_present(request: GroupPresentRequest, user: AuthUser = Depends(require_auth)):
+    """
+    Presentazione di Genesi all'ingresso in un gruppo — endpoint dedicato, idempotente.
+    Chiamato dall'evento di join del bridge: se il gruppo è nuovo ritorna il testo di
+    presentazione, altrimenti `presented=false` (senza effetti collaterali). La stessa
+    logica è il fallback sul primo messaggio in `/group`, deduplicata sul registry.
+    """
+    try:
+        from core.telegram_group_memory import stable_hash
+        clean_group = request.group_id.split("@")[0].replace("-", "")
+        group_int = stable_hash(clean_group)
+        from core.group_presentation import maybe_present_in_group
+        intro = await maybe_present_in_group(
+            platform="whatsapp",
+            group_id_int=group_int,
+            group_name=request.group_name,
+            participants=[p.dict() for p in request.participants] if request.participants else None,
+            adder_name=request.adder_name or "",
+        )
+        if intro:
+            log("WA_GROUP_PRESENTED_JOIN", group=request.group_id[:24], name=request.group_name[:30])
+            return GroupPresentResponse(response=intro, presented=True)
+        return GroupPresentResponse(response="", presented=False)
+    except Exception as e:
+        log("GROUP_PRESENT_ENDPOINT_ERROR", error=str(e))
+        return GroupPresentResponse(response="", presented=False)
+
 
 @router.post("/group/should_respond", response_model=ShouldRespondResponse)
 async def group_should_respond(request: ShouldRespondRequest, user: AuthUser = Depends(require_auth)):

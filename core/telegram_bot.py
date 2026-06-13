@@ -599,37 +599,22 @@ async def _handle_group_join(chat_id: int, msg: dict):
 
         await send_typing(chat_id)
 
-        # Presentazione generata dal LLM, su misura per il gruppo
-        from core.llm_service import llm_service
-        ctx = (
-            f"Sei appena stata aggiunta al gruppo Telegram '{title}'"
-            + (f" da {adder}" if adder else "") + ".\n"
-            + (f"Persone che CONOSCI GIÀ presenti: {', '.join(known_names)}.\n" if known_names else "")
-            + (f"Altre persone presenti: {', '.join(other_names)}.\n" if other_names else "")
-            + ("Questo è un gruppo della tua FAMIGLIA: tono affettuoso da familiare.\n"
-               if is_family else
-               "Gruppo nuovo: tono cordiale e simpatico, da ospite educata.\n")
+        # Presentazione tramite il modulo UNICO/GLOBALE (stessa logica di WhatsApp/Meta).
+        # I nomi degli admin diventano "partecipanti visibili" per un saluto su misura.
+        from core.group_presentation import maybe_present_in_group
+        participants = [{"name": n, "is_me": False} for n in (known_names + other_names)]
+        intro = await maybe_present_in_group(
+            platform="telegram",
+            group_id_int=chat_id,
+            group_name=title,
+            participants=participants,
+            adder_name=adder,
+            is_family=is_family,
         )
-        prompt = (
-            "Sei Genesi, assistente AI italiana. Scrivi il tuo PRIMO messaggio in un "
-            "gruppo a cui sei appena stata aggiunta. REGOLE:\n"
-            "- Ringrazia per nome chi ti ha aggiunta\n"
-            "- Se conosci già qualcuno, salutalo per nome con piacere genuino\n"
-            "- Deduci il contesto dal nome del gruppo e fai un cenno simpatico\n"
-            "- Presentati in 1 frase (cosa sai fare: chiacchierare, meteo, notizie, "
-            "ricordare le cose importanti, capire foto vocali e video)\n"
-            "- Massimo 4 frasi, calorosa, niente elenchi puntati, 1-2 emoji"
-        )
-        intro = await llm_service._call_model(
-            "openai/gpt-4o-mini", prompt, ctx,
-            user_id=f"tg_join_{chat_id}", route="memory")
-        if not intro or not intro.strip():
-            intro = (f"Ciao a tutti! Grazie {adder} per avermi aggiunta 😊 "
-                     "Sono Genesi: chiacchiero, ricordo le cose importanti e "
-                     "capisco foto, vocali e video. Felice di essere qui!")
-        await send_message(chat_id, intro.strip())
-        log("TELEGRAM_GROUP_JOIN_GREETED", chat_id=chat_id,
-            known=len(known_names), others=len(other_names))
+        if intro:
+            await send_message(chat_id, intro)
+            log("TELEGRAM_GROUP_JOIN_GREETED", chat_id=chat_id,
+                known=len(known_names), others=len(other_names))
     except Exception as e:
         logger.error("TELEGRAM_GROUP_JOIN_ERROR chat_id=%s err=%s", chat_id, e)
 
@@ -1042,6 +1027,25 @@ async def handle_update(update: dict):
                 if _names:
                     asyncio.create_task(_welcome_new_member(chat_id, _names))
                 return
+
+        # ── Fallback robusto presentazione: se Genesi si ritrova in un gruppo MAI
+        #    salutato (es. evento di join perso mentre era offline), si presenta al
+        #    primo messaggio utile. Stessa logica globale di WhatsApp/Meta, deduplicata
+        #    sul registry: sui gruppi già noti è un semplice read e prosegue.
+        if is_group:
+            try:
+                from core.group_presentation import maybe_present_in_group
+                _intro = await maybe_present_in_group(
+                    platform="telegram",
+                    group_id_int=chat_id,
+                    group_name=msg["chat"].get("title", "questo gruppo"),
+                )
+                if _intro:
+                    await send_message(chat_id, _intro)
+                    log("TELEGRAM_GROUP_PRESENTED_FALLBACK", chat_id=chat_id)
+                    return
+            except Exception as _pe:
+                logger.debug("TG_GROUP_PRESENT_FALLBACK_ERR %s", _pe)
 
         photo      = msg.get("photo")       # lista di dimensioni
         voice      = msg.get("voice")       # messaggio vocale

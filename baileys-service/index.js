@@ -192,45 +192,54 @@ async function startBaileys() {
         }
     });
 
-    // ── Genesi aggiunta a un gruppo: occhiata ai partecipanti + presentazione ──
+    // ── Genesi aggiunta a un gruppo: trigger di presentazione (logica nell'app) ──
+    // L'evento di join è la scorciatoia "istantanea"; la GARANZIA robusta è il
+    // fallback sul primo messaggio (lato app). Entrambi passano da /api/group/present
+    // ed entrambi sono deduplicati sul registry: niente doppie presentazioni.
     sock.ev.on("group-participants.update", async (update) => {
         try {
             if (update.action !== "add") return;
             const myJid = sock.user?.id?.replace(/:.*@/, "@") || "";
             const myLid = sock.user?.lid?.replace(/:.*@/, "@") || "";
+            const BOT_IDS = ["393313650671@s.whatsapp.net", "69123891531797@lid"];
             const added = (update.participants || []).map(p => String(p).replace(/:.*@/, "@"));
-            const meAdded = added.some(p => p === myJid || p === myLid);
+            const meAdded = added.some(p => p === myJid || (myLid && p === myLid) || BOT_IDS.includes(p));
             if (!meAdded) return;
 
             console.log(`[Baileys] Genesi aggiunta al gruppo ${update.id} — mi presento`);
-            const meta = await sock.groupMetadata(update.id);
-            const subject = meta?.subject || "questo gruppo";
-            const partNames = (meta?.participants || [])
-                .map(p => {
+            let subject = "questo gruppo";
+            let participants = null;
+            let adderName = "";
+            try {
+                const meta = await sock.groupMetadata(update.id);
+                subject = meta?.subject || subject;
+                participants = (meta?.participants || []).map(p => {
                     const pid = String(p.id || "").replace(/:.*@/, "@");
-                    if (pid === myJid || pid === myLid) return null;
-                    return contactCache[pid] || p.name || null;
-                })
-                .filter(Boolean);
-            const adderId = String(update.author || "").replace(/:.*@/, "@");
-            const adderName = contactCache[adderId] || "";
+                    const isMe = pid === myJid || (myLid && pid === myLid) || BOT_IDS.includes(pid);
+                    return { id: pid, name: contactCache[pid] || p.name || null, is_me: isMe };
+                });
+                const adderId = String(update.author || "").replace(/:.*@/, "@");
+                adderName = contactCache[adderId] || "";
+            } catch (metaErr) {
+                console.error("[Baileys] Metadata gruppo non disponibile:", metaErr.message);
+            }
 
-            const sysText =
-                `[SISTEMA] Sei appena stata aggiunta a questo gruppo WhatsApp chiamato "${subject}"` +
-                (adderName ? ` da ${adderName}` : "") + `. ` +
-                (partNames.length ? `Partecipanti visibili: ${partNames.join(", ")}. ` : "") +
-                `Scrivi il tuo PRIMO messaggio: ringrazia per nome chi ti ha aggiunta, ` +
-                `saluta per nome le persone che conosci, deduci il contesto dal nome del gruppo ` +
-                `e presentati in 1 frase (chiacchiere, meteo, notizie, memoria, foto/vocali/video). ` +
-                `Massimo 4 frasi, calorosa, 1-2 emoji, niente elenchi.`;
+            const token = await getToken("group");
+            const res = await axios.post(`${GENESI_URL}/api/group/present`, {
+                group_id:    update.id,
+                group_name:  subject,
+                participants: participants,
+                adder_name:  adderName,
+            }, { headers: { Authorization: `Bearer ${token}` }, timeout: 35000 });
 
-            const reply = await askGenesiGroup(sysText, "Sistema", "system",
-                update.id, subject, null);
-            if (reply) {
-                await sock.sendMessage(update.id, { text: reply });
+            if (res.data?.presented && res.data?.response) {
+                await sock.sendMessage(update.id, { text: res.data.response });
                 console.log(`[Baileys] Presentazione inviata in ${subject}`);
+            } else {
+                console.log(`[Baileys] Gruppo ${subject} già noto — nessuna ri-presentazione`);
             }
         } catch (e) {
+            if (e.response?.status === 401) tokens.group = null;
             console.error("[Baileys] Errore presentazione gruppo:", e.message);
         }
     });
