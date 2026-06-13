@@ -927,34 +927,55 @@ async def birthday_scheduler():
                                 tg_global_key = f"relational_state:last_group_greeting_ts_{gid}"
                                 await storage.save(tg_global_key, now_ts)
                                 
-                    # Invia a WhatsApp
-                    if _WA_GROUP_JID:
-                        import httpx
-                        from core.telegram_group_memory import stable_hash
-                        wa_chat_id = stable_hash(_WA_GROUP_JID)
+                    # Invia a TUTTI i gruppi WhatsApp noti (non più solo _WA_GROUP_JID).
+                    # Il registry tiene il chat_id hashato; il JID originale è salvato in
+                    # "wa_group_jid:{chat_id}" al passaggio dei messaggi di gruppo.
+                    import httpx
+                    from core.telegram_group_memory import stable_hash
+                    wa_targets = {}  # {jid: chat_id}
+                    for g in known_groups:
+                        if g.get("platform") != "whatsapp":
+                            continue
+                        cid = g["chat_id"]
+                        jid = await storage.load(f"wa_group_jid:{cid}", default="")
+                        if not jid:
+                            # Backward-compat: il gruppo storico hardcoded
+                            if _WA_GROUP_JID and stable_hash(_WA_GROUP_JID) == cid:
+                                jid = _WA_GROUP_JID
+                            else:
+                                continue  # JID non ancora noto: si salverà al primo messaggio
+                        wa_targets[jid] = cid
+                    # Assicura comunque la presenza del gruppo storico
+                    if _WA_GROUP_JID and _WA_GROUP_JID not in wa_targets:
+                        wa_targets[_WA_GROUP_JID] = stable_hash(_WA_GROUP_JID)
+
+                    for jid, cid in wa_targets.items():
                         msg = await _generate_proactive_greeting(
                             [(n, a) for n, a, _ in birthdays_today],
                             event_type,
                             today_date,
-                            chat_id=wa_chat_id,
+                            chat_id=cid,
                             platform="whatsapp"
                         )
-                        if msg:
-                            payload = {"groupId": _WA_GROUP_JID, "text": msg}
-                            if _BAILEYS_SEND_SECRET:
-                                payload["secret"] = _BAILEYS_SEND_SECRET
+                        if not msg:
+                            continue
+                        payload = {"groupId": jid, "text": msg}
+                        if _BAILEYS_SEND_SECRET:
+                            payload["secret"] = _BAILEYS_SEND_SECRET
+                        try:
                             async with httpx.AsyncClient(timeout=10) as client:
                                 _wa_res = await client.post(_BAILEYS_SEND_URL, json=payload)
                                 # Logga SEMPRE l'esito: un "forbidden" silenzioso
                                 # ha nascosto per giorni il saluto WA mai recapitato
                                 if _wa_res.status_code == 200:
-                                    log("PROACTIVE_GREETING_WA_OK", jid=_WA_GROUP_JID)
+                                    log("PROACTIVE_GREETING_WA_OK", jid=jid)
                                 else:
-                                    log("PROACTIVE_GREETING_WA_FAIL", jid=_WA_GROUP_JID,
+                                    log("PROACTIVE_GREETING_WA_FAIL", jid=jid,
                                         status=_wa_res.status_code, body=_wa_res.text[:120])
-                            # Registra il timestamp del saluto proattivo per il gap globale di 1 ora
-                            wa_global_key = f"relational_state:last_group_greeting_ts_{wa_chat_id}"
-                            await storage.save(wa_global_key, now_ts)
+                        except Exception as _wae:
+                            log("PROACTIVE_GREETING_WA_FAIL", jid=jid, status=0, body=str(_wae)[:120])
+                        # Registra il timestamp del saluto proattivo per il gap globale di 1 ora
+                        await storage.save(f"relational_state:last_group_greeting_ts_{cid}", now_ts)
                             
                     # Segna come inviato per oggi
                     await storage.save(sent_key, True)

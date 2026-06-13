@@ -746,10 +746,13 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
         except Exception as _pe:
             log("WA_GROUP_PRESENT_FAIL", error=str(_pe))
 
-        # Registrazione idempotente del gruppo (saluti proattivi futuri)
+        # Registrazione idempotente del gruppo (saluti proattivi futuri).
+        # Salva anche la mappa hash→JID: serve per inviare i saluti mattutini a TUTTI
+        # i gruppi WhatsApp noti (il registry tiene solo il chat_id hashato).
         try:
             from core.birthday_service import register_known_group
             _aio.create_task(register_known_group(group_int, "whatsapp", title=request.group_name))
+            _aio.create_task(storage.save(f"wa_group_jid:{group_int}", request.group_id))
         except Exception:
             pass
 
