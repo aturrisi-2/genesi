@@ -25,6 +25,10 @@ _BAILEYS_SEND_SECRET = os.getenv("BAILEYS_SEND_SECRET", "")
 # Gruppo WhatsApp ID (jid Baileys) — es. "39...-...@g.us"
 _WA_GROUP_JID = os.getenv("WA_GROUP_JID", "")
 
+# Gruppo WhatsApp che riceve OGNI MATTINA, a corredo del saluto, un'immagine
+# generata coerente con il testo del saluto e col meteo del posto (solo questo gruppo).
+_WA_MORNING_IMAGE_JID = os.getenv("WA_MORNING_IMAGE_JID", "393298879304-1482062977@g.us")
+
 logger = logging.getLogger(__name__)
 _TZ = ZoneInfo("Europe/Rome")
 
@@ -817,6 +821,55 @@ async def _generate_proactive_greeting(birthdays: list, event_type: str, today_d
         return "Buongiorno a tutti! Inizia una nuova giornata, buon lavoro e buona giornata a tutti!"
 
 
+async def _generate_morning_image(greeting_text: str, chat_id: int, platform: str = "whatsapp") -> str:
+    """
+    Genera un'immagine mattutina coerente con il testo del saluto e con il meteo
+    reale del posto. Ritorna l'URL pubblico (static/ig_posts) o "" se non riuscita.
+    """
+    try:
+        # 1. Meteo reale del gruppo (stesse fonti del saluto)
+        locations = await get_group_members_locations(chat_id)
+        cities = list(set(locations.values())) or ["Imola"]
+        wres = await asyncio.gather(
+            *[_get_quick_weather_summary(c) for c in cities], return_exceptions=True
+        )
+        weather = "; ".join(r for r in wres if isinstance(r, str) and r) or "cielo sereno"
+
+        # 2. Prompt immagine coerente con saluto + meteo (LLM, con fallback)
+        from core.llm_service import llm_service
+        img_prompt = await llm_service._call_model(
+            "openai/gpt-4o-mini",
+            "Sei un art director. Produci SOLO un prompt in inglese per un generatore di "
+            "immagini, senza spiegazioni né virgolette.",
+            ("Crea il prompt per un'illustrazione/foto calda e accogliente da 'buongiorno', "
+             "UNA sola scena, coerente con questo saluto e con il meteo reale.\n"
+             f"Saluto: \"{greeting_text}\"\n"
+             f"Meteo reale ora: {weather}\n"
+             "Rispecchia fedelmente le condizioni meteo (sole/nuvole/pioggia, luce, stagione). "
+             "Nessun testo nell'immagine, nessun volto riconoscibile. Massimo 60 parole."),
+            user_id="morning-image",
+            route="memory",
+        )
+        if not img_prompt or not img_prompt.strip():
+            img_prompt = (
+                f"A warm, cozy good-morning illustration that reflects the real weather "
+                f"({weather}). Soft natural morning light, inviting family atmosphere, "
+                "no text, no recognizable faces."
+            )
+
+        # 3. Genera e salva → URL pubblico (riusa la pipeline immagini di Instagram)
+        from core.instagram_publisher import _create_image
+        url = await _create_image(img_prompt.strip())
+        if url:
+            log("MORNING_IMAGE_OK", chat_id=chat_id, weather=weather[:60])
+        else:
+            log("MORNING_IMAGE_FAIL", chat_id=chat_id)
+        return url or ""
+    except Exception as e:
+        logger.warning("MORNING_IMAGE_ERROR chat_id=%s err=%s", chat_id, e)
+        return ""
+
+
 # ── Scheduler loop ─────────────────────────────────────────────────────────────
 
 async def birthday_scheduler():
@@ -960,6 +1013,12 @@ async def birthday_scheduler():
                         if not msg:
                             continue
                         payload = {"groupId": jid, "text": msg}
+                        # Solo per il gruppo configurato: immagine mattutina generata,
+                        # coerente con il saluto e col meteo del posto, inviata come caption.
+                        if jid == _WA_MORNING_IMAGE_JID:
+                            _img_url = await _generate_morning_image(msg, cid, "whatsapp")
+                            if _img_url:
+                                payload = {"groupId": jid, "imageUrl": _img_url, "caption": msg}
                         if _BAILEYS_SEND_SECRET:
                             payload["secret"] = _BAILEYS_SEND_SECRET
                         try:
