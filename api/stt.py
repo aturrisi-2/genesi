@@ -42,9 +42,10 @@ def get_local_stt_model():
                 os.makedirs(cache_dir, exist_ok=True)
             except Exception:
                 cache_dir = None
-        logger.info("STT_LOCAL_INIT: Loading Whisper 'base' model (device=cpu, compute_type=int8, cache=%s)...", cache_dir)
-        _local_model_instance = WhisperModel("base", device="cpu", compute_type="int8", download_root=cache_dir)
-        logger.info("STT_LOCAL_INIT: Whisper model loaded successfully.")
+        model_name = os.environ.get("STT_MODEL", "small")  # 'small' = molto meglio del 'base' per l'italiano
+        logger.info("STT_LOCAL_INIT: Loading Whisper '%s' model (device=cpu, compute_type=int8, cache=%s)...", model_name, cache_dir)
+        _local_model_instance = WhisperModel(model_name, device="cpu", compute_type="int8", download_root=cache_dir)
+        logger.info("STT_LOCAL_INIT: Whisper model '%s' loaded successfully.", model_name)
     return _local_model_instance
 
 # Estensioni supportate da OpenAI Whisper API

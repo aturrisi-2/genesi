@@ -18,6 +18,24 @@ def _trunc(s: str, max_len: int = 80) -> str:
 import os
 
 LOG_FILE = "genesi.log"
+_MAX_LOG_BYTES = 50 * 1024 * 1024  # rotazione a 50MB
+_write_count = 0
+
+
+def _rotate_if_needed():
+    """Rotazione per dimensione: tiene un backup (.1) e riparte. Evita log enormi."""
+    try:
+        if os.path.getsize(LOG_FILE) > _MAX_LOG_BYTES:
+            bak = LOG_FILE + ".1"
+            try:
+                if os.path.exists(bak):
+                    os.remove(bak)
+            except Exception:
+                pass
+            os.rename(LOG_FILE, bak)
+    except Exception:
+        pass
+
 
 def log(tag: str, **kwargs):
     parts = [f"[{_ts()}] {tag}"]
@@ -37,8 +55,12 @@ def log(tag: str, **kwargs):
     print(log_line, flush=True)
     
     # Scrittura su file persistente per Auditor
+    global _write_count
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(log_line + "\n")
+        _write_count += 1
+        if _write_count % 500 == 0:
+            _rotate_if_needed()
     except Exception:
         pass

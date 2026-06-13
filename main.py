@@ -92,6 +92,19 @@ async def lifespan(app: FastAPI):
         t.add_done_callback(_bg_tasks.discard)
         log(f"{label}_STARTED", status="ok")
 
+    # Indice vettoriale manuali: (ri)costruisce SOLO se i manuali sono cambiati
+    # (idempotente via firma) — così aggiungere un manuale lo rende cercabile al riavvio.
+    async def _vector_index_refresh():
+        try:
+            from core.vector_memory import build_index
+            res = await build_index()
+            log("VECTOR_INDEX_STARTUP", **{k: res.get(k) for k in ("built", "chunks", "reason") if k in res})
+        except Exception as e:
+            log("VECTOR_INDEX_STARTUP_ERROR", error=str(e))
+    _vt = asyncio.create_task(_vector_index_refresh())
+    _bg_tasks.add(_vt)
+    _vt.add_done_callback(_bg_tasks.discard)
+
     # Registra webhook Telegram
     from core.telegram_bot import set_webhook
     asyncio.create_task(set_webhook("https://genesi.lucadigitale.eu/api/telegram/webhook"))

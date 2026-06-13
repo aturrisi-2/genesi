@@ -746,6 +746,10 @@ async def check_and_send_birthdays():
 
 # ── Generatore Messaggio Proattivo LLM ─────────────────────────────────────────
 
+_WEATHER_CACHE: dict[str, tuple[float, str]] = {}  # city_lower -> (ts, summary)
+_WEATHER_TTL = 1800  # 30 min: il meteo non cambia a vista, evita chiamate ripetute
+
+
 async def _get_quick_weather_summary(city_name: str) -> str:
     """Ritorna una sintesi meteo super concisa (es. 'Imola: Cielo sereno, 23°C') per lo scheduler proattivo."""
     import httpx
@@ -753,6 +757,12 @@ async def _get_quick_weather_summary(city_name: str) -> str:
     OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY", "")
     if not OPENWEATHER_API_KEY:
         return ""
+    # Cache: stessa città entro 30 min → niente seconda chiamata a OpenWeather
+    _ck = (city_name or "").strip().lower()
+    _now = time.time()
+    _hit = _WEATHER_CACHE.get(_ck)
+    if _hit and _now - _hit[0] < _WEATHER_TTL:
+        return _hit[1]
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             # 1. Geocoding
@@ -789,7 +799,9 @@ async def _get_quick_weather_summary(city_name: str) -> str:
             w_data = w_resp.json()
             temp = round(w_data.get("main", {}).get("temp", 0))
             desc = w_data.get("weather", [{}])[0].get("description", "").lower()
-            return f"{city_name}: {desc}, {temp}°C"
+            _summary = f"{city_name}: {desc}, {temp}°C"
+            _WEATHER_CACHE[_ck] = (_now, _summary)
+            return _summary
     except Exception as e:
         logger.warning("PROACTIVE_GREETING_WEATHER_ERROR city=%s err=%s", city_name, e)
         return ""

@@ -33,8 +33,37 @@ class ManualService:
 
     def search(self, query: str, limit_chars: int = 3000) -> str:
         """
-        Cerca parole chiave della query all'interno dei manuali e restituisce i paragrafi rilevanti.
+        Cerca nei manuali e restituisce i paragrafi rilevanti.
+        Prima ricerca SEMANTICA (vettoriale sqlite-vec); se non disponibile o vuota,
+        fallback alla ricerca per parole chiave.
         """
+        if not query or not query.strip():
+            return ""
+
+        # 1) Ricerca semantica (vettoriale)
+        try:
+            from core.vector_memory import search_sync as _vsearch
+            hits = _vsearch(query, top_k=6)
+            if hits:
+                out, total = [], 0
+                for h in hits:
+                    block = f"[{h['title']}]\n{h['text']}"
+                    if h.get("url"):
+                        block += f"\n(Fonte: {h['url']})"
+                    if total + len(block) > limit_chars:
+                        break
+                    out.append(block)
+                    total += len(block)
+                if out:
+                    return "\n\n".join(out)
+        except Exception as e:
+            logger.debug("MANUAL_VECTOR_SEARCH_FALLBACK err=%s", e)
+
+        # 2) Fallback: ricerca per parole chiave (legacy)
+        return self._search_keywords(query, limit_chars)
+
+    def _search_keywords(self, query: str, limit_chars: int = 3000) -> str:
+        """Ricerca per parole chiave (fallback se il vettoriale non è disponibile)."""
         if not query or not query.strip():
             return ""
 
