@@ -75,9 +75,15 @@ _GROUP_CONV_STATE: dict[int, dict] = {}
 # { chat_id: {"wa_id": str, "category": str, "late_wakeup": bool, "pure": bool, "ts": float} }
 _PENDING_GREETINGS: dict[int, dict] = {}
 
-# I gruppi WhatsApp gestiti da Genesi sono attualmente tutti familiari
-# (la pipeline usa già il prompt "GRUPPO FAMILIARE" per ogni gruppo WA).
-_WA_GROUPS_ARE_FAMILY = True
+# Gruppi familiari WhatsApp: tono caldo, saluti proattivi, estrazione relazioni.
+# Solo questi chat_id ricevono il trattamento "famiglia". Gli altri gruppi
+# (lavoro, test, ecc.) usano il tono normale da assistente esterno.
+_WA_FAMILY_GROUP_IDS: set[int] = {
+    943999700,    # ❤Nipoti&Fratelli TURRISI
+}
+
+def _is_wa_family_group(chat_id: int) -> bool:
+    return int(chat_id) in _WA_FAMILY_GROUP_IDS
 
 
 def _get_greeting_category(text_lower: str) -> str:
@@ -1139,7 +1145,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     message=(text or caption or ""),
                     platform="whatsapp",
                     group_id=str(chat_id),
-                    is_family_group=_WA_GROUPS_ARE_FAMILY,
+                    is_family_group=_is_wa_family_group(chat_id),
                 ))
             except Exception as _gge:
                 logger.warning("GROUP_GREETING_EXTRACT_TASK_FAIL_WA err=%s", _gge)
@@ -1201,7 +1207,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                         message=(text or caption or ""),
                         platform="whatsapp",
                         group_id=str(chat_id),
-                        is_family_group=_WA_GROUPS_ARE_FAMILY,
+                        is_family_group=_is_wa_family_group(chat_id),
                     ))
                     if _pending_greet.get("pure"):
                         # Saluto puro → risposta personalizzata diretta
@@ -1213,7 +1219,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                             greeting_category=_pending_greet.get("category", "general"),
                             platform="whatsapp",
                             group_id=str(chat_id),
-                            is_family_group=_WA_GROUPS_ARE_FAMILY,
+                            is_family_group=_is_wa_family_group(chat_id),
                             is_late_wakeup=_pending_greet.get("late_wakeup", False),
                         )
                         if greet_reply:
