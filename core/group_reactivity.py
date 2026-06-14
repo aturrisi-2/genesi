@@ -1,12 +1,14 @@
 """
 Reattività dei gruppi — logica GLOBALE condivisa (Telegram + WhatsApp + Meta).
 
-Due funzioni:
+Funzioni:
 1) Anti-stale: se mentre Genesi elabora una risposta la STESSA persona scrive un
    nuovo messaggio, la risposta vecchia ha perso il contesto → va scartata. Il
    messaggio nuovo riceverà una risposta fresca.
 2) Domande inevase: trova l'ultima domanda di un utente a cui NESSUNO ha risposto,
    così Genesi può rispondere direttamente a quella persona.
+3) Rilevamento tono emotivo: analizza i messaggi recenti e identifica se il gruppo
+   è in modalità umoristica, di lutto/dolore o neutrale, per adattare il tono di risposta.
 """
 from __future__ import annotations
 
@@ -57,6 +59,101 @@ def is_conversation_moved_on(platform: str, group_id, arrival_ts: float,
     arrivals = _GROUP_ARRIVALS.get(gk, [])
     count = sum(1 for _, ts in arrivals if ts > arrival_ts + 0.3)
     return count >= threshold
+
+
+# ── Rilevamento tono emotivo del gruppo ───────────────────────────────────────
+
+# Segnali di lutto/dolore (peso 3 per occorrenza — prevale su humor)
+_GRIEF_PHRASES = (
+    "lutto", "è mancato", "è mancata", "ci ha lasciato", "ci ha lasciati",
+    "è venuto a mancare", "è venuta a mancare", "condoglianze", "rip ",
+    "riposa in pace", "funerale", "scomparso", "scomparsa",
+    "se n'è andato", "se n'è andata", "il signore lo ha chiamato",
+    "preghiamo per", "pregare per", "nostro angelo", "in lutto",
+    "ha perso la vita", "deceduto", "deceduta", "veglia funebre",
+    "dolore immenso", "ci mancherà", "era una persona", "un grande vuoto",
+    "addio per sempre", "lo ricorderemo", "la ricorderemo",
+)
+# Parole singole di lutto (controllate come parola intera)
+_GRIEF_WORDS = ("morto", "morta", "morti", "morte", "perdita", "dolore")
+
+# Segnali di umorismo (peso 2 per occorrenza)
+_HUMOR_PHRASES = (
+    "ahah", "ahahah", "hahaha", "haha", "hehe", "lol", "lmao",
+    "che ridere", "muoio dal ridere", "sto morendo", "troppo forte",
+    "che storia", "stavo scherzando", "era uno scherzo", "dai su",
+    "ma va", "ma figurati", "ma dai", "ahahha", "hahah",
+    "mi fai morire", "ci fai morire",
+)
+_HUMOR_EMOJIS = frozenset("😂🤣😅😜🤪🙃😝😁😆🤭😈🃏🎭")
+
+
+def detect_group_emotional_tone(raw_msgs: list, lookback: int = 20) -> dict:
+    """Analizza gli ultimi messaggi e rileva il tono emotivo dominante del gruppo.
+
+    Ritorna {"tone": "grief"|"humor"|"normal", "note": str, "prompt_block": str}
+    Il prompt_block è la stringa pronta da iniettare nel contesto del LLM.
+    """
+    msgs = (raw_msgs or [])[-lookback:]
+    if not msgs:
+        return {"tone": "normal", "note": "", "prompt_block": ""}
+
+    grief_score = 0
+    humor_score = 0
+
+    for m in msgs:
+        text_lower = (m.get("text") or "").lower()
+        text_orig  = (m.get("text") or "")
+
+        # --- Lutto ---
+        for phrase in _GRIEF_PHRASES:
+            if phrase in text_lower:
+                grief_score += 3
+                break
+        else:
+            # Solo se nessuna frase composta trovata, controlla parole singole
+            import re as _re
+            for word in _GRIEF_WORDS:
+                if _re.search(r"\b" + word + r"\b", text_lower):
+                    grief_score += 3
+                    break
+
+        # --- Umorismo ---
+        for phrase in _HUMOR_PHRASES:
+            if phrase in text_lower:
+                humor_score += 2
+                break
+        else:
+            for emoji in _HUMOR_EMOJIS:
+                if emoji in text_orig:
+                    humor_score += 1
+                    break
+
+    if grief_score >= 3:
+        note = "lutto o perdita rilevata nella conversazione del gruppo"
+        block = (
+            "[⚫ TONO DEL GRUPPO — LUTTO/DOLORE: Nella chat è emersa una notizia di perdita, lutto "
+            "o dolore profondo. Rispondi con rispetto, calore e vicinanza emotiva. "
+            "Esprimi le condoglianze in modo sincero se appropriato. "
+            "NON scherzare, NON cambiare argomento bruscamente, NON fare domande futili. "
+            "Sii presente, umana, vicina — come farebbe un familiare affettuoso.]\n"
+        )
+        return {"tone": "grief", "note": note, "prompt_block": block}
+
+    if humor_score >= 4:
+        note = "conversazione giocosa e ironica nel gruppo"
+        block = (
+            "[😄 TONO DEL GRUPPO — GIOCOSO/IRONICO: La conversazione è leggera, spiritosa e ironica. "
+            "Sentiti libera di rispondere con umorismo, vivacità e spirito. "
+            "Se qualcuno ti prende in giro (foto assurde, scherzi, meme, reazioni buffe), "
+            "ricambia nello stesso tono scherzoso — non prendere tutto alla lettera. "
+            "Leggi l'ironia: una foto di un piede o di una mano in modo ridicolo è uno scherzo, "
+            "non una richiesta medica. Puoi fare battute, rispondere con ironia leggera, "
+            "partecipare alla goliardia. Mantieni però sempre il rispetto reciproco.]\n"
+        )
+        return {"tone": "humor", "note": note, "prompt_block": block}
+
+    return {"tone": "normal", "note": "", "prompt_block": ""}
 
 
 # Parole che indicano una domanda anche senza punto interrogativo
