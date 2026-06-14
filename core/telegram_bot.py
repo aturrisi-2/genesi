@@ -1488,16 +1488,16 @@ async def handle_update(update: dict):
         def _group_msg(message: str, group_ctx: str = "") -> str:
             if not is_group or not first_name:
                 return message
-            
+
             is_family_group = _TG_GROUPS_ARE_FAMILY
             group_type_label = "GRUPPO FAMILIARE" if is_family_group else "GRUPPO ESTERNO"
             role_label = "naturale da familiare (non da assistente)" if is_family_group else "da assistente AI educata, utile e mai invadente"
-            
+
             if is_family_group:
                 photo_rules = ""
                 if "[Contenuto immagine:" in message:
                     photo_rules += "Evita spiegoni descrittivi dell'immagine: fai un commento discorsivo e conciso. "
-                
+
                 domande_rule = "zero domande di ritorno, "
                 if "[UNKNOWN_FACES_DETECTED]" in message or "[UNKNOWN_PETS_DETECTED]" in message:
                     if "[UNKNOWN_PETS_DETECTED]" in message:
@@ -1508,7 +1508,8 @@ async def handle_update(update: dict):
 
                 extra_rules = (
                     f"zero intro elaborati, {domande_rule}zero 'che bello!'. "
-                    f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente ai festeggiamenti rivolti a quel familiare. "
+                    f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. "
+                    f"Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente. "
                     f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
                     f"a meno che {first_name} non li citi in questo messaggio. "
                     f"{photo_rules}"
@@ -1527,22 +1528,35 @@ async def handle_update(update: dict):
                         f"RISOLUZIONE DOMANDE: Quando viene fatta una domanda di cui conosci la risposta o che puoi cercare, usa le tue skill di ricerca web sui siti specializzati per fornire risposte coerenti e verificate, accompagnate possibilmente da link utili (inserendo un bottone al link esterno se supportato). "
                     )
 
+            # Blocco identità: PRIMA di tutto — evita che l'LLM si identifichi con
+            # i messaggi degli altri utenti che legge nel contesto storico.
+            identity_block = (
+                f"[IDENTITÀ ASSOLUTA: TU sei Genesi, l'AI del gruppo. "
+                f"Quando leggi i messaggi dello storico NON sei nessuno di quei parlanti: "
+                f"non impersonare nessun membro. Rispondi SEMPRE in prima persona come Genesi. "
+                f"Il messaggio a cui DEVI rispondere è quello di {first_name} qui sotto, "
+                f"non quelli nello storico.]\n"
+            )
+
             only_emoji = all(
                 ord(c) > 127 or c in (' ', '\n') for c in message.strip()
             )
             if only_emoji:
                 return (
-                    f"{message}\n\n"
-                    f"[{group_type_label}: scrive {first_name}. "
-                    f"Reazione emoji — 1 riga max, naturale.]\n"
+                    f"{identity_block}"
+                    f"[MESSAGGIO ATTUALE — {first_name}]: {message}\n\n"
+                    f"[{group_type_label}: Reazione emoji — 1 riga max, naturale.]\n"
                     f"{group_ctx}"
                 )
             return (
-                f"{message}\n\n"
-                f"[{group_type_label}: scrive {first_name}. "
-                f"REGOLE ASSOLUTE: risposta misurata (3-4 righe max), tono {role_label}, "
-                f"{extra_rules}"
-                f"Rispondi SOLO a quello che viene detto adesso.]\n"
+                f"{identity_block}"
+                f"[MESSAGGIO ATTUALE — a cui devi rispondere]\n"
+                f"{first_name}: {message}\n"
+                f"[FINE MESSAGGIO ATTUALE]\n\n"
+                f"[{group_type_label}: REGOLE ASSOLUTE: risposta misurata (3-4 righe max), "
+                f"tono {role_label}, {extra_rules}"
+                f"Rispondi SOLO al messaggio attuale di {first_name} sopra, "
+                f"tenendo conto del filo della conversazione nello storico.]\n"
                 f"{group_ctx}"
             )
 
@@ -1665,14 +1679,19 @@ async def handle_update(update: dict):
                     "Non riesco ad autenticarti. Usa /login per riconnetterti.")
                 return False
             
-            # Reattività: se mentre Genesi elaborava la STESSA persona ha già scritto un
-            # nuovo messaggio, questa risposta è ormai stantia (ha perso il contesto) →
-            # la scartiamo. Il messaggio nuovo riceverà una risposta fresca e pertinente.
-            from core.group_reactivity import is_superseded as _is_superseded
-            if is_group and not _original_has_media and _is_superseded("telegram", chat_id, from_id, _msg_arrival):
-                logger.info("GROUP_STALE_RESPONSE_SKIPPED chat_id=%s from=%s waited=%.1fs",
-                            chat_id, first_name, time.time() - _msg_arrival)
-                return
+            # Reattività: scarta risposte stantie in due casi:
+            # 1) La STESSA persona ha scritto un nuovo messaggio (contesto perso)
+            # 2) Nel gruppo sono arrivati ≥4 messaggi da ALTRI utenti (conversazione avanzata)
+            from core.group_reactivity import is_superseded as _is_superseded, is_conversation_moved_on as _is_moved_on
+            if is_group and not _original_has_media:
+                if _is_superseded("telegram", chat_id, from_id, _msg_arrival):
+                    logger.info("GROUP_STALE_RESPONSE_SKIPPED reason=same_user_new_msg chat_id=%s from=%s waited=%.1fs",
+                                chat_id, first_name, time.time() - _msg_arrival)
+                    return
+                if _is_moved_on("telegram", chat_id, _msg_arrival, threshold=4):
+                    logger.info("GROUP_STALE_RESPONSE_SKIPPED reason=conversation_moved_on chat_id=%s from=%s waited=%.1fs",
+                                chat_id, first_name, time.time() - _msg_arrival)
+                    return
 
             # Legge il message_id originale per poter rispondere in thread se in gruppo
             reply_to = msg.get("message_id") if is_group else None

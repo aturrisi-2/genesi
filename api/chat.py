@@ -995,22 +995,35 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
         except Exception:
             pass
 
-        # 5. Costruisci messaggio arricchito (l'ancora d'identità è globale dentro
-        # build_group_context, valida anche per Telegram).
+        # 5. Costruisci messaggio arricchito.
+        # Il blocco identità va PRIMA di tutto per impedire che l'LLM si identifichi
+        # con i messaggi degli altri utenti presenti nello storico del contesto.
+        _identity_block = (
+            f"[IDENTITÀ ASSOLUTA: TU sei Genesi, l'AI del gruppo. "
+            f"Quando leggi i messaggi dello storico NON sei nessuno di quei parlanti: "
+            f"non impersonare nessun membro. Rispondi SEMPRE in prima persona come Genesi. "
+            f"Il messaggio a cui DEVI rispondere è quello di {eff_sender} qui sotto, "
+            f"non quelli nello storico.]\n"
+        )
         only_emoji = all(ord(c) > 127 or c in (' ', '\n') for c in request.text.strip())
         if only_emoji:
             enriched = (
-                f"{_uq_prefix}{processed_text}\n\n"
-                f"[GRUPPO FAMILIARE: scrive {eff_sender}. "
-                f"Reazione/emoji — risposta brevissima, calore familiare, zero domande.]\n"
+                f"{_identity_block}"
+                f"[MESSAGGIO ATTUALE — {eff_sender}]: {processed_text}\n\n"
+                f"[GRUPPO FAMILIARE: Reazione/emoji — risposta brevissima, calore familiare, zero domande.]\n"
+                f"{_uq_prefix}"
                 f"{group_ctx}"
             )
         else:
             enriched = (
-                f"{_uq_prefix}{processed_text}\n\n"
-                f"[GRUPPO FAMILIARE: scrive {eff_sender}. "
-                f"Sei un membro della famiglia — rispondi con calore e concretezza, "
-                f"senza domande superflue. Usa il nome {eff_sender}.]\n"
+                f"{_identity_block}"
+                f"[MESSAGGIO ATTUALE — a cui devi rispondere]\n"
+                f"{eff_sender}: {processed_text}\n"
+                f"[FINE MESSAGGIO ATTUALE]\n\n"
+                f"[GRUPPO FAMILIARE: Sei un membro della famiglia — rispondi con calore e concretezza, "
+                f"senza domande superflue. Usa il nome {eff_sender}. "
+                f"Rispondi SOLO al messaggio attuale, tenendo conto del filo nello storico.]\n"
+                f"{_uq_prefix}"
                 f"{group_ctx}"
             )
 
@@ -1023,11 +1036,19 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             platform="whatsapp_group",
         )
 
-        # Reattività GLOBALE: se mentre elaborava la STESSA persona ha già scritto un
-        # nuovo messaggio, questa risposta è stantia (ha perso il contesto) → non inviarla.
-        if not request.media_id and is_superseded("whatsapp", group_int, sender_int, _wa_arrival):
-            log("WA_GROUP_STALE_RESPONSE_SKIPPED", group=request.group_id[:20], sender=request.sender_name)
-            return GroupChatResponse(response="", status="stale")
+        # Reattività GLOBALE: scarta risposta stantia in due casi:
+        # 1) La STESSA persona ha già scritto di nuovo
+        # 2) Nel gruppo sono arrivati ≥4 messaggi da altri (conversazione avanzata)
+        from core.group_reactivity import is_conversation_moved_on as _is_moved_on_wa
+        if not request.media_id:
+            if is_superseded("whatsapp", group_int, sender_int, _wa_arrival):
+                log("WA_GROUP_STALE_RESPONSE_SKIPPED", reason="same_user_new_msg",
+                    group=request.group_id[:20], sender=request.sender_name)
+                return GroupChatResponse(response="", status="stale")
+            if _is_moved_on_wa("whatsapp", group_int, _wa_arrival, threshold=4):
+                log("WA_GROUP_STALE_RESPONSE_SKIPPED", reason="conversation_moved_on",
+                    group=request.group_id[:20], sender=request.sender_name)
+                return GroupChatResponse(response="", status="stale")
 
         # 6b. Sicurezza: i gruppi gestiscono solo testo. Se arriva un payload JSON
         # di generazione/modifica immagine, estrai il testo e non riversare il JSON grezzo.

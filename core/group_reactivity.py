@@ -15,12 +15,23 @@ import time
 # (platform, group_id, user_id) -> timestamp ultimo messaggio
 _ARRIVALS: dict[tuple, float] = {}
 
+# (platform, group_id) -> list of (user_id, ts) — tutti i messaggi arrivati
+_GROUP_ARRIVALS: dict[tuple, list] = {}
+
 
 def mark_arrival(platform: str, group_id, user_id) -> float:
     """Segna l'arrivo di un messaggio e ritorna il suo timestamp."""
     ts = time.time()
-    _ARRIVALS[(platform, str(group_id), str(user_id))] = ts
-    # housekeeping leggero
+    gk = (platform, str(group_id))
+    uid = str(user_id)
+    _ARRIVALS[(platform, str(group_id), uid)] = ts
+    # Aggiorna anche il buffer group-level per il controllo conversazione avanzata
+    arrivals = _GROUP_ARRIVALS.setdefault(gk, [])
+    arrivals.append((uid, ts))
+    # Mantieni solo ultime 200 entries per gruppo
+    if len(arrivals) > 200:
+        _GROUP_ARRIVALS[gk] = arrivals[-200:]
+    # housekeeping globale
     if len(_ARRIVALS) > 5000:
         cutoff = ts - 3600
         for k in [k for k, v in _ARRIVALS.items() if v < cutoff]:
@@ -32,6 +43,20 @@ def is_superseded(platform: str, group_id, user_id, arrival_ts: float, margin: f
     """True se la STESSA persona ha scritto un messaggio più nuovo dopo `arrival_ts`."""
     last = _ARRIVALS.get((platform, str(group_id), str(user_id)), 0.0)
     return last > arrival_ts + margin
+
+
+def is_conversation_moved_on(platform: str, group_id, arrival_ts: float,
+                              threshold: int = 4) -> bool:
+    """True se nel gruppo sono arrivati ≥ threshold messaggi da ALTRI utenti dopo arrival_ts.
+
+    Usato per scartare risposte stantie quando la conversazione è avanzata
+    significativamente mentre Genesi elaborava, anche se la stessa persona
+    non ha scritto di nuovo.
+    """
+    gk = (platform, str(group_id))
+    arrivals = _GROUP_ARRIVALS.get(gk, [])
+    count = sum(1 for _, ts in arrivals if ts > arrival_ts + 0.3)
+    return count >= threshold
 
 
 # Parole che indicano una domanda anche senza punto interrogativo

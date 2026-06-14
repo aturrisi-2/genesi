@@ -392,8 +392,19 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
     member   = await get_member(from_id)
     history  = await get_group_history(chat_id, limit=HISTORY_INJECT)
     insights = await _get_group_insights(chat_id)
-    raw_msgs = await get_raw_messages(chat_id, limit=RAW_INJECT)
+    raw_msgs_all = await get_raw_messages(chat_id, limit=RAW_INJECT)
     summary  = await _get_group_summary(chat_id)
+
+    # Escludi il messaggio corrente dal raw buffer (evita duplicazione nel prompt:
+    # il messaggio corrente è già chiaramente marcato come [MESSAGGIO ATTUALE]).
+    _cur_clean = (current_message or "").strip()[:150]
+    raw_msgs = []
+    for m in raw_msgs_all:
+        if (m.get("from_id") == from_id
+                and m.get("text", "").strip()[:150] == _cur_clean
+                and m is raw_msgs_all[-1]):
+            continue  # salta solo l'ultima occorrenza identica al messaggio corrente
+        raw_msgs.append(m)
 
     # 1. Rileva nome del gruppo e membri attivi in questo specifico gruppo
     group_title = await s.load(f"group_title:{chat_id}", default="Casa Turrisi" if chat_id > 0 else "Gruppo")
@@ -456,16 +467,6 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
         has_bot = True # Genesi è nel gruppo
 
     lines = []
-
-    # [IDENTITÀ — globale per ogni gruppo/piattaforma]
-    lines.append(
-        "[IDENTITÀ — FONDAMENTALE: TU sei Genesi. In questo gruppo \"Genesi\" sei TU. "
-        "Se qualcuno ti nomina, ti fa una domanda o ti critica (es. \"Genesi non ha capito\"), "
-        "si rivolge a TE: rispondi SEMPRE in prima persona (\"io\"), non parlare MAI di Genesi "
-        "in terza persona e non impersonare altri membri. Segui il filo della conversazione: "
-        "rispondi davvero a ciò che è stato appena detto/chiesto, senza cambiare argomento né "
-        "dare saluti generici fuori contesto.]"
-    )
 
     # [INFO GRUPPO CORRENTE]
     lines.append(f"[INFO GRUPPO: Ti trovi nel gruppo '{group_title}']")
@@ -540,12 +541,20 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
 
     # Discussione in corso (tutti i messaggi recenti, anche quelli a cui Genesi non ha risposto)
     if raw_msgs:
-        lines.append("[DISCUSSIONE IN CORSO — messaggi recenti del gruppo:]")
+        lines.append("[DISCUSSIONE IN CORSO — messaggi recenti del gruppo (dal più vecchio al più recente):]")
+        _now = time.time()
         for m in raw_msgs:
-            name = m.get("first_name", "?")
-            msg  = m.get("text", "")[:150]
-            lines.append(f"  {name}: {msg}")
-        lines.append("[FINE DISCUSSIONE]")
+            name    = m.get("first_name", "?")
+            msg     = m.get("text", "")[:150]
+            age_s   = int(_now - m.get("ts", _now))
+            if age_s < 60:
+                age_str = f"{age_s}s fa"
+            elif age_s < 3600:
+                age_str = f"{age_s // 60}min fa"
+            else:
+                age_str = f"{age_s // 3600}h fa"
+            lines.append(f"  [{age_str}] {name}: {msg}")
+        lines.append("[FINE DISCUSSIONE IN CORSO]")
 
         # Domanda rimasta SENZA RISPOSTA: se nel mucchio di commenti qualcuno ha
         # chiesto qualcosa e nessuno gli ha risposto, Genesi si rivolge a quella
