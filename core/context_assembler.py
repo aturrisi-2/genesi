@@ -413,6 +413,21 @@ def detect_topic(message: str, history: List[Dict] = None) -> str:
     return "conversazione libera"
 
 
+# Argomenti che meritano la ricerca SEMANTICA nei manuali clinici (RAG vettoriale,
+# più preciso ma con una chiamata embedding). Esclusi i termini puramente interrogativi
+# ("cosa", "come", "perché"...) che da soli non indicano un argomento di conoscenza.
+_KB_TOPIC_KW = (
+    "sintomi", "sintomo", "cura", "curare", "rimedio", "rimedi", "malattia", "malato",
+    "dolore", "fa male", "ho male", "mal di", "febbre", "tosse", "raffreddore",
+    "influenza", "nausea", "vomito", "vomita", "diarrea", "prurito", "gonfio", "sangue",
+    "pressione", "diabete", "allergia", "infezione", "infiammazione", "medicin",
+    "farmac", "stomaco", "gola", "schiena", "petto", "respir", "svenut", "svenim",
+    "ansia", "panico", "depress", "insonnia", "stress", "emicrania", "cefalea",
+    "primo soccorso", "soccorso", "ustione", "ferita", "ferito", "frattura", "trauma",
+    "veterinar", "cucciolo", "parassit", "vaccin", "zecca", "pulci",
+)
+
+
 def build_conversation_context(user_id: str, current_message: str,
                                 profile: Dict[str, Any], conversation_id: str = None,
                                 assembled_summary: str = None, force_manuals: bool = False) -> str:
@@ -513,17 +528,61 @@ def build_conversation_context(user_id: str, current_message: str,
               "cane", "gatto", "cucciolo", "animale", "parassit", "vaccin", "zecca", "pulci")
         return any(k in ml for k in kw)
 
-    # I route di CONOSCENZA consultano SEMPRE i manuali; altrove vige il gate (no chiacchiere).
-    if force_manuals or _looks_like_knowledge_query(current_message):
+    def _has_kb_topic(msg: str) -> bool:
+        """Vero se il messaggio tocca un argomento da knowledge base (salute, veterinaria,
+        psicologia, primo soccorso): merita la ricerca SEMANTICA, più precisa."""
+        ml = (msg or "").split("[")[0].strip().lower()
+        if len(ml) < 8:
+            return False
+        return any(k in ml for k in _KB_TOPIC_KW)
+
+    def _inject_keyword_manuals() -> bool:
+        """Ricerca keyword nei manuali (zero latenza). Fallback quando il RAG non pesca."""
         try:
             from core.manual_service import manual_service
-            manual_snippet = manual_service.search(current_message, limit_chars=3000)
-            if manual_snippet:
-                sections.append(f"[MANUALI_SISTEMA_CONTESTO]\n{manual_snippet}\n[/MANUALI_SISTEMA_CONTESTO]\n"
-                                f"ISTRUZIONE: Se rilevante, rispondi alla domanda dell'utente attingendo autonomamente dalle informazioni dei manuali sopra.")
-                logger.info("MANUAL_CONTEXT_INJECTED len=%d", len(manual_snippet))
+            snip = manual_service.search(current_message, limit_chars=3000)
+            if snip:
+                sections.append(f"[MANUALI_SISTEMA_CONTESTO]\n{snip}\n[/MANUALI_SISTEMA_CONTESTO]\n"
+                                f"ISTRUZIONE: Se rilevante, rispondi attingendo autonomamente dai manuali sopra.")
+                logger.info("MANUAL_CONTEXT_INJECTED len=%d", len(snip))
+                return True
         except Exception as me:
             logger.warning("MANUAL_CONTEXT_ERROR err=%s", me)
+        return False
+
+    # CONSULTAZIONE MANUALI — due livelli:
+    #  • route di conoscenza (force_manuals) o argomento medico/vet/psico → RAG SEMANTICO
+    #    sui 139k chunk (preciso: "mal di testa" → "Approccio alla cefalea"/"Emicrania").
+    #  • domanda generica con "?" senza argomento KB → ricerca keyword (zero latenza extra).
+    if force_manuals or _has_kb_topic(current_message):
+        _injected = False
+        try:
+            from core.vector_memory import search_sync as _vsearch
+            _good = [h for h in _vsearch(current_message, top_k=4) if h.get("score", 0) >= 0.04]
+            if _good:
+                _parts, _tot = [], 0
+                for h in _good:
+                    seg = ("[%s] %s" % (h.get("title") or "Manuale", (h.get("text") or "").strip()))[:1200]
+                    _parts.append(seg)
+                    _tot += len(seg)
+                    if _tot >= 3000:
+                        break
+                _snippet = "\n\n".join(_parts)
+                sections.append(
+                    f"[MANUALI_SISTEMA_CONTESTO]\n{_snippet}\n[/MANUALI_SISTEMA_CONTESTO]\n"
+                    f"ISTRUZIONE: Se pertinente, rispondi attingendo a queste informazioni dei manuali clinici. "
+                    f"Parla con parole tue, MAI citare nomi di file o numeri di pagina. "
+                    f"Per sintomi importanti o persistenti, ricorda con delicatezza di sentire un medico."
+                )
+                logger.info("MANUAL_CONTEXT_INJECTED_VEC chunks=%d len=%d top=%.3f",
+                            len(_good), len(_snippet), _good[0]["score"])
+                _injected = True
+        except Exception as _ve:
+            logger.warning("MANUAL_CONTEXT_VEC_ERROR err=%s", _ve)
+        if not _injected:
+            _inject_keyword_manuals()
+    elif _looks_like_knowledge_query(current_message):
+        _inject_keyword_manuals()
 
     return "\n\n".join(sections)
 
