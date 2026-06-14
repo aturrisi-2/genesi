@@ -106,10 +106,16 @@ def get_local_holiday(d: date, city: str) -> str | None:
     return None
 
 async def get_group_members_locations(chat_id: int) -> dict[str, str]:
-    """Recupera la mappa {nome: città} filtrata per i membri attivi dello specifico gruppo."""
-    locations = {}
-    
-    # 1. Rileva i membri attivi del gruppo
+    """Mappa {nome: città} dei membri attivi del gruppo.
+
+    FONTE PRIMARIA: le città REALI dichiarate dai membri ("vivo a X"), salvate da
+    group_greeting_service in `group_member_profile`. La città è una proprietà della
+    PERSONA: per ogni nome si tiene la voce più recente (preferendo lo stesso gruppo).
+    Il fallback statico interviene SOLO per i membri attivi senza città reale.
+    """
+    locations: dict[str, str] = {}
+
+    # 1. Membri attivi di questo gruppo (chi ha scritto)
     active_names = None
     if chat_id != 0:
         try:
@@ -118,49 +124,58 @@ async def get_group_members_locations(chat_id: int) -> dict[str, str]:
         except Exception:
             pass
 
+    # 2. FONTE PRIMARIA — città reali da group_member_profile
     try:
-        # Cerca i membri in memory/telegram/group_member
         import os
-        base_dir = "memory/telegram/group_member"
-        if os.path.exists(base_dir):
-            for filename in os.listdir(base_dir):
-                if filename.endswith(".json"):
-                    from_id_s = filename[:-5]
-                    if from_id_s.isdigit():
-                        from_id = int(from_id_s)
-                        from core.telegram_group_memory import get_member
-                        mem = await get_member(from_id)
-                        name = mem.get("first_name", "")
-                        city = mem.get("city") or mem.get("facts", {}).get("city", "")
-                        if name and city:
-                            # Se stiamo filtrando per gruppo, includiamo solo i partecipanti attivi
-                            if active_names is None or name in active_names:
-                                locations[name] = city
+        base_dir = "memory/group_member_profile"
+        gid = str(chat_id)
+        best: dict[str, tuple] = {}  # name_lower -> (name, rank, city)
+        if os.path.isdir(base_dir):
+            for fn in os.listdir(base_dir):
+                if not fn.endswith(".json"):
+                    continue
+                try:
+                    with open(os.path.join(base_dir, fn), encoding="utf-8") as f:
+                        d = json.load(f)
+                except Exception:
+                    continue
+                if not isinstance(d, dict):
+                    continue
+                name = (d.get("name") or "").strip()
+                city = (d.get("city") or "").strip()
+                if not name or not city:
+                    continue
+                same_group = (chat_id == 0) or (str(d.get("group_id") or "") == gid)
+                ts = int(d.get("city_updated_at") or d.get("last_seen") or 0)
+                rank = (1 if same_group else 0, ts)  # stesso gruppo > più recente
+                nl = name.lower()
+                if nl not in best or rank > best[nl][1]:
+                    best[nl] = (name, rank, city)
+        for nl, (name, _rank, city) in best.items():
+            if active_names is None or name in active_names:
+                locations[name] = city
     except Exception as e:
         logger.warning("Error getting group members locations: %s", e)
-    
-    # Fallback/Integrazione statica per i membri noti Turrisi
+
+    # 3. FALLBACK statico — SOLO per colmare i buchi (membro attivo senza città reale).
+    #    NB: la famiglia Turrisi è a Imola (Alfio NON è a Roma: era un default errato).
     known_fallbacks = {
-        "Alfio": "Roma",
+        "Alfio": "Imola",
         "Rita": "Imola",
         "Zoe": "Imola",
         "Ennio": "Imola",
         "Iolanda": "Catania",
         "Sandra": "Milano",
         "Mariella": "Torino",
-        "Katia": "Napoli",
+        "Katia": "Catania",
     }
-    
-    # Inserisci i fallback solo se stiamo processando il gruppo famiglia (-5007188402) o se è globale (0)
-    # Se è WhatsApp, supponiamo sia il gruppo famiglia per ora
     is_family_context = (chat_id == 0) or (chat_id in (-5007188402, -318483633))
-    
     for k, v in known_fallbacks.items():
-        if k not in locations:
-            # Consenti Alfio in tutti i gruppi, ma gli altri solo se sono nel gruppo attivo o nel contesto famiglia
-            if active_names is None or k in active_names or (k == "Alfio") or is_family_context:
-                locations[k] = v
-                
+        if k in locations:
+            continue  # città reale già nota → il fallback non la tocca
+        if active_names is None or k in active_names or is_family_context:
+            locations[k] = v
+
     return locations
 
 async def get_today_events_context(chat_id: int) -> str:
