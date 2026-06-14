@@ -183,9 +183,10 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                     history = chat_memory.get_messages(user_id, limit=3) if user_id else []
                     history_text = "\n".join([f"utente: {msg.get('user_message', '')}\ngenesi: {msg.get('system_response', '')}" for msg in history])
                     identity_update = await extract_identity_updates(request.message, history_text)
-                    if identity_update.interests or identity_update.preferences or \
-                       identity_update.traits or identity_update.pets or \
-                       identity_update.children or identity_update.spouse:
+                    if identity_update.name or identity_update.interests or \
+                       identity_update.preferences or identity_update.traits or \
+                       identity_update.pets or identity_update.children or \
+                       identity_update.spouse:
                         fresh_raw = await storage.load(f"profile:{user_id}", default={})
                         fresh_profile = UserProfile(**normalize_profile_dict(fresh_raw))
                         merge_identity_update(fresh_profile, identity_update)
@@ -868,6 +869,17 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                         ext = "jpg" if "jpeg" in media_mime else media_mime.split("/")[-1]
                         filename = f"photo.{ext}" if request.media_type == "image" else f"doc.{ext}"
                         media_analysis = await _upload_file(token, media_bytes, filename, media_mime)
+                        # Stato volti CORREGGIBILE legato al gruppo (group_int): consente di
+                        # correggere via testo il soggetto in foto nei turni successivi
+                        # ("quella a sinistra è Rita"). Stessa skill globale di Telegram/1:1.
+                        if request.media_type == "image":
+                            try:
+                                from core.face_memory_service import handle_photo_identification as _hpi
+                                _fpr = await _hpi(str(group_int), media_bytes, media_analysis, caption=request.text)
+                                if _fpr.get("sistema_msg"):
+                                    media_analysis = f"{media_analysis}{_fpr['sistema_msg']}"
+                            except Exception as _fpe:
+                                log("WA_GROUP_FACE_PHOTO_FAIL", error=str(_fpe))
             except Exception as _me:
                 log("WA_GROUP_MEDIA_ANALYZE_FAIL", error=str(_me))
 
@@ -880,6 +892,18 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             processed_text = await explore_links_in_text(processed_text)
         except Exception as _e:
             log("GROUP_CHAT_LINK_EXPLORE_FAIL", error=str(_e))
+
+        # 3d-bis. Correzione/identificazione VOLTI via testo (skill globale, come Telegram/1:1):
+        # se un turno con foto ha lasciato uno stato volti correggibile su questo gruppo,
+        # "quella a sinistra è Rita" rietichetta il volto nel DB e conferma il salvataggio.
+        if not request.media_id and request.text:
+            try:
+                from core.face_memory_service import handle_text_identification as _hti
+                _ftr = await _hti(str(group_int), request.text)
+                if _ftr.get("faces_saved") and _ftr.get("sistema_msg"):
+                    processed_text = f"{processed_text}{_ftr['sistema_msg']}"
+            except Exception as _fte:
+                log("WA_GROUP_FACE_TEXT_FAIL", error=str(_fte))
 
         # 3e. Fonde il thread recente del bridge nel buffer del gruppo PRIMA di costruire
         # il contesto: include anche i messaggi a cui Genesi non ha risposto (should_respond=NO),

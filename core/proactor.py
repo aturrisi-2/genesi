@@ -4417,7 +4417,8 @@ Messaggio utente: {message}"""
         # Build conversation context — MUST include chat history
         live_result = None
         profile = await storage.load(f"profile:{user_id}", default={})
-        conversation_ctx = build_conversation_context(user_id, message, profile, conversation_id)
+        # Route conoscenza → consulta SEMPRE i manuali (medicina, veterinaria, psicologia…)
+        conversation_ctx = build_conversation_context(user_id, message, profile, conversation_id, force_manuals=True)
 
         # ── LIVE SEARCH: solo per domande che richiedono dati aggiornati ──
         # Strip contesto pagina (widget) per non usarlo come query di ricerca

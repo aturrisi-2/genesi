@@ -155,11 +155,21 @@ async def set_awaiting_faces(session_id: str, img_path: str, description: str, u
     log("AWAITING_FACES_SET", session=session_id, unknown_count=unknown_count)
 
 
+_AWAITING_TTL = 600  # 10 min: finestra entro cui si accettano nomi/correzioni volti
+
+
 async def get_awaiting_faces(session_id: str) -> dict | None:
-    """Recupera lo stato di attesa volti per una sessione."""
+    """Recupera lo stato di attesa volti per una sessione (scade dopo _AWAITING_TTL)."""
     from core.storage import storage
     session_key = f"short_term_chat:awaiting_faces_{session_id}"
-    return await storage.load(session_key, default=None)
+    data = await storage.load(session_key, default=None)
+    if data and time.time() - data.get("ts", 0) > _AWAITING_TTL:
+        try:
+            await storage.delete(session_key)
+        except Exception:
+            pass
+        return None
+    return data
 
 
 async def pop_awaiting_faces(session_id: str) -> dict | None:
@@ -473,12 +483,25 @@ async def handle_photo_identification(
                 "NON usare elenchi o punti numerati. Scrivi in modo discorsivo, come stai parlando con un amico.]"
             )
     elif "[REFERENCES_KNOWN]" in analysis or "Mappa esatta dei volti noti" in analysis:
+        # Volti RICONOSCIUTI: salva comunque lo stato CORREGGIBILE (immagine + descrizione)
+        # così se l'utente corregge ("quella a sinistra è Rita, non Giorgio") possiamo
+        # ri-etichettare il volto giusto. Scade dopo 10 min (vedi _AWAITING_TTL).
+        try:
+            _corr_img = f"/tmp/genesi_face_{uuid.uuid4().hex[:10]}.jpg"
+            with open(_corr_img, "wb") as _cf:
+                _cf.write(img_bytes)
+            await set_awaiting_faces(session_id, _corr_img, analysis, unknown_count=0)
+        except Exception as _ce:
+            logger.error("PHOTO_CORRECTABLE_SAVE_ERROR err=%s", _ce)
         sistema_msg = (
             "\n[SISTEMA: L'utente ha caricato una foto con persone che già conosci. "
             "Fai un commento affettuoso e naturale nominando chi riconosci. "
             "NON usare elenchi numerati o punti elenco. "
             "NON scrivere '1. Nome - posizione'. "
-            "Scrivi in modo discorsivo e caldo, come se stessi parlando con un amico che ti mostra le foto di famiglia.]"
+            "VIETATO iniziare con 'Nell'immagine...', 'Nella foto...', 'Possiamo vedere...' "
+            "o qualsiasi formula descrittiva da referto. "
+            "Parla come a un amico che ti mostra una foto di famiglia: calore, un dettaglio "
+            "affettuoso, e se conosci la relazione tra le persone fanne cenno.]"
         )
 
     awaiting = await get_awaiting_faces(session_id)

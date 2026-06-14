@@ -415,7 +415,7 @@ def detect_topic(message: str, history: List[Dict] = None) -> str:
 
 def build_conversation_context(user_id: str, current_message: str,
                                 profile: Dict[str, Any], conversation_id: str = None,
-                                assembled_summary: str = None) -> str:
+                                assembled_summary: str = None, force_manuals: bool = False) -> str:
     """
     Builds structured conversation context for LLM:
     A) Last 15 messages (user/assistant alternating)
@@ -494,18 +494,27 @@ def build_conversation_context(user_id: str, current_message: str,
     # Evita ~500ms di latenza per ogni "si", "perché", "anche noi" → niente risposte stantie.
     def _looks_like_knowledge_query(msg: str) -> bool:
         m = (msg or "").split("[")[0].strip()  # togli le annotazioni [GRUPPO...]/[Contenuto...]
-        if len(m) < 18:
+        if len(m) < 12:
             return False
         ml = m.lower()
         if "?" in m:
             return True
-        kw = ("come si", "cosa", "perché", "perche", "quando", "quanto", "sintomi", "cura",
-              "rimedio", "rimedi", "malattia", "dolore", "febbre", "medicin", "farmac",
-              "primo soccorso", "soccorso", "veterinar", "cane", "gatto", "animale",
-              "spiega", "spiegami", "consiglio", "consigli", "aiuto", "significa", "differenza")
+        kw = ("come si", "come faccio", "come posso", "cosa", "perche", "quando", "quanto",
+              "quale", "spiega", "spiegami", "consiglio", "consigli", "aiuto", "significa",
+              "differenza", "che fare", "cosa fare",
+              "sintomi", "sintomo", "cura", "curare", "rimedio", "rimedi", "malattia", "malato",
+              "dolore", "fa male", "ho male", "mal di", "febbre", "tosse", "raffreddore",
+              "influenza", "nausea", "vomito", "diarrea", "prurito", "gonfio", "sangue",
+              "pressione", "diabete", "allergia", "infezione", "infiammazione", "medicin",
+              "farmac", "testa", "pancia", "stomaco", "gola", "schiena", "petto", "cuore",
+              "respir", "occhi", "orecchi", "denti", "gamba", "braccio", "pelle",
+              "ansia", "panico", "stress", "depress", "insonnia", "dormire", "tristezza",
+              "primo soccorso", "soccorso", "svenut", "ustione", "ferita", "veterinar",
+              "cane", "gatto", "cucciolo", "animale", "parassit", "vaccin", "zecca", "pulci")
         return any(k in ml for k in kw)
 
-    if _looks_like_knowledge_query(current_message):
+    # I route di CONOSCENZA consultano SEMPRE i manuali; altrove vige il gate (no chiacchiere).
+    if force_manuals or _looks_like_knowledge_query(current_message):
         try:
             from core.manual_service import manual_service
             manual_snippet = manual_service.search(current_message, limit_chars=3000)

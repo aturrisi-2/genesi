@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class IdentityUpdate(BaseModel):
+    name: Optional[str] = None
     interests: List[str] = Field(default_factory=list)
     preferences: List[str] = Field(default_factory=list)
     traits: List[str] = Field(default_factory=list)
@@ -26,6 +27,10 @@ EXTRACTION_PROMPT = """Sei un classificatore di identita' personale.
 Analizza il messaggio dell'utente e estrai SOLO informazioni identitarie STABILI sulla persona che parla in PRIMA PERSONA.
 
 CAMPI E REGOLE RIGOROSE:
+- name: il NOME PROPRIO di battesimo dell'utente che parla in prima persona, SOLO da auto-presentazioni
+  ESPLICITE ("mi chiamo X", "il mio nome è X", "sono X", "puoi chiamarmi X", "io sono X").
+  MAI da aggettivi/stati ("sono stanco", "sono felice") né da professioni ("sono medico").
+  MAI nomi di terze persone. Estrai SOLO il nome proprio, mai descrittori ("sono tuo amico").
 - interests: hobby, sport praticati, passioni (es. "formula 1", "musica elettronica", "padel")
 - preferences: gusti e preferenze stabili (es. "tifoso inter", "preferisce cena alle 21")
 - traits: SOLO aggettivi in prima persona che descrivono l'utente stesso (es. "determinato", "appassionato").
@@ -43,6 +48,11 @@ REGOLE GENERALI:
 - Rispondi SOLO con JSON valido su una riga
 
 ESEMPI CORRETTI:
+- "Mi chiamo Alfio" -> {"name": "Alfio"}
+- "Io sono Alfio" -> {"name": "Alfio"}
+- "Puoi chiamarmi Pina" -> {"name": "Pina"}
+- "Sono stanco" -> {}  (stato d'animo, non nome)
+- "Sono medico" -> {}  (professione, non nome)
 - "Adoro la musica elettronica" -> {"interests": ["musica elettronica"]}
 - "Tifo per l'Inter, non la Juventus" -> {"preferences": ["tifoso inter"]}
 - "I miei gatti Mignolo e Prof" -> {"pets": [{"type": "cat", "name": "Mignolo"}, {"type": "cat", "name": "Prof"}]}
@@ -120,6 +130,18 @@ def merge_identity_update(profile, update: IdentityUpdate):
     # Sanitizzazione centralizzata: mai descrittori relazionali ("madre",
     # "mia figlia") o specie/razze come nomi propri (regola d'oro name_utils)
     from core.name_utils import sanitize_profile_name, sanitize_pet_name
+
+    # NOME PROPRIO dell'utente: l'utente è l'autorità sul proprio nome, quindi una
+    # auto-presentazione esplicita ("mi chiamo X", "io sono X") CORREGGE anche un nome
+    # già presente ma errato (es. profilo contaminato con il nome di un altro membro).
+    if update.name:
+        _clean_name = sanitize_profile_name(update.name)
+        if _clean_name:
+            if (profile.name or "").strip().lower() != _clean_name.strip().lower():
+                logger.info("IDENTITY_MERGE_NAME old=%r new=%r", profile.name, _clean_name)
+            profile.name = _clean_name
+        else:
+            logger.info("IDENTITY_MERGE_NAME_SKIP raw=%r reason=relational_or_invalid", update.name)
 
     if update.spouse:
         _clean_spouse = sanitize_profile_name(update.spouse)
