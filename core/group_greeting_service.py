@@ -57,6 +57,45 @@ _CITY_STOPWORDS = {
     "macchina", "auto", "treno", "aereo", "ospedale", "chiesa", "spiaggia",
 }
 
+# Parole che NON possono comparire in un nome di città (ausiliari/verbi/avverbi):
+# bloccano frasi estratte per sbaglio come "Ha Toppato", "Sono Tornato".
+_CITY_NONPLACE_TOKENS = {
+    "ha", "ho", "hai", "hanno", "abbiamo", "avete", "è", "e", "sei", "sono",
+    "siamo", "siete", "sta", "stai", "sto", "stanno", "va", "vai", "vado",
+    "toppato", "tornato", "tornata", "arrivato", "arrivata", "partito", "partita",
+    "andato", "andata", "fatto", "fatta", "preso", "presa", "detto", "stato", "stata",
+    "molto", "poco", "tanto", "sempre", "mai", "già", "ancora", "forse", "quasi",
+}
+
+# Cache validazione geografica (city_lower -> bool). Evita riconvalidare la stessa città.
+_CITY_GEO_CACHE: dict[str, bool] = {}
+
+
+async def _city_exists_geo(city: str) -> bool:
+    """Valida che la stringa sia un VERO luogo, via OpenWeather geocoding. Cache in-memory.
+    Fail-open: se la chiave OpenWeather manca o c'è un errore di rete, NON scarta
+    (per non perdere città reali durante un'indisponibilità del servizio)."""
+    key = (city or "").strip().lower()
+    if not key:
+        return False
+    if key in _CITY_GEO_CACHE:
+        return _CITY_GEO_CACHE[key]
+    if not OPENWEATHER_API_KEY or OPENWEATHER_API_KEY == "test-key":
+        return True  # nessuna validazione possibile → non scartare
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(
+                "https://api.openweathermap.org/geo/1.0/direct",
+                params={"q": city, "limit": 1, "appid": OPENWEATHER_API_KEY},
+            )
+        ok = r.status_code == 200 and isinstance(r.json(), list) and len(r.json()) > 0
+    except Exception as e:
+        log("GROUP_GREETING_GEO_VALIDATE_FAIL", city=city, error=str(e)[:120])
+        return True  # errore rete → fail-open
+    if len(_CITY_GEO_CACHE) < 2000:
+        _CITY_GEO_CACHE[key] = ok
+    return ok
+
 _CITY_EXTRACT_PROMPT = """\
 Sei un estrattore di informazioni. Ricevi un messaggio scritto da un membro di un gruppo chat.
 Devi capire se la persona che scrive dichiara la PROPRIA città (dove vive, abita o si trova adesso).
@@ -241,6 +280,15 @@ class GroupGreetingService:
                 return ""
             if city.lower() in _CITY_STOPWORDS:
                 return ""
+            # Scarta frasi/verbi travestiti da città ("Ha Toppato", "Sono Tornato")
+            tokens = [t for t in re.split(r"[\s'’.\-]+", city.lower()) if t]
+            if any(t in _CITY_NONPLACE_TOKENS for t in tokens):
+                log("GROUP_GREETING_CITY_REJECTED", city=city, reason="nonplace_token")
+                return ""
+            # Validazione "mondo reale": deve risolvere a un luogo esistente
+            if not await _city_exists_geo(city):
+                log("GROUP_GREETING_CITY_REJECTED", city=city, reason="not_geocodable")
+                return ""
             return city
         except Exception as e:
             log("GROUP_GREETING_CITY_LLM_ERROR", error=str(e)[:200])
@@ -258,6 +306,80 @@ class GroupGreetingService:
         except Exception as e:
             log("GROUP_GREETING_LEGACY_CITY_ERROR",
                 platform=platform, user=str(platform_user_id), error=str(e)[:200])
+
+    # ── Roster di gruppo (TUTTI i membri, non solo chi scrive) ───────────────
+    # Comportamento GLOBALE: ogni volta che arriva un messaggio di gruppo con la
+    # lista partecipanti (qualsiasi piattaforma), Genesi memorizza il roster
+    # completo del gruppo. Così conosce anche i membri silenziosi.
+
+    @staticmethod
+    def _roster_key(platform: str, group_id: str) -> str:
+        return f"group_roster:{platform}:{group_id}"
+
+    async def update_group_roster(
+        self,
+        platform: str,
+        group_id: str,
+        participants: list,
+        is_family_group: bool = False,
+    ) -> int:
+        """Salva/aggiorna il roster COMPLETO dei membri del gruppo dal payload
+        partecipanti. Dedup per id. Fail-silent. Ritorna il numero di membri noti."""
+        try:
+            group_id = str(group_id or "").strip()
+            if not group_id or not participants:
+                return 0
+            key = self._roster_key(platform, group_id)
+            data = await storage.load(key, default={}) or {}
+            members = data.get("members") if isinstance(data, dict) else None
+            if not isinstance(members, dict):
+                members = {}
+            now = int(time.time())
+            for p in participants:
+                pid = (p.get("id") if isinstance(p, dict) else getattr(p, "id", "")) or ""
+                pname = (p.get("name") if isinstance(p, dict) else getattr(p, "name", "")) or ""
+                is_me = (p.get("is_me") if isinstance(p, dict) else getattr(p, "is_me", False))
+                pid = str(pid).strip()
+                pname = str(pname).strip()
+                if not pid or is_me:
+                    continue
+                norm_id = pid.split("@")[0].replace("+", "").strip()
+                if not norm_id:
+                    continue
+                entry = members.get(norm_id) or {}
+                # Non sovrascrivere un nome corretto dall'utente
+                if pname and not entry.get("name_locked"):
+                    entry["name"] = pname
+                entry["last_seen"] = now
+                members[norm_id] = entry
+            await storage.save(key, {
+                "members": members, "platform": platform, "group_id": group_id,
+                "is_family_group": bool(is_family_group), "updated_at": now,
+            })
+            log("GROUP_ROSTER_UPDATED", platform=platform, group=group_id, members=len(members))
+            return len(members)
+        except Exception as e:
+            log("GROUP_ROSTER_UPDATE_ERROR", platform=platform,
+                group=str(group_id), error=str(e)[:160])
+            return 0
+
+    async def get_group_roster(self, platform: str, group_id: str) -> list[dict]:
+        """Ritorna [{id, name, last_seen}] di TUTTI i membri noti del gruppo."""
+        try:
+            key = self._roster_key(platform, str(group_id))
+            data = await storage.load(key, default={}) or {}
+            members = data.get("members", {}) if isinstance(data, dict) else {}
+            out = []
+            if isinstance(members, dict):
+                for mid, e in members.items():
+                    e = e or {}
+                    out.append({"id": mid, "name": e.get("name", ""),
+                                "last_seen": e.get("last_seen", 0)})
+            return out
+        except Exception as e:
+            log("GROUP_ROSTER_READ_ERROR", platform=platform,
+                group=str(group_id), error=str(e)[:160])
+            return []
 
     # ── Lettura profilo ──────────────────────────────────────────────────────
 

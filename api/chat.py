@@ -826,6 +826,30 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                 except Exception as ex:
                     log("WA_GROUP_MEMBER_PRESEED_FAIL", error=str(ex))
 
+        # 3c-bis. COMPORTAMENTO GLOBALE (vale per ogni gruppo/piattaforma):
+        #  • roster COMPLETO del gruppo da TUTTI i partecipanti (non solo chi scrive);
+        #  • apprendimento città del mittente dal suo messaggio (estrattore validato).
+        # group_id = group_int (string) per coerenza con get_group_members_locations.
+        try:
+            from core.group_greeting_service import group_greeting_service as _ggs
+            _gname = (request.group_name or "").lower()
+            _is_fam = any(k in _gname for k in
+                          ("famigl", "casa", "turrisi", "nipoti", "fratell", "parent", "cugin"))
+            if request.participants:
+                _aio.create_task(_ggs.update_group_roster(
+                    "whatsapp", str(group_int),
+                    [p.dict() for p in request.participants], is_family_group=_is_fam))
+            _aio.create_task(_ggs.extract_and_save_member_info(
+                platform_user_id=str(request.sender_id or ""),
+                first_name=(request.sender_name or "").strip(),
+                message=request.text or "",
+                platform="whatsapp",
+                group_id=str(group_int),
+                is_family_group=_is_fam,
+            ))
+        except Exception as _rh:
+            log("WA_GROUP_ROSTER_HOOK_FAIL", error=str(_rh))
+
         # 3cc. Analisi file/media per gruppi WhatsApp (Immagini, Documenti, Audio, Video)
         # Audio e video passano dalla pipeline sensoriale universale (message_pipeline):
         # stesse capacità di Telegram/Messenger/Instagram — parlato, musica, suoni,
