@@ -362,6 +362,15 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
                 pass
         _asyncio.create_task(_maybe_audit())
 
+        # Knowledge Graph self-awareness update (fail-silent, ogni N turni)
+        async def _graph_turn():
+            try:
+                from core.graph_updater import graph_updater as _gu
+                await _gu.on_turn(user_id)
+            except Exception:
+                pass
+        _asyncio.create_task(_graph_turn())
+
         # Capability gap detection in background (fail-silent, nessun impatto sul flusso)
         _gap_msg  = _clean_msg
         _gap_resp = _raw_response
@@ -554,6 +563,15 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
                 except Exception:
                     pass
             _aio.create_task(_stream_update_behavioral())
+
+            # Knowledge Graph self-awareness update (streaming path, fail-silent)
+            async def _stream_graph_turn():
+                try:
+                    from core.graph_updater import graph_updater as _gu
+                    await _gu.on_turn(user_id)
+                except Exception:
+                    pass
+            _aio.create_task(_stream_graph_turn())
 
             # Capability gap detection in background (fail-silent)
             _stream_gap_msg  = _stream_clean_msg

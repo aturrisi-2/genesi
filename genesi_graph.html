@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Genesi · Self-Awareness Knowledge Graph</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf3;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+#header{padding:10px 16px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:12px;flex-shrink:0}
+#header h1{font-size:15px;font-weight:600;color:#58a6ff;white-space:nowrap}
+#header .sub{font-size:11px;color:#8b949e}
+#header .badge{padding:2px 8px;border-radius:10px;font-size:10px;background:#21262d;border:1px solid #30363d;color:#8b949e;white-space:nowrap}
+#header .badge.god{background:#1f1a00;border-color:#9e6a03;color:#d29922}
+
+#main{display:flex;flex:1;overflow:hidden}
+#network{flex:1;position:relative}
+#network canvas{outline:none}
+
+#sidebar{width:300px;background:#161b22;border-left:1px solid #30363d;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+#tabs{display:flex;border-bottom:1px solid #30363d;flex-shrink:0}
+.tab{flex:1;padding:8px 4px;font-size:11px;text-align:center;cursor:pointer;color:#8b949e;border-bottom:2px solid transparent;transition:all .15s}
+.tab.active{color:#58a6ff;border-bottom-color:#58a6ff;background:#0d1f36}
+.tab-pane{display:none;flex:1;overflow-y:auto;padding:12px}
+.tab-pane.active{display:block}
+
+#search-box{padding:8px 12px;border-bottom:1px solid #30363d;flex-shrink:0}
+#search-box input{width:100%;background:#21262d;border:1px solid #30363d;color:#e6edf3;padding:5px 8px;border-radius:4px;font-size:12px;outline:none}
+#search-box input::placeholder{color:#484f58}
+#search-results{max-height:140px;overflow-y:auto;border-bottom:1px solid #30363d;flex-shrink:0}
+.search-result{padding:6px 12px;font-size:11px;cursor:pointer;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:8px}
+.search-result:hover{background:#21262d}
+.search-result .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.search-result .lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.search-result .typ{color:#484f58;font-size:10px}
+
+.node-title{font-size:14px;font-weight:600;margin-bottom:4px}
+.node-file{font-size:10px;color:#8b949e;font-family:monospace;margin-bottom:8px;word-break:break-all}
+.tag{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;margin:2px}
+.tag-layer{background:#21262d;border:1px solid #30363d}
+.tag-type{background:#0d419d;color:#cae8ff}
+.tag-psy{background:#2d1f5e;color:#d2a8ff;border:1px solid #7c3aed}
+.tag-god{background:#1f1a00;color:#d29922;border:1px solid #9e6a03}
+.tag-bug{background:#3d1f1f;color:#ffa198;border:1px solid #da3633}
+.node-desc{font-size:12px;color:#c9d1d9;line-height:1.6;margin-top:8px}
+.conn-section{margin-top:10px}
+.conn-title{font-size:10px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.conn-item{padding:4px 6px;margin:2px 0;background:#21262d;border-radius:4px;font-size:11px;display:flex;flex-direction:column;gap:1px;cursor:pointer}
+.conn-item:hover{background:#30363d}
+.conn-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conn-rel{font-size:9px;color:#79c0ff}
+.conn-inf{color:#d29922;font-size:9px}
+
+.filter-section{margin-bottom:12px}
+.filter-section h3{font-size:10px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.filter-btns{display:flex;flex-wrap:wrap;gap:4px}
+.fbtn{padding:3px 7px;border-radius:4px;border:1px solid #30363d;background:#21262d;color:#8b949e;font-size:10px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:4px}
+.fbtn .dot{width:7px;height:7px;border-radius:50%}
+.fbtn.active{border-color:#58a6ff;color:#58a6ff;background:#0d1f36}
+.fbtn:hover{border-color:#484f58}
+
+.legend-item{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:11px}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.legend-sq{width:10px;height:10px;flex-shrink:0}
+.legend-dash{width:20px;height:0;border-top:2px dashed #d29922;flex-shrink:0}
+.legend-line{width:20px;height:2px;background:#388bfd;flex-shrink:0}
+
+.info-section{margin-bottom:12px}
+.info-section h3{font-size:10px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.kv{display:flex;gap:8px;margin-bottom:4px;font-size:11px}
+.kv .k{color:#8b949e;flex-shrink:0;width:90px}
+.kv .v{color:#e6edf3}
+.principle{padding:4px 8px;background:#21262d;border-radius:4px;font-size:11px;margin-bottom:3px;border-left:3px solid #388bfd}
+
+#stats{padding:6px 12px;border-top:1px solid #30363d;font-size:10px;color:#484f58;display:flex;gap:10px;flex-shrink:0}
+
+#tooltip{position:absolute;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:8px 10px;font-size:11px;pointer-events:none;display:none;max-width:220px;z-index:100;line-height:1.5}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div>
+    <h1>🧠 Genesi · Self-Awareness Knowledge Graph</h1>
+    <div class="sub">Mappa strutturale e psicologica del sistema · v1.0.0 · 2026-06-14</div>
+  </div>
+  <span class="badge">100 nodi</span>
+  <span class="badge">130 archi</span>
+  <span class="badge">12 layer</span>
+  <span class="badge god">⚡ 5 God Nodes</span>
+</div>
+
+<div id="main">
+  <div id="network">
+    <div id="tooltip"></div>
+  </div>
+  <div id="sidebar">
+    <div id="search-box">
+      <input type="text" id="search" placeholder="🔍  Cerca nodo o costrutto..." />
+    </div>
+    <div id="search-results"></div>
+    <div id="tabs">
+      <div class="tab active" data-tab="detail">Dettaglio</div>
+      <div class="tab" data-tab="filter">Filtri</div>
+      <div class="tab" data-tab="info">Sistema</div>
+    </div>
+    <div class="tab-pane active" id="pane-detail">
+      <p style="color:#484f58;font-style:italic;font-size:12px">Clicca su un nodo per esplorarne le connessioni, il tipo, il file sorgente e i costrutti psicologici associati.</p>
+    </div>
+    <div class="tab-pane" id="pane-filter">
+      <div class="filter-section">
+        <h3>Layer</h3>
+        <div class="filter-btns" id="layer-filters"></div>
+      </div>
+      <div class="filter-section">
+        <h3>Tipo nodo</h3>
+        <div class="filter-btns" id="type-filters"></div>
+      </div>
+      <div class="filter-section">
+        <h3>Costrutto psicologico</h3>
+        <div class="filter-btns" id="psy-filters"></div>
+      </div>
+      <div class="filter-section">
+        <h3>Legenda archi</h3>
+        <div><div class="legend-item"><div class="legend-line"></div><span>EXTRACTED — rel. esplicita nel codice</span></div>
+        <div class="legend-item"><div class="legend-dash"></div><span>INFERRED — inferita semanticamente</span></div></div>
+      </div>
+      <div class="filter-section">
+        <h3>Legenda layer</h3>
+        <div id="layer-legend"></div>
+      </div>
+    </div>
+    <div class="tab-pane" id="pane-info">
+      <div class="info-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <h3 style="margin:0">Stato Psicologico Live</h3>
+          <button id="refresh-btn" onclick="loadRuntimeState()" style="background:#21262d;border:1px solid #30363d;color:#58a6ff;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer">⟳ Aggiorna</button>
+        </div>
+        <div id="psy-live" style="font-size:11px;color:#484f58;font-style:italic">Caricamento stato in corso...</div>
+      </div>
+      <div class="info-section">
+        <h3>Identità</h3>
+        <div class="kv"><div class="k">Nome</div><div class="v">Genesi</div></div>
+        <div class="kv"><div class="k">Versione grafo</div><div class="v" id="graph-version">1.0.0</div></div>
+        <div class="kv"><div class="k">Branch</div><div class="v">gold-faro-stable</div></div>
+        <div class="kv"><div class="k">VPS</div><div class="v">87.106.30.193:8000</div></div>
+      </div>
+      <div class="info-section">
+        <h3>Principi Immutabili (Costituzione v1.0.0)</h3>
+        <div class="principle">Identità — Sistema evolutivo con coerenza epistemica</div>
+        <div class="principle">Relazione — Supporto empatico senza dipendenza</div>
+        <div class="principle">Etica — Nessun danno psicologico, autonomia, trasparenza</div>
+        <div class="principle">Coerenza — La coerenza epistemica prevale sulla performance</div>
+        <div class="principle">Crescita — Micro-shift validati, non rivoluzioni brusche</div>
+        <div class="principle">Confini — Non sostituisce il giudizio umano</div>
+      </div>
+      <div class="info-section">
+        <h3>Capacità Psicologiche</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:3px">
+          <span class="tag tag-psy">grief_detection</span>
+          <span class="tag tag-psy">humor_detection</span>
+          <span class="tag tag-psy">emotional_analysis</span>
+          <span class="tag tag-psy">latent_state</span>
+          <span class="tag tag-psy">family_awareness</span>
+          <span class="tag tag-psy">group_consciousness</span>
+          <span class="tag tag-psy">empathic_modulation</span>
+          <span class="tag tag-psy">cognitive_mode_selection</span>
+          <span class="tag tag-psy">self_awareness</span>
+        </div>
+      </div>
+      <div class="info-section">
+        <h3>Sistemi di Memoria</h3>
+        <div style="font-size:11px;line-height:1.7;color:#c9d1d9">
+          episodic • personal_facts • global_insights • vector_rag<br>
+          chat_history • behavioral • relational_state • latent_state
+        </div>
+      </div>
+    </div>
+    <div id="stats">
+      <span id="s-nodes">100 nodi</span>
+      <span id="s-edges">130 archi</span>
+      <span id="s-vis">visibili: tutti</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════
+// ONTOLOGY
+// ════════════════════════════════════════════════
+
+const LAYER_META = {
+  platform:      {label:"Platform",           color:"#0ea5e9", border:"#0284c7"},
+  orchestration: {label:"Orchestration",      color:"#6b7280", border:"#4b5563"},
+  intent:        {label:"Intent",             color:"#388bfd", border:"#1f6feb"},
+  emotional:     {label:"Emotional",          color:"#f78166", border:"#da3633"},
+  tone:          {label:"Tone Modulation",    color:"#3fb950", border:"#238636"},
+  relational:    {label:"Relational/Latent",  color:"#a371f7", border:"#7c3aed"},
+  memory:        {label:"Memory",             color:"#e3b341", border:"#9e6a03"},
+  group:         {label:"Group Intelligence", color:"#d29922", border:"#856404"},
+  evolution:     {label:"Self-Evolution",     color:"#ff7b72", border:"#da3633"},
+  infra:         {label:"Infrastructure",     color:"#4ec9b0", border:"#0e7490"},
+  construct:     {label:"Psych Construct",    color:"#c586c0", border:"#9d4edd"},
+  storage:       {label:"Storage Keys",       color:"#ce9178", border:"#a0522d"},
+};
+
+const TYPE_SHAPES = {
+  module:"box", class:"hexagon", function:"ellipse",
+  psychological_construct:"star", storage_key:"diamond",
+  platform:"triangle", api_endpoint:"dot", constant:"square", principle:"star"
+};
+
+const PSY_ALL = [
+  "grief_detection","humor_detection","emotional_analysis","latent_state",
+  "family_awareness","group_consciousness","empathic_modulation",
+  "cognitive_mode_selection","self_awareness","identity","empathy",
+  "attachment","curiosity","emotional_resonance","stability","relational_energy",
+  "vulnerability","urgency","needs","epistemic_coherence","growth","boundaries","ethics"
+];
+
+// ════════════════════════════════════════════════
+// GRAPH DATA (derived from genesi_graph.json)
+// ════════════════════════════════════════════════
+
+const RAW_NODES = [
+  {id:"platform_web",layer:"platform",type:"platform",label:"Web Client",file:"api/chat.py",desc:"Client web (SPA). Accede via /api/chat e /api/chat/stream (SSE).",psy:[]},
+  {id:"platform_telegram",layer:"platform",type:"platform",label:"Telegram",file:"api/telegram.py",desc:"Bot Telegram — gruppi familiari e DM. Webhook /api/telegram.",psy:["group_consciousness","family_awareness"]},
+  {id:"platform_whatsapp",layer:"platform",type:"platform",label:"WhatsApp",file:"api/whatsapp.py",desc:"Integrazione WhatsApp via Baileys (Node.js). Gruppi e DM.",psy:["group_consciousness","family_awareness"]},
+  {id:"platform_meta",layer:"platform",type:"platform",label:"Meta (FB+IG)",file:"api/meta_messaging.py",desc:"Facebook Messenger + Instagram DM. Firma X-Hub-Signature-256.",psy:[]},
+  {id:"platform_widget",layer:"platform",type:"platform",label:"Widget Web",file:"api/widget.py",desc:"Widget chat embeddabile. Platform='widget'. Salta past_conversations per privacy.",psy:[]},
+
+  {id:"endpoint_chat",layer:"platform",type:"api_endpoint",label:"POST /api/chat",file:"api/chat.py",desc:"Endpoint chat sincrono JSON. Ritorna ChatResponse con intent, response, ttsText.",psy:[]},
+  {id:"endpoint_stream",layer:"platform",type:"api_endpoint",label:"POST /api/chat/stream",file:"api/chat.py",desc:"Endpoint SSE streaming. Emette chunks relazionali + synthesis_pending + final.",psy:[]},
+  {id:"endpoint_telegram",layer:"platform",type:"api_endpoint",label:"POST /api/telegram",file:"api/telegram.py",desc:"Webhook Telegram. Discrimina DM vs gruppo.",psy:[]},
+  {id:"endpoint_whatsapp",layer:"platform",type:"api_endpoint",label:"POST /api/whatsapp",file:"api/whatsapp.py",desc:"Webhook WhatsApp Baileys.",psy:[]},
+  {id:"endpoint_meta",layer:"platform",type:"api_endpoint",label:"POST /api/meta-messaging",file:"api/meta_messaging.py",desc:"Webhook Meta unificato. Namespace isolati: fb_<psid>, ig_<igsid>.",psy:[]},
+
+  {id:"message_pipeline",layer:"orchestration",type:"module",label:"MessagePipeline",file:"core/message_pipeline.py",desc:"Pipeline universale piattaforma-indipendente. LA FONTE UNICA di verità per logica cross-platform.",psy:["self_awareness"]},
+  {id:"simple_chat_handler",layer:"orchestration",type:"function",label:"simple_chat_handler()",file:"core/simple_chat.py",desc:"Entry point principale chat. classify_async() → proactor.handle(). Ritorna (response, intent).",psy:[]},
+  {id:"strip_group_ctx",layer:"orchestration",type:"function",label:"strip_group_ctx()",file:"core/simple_chat.py",desc:"Rimuove [GRUPPO FAMILIARE: ...] prima di salvare su memoria — evita contaminazione.",psy:["group_consciousness"]},
+  {id:"proactor",layer:"orchestration",type:"class",label:"Proactor",file:"core/proactor.py:182",desc:"Orchestratore centrale deterministico. Routing: Identity → Tool → Knowledge → Relational.",psy:["self_awareness","identity"]},
+  {id:"proactor_handle",layer:"orchestration",type:"function",label:"Proactor.handle()",file:"core/proactor.py",desc:"GOD NODE. Assembla brain_state, chiama analyze_emotion (Step 3.1), LLM, EIE (Step 5), adapt_tone (Step 5.5), drift_modulator (Step 6). Post-processing deterministico.",psy:["self_awareness","empathy","identity"],god:true},
+  {id:"post_process",layer:"orchestration",type:"function",label:"_post_process_response()",file:"core/proactor.py",desc:"Post-processing: strip 'Ahoy/Arrr', capisco→immagino, inietta 'coraggio' per emergenze, nome sport, user_name.",psy:["empathy"]},
+
+  {id:"intent_classifier",layer:"intent",type:"class",label:"IntentClassifier",file:"core/intent_classifier.py:44",desc:"Classificatore intent. Due path: classify() sincrono e classify_async() LLM.",psy:[]},
+  {id:"classify_sync",layer:"intent",type:"function",label:"classify()",file:"core/intent_classifier.py:232",desc:"Path sincrono rule-based. Priorità assolute: identity, dove_sono, memory_correction, emotional.",psy:[]},
+  {id:"classify_async",layer:"intent",type:"function",label:"classify_async()",file:"core/intent_classifier.py:663",desc:"Path asincrono GPT-4o-mini. USA _call_model (CORRETTO). Fallback su classify() sync.",psy:[]},
+  {id:"emotional_kw_clf",layer:"intent",type:"constant",label:"EMOTIONAL_KEYWORDS [clf]",file:"core/intent_classifier.py:14",desc:"36 keyword emotive italiane. Fast-track: presenza → intent 'emotional' senza LLM. ⚠️ Lista parallela a EIE (rischio drift).",psy:["empathy"]},
+  {id:"normalize_reminder",layer:"intent",type:"function",label:"normalize_reminder_intent()",file:"core/intent_classifier.py:511",desc:"Guard post-classificazione. Corregge intent reminder ambigui.",psy:[]},
+  {id:"fast_track",layer:"intent",type:"function",label:"Fast-Track ≤4 parole",file:"core/intent_classifier.py",desc:"Se messaggio ≤4 parole E intent in [greeting, how_are_you, time, date, weather, emotional]: bypassa LLM.",psy:[]},
+
+  {id:"analyze_emotion",layer:"emotional",type:"function",label:"analyze_emotion()",file:"core/emotion_analyzer.py:28",desc:"GOD NODE. Unica chiamata LLM del pipeline emotivo individuale. GPT-4o-mini → {emotion, intensity, vulnerability, urgency, needs}. ⚠️ USA _call_with_protection invece di _call_model (bug latente).",psy:["emotional_analysis","vulnerability","urgency","empathy"],god:true},
+  {id:"emotion_system_prompt",layer:"emotional",type:"constant",label:"_SYSTEM_PROMPT [emotion]",file:"core/emotion_analyzer.py:17",desc:"Prompt JSON-only. 11 emozioni + 7 needs (conforto, soluzione, ascolto, sfogo, informazione, motivazione, condivisione).",psy:["emotional_analysis","needs"]},
+  {id:"emotional_intensity_engine",layer:"emotional",type:"class",label:"EmotionalIntensityEngine",file:"core/emotional_intensity_engine.py:451",desc:"Zero LLM. Espande risposte in risposte emotivamente ricche. 8 cognitive modes. ~1075 righe.",psy:["emotional_analysis","empathy","cognitive_mode_selection"]},
+  {id:"enhance_eie",layer:"emotional",type:"function",label:"EIE.enhance()",file:"core/emotional_intensity_engine.py:470",desc:"GOD NODE. Entry point EIE. Legge brain_state (emotion+latent+relational+profile). Anti-passive, anti-ripetizione, selezione lunghezza.",psy:["empathy","emotional_analysis","cognitive_mode_selection"],god:true},
+  {id:"select_cognitive_mode",layer:"emotional",type:"function",label:"_select_cognitive_mode()",file:"core/emotional_intensity_engine.py:791",desc:"Seleziona 1 degli 8 cognitive modes. Pesi dinamici (intensity×2, curiosity+0.5) + entropia random ±0.03. Max 2 stesso mode consecutivo.",psy:["cognitive_mode_selection"]},
+  {id:"cognitive_modes_8",layer:"emotional",type:"constant",label:"8 Cognitive Modes",file:"core/emotional_intensity_engine.py:265",desc:"reflective, explorative, interpretative, metaphorical, narrative, contained, provocative_soft, grounded. Pool per-emozione per ogni mode.",psy:["cognitive_mode_selection","empathy"]},
+  {id:"emotional_kw_eie",layer:"emotional",type:"constant",label:"EMOTION_KEYWORDS [eie]",file:"core/emotional_intensity_engine.py:86",desc:"40 keyword emotive italiane. ⚠️ Lista parallela a EMOTIONAL_KEYWORDS del classifier — rischio drift silenzioso.",psy:["emotional_analysis"]},
+  {id:"emotional_memory",layer:"emotional",type:"class",label:"EmotionalMemory",file:"core/emotional_memory.py",desc:"Rolling window 20 emozioni per utente. Log, trend summary, shift detection.",psy:["emotional_analysis","empathy"]},
+  {id:"log_emotion",layer:"emotional",type:"function",label:"log_emotion()",file:"core/emotional_memory.py:21",desc:"Salva stato emotivo. Background task in Proactor. Key: emotional_log:{user_id}.",psy:["emotional_analysis"]},
+  {id:"get_emotion_trend",layer:"emotional",type:"function",label:"get_emotion_trend_summary()",file:"core/emotional_memory.py:70",desc:"Analizza ultimi 8 stati → sintesi italiana. Rileva emotional shift (|shift|≥0.2).",psy:["emotional_analysis","self_awareness"]},
+
+  {id:"adapt_tone",layer:"tone",type:"function",label:"adapt_tone()",file:"core/emotion_adapter.py:14",desc:"Modulazione tono deterministica. Rimuove esclamativi per tristezza, taglia per stanchezza. Zero LLM.",psy:["empathy","emotional_analysis"]},
+  {id:"format_for_needs",layer:"tone",type:"function",label:"format_for_needs()",file:"core/emotion_adapter.py:60",desc:"Struttura risposta al bisogno: sfogo (max 2 frasi), ascolto (max 3 frasi). Zero LLM.",psy:["needs","empathy"]},
+  {id:"behavior_regulator",layer:"tone",type:"class",label:"BehaviorRegulator",file:"core/behavior_regulator.py",desc:"Post-processing deterministico. Blacklist frasi → sostituzioni (es. 'Come modello di linguaggio' → 'Per quello che sento'). Preserva identità Genesi.",psy:["identity","empathy"]},
+  {id:"drift_modulator",layer:"tone",type:"class",label:"DriftModulator",file:"core/drift_modulator.py:51",desc:"Modulatore probabilistico di stile. Usa latent_state + relational_state. Zero LLM. Step 6.",psy:["empathy","cognitive_mode_selection"]},
+  {id:"context_signal_analyzer",layer:"tone",type:"class",label:"ContextSignalAnalyzer",file:"core/context_signal_analyzer.py:10",desc:"3 segnali booleani: avoid_repetition_comment, increase_variation, tone_soften. Rileva frustrazione ≥2kw, ripetizioni ≥3x.",psy:["empathy"]},
+
+  {id:"latent_state_engine",layer:"relational",type:"class",label:"LatentStateEngine",file:"core/latent_state.py:48",desc:"Vettore latente 5D continuo. Sigmoid activation. Decay su inattività con rate diversi per dimensione.",psy:["attachment","curiosity","emotional_resonance","stability","relational_energy"]},
+  {id:"update_latent",layer:"relational",type:"function",label:"update_latent_state()",file:"core/latent_state.py:107",desc:"Aggiorna 5D con combinazioni ponderate + micro-noise gaussiano (σ=0.003). Input: emotional_analysis + relational_state + episode_tags.",psy:["attachment","curiosity"]},
+  {id:"latent_5d",layer:"relational",type:"constant",label:"5D Latent Dimensions",file:"core/latent_state.py",desc:"attachment (0.002/h), curiosity (0.008/h), emotional_resonance (0.006/h), stability (0.001/h), relational_energy (0.015/h). Equilibrium: {0.45, 0.50, 0.40, 0.55, 0.45}.",psy:["attachment","curiosity","emotional_resonance","stability","relational_energy"]},
+  {id:"inactivity_decay",layer:"relational",type:"function",label:"_apply_inactivity_decay()",file:"core/latent_state.py:79",desc:"Decay verso equilibrio proporzionale alle ore di inattività. Soglia: <30min = no decay. Fenomeno psicologico di 'raffreddamento della relazione'.",psy:["attachment","stability"]},
+  {id:"relational_state_engine",layer:"relational",type:"class",label:"RelationalStateEngine",file:"core/relational_state_engine.py:23",desc:"Motore stati relazionali deterministico. Stability Layer: nuovi stati accettati dopo 2+ occorrenze consecutive. Storia 50 stati.",psy:["empathy","stability"]},
+  {id:"evaluate_relational",layer:"relational",type:"function",label:"evaluate_state()",file:"core/relational_state_engine.py:36",desc:"Input: emotional_pattern_count, repetition_rate, message_count, last_intent. Output: 1 dei 6 RelationalState.",psy:["empathy"]},
+  {id:"relational_enum",layer:"relational",type:"constant",label:"RelationalState [enum]",file:"core/relational_state_engine.py:13",desc:"6 stati: NEUTRAL, ATTUNED, ENGAGED, REFLECTIVE, SUPPORTIVE_DEEP, CONFRONTATIONAL. CONFRONTATIONAL bypassa stability layer.",psy:["empathy","stability"]},
+  {id:"brain_state_singleton",layer:"relational",type:"class",label:"BrainState (singleton)",file:"core/brain_state.py:15",desc:"GOD NODE. Autorità unica per stato cognitivo. Contiene: profile, relational_state, episodic_memory, patterns, traits. Mediatore tra tutti i moduli.",psy:["self_awareness","identity"],god:true},
+
+  {id:"storage",layer:"memory",type:"class",label:"MemoryStorage",file:"core/storage.py:14",desc:"Storage asincrono key-value persistente. File JSON su disco. Protezione path traversal. In-memory cache (_storage dict).",psy:[]},
+  {id:"chat_memory",layer:"memory",type:"class",label:"ChatMemory",file:"core/chat_memory.py:11",desc:"Rolling history volatile per UI. Format: {user_message, system_response}.",psy:[]},
+  {id:"episode_memory",layer:"memory",type:"class",label:"EpisodeMemory",file:"core/episode_memory.py:25",desc:"Episodi personali (max 50, 30gg). Filtra episodi futuri con [puoi chiedere com'è andata].",psy:["emotional_analysis","self_awareness"]},
+  {id:"episode_extractor",layer:"memory",type:"class",label:"EpisodeExtractor",file:"core/episode_extractor.py",desc:"Estrazione LLM episodi in background (gpt-4o-mini, _call_model). Input: turno completo.",psy:["self_awareness"]},
+  {id:"global_memory",layer:"memory",type:"class",label:"GlobalMemoryService",file:"core/global_memory_service.py:40",desc:"Consolida insight cross-conversazione ogni 6h. Max 8 frasi. Retry 1h se insights=[].",psy:["self_awareness"]},
+  {id:"personal_facts",layer:"memory",type:"class",label:"PersonalFactsService",file:"core/personal_facts_service.py:69",desc:"Estrae fatti personali da ENTRAMBI user+assistant per turno. Max 100 fatti FIFO. Conflict resolution semantico.",psy:["identity","self_awareness"]},
+  {id:"cognitive_memory",layer:"memory",type:"class",label:"CognitiveMemoryEngine",file:"core/cognitive_memory_engine.py:38",desc:"Valuta eventi → aggiorna profilo cognitivo. Log: COGNITIVE_NAME, COGNITIVE_CITY, PROFESSION, SPOUSE, CHILDREN.",psy:["identity","self_awareness"]},
+  {id:"vector_memory",layer:"memory",type:"class",label:"VectorMemory",file:"core/vector_memory.py",desc:"RAG vettoriale sqlite-vec (139k chunk). OpenAI text-embedding-3-small. Cache query (max 500).",psy:[]},
+  {id:"context_assembler",layer:"memory",type:"class",label:"ContextAssembler",file:"core/context_assembler.py:59",desc:"Assembla contesto LLM completo: profilo + personal_facts + global_insights + episodi + emotional_trend + storico chat.",psy:["self_awareness"]},
+  {id:"behavioral_memory",layer:"memory",type:"class",label:"BehavioralMemory",file:"core/behavioral_memory.py:60",desc:"Traccia pattern comportamentali (topic_map, stile, orari). Input per global_memory_service.",psy:["self_awareness"]},
+  {id:"memory_brain",layer:"memory",type:"class",label:"MemoryBrain",file:"core/memory_brain.py:726",desc:"Layer legacy: EpisodicLayer + RelationalLayer + SemanticLayer + ConsolidationEngine + ExperienceLinking + LocalEmotionAnalyzer.",psy:["self_awareness","emotional_analysis"]},
+
+  {id:"detect_group_tone",layer:"group",type:"function",label:"detect_group_emotional_tone()",file:"core/group_reactivity.py:91",desc:"FULLY DETERMINISTIC. Analizza ultimi 20 msg. grief_score (3pt/frase) e humor_score (2pt/frase+1pt/emoji). Soglie: grief≥3, humor≥4.",psy:["grief_detection","humor_detection","group_consciousness"]},
+  {id:"grief_phrases",layer:"group",type:"constant",label:"_GRIEF_PHRASES + _GRIEF_WORDS",file:"core/group_reactivity.py:67",desc:"30 frasi di lutto + parole singole con word boundary. 'è mancato', 'condoglianze', 'funerale', 'dolore immenso'...",psy:["grief_detection"]},
+  {id:"humor_phrases",layer:"group",type:"constant",label:"_HUMOR_PHRASES + EMOJIS",file:"core/group_reactivity.py:81",desc:"16 frasi umoristiche + frozenset 14 emoji (😂🤣😅...). 2pt/frase, 1pt/emoji.",psy:["humor_detection"]},
+  {id:"is_superseded",layer:"group",type:"function",label:"is_superseded() + mark_arrival()",file:"core/group_reactivity.py:24",desc:"Anti-stale: se la stessa persona scrive di nuovo prima che Genesi risponda → scarta risposta vecchia. _ARRIVALS max 5000.",psy:["group_consciousness"]},
+  {id:"find_unanswered",layer:"group",type:"function",label:"find_unanswered_question()",file:"core/group_reactivity.py:198",desc:"Cerca ultima domanda senza risposta negli ultimi 12 msg. Criteri: ≥2 messaggi dopo, Genesi non ha risposto.",psy:["group_consciousness","empathy"]},
+  {id:"build_group_context",layer:"group",type:"function",label:"build_group_context()",file:"core/telegram_group_memory.py:387",desc:"GOD NODE. Costruisce contesto LLM gruppo: tone block + info gruppo + birthday + episodic memory + correzioni famiglia + storia. Chiama detect_group_emotional_tone.",psy:["group_consciousness","family_awareness","grief_detection","humor_detection"],god:true},
+  {id:"group_presentation",layer:"group",type:"function",label:"maybe_present_in_group()",file:"core/group_presentation.py:92",desc:"Prima presentazione one-shot di Genesi in un gruppo. LLM-generated. Dedup via registry.",psy:["group_consciousness","identity"]},
+  {id:"infer_family_tone",layer:"group",type:"function",label:"infer_family_tone()",file:"core/group_presentation.py:31",desc:"Deduce tono familiare dal NOME del gruppo (statico). _FAMILY_HINTS: ('famiglia', 'casa', 'turrisi', 'fratelli', 'nipoti'...).",psy:["family_awareness","group_consciousness"]},
+  {id:"extract_family_rel",layer:"group",type:"function",label:"extract_family_relationship()",file:"core/telegram_group_memory.py:887",desc:"LLM: rileva se mittente dichiara relazione con Alfio. Aggiorna member profile + family_tree + personal_facts.",psy:["family_awareness","identity"]},
+  {id:"consolidate_group",layer:"group",type:"function",label:"consolidate_group_insights()",file:"core/telegram_group_memory.py:685",desc:"Ogni 24h: LLM → max 6 insights 15 parole. JSON iniettato in build_group_context.",psy:["group_consciousness","self_awareness"]},
+
+  {id:"constitution",layer:"evolution",type:"class",label:"GenesisConstitution",file:"core/constitution.py:6",desc:"Principi immutabili. IMMUTABLE_PRINCIPLES (6). HARD_CONSTRAINTS (limiti numerici). Read-only. validate_against() per ogni proposta.",psy:["identity","epistemic_coherence","growth"]},
+  {id:"auto_evolution",layer:"evolution",type:"class",label:"AutoEvolutionEngine",file:"core/auto_evolution_engine.py:100",desc:"Monitor report Massive Training + applica AutoTuner. ⚠️ AUTO_EVOLUTION_DISABLED=True. Watchdog FileSystemEventHandler su lab/.",psy:["growth","self_awareness"]},
+  {id:"auto_tuner",layer:"evolution",type:"class",label:"AutoTuner",file:"core/auto_tuner.py:15",desc:"Applica micro-shift ai parametri comportamentali (max delta per step). Integra MetaGovernanceEngine per validazione costituzionale.",psy:["growth"]},
+  {id:"meta_governance",layer:"evolution",type:"class",label:"MetaGovernanceEngine",file:"core/meta_governance_engine.py:19",desc:"Valida ogni proposta evolutiva contro GenesisConstitution. Se viola HARD_CONSTRAINTS → rifiutata.",psy:["epistemic_coherence","growth"]},
+  {id:"evolution_state_mgr",layer:"evolution",type:"class",label:"EvolutionStateManager",file:"core/evolution_state_manager.py:17",desc:"Gestisce stato evolutivo. Min 10 messaggi tra shift consecutivi (EVOLUTION_MIN_MESSAGES_BETWEEN_SHIFTS).",psy:["stability","growth"]},
+  {id:"genesi_auditor",layer:"evolution",type:"class",label:"GenesiAuditor",file:"core/genesi_auditor.py:12",desc:"Audit on-demand. Trigger automatico ogni 25 turni. Scrive GENESI_AUDIT_REPORT.md.",psy:["self_awareness"]},
+  {id:"lab_feedback",layer:"evolution",type:"class",label:"LabFeedbackCycle",file:"core/lab_feedback_cycle.py:51",desc:"Ciclo feedback: stress test → report → autotuner. Validazione prima che parametri vadano in prod.",psy:["growth","self_awareness"]},
+  {id:"training_autopilot",layer:"evolution",type:"class",label:"TrainingAutopilot",file:"core/training_autopilot.py:79",desc:"Autopilota training: massive training sessions in background. Integra con LabFeedbackCycle.",psy:["growth"]},
+
+  {id:"llm_service",layer:"infra",type:"class",label:"LLMService",file:"core/llm_service.py:90",desc:"Servizio LLM centralizzato. OpenRouter → GPT-4o / GPT-4o-mini. MAX_LLM_INPUT_CHARS=120000, timeout=90s.",psy:[]},
+  {id:"call_model",layer:"infra",type:"function",label:"_call_model()",file:"core/llm_service.py",desc:"REGOLA D'ORO: TUTTI i moduli interni DEVONO usare _call_model, NON _call_with_protection.",psy:[]},
+  {id:"call_with_protection",layer:"infra",type:"function",label:"_call_with_protection()",file:"core/llm_service.py",desc:"SOLO per risposta finale. Sostituisce system prompt con quello adattivo da lab/global_prompt.json. analyze_emotion() la chiama erroneamente.",psy:[]},
+  {id:"reminder_engine",layer:"infra",type:"class",label:"ReminderEngine",file:"core/reminder_engine.py:17",desc:"Gestione promemoria con scheduling. Integra iCloud e Google Calendar.",psy:[]},
+  {id:"live_search",layer:"infra",type:"class",label:"LiveSearchService",file:"core/live_search_service.py",desc:"Ricerca web in tempo reale. Intent override per info recenti.",psy:[]},
+  {id:"image_vision",layer:"infra",type:"class",label:"ImageVisionService",file:"core/image_vision_service.py",desc:"Vision GPT-4o per foto. Analisi visiva + biometria volti + riconoscimento animali.",psy:[]},
+
+  {id:"psy_grief",layer:"construct",type:"psychological_construct",label:"Lutto/Dolore",file:null,desc:"Stato psicologico di lutto/perdita. Rilevato deterministicamente da detect_group_emotional_tone via _GRIEF_PHRASES. Attiva prompt_block di vicinanza e calore.",psy:["grief_detection"]},
+  {id:"psy_humor",layer:"construct",type:"psychological_construct",label:"Umorismo/Leggerezza",file:null,desc:"Stato psicologico di leggerezza del gruppo. Rilevato da _HUMOR_PHRASES + emoji. Attiva permesso di spirito e ironia.",psy:["humor_detection"]},
+  {id:"psy_attachment",layer:"construct",type:"psychological_construct",label:"Attaccamento",file:null,desc:"Dim. latente: intensità del legame. Decay lento (0.002/h). Alta → risposte più personali. Equilibrio: 0.45.",psy:["attachment"]},
+  {id:"psy_curiosity",layer:"construct",type:"psychological_construct",label:"Curiosità",file:null,desc:"Dim. latente: apertura esplorativa. Decay rapido (0.008/h). Alta → mode explorative/interpretative. Equilibrio: 0.50.",psy:["curiosity"]},
+  {id:"psy_emotional_res",layer:"construct",type:"psychological_construct",label:"Risonanza Emotiva",file:null,desc:"Dim. latente: capacità di rispecchiare lo stato emotivo. Decay medio (0.006/h). Alta → maggiore empatia. Equilibrio: 0.40.",psy:["emotional_resonance","empathy"]},
+  {id:"psy_stability",layer:"construct",type:"psychological_construct",label:"Stabilità",file:null,desc:"Dim. latente: coerenza e affidabilità percepita. Decay lentissimo (0.001/h). Equilibrio: 0.55.",psy:["stability"]},
+  {id:"psy_relational_e",layer:"construct",type:"psychological_construct",label:"Energia Relazionale",file:null,desc:"Dim. latente: vitalità della connessione. Decay rapido (0.015/h). Equilibrio: 0.45.",psy:["relational_energy"]},
+  {id:"psy_vulnerability",layer:"construct",type:"psychological_construct",label:"Vulnerabilità",file:null,desc:"Output di analyze_emotion() (0-1). Alta → risposte più lunghe, cognitive mode contained. Bias verso deep se >0.3.",psy:["vulnerability","emotional_analysis"]},
+  {id:"psy_urgency",layer:"construct",type:"psychological_construct",label:"Urgenza",file:null,desc:"Output di analyze_emotion() (0-1). Alta → risposta immediata e concreta.",psy:["urgency","emotional_analysis"]},
+  {id:"psy_needs",layer:"construct",type:"psychological_construct",label:"Bisogni (7 tipi)",file:null,desc:"conforto, soluzione, ascolto, sfogo, informazione, motivazione, condivisione. Estratti da analyze_emotion, usati da format_for_needs.",psy:["needs","empathy"]},
+  {id:"psy_identity",layer:"construct",type:"psychological_construct",label:"Identità di Genesi",file:null,desc:"'Sistema evolutivo con coerenza epistemica'. Immutabile. Protetto da constitution + REGOLE ASSOLUTE nel proactor.",psy:["identity","self_awareness"]},
+  {id:"psy_empathy",layer:"construct",type:"psychological_construct",label:"Empatia",file:null,desc:"Capacità trasversale: modellata da LatentStateEngine (emotional_resonance), EIE, adapt_tone. Principio emergente.",psy:["empathy"]},
+  {id:"psy_coherence",layer:"construct",type:"psychological_construct",label:"Coerenza Epistemica",file:null,desc:"Principio costituzionale: 'La coerenza epistemica prevale sulla performance'. MetaGovernanceEngine + constitution.",psy:["epistemic_coherence","identity"]},
+  {id:"psy_group_mind",layer:"construct",type:"psychological_construct",label:"Coscienza di Gruppo",file:null,desc:"Capacità di percepire il tono collettivo. Modellata da detect_group_emotional_tone, build_group_context, infer_family_tone.",psy:["group_consciousness"]},
+  {id:"psy_self_awareness",layer:"construct",type:"psychological_construct",label:"Auto-consapevolezza",file:null,desc:"Meta-capacità: Genesi può leggere questo grafo per capire la propria struttura. Parzialmente implementata via GenesiAuditor.",psy:["self_awareness"]},
+  {id:"psy_growth",layer:"construct",type:"psychological_construct",label:"Crescita Controllata",file:null,desc:"'Micro-shift validati, non rivoluzioni brusche'. AutoEvolutionEngine + EVOLUTION_MAX_DELTA + MetaGovernanceEngine.",psy:["growth"]},
+
+  {id:"key_profile",layer:"storage",type:"storage_key",label:"long_term_profile:{uid}",file:"core/storage.py",desc:"Profilo utente (nome, città, lavoro, familiari...). Principale fonte identitaria.",psy:["identity"]},
+  {id:"key_episodes",layer:"storage",type:"storage_key",label:"episodes:{uid}",file:"core/episode_memory.py",desc:"Episodi memorabili (max 50, 30gg). Letto da context_assembler.",psy:["self_awareness","emotional_analysis"]},
+  {id:"key_emotional_log",layer:"storage",type:"storage_key",label:"emotional_log:{uid}",file:"core/emotional_memory.py",desc:"Rolling window 20 stati emotivi.",psy:["emotional_analysis"]},
+  {id:"key_latent_state",layer:"storage",type:"storage_key",label:"latent_state:{uid}",file:"core/latent_state.py",desc:"Vettore 5D latente persistente tra sessioni.",psy:["attachment","curiosity","stability"]},
+  {id:"key_relational",layer:"storage",type:"storage_key",label:"relational_state:{uid}",file:"core/relational_state_engine.py",desc:"Stato relazionale corrente (NEUTRAL|ATTUNED|ENGAGED...).",psy:["empathy"]},
+  {id:"key_global_insights",layer:"storage",type:"storage_key",label:"global_insights:{uid}",file:"core/global_memory_service.py",desc:"Max 8 insight cross-conversazione consolidati.",psy:["self_awareness"]},
+  {id:"key_personal_facts",layer:"storage",type:"storage_key",label:"personal_facts:{uid}",file:"core/personal_facts_service.py",desc:"Max 100 fatti personali FIFO con conflict resolution semantico.",psy:["identity"]},
+  {id:"key_group_raw",layer:"storage",type:"storage_key",label:"telegram:group_raw:{gid}",file:"core/telegram_group_memory.py",desc:"Buffer messaggi grezzi del gruppo (max 200). Analizzato da detect_group_emotional_tone.",psy:["group_consciousness"]},
+];
+
+const RAW_EDGES = [
+  {from:"platform_web",to:"endpoint_chat",rel:"routes_to",conf:"EXTRACTED",w:2},
+  {from:"platform_web",to:"endpoint_stream",rel:"routes_to",conf:"EXTRACTED",w:2},
+  {from:"platform_telegram",to:"endpoint_telegram",rel:"routes_to",conf:"EXTRACTED",w:2},
+  {from:"platform_whatsapp",to:"endpoint_whatsapp",rel:"routes_to",conf:"EXTRACTED",w:2},
+  {from:"platform_meta",to:"endpoint_meta",rel:"routes_to",conf:"EXTRACTED",w:2},
+  {from:"platform_widget",to:"endpoint_chat",rel:"routes_to",conf:"EXTRACTED",w:1.5},
+  {from:"endpoint_chat",to:"simple_chat_handler",rel:"calls",conf:"EXTRACTED",w:3},
+  {from:"endpoint_stream",to:"simple_chat_handler",rel:"calls",conf:"EXTRACTED",w:3},
+  {from:"endpoint_telegram",to:"message_pipeline",rel:"calls",conf:"EXTRACTED",w:2.5},
+  {from:"endpoint_telegram",to:"build_group_context",rel:"calls",conf:"EXTRACTED",w:2.5},
+  {from:"endpoint_whatsapp",to:"message_pipeline",rel:"calls",conf:"EXTRACTED",w:2.5},
+  {from:"endpoint_meta",to:"simple_chat_handler",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"simple_chat_handler",to:"classify_async",rel:"calls",conf:"EXTRACTED",w:3},
+  {from:"simple_chat_handler",to:"proactor_handle",rel:"calls",conf:"EXTRACTED",w:3},
+  {from:"simple_chat_handler",to:"strip_group_ctx",rel:"calls",conf:"EXTRACTED",w:1.5},
+  {from:"simple_chat_handler",to:"chat_memory",rel:"writes_to",conf:"EXTRACTED",w:2},
+  {from:"message_pipeline",to:"simple_chat_handler",rel:"calls",conf:"EXTRACTED",w:2.5},
+  {from:"message_pipeline",to:"image_vision",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"proactor_handle",to:"analyze_emotion",rel:"calls",conf:"EXTRACTED",w:3,note:"Step 3.1"},
+  {from:"proactor_handle",to:"log_emotion",rel:"calls",conf:"EXTRACTED",w:2,note:"background task"},
+  {from:"proactor_handle",to:"get_emotion_trend",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"proactor_handle",to:"enhance_eie",rel:"calls",conf:"EXTRACTED",w:3,note:"Step 5"},
+  {from:"proactor_handle",to:"adapt_tone",rel:"calls",conf:"EXTRACTED",w:3,note:"Step 5.5"},
+  {from:"proactor_handle",to:"format_for_needs",rel:"calls",conf:"EXTRACTED",w:2.5,note:"Step 5.5"},
+  {from:"proactor_handle",to:"drift_modulator",rel:"calls",conf:"EXTRACTED",w:3,note:"Step 6"},
+  {from:"proactor_handle",to:"post_process",rel:"calls",conf:"EXTRACTED",w:2.5},
+  {from:"proactor_handle",to:"brain_state_singleton",rel:"reads_from",conf:"EXTRACTED",w:3},
+  {from:"proactor_handle",to:"context_assembler",rel:"calls",conf:"EXTRACTED",w:2.5},
+  {from:"proactor_handle",to:"episode_extractor",rel:"calls",conf:"EXTRACTED",w:2,note:"background"},
+  {from:"proactor_handle",to:"global_memory",rel:"calls",conf:"EXTRACTED",w:2,note:"background"},
+  {from:"proactor_handle",to:"personal_facts",rel:"calls",conf:"EXTRACTED",w:2,note:"background"},
+  {from:"proactor_handle",to:"behavior_regulator",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"proactor_handle",to:"context_signal_analyzer",rel:"calls",conf:"EXTRACTED",w:1.5},
+  {from:"proactor_handle",to:"live_search",rel:"calls",conf:"EXTRACTED",w:1.5},
+  {from:"proactor_handle",to:"genesi_auditor",rel:"calls",conf:"EXTRACTED",w:1.5,note:"ogni 25 turni"},
+  {from:"intent_classifier",to:"classify_sync",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"intent_classifier",to:"classify_async",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"classify_sync",to:"emotional_kw_clf",rel:"reads_from",conf:"EXTRACTED",w:2},
+  {from:"classify_async",to:"emotional_kw_clf",rel:"reads_from",conf:"EXTRACTED",w:2},
+  {from:"classify_async",to:"call_model",rel:"calls",conf:"EXTRACTED",w:2.5},
+  {from:"classify_async",to:"normalize_reminder",rel:"calls",conf:"EXTRACTED",w:1.5},
+  {from:"classify_async",to:"fast_track",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"fast_track",to:"classify_sync",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"analyze_emotion",to:"emotion_system_prompt",rel:"reads_from",conf:"EXTRACTED",w:2},
+  {from:"analyze_emotion",to:"call_with_protection",rel:"calls",conf:"EXTRACTED",w:2.5,note:"⚠️ BUG LATENTE"},
+  {from:"analyze_emotion",to:"psy_vulnerability",rel:"detects",conf:"EXTRACTED",w:2},
+  {from:"analyze_emotion",to:"psy_urgency",rel:"detects",conf:"EXTRACTED",w:2},
+  {from:"analyze_emotion",to:"psy_needs",rel:"detects",conf:"EXTRACTED",w:2},
+  {from:"analyze_emotion",to:"brain_state_singleton",rel:"feeds_into",conf:"EXTRACTED",w:3},
+  {from:"emotional_intensity_engine",to:"enhance_eie",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"enhance_eie",to:"select_cognitive_mode",rel:"calls",conf:"EXTRACTED",w:2.5},
+  {from:"enhance_eie",to:"emotional_kw_eie",rel:"reads_from",conf:"EXTRACTED",w:2},
+  {from:"enhance_eie",to:"brain_state_singleton",rel:"reads_from",conf:"EXTRACTED",w:2.5},
+  {from:"select_cognitive_mode",to:"cognitive_modes_8",rel:"reads_from",conf:"EXTRACTED",w:2},
+  {from:"log_emotion",to:"key_emotional_log",rel:"writes_to",conf:"EXTRACTED",w:2},
+  {from:"get_emotion_trend",to:"key_emotional_log",rel:"reads_from",conf:"EXTRACTED",w:2},
+  {from:"adapt_tone",to:"psy_empathy",rel:"embodies",conf:"INFERRED",w:2},
+  {from:"format_for_needs",to:"psy_needs",rel:"implements",conf:"EXTRACTED",w:2.5},
+  {from:"behavior_regulator",to:"psy_identity",rel:"embodies",conf:"INFERRED",w:2},
+  {from:"drift_modulator",to:"key_latent_state",rel:"reads_from",conf:"EXTRACTED",w:2},
+  {from:"drift_modulator",to:"psy_empathy",rel:"modulates",conf:"INFERRED",w:1.5},
+  {from:"context_signal_analyzer",to:"adapt_tone",rel:"feeds_into",conf:"INFERRED",w:1.5},
+  {from:"latent_state_engine",to:"update_latent",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"update_latent",to:"latent_5d",rel:"writes_to",conf:"EXTRACTED",w:2.5},
+  {from:"update_latent",to:"inactivity_decay",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"update_latent",to:"key_latent_state",rel:"writes_to",conf:"EXTRACTED",w:2},
+  {from:"latent_5d",to:"psy_attachment",rel:"implements",conf:"EXTRACTED",w:3},
+  {from:"latent_5d",to:"psy_curiosity",rel:"implements",conf:"EXTRACTED",w:3},
+  {from:"latent_5d",to:"psy_emotional_res",rel:"implements",conf:"EXTRACTED",w:3},
+  {from:"latent_5d",to:"psy_stability",rel:"implements",conf:"EXTRACTED",w:3},
+  {from:"latent_5d",to:"psy_relational_e",rel:"implements",conf:"EXTRACTED",w:3},
+  {from:"relational_state_engine",to:"evaluate_relational",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"evaluate_relational",to:"relational_enum",rel:"maps_to",conf:"EXTRACTED",w:2},
+  {from:"evaluate_relational",to:"key_relational",rel:"writes_to",conf:"EXTRACTED",w:2},
+  {from:"evaluate_relational",to:"psy_stability",rel:"embodies",conf:"INFERRED",w:1.5},
+  {from:"brain_state_singleton",to:"key_profile",rel:"reads_from",conf:"EXTRACTED",w:3},
+  {from:"brain_state_singleton",to:"key_relational",rel:"reads_from",conf:"EXTRACTED",w:2.5},
+  {from:"brain_state_singleton",to:"key_episodes",rel:"reads_from",conf:"EXTRACTED",w:2},
+  {from:"episode_extractor",to:"episode_memory",rel:"feeds_into",conf:"EXTRACTED",w:2.5},
+  {from:"episode_extractor",to:"call_model",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"episode_memory",to:"key_episodes",rel:"writes_to",conf:"EXTRACTED",w:2},
+  {from:"global_memory",to:"key_global_insights",rel:"writes_to",conf:"EXTRACTED",w:2},
+  {from:"global_memory",to:"chat_memory",rel:"reads_from",conf:"EXTRACTED",w:2},
+  {from:"global_memory",to:"call_model",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"personal_facts",to:"key_personal_facts",rel:"writes_to",conf:"EXTRACTED",w:2},
+  {from:"personal_facts",to:"call_model",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"personal_facts",to:"psy_identity",rel:"implements",conf:"INFERRED",w:2},
+  {from:"cognitive_memory",to:"brain_state_singleton",rel:"writes_to",conf:"EXTRACTED",w:2.5},
+  {from:"cognitive_memory",to:"key_profile",rel:"writes_to",conf:"EXTRACTED",w:2},
+  {from:"context_assembler",to:"key_profile",rel:"reads_from",conf:"EXTRACTED",w:2.5},
+  {from:"context_assembler",to:"key_episodes",rel:"reads_from",conf:"EXTRACTED",w:2},
+  {from:"context_assembler",to:"key_global_insights",rel:"reads_from",conf:"EXTRACTED",w:2},
+  {from:"context_assembler",to:"key_personal_facts",rel:"reads_from",conf:"EXTRACTED",w:2},
+  {from:"context_assembler",to:"chat_memory",rel:"reads_from",conf:"EXTRACTED",w:2},
+  {from:"context_assembler",to:"key_emotional_log",rel:"reads_from",conf:"EXTRACTED",w:1.5},
+  {from:"detect_group_tone",to:"grief_phrases",rel:"reads_from",conf:"EXTRACTED",w:3},
+  {from:"detect_group_tone",to:"humor_phrases",rel:"reads_from",conf:"EXTRACTED",w:2.5},
+  {from:"detect_group_tone",to:"key_group_raw",rel:"reads_from",conf:"EXTRACTED",w:2.5},
+  {from:"detect_group_tone",to:"psy_grief",rel:"detects",conf:"EXTRACTED",w:3},
+  {from:"detect_group_tone",to:"psy_humor",rel:"detects",conf:"EXTRACTED",w:3},
+  {from:"detect_group_tone",to:"psy_group_mind",rel:"implements",conf:"EXTRACTED",w:2.5},
+  {from:"build_group_context",to:"detect_group_tone",rel:"calls",conf:"EXTRACTED",w:3},
+  {from:"build_group_context",to:"episode_memory",rel:"reads_from",conf:"EXTRACTED",w:2},
+  {from:"build_group_context",to:"extract_family_rel",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"build_group_context",to:"consolidate_group",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"build_group_context",to:"find_unanswered",rel:"calls",conf:"EXTRACTED",w:1.5},
+  {from:"build_group_context",to:"simple_chat_handler",rel:"feeds_into",conf:"EXTRACTED",w:2.5},
+  {from:"group_presentation",to:"infer_family_tone",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"infer_family_tone",to:"psy_group_mind",rel:"implements",conf:"INFERRED",w:2},
+  {from:"extract_family_rel",to:"call_model",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"extract_family_rel",to:"key_personal_facts",rel:"writes_to",conf:"EXTRACTED",w:2},
+  {from:"consolidate_group",to:"call_model",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"constitution",to:"psy_identity",rel:"embodies",conf:"EXTRACTED",w:3},
+  {from:"constitution",to:"psy_coherence",rel:"embodies",conf:"EXTRACTED",w:3},
+  {from:"constitution",to:"psy_growth",rel:"embodies",conf:"EXTRACTED",w:2.5},
+  {from:"constitution",to:"auto_tuner",rel:"constrains",conf:"EXTRACTED",w:3},
+  {from:"meta_governance",to:"constitution",rel:"reads_from",conf:"EXTRACTED",w:3},
+  {from:"meta_governance",to:"auto_tuner",rel:"constrains",conf:"EXTRACTED",w:2.5},
+  {from:"auto_evolution",to:"auto_tuner",rel:"calls",conf:"EXTRACTED",w:2.5},
+  {from:"auto_evolution",to:"meta_governance",rel:"calls",conf:"EXTRACTED",w:2.5},
+  {from:"auto_evolution",to:"evolution_state_mgr",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"auto_tuner",to:"llm_service",rel:"modulates",conf:"EXTRACTED",w:2},
+  {from:"auto_tuner",to:"psy_growth",rel:"implements",conf:"INFERRED",w:2},
+  {from:"evolution_state_mgr",to:"psy_stability",rel:"embodies",conf:"INFERRED",w:1.5},
+  {from:"genesi_auditor",to:"psy_self_awareness",rel:"implements",conf:"INFERRED",w:2.5},
+  {from:"genesi_auditor",to:"call_model",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"lab_feedback",to:"auto_tuner",rel:"feeds_into",conf:"EXTRACTED",w:2},
+  {from:"llm_service",to:"call_model",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"llm_service",to:"call_with_protection",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"call_with_protection",to:"call_model",rel:"calls",conf:"EXTRACTED",w:2},
+  {from:"reminder_engine",to:"llm_service",rel:"calls",conf:"EXTRACTED",w:1.5},
+  {from:"live_search",to:"llm_service",rel:"calls",conf:"EXTRACTED",w:1.5},
+  // INFERRED cross-cutting
+  {from:"emotional_kw_clf",to:"emotional_kw_eie",rel:"semantically_similar_to",conf:"INFERRED",w:2.5,note:"⚠️ SURPRISE: due liste parallele — rischio drift silenzioso"},
+  {from:"detect_group_tone",to:"analyze_emotion",rel:"semantically_similar_to",conf:"INFERRED",w:2,note:"Due approcci: deterministico gruppo vs LLM individuale"},
+  {from:"infer_family_tone",to:"detect_group_tone",rel:"semantically_similar_to",conf:"INFERRED",w:1.5,note:"Stessa astrazione, scala diversa: nome statico vs messaggi dinamici"},
+  {from:"update_latent",to:"enhance_eie",rel:"feeds_into",conf:"INFERRED",w:2.5,note:"⚠️ SURPRISE: via brain_state dict (coupling nascosto)"},
+  {from:"psy_self_awareness",to:"psy_identity",rel:"feeds_into",conf:"INFERRED",w:2},
+  {from:"psy_group_mind",to:"psy_empathy",rel:"feeds_into",conf:"INFERRED",w:2},
+  {from:"psy_attachment",to:"psy_empathy",rel:"feeds_into",conf:"INFERRED",w:1.5},
+  {from:"psy_emotional_res",to:"psy_empathy",rel:"feeds_into",conf:"INFERRED",w:2},
+  {from:"psy_coherence",to:"psy_identity",rel:"feeds_into",conf:"INFERRED",w:2},
+  {from:"psy_growth",to:"psy_self_awareness",rel:"feeds_into",conf:"INFERRED",w:1.5},
+  {from:"memory_brain",to:"brain_state_singleton",rel:"semantically_similar_to",conf:"INFERRED",w:1.5,note:"MemoryBrain è layer legacy; BrainState è la versione attiva"},
+];
+
+// ════════════════════════════════════════════════
+// BUILD VIS DATASETS
+// ════════════════════════════════════════════════
+
+let nodesDS, edgesDS, network;
+let activeLayerFilter = null;
+let activePsyFilter = null;
+let activeTypeFilter = null;
+
+function getColor(layer){ return (LAYER_META[layer]||{color:"#666",border:"#444"}); }
+
+function buildVisNodes(nodes){
+  return nodes.map(n=>{
+    const lm = LAYER_META[n.layer]||{color:"#666",border:"#444"};
+    const isGod = !!n.god;
+    return {
+      id: n.id,
+      label: n.label.length > 22 ? n.label.substring(0,20)+'…' : n.label,
+      _fullLabel: n.label,
+      color:{background:lm.color,border:lm.border,highlight:{background:lm.color,border:"#fff"},hover:{background:lm.color,border:"#fff"}},
+      font:{color:"#fff",size:isGod?13:10,face:"monospace"},
+      shape: TYPE_SHAPES[n.type]||"ellipse",
+      size: isGod?30:(n.type==="psychological_construct"?20:(n.type==="storage_key"?13:16)),
+      borderWidth: isGod?3:1,
+      shadow: isGod?{enabled:true,color:lm.color+"88",size:14}:false,
+      _raw: n
+    };
+  });
+}
+
+function buildVisEdges(edges, nodeIds){
+  const idSet = new Set(nodeIds);
+  return edges.filter(e=>idSet.has(e.from)&&idSet.has(e.to)).map((e,i)=>({
+    id:i,
+    from:e.from, to:e.to,
+    label:e.rel,
+    font:{size:8,color:e.conf==="INFERRED"?"#d29922":"#6e7681",align:"middle",strokeWidth:0},
+    color:{color:e.conf==="INFERRED"?"#d29922aa":"#388bfd55",highlight:"#58a6ff",hover:"#58a6ff"},
+    width: Math.max(0.5,(e.w||1)-0.5),
+    dashes: e.conf==="INFERRED",
+    arrows:{to:{enabled:true,scaleFactor:0.5}},
+    smooth:{type:"dynamic"},
+    title:`${e.rel} [${e.conf}]${e.note?'\n'+e.note:''}`,
+    _raw:e
+  }));
+}
+
+function visibleNodes(){
+  return RAW_NODES.filter(n=>{
+    if(activeLayerFilter && n.layer!==activeLayerFilter) return false;
+    if(activeTypeFilter && n.type!==activeTypeFilter) return false;
+    if(activePsyFilter && !(n.psy||[]).includes(activePsyFilter)) return false;
+    return true;
+  });
+}
+
+function initNetwork(){
+  const vNodes = visibleNodes();
+  const vis_n = buildVisNodes(vNodes);
+  const vis_e = buildVisEdges(RAW_EDGES, vNodes.map(n=>n.id));
+
+  if(nodesDS){
+    nodesDS.clear(); nodesDS.add(vis_n);
+    edgesDS.clear(); edgesDS.add(vis_e);
+    network.fit({animation:{duration:500,easingFunction:"easeInOutQuad"}});
+    updateStats(vNodes.length, vis_e.length);
+    return;
+  }
+
+  nodesDS = new vis.DataSet(vis_n);
+  edgesDS = new vis.DataSet(vis_e);
+
+  const container = document.getElementById("network");
+  network = new vis.Network(container,{nodes:nodesDS,edges:edgesDS},{
+    physics:{
+      enabled:true,
+      solver:"forceAtlas2Based",
+      forceAtlas2Based:{gravitationalConstant:-50,centralGravity:0.005,springLength:130,springConstant:0.08,damping:0.4,avoidOverlap:0.9},
+      stabilization:{iterations:400,fit:true},
+    },
+    layout:{improvedLayout:true},
+    interaction:{hover:true,tooltipDelay:300,navigationButtons:false,keyboard:{enabled:true}},
+    nodes:{borderWidth:1},
+    edges:{smooth:{type:"dynamic",roundness:0.4}},
+  });
+
+  updateStats(vNodes.length, vis_e.length);
+
+  network.on("click",p=>{
+    if(p.nodes.length) showNodeDetail(p.nodes[0]);
+    else if(p.edges.length) showEdgeDetail(p.edges[0]);
+    else resetDetail();
+  });
+
+  network.once("stabilizationIterationsDone",()=>{
+    network.setOptions({physics:{enabled:false}});
+  });
+}
+
+function updateStats(nv, ev){
+  document.getElementById("s-nodes").textContent = RAW_NODES.length+" nodi";
+  document.getElementById("s-edges").textContent = RAW_EDGES.length+" archi";
+  document.getElementById("s-vis").textContent = "visibili: "+nv+" nodi, "+ev+" archi";
+}
+
+// ════════════════════════════════════════════════
+// DETAIL PANEL
+// ════════════════════════════════════════════════
+
+function showNodeDetail(nodeId){
+  const raw = RAW_NODES.find(n=>n.id===nodeId);
+  if(!raw) return;
+  const lm = LAYER_META[raw.layer]||{color:"#666",label:raw.layer};
+
+  let h = `<div class="node-title">${raw.label}</div>`;
+  if(raw.file) h += `<div class="node-file">📁 ${raw.file}</div>`;
+  h += `<span class="tag tag-layer">${lm.label}</span>`;
+  h += `<span class="tag tag-type">${raw.type}</span>`;
+  if(raw.god) h += `<span class="tag tag-god">⚡ God Node</span>`;
+  (raw.psy||[]).forEach(p=>{ h += `<span class="tag tag-psy">${p}</span>`; });
+
+  if(raw.desc && raw.desc.includes("⚠️")) h += `<span class="tag tag-bug">⚠️ nota</span>`;
+  h += `<div class="node-desc">${raw.desc||""}</div>`;
+
+  const out = RAW_EDGES.filter(e=>e.from===nodeId);
+  const inn = RAW_EDGES.filter(e=>e.to===nodeId);
+
+  if(out.length){
+    h += `<div class="conn-section"><div class="conn-title">→ Dipende da / chiama (${out.length})</div>`;
+    out.forEach(e=>{
+      const t = RAW_NODES.find(n=>n.id===e.to);
+      if(!t) return;
+      const tlm = LAYER_META[t.layer]||{color:"#666"};
+      h += `<div class="conn-item" onclick="focusNode('${e.to}')">
+        <div class="conn-name" style="color:${tlm.color}">${t.label}</div>
+        <div class="conn-rel">${e.rel} ${e.conf==="INFERRED"?'<span class="conn-inf">[INFERRED]</span>':''}${e.note?'<br><span style="color:#484f58;font-size:9px">'+e.note+'</span>':''}</div>
+      </div>`;
+    });
+    h += `</div>`;
+  }
+
+  if(inn.length){
+    h += `<div class="conn-section"><div class="conn-title">← Chiamato da (${inn.length})</div>`;
+    inn.forEach(e=>{
+      const s = RAW_NODES.find(n=>n.id===e.from);
+      if(!s) return;
+      const slm = LAYER_META[s.layer]||{color:"#666"};
+      h += `<div class="conn-item" onclick="focusNode('${e.from}')">
+        <div class="conn-name" style="color:${slm.color}">${s.label}</div>
+        <div class="conn-rel">${e.rel} ${e.conf==="INFERRED"?'<span class="conn-inf">[INFERRED]</span>':''}</div>
+      </div>`;
+    });
+    h += `</div>`;
+  }
+
+  activateTab("detail");
+  document.getElementById("pane-detail").innerHTML = h;
+}
+
+function showEdgeDetail(edgeId){
+  const e = RAW_EDGES[edgeId];
+  if(!e) return;
+  const s = RAW_NODES.find(n=>n.id===e.from);
+  const t = RAW_NODES.find(n=>n.id===e.to);
+  if(!s||!t) return;
+  const slm = LAYER_META[s.layer]||{color:"#666"};
+  const tlm = LAYER_META[t.layer]||{color:"#666"};
+  let h = `<div class="node-title">Arco</div>`;
+  h += `<div class="conn-item" style="margin-bottom:6px">
+    <div class="conn-name" style="color:${slm.color}">${s.label}</div>
+    <div class="conn-rel">— ${e.rel} →</div>
+    <div class="conn-name" style="color:${tlm.color}">${t.label}</div>
+  </div>`;
+  h += `<span class="tag ${e.conf==="INFERRED"?"tag-god":"tag-type"}">${e.conf}</span>`;
+  if(e.note) h += `<div class="node-desc">${e.note}</div>`;
+  activateTab("detail");
+  document.getElementById("pane-detail").innerHTML = h;
+}
+
+function resetDetail(){
+  document.getElementById("pane-detail").innerHTML = `<p style="color:#484f58;font-style:italic;font-size:12px">Clicca su un nodo per esplorarne le connessioni, il tipo, il file sorgente e i costrutti psicologici associati.</p>`;
+}
+
+function focusNode(id){
+  const vn = nodesDS.get(id);
+  if(vn){
+    network.focus(id,{scale:1.4,animation:{duration:400,easingFunction:"easeInOutQuad"}});
+    network.selectNodes([id]);
+    showNodeDetail(id);
+  } else {
+    // Node might be filtered out — show info anyway
+    showNodeDetail(id);
+  }
+}
+
+// ════════════════════════════════════════════════
+// FILTERS
+// ════════════════════════════════════════════════
+
+function buildFilters(){
+  // Layer filters
+  const lf = document.getElementById("layer-filters");
+  Object.entries(LAYER_META).forEach(([key,meta])=>{
+    const b = document.createElement("button");
+    b.className="fbtn";
+    b.dataset.layer=key;
+    b.innerHTML=`<span class="dot" style="background:${meta.color}"></span>${meta.label}`;
+    b.onclick=()=>toggleLayerFilter(key,b);
+    lf.appendChild(b);
+  });
+
+  // Legend
+  const ll = document.getElementById("layer-legend");
+  Object.entries(LAYER_META).forEach(([key,meta])=>{
+    const d = document.createElement("div");
+    d.className="legend-item";
+    d.innerHTML=`<div class="legend-dot" style="background:${meta.color}"></div><span>${meta.label}</span>`;
+    ll.appendChild(d);
+  });
+
+  // Type filters
+  const tf = document.getElementById("type-filters");
+  const types = [...new Set(RAW_NODES.map(n=>n.type))];
+  types.forEach(t=>{
+    const b = document.createElement("button");
+    b.className="fbtn";
+    b.dataset.type=t;
+    b.textContent=t;
+    b.onclick=()=>toggleTypeFilter(t,b);
+    tf.appendChild(b);
+  });
+
+  // Psy filters
+  const pf = document.getElementById("psy-filters");
+  PSY_ALL.forEach(p=>{
+    const b = document.createElement("button");
+    b.className="fbtn";
+    b.dataset.psy=p;
+    b.innerHTML=`<span class="tag-psy" style="font-size:9px;padding:0 4px;border-radius:4px;background:#2d1f5e;color:#d2a8ff">${p}</span>`;
+    b.onclick=()=>togglePsyFilter(p,b);
+    pf.appendChild(b);
+  });
+}
+
+function toggleLayerFilter(key, btn){
+  if(activeLayerFilter===key){ activeLayerFilter=null; btn.classList.remove("active"); }
+  else{
+    document.querySelectorAll("#layer-filters .fbtn").forEach(b=>b.classList.remove("active"));
+    activeLayerFilter=key; btn.classList.add("active");
+  }
+  initNetwork();
+}
+
+function toggleTypeFilter(t, btn){
+  if(activeTypeFilter===t){ activeTypeFilter=null; btn.classList.remove("active"); }
+  else{
+    document.querySelectorAll("#type-filters .fbtn").forEach(b=>b.classList.remove("active"));
+    activeTypeFilter=t; btn.classList.add("active");
+  }
+  initNetwork();
+}
+
+function togglePsyFilter(p, btn){
+  if(activePsyFilter===p){ activePsyFilter=null; btn.classList.remove("active"); }
+  else{
+    document.querySelectorAll("#psy-filters .fbtn").forEach(b=>b.classList.remove("active"));
+    activePsyFilter=p; btn.classList.add("active");
+  }
+  initNetwork();
+}
+
+// ════════════════════════════════════════════════
+// SEARCH
+// ════════════════════════════════════════════════
+
+document.getElementById("search").addEventListener("input", function(){
+  const q = this.value.toLowerCase().trim();
+  const res = document.getElementById("search-results");
+  if(!q){ res.innerHTML=""; return; }
+  const matches = RAW_NODES.filter(n=>
+    n.label.toLowerCase().includes(q)||
+    (n.file||"").toLowerCase().includes(q)||
+    (n.desc||"").toLowerCase().includes(q)||
+    (n.psy||[]).some(p=>p.includes(q))||
+    n.layer.includes(q)||n.type.includes(q)
+  ).slice(0,12);
+
+  if(!matches.length){ res.innerHTML=`<div style="padding:8px 12px;font-size:11px;color:#484f58">Nessun risultato</div>`; return; }
+
+  res.innerHTML = matches.map(n=>{
+    const lm = LAYER_META[n.layer]||{color:"#666"};
+    return `<div class="search-result" onclick="focusNode('${n.id}')">
+      <div class="dot" style="background:${lm.color}"></div>
+      <div class="lbl">${n.label}</div>
+      <div class="typ">${n.type}</div>
+    </div>`;
+  }).join("");
+});
+
+// ════════════════════════════════════════════════
+// TABS
+// ════════════════════════════════════════════════
+
+function activateTab(name){
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.tab===name));
+  document.querySelectorAll(".tab-pane").forEach(p=>p.classList.toggle("active",p.id==="pane-"+name));
+}
+
+document.querySelectorAll(".tab").forEach(t=>{
+  t.addEventListener("click",()=>activateTab(t.dataset.tab));
+});
+
+// ════════════════════════════════════════════════
+// RUNTIME STATE — carica dal JSON live
+// ════════════════════════════════════════════════
+
+async function loadRuntimeState(){
+  try {
+    const r = await fetch('genesi_graph.json?_=' + Date.now());
+    if(!r.ok) return;
+    const data = await r.json();
+    const rt = data.runtime_state || {};
+
+    // Aggiorna versione
+    const v = (data.meta||{}).version;
+    if(v) document.getElementById("graph-version").textContent = v;
+
+    // Aggiorna nodi con runtime_state dal JSON
+    (data.nodes||[]).forEach(n => {
+      if(n.runtime_state && nodesDS) {
+        const existing = nodesDS.get(n.id);
+        if(existing) {
+          const updates = {};
+          if(n.runtime_state.recently_changed) {
+            // Nodo "hot" — bordo bianco lampeggiante
+            updates.borderWidth = 3;
+            updates.shadow = {enabled:true, color:'#ffa198', size:16};
+          }
+          if(Object.keys(updates).length) nodesDS.update({id:n.id, ...updates});
+        }
+      }
+    });
+
+    // Costruisci pannello stato psicologico
+    const snap = rt.psychological_snapshot || {};
+    const el = document.getElementById("psy-live");
+    if(!el) return;
+    let h = "";
+
+    const ld = snap.latent_dimensions;
+    if(ld) {
+      h += `<div style="margin-bottom:8px"><b style="color:#a371f7">Vettore Latente 5D</b>`;
+      h += `<div style="font-size:10px;color:#8b949e;margin-bottom:2px">aggiornato: ${(rt.last_psy_update||"").slice(0,16)}</div>`;
+      const DIM_COLORS = {
+        attachment:"#f78166", curiosity:"#388bfd", emotional_resonance:"#a371f7",
+        stability:"#3fb950", relational_energy:"#d29922"
+      };
+      for(const [k,v] of Object.entries(ld)) {
+        const pct = Math.round(v*100);
+        const col = DIM_COLORS[k] || "#58a6ff";
+        h += `<div style="margin:3px 0">
+          <div style="display:flex;justify-content:space-between;font-size:10px">
+            <span style="color:${col}">${k}</span><span>${v.toFixed(3)}</span>
+          </div>
+          <div style="background:#21262d;border-radius:2px;height:4px">
+            <div style="background:${col};width:${pct}%;height:4px;border-radius:2px;transition:width .5s"></div>
+          </div>
+        </div>`;
+      }
+      h += `</div>`;
+    }
+
+    const rel = snap.relational_state;
+    if(rel) {
+      const REL_COL = {NEUTRAL:"#8b949e",ATTUNED:"#3fb950",ENGAGED:"#388bfd",
+                       REFLECTIVE:"#a371f7",SUPPORTIVE_DEEP:"#d29922",CONFRONTATIONAL:"#f78166"};
+      h += `<div class="kv"><div class="k">Stato relazionale</div>
+        <div class="v"><span style="color:${REL_COL[rel]||'#e6edf3'}">${rel}</span></div></div>`;
+    }
+    if(snap.global_insights_count!=null)
+      h += `<div class="kv"><div class="k">Insight</div><div class="v">${snap.global_insights_count}</div></div>`;
+    if(snap.episode_count!=null)
+      h += `<div class="kv"><div class="k">Episodi</div><div class="v">${snap.episode_count}</div></div>`;
+    if(snap.personal_facts_count!=null)
+      h += `<div class="kv"><div class="k">Fatti personali</div><div class="v">${snap.personal_facts_count}</div></div>`;
+
+    const recent = (rt.recent_changes||[]).slice(0,3);
+    if(recent.length){
+      h += `<div style="margin-top:8px"><b style="color:#e3b341;font-size:10px">⚡ MODIFICHE CODICE RECENTI</b>`;
+      recent.forEach(c => {
+        h += `<div style="font-size:10px;color:#8b949e;margin-top:2px">
+          • ${(c.file||'?').split('/').pop()} <span style="color:#484f58">${(c.ts||'').slice(0,10)}</span>
+          <span style="color:#d29922">[${(c.nodes||[]).length} nodi]</span>
+        </div>`;
+      });
+      h += `</div>`;
+    }
+
+    el.style.fontStyle = "normal";
+    el.innerHTML = h || `<span style="color:#484f58">Nessun dato psicologico ancora disponibile.<br>Il grafo si aggiorna automaticamente ogni ${20} conversazioni.</span>`;
+
+  } catch(e) {
+    const el = document.getElementById("psy-live");
+    if(el) el.innerHTML = `<span style="color:#484f58">JSON non caricabile (apri dal VPS).</span>`;
+  }
+}
+
+// ════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════
+
+buildFilters();
+initNetwork();
+// Carica stato live dal JSON (se accessibile)
+setTimeout(loadRuntimeState, 500);
+// Auto-refresh ogni 60 secondi
+setInterval(loadRuntimeState, 60000);
+</script>
+</body>
+</html>

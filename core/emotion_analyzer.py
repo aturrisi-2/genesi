@@ -34,8 +34,8 @@ async def analyze_emotion(message: str) -> dict:
         return dict(_EMOTION_DEFAULT)
     try:
         from core.llm_service import llm_service
-        content = await llm_service._call_with_protection(
-            "gpt-4o-mini", _SYSTEM_PROMPT, message[:400], route="emotion"
+        content = await llm_service._call_model(
+            "openai/gpt-4o-mini", _SYSTEM_PROMPT, message[:400], route="emotion"
         )
         if content:
             data = json.loads(content.strip())

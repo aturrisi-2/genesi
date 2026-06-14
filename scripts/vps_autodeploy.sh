@@ -113,6 +113,34 @@ if [[ -f requirements.txt ]]; then
   "$VENV_DIR/bin/pip" install -r requirements.txt
 fi
 
+
+# ── Diagnostics token: genera LIVE_LOGS_TOKEN se assente ─────────────────────
+# Usato dall'endpoint /api/system/live-logs per lettura log remota senza SSH.
+_ENV_FILE="$APP_DIR/.env"
+if [[ -f "$_ENV_FILE" ]] && ! grep -q "^LIVE_LOGS_TOKEN=" "$_ENV_FILE"; then
+  if command -v openssl >/dev/null 2>&1; then
+    _NEW_TOKEN="$(openssl rand -hex 32)"
+  else
+    _NEW_TOKEN="$(head -c 32 /dev/urandom | xxd -p | tr -d '\n')"
+  fi
+  echo "LIVE_LOGS_TOKEN=$_NEW_TOKEN" >> "$_ENV_FILE"
+  log "LIVE_LOGS_TOKEN generated and added to .env"
+  log "DIAG_TOKEN_VALUE: $_NEW_TOKEN"
+  # Scrivi anche nel file di bootstrap (memory/ è esclusa da git clean)
+  mkdir -p "$APP_DIR/memory"
+  echo "$_NEW_TOKEN" > "$APP_DIR/memory/.live_logs_token"
+  chmod 600 "$APP_DIR/memory/.live_logs_token"
+elif [[ -f "$_ENV_FILE" ]]; then
+  _EXISTING_TOKEN="$(grep "^LIVE_LOGS_TOKEN=" "$_ENV_FILE" | cut -d= -f2 | head -1)"
+  if [[ -n "$_EXISTING_TOKEN" ]]; then
+    mkdir -p "$APP_DIR/memory"
+    echo "$_EXISTING_TOKEN" > "$APP_DIR/memory/.live_logs_token"
+    chmod 600 "$APP_DIR/memory/.live_logs_token"
+    log "DIAG_TOKEN_VALUE: $_EXISTING_TOKEN"
+  fi
+fi
+unset _ENV_FILE _NEW_TOKEN _EXISTING_TOKEN
+
 log "Restarting service: $SERVICE_NAME"
 SERVICE_CHECK_INTERVAL_SECONDS="${SERVICE_CHECK_INTERVAL_SECONDS:-2}"
 SERVICE_CHECK_MAX_ATTEMPTS="${SERVICE_CHECK_MAX_ATTEMPTS:-15}"

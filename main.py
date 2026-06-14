@@ -55,6 +55,7 @@ from api.telegram import router as telegram_router
 from api.whatsapp import router as whatsapp_router
 from api.meta_messaging import router as meta_messaging_router
 from api.widget import router as widget_router
+from api.system_diagnostics import router as system_diagnostics_router
 from auth.database import init_db, async_session
 from auth.models import Visit
 from core.log import log
@@ -111,11 +112,26 @@ async def lifespan(app: FastAPI):
     _bg_tasks.add(_vt)
     _vt.add_done_callback(_bg_tasks.discard)
 
+    # Knowledge Graph auto-updater: avvia watcher codice sorgente
+    try:
+        from core.graph_updater import graph_updater as _graph_updater
+        _graph_updater.start_code_watcher()
+        log("GRAPH_UPDATER_STARTED", status="ok", watching="core,api,auth")
+    except Exception as _ge:
+        log("GRAPH_UPDATER_START_ERROR", error=str(_ge))
+
     # Registra webhook Telegram
     from core.telegram_bot import set_webhook
     asyncio.create_task(set_webhook("https://genesi.lucadigitale.eu/api/telegram/webhook"))
 
     yield  # ← app in esecuzione
+
+    # SHUTDOWN — ferma graph updater watcher
+    try:
+        from core.graph_updater import graph_updater as _graph_updater
+        _graph_updater.stop_code_watcher()
+    except Exception:
+        pass
 
     # SHUTDOWN — cancella tutti i background task
     for t in list(_bg_tasks):
@@ -529,6 +545,7 @@ app.include_router(telegram_router)
 app.include_router(whatsapp_router)
 app.include_router(meta_messaging_router)
 app.include_router(widget_router)
+app.include_router(system_diagnostics_router)
 from api.weather_widget import router as weather_widget_router
 app.include_router(weather_widget_router)
 from api.push import router as push_router
