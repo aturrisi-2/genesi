@@ -135,8 +135,13 @@ def verify_signature(payload: bytes, signature_header: str,
     """
     secrets = _secrets_for_platform(platform)
     if not secrets:
-        logger.warning("META_SIGNATURE_SKIPPED app_secret non configurato")
-        return True
+        # Fail-CLOSED in produzione: senza secret non si può autenticare il webhook.
+        # Solo opt-in esplicito per sviluppo locale.
+        if os.getenv("META_ALLOW_UNSIGNED", "").lower() in ("1", "true", "yes"):
+            logger.warning("META_SIGNATURE_SKIPPED app_secret non configurato (dev opt-in)")
+            return True
+        logger.error("META_SIGNATURE_NO_SECRET reject — set META_APP_SECRET/IG_APP_SECRET")
+        return False
     if not signature_header or not signature_header.startswith("sha256="):
         logger.warning("META_SIGNATURE_MISSING")
         return False

@@ -63,9 +63,12 @@ class TestSignatureVerification:
         tampered = b'{"object":"page","entry":[{"evil":true}]}'
         assert verify_signature(tampered, sig) is False
 
-    def test_dev_mode_without_secret_accepts(self, monkeypatch):
-        # Senza app secret configurato (dev) accetta ma non deve crashare
+    def test_no_secret_fail_closed_by_default(self, monkeypatch):
+        # Senza app secret configurato: fail-CLOSED (rifiuta), tranne opt-in dev esplicito.
         monkeypatch.setattr(bot, "META_APP_SECRET", "")
+        monkeypatch.delenv("META_ALLOW_UNSIGNED", raising=False)
+        assert verify_signature(b"{}", "") is False
+        monkeypatch.setenv("META_ALLOW_UNSIGNED", "1")
         assert verify_signature(b"{}", "") is True
 
 
@@ -410,6 +413,7 @@ class TestRouterSignatureEnforcement:
     async def test_invalid_json_returns_200_no_crash(self, monkeypatch):
         # Meta esige 200 anche su body corrotto, ma nulla deve essere processato
         monkeypatch.setattr(bot, "META_APP_SECRET", "")
+        monkeypatch.setenv("META_ALLOW_UNSIGNED", "1")
         from api.meta_messaging import _receive
         req = _FakeRequest(b"not-json-{{{", {})
         with patch("api.meta_messaging.handle_update", new_callable=AsyncMock) as mock_handle:
@@ -420,6 +424,7 @@ class TestRouterSignatureEnforcement:
     @pytest.mark.asyncio
     async def test_json_array_payload_rejected(self, monkeypatch):
         monkeypatch.setattr(bot, "META_APP_SECRET", "")
+        monkeypatch.setenv("META_ALLOW_UNSIGNED", "1")
         from api.meta_messaging import _receive
         req = _FakeRequest(b'["not", "a", "dict"]', {})
         with patch("api.meta_messaging.handle_update", new_callable=AsyncMock) as mock_handle:

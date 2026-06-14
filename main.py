@@ -10,6 +10,12 @@ from dotenv import load_dotenv
 # Carica variabili d'ambiente IMMEDIATAMENTE (prima degli import che le usano)
 load_dotenv()
 
+# Sicurezza: httpx/httpcore loggano gli URL completi a livello INFO → fuga di
+# access_token (FB/IG passati come query param) in journalctl. Silenzia a WARNING.
+import logging as _logging
+for _noisy in ("httpx", "httpcore"):
+    _logging.getLogger(_noisy).setLevel(_logging.WARNING)
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
