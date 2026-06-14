@@ -3,11 +3,38 @@ import logging
 import re
 import os
 import json
+import socket
+import ipaddress
 import httpx
 from urllib.parse import urlparse, urljoin
 from youtube_transcript_api import YouTubeTranscriptApi
 
 logger = logging.getLogger(__name__)
+
+
+async def _is_safe_public_url(url: str) -> bool:
+    """Anti-SSRF: True solo se l'host risolve esclusivamente a IP pubblici.
+
+    Blocca loopback, reti private, link-local (incl. 169.254.169.254 metadata
+    cloud), multicast, reserved e unspecified. Fail-closed su qualsiasi errore.
+    """
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return False
+        loop = asyncio.get_running_loop()
+        infos = await loop.getaddrinfo(parsed.hostname, None)
+        if not infos:
+            return False
+        for info in infos:
+            ip = ipaddress.ip_address(info[4][0])
+            if (ip.is_private or ip.is_loopback or ip.is_link_local
+                    or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+                return False
+        return True
+    except Exception as e:
+        logger.warning("SSRF_GUARD_REJECT url=%s err=%s", url, e)
+        return False
 
 # Regex per trovare URL nei messaggi
 URL_REGEX = re.compile(
@@ -106,7 +133,9 @@ async def explore_jina(url: str) -> str:
 def is_msd_category(url: str) -> bool:
     """Rileva se un URL fa riferimento a una categoria di MSD Manuals."""
     parsed = urlparse(url)
-    if 'msdmanuals.com' not in parsed.netloc.lower():
+    host = (parsed.hostname or "").lower()
+    # Host-check ESATTO (no substring): evita bypass tipo msdmanuals.com.attacker.com
+    if not (host == "msdmanuals.com" or host.endswith(".msdmanuals.com")):
         return False
     path_parts = [p for p in parsed.path.split('/') if p]
     # Una pagina di categoria di MSD ha solitamente 2 o 3 componenti di percorso:
@@ -134,9 +163,9 @@ async def _fetch_article_for_manual(art_url: str, art_title: str, sem: asyncio.S
         except Exception as e:
             logger.warning("Jina fetch failed for %s, trying direct HTTP: %s", art_url, e)
 
-        if not content:
+        if not content and await _is_safe_public_url(art_url):
             try:
-                async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+                async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
                     resp = await client.get(art_url, headers=headers)
                     if resp.status_code == 200:
                         html = resp.text
@@ -186,7 +215,10 @@ async def crawl_and_save_msd_category_bg(url: str, category_slug: str):
                 "Chrome/120.0.0.0 Safari/537.36"
             )
         }
-        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+        if not await _is_safe_public_url(url):
+            logger.error("MSD_CRAWLER_UNSAFE_URL url=%s", url)
+            return
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
             resp = await client.get(url, headers=headers)
             if resp.status_code != 200:
                 logger.error("MSD_CRAWLER_INDEX_ERROR status=%d", resp.status_code)
