@@ -21,6 +21,7 @@ from core.log import log
 logger = logging.getLogger(__name__)
 
 FACES_DIR = "data/faces"
+FACES_PENDING_DIR = "data/faces_pending"  # immagini awaiting — sopravvivono al restart
 
 # Nomi non validi da non salvare mai
 _INVALID_NAMES = {
@@ -405,8 +406,12 @@ async def handle_photo_identification(
     n_pets = int(_total_p.group(1)) if _total_p else 0
 
     if has_unknown_faces or has_unknown_pets:
-        # Salva l'immagine tmp per uso futuro
-        tmp_img = f"/tmp/genesi_face_{uuid.uuid4().hex[:10]}.jpg"
+        # Salva in data/faces_pending/ (persistente — sopravvive a restart e /tmp cleanup)
+        try:
+            os.makedirs(FACES_PENDING_DIR, exist_ok=True)
+        except Exception:
+            pass
+        tmp_img = os.path.join(FACES_PENDING_DIR, f"genesi_face_{uuid.uuid4().hex[:10]}.jpg")
         try:
             with open(tmp_img, "wb") as f:
                 f.write(img_bytes)

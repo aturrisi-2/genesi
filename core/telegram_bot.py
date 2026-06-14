@@ -1489,6 +1489,18 @@ async def handle_update(update: dict):
             if not is_group or not first_name:
                 return message
 
+            # Estrai blocchi [SISTEMA: ...] dal corpo del messaggio.
+            # Devono apparire DOPO [FINE MESSAGGIO ATTUALE], non dentro la riga
+            # "{first_name}: {message}" — altrimenti il LLM li legge come parole
+            # di Mariella invece che come direttive di sistema.
+            _sistema_block = ""
+            _clean_message = message
+            _SISTEMA_MARKER = "\n[SISTEMA:"
+            if _SISTEMA_MARKER in message:
+                idx = message.index(_SISTEMA_MARKER)
+                _clean_message = message[:idx]
+                _sistema_block = message[idx:].strip()
+
             is_family_group = _TG_GROUPS_ARE_FAMILY
             group_type_label = "GRUPPO FAMILIARE" if is_family_group else "GRUPPO ESTERNO"
             role_label = "naturale da familiare (non da assistente)" if is_family_group else "da assistente AI educata, utile e mai invadente"
@@ -1499,7 +1511,10 @@ async def handle_update(update: dict):
                     photo_rules += "Evita spiegoni descrittivi dell'immagine: fai un commento discorsivo e conciso. "
 
                 domande_rule = "zero domande di ritorno, "
-                if "[UNKNOWN_FACES_DETECTED]" in message or "[UNKNOWN_PETS_DETECTED]" in message:
+                # Se c'è già un sistema_block da handle_photo_identification (più dettagliato),
+                # NON aggiungere photo_rules per facce/animali sconosciuti: sarebbero istruzioni
+                # doppie e conflittuali. Il sistema_block gestisce già tutto.
+                if not _sistema_block and ("[UNKNOWN_FACES_DETECTED]" in message or "[UNKNOWN_PETS_DETECTED]" in message):
                     if "[UNKNOWN_PETS_DETECTED]" in message:
                         photo_rules += 'Ci sono animali domestici sconosciuti al sistema visivo. Fai un commento affettuoso. Anche se intuisci chi sia dal profilo, DEVI CHIEDERE all\'utente di scriverti esplicitamente come si chiama per poter memorizzare il suo aspetto visivo. REGOLA FERREA: Fai la domanda e chiedi di scriverti il nome! '
                     else:
@@ -1539,21 +1554,23 @@ async def handle_update(update: dict):
             )
 
             only_emoji = all(
-                ord(c) > 127 or c in (' ', '\n') for c in message.strip()
+                ord(c) > 127 or c in (' ', '\n') for c in _clean_message.strip()
             )
             if only_emoji:
                 return (
                     f"{identity_block}"
-                    f"[MESSAGGIO ATTUALE — {first_name}]: {message}\n\n"
+                    f"[MESSAGGIO ATTUALE — {first_name}]: {_clean_message}\n\n"
                     f"[{group_type_label}: Reazione emoji — 1 riga max, naturale.]\n"
                     f"{group_ctx}"
                 )
+            _sistema_sep = f"\n{_sistema_block}\n" if _sistema_block else ""
             return (
                 f"{identity_block}"
                 f"[MESSAGGIO ATTUALE — a cui devi rispondere]\n"
-                f"{first_name}: {message}\n"
-                f"[FINE MESSAGGIO ATTUALE]\n\n"
-                f"[{group_type_label}: REGOLE ASSOLUTE: risposta misurata (3-4 righe max), "
+                f"{first_name}: {_clean_message}\n"
+                f"[FINE MESSAGGIO ATTUALE]\n"
+                f"{_sistema_sep}"
+                f"\n[{group_type_label}: REGOLE ASSOLUTE: risposta misurata (3-4 righe max), "
                 f"tono {role_label}, {extra_rules}"
                 f"Rispondi SOLO al messaggio attuale di {first_name} sopra, "
                 f"tenendo conto del filo della conversazione nello storico.]\n"
