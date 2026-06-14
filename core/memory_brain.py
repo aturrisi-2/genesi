@@ -533,7 +533,7 @@ class ConsolidationEngine:
                 ep["consolidated_at"] = datetime.now().isoformat()
         await storage.save(f"episodes/{user_id}", episodes)
 
-        result = {"consolidated": len(batch), "patterns": len(new_patterns), "traits": len(new_traits)}
+        result = {"consolidated": len(batch), "patterns": len(new_patterns), "traits": len(new_cog_traits)}
         logger.info("CONSOLIDATION_DONE user=%s %s", user_id, result)
         return result
 

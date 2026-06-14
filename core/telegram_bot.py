@@ -807,6 +807,7 @@ async def _get_or_create_member_token(from_id: int, first_name: str) -> str | No
 
 async def _refresh_member_token(from_id: int) -> str | None:
     """Rinnova il token del membro rimuovendolo dalla cache e ri-autenticando."""
+    from core.telegram_group_memory import get_member
     _MEMBER_TOKENS.pop(from_id, None)
     member = await get_member(from_id)
     first_name = member.get("first_name", "")

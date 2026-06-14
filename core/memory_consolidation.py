@@ -581,9 +581,9 @@ class MemoryConsolidation:
             logger.info("PROFILE_UPDATED", extra={
                 "user_id": user_id,
                 "new_patterns": len(new_patterns),
-                "new_traits": len(new_traits),
+                "new_traits": len(new_cog_traits),
                 "total_patterns": len(profile["patterns"]),
-                "total_traits": len(profile["traits"])
+                "total_traits": len(profile.get("traits", []))
             })
             
         except Exception as e:

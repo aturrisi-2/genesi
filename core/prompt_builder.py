@@ -173,10 +173,10 @@ Rispondi in modo empatico e coerente con la memoria condivisa."""
     #     log("PROMPT_BUILDER_PROFILE", name=user_profile["name"])
     
     # Blocca se prompt vuoto
-    if len(final_prompt) == 0:
+    if len(prompt) == 0:
         raise RuntimeError("Prompt builder generated empty prompt")
-    
-    return final_prompt
+
+    return prompt
 
 def _get_state_directives(state: dict, emotion_data: dict) -> str:
     """

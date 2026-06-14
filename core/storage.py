@@ -276,6 +276,8 @@ class MemoryStorage:
             try:
                 json_string = json.dumps(value, ensure_ascii=False, indent=2)
             except TypeError as e:
+                import logging
+                logger = logging.getLogger(__name__)
                 logger.critical(
                     "STORAGE_SERIALIZATION_FAILURE key=%s data_type=%s error=%s",
                     key,

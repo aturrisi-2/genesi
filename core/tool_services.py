@@ -703,7 +703,7 @@ class ToolService:
             city = "Italia"
             print(f"NEWS_DEFAULT_LOCATION city=Italia")
             # Riprova con Italia
-            return await self._news_with_fallback_chain(client, None, None, "IT", requested_section)
+            return await self._news_with_fallback_chain(client, None, None, "IT", section)
         
         return f"Non trovo notizie locali recenti per {city}."
 
