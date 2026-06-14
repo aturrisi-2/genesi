@@ -9,7 +9,10 @@ Se nessun token è configurato, risponde 503.
 import os
 from pathlib import Path
 
+import json
+
 from fastapi import APIRouter, HTTPException, Query, Header
+from fastapi.responses import JSONResponse
 
 from core.log import log
 
@@ -43,6 +46,20 @@ def _check_token(authorization: str | None, token: str | None) -> None:
         candidate = token
     if not candidate or candidate != active:
         raise HTTPException(status_code=403, detail="Forbidden")
+
+
+_GRAPH_JSON = Path(__file__).parent.parent / "genesi_graph.json"
+
+
+@router.get("/graph-data")
+async def graph_data():
+    """Restituisce genesi_graph.json per il pannello admin. Nessuna autenticazione richiesta (dati architetturali non sensibili)."""
+    if not _GRAPH_JSON.exists():
+        return JSONResponse({"error": "genesi_graph.json not found"}, status_code=404)
+    try:
+        return JSONResponse(json.loads(_GRAPH_JSON.read_text(encoding="utf-8")))
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
 
 
 @router.get("/live-logs")

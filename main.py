@@ -410,6 +410,10 @@ async def serve_admin_logs():
 async def serve_admin_widget():
     return FileResponse(BASE_DIR / "static" / "admin-widget.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
+@app.get("/admin-graph")
+async def serve_admin_graph():
+    return FileResponse(BASE_DIR / "static" / "admin-graph.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
 @app.get("/intranet-test")
 async def serve_intranet_test():
     from fastapi.responses import RedirectResponse

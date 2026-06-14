@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grafo Autoconsapevolezza — Genesi Admin</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf3;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── ADMIN TOPBAR ── */
+.admin-topbar{
+  position:fixed;top:0;left:0;right:0;z-index:999;
+  background:rgba(10,10,20,0.95);backdrop-filter:blur(12px);
+  border-bottom:1px solid rgba(255,255,255,0.07);
+  display:flex;align-items:center;gap:8px;padding:0 18px;height:48px;flex-shrink:0;
+}
+.admin-topbar a,.admin-topbar button{
+  display:inline-flex;align-items:center;gap:5px;padding:5px 12px;
+  border-radius:6px;font-size:0.82rem;font-weight:600;text-decoration:none;
+  cursor:pointer;border:1px solid transparent;background:transparent;color:#ccc;
+  transition:background .15s,color .15s;white-space:nowrap;
+}
+.admin-topbar a:hover{background:rgba(255,255,255,0.07);color:#fff}
+.tb-home{color:#a5f3fc !important;border-color:rgba(6,182,212,0.3) !important}
+.tb-home:hover{background:rgba(6,182,212,0.12) !important;color:#67e8f9 !important}
+.tb-sep{color:rgba(255,255,255,0.12);font-size:1.1rem;user-select:none}
+.tb-logout{margin-left:auto;color:#9ca3af;background:transparent;border:none;cursor:pointer;padding:5px 12px;border-radius:6px;font-size:0.82rem;font-weight:600}
+.tb-logout:hover{color:#f87171}
+.tb-graph-active{color:#a371f7 !important;border-color:rgba(163,113,247,0.5) !important;background:rgba(163,113,247,0.12) !important}
+
+/* ── GRAPH LAYOUT ── */
+#app{display:flex;flex-direction:column;height:100vh;padding-top:48px}
+
+#graph-header{padding:8px 16px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:12px;flex-shrink:0}
+#graph-header h1{font-size:14px;font-weight:600;color:#58a6ff;white-space:nowrap}
+#graph-header .sub{font-size:11px;color:#8b949e}
+#graph-header .badge{padding:2px 8px;border-radius:10px;font-size:10px;background:#21262d;border:1px solid #30363d;color:#8b949e;white-space:nowrap}
+#graph-header .badge.god{background:#1f1a00;border-color:#9e6a03;color:#d29922}
+
+#main{display:flex;flex:1;overflow:hidden}
+#network{flex:1;position:relative}
+#network canvas{outline:none}
+
+#sidebar{width:300px;background:#161b22;border-left:1px solid #30363d;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+#tabs{display:flex;border-bottom:1px solid #30363d;flex-shrink:0}
+.tab{flex:1;padding:8px 4px;font-size:11px;text-align:center;cursor:pointer;color:#8b949e;border-bottom:2px solid transparent;transition:all .15s}
+.tab.active{color:#58a6ff;border-bottom-color:#58a6ff;background:#0d1f36}
+.tab-pane{display:none;flex:1;overflow-y:auto;padding:12px}
+.tab-pane.active{display:block}
+
+#search-box{padding:8px 12px;border-bottom:1px solid #30363d;flex-shrink:0}
+#search-box input{width:100%;background:#21262d;border:1px solid #30363d;color:#e6edf3;padding:5px 8px;border-radius:4px;font-size:12px;outline:none}
+#search-box input::placeholder{color:#484f58}
+#search-results{max-height:140px;overflow-y:auto;border-bottom:1px solid #21262d;flex-shrink:0}
+.search-result{padding:6px 12px;font-size:11px;cursor:pointer;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:8px}
+.search-result:hover{background:#21262d}
+.search-result .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.search-result .lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.search-result .typ{color:#484f58;font-size:10px}
+
+.node-title{font-size:14px;font-weight:600;margin-bottom:4px}
+.node-file{font-size:10px;color:#8b949e;font-family:monospace;margin-bottom:8px;word-break:break-all}
+.tag{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;margin:2px}
+.tag-layer{background:#21262d;border:1px solid #30363d}
+.tag-type{background:#0d419d;color:#cae8ff}
+.tag-psy{background:#2d1f5e;color:#d2a8ff;border:1px solid #7c3aed}
+.tag-god{background:#1f1a00;color:#d29922;border:1px solid #9e6a03}
+.tag-bug{background:#3d1f1f;color:#ffa198;border:1px solid #da3633}
+.node-desc{font-size:12px;color:#c9d1d9;line-height:1.6;margin-top:8px}
+.conn-section{margin-top:10px}
+.conn-title{font-size:10px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.conn-item{padding:4px 6px;margin:2px 0;background:#21262d;border-radius:4px;font-size:11px;display:flex;flex-direction:column;gap:1px;cursor:pointer}
+.conn-item:hover{background:#30363d}
+.conn-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conn-rel{font-size:9px;color:#79c0ff}
+.conn-inf{color:#d29922;font-size:9px}
+
+.filter-section{margin-bottom:12px}
+.filter-section h3{font-size:10px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.filter-btns{display:flex;flex-wrap:wrap;gap:4px}
+.fbtn{padding:3px 7px;border-radius:4px;border:1px solid #30363d;background:#21262d;color:#8b949e;font-size:10px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:4px}
+.fbtn .dot{width:7px;height:7px;border-radius:50%}
+.fbtn.active{border-color:#58a6ff;color:#58a6ff;background:#0d1f36}
+.fbtn:hover{border-color:#484f58}
+
+.legend-item{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:11px}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.legend-dash{width:20px;height:0;border-top:2px dashed #d29922;flex-shrink:0}
+.legend-line{width:20px;height:2px;background:#388bfd;flex-shrink:0}
+
+.info-section{margin-bottom:12px}
+.info-section h3{font-size:10px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.kv{display:flex;gap:8px;margin-bottom:4px;font-size:11px}
+.kv .k{color:#8b949e;flex-shrink:0;width:90px}
+.kv .v{color:#e6edf3}
+.principle{padding:4px 8px;background:#21262d;border-radius:4px;font-size:11px;margin-bottom:3px;border-left:3px solid #388bfd}
+
+#stats{padding:6px 12px;border-top:1px solid #30363d;font-size:10px;color:#484f58;display:flex;gap:10px;flex-shrink:0}
+
+#tooltip{position:absolute;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:8px 10px;font-size:11px;pointer-events:none;display:none;max-width:220px;z-index:100;line-height:1.5}
+</style>
+</head>
+<body>
+
+<!-- ADMIN TOPBAR -->
+<nav class="admin-topbar">
+  <a href="/" class="tb-home">← Genesi</a>
+  <span class="tb-sep">|</span>
+  <a href="/admin" class="tb-home" style="color:#e2e8f0;border-color:rgba(255,255,255,0.15);">Admin</a>
+  <a href="/training-admin" style="color:#c4b5fd;border-color:rgba(124,77,255,0.3);padding:5px 12px;border-radius:6px;font-size:0.82rem;font-weight:600;text-decoration:none;border:1px solid rgba(124,77,255,0.3);">🎓 Training</a>
+  <a href="/admin-logs" style="color:#67e8f9;border-color:rgba(6,182,212,0.25);padding:5px 12px;border-radius:6px;font-size:0.82rem;font-weight:600;text-decoration:none;border:1px solid rgba(6,182,212,0.25);">📋 Log Live</a>
+  <a href="/admin-widget" style="color:#4ade80;border-color:rgba(34,197,94,0.35);padding:5px 12px;border-radius:6px;font-size:0.82rem;font-weight:600;text-decoration:none;border:1px solid rgba(34,197,94,0.35);">🧩 Widget</a>
+  <a href="/admin-graph" class="tb-graph-active">🧠 Grafo</a>
+  <button class="tb-logout" id="topbar-logout">Logout</button>
+</nav>
+
+<div id="app">
+  <div id="graph-header">
+    <div>
+      <h1>🧠 Genesi · Self-Awareness Knowledge Graph</h1>
+      <div class="sub">Mappa strutturale e psicologica del sistema · auto-aggiornamento ogni 60s</div>
+    </div>
+    <span class="badge">100 nodi</span>
+    <span class="badge">130 archi</span>
+    <span class="badge">12 layer</span>
+    <span class="badge god">⚡ 5 God Nodes</span>
+  </div>
+
+  <div id="main">
+    <div id="network">
+      <div id="tooltip"></div>
+    </div>
+    <div id="sidebar">
+      <div id="search-box">
+        <input type="text" id="search" placeholder="🔍  Cerca nodo o costrutto..." />
+      </div>
+      <div id="search-results"></div>
+      <div id="tabs">
+        <div class="tab active" data-tab="detail">Dettaglio</div>
+        <div class="tab" data-tab="filter">Filtri</div>
+        <div class="tab" data-tab="info">Sistema</div>
+      </div>
+      <div class="tab-pane active" id="pane-detail">
+        <p style="color:#484f58;font-style:italic;font-size:12px">Clicca su un nodo per esplorarne le connessioni, il tipo, il file sorgente e i costrutti psicologici associati.</p>
+      </div>
+      <div class="tab-pane" id="pane-filter">
+        <div class="filter-section">
+          <h3>Layer</h3>
+          <div class="filter-btns" id="layer-filters"></div>
+        </div>
+        <div class="filter-section">
+          <h3>Tipo nodo</h3>
+          <div class="filter-btns" id="type-filters"></div>
+        </div>
+        <div class="filter-section">
+          <h3>Costrutto psicologico</h3>
+          <div class="filter-btns" id="psy-filters"></div>
+        </div>
+        <div class="filter-section">
+          <h3>Legenda archi</h3>
+          <div><div class="legend-item"><div class="legend-line"></div><span>EXTRACTED — rel. esplicita nel codice</span></div>
+          <div class="legend-item"><div class="legend-dash"></div><span>INFERRED — inferita semanticamente</span></div></div>
+        </div>
+        <div class="filter-section">
+          <h3>Legenda layer</h3>
+          <div id="layer-legend"></div>
+        </div>
+      </div>
+      <div class="tab-pane" id="pane-info">
+        <div class="info-section">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <h3 style="margin:0">Stato Psicologico Live</h3>
+            <button id="refresh-btn" onclick="loadRuntimeState()" style="background:#21262d;border:1px solid #30363d;color:#58a6ff;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer">⟳ Aggiorna</button>
+          </div>
+          <div id="psy-live" style="font-size:11px;color:#484f58;font-style:italic">Caricamento stato in corso...</div>
+        </div>
+        <div class="info-section">
+          <h3>Identità</h3>
+          <div class="kv"><div class="k">Nome</div><div class="v">Genesi</div></div>
+          <div class="kv"><div class="k">Versione grafo</div><div class="v" id="graph-version">1.0.0</div></div>
+          <div class="kv"><div class="k">Branch</div><div class="v">gold-faro-stable</div></div>
+          <div class="kv"><div class="k">VPS</div><div class="v">87.106.30.193:8000</div></div>
+        </div>
+        <div class="info-section">
+          <h3>Principi Immutabili (Costituzione v1.0.0)</h3>
+          <div class="principle">Identità — Sistema evolutivo con coerenza epistemica</div>
+          <div class="principle">Relazione — Supporto empatico senza dipendenza</div>
+          <div class="principle">Etica — Nessun danno psicologico, autonomia, trasparenza</div>
+          <div class="principle">Coerenza — La coerenza epistemica prevale sulla performance</div>
+          <div class="principle">Crescita — Micro-shift validati, non rivoluzioni brusche</div>
+          <div class="principle">Confini — Non sostituisce il giudizio umano</div>
+        </div>
+        <div class="info-section">
+          <h3>Capacità Psicologiche</h3>
+          <div style="display:flex;flex-wrap:wrap;gap:3px">
+            <span class="tag tag-psy">grief_detection</span>
+            <span class="tag tag-psy">humor_detection</span>
+            <span class="tag tag-psy">emotional_analysis</span>
+            <span class="tag tag-psy">latent_state</span>
+            <span class="tag tag-psy">family_awareness</span>
+            <span class="tag tag-psy">group_consciousness</span>
+            <span class="tag tag-psy">empathic_modulation</span>
+            <span class="tag tag-psy">cognitive_mode_selection</span>
+            <span class="tag tag-psy">self_awareness</span>
+          </div>
+        </div>
+        <div class="info-section">
+          <h3>Sistemi di Memoria</h3>
+          <div style="font-size:11px;line-height:1.7;color:#c9d1d9">
+            episodic · personal_facts · global_insights · vector_rag<br>
+            chat_history · behavioral · relational_state · latent_state
+          </div>
+        </div>
+      </div>
+      <div id="stats">
+        <span id="s-nodes">100 nodi</span>
+        <span id="s-edges">130 archi</span>
+        <span id="s-vis">visibili: tutti</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── AUTH CHECK ──
+(function(){
+  const token = localStorage.getItem('genesi_access_token');
+  const isAdmin = localStorage.getItem('genesi_is_admin');
+  if(!token || isAdmin !== 'true'){
+    window.location.href = '/login';
+    return;
+  }
+  document.getElementById('topbar-logout').addEventListener('click', ()=>{
+    localStorage.removeItem('genesi_access_token');
+    localStorage.removeItem('genesi_is_admin');
+    window.location.href = '/login';
+  });
+})();
+
+// ════════════════════════════════════════════════
+// ONTOLOGY
+// ════════════════════════════════════════════════
+
+const LAYER_META = {
+  platform:      {label:"Platform",           color:"#0ea5e9", border:"#0284c7"},
+  orchestration: {label:"Orchestration",      color:"#6b7280", border:"#4b5563"},
+  intent:        {label:"Intent",             color:"#388bfd", border:"#1f6feb"},
+  emotional:     {label:"Emotional",          color:"#f78166", border:"#da3633"},
+  tone:          {label:"Tone Modulation",    color:"#3fb950", border:"#238636"},
+  relational:    {label:"Relational/Latent",  color:"#a371f7", border:"#7c3aed"},
+  memory:        {label:"Memory",             color:"#e3b341", border:"#9e6a03"},
+  group:         {label:"Group Intelligence", color:"#d29922", border:"#856404"},
+  evolution:     {label:"Self-Evolution",     color:"#ff7b72", border:"#da3633"},
+  infra:         {label:"Infrastructure",     color:"#4ec9b0", border:"#0e7490"},
+  construct:     {label:"Psych Construct",    color:"#c586c0", border:"#9d4edd"},
+  storage:       {label:"Storage Keys",       color:"#ce9178", border:"#a0522d"},
+};
+
+const TYPE_SHAPES = {
+  module:"box", class:"hexagon", function:"ellipse",
+  psychological_construct:"star", storage_key:"diamond",
+  platform:"triangle", api_endpoint:"dot", constant:"square", principle:"star"
+};
+
+const PSY_ALL = [
+  "grief_detection","humor_detection","emotional_analysis","latent_state",
+  "family_awareness","group_consciousness","empathic_modulation",
+  "cognitive_mode_selection","self_awareness","identity","empathy",
+  "attachment","curiosity","emotional_resonance","stability","relational_energy",
+  "vulnerability","urgency","needs","epistemic_coherence","growth","boundaries","ethics"
+];
+
+// ════════════════════════════════════════════════
+// GRAPH DATA — caricato da /api/system/graph-data
+// ════════════════════════════════════════════════
+
+let RAW_NODES = [];
+let RAW_EDGES = [];
+
+async function fetchGraphData(){
+  try {
+    const r = await fetch('/api/system/graph-data?_='+Date.now());
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const data = await r.json();
+    // Usa i nodi/archi dal JSON se disponibili, altrimenti array vuoti
+    if(data.nodes && data.nodes.length){
+      RAW_NODES = data.nodes.map(n=>({
+        id: n.id, label: n.label, layer: n.layer||'infra', type: n.type||'module',
+        file: n.file, desc: n.description||n.desc||'', psy: n.psychological_tags||[],
+        god: n.is_god_node||false
+      }));
+    }
+    if(data.edges && data.edges.length){
+      RAW_EDGES = data.edges.map(e=>({
+        from: e.source||e.from, to: e.target||e.to,
+        rel: e.relation||e.rel, conf: e.confidence||e.conf||'EXTRACTED',
+        w: e.weight||e.w||1, note: e.note||''
+      }));
+    }
+    return data;
+  } catch(e){
+    console.warn('graph-data fetch failed:', e);
+    return null;
+  }
+}
+
+// ════════════════════════════════════════════════
+// BUILD VIS DATASETS
+// ════════════════════════════════════════════════
+
+let nodesDS, edgesDS, network;
+let activeLayerFilter = null;
+let activePsyFilter = null;
+let activeTypeFilter = null;
+
+function getColor(layer){ return (LAYER_META[layer]||{color:"#666",border:"#444"}); }
+
+function buildVisNodes(nodes){
+  return nodes.map(n=>{
+    const lm = LAYER_META[n.layer]||{color:"#666",border:"#444"};
+    const isGod = !!n.god;
+    return {
+      id: n.id,
+      label: n.label && n.label.length > 22 ? n.label.substring(0,20)+'…' : (n.label||n.id),
+      _fullLabel: n.label,
+      color:{background:lm.color,border:lm.border,highlight:{background:lm.color,border:"#fff"},hover:{background:lm.color,border:"#fff"}},
+      font:{color:"#fff",size:isGod?13:10,face:"monospace"},
+      shape: TYPE_SHAPES[n.type]||"ellipse",
+      size: isGod?30:(n.type==="psychological_construct"?20:(n.type==="storage_key"?13:16)),
+      borderWidth: isGod?3:1,
+      shadow: isGod?{enabled:true,color:lm.color+"88",size:14}:false,
+      _raw: n
+    };
+  });
+}
+
+function buildVisEdges(edges, nodeIds){
+  const idSet = new Set(nodeIds);
+  return edges.filter(e=>idSet.has(e.from)&&idSet.has(e.to)).map((e,i)=>({
+    id:i,
+    from:e.from, to:e.to,
+    label:e.rel,
+    font:{size:8,color:e.conf==="INFERRED"?"#d29922":"#6e7681",align:"middle",strokeWidth:0},
+    color:{color:e.conf==="INFERRED"?"#d29922aa":"#388bfd55",highlight:"#58a6ff",hover:"#58a6ff"},
+    width: Math.max(0.5,(e.w||1)-0.5),
+    dashes: e.conf==="INFERRED",
+    arrows:{to:{enabled:true,scaleFactor:0.5}},
+    smooth:{type:"dynamic"},
+    title:`${e.rel} [${e.conf}]${e.note?'\n'+e.note:''}`,
+    _raw:e
+  }));
+}
+
+function visibleNodes(){
+  return RAW_NODES.filter(n=>{
+    if(activeLayerFilter && n.layer!==activeLayerFilter) return false;
+    if(activeTypeFilter && n.type!==activeTypeFilter) return false;
+    if(activePsyFilter && !(n.psy||[]).includes(activePsyFilter)) return false;
+    return true;
+  });
+}
+
+function initNetwork(){
+  const vNodes = visibleNodes();
+  const vis_n = buildVisNodes(vNodes);
+  const vis_e = buildVisEdges(RAW_EDGES, vNodes.map(n=>n.id));
+
+  if(nodesDS){
+    nodesDS.clear(); nodesDS.add(vis_n);
+    edgesDS.clear(); edgesDS.add(vis_e);
+    network.fit({animation:{duration:500,easingFunction:"easeInOutQuad"}});
+    updateStats(vNodes.length, vis_e.length);
+    return;
+  }
+
+  nodesDS = new vis.DataSet(vis_n);
+  edgesDS = new vis.DataSet(vis_e);
+
+  const container = document.getElementById("network");
+  network = new vis.Network(container,{nodes:nodesDS,edges:edgesDS},{
+    physics:{
+      enabled:true,
+      solver:"forceAtlas2Based",
+      forceAtlas2Based:{gravitationalConstant:-50,centralGravity:0.005,springLength:130,springConstant:0.08,damping:0.4,avoidOverlap:0.9},
+      stabilization:{iterations:400,fit:true},
+    },
+    layout:{improvedLayout:true},
+    interaction:{hover:true,tooltipDelay:300,navigationButtons:false,keyboard:{enabled:true}},
+    nodes:{borderWidth:1},
+    edges:{smooth:{type:"dynamic",roundness:0.4}},
+  });
+
+  updateStats(vNodes.length, vis_e.length);
+
+  network.on("click",p=>{
+    if(p.nodes.length) showNodeDetail(p.nodes[0]);
+    else if(p.edges.length) showEdgeDetail(p.edges[0]);
+    else resetDetail();
+  });
+
+  network.once("stabilizationIterationsDone",()=>{
+    network.setOptions({physics:{enabled:false}});
+  });
+}
+
+function updateStats(nv, ev){
+  document.getElementById("s-nodes").textContent = RAW_NODES.length+" nodi";
+  document.getElementById("s-edges").textContent = RAW_EDGES.length+" archi";
+  document.getElementById("s-vis").textContent = "visibili: "+nv+" nodi, "+ev+" archi";
+}
+
+// ════════════════════════════════════════════════
+// DETAIL PANEL
+// ════════════════════════════════════════════════
+
+function showNodeDetail(nodeId){
+  const raw = RAW_NODES.find(n=>n.id===nodeId);
+  if(!raw) return;
+  const lm = LAYER_META[raw.layer]||{color:"#666",label:raw.layer};
+
+  let h = `<div class="node-title">${raw.label}</div>`;
+  if(raw.file) h += `<div class="node-file">📁 ${raw.file}</div>`;
+  h += `<span class="tag tag-layer">${lm.label}</span>`;
+  h += `<span class="tag tag-type">${raw.type}</span>`;
+  if(raw.god) h += `<span class="tag tag-god">⚡ God Node</span>`;
+  (raw.psy||[]).forEach(p=>{ h += `<span class="tag tag-psy">${p}</span>`; });
+  if(raw.desc && raw.desc.includes("⚠️")) h += `<span class="tag tag-bug">⚠️ nota</span>`;
+  h += `<div class="node-desc">${raw.desc||""}</div>`;
+
+  const out = RAW_EDGES.filter(e=>e.from===nodeId);
+  const inn = RAW_EDGES.filter(e=>e.to===nodeId);
+
+  if(out.length){
+    h += `<div class="conn-section"><div class="conn-title">→ Dipende da / chiama (${out.length})</div>`;
+    out.forEach(e=>{
+      const t = RAW_NODES.find(n=>n.id===e.to);
+      if(!t) return;
+      const tlm = LAYER_META[t.layer]||{color:"#666"};
+      h += `<div class="conn-item" onclick="focusNode('${e.to}')">
+        <div class="conn-name" style="color:${tlm.color}">${t.label}</div>
+        <div class="conn-rel">${e.rel} ${e.conf==="INFERRED"?'<span class="conn-inf">[INFERRED]</span>':''}${e.note?'<br><span style="color:#484f58;font-size:9px">'+e.note+'</span>':''}</div>
+      </div>`;
+    });
+    h += `</div>`;
+  }
+
+  if(inn.length){
+    h += `<div class="conn-section"><div class="conn-title">← Chiamato da (${inn.length})</div>`;
+    inn.forEach(e=>{
+      const s = RAW_NODES.find(n=>n.id===e.from);
+          if(!s) return;
+      const slm = LAYER_META[s.layer]||{color:"#666"};
+      h += `<div class="conn-item" onclick="focusNode('${e.from}')">
+        <div class="conn-name" style="color:${slm.color}">${s.label}</div>
+        <div class="conn-rel">${e.rel} ${e.conf==="INFERRED"?'<span class="conn-inf">[INFERRED]</span>':''}</div>
+      </div>`;
+    });
+    h += `</div>`;
+  }
+
+  activateTab("detail");
+  document.getElementById("pane-detail").innerHTML = h;
+}
+
+function showEdgeDetail(edgeId){
+  const e = RAW_EDGES[edgeId];
+  if(!e) return;
+  const s = RAW_NODES.find(n=>n.id===e.from);
+  const t = RAW_NODES.find(n=>n.id===e.to);
+  if(!s||!t) return;
+  const slm = LAYER_META[s.layer]||{color:"#666"};
+  const tlm = LAYER_META[t.layer]||{color:"#666"};
+  let h = `<div class="node-title">Arco</div>`;
+  h += `<div class="conn-item" style="margin-bottom:6px">
+    <div class="conn-name" style="color:${slm.color}">${s.label}</div>
+    <div class="conn-rel">— ${e.rel} →</div>
+    <div class="conn-name" style="color:${tlm.color}">${t.label}</div>
+  </div>`;
+  h += `<span class="tag ${e.conf==="INFERRED"?"tag-god":"tag-type"}">${e.conf}</span>`;
+  if(e.note) h += `<div class="node-desc">${e.note}</div>`;
+  activateTab("detail");
+  document.getElementById("pane-detail").innerHTML = h;
+}
+
+function resetDetail(){
+  document.getElementById("pane-detail").innerHTML = `<p style="color:#484f58;font-style:italic;font-size:12px">Clicca su un nodo per esplorarne le connessioni, il tipo, il file sorgente e i costrutti psicologici associati.</p>`;
+}
+
+function focusNode(id){
+  const vn = nodesDS ? nodesDS.get(id) : null;
+  if(vn){
+    network.focus(id,{scale:1.4,animation:{duration:400,easingFunction:"easeInOutQuad"}});
+    network.selectNodes([id]);
+    showNodeDetail(id);
+  } else {
+    showNodeDetail(id);
+  }
+}
+
+// ════════════════════════════════════════════════
+// FILTERS
+// ════════════════════════════════════════════════
+
+function buildFilters(){
+  const lf = document.getElementById("layer-filters");
+  Object.entries(LAYER_META).forEach(([key,meta])=>{
+    const b = document.createElement("button");
+    b.className="fbtn"; b.dataset.layer=key;
+    b.innerHTML=`<span class="dot" style="background:${meta.color}"></span>${meta.label}`;
+    b.onclick=()=>toggleLayerFilter(key,b);
+    lf.appendChild(b);
+  });
+
+  const ll = document.getElementById("layer-legend");
+  Object.entries(LAYER_META).forEach(([key,meta])=>{
+    const d = document.createElement("div");
+    d.className="legend-item";
+    d.innerHTML=`<div class="legend-dot" style="background:${meta.color}"></div><span>${meta.label}</span>`;
+    ll.appendChild(d);
+  });
+
+  const tf = document.getElementById("type-filters");
+  const types = [...new Set(RAW_NODES.map(n=>n.type))];
+  types.forEach(t=>{
+    const b = document.createElement("button");
+    b.className="fbtn"; b.dataset.type=t; b.textContent=t;
+    b.onclick=()=>toggleTypeFilter(t,b);
+    tf.appendChild(b);
+  });
+
+  const pf = document.getElementById("psy-filters");
+  PSY_ALL.forEach(p=>{
+    const b = document.createElement("button");
+    b.className="fbtn"; b.dataset.psy=p;
+    b.innerHTML=`<span class="tag-psy" style="font-size:9px;padding:0 4px;border-radius:4px;background:#2d1f5e;color:#d2a8ff">${p}</span>`;
+    b.onclick=()=>togglePsyFilter(p,b);
+    pf.appendChild(b);
+  });
+}
+
+function toggleLayerFilter(key,btn){
+  if(activeLayerFilter===key){activeLayerFilter=null;btn.classList.remove("active");}
+  else{document.querySelectorAll("#layer-filters .fbtn").forEach(b=>b.classList.remove("active"));activeLayerFilter=key;btn.classList.add("active");}
+  initNetwork();
+}
+function toggleTypeFilter(t,btn){
+  if(activeTypeFilter===t){activeTypeFilter=null;btn.classList.remove("active");}
+  else{document.querySelectorAll("#type-filters .fbtn").forEach(b=>b.classList.remove("active"));activeTypeFilter=t;btn.classList.add("active");}
+  initNetwork();
+}
+function togglePsyFilter(p,btn){
+  if(activePsyFilter===p){activePsyFilter=null;btn.classList.remove("active");}
+  else{document.querySelectorAll("#psy-filters .fbtn").forEach(b=>b.classList.remove("active"));activePsyFilter=p;btn.classList.add("active");}
+  initNetwork();
+}
+
+// ════════════════════════════════════════════════
+// SEARCH
+// ════════════════════════════════════════════════
+
+document.getElementById("search").addEventListener("input", function(){
+  const q = this.value.toLowerCase().trim();
+  const res = document.getElementById("search-results");
+  if(!q){res.innerHTML="";return;}
+  const matches = RAW_NODES.filter(n=>
+    (n.label||"").toLowerCase().includes(q)||
+    (n.file||"").toLowerCase().includes(q)||
+    (n.desc||"").toLowerCase().includes(q)||
+    (n.psy||[]).some(p=>p.includes(q))||
+    (n.layer||"").includes(q)||(n.type||"").includes(q)
+  ).slice(0,12);
+
+  if(!matches.length){res.innerHTML=`<div style="padding:8px 12px;font-size:11px;color:#484f58">Nessun risultato</div>`;return;}
+  res.innerHTML = matches.map(n=>{
+    const lm = LAYER_META[n.layer]||{color:"#666"};
+    return `<div class="search-result" onclick="focusNode('${n.id}')">
+      <div class="dot" style="background:${lm.color}"></div>
+      <div class="lbl">${n.label}</div>
+      <div class="typ">${n.type}</div>
+    </div>`;
+  }).join("");
+});
+
+// ════════════════════════════════════════════════
+// TABS
+// ════════════════════════════════════════════════
+
+function activateTab(name){
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.tab===name));
+  document.querySelectorAll(".tab-pane").forEach(p=>p.classList.toggle("active",p.id==="pane-"+name));
+}
+document.querySelectorAll(".tab").forEach(t=>{
+  t.addEventListener("click",()=>activateTab(t.dataset.tab));
+});
+
+// ════════════════════════════════════════════════
+// RUNTIME STATE — carica da /api/system/graph-data
+// ════════════════════════════════════════════════
+
+async function loadRuntimeState(){
+  try {
+    const r = await fetch('/api/system/graph-data?_='+Date.now());
+    if(!r.ok) return;
+    const data = await r.json();
+    const rt = data.runtime_state || {};
+
+    const v = (data.meta||{}).version;
+    if(v) document.getElementById("graph-version").textContent = v;
+
+    (data.nodes||[]).forEach(n => {
+      if(n.runtime_state && nodesDS) {
+        const existing = nodesDS.get(n.id);
+        if(existing && n.runtime_state.recently_changed) {
+          nodesDS.update({id:n.id, borderWidth:3, shadow:{enabled:true,color:'#ffa198',size:16}});
+        }
+      }
+    });
+
+    const snap = rt.psychological_snapshot || {};
+    const el = document.getElementById("psy-live");
+    if(!el) return;
+    let h = "";
+
+    const ld = snap.latent_dimensions;
+    if(ld) {
+      h += `<div style="margin-bottom:8px"><b style="color:#a371f7">Vettore Latente 5D</b>`;
+      h += `<div style="font-size:10px;color:#8b949e;margin-bottom:2px">aggiornato: ${(rt.last_psy_update||"").slice(0,16)}</div>`;
+      const DIM_COLORS = {attachment:"#f78166",curiosity:"#388bfd",emotional_resonance:"#a371f7",stability:"#3fb950",relational_energy:"#d29922"};
+      for(const [k,v] of Object.entries(ld)) {
+        const pct = Math.round(v*100);
+        const col = DIM_COLORS[k] || "#58a6ff";
+        h += `<div style="margin:3px 0">
+          <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:${col}">${k}</span><span>${v.toFixed(3)}</span></div>
+          <div style="background:#21262d;border-radius:2px;height:4px"><div style="background:${col};width:${pct}%;height:4px;border-radius:2px;transition:width .5s"></div></div>
+        </div>`;
+      }
+      h += `</div>`;
+    }
+
+    const rel = snap.relational_state;
+    if(rel) {
+      const REL_COL = {NEUTRAL:"#8b949e",ATTUNED:"#3fb950",ENGAGED:"#388bfd",REFLECTIVE:"#a371f7",SUPPORTIVE_DEEP:"#d29922",CONFRONTATIONAL:"#f78166"};
+      h += `<div class="kv"><div class="k">Stato relazionale</div><div class="v"><span style="color:${REL_COL[rel]||'#e6edf3'}">${rel}</span></div></div>`;
+    }
+    if(snap.global_insights_count!=null) h += `<div class="kv"><div class="k">Insight</div><div class="v">${snap.global_insights_count}</div></div>`;
+    if(snap.episode_count!=null) h += `<div class="kv"><div class="k">Episodi</div><div class="v">${snap.episode_count}</div></div>`;
+    if(snap.personal_facts_count!=null) h += `<div class="kv"><div class="k">Fatti personali</div><div class="v">${snap.personal_facts_count}</div></div>`;
+
+    const recent = (rt.recent_changes||[]).slice(0,3);
+    if(recent.length){
+      h += `<div style="margin-top:8px"><b style="color:#e3b341;font-size:10px">⚡ MODIFICHE CODICE RECENTI</b>`;
+      recent.forEach(c=>{
+        h += `<div style="font-size:10px;color:#8b949e;margin-top:2px">• ${(c.file||'?').split('/').pop()} <span style="color:#484f58">${(c.ts||'').slice(0,10)}</span> <span style="color:#d29922">[${(c.nodes||[]).length} nodi]</span></div>`;
+      });
+      h += `</div>`;
+    }
+
+    el.style.fontStyle = "normal";
+    el.innerHTML = h || `<span style="color:#484f58">Nessun dato psicologico ancora disponibile.</span>`;
+
+  } catch(e) {
+    const el = document.getElementById("psy-live");
+    if(el) el.innerHTML = `<span style="color:#484f58">Errore caricamento stato.</span>`;
+  }
+}
+
+// ════════════════════════════════════════════════
+// INIT — carica dati dal server poi costruisce grafo
+// ════════════════════════════════════════════════
+
+(async function init(){
+  await fetchGraphData();
+  buildFilters();
+  initNetwork();
+  setTimeout(loadRuntimeState, 800);
+  setInterval(loadRuntimeState, 60000);
+})();
+</script>
+</body>
+</html>
