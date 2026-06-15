@@ -868,6 +868,7 @@ async def _upload_file(token: str, data: bytes, filename: str,
         res = await client.post(
             f"{GENESI_URL}/api/upload/",
             files={"file": (filename, data, content_type)},
+            data={"platform": "telegram"},
             headers={"Authorization": f"Bearer {token}"},
         )
         if res.status_code == 200:

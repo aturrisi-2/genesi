@@ -772,6 +772,7 @@ async def _upload_file(token: str, data: bytes, filename: str,
         res = await client.post(
             f"{GENESI_URL}/api/upload/",
             files={"file": (filename, data, content_type)},
+            data={"platform": "whatsapp"},
             headers={"Authorization": f"Bearer {token}"},
         )
         if res.status_code == 200:
@@ -958,7 +959,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
         if text:
             face_result = await handle_text_identification(_wa_session, text)
             if face_result["was_awaiting"] and face_result["faces_saved"]:
-                text += face_result["sistema_msg"]
+                text = face_result["sistema_msg"]  # replace, not append (BUG#1 fix)
 
         # ── Comandi (testo che inizia con /) ──────────────────────────────────
         if text in ("/start", "ciao", "start"):
@@ -1390,6 +1391,9 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 photo_result = await handle_photo_identification(
                     _photo_session, img_bytes, analysis, caption=caption
                 )
+                log("WA_PHOTO_SESSION_SET", session=_photo_session,
+                    is_group=is_group, sistema_msg_len=len(photo_result.get("sistema_msg", "")),
+                    remaining=photo_result.get("remaining", 0))
                 user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
                 if photo_result["sistema_msg"]:
                     user_msg += photo_result["sistema_msg"]

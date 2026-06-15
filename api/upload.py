@@ -56,7 +56,11 @@ async def _ocr_with_retry(file_path: str, max_retries: int = 3) -> str:
 
 
 @router.post("/")
-async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(require_auth)):
+async def upload_file(
+    file: UploadFile = File(...),
+    platform: str = Form(default="web"),
+    user: AuthUser = Depends(require_auth),
+):
     try:
         # STEP 1: Validazione upload prima di qualsiasi elaborazione
         if not file.filename:
@@ -73,28 +77,33 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
         result = await analyze_file(file)
 
         if "[UNKNOWN_FACES_DETECTED]" in result.get("content", "") or "[UNKNOWN_PETS_DETECTED]" in result.get("content", ""):
-            b64_data = result.get("meta", {}).get("image_data_url", "").split(",")[-1]
-            if b64_data:
-                import base64
-                img_bytes = base64.b64decode(b64_data)
-                tmp_img = f"/tmp/genesi_face_web_{uuid.uuid4().hex[:8]}.jpg"
-                try:
-                    with open(tmp_img, "wb") as f:
-                        f.write(img_bytes)
-                    import re as _re
-                    _web_content = result.get("content", "")
-                    _unk_n = len(_re.findall(r'\d+° da sinistra', _web_content))
-                    if not _unk_n:
-                        _th = _re.search(r'\[TOTAL_HUMANS:(\d+)\]', _web_content)
-                        _tp = _re.search(r'\[TOTAL_PETS:(\d+)\]', _web_content)
-                        if "[UNKNOWN_FACES_DETECTED]" in _web_content and _th:
-                            _unk_n += int(_th.group(1))
-                        if "[UNKNOWN_PETS_DETECTED]" in _web_content and _tp:
-                            _unk_n += int(_tp.group(1))
-                    await set_awaiting_faces(str(user_id), tmp_img, _web_content,
-                                             unknown_count=max(1, _unk_n))
-                except Exception as e:
-                    log("AWAITING_FACES_TMP_ERROR", error=str(e))
+            if platform != "web":
+                # Bot (telegram/whatsapp) gestisce la propria sessione via handle_photo_identification
+                log("AWAITING_FACES_SKIP_BOT", platform=platform, user_id=str(user_id))
+            else:
+                b64_data = result.get("meta", {}).get("image_data_url", "").split(",")[-1]
+                if b64_data:
+                    import base64
+                    img_bytes = base64.b64decode(b64_data)
+                    tmp_img = f"/tmp/genesi_face_web_{uuid.uuid4().hex[:8]}.jpg"
+                    try:
+                        with open(tmp_img, "wb") as f:
+                            f.write(img_bytes)
+                        import re as _re
+                        _web_content = result.get("content", "")
+                        _unk_n = len(_re.findall(r'\d+° da sinistra', _web_content))
+                        if not _unk_n:
+                            _th = _re.search(r'\[TOTAL_HUMANS:(\d+)\]', _web_content)
+                            _tp = _re.search(r'\[TOTAL_PETS:(\d+)\]', _web_content)
+                            if "[UNKNOWN_FACES_DETECTED]" in _web_content and _th:
+                                _unk_n += int(_th.group(1))
+                            if "[UNKNOWN_PETS_DETECTED]" in _web_content and _tp:
+                                _unk_n += int(_tp.group(1))
+                        await set_awaiting_faces(str(user_id), tmp_img, _web_content,
+                                                 unknown_count=max(1, _unk_n))
+                        log("AWAITING_FACES_SET_WEB", user_id=str(user_id), unknown_count=max(1, _unk_n))
+                    except Exception as e:
+                        log("AWAITING_FACES_TMP_ERROR", error=str(e))
 
         # Always persist document for authenticated user
         doc_id = None
