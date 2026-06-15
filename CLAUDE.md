@@ -82,3 +82,46 @@ Il tool GitHub MCP è limitato al repository `aturrisi-2/genesi`. Non tentare di
 
 - Non scrivere mai credenziali (password, token, chiavi SSH) nei file del repository o nei messaggi di commit.
 - Se l'utente condivide credenziali in chat, avvisalo immediatamente di cambiarle e usare autenticazione a chiave SSH invece.
+
+---
+
+## Stato Lavori — Sessione 2026-06-15
+
+### Completato ✅
+
+**Migrazione Face Recognition: VGGFace2 → InsightFace ArcFace**
+- `core/biometric_service.py` riscritto per usare InsightFace `buffalo_l` (RetinaFace + ArcFace 512-dim)
+- Vecchi embedding VGGFace2 (`.pt`, `.npy`) rinominati automaticamente a `.bak_v1` al primo avvio
+- Nuovo formato: numpy `.npy` `[N, 512]` L2-normalizzati (no torch dependency)
+- Soglie tunabili via env senza redeploy: `FACE_MATCH_THRESHOLD` (default 0.6), `FACE_MATCH_MARGIN` (default 0.0), `FACE_MATCH_CONFIDENT_DIST` (default 0.3)
+- `requirements.txt` aggiornato: `insightface>=1.0.0`, `onnxruntime>=1.18.0`, `opencv-python-headless>=4.8.0`
+- Deploy VPS completato (run #910, `conclusion: success`), servizio `genesi` riavviato
+- Verificato: riconoscimento funziona sul VPS (utente testato con foto + cane)
+
+**Meta Messaging Webhook (Messenger + Instagram DM)**
+- `core/meta_messaging_bot.py` + `api/meta_messaging.py` implementati
+- Verifica HMAC-SHA256 (`X-Hub-Signature-256`) — 403 su token errato
+- Test di sicurezza: `tests/test_meta_messaging_security.py` (50 test, tutti verdi)
+
+### Da Fare / Pendente ⏳
+
+**1. Meta Webhook — Variabili d'ambiente sul VPS**
+Il codice è pronto ma il webhook non è attivo finché non si aggiungono questi 4 valori a `/opt/genesi/.env` sul VPS (via SSH dall'utente):
+```
+META_APP_SECRET=<da developers.facebook.com → Impostazioni app → Di base → App Secret>
+META_VERIFY_TOKEN=<stringa libera che scegli tu, es. genesi_webhook_2024>
+FB_PAGE_ACCESS_TOKEN=<da Messenger → Genera token, collegando la Pagina Facebook>
+IG_ACCESS_TOKEN=<da Instagram → Genera token, collegando l'account IG Business>
+```
+Dopo aver aggiunto le variabili, riavviare il servizio: `sudo systemctl restart genesi`
+
+Poi configurare su developers.facebook.com:
+- Webhook URL: `https://<tuo-dominio>/api/messenger/webhook` e `/api/instagram/webhook`
+- Verify Token: stesso valore di `META_VERIFY_TOKEN`
+- Campi da sottoscrivere: `messages`, `messaging_postbacks`
+
+**2. Test espressioni diverse — Face Recognition**
+Verificare che il miglioramento ArcFace funzioni: inviare a Genesi una foto con espressione molto diversa rispetto a quella usata per la registrazione (es. registrato serio → test sorridente). Dovrebbe riconoscere correttamente dove prima falliva.
+
+**3. Feature branch `claude/genesis-activation-check-53nbre`**
+Branch creato per il task di questa sessione. È allineato con `gold-faro-stable`. Non ci sono modifiche pendenti specifiche su questo branch — tutto è stato pushato direttamente su `gold-faro-stable`.
