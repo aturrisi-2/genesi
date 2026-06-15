@@ -81,3 +81,12 @@ static/intranet/*.html
 # Widget Service — progetto separato in genesi-widget/
 # ===============================
 widget-service/
+
+# Artefatti di sviluppo / log / backup (non tracciare)
+tv2_err.txt
+tv2_out.txt
+import_log.txt
+*.tar.gz
+monitor_trigger_count.txt
+tests/dummy_face_image*.jpg
+80
