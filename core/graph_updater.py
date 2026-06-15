@@ -135,6 +135,60 @@ class GraphUpdater:
             logger.info("GRAPH_UPDATER code_watcher_started watching=core,api,auth")
         except Exception as e:
             logger.warning("GRAPH_UPDATER code_watcher_error: %s", e)
+        # Riconciliazione startup: il watchdog NON vede i cambi avvenuti durante un
+        # deploy (git pull + restart: i file cambiano mentre l'osservatore è spento).
+        # Confrontiamo l'mtime dei file-sorgente con l'ultimo avvio registrato e
+        # marchiamo i nodi modificati nel frattempo → ogni deploy si riflette nel grafo.
+        try:
+            self._reconcile_code_changes_on_startup()
+        except Exception as e:
+            logger.debug("GRAPH_UPDATER startup_reconcile_error: %s", e)
+
+    def _reconcile_code_changes_on_startup(self) -> None:
+        """Marca i nodi i cui file sono cambiati dall'ultimo avvio (cattura i deploy)."""
+        graph = self._load_graph()
+        rt = graph.setdefault("runtime_state", {})
+        prev = rt.get("last_startup_ts")  # epoch float dell'avvio precedente
+        now = time.time()
+        now_iso = datetime.utcnow().isoformat()
+        rt["last_startup_ts"] = now
+
+        if not prev:
+            # Primo avvio tracciato: fissa solo la baseline, niente marcatura di massa.
+            self._save_graph(graph)
+            return
+
+        changed_nodes: List[str] = []
+        files_changed: set = set()
+        for node in graph.get("nodes", []):
+            nf = node.get("file") or ""
+            if not nf:
+                continue
+            # "core/proactor.py:182" → "core/proactor.py"
+            path = nf.split(":")[0]
+            try:
+                if os.path.isfile(path) and os.path.getmtime(path) > prev:
+                    node.setdefault("runtime_state", {})
+                    node["runtime_state"]["last_modified"] = now_iso
+                    node["runtime_state"]["recently_changed"] = True
+                    changed_nodes.append(node["id"])
+                    files_changed.add(path)
+            except Exception:
+                continue
+
+        if changed_nodes:
+            rt["last_code_update"] = now_iso
+            rt.setdefault("recent_changes", [])
+            rt["recent_changes"] = (
+                [{"file": f, "ts": now_iso,
+                  "nodes": [n["id"] for n in graph["nodes"]
+                            if (n.get("file") or "").split(":")[0] == f]}
+                 for f in sorted(files_changed)]
+                + rt["recent_changes"]
+            )[:20]
+            logger.info("GRAPH_UPDATER startup_reconcile files=%d nodes=%d",
+                        len(files_changed), len(changed_nodes))
+        self._save_graph(graph)
 
     def stop_code_watcher(self) -> None:
         if self._observer:
@@ -410,11 +464,14 @@ class GraphUpdater:
     async def on_turn(self, user_id: str) -> None:
         """
         Chiamato ad ogni turno di conversazione da api/chat.py.
-        Gestisce il counter e triggera il psy update ogni N turni.
+        Schedula SEMPRE l'aggiornamento psicologico: `update_psychological_state` si
+        auto-limita a 1/60s (_PSY_DEBOUNCE_S), quindi non c'è spam. Il vecchio gate a
+        N turni non era affidabile — `_turn_counter` è in-memory e si azzera ad ogni
+        restart, perciò con poche conversazioni per finestra la soglia (20) non veniva
+        mai raggiunta e last_psy_update restava None (grafo mai aggiornato).
         """
         self._turn_counter += 1
-        if self._turn_counter % PSY_UPDATE_EVERY_N_TURNS == 0:
-            asyncio.create_task(self.update_psychological_state(user_id))
+        asyncio.create_task(self.update_psychological_state(user_id))
 
     # ── INTROSPECTION API ──────────────────────────────────────────────────────
 
