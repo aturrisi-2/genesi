@@ -203,7 +203,8 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         # contiene già il marker [SISTEMA:] iniettato dall'handler del bot.
         # Evita doppio-salvataggio dei volti e corruzione profilo.
         if "\n[SISTEMA:" not in request.message:
-            face_result = await handle_text_identification(str(user_id), request.message)
+            face_result = await handle_text_identification(
+                str(user_id), request.message, speaker_name=getattr(profile, "name", None))
             if face_result["was_awaiting"] and face_result["faces_saved"]:
                 log("CHAT_FACE_IDENTIFIED_WEB", user_id=str(user_id),
                     saved_names=face_result["saved_names"],
@@ -927,7 +928,7 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                         if request.media_type == "image":
                             try:
                                 from core.face_memory_service import handle_photo_identification as _hpi
-                                _fpr = await _hpi(str(group_int), media_bytes, media_analysis, caption=request.text)
+                                _fpr = await _hpi(str(group_int), media_bytes, media_analysis, caption=request.text, speaker_name=request.sender_name)
                                 if _fpr.get("sistema_msg"):
                                     media_analysis = f"{media_analysis}{_fpr['sistema_msg']}"
                             except Exception as _fpe:
@@ -951,7 +952,7 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
         if not request.media_id and request.text:
             try:
                 from core.face_memory_service import handle_text_identification as _hti
-                _ftr = await _hti(str(group_int), request.text)
+                _ftr = await _hti(str(group_int), request.text, speaker_name=request.sender_name)
                 if _ftr.get("faces_saved") and _ftr.get("sistema_msg"):
                     processed_text = f"{processed_text}{_ftr['sistema_msg']}"
             except Exception as _fte:

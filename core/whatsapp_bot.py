@@ -957,7 +957,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
         # Cattura stato PRIMA di handle_text_identification (che potrebbe cancellarlo)
         was_awaiting_faces = bool(await get_awaiting_faces(_wa_session))
         if text:
-            face_result = await handle_text_identification(_wa_session, text)
+            face_result = await handle_text_identification(_wa_session, text, speaker_name=first_name)
             if face_result["was_awaiting"] and face_result["faces_saved"]:
                 text = face_result["sistema_msg"]  # replace, not append (BUG#1 fix)
             elif face_result["was_awaiting"] and face_result["sistema_msg"]:
@@ -1393,7 +1393,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 # Handler centralizzato per identificazione volti/animali
                 _photo_session = str(chat_id) if is_group else str(wa_id)
                 photo_result = await handle_photo_identification(
-                    _photo_session, img_bytes, analysis, caption=caption
+                    _photo_session, img_bytes, analysis, caption=caption, speaker_name=first_name
                 )
                 log("WA_PHOTO_SESSION_SET", session=_photo_session,
                     is_group=is_group, sistema_msg_len=len(photo_result.get("sistema_msg", "")),
@@ -1475,7 +1475,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 # Handler centralizzato per identificazione volti/animali
                 _doc_session = str(chat_id) if is_group else str(wa_id)
                 photo_result = await handle_photo_identification(
-                    _doc_session, doc_bytes, analysis, caption=caption
+                    _doc_session, doc_bytes, analysis, caption=caption, speaker_name=first_name
                 )
                 user_msg = f"{user_msg}\n\n[Contenuto: {analysis}]"
                 if photo_result["sistema_msg"]:

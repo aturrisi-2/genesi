@@ -234,6 +234,7 @@ async def try_extract_faces_from_text(
     tmp_img: str,
     desc_img: str,
     session_uid: str,
+    speaker_name: str | None = None,
 ) -> tuple[bool, list[str]]:
     """
     FUNZIONE CENTRALIZZATA — usata identicamente da WhatsApp, Telegram e Web.
@@ -243,7 +244,11 @@ async def try_extract_faces_from_text(
     - Liste ordinate: "da sinistra Mariella, Rita, Zoe, Iolanda"
     - Posizioni esplicite: "quella a destra è Iolanda"
     - Risposte parziali: salva quelli noti, aggiorna il contatore dei rimanenti
+    - Auto-riferimento: "sono io" → mappato a speaker_name (chi sta scrivendo)
     - Blocco nomi placeholder: non salva mai UNKNOWN, sconosciuto, ecc.
+
+    Args:
+        speaker_name: nome di chi sta scrivendo (per mappare 'io'/'sono io').
 
     Returns:
         (saved: bool, saved_names: list[str]) — True se almeno un nome è stato salvato
@@ -271,10 +276,20 @@ async def try_extract_faces_from_text(
     already_known = awaiting.get("identified", []) if awaiting else []
     already_str = f"\nNomi già identificati in questa sessione: {', '.join(already_known)}." if already_known else ""
 
+    # Auto-riferimento: se chi scrive dice "sono io" il nome è il suo (speaker_name).
+    speaker_hint = ""
+    if speaker_name and str(speaker_name).strip():
+        _sp = str(speaker_name).strip()
+        speaker_hint = (
+            f"\nCHI STA SCRIVENDO SI CHIAMA: {_sp}. "
+            f"Se l'utente usa la prima persona riferita a sé ('sono io', 'questo/a sono io', "
+            f"'ci sono anch'io', 'la persona sono io'), il nome da associare a quel soggetto è '{_sp}'."
+        )
+
     extract_prompt = (
         "L'utente sta fornendo i nomi delle persone e/o degli animali domestici presenti in una foto.\n"
         f"Descrizione visiva della foto (dall'analisi AI): {desc_img}\n"
-        f"{count_hint}{already_str}\n"
+        f"{count_hint}{already_str}{speaker_hint}\n"
         f"Risposta dell'utente: {text}\n\n"
         "COMPITO: Estrai SOLO i nomi propri NUOVI (non già elencati in 'Nomi già identificati') "
         "e associa ciascuno alla sua posizione nella foto (0=primo da sinistra, 1=secondo, ecc.).\n"
@@ -297,7 +312,10 @@ async def try_extract_faces_from_text(
         "   Se l'utente dice 'quella è mia mamma Iolanda', il nome è 'Iolanda'.\n"
         "10. Per animali: MAI usare specie o razza come nome ('il mio gatto', 'gatto persiano' "
         "    NON sono nomi). Il nome è quello dato dall'utente all'animale (es. 'Mignolo', 'Rio'). "
-        "    Se l'utente non ha nominato l'animale, OMETTI quella voce.\n\n"
+        "    Se l'utente non ha nominato l'animale, OMETTI quella voce.\n"
+        "11. AUTO-RIFERIMENTO: se l'utente parla in prima persona di sé ('sono io', "
+        "    'questo sono io'), quel soggetto è SEMPRE 'type':'human' ed è la PERSONA che scrive "
+        "    (vedi 'CHI STA SCRIVENDO'). MAI associare un auto-riferimento a un animale.\n\n"
         "Output ESCLUSIVAMENTE come array JSON:\n"
         "[{\"name\": \"Mariella\", \"position_index\": 0, \"type\": \"human\", "
         "\"gender\": \"F\", \"visual_desc\": \"donna capelli biondi a sinistra\"}, "
@@ -391,6 +409,7 @@ async def handle_photo_identification(
     img_bytes: bytes,
     analysis: str,
     caption: str | None = None,
+    speaker_name: str | None = None,
 ) -> dict:
     """
     HANDLER CENTRALIZZATO per la gestione foto con soggetti sconosciuti.
@@ -460,7 +479,7 @@ async def handle_photo_identification(
         # Se la caption già contiene nomi, estrai subito
         if caption and tmp_img:
             faces_saved, saved_names = await try_extract_faces_from_text(
-                caption, tmp_img, analysis, session_id
+                caption, tmp_img, analysis, session_id, speaker_name=speaker_name
             )
             if faces_saved:
                 # Controlla se ci sono ancora sconosciuti
@@ -544,6 +563,7 @@ async def handle_photo_identification(
 async def handle_text_identification(
     session_id: str,
     text: str,
+    speaker_name: str | None = None,
 ) -> dict:
     """
     HANDLER CENTRALIZZATO per testo che potrebbe contenere identificazioni di volti.
@@ -578,7 +598,7 @@ async def handle_text_identification(
     desc_img = awaiting.get("description", "")
 
     faces_saved, saved_names = await try_extract_faces_from_text(
-        text, tmp_img, desc_img, session_id
+        text, tmp_img, desc_img, session_id, speaker_name=speaker_name
     )
 
     # Rileggi lo stato aggiornato

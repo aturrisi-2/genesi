@@ -1419,7 +1419,7 @@ async def handle_update(update: dict):
             # Rilevamento nomi per volti sconosciuti (usa handler centralizzato)
             _face_text = text if text else caption
             if _face_text:
-                face_result = await handle_text_identification(str(chat_id), _face_text)
+                face_result = await handle_text_identification(str(chat_id), _face_text, speaker_name=first_name)
                 if face_result["was_awaiting"] and face_result["faces_saved"]:
                     log("GROUP_FACE_TEXT_REPLACED", chat_id=chat_id,
                         saved_names=face_result["saved_names"],
@@ -1824,7 +1824,7 @@ async def handle_update(update: dict):
                 # Handler centralizzato per identificazione volti/animali
                 _photo_session = str(chat_id) if is_group else str(from_id)
                 photo_result = await handle_photo_identification(
-                    _photo_session, img_bytes, analysis, caption=caption
+                    _photo_session, img_bytes, analysis, caption=caption, speaker_name=first_name
                 )
                 user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
                 if photo_result["sistema_msg"]:
@@ -1943,7 +1943,7 @@ async def handle_update(update: dict):
             if analysis and analysis != "__TOKEN_EXPIRED__":
                 _doc_session = str(chat_id) if is_group else str(from_id)
                 doc_result = await handle_photo_identification(
-                    _doc_session, doc_bytes, analysis, caption=caption
+                    _doc_session, doc_bytes, analysis, caption=caption, speaker_name=first_name
                 )
                 user_msg = f"{user_msg}\n\n[Contenuto: {analysis}]"
                 if doc_result["sistema_msg"]:
@@ -2095,7 +2095,7 @@ async def handle_update(update: dict):
 
         # Rilevamento nomi per volti sconosciuti (usa handler centralizzato)
         _face_session_1to1 = str(chat_id) if is_group else str(from_id)
-        face_result = await handle_text_identification(_face_session_1to1, text)
+        face_result = await handle_text_identification(_face_session_1to1, text, speaker_name=first_name)
         if face_result["was_awaiting"]:
             if face_result["faces_saved"]:
                 log("TG_1TO1_FACE_TEXT_REPLACED", session=_face_session_1to1,
