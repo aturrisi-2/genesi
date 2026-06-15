@@ -1427,6 +1427,10 @@ async def handle_update(update: dict):
                     # Replace (non append): evita che "No, X è Y" raggiunga
                     # il classificatore intent e scriva spouse/children sbagliati.
                     text = face_result["sistema_msg"]
+                elif face_result["was_awaiting"] and face_result["sistema_msg"]:
+                    # #B: utente chiede chi sono (nessun nome) → append re-ask (sicuro: è domanda)
+                    log("GROUP_FACE_REASK_APPENDED", chat_id=chat_id)
+                    text = f"{text}{face_result['sistema_msg']}"
 
             
             # Se interveniamo su un vocale, invia prima la trascrizione
@@ -2072,6 +2076,10 @@ async def handle_update(update: dict):
             else:
                 log("TG_1TO1_FACE_AWAIT_NO_NAMES", session=_face_session_1to1,
                     text_preview=text[:60])
+                if face_result["sistema_msg"]:
+                    # #B: utente chiede chi sono → append re-ask (sicuro: è domanda, non nome)
+                    log("TG_1TO1_FACE_REASK_APPENDED", session=_face_session_1to1)
+                    text = f"{text}{face_result['sistema_msg']}"
 
         if _WEATHER_RE.search(text) and not city:
             session["state"]               = STATE_AWAIT_CITY

@@ -54,6 +54,25 @@ def _is_relational_descriptor(clean_name: str) -> bool:
     return bool(_RELATIONAL_PATTERN.match(clean_name))
 
 
+def _is_identity_question(text: str) -> bool:
+    """True se l'utente sta CHIEDENDO chi sono i soggetti della foto (vs. fornire nomi).
+
+    Usato per distinguere 'Conosci chi sono in foto?' (domanda → re-ask) da
+    'da sinistra Mariella, Rita' (nomi → estrazione) o testo non correlato.
+    """
+    if not text:
+        return False
+    low = text.lower()
+    has_q = "?" in text or any(
+        w in low for w in ("chi ", "chi?", "sai chi", "riconosci", "conosci", "li conosci", "sapresti")
+    )
+    has_subject = any(
+        k in low for k in ("foto", "immagine", "soggett", "person", "volt", "facc",
+                            "quest", "lì", "li ", "loro", "ritratt")
+    )
+    return has_q and has_subject
+
+
 def _ensure_dir():
     if not os.path.exists(FACES_DIR):
         os.makedirs(FACES_DIR, exist_ok=True)
@@ -563,7 +582,15 @@ async def handle_text_identification(
 
     # Rileggi lo stato aggiornato
     awaiting_updated = await get_awaiting_faces(session_id)
-    remaining = awaiting_updated.get("remaining", 0) if awaiting_updated else 0
+    if awaiting_updated:
+        # FIX: la chiave 'remaining' esiste solo DOPO una prima estrazione riuscita
+        # (la setta update_awaiting_faces_identified). Al primo testo senza nomi
+        # default 0 dava all_done=true falso. Fallback a unknown_count - identificati.
+        _identified = awaiting_updated.get("identified", [])
+        _ucount = awaiting_updated.get("unknown_count", 0)
+        remaining = awaiting_updated.get("remaining", max(0, _ucount - len(_identified)))
+    else:
+        remaining = 0
     all_done = remaining <= 0
 
     log("FACE_EXTRACTION_RESULT", session=session_id,
@@ -589,8 +616,18 @@ async def handle_text_identification(
                 "Ringrazia l'utente in modo naturale (NON usare elenchi). "
                 "Continua a chiedere chi sono le altre persone usando le loro caratteristiche fisiche.]"
             )
-    # Se non ha estratto nomi ma c'è ancora un awaiting attivo → non fare nulla,
-    # il LLM parlerà normalmente del testo
+    elif not all_done and remaining > 0 and _is_identity_question(text):
+        # #B fix: awaiting attivo, nessun nome fornito, ma l'utente CHIEDE chi sono.
+        # Senza guida il LLM allucina "non vedo l'immagine". Istruiscilo a richiedere i nomi.
+        log("FACE_REASK_INJECTED", session=session_id, remaining=remaining, text_preview=text[:60])
+        sistema_msg = (
+            f"\n[SISTEMA: Nella foto che ti è stata mostrata ci sono {remaining} "
+            f"persona/e che non conosci ancora. NON dire che non vedi l'immagine — la vedi. "
+            f"Spiega in modo naturale che non sai ancora chi sono e chiedi all'utente "
+            f"di dirti i loro nomi (da sinistra a destra) così li memorizzi.]"
+        )
+    # Altrimenti (awaiting attivo ma l'utente parla d'altro) → nessuna guida,
+    # il LLM risponde normalmente al testo.
 
     return {
         "was_awaiting": True,

@@ -960,6 +960,10 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             face_result = await handle_text_identification(_wa_session, text)
             if face_result["was_awaiting"] and face_result["faces_saved"]:
                 text = face_result["sistema_msg"]  # replace, not append (BUG#1 fix)
+            elif face_result["was_awaiting"] and face_result["sistema_msg"]:
+                # #B: utente chiede chi sono (nessun nome) → append re-ask (sicuro: è domanda)
+                log("WA_FACE_REASK_APPENDED", session=_wa_session)
+                text = f"{text}{face_result['sistema_msg']}"
 
         # ── Comandi (testo che inizia con /) ──────────────────────────────────
         if text in ("/start", "ciao", "start"):
