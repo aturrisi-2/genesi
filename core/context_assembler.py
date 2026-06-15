@@ -821,7 +821,11 @@ def _inject_document_context(user_id: str, message: str,
     _references = is_document_reference(extract_current_user_text(message))
     _fresh = False
     _most_recent_id = active_docs_recent_first[0] if active_docs_recent_first else None
-    if _most_recent_id and not _references:
+    # _fresh calcolato SEMPRE (non solo quando not _references): le foto arrivano con
+    # auto-caption "Analizza questa immagine" -> _references=True; se _fresh restasse
+    # False qui, il gate "solo la piu' recente" sotto non scattava e una foto nuova
+    # tirava dentro le precedenti (divergente tra piattaforme).
+    if _most_recent_id:
         try:
             import re as _re_doc, time as _time_doc, calendar as _cal_doc
             _m = _re_doc.search(r'_(\d{14})_', _most_recent_id)
@@ -868,13 +872,26 @@ def _inject_document_context(user_id: str, message: str,
                         doc_type=doc.get("type"), most_recent=is_most_recent)
 
     doc_count = len(selected)
-    instruction = (
-        f"ISTRUZIONE: L'utente si riferisce a {'questi file' if doc_count > 1 else 'questo file'}. "
-        f"Rispondi usando il contenuto {'dei file' if doc_count > 1 else 'del file'} sopra. "
-        f"NON dire che non hai accesso al file. HAI il contenuto. "
-        f"NON rispondere con frasi generiche. USA i dati {'dei file' if doc_count > 1 else 'del file'}. "
-        f"Il file contrassegnato come (PIÙ RECENTE) è quello caricato per ultimo — dagli priorità se l'utente non specifica quale. "
-        f"Se l'utente chiede di confrontare più file o immagini, usa tutti quelli disponibili qui sopra."
-    )
+    _all_images = bool(selected) and all((d.get("type") == "image") for d in selected)
+    if _all_images:
+        # Foto: stile UNICO e GLOBALE su tutte le piattaforme — commento breve, caldo
+        # e naturale (come un amico), NON descrizione clinica / "spiegone". Evita la
+        # divergenza in cui 1:1 faceva l'analisi dettagliata e i gruppi una battuta.
+        instruction = (
+            "ISTRUZIONE: L'utente ha condiviso una foto (descrizione sopra). "
+            "Commenta in modo naturale, caldo e BREVE: 1-2 frasi, max ~25 parole. "
+            "Come faresti con un amico — niente elenchi, niente descrizione clinica o 'spiegoni'. "
+            "Riconosci per nome le persone/animali noti citati sopra. "
+            "NON dire che non puoi vedere l'immagine: HAI la descrizione qui sopra."
+        )
+    else:
+        instruction = (
+            f"ISTRUZIONE: L'utente si riferisce a {'questi file' if doc_count > 1 else 'questo file'}. "
+            f"Rispondi usando il contenuto {'dei file' if doc_count > 1 else 'del file'} sopra. "
+            f"NON dire che non hai accesso al file. HAI il contenuto. "
+            f"NON rispondere con frasi generiche. USA i dati {'dei file' if doc_count > 1 else 'del file'}. "
+            f"Il file contrassegnato come (PIÙ RECENTE) è quello caricato per ultimo — dagli priorità se l'utente non specifica quale. "
+            f"Se l'utente chiede di confrontare più file o immagini, usa tutti quelli disponibili qui sopra."
+        )
 
     return "\n\n".join(blocks) + "\n\n" + instruction
