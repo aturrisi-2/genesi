@@ -726,6 +726,47 @@ def is_document_reference(message: str) -> bool:
     return any(trigger in msg_lower for trigger in _DOCUMENT_TRIGGERS)
 
 
+# Marker del wrapper di gruppo (vedi telegram_bot._group_msg / api/chat).
+_GROUP_CTX_TAIL_RE = _re.compile(r"\s*\[GRUPPO(?:\s+FAMILIARE)?:.*", _re.DOTALL | _re.IGNORECASE)
+
+
+def extract_current_user_text(message: str) -> str:
+    """Estrae il testo realmente scritto dall'utente da un wrapper di gruppo.
+
+    Il path di gruppo (telegram_bot._group_msg, api/chat) costruisce un prompt che
+    inizia con [IDENTITÀ ASSOLUTA: ...] e racchiude il messaggio reale in
+    [MESSAGGIO ATTUALE ...]\\n<Nome>: <testo>\\n[FINE MESSAGGIO ATTUALE], seguito dal
+    group_ctx con lo storico del gruppo. Passare questo blob intero alla logica
+    testuale a valle (is_document_reference, chat_memory) inquina tutto: parole come
+    "foto"/"immagine" nello storico falsano il gate documenti e il wrapper viene
+    salvato come user_message. Questa funzione isola il solo testo dell'utente.
+
+    Fallback: se non c'è il blocco [MESSAGGIO ATTUALE], rimuove solo il group_ctx.
+    """
+    if not message:
+        return ""
+    # Directive-only: nessun testo utente reale (es. azione di sistema sui volti).
+    if "[NESSUN NUOVO MESSAGGIO" in message:
+        return ""
+    if "[MESSAGGIO ATTUALE" not in message:
+        return _GROUP_CTX_TAIL_RE.sub("", message).strip()
+    seg = message.split("[MESSAGGIO ATTUALE", 1)[1]
+    # Scarta l'header del marker fino al primo ']'.
+    if "]" in seg:
+        seg = seg.split("]", 1)[1]
+    # Tronca al fine-blocco o al successivo blocco tra parentesi quadre.
+    for _stop in ("[FINE MESSAGGIO ATTUALE]", "\n["):
+        _i = seg.find(_stop)
+        if _i != -1:
+            seg = seg[:_i]
+    seg = seg.strip()
+    # Variante emoji: "[MESSAGGIO ATTUALE — Nome]: <testo>" → resta ": <testo>".
+    seg = _re.sub(r"^\s*:\s*", "", seg)
+    # Variante standard: "<Nome>: <testo>" → rimuove il prefisso del nome.
+    seg = _re.sub(r"^[^\n:]{1,40}:\s*", "", seg, count=1)
+    return seg.strip()
+
+
 def _format_doc_block(doc: Dict[str, Any], is_most_recent: bool = False) -> str:
     """Format a single document as a [DOCUMENT_CONTEXT] block (max 2000 chars content)."""
     raw_content = doc.get("content", "")
@@ -774,7 +815,10 @@ def _inject_document_context(user_id: str, message: str,
     # messaggio (immagine vecchia re-iniettata 9×) → LLM perdeva la domanda reale
     # e/o forzava "rispondi sui file" su messaggi non correlati.
     _DOC_FRESH_WINDOW = 180  # secondi: finestra "appena caricato"
-    _references = is_document_reference(message)
+    # Riferimento valutato SOLO sul testo reale dell'utente: nei gruppi il messaggio
+    # arriva wrappato con lo storico, dove parole come "foto"/"immagine" di turni
+    # passati facevano risultare _references=True a ogni turno → SKIP non scattava mai.
+    _references = is_document_reference(extract_current_user_text(message))
     _fresh = False
     _most_recent_id = active_docs_recent_first[0] if active_docs_recent_first else None
     if _most_recent_id and not _references:
