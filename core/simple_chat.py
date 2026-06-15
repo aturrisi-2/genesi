@@ -71,11 +71,13 @@ async def simple_chat_handler(user_id: str, message: str, conversation_id: str =
         if not user_manager.get_user(user_id):
             user_manager.create_user(user_id)
         user_manager.increment_messages(user_id)
-        # extract_current_user_text: nei gruppi il messaggio è wrappato (identità +
-        # [MESSAGGIO ATTUALE] + storico). Salviamo SOLO il testo reale dell'utente,
-        # altrimenti chat_memory (e il filo della conversazione) si riempie di wrapper.
-        from core.context_assembler import extract_current_user_text
-        chat_memory.add_message(user_id, extract_current_user_text(message), response, primary_intent)
+        # NB: si usa strip_group_ctx (NON extract_current_user_text) di proposito.
+        # extract_current_user_text "ripuliva troppo" la history: classify_async la usa
+        # come contesto e, con il testo nudo, i turni-foto venivano riclassificati
+        # memory_context (route che NON inietta la vision) -> "non posso analizzare
+        # l'immagine". Manteniamo qui il comportamento storico; la pulizia del wrapper
+        # resta applicata solo al gate documenti (is_document_reference).
+        chat_memory.add_message(user_id, strip_group_ctx(message), response, primary_intent)
 
         log("CHAT_OUTPUT", response=response[:100], intent=primary_intent, user_id=user_id)
         return response, primary_intent

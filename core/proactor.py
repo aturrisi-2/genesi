@@ -314,6 +314,23 @@ class Proactor:
 
         _pp_original = response  # snapshot per diff finale
 
+        # 0. DATA SPURIA: l'LLM a volte echeggia DATA/ORA CORRENTE anteponendola alla
+        #    risposta su domande NON temporali (es. "15/06/2026. Sto bene" su "come va?").
+        #    Strip deterministico della data iniziale se l'utente non l'ha chiesta.
+        if not _re_pp.search(r'\b(che giorno|che data|quando|che ora|che ore|data di oggi|in che giorno|oggi è)\b', msg_lower):
+            _stripped = _re_pp.sub(
+                r'^\s*(?:o[,\.]?\s+)?\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}\s*[\.,:;\-]*\s*',
+                '',
+                response,
+                count=1,
+                flags=_re_pp.IGNORECASE,
+            )
+            if _stripped != response:
+                log("POST_PROCESS_DATE_STRIPPED", preview=response[:40])
+                response = _stripped.lstrip()
+                if response[:1].isalpha():
+                    response = response[0].upper() + response[1:]
+
         # 1. IDENTITÀ INVARIABILE: rimuovi cliché da personaggio ovunque nella risposta
         response = _re_pp.sub(r'\b(ahoy|arrr+|aye aye|aye\b|matelot|avast|abborda|capitan[eo])\b[,!]?\s*', '', response, flags=_re_pp.IGNORECASE)
 
@@ -4410,7 +4427,7 @@ DETTAGLI DI STILE:
 - APERTURA VARIABILE: Non iniziare mai due risposte consecutive con la stessa parola o struttura.
 - CHIUSURA: Termina in modo asciutto e naturale, senza domande forzate o preamboli.
 
-DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')} ({time_ctx}) — solo per tuo riferimento interno: NON dichiarare ne' anteporre data/ora nella risposta a meno che l'utente non la chieda esplicitamente.
+DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')} ({time_ctx})
 {conversation_context}
 {f"{relational_map}" if relational_map else ""}
 STATO LATENTE: {latent_synopsis}
@@ -4514,7 +4531,7 @@ NUOVE SKILL ACQUISITE (Giugno 2026):
 - Ricerca Live Potenziata: usi una parte del tuo cervello neurale per decifrare le richieste, rimuovere refusi, e interrogare il web con chiavi di ricerca perfette, garantendo risultati web impeccabili.
 
 REGOLE:
-- DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')} (riferimento interno: NON dichiarare ne' anteporre data/ora se non richiesta esplicitamente)
+- DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')}
 - Rispondi SOLO con informazione concreta.
 - Usa la CONVERSAZIONE RECENTE sopra per risolvere riferimenti come "prima", "perche'", "continua".
 - Se l'utente chiede "perche'" o "secondo te", riferisciti al contesto della conversazione sopra.
