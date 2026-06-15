@@ -841,6 +841,19 @@ def _inject_document_context(user_id: str, message: str,
     if not selected:
         return ""
 
+    # GLOBALE (tutte le piattaforme): se il doc più recente è APPENA stato caricato,
+    # l'utente si riferisce a QUELLO, non alle immagini precedenti. Inietta solo il più
+    # recente, a meno che non chieda esplicitamente un confronto tra più file. Senza
+    # questo, una nuova foto "tirava dentro" le foto vecchie in modo divergente tra
+    # piattaforme (dipendeva da quanti doc storici esistevano per quel user_id).
+    if _fresh and _most_recent_id:
+        _wants_compare = bool(_re.search(
+            r'\b(confront|compar|differenz|entramb|tutte le|le due|le altre|quella di prima|precedent)',
+            extract_current_user_text(message).lower(),
+        ))
+        if not _wants_compare:
+            selected = [d for d in selected if d.get("doc_id") == _most_recent_id] or selected[:1]
+
     # Il primo nella lista è il più recente (dopo il reverse)
     most_recent_id = active_docs_recent_first[0] if active_docs_recent_first else None
 
