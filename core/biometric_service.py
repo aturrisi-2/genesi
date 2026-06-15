@@ -12,6 +12,28 @@ _resnet = None
 
 FACES_DIR = "data/faces"
 
+
+def _face_match_threshold(default: float = 0.75) -> float:
+    """Soglia distanza L2 per il match biometrico. Tunabile via env senza redeploy.
+    Default = valore passato dal chiamante (storico 0.75). Env FACE_MATCH_THRESHOLD
+    lo sovrascrive. Più BASSA = più severo (meno falsi positivi)."""
+    try:
+        return float(os.getenv("FACE_MATCH_THRESHOLD", str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _face_match_margin() -> float:
+    """Margine anti-ambiguità (ratio test). Se il miglior match e il secondo
+    miglior match (identità diversa) distano MENO di questo margine, il volto è
+    ambiguo → lasciato 'sconosciuto' invece di rischiare un nome sbagliato
+    (es. Ennio↔Giorgio). Default 0.0 = disattivato (comportamento storico).
+    Alza via env FACE_MATCH_MARGIN (es. 0.06) per ridurre i falsi positivi."""
+    try:
+        return float(os.getenv("FACE_MATCH_MARGIN", "0.0"))
+    except (TypeError, ValueError):
+        return 0.0
+
 def get_face_models():
     global _mtcnn, _resnet
     if _mtcnn is None:
@@ -216,28 +238,51 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 0.75) -> d
                 except Exception as load_err:
                     logger.warning("Failed to load embeddings for %s: %s", f, load_err)
 
+        # Soglia + margine effettivi (env-tunabili senza redeploy)
+        _threshold = _face_match_threshold(threshold)
+        _margin = _face_match_margin()
+
         # Per ogni volto nuovo, trova la corrispondenza MIGLIORE assoluta con vincolo 1-a-1
         distances = []
+        # per_face[i] = lista (dist, name) ordinata, per il ratio-test anti-ambiguità
+        per_face: dict[int, list] = {i: [] for i in range(total_faces)}
         for i in range(total_faces):
             for kf in known_faces_data:
                 dists = (kf["embs"] - emb_new[i]).norm(dim=1)
                 min_dist = dists.min().item()
                 distances.append((min_dist, i, kf["name"]))
-                
+                per_face[i].append((min_dist, kf["name"]))
+
+        for i in per_face:
+            per_face[i].sort(key=lambda x: x[0])
+
         distances.sort(key=lambda x: x[0])
-        
+
         matched_identities = set()
         face_to_name = {}
         face_to_confidence = {}  # Confidence score per ogni match
-        
+
         for min_dist, i, name in distances:
             if i not in matched_face_indices and name not in matched_identities:
-                if min_dist < threshold:
+                if min_dist < _threshold:
+                    # Ratio-test: se esiste un'altra identità quasi alla stessa distanza,
+                    # il match è ambiguo → NON assegnare (meglio "sconosciuto" che sbagliato)
+                    _pf = per_face.get(i, [])
+                    _second = next((d for d, n in _pf if n != name), None)
+                    if _margin > 0.0 and _second is not None and (_second - min_dist) < _margin:
+                        log("FACE_MATCH_AMBIGUOUS", face_index=i, best=round(min_dist, 3),
+                            best_name=name, second=round(_second, 3),
+                            margin=_margin, decision="skip")
+                        continue
                     matched_face_indices.add(i)
                     matched_identities.add(name)
                     face_to_name[i] = name
                     face_to_confidence[i] = round(1.0 - min_dist, 3)  # più alto = più sicuro
                     recognized_names.add(name)
+                    log("FACE_MATCH_DECISION", face_index=i, name=name,
+                        best=round(min_dist, 3),
+                        second=round(_second, 3) if _second is not None else None,
+                        threshold=_threshold)
 
         unknown_faces_detected = len(matched_face_indices) < total_faces
         unknown_faces_positions = []

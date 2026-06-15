@@ -260,14 +260,29 @@ async def analyze_pets_biometric(image_path: str, threshold: float = 0.75) -> di
             except Exception as e:
                 logger.debug("PET_LOAD_ERROR file=%s err=%s", f, e)
 
+        # Soglia + margine effettivi (env-tunabili senza redeploy)
+        try:
+            _threshold = float(os.getenv("PET_MATCH_THRESHOLD", str(threshold)))
+        except (TypeError, ValueError):
+            _threshold = threshold
+        try:
+            _margin = float(os.getenv("PET_MATCH_MARGIN", "0.0"))
+        except (TypeError, ValueError):
+            _margin = 0.0
+
         # Matching greedy: distanza euclidea su embeddings normalizzati
         all_distances = []
+        per_pet: dict[int, list] = {i: [] for i in range(total_pets)}
         for i in range(total_pets):
             for kp in known_pets_data:
                 dists = (kp["embs"] - embs_new[i]).norm(dim=1)
                 min_dist = float(dists.min().item())
                 conf = round(1.0 - min_dist, 3)
                 all_distances.append((min_dist, conf, i, kp["name"]))
+                per_pet[i].append((min_dist, kp["name"]))
+
+        for i in per_pet:
+            per_pet[i].sort(key=lambda x: x[0])
 
         all_distances.sort(key=lambda x: x[0])
 
@@ -278,7 +293,13 @@ async def analyze_pets_biometric(image_path: str, threshold: float = 0.75) -> di
 
         for min_dist, conf, i, name in all_distances:
             if i not in matched_pet_indices and name not in matched_identities:
-                if min_dist < threshold:
+                if min_dist < _threshold:
+                    _pf = per_pet.get(i, [])
+                    _second = next((d for d, n in _pf if n != name), None)
+                    if _margin > 0.0 and _second is not None and (_second - min_dist) < _margin:
+                        log("PET_MATCH_AMBIGUOUS", pet_index=i, best=round(min_dist, 3),
+                            best_name=name, second=round(_second, 3), margin=_margin)
+                        continue
                     matched_pet_indices.add(i)
                     matched_identities.add(name)
                     pet_to_name[i] = name
