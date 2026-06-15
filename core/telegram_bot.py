@@ -1521,6 +1521,10 @@ async def handle_update(update: dict):
                 idx = message.index(_SISTEMA_MARKER)
                 _clean_message = message[:idx]
                 _sistema_block = message[idx:].strip()
+            # Caso anche senza newline iniziale (text = sistema_msg dopo BUG#1 fix)
+            elif message.lstrip().startswith("[SISTEMA:"):
+                _clean_message = ""
+                _sistema_block = message.strip()
 
             is_family_group = _is_tg_family_group(chat_id)
             group_type_label = "GRUPPO FAMILIARE" if is_family_group else "GRUPPO ESTERNO"
@@ -1573,6 +1577,20 @@ async def handle_update(update: dict):
                 f"Il messaggio a cui DEVI rispondere è quello di {first_name} qui sotto, "
                 f"non quelli nello storico.]\n"
             )
+
+            # Messaggio = SOLO direttiva di sistema (es. volti memorizzati): NON c'è
+            # testo utente. Evita lo slot "Alfio: " vuoto che faceva dire al LLM
+            # "non vedo un messaggio a cui rispondere". Prompt directive-only.
+            if not _clean_message.strip() and _sistema_block:
+                return (
+                    f"{identity_block}"
+                    f"[NESSUN NUOVO MESSAGGIO TESTUALE DA {first_name} — esegui l'azione "
+                    f"di sistema qui sotto e rispondi in modo naturale, in prima persona come Genesi]\n"
+                    f"{_sistema_block}\n"
+                    f"\n[{group_type_label}: tono {role_label}, risposta misurata (3-4 righe max), "
+                    f"{extra_rules}]\n"
+                    f"{group_ctx}"
+                )
 
             only_emoji = all(
                 ord(c) > 127 or c in (' ', '\n') for c in _clean_message.strip()
