@@ -471,9 +471,11 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
     try:
         from core.group_reactivity import detect_group_emotional_tone as _dgt
         _tone_info = _dgt(raw_msgs)
-        if _tone_info["tone"] != "normal":
-            log("GROUP_EMOTIONAL_TONE_DETECTED",
-                chat_id=chat_id, tone=_tone_info["tone"], note=_tone_info["note"])
+        log("GROUP_EMOTIONAL_TONE",
+            chat_id=chat_id, tone=_tone_info["tone"],
+            note=_tone_info.get("note", ""),
+            is_family=is_family_group, num_members=num_humans,
+            group_title=group_title)
     except Exception:
         _tone_info = {"tone": "normal", "note": "", "prompt_block": ""}
 

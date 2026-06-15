@@ -541,11 +541,18 @@ async def handle_text_identification(
     """
     awaiting = await get_awaiting_faces(session_id)
     if not awaiting:
+        log("FACE_SESSION_MISS", session=session_id, text_preview=text[:60])
         return {
             "was_awaiting": False, "faces_saved": False,
             "saved_names": [], "remaining": 0, "all_done": False,
             "sistema_msg": ""
         }
+
+    log("FACE_SESSION_HIT", session=session_id,
+        unknown_count=awaiting.get("unknown_count", 0),
+        remaining=awaiting.get("remaining", awaiting.get("unknown_count", 0)),
+        identified=awaiting.get("identified", []),
+        text_preview=text[:60])
 
     tmp_img = awaiting.get("img_path", "")
     desc_img = awaiting.get("description", "")
@@ -558,6 +565,10 @@ async def handle_text_identification(
     awaiting_updated = await get_awaiting_faces(session_id)
     remaining = awaiting_updated.get("remaining", 0) if awaiting_updated else 0
     all_done = remaining <= 0
+
+    log("FACE_EXTRACTION_RESULT", session=session_id,
+        faces_saved=faces_saved, saved_names=saved_names,
+        remaining=remaining, all_done=all_done)
 
     sistema_msg = ""
     if faces_saved:

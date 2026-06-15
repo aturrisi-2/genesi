@@ -205,7 +205,13 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         if "\n[SISTEMA:" not in request.message:
             face_result = await handle_text_identification(str(user_id), request.message)
             if face_result["was_awaiting"] and face_result["faces_saved"]:
+                log("CHAT_FACE_IDENTIFIED_WEB", user_id=str(user_id),
+                    saved_names=face_result["saved_names"],
+                    all_done=face_result["all_done"])
                 request.message += face_result["sistema_msg"]
+        else:
+            log("CHAT_FACE_SKIP_BOT_HANDLED", user_id=str(user_id),
+                msg_preview=request.message[:60])
 
         # Testo utente pulito (senza group_ctx) — usato da tutti i sistemi di memoria.
         # Il messaggio completo (con group_ctx) serve solo al proactor per rispondere.

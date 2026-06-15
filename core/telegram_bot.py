@@ -1388,6 +1388,13 @@ async def handle_update(update: dict):
 
         # Genesi decide autonomamente se e quando intervenire nel gruppo.
         if is_group:
+            _is_family = _is_tg_family_group(chat_id)
+            log("GROUP_INTERVENE_CHECK", platform="telegram", chat_id=chat_id,
+                from_id=from_id, first_name=first_name,
+                is_family=_is_family, reply_to_genesi=_reply_to_genesi,
+                has_media=_original_has_media, bot_mentioned=_bot_mentioned,
+                text_preview=(text or caption or "")[:60])
+
             # Fast-path: reply diretta a un messaggio di Genesi → sempre sì
             if _reply_to_genesi:
                 should = True
@@ -1404,12 +1411,18 @@ async def handle_update(update: dict):
                 logger.info("TELEGRAM_GROUP_SILENT chat_id=%s from=%s msg=%.60s",
                             chat_id, first_name, f"{text} {caption}".strip())
                 return
-            
+
+            log("GROUP_INTERVENING", platform="telegram", chat_id=chat_id,
+                from_id=from_id, first_name=first_name, is_family=_is_family)
+
             # Rilevamento nomi per volti sconosciuti (usa handler centralizzato)
             _face_text = text if text else caption
             if _face_text:
                 face_result = await handle_text_identification(str(chat_id), _face_text)
                 if face_result["was_awaiting"] and face_result["faces_saved"]:
+                    log("GROUP_FACE_TEXT_REPLACED", chat_id=chat_id,
+                        saved_names=face_result["saved_names"],
+                        all_done=face_result["all_done"])
                     # Replace (non append): evita che "No, X è Y" raggiunga
                     # il classificatore intent e scriva spouse/children sbagliati.
                     text = face_result["sistema_msg"]
@@ -1717,6 +1730,7 @@ async def handle_update(update: dict):
             # ha erroneamente incluso nell'output (context leak).
             if is_group:
                 import re as _re
+                _reply_before_sanitize = reply
                 reply = _re.sub(r'^\s*Genesi\s*:\s*', '', reply, flags=_re.IGNORECASE)
                 _LEAKED_MARKERS = (
                     '[INFO GRUPPO', '[CONTEGGIO MEMBRI', '[LISTA DETTAGLIATA MEMBRI',
@@ -1728,6 +1742,10 @@ async def handle_update(update: dict):
                 _clean_lines = [l for l in reply.split('\n')
                                 if not any(m in l for m in _LEAKED_MARKERS)]
                 reply = '\n'.join(_clean_lines).strip()
+                if reply != _reply_before_sanitize:
+                    _removed = len(_reply_before_sanitize) - len(reply)
+                    log("GROUP_RESPONSE_SANITIZED", chat_id=chat_id, chars_removed=_removed,
+                        preview_before=_reply_before_sanitize[:80])
                 if not reply:
                     logger.warning("GROUP_RESPONSE_SANITIZED_EMPTY chat_id=%s from=%s", chat_id, first_name)
                     return True
@@ -1774,8 +1792,13 @@ async def handle_update(update: dict):
                 )
                 user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
                 if photo_result["sistema_msg"]:
+                    log("PHOTO_FACE_SISTEMA_INJECTED", is_group=is_group,
+                        faces_saved=photo_result["faces_saved"],
+                        remaining=photo_result["remaining"],
+                        saved_names=photo_result["saved_names"])
                     user_msg += photo_result["sistema_msg"]
                 elif not is_group:
+                    log("PHOTO_ANTISPIEGONE_INJECTED", is_group=False)
                     user_msg += "\n[SISTEMA: Commenta la foto in modo naturale e conciso. Max 2 frasi, evita descrizioni dettagliate.]"
 
             media_group_id = msg.get("media_group_id")
@@ -2035,11 +2058,19 @@ async def handle_update(update: dict):
             return
 
         # Rilevamento nomi per volti sconosciuti (usa handler centralizzato)
-        face_result = await handle_text_identification(str(chat_id) if is_group else str(from_id), text)
-        if face_result["was_awaiting"] and face_result["faces_saved"]:
-            # Replace (non append): evita che "No, X è Y" scriva spouse/children sbagliati
-            text = face_result["sistema_msg"]
-
+        _face_session_1to1 = str(chat_id) if is_group else str(from_id)
+        face_result = await handle_text_identification(_face_session_1to1, text)
+        if face_result["was_awaiting"]:
+            if face_result["faces_saved"]:
+                log("TG_1TO1_FACE_TEXT_REPLACED", session=_face_session_1to1,
+                    saved_names=face_result["saved_names"],
+                    all_done=face_result["all_done"],
+                    original_text_preview=text[:60])
+                # Replace (non append): evita che "No, X è Y" scriva spouse/children sbagliati
+                text = face_result["sistema_msg"]
+            else:
+                log("TG_1TO1_FACE_AWAIT_NO_NAMES", session=_face_session_1to1,
+                    text_preview=text[:60])
 
         if _WEATHER_RE.search(text) and not city:
             session["state"]               = STATE_AWAIT_CITY

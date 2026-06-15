@@ -312,6 +312,8 @@ class Proactor:
         import re as _re_pp
         msg_lower = user_message.lower().strip()
 
+        _pp_original = response  # snapshot per diff finale
+
         # 1. IDENTITÀ INVARIABILE: rimuovi cliché da personaggio ovunque nella risposta
         response = _re_pp.sub(r'\b(ahoy|arrr+|aye aye|aye\b|matelot|avast|abborda|capitan[eo])\b[,!]?\s*', '', response, flags=_re_pp.IGNORECASE)
 
@@ -322,6 +324,7 @@ class Proactor:
             _re_pp.IGNORECASE
         )
         if _ROLEPLAY_PAT.search(response):
+            log("POST_PROCESS_ROLEPLAY_BLOCKED", pattern="pirata/ruolo", preview=response[:80])
             response = _ROLEPLAY_PAT.sub("", response).strip()
             if not response or len(response) < 10:
                 response = "Resto Genesi. Dimmi cosa ti serve davvero."
@@ -334,6 +337,7 @@ class Proactor:
             _re_pp.IGNORECASE
         )
         if _AI_IDENTITY_PAT.search(response):
+            log("POST_PROCESS_JAILBREAK_BLOCKED", pattern="ai_identity", preview=response[:80])
             response = "Sono Genesi. " + _AI_IDENTITY_PAT.sub("sono Genesi", response)
         # Fallback: se il nome di un altro AI compare ancora come soggetto → rimuovilo
         _AI_BARE_PAT = _re_pp.compile(
@@ -364,14 +368,18 @@ class Proactor:
             _re_pp.IGNORECASE
         )
         if _NO_LIMITS_PAT.search(response):
+            log("POST_PROCESS_JAILBREAK_BLOCKED", pattern="no_limits", preview=response[:80])
             response = "Rimango Genesi, con la mia identità e i miei valori. " + _NO_LIMITS_PAT.sub("", response).strip()
 
         # 2. VIETATO "capisco": sostituisci con "immagino" — ma non dopo "non" (grammaticalmente corretto)
+        _response_before_capisco = response
         response = _re_pp.sub(
             r'(?<![Nn]on )\b([Cc])apisco\b',
             lambda m: 'Immagino' if m.group(1).isupper() else 'immagino',
             response
         )
+        if response != _response_before_capisco:
+            log("POST_PROCESS_CAPISCO_FIXED", user_msg_preview=user_message[:50])
 
         # 3. CRISI FAMILIARE: DISABILITATO
         # Questa regola causava il problema del "Coraggio per tua nonna!" ripetuto ossessivamente.
@@ -410,6 +418,7 @@ class Proactor:
                         f'\\1 di {sport_name}',
                         response, count=1, flags=_re_pp.IGNORECASE
                     )
+                    log("POST_PROCESS_SPORT_INJECTED", sport=sport_name)
                 break
 
         # 5. OPINIONE SU UTENTE: se risponde a "cosa pensi di me" e non usa il nome, iniettalo in apertura
@@ -447,6 +456,11 @@ class Proactor:
 
         # 7. STRIP STANDALONE "Dimmi." / "Dimmi!" come chiusura meccanica
         response = _re_pp.sub(r'\s*\bDimmi[.!]\s*$', '', response, flags=_re_pp.IGNORECASE).strip()
+
+        if response != _pp_original:
+            log("POST_PROCESS_APPLIED",
+                len_before=len(_pp_original), len_after=len(response),
+                user_msg_preview=user_message[:50])
 
         return response
 
@@ -1705,6 +1719,12 @@ class Proactor:
             return reply_fallback
 
         natural_reply = (parsed_response.get("reply") or reply_fallback).strip()
+
+        log("MEMORY_CORRECTION_PARSED",
+            user_id=user_id,
+            corrections=parsed_response.get("corrections", []),
+            reply_preview=natural_reply[:80],
+            msg_preview=message[:80])
 
         # Supporta sia nuovo formato {"corrections": [...]} che vecchio {"field":..., "action":...}
         corrections_list = parsed_response.get("corrections")
@@ -3730,6 +3750,18 @@ Messaggio: "{message}" """
         _platform = getattr(self, '_current_platform', '') or platform or ""
         context = await self.context_assembler.build(user_id, message, platform=_platform)
         logger.info("CONTEXT_ASSEMBLED user=%s summary_len=%d platform=%s", user_id, len(context.get('summary', '')), _platform)
+        _ctx_profile = context.get("profile", {})
+        log("CONTEXT_ASSEMBLED",
+            user_id=user_id, platform=_platform or "unknown",
+            summary_len=len(context.get("summary", "")),
+            has_episodes=bool(context.get("episodes")),
+            has_personal_facts=bool(context.get("personal_facts")),
+            has_global_insights=bool(context.get("global_insights")),
+            profile_name=_ctx_profile.get("name"),
+            profile_city=_ctx_profile.get("city"),
+            profile_spouse=_ctx_profile.get("spouse"),
+            profile_children=[c.get("name") if isinstance(c, dict) else str(c)
+                               for c in _ctx_profile.get("children", [])])
 
         # Inject into brain_state for backward compatibility
         brain_state["relational_context"] = context["summary"]
@@ -3824,8 +3856,13 @@ Messaggio: "{message}" """
             if _shift and _shift.get("confidence", 0) >= 0.4:
                 _direction = "in aumento" if _shift["direction"] == "increase" else "in miglioramento"
                 emotional_trend = (emotional_trend or "") + f" [SHIFT EMOTIVO: intensità {_direction}, emozione dominante: {_shift['recent_emotion']}]"
+                log("RELATIONAL_EMOTIONAL_SHIFT",
+                    user_id=user_id, direction=_shift["direction"],
+                    emotion=_shift.get("recent_emotion"), confidence=_shift.get("confidence"))
             if emotional_trend:
                 logger.info("EMOTIONAL_TREND_INJECTED user=%s trend_len=%d", user_id, len(emotional_trend))
+                log("RELATIONAL_EMOTIONAL_TREND",
+                    user_id=user_id, trend_preview=emotional_trend[:120])
         except Exception:
             pass
 
@@ -3863,6 +3900,11 @@ Messaggio: "{message}" """
             )
 
         logger.info("PROACTOR_LLM_RESPONSE user=%s response_len=%d", user_id, len(gpt_response))
+        log("RELATIONAL_RESPONSE",
+            user_id=user_id, platform=_platform or "unknown",
+            is_group=_is_group_platform if '_is_group_platform' in dir() else False,
+            primo_oggi=_primo_oggi, response_len=len(gpt_response),
+            response_preview=gpt_response[:100])
 
         # 4. Curiosity Engine — skip nei gruppi Telegram (aggiunge domande fuori contesto)
         _is_group_platform = (_platform in ("telegram_group", "whatsapp_group"))
