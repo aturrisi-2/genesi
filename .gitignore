@@ -83,3 +83,11 @@ widget-service/
 
 # Artefatti generati dai test (test_face_extraction.py)
 tests/dummy_face_image*.jpg
+
+# Artefatti di sviluppo / log / backup binari (non tracciare)
+tv2_err.txt
+tv2_out.txt
+import_log.txt
+*.tar.gz
+80
+monitor_trigger_count.txt
