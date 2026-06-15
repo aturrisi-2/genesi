@@ -199,9 +199,13 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         import asyncio as _asyncio
 
         # ── Rilevamento nomi per volti sconosciuti (WebApp) ──
-        face_result = await handle_text_identification(str(user_id), request.message)
-        if face_result["was_awaiting"] and face_result["faces_saved"]:
-            request.message += face_result["sistema_msg"]
+        # Skip se il bot (TG/WA) ha già gestito l'identificazione: il messaggio
+        # contiene già il marker [SISTEMA:] iniettato dall'handler del bot.
+        # Evita doppio-salvataggio dei volti e corruzione profilo.
+        if "\n[SISTEMA:" not in request.message:
+            face_result = await handle_text_identification(str(user_id), request.message)
+            if face_result["was_awaiting"] and face_result["faces_saved"]:
+                request.message += face_result["sistema_msg"]
 
         # Testo utente pulito (senza group_ctx) — usato da tutti i sistemi di memoria.
         # Il messaggio completo (con group_ctx) serve solo al proactor per rispondere.

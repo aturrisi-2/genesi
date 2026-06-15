@@ -1409,11 +1409,10 @@ async def handle_update(update: dict):
             _face_text = text if text else caption
             if _face_text:
                 face_result = await handle_text_identification(str(chat_id), _face_text)
-                if face_result["faces_saved"]:
-                    if face_result["all_done"]:
-                        text += face_result["sistema_msg"]
-                    else:
-                        text += face_result["sistema_msg"]
+                if face_result["was_awaiting"] and face_result["faces_saved"]:
+                    # Replace (non append): evita che "No, X è Y" raggiunga
+                    # il classificatore intent e scriva spouse/children sbagliati.
+                    text = face_result["sistema_msg"]
 
             
             # Se interveniamo su un vocale, invia prima la trascrizione
@@ -1714,6 +1713,25 @@ async def handle_update(update: dict):
                                 chat_id, first_name, time.time() - _msg_arrival)
                     return
 
+            # Sanifica risposte di gruppo: rimuove marker di contesto che il LLM
+            # ha erroneamente incluso nell'output (context leak).
+            if is_group:
+                import re as _re
+                reply = _re.sub(r'^\s*Genesi\s*:\s*', '', reply, flags=_re.IGNORECASE)
+                _LEAKED_MARKERS = (
+                    '[INFO GRUPPO', '[CONTEGGIO MEMBRI', '[LISTA DETTAGLIATA MEMBRI',
+                    '[⚠️', '[MEMORIA EPISODICA', '[DINAMICHE DELLA FAMIGLIA',
+                    '[RIEPILOGO DISCUSSIONI', '[COSA SO DI ', '[IDENTITÀ ASSOLUTA',
+                    '[MESSAGGIO ATTUALE', '[FINE MESSAGGIO', '[GRUPPO FAMILIARE',
+                    '[GRUPPO ESTERNO', '[ISTRUZIONE PRIORITARIA',
+                )
+                _clean_lines = [l for l in reply.split('\n')
+                                if not any(m in l for m in _LEAKED_MARKERS)]
+                reply = '\n'.join(_clean_lines).strip()
+                if not reply:
+                    logger.warning("GROUP_RESPONSE_SANITIZED_EMPTY chat_id=%s from=%s", chat_id, first_name)
+                    return True
+
             # Legge il message_id originale per poter rispondere in thread se in gruppo
             reply_to = msg.get("message_id") if is_group else None
             await _send_response(chat_id, reply, reply_to_message_id=reply_to)
@@ -1757,6 +1775,8 @@ async def handle_update(update: dict):
                 user_msg = f"{user_msg}\n\n[Contenuto immagine: {analysis}]"
                 if photo_result["sistema_msg"]:
                     user_msg += photo_result["sistema_msg"]
+                elif not is_group:
+                    user_msg += "\n[SISTEMA: Commenta la foto in modo naturale e conciso. Max 2 frasi, evita descrizioni dettagliate.]"
 
             media_group_id = msg.get("media_group_id")
             if media_group_id:
@@ -2017,7 +2037,8 @@ async def handle_update(update: dict):
         # Rilevamento nomi per volti sconosciuti (usa handler centralizzato)
         face_result = await handle_text_identification(str(chat_id) if is_group else str(from_id), text)
         if face_result["was_awaiting"] and face_result["faces_saved"]:
-            text += face_result["sistema_msg"]
+            # Replace (non append): evita che "No, X è Y" scriva spouse/children sbagliati
+            text = face_result["sistema_msg"]
 
 
         if _WEATHER_RE.search(text) and not city:

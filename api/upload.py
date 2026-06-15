@@ -81,7 +81,18 @@ async def upload_file(file: UploadFile = File(...), user: AuthUser = Depends(req
                 try:
                     with open(tmp_img, "wb") as f:
                         f.write(img_bytes)
-                    await set_awaiting_faces(str(user_id), tmp_img, result.get("content", ""))
+                    import re as _re
+                    _web_content = result.get("content", "")
+                    _unk_n = len(_re.findall(r'\d+° da sinistra', _web_content))
+                    if not _unk_n:
+                        _th = _re.search(r'\[TOTAL_HUMANS:(\d+)\]', _web_content)
+                        _tp = _re.search(r'\[TOTAL_PETS:(\d+)\]', _web_content)
+                        if "[UNKNOWN_FACES_DETECTED]" in _web_content and _th:
+                            _unk_n += int(_th.group(1))
+                        if "[UNKNOWN_PETS_DETECTED]" in _web_content and _tp:
+                            _unk_n += int(_tp.group(1))
+                    await set_awaiting_faces(str(user_id), tmp_img, _web_content,
+                                             unknown_count=max(1, _unk_n))
                 except Exception as e:
                     log("AWAITING_FACES_TMP_ERROR", error=str(e))
 
