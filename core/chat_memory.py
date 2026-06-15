@@ -1,19 +1,57 @@
 """
 CHAT MEMORY - Genesi Core v2
-Memory conversazionale in-memory
-1 intent → 1 funzione, zero persistenza
+Memory conversazionale: cache in-memory + persistenza su disco.
+La cache RAM resta veloce; il mirror su disco sopravvive ai restart
+(altrimenti ogni riavvio azzerava il filo della conversazione — P1).
+1 intent → 1 funzione.
 """
 
+import os
+import re
+import json
 from typing import List, Dict, Any, Optional
 from core.memory_storage import memory_storage
 from core.log import log
 
+_CHAT_BUFFER_DIR = "memory/chat_buffer"
+
+
+def _disk_path(user_id: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", str(user_id))
+    return os.path.join(_CHAT_BUFFER_DIR, f"{safe}.json")
+
+
+def _persist_to_disk(user_id: str, messages: List[Dict[str, Any]]) -> None:
+    """Mirror su disco (fail-silent: un errore disco non deve mai rompere la chat)."""
+    try:
+        os.makedirs(_CHAT_BUFFER_DIR, exist_ok=True)
+        tmp = _disk_path(user_id) + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(messages, f, ensure_ascii=False)
+        os.replace(tmp, _disk_path(user_id))  # scrittura atomica
+    except Exception as e:
+        log("CHAT_MEMORY_PERSIST_ERROR", user_id=user_id, error=str(e))
+
+
+def _restore_from_disk(user_id: str) -> Optional[List[Dict[str, Any]]]:
+    try:
+        p = _disk_path(user_id)
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return data
+    except Exception as e:
+        log("CHAT_MEMORY_RESTORE_ERROR", user_id=user_id, error=str(e))
+    return None
+
+
 class ChatMemory:
     """
     Memory conversazionale - 1 intent → 1 funzione
-    Storage in-memory per validazione comportamento
+    Cache RAM + mirror su disco (sopravvive ai restart).
     """
-    
+
     def __init__(self, max_messages: int = 100):
         self.max_messages = max_messages
         self.prefix = "chat:"
@@ -33,8 +71,11 @@ class ChatMemory:
         """
         try:
             key = f"{self.prefix}{user_id}"
-            messages = memory_storage.load(key) or []
-            
+            messages = memory_storage.load(key)
+            if messages is None:
+                # Post-restart: ripristina il filo dal disco prima di appendere
+                messages = _restore_from_disk(user_id) or []
+
             # Nuovo messaggio
             new_message = {
                 "timestamp": "now",
@@ -42,17 +83,18 @@ class ChatMemory:
                 "system_response": response,
                 "intent": intent
             }
-            
+
             # Aggiungi alla lista
             messages.append(new_message)
-            
+
             # Mantieni solo gli ultimi max_messages
             if len(messages) > self.max_messages:
                 messages = messages[-self.max_messages:]
-            
-            # Salva in memoria
+
+            # Salva in memoria + mirror su disco (sopravvive ai restart)
             memory_storage.save(key, messages)
-            
+            _persist_to_disk(user_id, messages)
+
             log("CHAT_MEMORY_ADD", user_id=user_id, intent=intent, total=len(messages))
             return True
             
@@ -73,11 +115,18 @@ class ChatMemory:
         """
         try:
             key = f"{self.prefix}{user_id}"
-            messages = memory_storage.load(key) or []
-            
+            messages = memory_storage.load(key)
+            if messages is None:
+                # Cache RAM vuota (primo accesso o post-restart) → ripristina dal disco
+                restored = _restore_from_disk(user_id)
+                if restored:
+                    memory_storage.save(key, restored)  # riscalda la cache
+                    log("CHAT_MEMORY_RESTORED", user_id=user_id, count=len(restored))
+                messages = restored or []
+
             if limit and limit > 0:
                 messages = messages[-limit:]
-            
+
             log("CHAT_MEMORY_GET", user_id=user_id, count=len(messages))
             return messages
             
@@ -111,12 +160,19 @@ class ChatMemory:
         try:
             key = f"{self.prefix}{user_id}"
             success = memory_storage.delete(key)
-            
+            # Rimuovi anche il mirror su disco
+            try:
+                _p = _disk_path(user_id)
+                if os.path.exists(_p):
+                    os.remove(_p)
+            except Exception:
+                pass
+
             if success:
                 log("CHAT_MEMORY_CLEAR", user_id=user_id)
             else:
                 log("CHAT_MEMORY_CLEAR_NOT_FOUND", user_id=user_id)
-            
+
             return success
             
         except Exception as e:
