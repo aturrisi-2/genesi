@@ -491,7 +491,15 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
     lines.append(f"[CONTEGGIO MEMBRI DEL GRUPPO: In totale ci sono {total_members} membri: tu (e gli altri umani) e io (Genesi, l'assistente AI).]")
     if active_members:
         lines.append(f"[LISTA DETTAGLIATA MEMBRI UMANI: {', '.join(active_members)}]")
-    lines.append("[⚠️ IMPORTANTE: I membri che iniziano con '+' o contengono solo cifre sono partecipanti di cui non conosciamo ancora il nome (es. altri numeri o account secondari). NON associarli o confonderli MAI con Rita, Ennio o altri familiari dell'albero genealogico! Non allucinare i loro nomi.]")
+    # Istruzione sui membri anonimi: SOLO se ce ne sono davvero. Altrimenti l'LLM
+    # la parafrasava nell'output ("...non conosciamo ancora il nome, altri numeri o
+    # account secondari") = context leak BUG#3.
+    _has_numeric_member = any(
+        m.strip().startswith("+") or m.strip().replace(" ", "").replace("(tel:", "").replace(")", "").replace(".", "").isdigit()
+        for m in active_members
+    ) if active_members else False
+    if _has_numeric_member:
+        lines.append("[⚠️ IMPORTANTE: I membri che iniziano con '+' o contengono solo cifre sono partecipanti di cui non conosciamo ancora il nome. NON associarli o confonderli MAI con Rita, Ennio o altri familiari dell'albero genealogico! Non allucinare i loro nomi.]")
     lines.append("")
 
     # 📅 Contesto Temporale, Festività e Compleanni di Oggi

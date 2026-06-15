@@ -175,7 +175,8 @@ async def set_awaiting_faces(session_id: str, img_path: str, description: str, u
     log("AWAITING_FACES_SET", session=session_id, unknown_count=unknown_count)
 
 
-_AWAITING_TTL = 600  # 10 min: finestra entro cui si accettano nomi/correzioni volti
+_AWAITING_TTL = 1800  # 30 min: finestra per nomi/correzioni volti (era 600 = 10min,
+                      # troppo corto: l'utente perdeva i nomi se rispondeva tardi)
 
 
 async def get_awaiting_faces(session_id: str) -> dict | None:
