@@ -767,6 +767,31 @@ def _inject_document_context(user_id: str, message: str,
     # I più recenti sono in fondo — invertiamo per dargli priorità nel selector
     active_docs_recent_first = list(reversed(active_docs))
 
+    # GATE: NON iniettare a ogni turno. Inietta SOLO se:
+    #  (a) il messaggio referenzia esplicitamente un documento/foto, OPPURE
+    #  (b) il doc più recente è stato caricato da poco (finestra post-upload).
+    # Senza questo gate il selector di default re-iniettava gli ultimi 2 doc a OGNI
+    # messaggio (immagine vecchia re-iniettata 9×) → LLM perdeva la domanda reale
+    # e/o forzava "rispondi sui file" su messaggi non correlati.
+    _DOC_FRESH_WINDOW = 180  # secondi: finestra "appena caricato"
+    _references = is_document_reference(message)
+    _fresh = False
+    _most_recent_id = active_docs_recent_first[0] if active_docs_recent_first else None
+    if _most_recent_id and not _references:
+        try:
+            import re as _re_doc, time as _time_doc, calendar as _cal_doc
+            _m = _re_doc.search(r'_(\d{14})_', _most_recent_id)
+            if _m:
+                # timestamp nel doc_id è UTC (datetime.utcnow in upload.py) → timegm
+                _up = _cal_doc.timegm(_time_doc.strptime(_m.group(1), "%Y%m%d%H%M%S"))
+                _fresh = (_time_doc.time() - _up) <= _DOC_FRESH_WINDOW
+        except Exception:
+            _fresh = False
+    if not _references and not _fresh:
+        _structured_log("DOCUMENT_CONTEXT_SKIP", user_id=user_id,
+                        reason="no_reference_not_fresh", most_recent=_most_recent_id)
+        return ""
+
     # Use document selector to pick relevant docs
     selected = resolve_documents(message, user_id, active_docs_recent_first)
     if not selected:
