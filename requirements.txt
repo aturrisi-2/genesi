@@ -35,3 +35,6 @@ pyremindkit @ git+https://github.com/namuan/pyremindkit
 playwright>=1.44.0
 playwright-stealth>=1.0.6
 youtube-transcript-api
+insightface>=1.0.0
+onnxruntime>=1.18.0
+opencv-python-headless>=4.8.0
