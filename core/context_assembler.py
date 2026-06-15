@@ -878,9 +878,12 @@ def _inject_document_context(user_id: str, message: str,
         # e naturale (come un amico), NON descrizione clinica / "spiegone". Evita la
         # divergenza in cui 1:1 faceva l'analisi dettagliata e i gruppi una battuta.
         instruction = (
-            "ISTRUZIONE: L'utente ha condiviso una foto (descrizione sopra). "
-            "Commenta in modo naturale, caldo e BREVE: 1-2 frasi, max ~25 parole. "
-            "Come faresti con un amico — niente elenchi, niente descrizione clinica o 'spiegoni'. "
+            "ISTRUZIONE FOTO (PRIORITARIA — sovrascrive ogni regola di tono 'AI esterna', "
+            "di concisione tecnica o di analisi dettagliata): l'utente ha condiviso una foto "
+            "(descrizione sopra). Reagisci come un amico affettuoso che la guarda: 1-2 frasi "
+            "brevi (max ~25 parole), tono caldo, umano e naturale, italiano colloquiale. "
+            "Commenta il momento e l'emozione, NON i dettagli tecnici. "
+            "VIETATO l'esordio 'Nell'immagine', 'L'immagine mostra', 'Nella foto vedo' o elenchi/descrizioni cliniche. "
             "Riconosci per nome le persone/animali noti citati sopra. "
             "NON dire che non puoi vedere l'immagine: HAI la descrizione qui sopra."
         )
