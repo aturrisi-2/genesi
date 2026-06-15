@@ -28,11 +28,23 @@ def _face_match_margin() -> float:
     miglior match (identità diversa) distano MENO di questo margine, il volto è
     ambiguo → lasciato 'sconosciuto' invece di rischiare un nome sbagliato
     (es. Ennio↔Giorgio). Default 0.0 = disattivato (comportamento storico).
-    Alza via env FACE_MATCH_MARGIN (es. 0.06) per ridurre i falsi positivi."""
+    Alza via env FACE_MATCH_MARGIN (es. 0.08) per ridurre i falsi positivi."""
     try:
         return float(os.getenv("FACE_MATCH_MARGIN", "0.0"))
     except (TypeError, ValueError):
         return 0.0
+
+
+def _face_confident_dist() -> float:
+    """Soglia di 'match sicuro': sotto questa distanza il ratio-test (margin) NON
+    si applica. Serve perché embedding duplicati della stessa persona danno
+    second-best≈best≈0 (gap nullo): senza questo floor il margin scarterebbe per
+    errore match certissimi (es. Zoe/Ennio a best=0.000). Solo la 'banda incerta'
+    (best ≥ floor) è soggetta al ratio-test. Tunabile via FACE_MATCH_CONFIDENT_DIST."""
+    try:
+        return float(os.getenv("FACE_MATCH_CONFIDENT_DIST", "0.5"))
+    except (TypeError, ValueError):
+        return 0.5
 
 def get_face_models():
     global _mtcnn, _resnet
@@ -241,6 +253,7 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 0.75) -> d
         # Soglia + margine effettivi (env-tunabili senza redeploy)
         _threshold = _face_match_threshold(threshold)
         _margin = _face_match_margin()
+        _confident = _face_confident_dist()
 
         # Per ogni volto nuovo, trova la corrispondenza MIGLIORE assoluta con vincolo 1-a-1
         distances = []
@@ -269,10 +282,13 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 0.75) -> d
                     # il match è ambiguo → NON assegnare (meglio "sconosciuto" che sbagliato)
                     _pf = per_face.get(i, [])
                     _second = next((d for d, n in _pf if n != name), None)
-                    if _margin > 0.0 and _second is not None and (_second - min_dist) < _margin:
+                    # Ratio-test SOLO nella banda incerta (best ≥ floor): i match
+                    # certi (best < floor) bypassano → embedding duplicati salvi.
+                    if (_margin > 0.0 and min_dist >= _confident
+                            and _second is not None and (_second - min_dist) < _margin):
                         log("FACE_MATCH_AMBIGUOUS", face_index=i, best=round(min_dist, 3),
                             best_name=name, second=round(_second, 3),
-                            margin=_margin, decision="skip")
+                            margin=_margin, confident=_confident, decision="skip")
                         continue
                     matched_face_indices.add(i)
                     matched_identities.add(name)

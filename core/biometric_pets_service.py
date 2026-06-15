@@ -269,6 +269,10 @@ async def analyze_pets_biometric(image_path: str, threshold: float = 0.75) -> di
             _margin = float(os.getenv("PET_MATCH_MARGIN", "0.0"))
         except (TypeError, ValueError):
             _margin = 0.0
+        try:
+            _confident = float(os.getenv("PET_MATCH_CONFIDENT_DIST", "0.5"))
+        except (TypeError, ValueError):
+            _confident = 0.5
 
         # Matching greedy: distanza euclidea su embeddings normalizzati
         all_distances = []
@@ -296,9 +300,11 @@ async def analyze_pets_biometric(image_path: str, threshold: float = 0.75) -> di
                 if min_dist < _threshold:
                     _pf = per_pet.get(i, [])
                     _second = next((d for d, n in _pf if n != name), None)
-                    if _margin > 0.0 and _second is not None and (_second - min_dist) < _margin:
+                    if (_margin > 0.0 and min_dist >= _confident
+                            and _second is not None and (_second - min_dist) < _margin):
                         log("PET_MATCH_AMBIGUOUS", pet_index=i, best=round(min_dist, 3),
-                            best_name=name, second=round(_second, 3), margin=_margin)
+                            best_name=name, second=round(_second, 3),
+                            margin=_margin, confident=_confident)
                         continue
                     matched_pet_indices.add(i)
                     matched_identities.add(name)
