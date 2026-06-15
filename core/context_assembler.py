@@ -885,6 +885,8 @@ def _inject_document_context(user_id: str, message: str,
             "Commenta il momento e l'emozione, NON i dettagli tecnici. "
             "VIETATO l'esordio 'Nell'immagine', 'L'immagine mostra', 'Nella foto vedo' o elenchi/descrizioni cliniche. "
             "Riconosci per nome le persone/animali noti citati sopra. "
+            "Se la persona ritratta è chi ti scrive (l'utente), rivolgiti a lui in SECONDA persona "
+            "('ti vedo', 'sei', 'tu e ...'), MAI in terza persona. "
             "NON dire che non puoi vedere l'immagine: HAI la descrizione qui sopra."
         )
     else:

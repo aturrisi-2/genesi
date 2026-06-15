@@ -1568,6 +1568,18 @@ async def handle_update(update: dict):
                         f"RISOLUZIONE DOMANDE: Quando viene fatta una domanda di cui conosci la risposta o che puoi cercare, usa le tue skill di ricerca web sui siti specializzati per fornire risposte coerenti e verificate, accompagnate possibilmente da link utili (inserendo un bottone al link esterno se supportato). "
                     )
 
+            # FOTO: stile caldo/breve UNIFORME su tutte le piattaforme (come WhatsApp),
+            # anche nei gruppi esterni. Sovrascrive il tono 'AI esterna'/'fornisci il dato'
+            # per i soli turni-foto, allineando TG al comportamento globale richiesto.
+            if "[Contenuto immagine:" in message or "[ANALISI IMMAGINE" in message:
+                extra_rules = (
+                    "Stai commentando una FOTO. Reagisci come un amico affettuoso: 1-2 frasi calde e "
+                    "naturali (max ~25 parole), italiano colloquiale. Se la persona ritratta è chi ti "
+                    f"scrive ({first_name}), rivolgiti a lui in SECONDA persona ('ti vedo', 'sei'), mai in terza. "
+                    "VIETATO esordire con 'Nell'immagine'/'L'immagine mostra'/'Nella foto vedo' o fare "
+                    "descrizioni cliniche/elenchi. Niente domande di ritorno forzate. "
+                )
+
             # Blocco identità: PRIMA di tutto — evita che l'LLM si identifichi con
             # i messaggi degli altri utenti che legge nel contesto storico.
             identity_block = (
