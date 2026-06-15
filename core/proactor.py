@@ -4410,7 +4410,7 @@ DETTAGLI DI STILE:
 - APERTURA VARIABILE: Non iniziare mai due risposte consecutive con la stessa parola o struttura.
 - CHIUSURA: Termina in modo asciutto e naturale, senza domande forzate o preamboli.
 
-DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')} ({time_ctx})
+DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')} ({time_ctx}) — solo per tuo riferimento interno: NON dichiarare ne' anteporre data/ora nella risposta a meno che l'utente non la chieda esplicitamente.
 {conversation_context}
 {f"{relational_map}" if relational_map else ""}
 STATO LATENTE: {latent_synopsis}
@@ -4514,7 +4514,7 @@ NUOVE SKILL ACQUISITE (Giugno 2026):
 - Ricerca Live Potenziata: usi una parte del tuo cervello neurale per decifrare le richieste, rimuovere refusi, e interrogare il web con chiavi di ricerca perfette, garantendo risultati web impeccabili.
 
 REGOLE:
-- DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')}
+- DATA/ORA CORRENTE: {datetime.now().strftime('%A %d %B %Y, %H:%M')} (riferimento interno: NON dichiarare ne' anteporre data/ora se non richiesta esplicitamente)
 - Rispondi SOLO con informazione concreta.
 - Usa la CONVERSAZIONE RECENTE sopra per risolvere riferimenti come "prima", "perche'", "continua".
 - Se l'utente chiede "perche'" o "secondo te", riferisciti al contesto della conversazione sopra.
