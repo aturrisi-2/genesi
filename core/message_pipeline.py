@@ -434,6 +434,9 @@ async def schedule_memory_tasks(
     if should_run_llm and len(user_message) > 10:
         asyncio.create_task(_personal_facts())
         asyncio.create_task(_episodes())
+    # Relazioni: gira SEMPRE (anche nei gruppi, non gated al 10%) perché le
+    # presentazioni familiari ("mia sorella Elena") vanno catturate ogni volta.
+    if len(user_message) > 10:
         asyncio.create_task(_relatives())
     asyncio.create_task(_global_memory())
     asyncio.create_task(_predictive())

@@ -4022,10 +4022,25 @@ Messaggio: "{message}" """
         resp_lower = response.lower()
         if not any(p in resp_lower for p in _REFUSAL_PHRASES):
             return response
+        # GUARD: niente auto-search per domande su contenuto LOCALE (foto/immagine/
+        # volti/soggetti). Qui "non ho informazioni" è un fallimento di contesto, non
+        # una mancanza di dati dal web → una ricerca darebbe fonti irrilevanti.
+        _msg_low = message.lower()
+        if any(w in _msg_low for w in ("foto", "immagine", "soggett", "volt",
+                                       "nella foto", "in foto", "ritratt")):
+            log("AUTO_SEARCH_SKIP_LOCAL", user_id=user_id, reason="photo_or_local_content")
+            return response
         try:
             from core.live_search_service import search_for_answer
             _auto_query = message.split("\n\n[CONTESTO PAGINA]")[0].strip()
             _auto_query = _auto_query.split("\n\n[ISTRUZIONE WIDGET]")[0].strip()
+            # Pulisci i blocchi di sistema/gruppo dalla query: senza questo la ricerca
+            # userebbe il prompt "[IDENTITÀ ASSOLUTA...]"/"[GRUPPO...]" come testo → fonti casuali.
+            _auto_query = re.sub(r"\[(IDENTIT[AÀ][^\]]*|GRUPPO[^\]]*|SISTEMA[^\]]*)\]",
+                                 "", _auto_query, flags=re.IGNORECASE).strip()
+            if len(_auto_query) < 3:
+                log("AUTO_SEARCH_SKIP_EMPTY_QUERY", user_id=user_id)
+                return response
             logger.info("AUTO_SEARCH_TRIGGERED user=%s query=%s", user_id, _auto_query[:60])
             live_result = await search_for_answer(_auto_query)
             if not live_result:
