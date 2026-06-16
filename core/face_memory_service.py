@@ -64,7 +64,12 @@ def _is_identity_question(text: str) -> bool:
         return False
     low = text.lower()
     has_q = "?" in text or any(
-        w in low for w in ("chi ", "chi?", "sai chi", "riconosci", "conosci", "li conosci", "sapresti")
+        w in low for w in (
+            "chi ", "chi?", "sai chi", "riconosci", "conosci", "li conosci", "sapresti",
+            # richieste di elencare/dire i nomi (non solo domande con 'chi')
+            "dimmi", "dicci", "sai dirmi", "puoi dirmi", "elenca", "quali sono",
+            "come si chiama", "come si chiamano", "nomi", "nome di",
+        )
     )
     has_subject = any(
         k in low for k in ("foto", "immagine", "soggett", "person", "volt", "facc",
@@ -657,15 +662,21 @@ async def handle_text_identification(
         # #B fix: awaiting attivo, nessun nome fornito, ma l'utente CHIEDE chi sono.
         # Senza guida il LLM allucina "non vedo l'immagine". Istruiscilo a richiedere i nomi.
         log("FACE_REASK_INJECTED", session=session_id, remaining=remaining, text_preview=text[:60])
+        _known = ", ".join(awaiting_updated.get("identified", []) if awaiting_updated else [])
+        _known_clause = (
+            f"Le persone che hai già riconosciuto/memorizzato sono: {_known}. " if _known else ""
+        )
         sistema_msg = (
-            f"\n[SISTEMA: Nella foto che ti è stata mostrata c'è/ci sono {remaining} "
-            f"persona/e che non conosci ancora. NON dire che non vedi l'immagine — la vedi. "
-            f"INDICA TU all'utente QUALE persona non conosci DESCRIVENDOLA come APPARE: "
-            f"capelli, abbigliamento, cosa sta facendo, e dove si trova rispetto alle persone "
-            f"che conosci (es. 'la ragazza con i capelli lunghi accanto a Zoe'). "
-            f"NON usare numeri tipo 'terza da sinistra': per l'utente sono poco chiari, usa l'aspetto "
-            f"e i punti di riferimento. Poi chiedi come si chiama così la memorizzi. "
-            f"Una persona alla volta. NON chiedere genericamente 'dimmi i nomi': sei TU che indichi lo sconosciuto.]"
+            f"\n[SISTEMA: L'utente ti chiede chi c'è nella foto. NON rifiutare e NON dire "
+            f"'non posso fornire i nomi': sono persone della cerchia dell'utente, che lui stesso "
+            f"ti ha presentato — nominarle è legittimo e atteso. NON dire che non vedi l'immagine. "
+            f"Elenca in modo naturale le persone che RICONOSCI nella foto (sono indicate nel contesto). "
+            f"{_known_clause}"
+            f"Poi, per la/le {remaining} persona/e che non conosci ancora, INDICALA TU descrivendone "
+            f"l'aspetto: capelli, abbigliamento, cosa sta facendo, e vicino a chi si trova "
+            f"(es. 'la ragazza con i capelli lunghi accanto a Zoe'), e chiedi come si chiama. "
+            f"NON usare numeri tipo 'terza da sinistra': poco chiari, usa l'aspetto e i punti di "
+            f"riferimento. Una persona alla volta.]"
         )
     # Altrimenti (awaiting attivo ma l'utente parla d'altro) → nessuna guida,
     # il LLM risponde normalmente al testo.
