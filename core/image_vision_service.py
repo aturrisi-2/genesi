@@ -305,24 +305,23 @@ async def describe_image(path: str) -> str:
             if total_pets and total_pets > 0:
                 description += f" [TOTAL_PETS:{total_pets}]"
 
-            # Conteggio + posizioni REALI degli sconosciuti, dal biometrico.
-            # Affidabile: NON dipende da come il vision LLM ha (o non ha) descritto
-            # le posizioni. Serve a valle (face_memory_service) per chiedere/indicare
-            # SOLO i soggetti realmente sconosciuti, non tutti.
+            # Conteggio REALE degli sconosciuti, dal biometrico (affidabile).
+            # Serve a valle (face_memory_service) per chiedere/indicare SOLO i
+            # soggetti realmente sconosciuti, non tutti.
+            # NB: NON iniettiamo le posizioni numeriche ('N° da sinistra') del
+            # biometrico: l'ordinamento per bbox non coincide con come l'utente
+            # conta le persone (file multiple, facce sfondo) → confonde. Genesi
+            # indica gli sconosciuti per ASPETTO, usando la descrizione del vision.
             if is_unknown_faces and str(is_unknown_faces).lower() in ("true", "1", "yes", "si", "sì"):
                 _n_unk_h = len(unknown_faces_positions) if unknown_faces_positions else max(
                     0, bio_total_faces - len(recognized_faces_list)
                 )
                 if _n_unk_h > 0:
                     description += f" [UNKNOWN_HUMANS:{_n_unk_h}]"
-                if unknown_faces_positions:
-                    description += f" [UNKNOWN_HUMAN_POS:{', '.join(unknown_faces_positions)}]"
             if is_unknown_pets and str(is_unknown_pets).lower() in ("true", "1", "yes", "si", "sì"):
                 _n_unk_p = len(unknown_pets_positions) if unknown_pets_positions else max(0, bio_total_pets)
                 if _n_unk_p > 0:
                     description += f" [UNKNOWN_PETS:{_n_unk_p}]"
-                if unknown_pets_positions:
-                    description += f" [UNKNOWN_PET_POS:{', '.join(unknown_pets_positions)}]"
 
             # Inietta gender_hints nel description per downstream
             gender_hints = parsed.get("gender_hints", [])
@@ -379,15 +378,11 @@ async def describe_image(path: str) -> str:
                 0, bio_total_faces - len(recognized_faces_list))
             if _n_unk_h > 0:
                 description += f" [UNKNOWN_HUMANS:{_n_unk_h}]"
-            if unknown_faces_positions:
-                description += f" [UNKNOWN_HUMAN_POS:{', '.join(unknown_faces_positions)}]"
         if unknown_pets_detected:
             description += " [UNKNOWN_PETS_DETECTED]"
             _n_unk_p = len(unknown_pets_positions) if unknown_pets_positions else max(0, bio_total_pets)
             if _n_unk_p > 0:
                 description += f" [UNKNOWN_PETS:{_n_unk_p}]"
-            if unknown_pets_positions:
-                description += f" [UNKNOWN_PET_POS:{', '.join(unknown_pets_positions)}]"
         if bio_total_faces:
             description += f" [TOTAL_HUMANS:{bio_total_faces}]"
         if bio_total_pets:

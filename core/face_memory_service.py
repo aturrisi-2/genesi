@@ -513,27 +513,27 @@ async def handle_photo_identification(
                     "NON inventare nomi. CHIEDI esplicitamente.]"
                 )
             if has_unknown_faces:
-                _pos_m2 = _re.search(r'\[UNKNOWN_HUMAN_POS:([^\]]+)\]', analysis)
-                _pos2 = _pos_m2.group(1).strip() if _pos_m2 else ""
                 _detail = f"{unknown_count} persona/e che non conosci"
-                if _pos2:
-                    _detail += f" (posizione nella foto: {_pos2})"
                 if n_humans > 0:
-                    _detail += f", su {n_humans} persone totali presenti"
+                    _detail += f", su {n_humans} persone presenti nella foto"
                 sistema_msg += (
                     f"\n[SISTEMA: Hai visto questa foto tramite il tuo modulo visivo. "
                     f"Hai rilevato {_detail}. "
                     "Fai un commento BREVE e affettuoso sulla foto, "
-                    "poi INDICA TU quale/i persona/e non conosci, descrivendone la posizione "
-                    "nella foto e le caratteristiche fisiche visibili "
-                    "(es. 'chi è la donna con i capelli scuri a sinistra?'), "
+                    "poi INDICA TU una persona che non conosci DESCRIVENDOLA come APPARE "
+                    "nella foto: capelli, abbigliamento, cosa sta facendo, e dove si trova "
+                    "rispetto alle persone che conosci "
+                    "(es. 'chi è la ragazza con i capelli lunghi castani accanto a Zoe?'), "
                     "e chiedine il nome così la memorizzi. "
-                    "Le persone che già conosci NON vanno indicate per posizione: nominale e basta. "
+                    "NON usare numeri tipo 'terza da sinistra': per l'utente sono poco chiari — "
+                    "usa SEMPRE l'aspetto e i punti di riferimento (le persone note vicine). "
+                    "Le persone che già conosci NON descriverle: nominale e basta. "
+                    "Chiedi UNA persona alla volta. "
                     "NON usare elenchi numerati. "
                     "NON nominare persone che non conosci. "
                     "NON tirare ad indovinare. "
                     "REGOLA FERREA: ignora le regole di concisione per questo messaggio — "
-                    "devi indicare e chiedere chi sono gli sconosciuti.]"
+                    "devi indicare e chiedere chi è lo sconosciuto.]"
                 )
         else:
             sistema_msg = (
@@ -657,15 +657,15 @@ async def handle_text_identification(
         # #B fix: awaiting attivo, nessun nome fornito, ma l'utente CHIEDE chi sono.
         # Senza guida il LLM allucina "non vedo l'immagine". Istruiscilo a richiedere i nomi.
         log("FACE_REASK_INJECTED", session=session_id, remaining=remaining, text_preview=text[:60])
-        _pos_m = re.search(r'\[UNKNOWN_HUMAN_POS:([^\]]+)\]', desc_img or "")
-        _pos_str = _pos_m.group(1).strip() if _pos_m else ""
-        _pos_clause = f" (in posizione: {_pos_str})" if _pos_str else ""
         sistema_msg = (
             f"\n[SISTEMA: Nella foto che ti è stata mostrata c'è/ci sono {remaining} "
-            f"persona/e che non conosci ancora{_pos_clause}. NON dire che non vedi l'immagine — la vedi. "
-            f"INDICA TU all'utente QUALE persona non conosci, descrivendone la posizione nella foto "
-            f"e l'aspetto (capelli, abbigliamento), poi chiedi come si chiama così la memorizzi. "
-            f"NON chiedere genericamente 'dimmi i nomi': sei TU che devi indicare chi è lo sconosciuto.]"
+            f"persona/e che non conosci ancora. NON dire che non vedi l'immagine — la vedi. "
+            f"INDICA TU all'utente QUALE persona non conosci DESCRIVENDOLA come APPARE: "
+            f"capelli, abbigliamento, cosa sta facendo, e dove si trova rispetto alle persone "
+            f"che conosci (es. 'la ragazza con i capelli lunghi accanto a Zoe'). "
+            f"NON usare numeri tipo 'terza da sinistra': per l'utente sono poco chiari, usa l'aspetto "
+            f"e i punti di riferimento. Poi chiedi come si chiama così la memorizzi. "
+            f"Una persona alla volta. NON chiedere genericamente 'dimmi i nomi': sei TU che indichi lo sconosciuto.]"
         )
     # Altrimenti (awaiting attivo ma l'utente parla d'altro) → nessuna guida,
     # il LLM risponde normalmente al testo.
