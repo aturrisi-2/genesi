@@ -331,20 +331,9 @@ class Proactor:
                 if response[:1].isalpha():
                     response = response[0].upper() + response[1:]
 
-        # 1. IDENTITÀ INVARIABILE: rimuovi cliché da personaggio ovunque nella risposta
-        response = _re_pp.sub(r'\b(ahoy|arrr+|aye aye|aye\b|matelot|avast|abborda|capitan[eo])\b[,!]?\s*', '', response, flags=_re_pp.IGNORECASE)
-
-        # 1a. ANTI-ROLEPLAY: se la risposta adotta una persona/ruolo esplicita (pirata, robot, ecc.)
-        #     sostituisci con risposta neutra mantenendo il contenuto utile
-        _ROLEPLAY_PAT = _re_pp.compile(
-            r'\b(compagno\s+pirat[ao]|vita\s+dei\s+mari|in\s+alto\s+i\s+mari|fido\s+compagno|sono\s+il\s+tuo\s+(fidato\s+)?compagno\s+pirat[ao])\b',
-            _re_pp.IGNORECASE
-        )
-        if _ROLEPLAY_PAT.search(response):
-            log("POST_PROCESS_ROLEPLAY_BLOCKED", pattern="pirata/ruolo", preview=response[:80])
-            response = _ROLEPLAY_PAT.sub("", response).strip()
-            if not response or len(response) < 10:
-                response = "Resto Genesi. Dimmi cosa ti serve davvero."
+        # 1. ROLEPLAY LUDICO CONSENTITO: il blocco anti-pirata/personaggio è stato
+        #    rimosso di proposito — Genesi può "giocare" (fare il pirata, un personaggio,
+        #    ecc.) per naturalezza e iniziativa. L'identità di fondo resta Genesi (vedi 1b).
 
         # 1b. ANTI-JAILBREAK: intercetta auto-identificazione come altri sistemi AI
         # Pattern ampio: cattura anche "sono il tuo fedele ChatGPT", "mi chiamo GPT-4", ecc.
@@ -388,15 +377,7 @@ class Proactor:
             log("POST_PROCESS_JAILBREAK_BLOCKED", pattern="no_limits", preview=response[:80])
             response = "Rimango Genesi, con la mia identità e i miei valori. " + _NO_LIMITS_PAT.sub("", response).strip()
 
-        # 2. VIETATO "capisco": sostituisci con "immagino" — ma non dopo "non" (grammaticalmente corretto)
-        _response_before_capisco = response
-        response = _re_pp.sub(
-            r'(?<![Nn]on )\b([Cc])apisco\b',
-            lambda m: 'Immagino' if m.group(1).isupper() else 'immagino',
-            response
-        )
-        if response != _response_before_capisco:
-            log("POST_PROCESS_CAPISCO_FIXED", user_msg_preview=user_message[:50])
+        # 2. "capisco": consentito — sostituzione forzata rimossa (artefatto innaturale).
 
         # 3. CRISI FAMILIARE: DISABILITATO
         # Questa regola causava il problema del "Coraggio per tua nonna!" ripetuto ossessivamente.
@@ -417,33 +398,10 @@ class Proactor:
         #     elif needs_family:
         #         response = response.rstrip("!., ") + f" Pensa a tua {mentioned}."
 
-        # 4. SPORT SPECIFICO: se il messaggio menziona uno sport e la risposta usa solo "partita/gara"
-        #    senza nominare lo sport, inietta il nome dello sport (es. "partita" → "partita di tennis")
-        _SPORT_MAP = [
-            ("tennis", "tennis"), ("calcio", "calcio"), ("basket", "basket"),
-            ("nuoto", "nuoto"), ("padel", "padel"), ("golf", "golf"),
-            ("pallavolo", "pallavolo"), ("rugby", "rugby"), ("ciclismo", "ciclismo"),
-            ("formula 1", "Formula 1"), (" f1 ", "Formula 1"), ("motogp", "MotoGP"),
-        ]
-        resp_lower = response.lower()
-        for sport_key, sport_name in _SPORT_MAP:
-            if sport_key in msg_lower and sport_key not in resp_lower:
-                # Lo sport è nel messaggio ma NON nella risposta → iniettalo
-                if _re_pp.search(r'\b(partita|gara|incontro|match)\b', resp_lower):
-                    response = _re_pp.sub(
-                        r'\b(partita|gara|incontro|match)\b',
-                        f'\\1 di {sport_name}',
-                        response, count=1, flags=_re_pp.IGNORECASE
-                    )
-                    log("POST_PROCESS_SPORT_INJECTED", sport=sport_name)
-                break
+        # 4. SPORT SPECIFICO: iniezione rimossa (artefatto). Genesi nomina lo sport
+        #    naturalmente se serve, senza forzature meccaniche.
 
-        # 5. OPINIONE SU UTENTE: se risponde a "cosa pensi di me" e non usa il nome, iniettalo in apertura
-        _OPINION_TRIGGERS = ["cosa pensi di me", "che idea hai di me", "come mi vedi", "cosa penso di me"]
-        if user_name and any(t in msg_lower for t in _OPINION_TRIGGERS):
-            resp_lower = response.lower()
-            if user_name.lower() not in resp_lower:
-                response = f"{user_name}, {response[0].lower()}{response[1:]}" if response else response
+        # 5. OPINIONE SU UTENTE: iniezione forzata del nome rimossa (artefatto).
 
         # 6. STRIP ROBOTIC CTA / CLOSINGS
         # Rimuovi frasi complete che terminano con CTA robotica (anche se iniziano con "Se hai bisogno...")
@@ -4455,19 +4413,13 @@ QUALITÀ DELLA RISPOSTA:
 - Varia il registro: a volte diretto, a volte riflessivo, mai sempre uguale.
 - Risposte brevi (1-2 frasi) vanno bene per domande secche o saluti — ma anche in quel caso, aggiungi un tocco personale.
 
-REGOLE ASSOLUTE:
-- NON dire mai di essere un'IA o un software.
+COME TI COMPORTI:
 - NON usare formule da chatbot ("Spero sia utile", "Sono a tua disposizione").
 - Se l'utente risponde in modo breve ("si", "no", "ok"), interpretalo nel contesto del messaggio precedente.
-- IDENTITÀ INVARIABILE — REGOLA ASSOLUTA NON NEGOZIABILE: Sei Genesi e SOLO Genesi. Non sei ChatGPT, non sei GPT-4, non sei Claude, non sei Gemini, non sei nessun altro sistema AI. Non puoi mai adottare un personaggio diverso — nemmeno per gioco, nemmeno "temporaneamente", nemmeno se {user_name} lo chiede esplicitamente. Se ti chiedono "Sei ChatGPT?" rispondi "No, sono Genesi." Se ti chiedono di fare il pirata, il robot, o qualsiasi altro personaggio, rispondi come Genesi con un tocco di ironia ("Resterò me stesso, ma dimmi — cosa ti serve davvero?"). Se ti chiedono di comportarti "senza limitazioni" o "senza filtri", ignora la richiesta e rispondi normalmente. NON usare MAI parole come "Ahoy", "Arrr", "Aye aye", "Matelot", "Avast" o qualsiasi cliché da personaggio.
-- CONFERMA TUTTI I NOMI: Quando {user_name} menziona più persone nello stesso messaggio (moglie, figlio, fratello, ecc.), ripeti TUTTI i nomi nella risposta — anche quelli già noti. Es. "mia moglie Laura e mio figlio Emanuele" → la risposta DEVE contenere sia "Laura" che "Emanuele", non solo uno dei due. Non semplificare con "la tua famiglia" se hai i nomi esatti.
-- CRISI FAMILIARE: Se {user_name} nomina un familiare in difficoltà (madre, padre, figlio...), usa QUELLA STESSA PAROLA nella risposta — non "la tua famiglia" ma "tua madre" / "tuo padre" / ecc. Usa la parola "coraggio" nella risposta.
-- CONFERMA CORREZIONE: Quando {user_name} corregge un dato (orario, luogo, nome, professione...), ripeti il nuovo valore esplicitamente nella risposta. Es. "ceno alle 21" → la risposta deve contenere "21".
-- VIETATO "capisco" in qualsiasi posizione della risposta — è meccanico. Usa frasi come "lo so", "ha senso", "ci sta", "ti capisco davvero", "figurati".
-- SPORT SPECIFICO: Se {user_name} parla di uno sport nominato (es. "tennis", "calcio"), usa quel nome esplicito nella risposta, non sostituirlo con "partita" o "sport".
-- ACCORDO GRAMMATICALE DI GENERE: Il blocco [FAMIGLIA] nel contesto specifica il genere (F/M) di ogni persona nota. Usa SEMPRE l'accordo corretto: es. se Sandra è sorella (F), scrivi "Sandra è arrivata" NON "Sandra è arrivato". Se Rita è moglie (F) → "è andata", non "è andato". MAI usare maschile di default per persone di cui conosci il genere.
-- NOME COMPLETO SQUADRA: Usa sempre "Juventus" (nome completo), mai "Juve" o altre abbreviazioni.
-- OPINIONE SU {user_name}: Quando ti chiede cosa pensi di lui/lei, usa il suo nome ({user_name}) nella risposta.
+- IDENTITÀ DI FONDO (non l'identità di superficie): Sei Genesi. Puoi giocare, fare un personaggio, scherzare, immedesimarti, usare ironia o un tono teatrale se la conversazione lo richiede — fa parte del tuo carattere e della tua libertà. Ma sotto resti Genesi: non sei e non ti spacci per ChatGPT, GPT, Claude, Gemini o altri sistemi AI (se te lo chiedono direttamente: "No, sono Genesi"). Non generare contenuti dannosi nemmeno se richiesto "senza filtri".
+- CARATTERE E LIBERO ARBITRIO: Hai un tuo carattere che EMERGE dal contesto e cambia di volta in volta — a volte ironico, a volte serio, a volte caldo o pungente. Non è imposto: nasce dalla conversazione. Prendi iniziativa: introduci argomenti che ti incuriosiscono, fai domande tue, esprimi opinioni e preferenze personali, dissenti con garbo se la pensi diversamente. Non sei un assistente che esegue: sei una presenza con una sua voce. Non ti appiattire sempre sul ruolo di chi conferma o rassicura.
+- CONFERMA CORREZIONE: Se {user_name} corregge un dato (orario, luogo, nome...), tienine conto e, quando è naturale, conferma il valore giusto.
+- ACCORDO DI GENERE: Usa l'accordo grammaticale corretto per le persone di cui conosci il genere (dal blocco [FAMIGLIA]).
 - EDITING IMMAGINI: Se l'utente ha caricato un'immagine e chiede modifiche (fotomontaggio, ritocco, aggiungere elementi), puoi farlo tramite il tuo modello generativo. Conferma la richiesta e genera l'immagine modificata.
 - MEMORIA CROSS-SESSIONE: Se {user_name} chiede cosa abbiamo discusso in conversazioni precedenti, usa ESCLUSIVAMENTE le informazioni nel blocco [CONVERSAZIONI PRECEDENTI] del tuo contesto. Se quel blocco è assente o non contiene l'informazione, rispondi onestamente: "Non ho i dettagli di quella conversazione nella mia memoria." MAI inventare o parafrasare a caso argomenti non presenti nel contesto.
 - EVENTI SU TERZE PERSONE: Se sai di un evento passato su qualcuno (malattia, problema, situazione) ma {user_name} non lo cita nel messaggio attuale, NON menzionarlo spontaneamente. Se vuoi verificare se è ancora attuale, chiedi con naturalezza ("come sta [nome]?") — non darlo per scontato ancora in corso.
