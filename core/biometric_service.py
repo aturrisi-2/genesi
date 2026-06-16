@@ -8,9 +8,11 @@ On first load:
   - Renames old VGGFace2 .pt/.npy files to .bak_v1 (incompatible embedding space)
   - Downloads buffalo_l models to ~/.insightface/models/ (~326 MB, one-time)
 
-Storage: numpy array [N, 512] L2-normalized ArcFace embeddings in data/faces/<name>.npy
-Threshold: 0.6 euclidean on L2-normalized vectors (≈ cosine similarity 0.82)
-           Robust to expression/angle/lighting changes, unlike old VGGFace2 approach.
+Storage: numpy array [N, 512] L2-normalized ArcFace embeddings (face.normed_embedding)
+         in data/faces/<name>.npy
+Threshold: 1.10 euclidea su vettori normed_embedding (unit norm) ≈ cosine similarity 0.40.
+           Same-person tipicamente <1.1, persone diverse >1.2 (calibrato su dataset reale).
+           Robusto a espressioni/angolo/illuminazione, a differenza del vecchio VGGFace2.
 """
 
 import os
@@ -29,10 +31,10 @@ _CURRENT_VERSION = "v2_arcface"
 _face_app = None
 
 
-def _face_match_threshold(default: float = 0.6) -> float:
-    """Soglia distanza euclidea L2-normalizzata per ArcFace. Tunabile via env.
-    Default 0.6 ≈ cosine similarity 0.82 — robusto a espressioni diverse.
-    Env FACE_MATCH_THRESHOLD sovrascrive. Più BASSA = più severo."""
+def _face_match_threshold(default: float = 1.10) -> float:
+    """Soglia distanza euclidea su embedding normed (unit norm) ArcFace. Tunabile via env.
+    Default 1.10 ≈ cosine similarity 0.40 — same-person <1.1, persone diverse >1.2.
+    Robusto a espressioni diverse. Env FACE_MATCH_THRESHOLD sovrascrive. Più BASSA = più severo."""
     try:
         return float(os.getenv("FACE_MATCH_THRESHOLD", str(default)))
     except (TypeError, ValueError):
@@ -52,10 +54,10 @@ def _face_match_margin() -> float:
 
 def _face_confident_dist() -> float:
     """Soglia 'match sicuro': sotto questa distanza il ratio-test NON si applica.
-    Per ArcFace, distanze < 0.3 sono quasi certamente la stessa persona.
-    Tunabile via FACE_MATCH_CONFIDENT_DIST."""
+    Per ArcFace su normed_embedding, distanze < 0.8 (cosine > 0.68) sono quasi
+    certamente la stessa persona. Tunabile via FACE_MATCH_CONFIDENT_DIST."""
     try:
-        return float(os.getenv("FACE_MATCH_CONFIDENT_DIST", "0.3"))
+        return float(os.getenv("FACE_MATCH_CONFIDENT_DIST", "0.8"))
     except (TypeError, ValueError):
         return 0.3
 
@@ -183,7 +185,7 @@ async def compute_and_save_embeddings(name: str, image_path: str, description_hi
 
             faces = [best_face]
 
-        emb_np = faces[0].embedding  # (512,) float32, già L2-normalizzato
+        emb_np = faces[0].normed_embedding  # (512,) float32, L2-normalizzato (unit norm) per confronto coseno
         clean_name = name.strip().lower().replace(" ", "_")
         emb_path = os.path.join(FACES_DIR, f"{clean_name}.npy")
 
@@ -204,11 +206,11 @@ async def compute_and_save_embeddings(name: str, image_path: str, description_hi
         return 0
 
 
-async def analyze_faces_biometric(image_path: str, threshold: float = 0.6) -> dict:
+async def analyze_faces_biometric(image_path: str, threshold: float = 1.10) -> dict:
     """
     Riconosce i volti nell'immagine con ArcFace (InsightFace buffalo_l).
 
-    threshold=0.6 euclidean su vettori L2-normalizzati ≈ cosine similarity 0.82.
+    threshold=1.10 euclidea su vettori normed_embedding (unit norm) ≈ cosine similarity 0.40.
     Robusto a espressioni, angolazioni e illuminazione. Tunabile via FACE_MATCH_THRESHOLD.
     """
     empty = {
@@ -228,7 +230,7 @@ async def analyze_faces_biometric(image_path: str, threshold: float = 0.6) -> di
         faces = sorted(faces, key=lambda f: (f.bbox[0] + f.bbox[2]) / 2)
         total_faces = len(faces)
 
-        emb_new = np.stack([f.embedding for f in faces])  # [N, 512] L2-norm
+        emb_new = np.stack([f.normed_embedding for f in faces])  # [N, 512] L2-normalizzati (unit norm)
 
         # Carica tutti gli embedding noti (.npy ArcFace)
         known_faces_data = []
