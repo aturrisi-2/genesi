@@ -518,7 +518,11 @@ def build_conversation_context(user_id: str, current_message: str,
     # messaggio è una vera richiesta di conoscenza/aiuto, non per le chiacchiere di gruppo.
     # Evita ~500ms di latenza per ogni "si", "perché", "anche noi" → niente risposte stantie.
     def _looks_like_knowledge_query(msg: str) -> bool:
-        m = (msg or "").split("[")[0].strip()  # togli le annotazioni [GRUPPO...]/[Contenuto...]
+        # Rimuovi TUTTI i blocchi [...] iniettati a valle (in gruppo il messaggio
+        # INIZIA con [IDENTITA ASSOLUTA...] -> split("[")[0] dava vuoto e nascondeva
+        # la domanda reale, es. "come si affronta un attacco cardiaco").
+        m = _re.sub(r"\[[^\]]*\]", " ", msg or "")
+        m = _re.sub(r"\s+", " ", m).strip()
         if len(m) < 12:
             return False
         ml = m.lower()
@@ -541,7 +545,8 @@ def build_conversation_context(user_id: str, current_message: str,
     def _has_kb_topic(msg: str) -> bool:
         """Vero se il messaggio tocca un argomento da knowledge base (salute, veterinaria,
         psicologia, primo soccorso): merita la ricerca SEMANTICA, più precisa."""
-        ml = (msg or "").split("[")[0].strip().lower()
+        ml = _re.sub(r"\[[^\]]*\]", " ", msg or "")
+        ml = _re.sub(r"\s+", " ", ml).strip().lower()
         if len(ml) < 8:
             return False
         return any(k in ml for k in _KB_TOPIC_KW)
