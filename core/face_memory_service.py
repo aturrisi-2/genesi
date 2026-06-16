@@ -657,7 +657,7 @@ async def handle_text_identification(
         # #B fix: awaiting attivo, nessun nome fornito, ma l'utente CHIEDE chi sono.
         # Senza guida il LLM allucina "non vedo l'immagine". Istruiscilo a richiedere i nomi.
         log("FACE_REASK_INJECTED", session=session_id, remaining=remaining, text_preview=text[:60])
-        _pos_m = _re.search(r'\[UNKNOWN_HUMAN_POS:([^\]]+)\]', desc_img or "")
+        _pos_m = re.search(r'\[UNKNOWN_HUMAN_POS:([^\]]+)\]', desc_img or "")
         _pos_str = _pos_m.group(1).strip() if _pos_m else ""
         _pos_clause = f" (in posizione: {_pos_str})" if _pos_str else ""
         sistema_msg = (
