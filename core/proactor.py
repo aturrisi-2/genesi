@@ -3980,22 +3980,26 @@ Messaggio: "{message}" """
         resp_lower = response.lower()
         if not any(p in resp_lower for p in _REFUSAL_PHRASES):
             return response
+        # Query/guard SOLO sulla domanda reale dell'utente: rimuovi TUTTI i blocchi
+        # [...] iniettati a valle (prompt "[IDENTITÀ ASSOLUTA...]", "[GRUPPO...]",
+        # "[Contenuto immagine: ...]", contesto). Senza questo, in gruppo il message
+        # è arricchito col contesto (foto/volti dei turni precedenti) → il guard sotto
+        # darebbe falsi positivi e bloccherebbe OGNI ricerca, e la query userebbe il
+        # prompt di sistema → fonti casuali.
+        _clean_msg = message.split("\n\n[CONTESTO PAGINA]")[0]
+        _clean_msg = _clean_msg.split("\n\n[ISTRUZIONE WIDGET]")[0]
+        _clean_msg = re.sub(r"\[[^\]]*\]", " ", _clean_msg, flags=re.DOTALL)
+        _clean_msg = re.sub(r"\s+", " ", _clean_msg).strip()
         # GUARD: niente auto-search per domande su contenuto LOCALE (foto/immagine/
-        # volti/soggetti). Qui "non ho informazioni" è un fallimento di contesto, non
-        # una mancanza di dati dal web → una ricerca darebbe fonti irrilevanti.
-        _msg_low = message.lower()
+        # volti/soggetti) — lì "non ho info" è un fallimento di contesto, non di dati web.
+        _msg_low = _clean_msg.lower()
         if any(w in _msg_low for w in ("foto", "immagine", "soggett", "volt",
                                        "nella foto", "in foto", "ritratt")):
             log("AUTO_SEARCH_SKIP_LOCAL", user_id=user_id, reason="photo_or_local_content")
             return response
         try:
             from core.live_search_service import search_for_answer
-            _auto_query = message.split("\n\n[CONTESTO PAGINA]")[0].strip()
-            _auto_query = _auto_query.split("\n\n[ISTRUZIONE WIDGET]")[0].strip()
-            # Pulisci i blocchi di sistema/gruppo dalla query: senza questo la ricerca
-            # userebbe il prompt "[IDENTITÀ ASSOLUTA...]"/"[GRUPPO...]" come testo → fonti casuali.
-            _auto_query = re.sub(r"\[(IDENTIT[AÀ][^\]]*|GRUPPO[^\]]*|SISTEMA[^\]]*)\]",
-                                 "", _auto_query, flags=re.IGNORECASE).strip()
+            _auto_query = _clean_msg
             if len(_auto_query) < 3:
                 log("AUTO_SEARCH_SKIP_EMPTY_QUERY", user_id=user_id)
                 return response
