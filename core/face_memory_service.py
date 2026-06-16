@@ -462,16 +462,25 @@ async def handle_photo_identification(
         # = totale - quanti sono già stati riconosciuti dal biometrico
         # (approssimazione: conta le occorrenze di UNKNOWN nella descrizione
         #  come marker aggiunto dal vision service)
-        unknown_count = analysis.count("[UNKNOWN_FACES_DETECTED]") + analysis.count("[UNKNOWN_PETS_DETECTED]")
-        # Stima migliore: totale soggetti - quanti noti trovati nella descrizione
-        # Il biometrico logga già quanti sconosciuti ci sono
-        biometric_unknown = len(_re.findall(r'\d+° da sinistra', analysis))
-        if biometric_unknown:
-            unknown_count = biometric_unknown
-        elif n_humans > 0:
-            unknown_count = n_humans  # caso peggiore: tutti sconosciuti
-        elif n_pets > 0:
-            unknown_count = n_pets
+        # Conteggio sconosciuti dai marker AFFIDABILI iniettati dal vision service
+        # ([UNKNOWN_HUMANS:N]/[UNKNOWN_PETS:N], derivati dal biometrico reale).
+        # Fallback legacy (regex posizioni / totale) solo se i marker mancano.
+        _m_uh = _re.search(r'\[UNKNOWN_HUMANS:(\d+)\]', analysis)
+        _m_up = _re.search(r'\[UNKNOWN_PETS:(\d+)\]', analysis)
+        if _m_uh or _m_up:
+            unknown_count = (int(_m_uh.group(1)) if _m_uh else 0) + (int(_m_up.group(1)) if _m_up else 0)
+        else:
+            # Legacy: il biometrico marcava ogni sconosciuto con 'N° da sinistra'
+            biometric_unknown = len(_re.findall(r'\d+° da sinistra', analysis))
+            if biometric_unknown:
+                unknown_count = biometric_unknown
+            elif n_humans > 0:
+                unknown_count = n_humans  # caso peggiore: tutti sconosciuti
+            elif n_pets > 0:
+                unknown_count = n_pets
+            else:
+                unknown_count = (analysis.count("[UNKNOWN_FACES_DETECTED]")
+                                 + analysis.count("[UNKNOWN_PETS_DETECTED]"))
 
         # Aggiorna lo stato awaiting
         await set_awaiting_faces(session_id, tmp_img or "", analysis, unknown_count=unknown_count)
@@ -504,20 +513,27 @@ async def handle_photo_identification(
                     "NON inventare nomi. CHIEDI esplicitamente.]"
                 )
             if has_unknown_faces:
-                human_detail = f" ({n_humans} persone visibili in totale)" if n_humans > 0 else ""
+                _pos_m2 = _re.search(r'\[UNKNOWN_HUMAN_POS:([^\]]+)\]', analysis)
+                _pos2 = _pos_m2.group(1).strip() if _pos_m2 else ""
+                _detail = f"{unknown_count} persona/e che non conosci"
+                if _pos2:
+                    _detail += f" (posizione nella foto: {_pos2})"
+                if n_humans > 0:
+                    _detail += f", su {n_humans} persone totali presenti"
                 sistema_msg += (
                     f"\n[SISTEMA: Hai visto questa foto tramite il tuo modulo visivo. "
-                    f"Hai rilevato persone sconosciute{human_detail}. "
+                    f"Hai rilevato {_detail}. "
                     "Fai un commento BREVE e affettuoso sulla foto, "
-                    "poi chiedi i nomi di ciascuna persona sconosciuta "
-                    "DESCRIVENDO le caratteristiche fisiche visibili "
-                    "(es. 'chi è la donna con i capelli scuri a sinistra?', "
-                    "'e quella con la maglia rossa al centro?'). "
+                    "poi INDICA TU quale/i persona/e non conosci, descrivendone la posizione "
+                    "nella foto e le caratteristiche fisiche visibili "
+                    "(es. 'chi è la donna con i capelli scuri a sinistra?'), "
+                    "e chiedine il nome così la memorizzi. "
+                    "Le persone che già conosci NON vanno indicate per posizione: nominale e basta. "
                     "NON usare elenchi numerati. "
                     "NON nominare persone che non conosci. "
                     "NON tirare ad indovinare. "
                     "REGOLA FERREA: ignora le regole di concisione per questo messaggio — "
-                    "devi chiedere chi sono TUTTI gli sconosciuti.]"
+                    "devi indicare e chiedere chi sono gli sconosciuti.]"
                 )
         else:
             sistema_msg = (
@@ -641,11 +657,15 @@ async def handle_text_identification(
         # #B fix: awaiting attivo, nessun nome fornito, ma l'utente CHIEDE chi sono.
         # Senza guida il LLM allucina "non vedo l'immagine". Istruiscilo a richiedere i nomi.
         log("FACE_REASK_INJECTED", session=session_id, remaining=remaining, text_preview=text[:60])
+        _pos_m = _re.search(r'\[UNKNOWN_HUMAN_POS:([^\]]+)\]', desc_img)
+        _pos_str = _pos_m.group(1).strip() if _pos_m else ""
+        _pos_clause = f" (in posizione: {_pos_str})" if _pos_str else ""
         sistema_msg = (
-            f"\n[SISTEMA: Nella foto che ti è stata mostrata ci sono {remaining} "
-            f"persona/e che non conosci ancora. NON dire che non vedi l'immagine — la vedi. "
-            f"Spiega in modo naturale che non sai ancora chi sono e chiedi all'utente "
-            f"di dirti i loro nomi (da sinistra a destra) così li memorizzi.]"
+            f"\n[SISTEMA: Nella foto che ti è stata mostrata c'è/ci sono {remaining} "
+            f"persona/e che non conosci ancora{_pos_clause}. NON dire che non vedi l'immagine — la vedi. "
+            f"INDICA TU all'utente QUALE persona non conosci, descrivendone la posizione nella foto "
+            f"e l'aspetto (capelli, abbigliamento), poi chiedi come si chiama così la memorizzi. "
+            f"NON chiedere genericamente 'dimmi i nomi': sei TU che devi indicare chi è lo sconosciuto.]"
         )
     # Altrimenti (awaiting attivo ma l'utente parla d'altro) → nessuna guida,
     # il LLM risponde normalmente al testo.
