@@ -99,9 +99,12 @@ async def describe_image(path: str) -> str:
         "'pelo nero con petto bianco', 'manto dorato'), markings distintivi (macchie, colore orecchie, segni particolari), "
         "taglia (piccolo/medio/grande), posizione nella foto. "
         "ESEMPIO animale: 'un gatto di taglia media, pelo tigrato grigio e bianco, con macchia bianca sul muso, a sinistra'. "
-        "PER OGNI SOGGETTO NOTO (fornito nei riferimenti): cita esattamente il nome, la posizione "
-        "e l'espressione/stato d'animo visibile (es. sorridente, serio, imbronciato, sorpreso, pensieroso). "
-        "NON inventare nomi. NON indovinare chi siano. Descrivi e basta.\n"
+        "PER OGNI SOGGETTO NOTO (persona o animale già identificato nei riferimenti): cita SOLO il nome, "
+        "ed eventualmente l'espressione/stato d'animo o cosa sta facendo, per un'interazione naturale. "
+        "NON indicare la posizione e NON descrivere l'aspetto fisico dei soggetti NOTI. "
+        "La POSIZIONE ESATTA nella foto e la descrizione fisica vanno date SOLO per i soggetti SCONOSCIUTI "
+        "(persone o animali non identificati), per permettere all'utente di riconoscerli e salvarli. "
+        "NON inventare nomi. NON indovinare chi siano i soggetti sconosciuti.\n"
         "'gender_hints': array di oggetti con 'position' (numero intero 0=primo da sinistra) e 'gender' (M o F) per ogni persona umana. "
         "Es: [{\"position\": 0, \"gender\": \"F\"}, {\"position\": 1, \"gender\": \"M\"}].\n"
         "'unknown_faces_detected': true se c'è ALMENO UNA persona umana NON presente nei riferimenti forniti.\n"
@@ -152,9 +155,11 @@ async def describe_image(path: str) -> str:
             content_array.append({
                 "type": "text",
                 "text": (
-                    f"RIFERIMENTI VOLTI NOTI (già identificati dal sistema biometrico): {names_str}. "
-                    "REGOLA: DEVI includere TUTTI questi nomi con la loro posizione esatta nella 'description'. "
-                    "Non accorciare, non omettere nessuno."
+                    f"SOGGETTI NOTI (già identificati dal sistema biometrico): {names_str}. "
+                    "REGOLA: cita TUTTI questi nomi nella 'description', senza ometterne nessuno. "
+                    "NON aggiungere la loro posizione ('1° da sinistra') né descriverne l'aspetto fisico: "
+                    "sono già noti. Interagisci con la scena in modo naturale (espressione, attività, contesto). "
+                    "La posizione esatta serve SOLO per gli eventuali soggetti SCONOSCIUTI."
                 )
             })
 
