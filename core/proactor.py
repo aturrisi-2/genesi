@@ -4035,8 +4035,14 @@ Messaggio: "{message}" """
                 )
             sys_prompt = (
                 "Sei Genesi, un assistente AI personale italiano. "
-                "Hai appena trovato informazioni aggiornate online.\n\n"
-                f"{web_block}\n{instruction}"
+                "Hai appena cercato online.\n\n"
+                f"{web_block}\n{instruction}\n\n"
+                "ONESTÀ ASSOLUTA: usa SOLO ciò che è realmente scritto nei dati qui sopra. "
+                "Se i dati NON rispondono alla domanda dell'utente (argomento diverso, fonte non "
+                "pertinente, nessun dettaglio sull'evento o sul fatto richiesto), NON inventare e "
+                "NON riempire: dì con naturalezza che non hai trovato informazioni specifiche. "
+                "MAI affermare com'è andato un evento, dare un giudizio o un'opinione "
+                "('è stato un grande spettacolo', 'è andata benissimo') se non è esplicitamente nei dati."
             )
             new_response = await llm_service._call_model(
                 "openai/gpt-4o-mini",
