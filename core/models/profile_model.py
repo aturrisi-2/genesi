@@ -10,6 +10,14 @@ class Pet(BaseModel):
 class Child(BaseModel):
     name: str
 
+class Relative(BaseModel):
+    """Parente o relazione sociale dell'utente, estratta semanticamente.
+    relation è una stringa libera (sorella, zio, cugino, amico, collega, ...),
+    NON una lista chiusa: la classifica il LLM."""
+    name: str
+    relation: str
+    gender: Optional[str] = None
+
 class UserProfile(BaseModel):
     # Identity & metadata
     user_id: Optional[str] = None
@@ -23,6 +31,7 @@ class UserProfile(BaseModel):
     # Collections
     pets: List[Pet] = Field(default_factory=list)
     children: List[Child] = Field(default_factory=list)
+    relatives: List[Relative] = Field(default_factory=list)
     interests: List[str] = Field(default_factory=list)
     preferences: List[str] = Field(default_factory=list)
     traits: List[str] = Field(default_factory=list)

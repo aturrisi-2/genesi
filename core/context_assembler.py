@@ -341,6 +341,16 @@ class ContextAssembler:
         if children:
             names = [c['name'] if isinstance(c, dict) else str(c) for c in children]
             parts.append(f"Figli: {', '.join(names)}")
+        # Relatives (parenti + relazioni sociali, estratti semanticamente)
+        relatives = profile.get('relatives', [])
+        if relatives and isinstance(relatives, list):
+            rel_descs = [
+                f"{r['name']} ({r['relation']})"
+                for r in relatives
+                if isinstance(r, dict) and r.get('name') and r.get('relation')
+            ]
+            if rel_descs:
+                parts.append(f"Parenti e relazioni: {', '.join(rel_descs)}")
         # Pets
         pets = profile.get('pets', [])
         if pets:

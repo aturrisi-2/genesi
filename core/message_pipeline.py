@@ -344,6 +344,18 @@ async def schedule_memory_tasks(
             except Exception as e:
                 logger.debug("PIPELINE_PERSONAL_FACTS_ERR %s", e)
 
+    async def _relatives():
+        async with _BACKGROUND_SEM:
+            try:
+                from core.relatives_extractor import extract_relatives, merge_relatives
+                from core.storage import storage as _storage
+                prof = await _storage.load(f"profile:{user_id}", default={}) or {}
+                rels = await extract_relatives(user_message, speaker_name=prof.get("name"))
+                if rels and merge_relatives(prof, rels):
+                    await _storage.save(f"profile:{user_id}", prof)
+            except Exception as e:
+                logger.debug("PIPELINE_RELATIVES_ERR %s", e)
+
     async def _episodes():
         async with _BACKGROUND_SEM:
             try:
@@ -422,6 +434,7 @@ async def schedule_memory_tasks(
     if should_run_llm and len(user_message) > 10:
         asyncio.create_task(_personal_facts())
         asyncio.create_task(_episodes())
+        asyncio.create_task(_relatives())
     asyncio.create_task(_global_memory())
     asyncio.create_task(_predictive())
     asyncio.create_task(_episode_resolution())

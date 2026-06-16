@@ -241,6 +241,7 @@ async def try_extract_faces_from_text(
     desc_img: str,
     session_uid: str,
     speaker_name: str | None = None,
+    owner_user_id: str | None = None,
 ) -> tuple[bool, list[str]]:
     """
     FUNZIONE CENTRALIZZATA — usata identicamente da WhatsApp, Telegram e Web.
@@ -321,19 +322,23 @@ async def try_extract_faces_from_text(
         "7. Per animali ('type':'pet'): aggiungi 'species': 'cane'/'gatto'/'uccello'/ecc. "
         "   dalla descrizione visiva.\n"
         "8. Se l'utente non fornisce nomi (parla d'altro), restituisci [].\n"
-        "9. MAI estrarre descrittori relazionali come nomi "
-        "   (es. 'mia mamma', 'mio figlio', 'la moglie'). "
-        "   Estrai SOLO il nome proprio di battesimo. "
-        "   Se l'utente dice 'quella è mia mamma Iolanda', il nome è 'Iolanda'.\n"
+        "9. MAI estrarre descrittori relazionali come NOME "
+        "   (es. 'mia mamma', 'mio figlio', 'la moglie' NON sono nomi). "
+        "   In 'name' va SOLO il nome proprio di battesimo. "
+        "   Se l'utente dichiara ANCHE la relazione con sé ('quella è mia sorella Elena', "
+        "   'mio zio Pino', 'il mio amico Luca'), mettila nel campo 'relation' come testo "
+        "   libero minuscolo (sorella, zio, cugino, mamma, amico, collega...). "
+        "   Se nessuna relazione è dichiarata, OMETTI 'relation'. "
+        "   Es: 'quella è mia mamma Iolanda' → name='Iolanda', relation='mamma'.\n"
         "10. Per animali: MAI usare specie o razza come nome ('il mio gatto', 'gatto persiano' "
         "    NON sono nomi). Il nome è quello dato dall'utente all'animale (es. 'Mignolo', 'Rio'). "
         "    Se l'utente non ha nominato l'animale, OMETTI quella voce.\n"
         "11. AUTO-RIFERIMENTO: se l'utente parla in prima persona di sé ('sono io', "
         "    'questo sono io'), quel soggetto è SEMPRE 'type':'human' ed è la PERSONA che scrive "
         "    (vedi 'CHI STA SCRIVENDO'). MAI associare un auto-riferimento a un animale.\n\n"
-        "Output ESCLUSIVAMENTE come array JSON:\n"
+        "Output ESCLUSIVAMENTE come array JSON (campo 'relation' solo se dichiarata):\n"
         "[{\"name\": \"Mariella\", \"position_index\": 0, \"type\": \"human\", "
-        "\"gender\": \"F\", \"visual_desc\": \"donna capelli biondi a sinistra\"}, "
+        "\"gender\": \"F\", \"relation\": \"sorella\", \"visual_desc\": \"donna capelli biondi a sinistra\"}, "
         "{\"name\": \"Mignolo\", \"position_index\": 1, \"type\": \"pet\", "
         "\"species\": \"gatto\", \"gender\": \"M\", \"visual_desc\": \"gatto tigrato grigio\"}]\n"
         "Nessun testo fuori dal JSON."
@@ -357,6 +362,7 @@ async def try_extract_faces_from_text(
 
         saved_count = 0
         saved_names = []
+        relatives_found = []  # relazioni dichiarate insieme ai volti ("mia sorella Elena")
 
         for face_data in parsed_faces:
             name = (face_data.get("name") or "").strip()
@@ -405,6 +411,24 @@ async def try_extract_faces_from_text(
                                 name, pos_idx, gender, visual_desc)
                     saved_count += 1
                     saved_names.append(name)
+                    # Relazione dichiarata insieme al volto ("quella è mia sorella Elena")
+                    _rel = (face_data.get("relation") or "").strip().lower()
+                    if _rel:
+                        relatives_found.append({
+                            "name": name, "relation": _rel,
+                            "gender": gender if gender in ("M", "F") else None,
+                        })
+
+        # Salva le relazioni dichiarate nel profilo del proprietario (se noto)
+        if relatives_found and owner_user_id:
+            try:
+                from core.relatives_extractor import merge_relatives
+                from core.storage import storage
+                _prof = await storage.load(f"profile:{owner_user_id}", default={}) or {}
+                if merge_relatives(_prof, relatives_found):
+                    await storage.save(f"profile:{owner_user_id}", _prof)
+            except Exception as _re_err:
+                logger.debug("EXTRACT_RELATIVES_SAVE_ERR %s", _re_err)
 
         if saved_count > 0:
             # Aggiorna lo stato awaiting con i nuovi nomi identificati
@@ -595,6 +619,7 @@ async def handle_text_identification(
     session_id: str,
     text: str,
     speaker_name: str | None = None,
+    owner_user_id: str | None = None,
 ) -> dict:
     """
     HANDLER CENTRALIZZATO per testo che potrebbe contenere identificazioni di volti.
@@ -629,7 +654,8 @@ async def handle_text_identification(
     desc_img = awaiting.get("description", "")
 
     faces_saved, saved_names = await try_extract_faces_from_text(
-        text, tmp_img, desc_img, session_id, speaker_name=speaker_name
+        text, tmp_img, desc_img, session_id, speaker_name=speaker_name,
+        owner_user_id=owner_user_id,
     )
 
     # Rileggi lo stato aggiornato
