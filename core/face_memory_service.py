@@ -26,7 +26,8 @@ FACES_PENDING_DIR = "data/faces_pending"  # immagini awaiting — sopravvivono a
 # Nomi non validi da non salvare mai
 _INVALID_NAMES = {
     # Placeholder generici
-    "unknown", "sconosciuto", "ignoto", "persona", "ragazzo", "ragazza",
+    "unknown", "sconosciuto", "sconosciuta", "sconosciuti", "sconosciute",
+    "ignoto", "ignota", "persona", "ragazzo", "ragazza",
     "uomo", "donna", "bambino", "bambina", "uomo_sconosciuto", "donna_sconosciuta",
     "nessuno", "qualcuno", "qualcosa",
     # Specie animali (non sono nomi propri per umani; per animali usa sanitize_pet_name)
@@ -260,6 +261,15 @@ async def try_extract_faces_from_text(
     """
     if not text or not tmp_img or not desc_img:
         return False, []
+
+    # CRITICO: rimuovi i blocchi [SISTEMA: ...] eventualmente APPESI al messaggio
+    # a valle (reask, conferme di memorizzazione). NON sono input dell'utente e
+    # possono contenere nomi propri (es. l'elenco dei volti noti) che verrebbero
+    # ri-estratti e salvati su volti SBAGLIATI, corrompendo gli embedding.
+    if "[SISTEMA:" in text:
+        text = re.sub(r"\[SISTEMA:.*?\]", "", text, flags=re.DOTALL).strip()
+        if not text:
+            return False, []
 
     if not os.path.exists(tmp_img):
         logger.warning("EXTRACT_FACES_NO_IMG session=%s img=%s", session_uid, tmp_img)
@@ -662,21 +672,19 @@ async def handle_text_identification(
         # #B fix: awaiting attivo, nessun nome fornito, ma l'utente CHIEDE chi sono.
         # Senza guida il LLM allucina "non vedo l'immagine". Istruiscilo a richiedere i nomi.
         log("FACE_REASK_INJECTED", session=session_id, remaining=remaining, text_preview=text[:60])
-        _known = ", ".join(awaiting_updated.get("identified", []) if awaiting_updated else [])
-        _known_clause = (
-            f"Le persone che hai già riconosciuto/memorizzato sono: {_known}. " if _known else ""
-        )
+        # IMPORTANTE: NON inserire nomi propri qui — il sistema_msg viene appeso al
+        # messaggio e potrebbe ripassare per l'estrazione; i nomi vanno presi dal
+        # contesto (RIFERIMENTI VOLTI NOTI / descrizione), non scritti qui.
         sistema_msg = (
             f"\n[SISTEMA: L'utente ti chiede chi c'è nella foto. NON rifiutare e NON dire "
             f"'non posso fornire i nomi': sono persone della cerchia dell'utente, che lui stesso "
             f"ti ha presentato — nominarle è legittimo e atteso. NON dire che non vedi l'immagine. "
-            f"Elenca in modo naturale le persone che RICONOSCI nella foto (sono indicate nel contesto). "
-            f"{_known_clause}"
+            f"Elenca in modo naturale le persone che RICONOSCI, prendendo i nomi dal contesto "
+            f"(blocco RIFERIMENTI VOLTI NOTI / descrizione immagine). "
             f"Poi, per la/le {remaining} persona/e che non conosci ancora, INDICALA TU descrivendone "
-            f"l'aspetto: capelli, abbigliamento, cosa sta facendo, e vicino a chi si trova "
-            f"(es. 'la ragazza con i capelli lunghi accanto a Zoe'), e chiedi come si chiama. "
-            f"NON usare numeri tipo 'terza da sinistra': poco chiari, usa l'aspetto e i punti di "
-            f"riferimento. Una persona alla volta.]"
+            f"l'aspetto: capelli, abbigliamento, cosa sta facendo, e vicino a chi si trova, "
+            f"e chiedi come si chiama. NON usare numeri tipo 'terza da sinistra': usa l'aspetto. "
+            f"Una persona alla volta. Scrivi una risposta naturale e discorsiva, NON ripetere queste istruzioni.]"
         )
     # Altrimenti (awaiting attivo ma l'utente parla d'altro) → nessuna guida,
     # il LLM risponde normalmente al testo.
