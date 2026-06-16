@@ -178,7 +178,9 @@ class ManualService:
                 break
             
             source_parts = []
-            source_header = f"--- MANUALE: {source} ---"
+            # Nome leggibile per la citazione (no estensione/trattini)
+            _readable = source.rsplit(".", 1)[0].replace("-", " ").replace("_", " ").strip().title()
+            source_header = f"--- MANUALE: {_readable} ---"
             
             # Stima dello spazio rimanente per l'intestazione
             rem_space = limit_chars - current_len

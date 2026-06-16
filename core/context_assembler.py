@@ -557,8 +557,15 @@ def build_conversation_context(user_id: str, current_message: str,
             from core.manual_service import manual_service
             snip = manual_service.search(current_message, limit_chars=3000)
             if snip:
-                sections.append(f"[MANUALI_SISTEMA_CONTESTO]\n{snip}\n[/MANUALI_SISTEMA_CONTESTO]\n"
-                                f"ISTRUZIONE: Se rilevante, rispondi attingendo autonomamente dai manuali sopra.")
+                sections.append(
+                    f"[MANUALI_SISTEMA_CONTESTO]\n{snip}\n[/MANUALI_SISTEMA_CONTESTO]\n"
+                    "ISTRUZIONE: Rispondi attingendo ai manuali qui sopra, con tono professionale e chiaro. "
+                    "Struttura la risposta in modo leggibile: frasi brevi, un elenco puntato per i passaggi "
+                    "pratici quando utile, **grassetto** sui punti chiave. "
+                    "CITA SEMPRE la fonte alla fine: nome del MANUALE e capitolo — li trovi nei marcatori "
+                    "'--- MANUALE: ... ---' e '[Titolo capitolo]'. Esempio: "
+                    "'📚 Fonte: Manuale di Primo Soccorso — cap. \"Arresto cardiaco\"'. "
+                    "Per sintomi importanti o persistenti, invita con delicatezza a sentire un medico.")
                 logger.info("MANUAL_CONTEXT_INJECTED len=%d", len(snip))
                 return True
         except Exception as me:
@@ -585,9 +592,12 @@ def build_conversation_context(user_id: str, current_message: str,
                 _snippet = "\n\n".join(_parts)
                 sections.append(
                     f"[MANUALI_SISTEMA_CONTESTO]\n{_snippet}\n[/MANUALI_SISTEMA_CONTESTO]\n"
-                    f"ISTRUZIONE: Se pertinente, rispondi attingendo a queste informazioni dei manuali clinici. "
-                    f"Parla con parole tue, MAI citare nomi di file o numeri di pagina. "
-                    f"Per sintomi importanti o persistenti, ricorda con delicatezza di sentire un medico."
+                    "ISTRUZIONE: Rispondi attingendo a queste informazioni dei manuali clinici, con tono "
+                    "professionale e chiaro. Struttura la risposta in modo leggibile: frasi brevi, un elenco "
+                    "puntato per i passaggi pratici quando utile, **grassetto** sui punti chiave. Parla con "
+                    "parole tue (non copiare). CITA SEMPRE la fonte alla fine: il capitolo indicato tra "
+                    "'[...]' e, se presente, il manuale. Esempio: '📚 Fonte: cap. \"Approccio alla cefalea\"'. "
+                    "Per sintomi importanti o persistenti, ricorda con delicatezza di sentire un medico."
                 )
                 logger.info("MANUAL_CONTEXT_INJECTED_VEC chunks=%d len=%d top=%.3f",
                             len(_good), len(_snippet), _good[0]["score"])
