@@ -60,6 +60,7 @@ from api.system_diagnostics import router as system_diagnostics_router
 from auth.database import init_db, async_session
 from auth.models import Visit
 from core.log import log
+from core import automation_flags
 from core.reminder_engine import reminder_engine
 from core.training_autopilot import autopilot as training_autopilot
 from core.moltbook_service import moltbook_service
@@ -83,22 +84,48 @@ async def lifespan(app: FastAPI):
     _bg_tasks: set = set()
     from core.birthday_service import birthday_scheduler as _birthday_scheduler
     from core.instagram_publisher import instagram_publisher_scheduler as _ig_publisher
-    for coro, label in [
-        (reminder_checker_background(),        "REMINDER_CHECKER"),
-        (calendar_checker_background(),        "CALENDAR_CHECKER"),
-        (lab_cycle_scheduler(),                "LAB_CYCLE_SCHEDULER"),
-        (evolution_scheduler(),                "EVOLUTION_SCHEDULER"),
-        (training_autopilot.run_background_loop(), "TRAINING_AUTOPILOT"),
-        (moltbook_heartbeat_background(),      "MOLTBOOK_HEARTBEAT"),
-        (improvement_health.run_background_loop(), "IMPROVEMENT_HEALTH"),
-        (facebook_heartbeat_background(),      "FACEBOOK_HEARTBEAT"),
-        (_birthday_scheduler(),                "BIRTHDAY_SCHEDULER"),
-        (_ig_publisher(),                      "IG_PUBLISHER"),
-    ]:
-        t = asyncio.create_task(coro)
+
+    def _start_background(coro_factory, label: str, enabled: bool, reason: str):
+        if not enabled:
+            log(
+                "AUTOMATION_TASK_NOT_STARTED",
+                label=label,
+                passive=automation_flags.passive_mode(),
+                reason=reason,
+            )
+            return
+        t = asyncio.create_task(coro_factory())
         _bg_tasks.add(t)
         t.add_done_callback(_bg_tasks.discard)
         log(f"{label}_STARTED", status="ok")
+
+    passive = automation_flags.passive_mode()
+    _start_background(lambda: reminder_checker_background(), "REMINDER_CHECKER",
+                      automation_flags.flag_enabled("reminders"), "ENABLE_REMINDERS=false")
+    _start_background(lambda: calendar_checker_background(), "CALENDAR_CHECKER",
+                      (not passive and automation_flags.flag_enabled("calendar_check")),
+                      "passive_mode_or_calendar_disabled")
+    _start_background(lambda: lab_cycle_scheduler(), "LAB_CYCLE_SCHEDULER",
+                      not passive, "passive_mode")
+    _start_background(lambda: evolution_scheduler(), "EVOLUTION_SCHEDULER",
+                      not passive, "passive_mode")
+    _start_background(lambda: training_autopilot.run_background_loop(), "TRAINING_AUTOPILOT",
+                      automation_flags.flag_enabled("training_autopilot"), "ENABLE_TRAINING_AUTOPILOT=false")
+    _start_background(lambda: moltbook_heartbeat_background(), "MOLTBOOK_HEARTBEAT",
+                      automation_flags.flag_enabled("moltbook_autopublish"), "ENABLE_MOLTBOOK_AUTOPUBLISH=false")
+    _start_background(lambda: improvement_health.run_background_loop(), "IMPROVEMENT_HEALTH",
+                      automation_flags.flag_enabled("improvement_health"), "ENABLE_IMPROVEMENT_HEALTH=false")
+    _start_background(lambda: facebook_heartbeat_background(), "FACEBOOK_HEARTBEAT",
+                      automation_flags.flag_enabled("facebook_automation"), "ENABLE_FACEBOOK_AUTOMATION=false")
+    _start_background(lambda: _birthday_scheduler(), "BIRTHDAY_SCHEDULER",
+                      (automation_flags.flag_enabled("morning_greetings")
+                       or automation_flags.flag_enabled("birthday_greetings")),
+                      "birthday_and_morning_greetings_disabled")
+    _start_background(lambda: _ig_publisher(), "IG_PUBLISHER",
+                      (automation_flags.flag_enabled("instagram_reels")
+                       or automation_flags.flag_enabled("instagram_posting")
+                       or automation_flags.flag_enabled("instagram_comment_replies")),
+                      "instagram_flags_disabled")
 
     # Indice vettoriale manuali: (ri)costruisce SOLO se i manuali sono cambiati
     # (idempotente via firma) — così aggiungere un manuale lo rende cercabile al riavvio.
