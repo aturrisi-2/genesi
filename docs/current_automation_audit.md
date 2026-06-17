@@ -117,6 +117,9 @@ Nuovo modulo: **`core/automation_flags.py`**.
    uscita outbound. Riattivabile senza redeploy (variabili ambiente).
 4. **On-request intatto**: le risposte a chi interpella Genesi non passano dai
    flag proattivi.
+5. **Controllo admin**: il pannello `/admin` espone una sezione "Automazioni"
+   che salva override persistenti in `memory/admin/automation_flags.json`.
+   Gli override admin hanno precedenza sulle variabili ambiente.
 
 ### 3.2 Variabili ambiente introdotte (tutte default sicuro)
 

@@ -437,6 +437,32 @@
             </div>
 
             <!-- ── DEEP CONVERSATION TRAINING ──────────────────────────── -->
+            <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">Automazioni</h2>
+            <div id="automation-section"
+                style="background:rgba(14,165,233,0.05); border:1px solid rgba(14,165,233,0.22); border-radius:8px; padding:15px; margin-top:12px;">
+                <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap; margin-bottom:12px;">
+                    <div>
+                        <div id="automation-master-state" style="font-size:0.95rem; font-weight:700; color:#38bdf8;">Caricamento...</div>
+                        <div style="font-size:0.78rem; color:#9ca3af; margin-top:3px;">
+                            Gli override vengono salvati in memoria locale e hanno precedenza sulle variabili ambiente.
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <button id="automation-save"
+                            style="padding:7px 14px; border-radius:6px; border:1px solid rgba(56,189,248,0.45); color:#7dd3fc; background:rgba(56,189,248,0.10); font-size:0.82rem; cursor:pointer;">
+                            Salva
+                        </button>
+                        <button id="automation-reset"
+                            style="padding:7px 14px; border-radius:6px; border:1px solid rgba(248,113,113,0.45); color:#fca5a5; background:rgba(248,113,113,0.06); font-size:0.82rem; cursor:pointer;">
+                            Reset override
+                        </button>
+                        <span id="automation-msg" style="font-size:0.78rem; color:#9ca3af;"></span>
+                    </div>
+                </div>
+                <div id="automation-loading" style="font-size:0.85rem; color:#7dd3fc;">Caricamento interruttori...</div>
+                <div id="automation-grid" style="display:none; grid-template-columns:1fr; gap:12px;"></div>
+            </div>
+
             <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">🧠 Deep Conversation Training</h2>
             <div id="dc-section"
                 style="background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:15px; margin-top:12px;">
@@ -558,6 +584,7 @@
             loadImprovementScore();
             loadCapabilityGaps();
             loadFacebookStatus();
+            loadAutomationStatus();
         }
 
         async function loadStats() {
@@ -1306,6 +1333,175 @@
                 document.getElementById('gaps-error').style.display = 'block';
             }
         }
+
+        const automationLabels = {
+            GENESI_PASSIVE_MODE: ['Modalita passiva', 'Spegne tutte le automazioni proattive.'],
+            ENABLE_PROACTIVE_MESSAGES: ['Messaggi proattivi', 'Umbrella per saluti, compleanni e interventi nei gruppi.'],
+            ENABLE_SOCIAL_AUTOPUBLISH: ['Pubblicazioni social', 'Umbrella per Instagram, Facebook e Moltbook.'],
+            ENABLE_MORNING_GREETINGS: ['Saluti mattutini', 'Buongiorno automatici su gruppi e canali.'],
+            ENABLE_BIRTHDAY_GREETINGS: ['Compleanni', 'Auguri e raccolta date in automatico.'],
+            ENABLE_GROUP_INTERVENTIONS: ['Interventi nei gruppi', 'Risposte non richieste in Telegram e WhatsApp gruppo.'],
+            ENABLE_GROUP_AUTO_PRESENTATION: ['Auto-presentazione gruppi', 'Messaggio quando Genesi entra in un gruppo.'],
+            ENABLE_GROUP_GREETING_REPLIES: ['Saluti personalizzati', 'Risposte automatiche a saluti e nuovi membri.'],
+            ENABLE_INSTAGRAM_POSTING: ['Instagram post', 'Pubblicazione automatica di post.'],
+            ENABLE_INSTAGRAM_REELS: ['Instagram reel', 'Pubblicazione automatica di reel.'],
+            ENABLE_INSTAGRAM_COMMENT_REPLIES: ['Commenti Instagram', 'Risposte automatiche via polling o webhook.'],
+            ENABLE_FACEBOOK_AUTOMATION: ['Facebook gruppi', 'Heartbeat, post, commenti e like automatici.'],
+            ENABLE_MOLTBOOK_AUTOPUBLISH: ['Moltbook', 'Post, commenti, follow, upvote e heartbeat autonomi.'],
+            ENABLE_TRAINING_AUTOPILOT: ['Training autopilot', 'Training automatico interno e consumi LLM.'],
+            ENABLE_IMPROVEMENT_HEALTH: ['Health monitor', 'Monitoraggio interno automatico.'],
+            ENABLE_REMINDERS: ['Reminder automatici', 'Consegna automatica dei reminder scaduti.'],
+            ENABLE_PROACTIVE_EMAIL: ['Email proattive', 'Invio email automatiche per reminder.'],
+            ENABLE_CALENDAR_CHECK: ['Check calendario', 'Controllo calendario solo diagnostico.'],
+            ENABLE_META_DM_REPLIES: ['DM Meta', 'Risposte a Messenger e Instagram DM quando interpellata.'],
+        };
+
+        const automationGroups = [
+            ['Master', ['GENESI_PASSIVE_MODE']],
+            ['Umbrella', ['ENABLE_PROACTIVE_MESSAGES', 'ENABLE_SOCIAL_AUTOPUBLISH']],
+            ['Messaggi e gruppi', [
+                'ENABLE_MORNING_GREETINGS',
+                'ENABLE_BIRTHDAY_GREETINGS',
+                'ENABLE_GROUP_INTERVENTIONS',
+                'ENABLE_GROUP_AUTO_PRESENTATION',
+                'ENABLE_GROUP_GREETING_REPLIES',
+                'ENABLE_REMINDERS',
+                'ENABLE_PROACTIVE_EMAIL',
+            ]],
+            ['Social e pubblicazione', [
+                'ENABLE_INSTAGRAM_POSTING',
+                'ENABLE_INSTAGRAM_REELS',
+                'ENABLE_INSTAGRAM_COMMENT_REPLIES',
+                'ENABLE_FACEBOOK_AUTOMATION',
+                'ENABLE_MOLTBOOK_AUTOPUBLISH',
+            ]],
+            ['Interni e on-request', [
+                'ENABLE_TRAINING_AUTOPILOT',
+                'ENABLE_IMPROVEMENT_HEALTH',
+                'ENABLE_CALENDAR_CHECK',
+                'ENABLE_META_DM_REPLIES',
+            ]],
+        ];
+
+        function automationEffectiveByEnv(registry, state) {
+            const result = { GENESI_PASSIVE_MODE: !!state.passive_mode };
+            Object.values(registry.flags || {}).forEach(spec => {
+                result[spec.env] = !!state.flags[Object.keys(registry.flags).find(k => registry.flags[k].env === spec.env)];
+            });
+            Object.values(registry.umbrellas || {}).forEach(spec => {
+                result[spec.env] = state.overrides && spec.env in state.overrides ? !!state.overrides[spec.env] : !!spec.default;
+            });
+            return result;
+        }
+
+        function automationDefaultValue(env, registry) {
+            if (env === 'GENESI_PASSIVE_MODE') return !!registry.master.default;
+            for (const spec of Object.values(registry.umbrellas || {})) {
+                if (spec.env === env) return !!spec.default;
+            }
+            for (const spec of Object.values(registry.flags || {})) {
+                if (spec.env === env) return !!spec.default;
+            }
+            return false;
+        }
+
+        function renderAutomationPanel(data) {
+            const registry = data.registry || {};
+            const state = data.state || {};
+            const overrides = state.overrides || {};
+            const effective = automationEffectiveByEnv(registry, state);
+            const grid = document.getElementById('automation-grid');
+            const loading = document.getElementById('automation-loading');
+            const master = document.getElementById('automation-master-state');
+
+            master.textContent = state.passive_mode ? 'Modalita passiva attiva: processi proattivi in pausa' : 'Modalita passiva disattivata';
+            master.style.color = state.passive_mode ? '#7dd3fc' : '#fbbf24';
+            loading.style.display = 'none';
+            grid.style.display = 'grid';
+
+            grid.innerHTML = automationGroups.map(([title, envs]) => {
+                const rows = envs.map(env => {
+                    const label = automationLabels[env] || [env, ''];
+                    const value = env in overrides ? !!overrides[env] : automationDefaultValue(env, registry);
+                    const isEffective = !!effective[env];
+                    const badgeColor = isEffective ? '#6ee7b7' : '#f87171';
+                    const badgeText = isEffective ? 'ATTIVO' : 'OFF';
+                    return `
+                        <label style="display:flex; gap:10px; align-items:flex-start; justify-content:space-between; padding:9px 0; border-top:1px solid rgba(255,255,255,0.06);">
+                            <span style="min-width:0;">
+                                <span style="display:block; color:#e5e7eb; font-size:0.84rem; font-weight:600;">${label[0]}</span>
+                                <span style="display:block; color:#8b949e; font-size:0.73rem; margin-top:2px;">${label[1]}</span>
+                                <span style="display:block; color:${badgeColor}; font-size:0.68rem; margin-top:4px; letter-spacing:0.04em;">${badgeText}</span>
+                            </span>
+                            <input class="automation-toggle" data-env="${env}" type="checkbox" ${value ? 'checked' : ''}
+                                style="width:18px; height:18px; flex:0 0 auto; accent-color:#38bdf8; margin-top:2px;">
+                        </label>`;
+                }).join('');
+                return `
+                    <div style="background:rgba(0,0,0,0.18); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:12px;">
+                        <div style="font-size:0.76rem; color:#7dd3fc; text-transform:uppercase; letter-spacing:0.08em; font-weight:700; margin-bottom:3px;">${title}</div>
+                        ${rows}
+                    </div>`;
+            }).join('');
+        }
+
+        async function loadAutomationStatus() {
+            const msgEl = document.getElementById('automation-msg');
+            try {
+                const res = await fetch('/api/admin/automation/status', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error(res.status);
+                renderAutomationPanel(await res.json());
+            } catch(e) {
+                document.getElementById('automation-loading').textContent = 'Errore nel caricamento automazioni.';
+                msgEl.textContent = '';
+            }
+        }
+
+        document.getElementById('automation-save').addEventListener('click', async () => {
+            const msgEl = document.getElementById('automation-msg');
+            const values = {};
+            document.querySelectorAll('.automation-toggle').forEach(el => {
+                values[el.dataset.env] = el.checked;
+            });
+            msgEl.textContent = 'Salvataggio...';
+            try {
+                const res = await fetch('/api/admin/automation/config', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ values })
+                });
+                if (!res.ok) throw new Error(res.status);
+                renderAutomationPanel(await res.json());
+                msgEl.style.color = '#7dd3fc';
+                msgEl.textContent = 'Salvato';
+                setTimeout(() => { msgEl.textContent = ''; }, 1800);
+            } catch(e) {
+                msgEl.style.color = '#f87171';
+                msgEl.textContent = 'Errore salvataggio';
+            }
+        });
+
+        document.getElementById('automation-reset').addEventListener('click', async () => {
+            if (!confirm('Rimuovere gli override admin e tornare a env/default?')) return;
+            const msgEl = document.getElementById('automation-msg');
+            msgEl.textContent = 'Reset...';
+            try {
+                const res = await fetch('/api/admin/automation/reset', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error(res.status);
+                renderAutomationPanel(await res.json());
+                msgEl.style.color = '#7dd3fc';
+                msgEl.textContent = 'Override rimossi';
+                setTimeout(() => { msgEl.textContent = ''; }, 1800);
+            } catch(e) {
+                msgEl.style.color = '#f87171';
+                msgEl.textContent = 'Errore reset';
+            }
+        });
 
         function doLogout(e) {
             e && e.preventDefault();
