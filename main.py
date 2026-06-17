@@ -52,6 +52,7 @@ from api.admin.capability_gaps import router as admin_capability_gaps_router
 from api.admin.facebook import router as admin_facebook_router
 from api.integrations import router as integrations_router
 from api.news import router as news_router
+from api.operational import router as operational_router
 from api.telegram import router as telegram_router
 from api.whatsapp import router as whatsapp_router
 from api.meta_messaging import router as meta_messaging_router
@@ -585,6 +586,7 @@ app.include_router(admin_capability_gaps_router, prefix="/api")
 app.include_router(admin_facebook_router, prefix="/api")
 app.include_router(integrations_router, prefix="/api")
 app.include_router(news_router)
+app.include_router(operational_router)
 app.include_router(coding_router)
 app.include_router(telegram_router)
 app.include_router(whatsapp_router)
