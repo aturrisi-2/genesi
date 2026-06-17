@@ -906,6 +906,19 @@ async def instagram_publisher_scheduler():
     while True:
         try:
             if _enabled():
+                from core import automation_flags as _af
+                instagram_active = (
+                    _af.flag_enabled("instagram_reels")
+                    or _af.flag_enabled("instagram_posting")
+                    or _af.flag_enabled("instagram_comment_replies")
+                )
+                if not instagram_active:
+                    if time.time() - last_heartbeat > 3600:
+                        log("AUTOMATION_SKIPPED", flag="instagram_publisher", passive=_af.passive_mode())
+                        last_heartbeat = time.time()
+                    await asyncio.sleep(300)
+                    continue
+
                 now = datetime.now(TZ_ROME)
                 today = now.strftime("%Y-%m-%d")
                 now_hm = now.strftime("%H:%M")
