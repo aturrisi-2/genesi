@@ -503,6 +503,10 @@ async def reply_to_comment(comment_id: str, username: str, text: str) -> bool:
     Usata sia dal webhook handler che dal polling di fallback del publisher.
     """
     try:
+        from core import automation_flags
+        if not automation_flags.ensure_active("instagram_comment_replies"):
+            return False
+
         from core.llm_service import llm_service
         ctx = f"Commento di @{username}: {text}" if username else f"Commento: {text}"
         reply = await llm_service._call_model(
@@ -590,6 +594,11 @@ async def _process_event(event: dict, platform: str, cfg: dict):
     if msg.get("is_echo"):
         # Messaggio inviato dalla pagina stessa → ignorare (previene loop)
         logger.info("META_EVENT_ECHO platform=%s", platform)
+        return
+
+    from core import automation_flags
+    if not automation_flags.flag_enabled("meta_dm_replies"):
+        log("AUTOMATION_SKIPPED", flag="meta_dm_replies", platform=platform)
         return
 
     sender_id = (event.get("sender") or {}).get("id", "")

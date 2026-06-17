@@ -421,7 +421,11 @@ class ImprovementHealthMonitor:
         logger.info("IMPROVEMENT_HEALTH_MONITOR_STARTED interval=%ds", CHECK_INTERVAL_S)
         while True:
             try:
-                await self.log_report()
+                # FASE 0 — modalità passiva: monitoraggio interno sospeso finché
+                # ENABLE_IMPROVEMENT_HEALTH non è riabilitato.
+                from core import automation_flags
+                if automation_flags.flag_enabled("improvement_health"):
+                    await self.log_report()
             except Exception as e:
                 logger.warning("IMPROVEMENT_HEALTH_MONITOR_ERROR err=%s", e)
             await asyncio.sleep(CHECK_INTERVAL_S)

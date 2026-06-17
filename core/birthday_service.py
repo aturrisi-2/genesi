@@ -1013,6 +1013,15 @@ async def birthday_scheduler():
 
     while True:
         try:
+            # FASE 0 — modalità passiva: nessun saluto mattutino né augurio
+            # proattivo finché morning_greetings/birthday_greetings non sono
+            # esplicitamente riabilitati.
+            from core import automation_flags
+            if not (automation_flags.flag_enabled("morning_greetings")
+                    or automation_flags.flag_enabled("birthday_greetings")):
+                await asyncio.sleep(300)
+                continue
+
             now = datetime.now(_TZ)
             today_str = now.date().isoformat()
             today_date = now.date()

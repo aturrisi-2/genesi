@@ -214,6 +214,17 @@ async def _group_should_intervene(
     Decide con LLM se Genesi deve intervenire nel gruppo WhatsApp.
     Fast-path per mention/nome diretti. LLM per tutto il resto.
     """
+    # FASE 0 — modalità passiva: senza interventi di gruppo né saluti automatici
+    # abilitati, Genesi resta in silenzio su tutto ciò che NON la interpella
+    # direttamente (mention). Le reply dirette e l'attesa-volti sono già gestite
+    # a monte di questa chiamata e non passano da qui.
+    from core import automation_flags
+    if not bot_mentioned and not (
+        automation_flags.flag_enabled("group_interventions")
+        or automation_flags.flag_enabled("group_greeting_replies")
+    ):
+        return False
+
     import re
     has_link = bool(re.search(r'https?://[^\s]+|www\.[^\s]+', f"{text} {caption}", re.IGNORECASE))
     if has_media or has_link:
@@ -1203,6 +1214,12 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             if (_pending_greet and _pending_greet.get("wa_id") == wa_id
                     and time.time() - _pending_greet.get("ts", 0) < 60):
                 try:
+                    from core import automation_flags
+                    if not automation_flags.flag_enabled("group_greeting_replies"):
+                        log("AUTOMATION_SKIPPED", flag="group_greeting_replies",
+                            platform="whatsapp", chat_id=chat_id)
+                        return
+
                     from core.group_greeting_service import group_greeting_service
                     from core.telegram_group_memory import append_group_history, stable_hash
                     # Estrai info membro in background (non blocca la risposta)

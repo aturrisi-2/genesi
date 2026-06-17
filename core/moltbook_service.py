@@ -1401,6 +1401,11 @@ class MoltbookService:
     # ── Heartbeat ───────────────────────────────────────────────────────────────
 
     async def heartbeat(self):
+        # FASE 0 — modalità passiva: nessuna pubblicazione/azione autonoma su
+        # Moltbook (MOLTBOK/MULTBOOK) finché il flag non è riabilitato.
+        from core import automation_flags
+        if not automation_flags.ensure_active("moltbook_autopublish"):
+            return
         if not self.api_key:
             log("MOLTBOOK_SKIP", reason="no api key")
             return

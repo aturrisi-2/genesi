@@ -222,6 +222,24 @@ async def _group_should_intervene(
     Decide con LLM se Genesi deve intervenire nel gruppo.
     Fast-path per mention/nome diretti. LLM per tutto il resto.
     """
+    # FASE 0 — modalità passiva: se Genesi non è interpellata direttamente
+    # (mention @bot, nome, o pulsanti del bot) e né interventi di gruppo né
+    # saluti automatici sono abilitati, resta in silenzio. Le reply dirette e
+    # l'attesa-volti sono gestite a monte e non passano da qui.
+    from core import automation_flags
+    _full = f"{text} {caption}"
+    _addressed = bool(
+        bot_mentioned
+        or (bot_username and f"@{bot_username.lower()}" in _full.lower())
+        or _GENESI_RE.search(_full)
+        or _full.strip() in ("🌦️ Meteo", "🤖 Aiuto")
+    )
+    if not _addressed and not (
+        automation_flags.flag_enabled("group_interventions")
+        or automation_flags.flag_enabled("group_greeting_replies")
+    ):
+        return False
+
     has_link = bool(re.search(r'https?://[^\s]+|www\.[^\s]+', f"{text} {caption}", re.IGNORECASE))
     if has_media or has_link or has_location:
         # Interviene sempre se viene inviato un elemento multimediale, un link o una posizione
@@ -648,6 +666,10 @@ async def _handle_group_join(chat_id: int, msg: dict):
 async def _welcome_new_member(chat_id: int, names: list[str]):
     """Benvenuto a un nuovo membro umano nel gruppo familiare."""
     try:
+        from core import automation_flags
+        if not automation_flags.ensure_active("group_greeting_replies"):
+            return
+
         await send_typing(chat_id)
         from core.llm_service import llm_service
         intro = await llm_service._call_model(
@@ -1443,6 +1465,12 @@ async def handle_update(update: dict):
                     and time.time() - _pending_greet.get("ts", 0) < 60):
                 _is_family = _is_tg_family_group(chat_id)
                 try:
+                    from core import automation_flags
+                    if not automation_flags.flag_enabled("group_greeting_replies"):
+                        log("AUTOMATION_SKIPPED", flag="group_greeting_replies",
+                            platform="telegram", chat_id=chat_id)
+                        return
+
                     from core.group_greeting_service import group_greeting_service
                     # Estrai info membro in background (non blocca la risposta)
                     asyncio.create_task(group_greeting_service.extract_and_save_member_info(

@@ -86,6 +86,12 @@ class TrainingAutopilot:
         logger.info("AUTOPILOT_STARTED interval=%ds max_lessons=%d", CHECK_INTERVAL_S, MAX_ACTIVE_LESSONS)
         while True:
             try:
+                # FASE 0 — modalità passiva: training automatico disattivato
+                # (consumo crediti LLM). Riattivabile con ENABLE_TRAINING_AUTOPILOT.
+                from core import automation_flags
+                if not automation_flags.flag_enabled("training_autopilot"):
+                    await asyncio.sleep(CHECK_INTERVAL_S)
+                    continue
                 await self._tick()
             except Exception as e:
                 logger.error("AUTOPILOT_TICK_ERROR err=%s", e)

@@ -175,6 +175,14 @@ async def reminder_checker_background():
     """
     while True:
         try:
+            # FASE 0 — modalità passiva totale: nessuna consegna automatica dei
+            # reminder (scelta esplicita: zero proattivo). Riattivabile con
+            # ENABLE_REMINDERS=true + GENESI_PASSIVE_MODE=false.
+            from core import automation_flags
+            if not automation_flags.flag_enabled("reminders"):
+                await asyncio.sleep(60)
+                continue
+
             # Get due reminders
             due_reminders = reminder_engine.get_due_reminders()
             
@@ -214,14 +222,14 @@ async def reminder_checker_background():
                         log("REMINDER_NOTIFICATION_ERROR", user_id=user_id, error=str(e))
                         # Non bloccare: reminder è già triggered anche se notifica fallisce
                     
-                    # Email notification
+                    # Email notification (proattiva → gated)
                     try:
                         from core.notification_email import send_reminder_email
                         from auth.database import get_user_by_id
                         from core.storage import storage
 
                         user = await get_user_by_id(user_id)
-                        if user and user.email:
+                        if automation_flags.flag_enabled("proactive_email") and user and user.email:
                             # Tenta di recuperare il nome dal profilo
                             profile = await storage.load(f"profile:{user_id}", default={})
                             user_name = profile.get("name", "")
@@ -297,8 +305,12 @@ async def facebook_heartbeat_background():
     await asyncio.sleep(120)   # attendi 2 min dopo startup
     while True:
         try:
-            from core.facebook_service import facebook_service as _fb
-            await _fb.heartbeat()
+            from core import automation_flags
+            if automation_flags.flag_enabled("facebook_automation"):
+                from core.facebook_service import facebook_service as _fb
+                await _fb.heartbeat()
+            else:
+                log("AUTOMATION_SKIPPED", flag="facebook_automation")
         except Exception as e:
             log("FACEBOOK_LOOP_ERROR", error=str(e))
         interval = random.randint(7200, 14400)   # 2-4 ore

@@ -923,8 +923,11 @@ async def instagram_publisher_scheduler():
                 state = _load_state()
                 slots_done = state.setdefault("published_slots", {}).get(today, [])
 
+                # FASE 0 — modalità passiva: flag centralizzati per ogni superficie
+                from core import automation_flags as _af
+
                 # Reel ogni IG_REELS_EVERY_DAYS giorni (default 3) allo slot orario
-                for slot in _reels_times():
+                for slot in (_reels_times() if _af.flag_enabled("instagram_reels") else []):
                     _rslot = f"reel@{slot}"
                     if _rslot not in slots_done and now_hm >= slot:
                         if not _reel_due(state):
@@ -942,7 +945,7 @@ async def instagram_publisher_scheduler():
                         log("IG_REEL_SLOT_DONE", slot=slot, published=rok)
                         slots_done = state["published_slots"].get(today, [])
 
-                for slot in _publish_times():
+                for slot in (_publish_times() if _af.flag_enabled("instagram_posting") else []):
                     if slot not in slots_done and now_hm >= slot:
                         logger.info("IG_PUB_SLOT_TRIGGER slot=%s", slot)
                         ok = await publish_one_post()
@@ -959,7 +962,8 @@ async def instagram_publisher_scheduler():
                         log("IG_PUB_SLOT_DONE", slot=slot, published=ok)
 
                 # Polling commenti ad ogni ciclo (5 min) — fallback dei webhook
-                await poll_and_reply_comments()
+                if _af.flag_enabled("instagram_comment_replies"):
+                    await poll_and_reply_comments()
 
                 if time.time() - last_insights > 6 * 3600:
                     await refresh_insights()

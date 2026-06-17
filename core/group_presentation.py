@@ -106,6 +106,15 @@ async def maybe_present_in_group(
     `is_family`: forza il tono; se None viene dedotto dal nome del gruppo.
     """
     try:
+        # FASE 0 — modalità passiva: nessuna auto-presentazione spontanea quando
+        # Genesi viene aggiunta a un gruppo. Il gruppo viene comunque registrato
+        # più sotto solo se si procede; qui usciamo prima senza inviare nulla.
+        from core import automation_flags
+        if not automation_flags.flag_enabled("group_auto_presentation"):
+            log("AUTOMATION_SKIPPED", flag="group_auto_presentation",
+                platform=platform, group=group_id_int)
+            return None
+
         if await _already_known(platform, group_id_int):
             return None
 
