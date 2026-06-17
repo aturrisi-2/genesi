@@ -461,6 +461,17 @@
                 </div>
                 <div id="automation-loading" style="font-size:0.85rem; color:#7dd3fc;">Caricamento interruttori...</div>
                 <div id="automation-grid" style="display:none; grid-template-columns:1fr; gap:12px;"></div>
+                <div style="margin-top:14px; border-top:1px solid rgba(255,255,255,0.08); padding-top:12px;">
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+                        <button id="automation-diagnostics"
+                            style="padding:7px 14px; border-radius:6px; border:1px solid rgba(52,211,153,0.45); color:#86efac; background:rgba(52,211,153,0.08); font-size:0.82rem; cursor:pointer;">
+                            Verifica effetto
+                        </button>
+                        <span id="automation-diagnostics-msg" style="font-size:0.78rem; color:#9ca3af;"></span>
+                    </div>
+                    <div id="automation-diagnostics-box"
+                        style="display:none; background:rgba(0,0,0,0.22); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:12px; font-size:0.78rem; color:#d1d5db;"></div>
+                </div>
             </div>
 
             <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">🧠 Deep Conversation Training</h2>
@@ -1500,6 +1511,63 @@
             } catch(e) {
                 msgEl.style.color = '#f87171';
                 msgEl.textContent = 'Errore reset';
+            }
+        });
+
+        function automationEscapeHtml(text) {
+            return String(text || '').replace(/[&<>"']/g, ch => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            }[ch]));
+        }
+
+        function renderAutomationDiagnostics(d) {
+            const box = document.getElementById('automation-diagnostics-box');
+            const statusColor = d.all_proactive_paused ? '#86efac' : '#fbbf24';
+            const statusText = d.all_proactive_paused
+                ? 'Tutte le automazioni proattive risultano in pausa.'
+                : 'Ci sono automazioni proattive ancora attive.';
+            const active = (d.active_proactive || []).length
+                ? d.active_proactive.map(x => `<span style="color:#fbbf24;">${automationEscapeHtml(x)}</span>`).join(', ')
+                : '<span style="color:#86efac;">nessuna</span>';
+            const enabled = (d.enabled_overrides || []).length
+                ? d.enabled_overrides.map(automationEscapeHtml).join(', ')
+                : 'nessun override ON';
+            const logHtml = d.log_error
+                ? `<div style="color:#f87171;">Log non leggibile: ${automationEscapeHtml(d.log_error)}</div>`
+                : ((d.log_lines || []).length
+                    ? `<pre style="margin:8px 0 0; max-height:260px; overflow:auto; white-space:pre-wrap; color:#9ca3af; font-size:0.72rem; line-height:1.45;">${automationEscapeHtml(d.log_lines.join('\n'))}</pre>`
+                    : '<div style="color:#9ca3af; margin-top:8px;">Nessuna riga log rilevante trovata nel file applicativo.</div>');
+
+            box.style.display = 'block';
+            box.innerHTML = `
+                <div style="color:${statusColor}; font-weight:700; margin-bottom:6px;">${statusText}</div>
+                <div>Passive mode: <b style="color:${d.passive_mode ? '#7dd3fc' : '#fbbf24'};">${d.passive_mode ? 'ON' : 'OFF'}</b></div>
+                <div style="margin-top:4px;">Proattive attive: ${active}</div>
+                <div style="margin-top:4px; color:#9ca3af;">Override spuntati ON: ${enabled}</div>
+                <div style="margin-top:10px; color:#e5e7eb; font-weight:600;">Ultime righe log pertinenti</div>
+                ${logHtml}`;
+        }
+
+        document.getElementById('automation-diagnostics').addEventListener('click', async () => {
+            const msgEl = document.getElementById('automation-diagnostics-msg');
+            msgEl.style.color = '#9ca3af';
+            msgEl.textContent = 'Verifica in corso...';
+            try {
+                const res = await fetch('/api/admin/automation/diagnostics', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error(res.status);
+                renderAutomationDiagnostics(await res.json());
+                msgEl.style.color = '#86efac';
+                msgEl.textContent = 'Verificato';
+                setTimeout(() => { msgEl.textContent = ''; }, 1800);
+            } catch(e) {
+                msgEl.style.color = '#f87171';
+                msgEl.textContent = 'Errore verifica';
             }
         });
 
