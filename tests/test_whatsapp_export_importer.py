@@ -181,7 +181,7 @@ async def test_processing_after_import_updates_operational_state(monkeypatch, is
     assert result["processed"] == 8
     assert len(state.decisions) == 1
     assert len(state.tasks) >= 3
-    assert len(state.issues) >= 2
+    assert len(state.issues) >= 1
     assert len(state.information) >= 3
     assert len(state.open_questions) == 1
 

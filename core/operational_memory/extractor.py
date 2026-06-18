@@ -15,6 +15,7 @@ from core.operational_memory.models import (
     OperationalState,
     OperationalTask,
 )
+from core.operational_memory.quality import is_noise_text
 
 
 class OperationalMemoryExtractionError(RuntimeError):
@@ -57,11 +58,15 @@ def _normalize_items(
         source = str(raw.get("source") or "").strip()
         if not text or not source:
             continue
+        if is_noise_text(text):
+            continue
 
         data = dict(raw)
         data["text"] = text
         data["source"] = source
         data["id"] = str(raw.get("id") or "").strip() or _stable_id(prefix, text, source)
+        confidence = str(raw.get("confidence") or "medium").strip().lower()
+        data["confidence"] = confidence if confidence in {"high", "medium", "low"} else "medium"
 
         key = (text.lower(), source.lower())
         if key in seen:
@@ -101,7 +106,14 @@ Regole:
 - Rispondi SOLO con JSON valido.
 - Non inventare nulla: estrai solo elementi supportati dai messaggi.
 - Ogni elemento deve avere una fonte nel campo "source", usando "msg N" o una breve citazione.
+- Ogni elemento deve avere "confidence": "high", "medium" o "low".
 - Se un campo non e' esplicito, usa null o ometti l'elemento.
+- Ignora conferme isolate, saluti, ringraziamenti, messaggi sociali e placeholder media.
+- Non trasformare "si", "ok", "no", "grazie", "perfetto", "top" in decisioni o informazioni se sono isolati.
+- Non estrarre "sticker non incluso", "immagine omessa", "video omesso", "audio omesso" o "messaggio eliminato".
+- Usa confidence "high" solo per elementi espliciti e operativi.
+- Usa confidence "medium" per elementi operativi plausibili ma incompleti.
+- Usa confidence "low" per elementi vaghi, sociali o poco verificabili.
 - Le categorie sono:
   decisions: decisioni gia' prese.
   tasks: cose da fare, con owner/due solo se esplicitati.
@@ -111,11 +123,11 @@ Regole:
 
 Formato obbligatorio:
 {
-  "decisions": [{"text": "...", "source": "msg N"}],
-  "tasks": [{"text": "...", "owner": null, "due": null, "status": "open", "source": "msg N"}],
-  "issues": [{"text": "...", "source": "msg N"}],
-  "information": [{"text": "...", "source": "msg N"}],
-  "open_questions": [{"text": "...", "source": "msg N"}]
+  "decisions": [{"text": "...", "source": "msg N", "confidence": "high"}],
+  "tasks": [{"text": "...", "owner": null, "due": null, "status": "open", "source": "msg N", "confidence": "high"}],
+  "issues": [{"text": "...", "source": "msg N", "confidence": "high"}],
+  "information": [{"text": "...", "source": "msg N", "confidence": "medium"}],
+  "open_questions": [{"text": "...", "source": "msg N", "confidence": "medium"}]
 }
 """.strip()
     user_message = f"Messaggi:\n{numbered}"
@@ -123,7 +135,11 @@ Formato obbligatorio:
 
 
 async def extract_state(messages: list[str]) -> OperationalState:
-    clean_messages = [m.strip() for m in messages if isinstance(m, str) and m.strip()]
+    clean_messages = [
+        m.strip()
+        for m in messages
+        if isinstance(m, str) and m.strip() and not is_noise_text(m)
+    ]
     if not clean_messages:
         return OperationalState()
 

@@ -9,12 +9,14 @@ from pydantic import BaseModel, Field
 EventType = Literal["text", "image", "pdf", "document"]
 ProcessedStatus = Literal["pending", "processed", "failed"]
 TaskStatus = Literal["open", "completed"]
+Confidence = Literal["high", "medium", "low"]
 
 
 class OperationalItem(BaseModel):
     id: str = Field(default="")
     text: str
     source: str
+    confidence: Confidence = "medium"
 
 
 class Decision(OperationalItem):
