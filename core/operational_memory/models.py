@@ -74,6 +74,12 @@ class OperationalEvent(BaseModel):
     type: EventType = "text"
     content: str = Field(default="")
     attachment_metadata: dict = Field(default_factory=dict)
+    attachment_path: Optional[str] = None
+    attachment_type: Optional[str] = None
+    extracted_text: Optional[str] = None
+    media_description: Optional[str] = None
+    extraction_status: Optional[str] = None
+    extraction_confidence: Optional[Confidence] = None
     processed_status: ProcessedStatus = "pending"
 
 
@@ -96,6 +102,7 @@ class DailyReport(BaseModel):
     issues_open: list[str] = Field(default_factory=list)
     information: list[str] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
+    media_relevant: list[str] = Field(default_factory=list)
     items_to_verify: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
     markdown: str = ""

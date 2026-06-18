@@ -44,6 +44,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--project-id", required=True, help="Operational Memory project id")
     parser.add_argument("--output", required=True, help="Path where the markdown report will be saved")
     parser.add_argument("--source-name", default=DEFAULT_SOURCE_NAME)
+    parser.add_argument("--media-dir", default=None, help="Optional WhatsApp export media directory")
     parser.add_argument("--timezone", default=DEFAULT_TIMEZONE)
     parser.add_argument("--report-format", choices=("markdown", "json"), default="markdown")
     parser.add_argument("--no-snapshot", action="store_true", help="Do not create a snapshot")
@@ -54,6 +55,10 @@ def _build_parser() -> argparse.ArgumentParser:
 async def _run(args: argparse.Namespace) -> dict:
     input_path = Path(args.input)
     output_path = Path(args.output)
+    media_dir = Path(args.media_dir) if args.media_dir else None
+    if input_path.is_dir():
+        media_dir = media_dir or input_path
+        input_path = input_path / "_chat.txt"
 
     raw_text = _read_text(input_path)
     request = OfflineWhatsAppDemoRequest(
@@ -62,6 +67,7 @@ async def _run(args: argparse.Namespace) -> dict:
         timezone=args.timezone,
         create_snapshot=not args.no_snapshot,
         report_format=args.report_format,
+        media_dir=str(media_dir) if media_dir is not None else None,
     )
     if args.verbose:
         response = await run_whatsapp_export_demo(args.project_id, request)
@@ -77,6 +83,10 @@ async def _run(args: argparse.Namespace) -> dict:
         "imported_messages": response.import_summary.accepted,
         "duplicates": response.import_summary.duplicates,
         "ignored": response.import_summary.ignored,
+        "media_detected": response.import_summary.media_detected,
+        "media_analyzed": response.import_summary.media_analyzed,
+        "media_text_extracted": response.import_summary.media_text_extracted,
+        "media_ignored": response.import_summary.media_ignored,
         "processed_events": response.processing.processed,
         "failed_events": response.processing.failed,
         "pending_after": response.processing.pending_after,

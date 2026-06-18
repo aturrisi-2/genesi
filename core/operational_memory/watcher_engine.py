@@ -70,14 +70,17 @@ def event_to_extraction_message(event: OperationalEvent) -> str:
     attachment = event.attachment_metadata or {}
     file_name = attachment.get("file_name") or attachment.get("name") or "attachment"
     simulated_text = (
-        attachment.get("simulated_ocr")
+        event.extracted_text
+        or attachment.get("simulated_ocr")
         or attachment.get("simulated_text")
         or attachment.get("description")
+        or event.media_description
         or event.content
     )
     return (
         f"[{event.timestamp}] {event.sender} ha inviato {event.type} '{file_name}'. "
-        f"Contenuto simulato: {simulated_text}"
+        f"Descrizione media: {event.media_description or attachment.get('description') or ''}. "
+        f"Testo estratto o simulato: {simulated_text}"
     ).strip()
 
 

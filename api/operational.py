@@ -60,6 +60,7 @@ class WhatsAppExportImportRequest(BaseModel):
     raw_text: str
     source_name: str = "whatsapp-export"
     timezone: str = "Europe/Rome"
+    media_dir: str | None = None
 
 
 class WhatsAppExportImportResponse(BaseModel):
@@ -135,6 +136,7 @@ async def import_whatsapp_export_endpoint(
         project_id=project_id,
         source_name=request.source_name,
         timezone=request.timezone,
+        media_dir=request.media_dir,
     )
     result = await ingest_events_batch(project_id, parsed.events)
     return WhatsAppExportImportResponse(

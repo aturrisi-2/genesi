@@ -20,6 +20,7 @@ class OfflineWhatsAppDemoRequest(BaseModel):
     timezone: str = "Europe/Rome"
     create_snapshot: bool = True
     report_format: ReportFormat = "markdown"
+    media_dir: str | None = None
 
 
 class OfflineWhatsAppDemoImportSummary(BaseModel):
@@ -28,6 +29,10 @@ class OfflineWhatsAppDemoImportSummary(BaseModel):
     duplicates: int = 0
     ignored: int = 0
     failed: int = 0
+    media_detected: int = 0
+    media_analyzed: int = 0
+    media_text_extracted: int = 0
+    media_ignored: int = 0
 
 
 class OfflineWhatsAppDemoProcessingSummary(BaseModel):
@@ -89,6 +94,7 @@ async def run_whatsapp_export_demo(
         project_id=project_id,
         source_name=request.source_name or "whatsapp-export",
         timezone=request.timezone or "Europe/Rome",
+        media_dir=request.media_dir,
     )
     import_result = await ingest_events_batch(project_id, parsed.events)
     processing_result = await process_pending_events(project_id)
@@ -113,6 +119,10 @@ async def run_whatsapp_export_demo(
             duplicates=import_result["duplicates"],
             ignored=parsed.ignored,
             failed=import_result["failed"],
+            media_detected=parsed.media_detected,
+            media_analyzed=parsed.media_analyzed,
+            media_text_extracted=parsed.media_text_extracted,
+            media_ignored=parsed.media_ignored,
         ),
         processing=OfflineWhatsAppDemoProcessingSummary(
             processed=processing_result["processed"],

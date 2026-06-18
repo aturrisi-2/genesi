@@ -4,8 +4,10 @@ import hashlib
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from core.operational_memory.media_analyzer import analyze_media, attachment_type_for_path, is_supported_attachment
 from core.operational_memory.models import OperationalEvent
 
 
@@ -44,6 +46,10 @@ _MEDIA_MARKERS = (
 class WhatsAppParseResult:
     events: list[OperationalEvent]
     ignored: int = 0
+    media_detected: int = 0
+    media_analyzed: int = 0
+    media_text_extracted: int = 0
+    media_ignored: int = 0
 
 
 def _parse_timestamp(date_part: str, time_part: str, timezone: str) -> str:
@@ -92,6 +98,41 @@ def _event_type_for_media(content: str) -> str:
     return "image"
 
 
+_ATTACHED_RE = re.compile(r"<(?:attached|allegato):\s*(?P<name>[^>]+)>", re.IGNORECASE)
+_LRM = "\u200e"
+
+
+def _clean_whatsapp_control_chars(text: str) -> str:
+    return (text or "").replace(_LRM, "").strip()
+
+
+def _extract_attachment_name(content: str) -> str | None:
+    match = _ATTACHED_RE.search(content or "")
+    if not match:
+        return None
+    return match.group("name").strip()
+
+
+def _content_without_attachment_marker(content: str) -> str:
+    cleaned = _ATTACHED_RE.sub("", content or "")
+    cleaned = re.sub(r"<media omess[oi]>", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"media omitted", "", cleaned, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _resolve_attachment(media_dir: Path | None, attachment_name: str | None) -> Path | None:
+    if media_dir is None or not attachment_name:
+        return None
+    direct = media_dir / attachment_name
+    if direct.exists():
+        return direct
+    lowered = attachment_name.lower()
+    for path in media_dir.iterdir():
+        if path.is_file() and path.name.lower() == lowered:
+            return path
+    return None
+
+
 def _stable_event_id(project_id: str, timestamp: str, sender: str, content: str) -> str:
     raw = f"{project_id}|{timestamp}|{sender}|{content}"
     return "wa_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
@@ -110,16 +151,22 @@ def parse_whatsapp_export(
     project_id: str,
     source_name: str = "whatsapp-export",
     timezone: str = "Europe/Rome",
+    media_dir: str | Path | None = None,
 ) -> WhatsAppParseResult:
     events: list[OperationalEvent] = []
     ignored = 0
+    media_detected = 0
+    media_analyzed = 0
+    media_text_extracted = 0
+    media_ignored = 0
+    media_root = Path(media_dir) if media_dir else None
     current: dict | None = None
 
     def flush_current() -> None:
-        nonlocal current, ignored
+        nonlocal current, ignored, media_detected, media_analyzed, media_text_extracted, media_ignored
         if current is None:
             return
-        body = current["body"].strip()
+        body = _clean_whatsapp_control_chars(current["body"])
         if _is_system_message(body):
             ignored += 1
             current = None
@@ -130,15 +177,44 @@ def parse_whatsapp_export(
             current = None
             return
         sender, content = split
+        attachment_name = _extract_attachment_name(content)
+        attachment_path = _resolve_attachment(media_root, attachment_name)
+        cleaned_content = _content_without_attachment_marker(content)
         event_type = "text"
         attachment_metadata = {}
-        if _is_media_message(content):
+        media_analysis = None
+        if _is_media_message(content) or attachment_name:
+            media_detected += 1
             event_type = _event_type_for_media(content)
             attachment_metadata = {
                 "raw_media_marker": content,
                 "description": f"Allegato WhatsApp importato offline: {content}",
             }
+            if attachment_path is not None:
+                attachment_type = attachment_type_for_path(attachment_path)
+                attachment_metadata["file_name"] = attachment_path.name
+                attachment_metadata["file_exists"] = True
+                if is_supported_attachment(attachment_path):
+                    media_analysis = analyze_media(attachment_path)
+                    media_analyzed += 1
+                    if media_analysis.extracted_text.strip():
+                        media_text_extracted += 1
+                    event_type = "pdf" if media_analysis.attachment_type == "pdf" else "image"
+                else:
+                    media_ignored += 1
+                    if cleaned_content:
+                        event_type = "text"
+                    else:
+                        current = None
+                        return
+            else:
+                attachment_metadata["file_exists"] = False
+                if not cleaned_content:
+                    media_ignored += 1
         timestamp = _parse_timestamp(current["date"], current["time"], timezone)
+        event_content = cleaned_content or content
+        if media_analysis is not None and media_analysis.extracted_text:
+            event_content = f"{event_content}\n{media_analysis.extracted_text}".strip()
         events.append(
             OperationalEvent(
                 event_id=_stable_event_id(project_id, timestamp, sender, content),
@@ -147,15 +223,24 @@ def parse_whatsapp_export(
                 sender=sender,
                 timestamp=timestamp,
                 type=event_type,
-                content=content,
-                attachment_metadata=attachment_metadata,
+                content=event_content,
+                attachment_metadata={
+                    **attachment_metadata,
+                    **(media_analysis.metadata if media_analysis is not None else {}),
+                },
+                attachment_path=media_analysis.attachment_path if media_analysis is not None else (str(attachment_path) if attachment_path else None),
+                attachment_type=media_analysis.attachment_type if media_analysis is not None else None,
+                extracted_text=media_analysis.extracted_text if media_analysis is not None else None,
+                media_description=media_analysis.media_description if media_analysis is not None else attachment_metadata.get("description"),
+                extraction_status=media_analysis.extraction_status if media_analysis is not None else None,
+                extraction_confidence=media_analysis.extraction_confidence if media_analysis is not None else None,
                 processed_status="pending",
             )
         )
         current = None
 
     for raw_line in raw_text.splitlines():
-        line = raw_line.rstrip("\n")
+        line = _clean_whatsapp_control_chars(raw_line.rstrip("\n"))
         match = _match_line(line)
         if match:
             flush_current()
@@ -172,4 +257,11 @@ def parse_whatsapp_export(
         current["body"] += "\n" + line.strip()
 
     flush_current()
-    return WhatsAppParseResult(events=events, ignored=ignored)
+    return WhatsAppParseResult(
+        events=events,
+        ignored=ignored,
+        media_detected=media_detected,
+        media_analyzed=media_analyzed,
+        media_text_extracted=media_text_extracted,
+        media_ignored=media_ignored,
+    )

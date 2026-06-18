@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from core.operational_memory.event_store import list_events
-from core.operational_memory.models import DailyReport, OperationalItem, OperationalState
+from core.operational_memory.models import DailyReport, OperationalEvent, OperationalItem, OperationalState
 from core.operational_memory.quality import (
     has_item_context,
     next_action_priority,
@@ -116,6 +116,7 @@ def _markdown(report: DailyReport) -> str:
         ("Problemi aperti", report.issues_open),
         ("Informazioni rilevanti", report.information),
         ("Domande aperte", report.open_questions),
+        ("Media rilevanti", report.media_relevant),
         ("Elementi da verificare", report.items_to_verify),
         ("Prossime azioni suggerite", report.next_actions),
     ]
@@ -128,6 +129,30 @@ def _markdown(report: DailyReport) -> str:
             lines.append("- Nessun elemento")
         lines.append("")
     return "\n".join(lines).strip()
+
+
+def _media_label(event: OperationalEvent) -> str:
+    file_name = None
+    if event.attachment_path:
+        file_name = event.attachment_path.replace("\\", "/").split("/")[-1]
+    file_name = file_name or event.attachment_metadata.get("file_name") or "media"
+    extracted = (event.extracted_text or "").strip()
+    if len(extracted) > 180:
+        extracted = extracted[:177].rstrip() + "..."
+    description = event.media_description or event.attachment_metadata.get("description") or ""
+    context_parts = []
+    if event.sender:
+        context_parts.append(f"autore: {event.sender}")
+    if event.timestamp:
+        context_parts.append(f"data: {_format_timestamp(event.timestamp)}")
+    return "\n".join(
+        [
+            f"{file_name} ({event.attachment_type or event.type})",
+            f"  Contesto collegato: {' | '.join(context_parts) if context_parts else 'non disponibile'}",
+            f"  Testo estratto: {extracted or 'non disponibile'}",
+            f"  Possibile significato operativo: {description or 'media collegato alla conversazione'}",
+        ]
+    )
 
 
 async def build_daily_report(project_id: str) -> DailyReport:
@@ -154,6 +179,12 @@ async def build_daily_report(project_id: str) -> DailyReport:
     context_complete = len([item for item in operational_items if has_item_context(item)])
     context_total = len(operational_items)
 
+    media_events = [
+        event
+        for event in events
+        if event.attachment_path and event.attachment_type in {"image", "pdf", "document"}
+    ]
+
     report = DailyReport(
         title=f"Aggiornamento giornaliero - {project_id}",
         date=today,
@@ -164,6 +195,7 @@ async def build_daily_report(project_id: str) -> DailyReport:
         issues_open=[_item_label(item, "ISSUE") for item in issues],
         information=[item.text for item in information],
         open_questions=[item.text for item in open_questions],
+        media_relevant=[_media_label(event) for event in media_events],
         items_to_verify=[_item_label(item, "VERIFY") for item in items_to_verify],
         next_actions=_next_actions(state),
         metadata={
