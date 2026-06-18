@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from core.operational_memory.importers.whatsapp_export import parse_whatsapp_export
 from core.operational_memory.extractor import (
     OperationalMemoryExtractionError,
     extract_state,
@@ -46,6 +47,22 @@ class OperationalEventsBatchRequest(BaseModel):
 class OperationalEventsBatchResponse(BaseModel):
     accepted: int = 0
     duplicates: int = 0
+    failed: int = 0
+
+
+class WhatsAppExportImportRequest(BaseModel):
+    raw_text: str
+    source_name: str = "whatsapp-export"
+    timezone: str = "Europe/Rome"
+
+
+class WhatsAppExportImportResponse(BaseModel):
+    project_id: str
+    source_name: str
+    parsed: int = 0
+    accepted: int = 0
+    duplicates: int = 0
+    ignored: int = 0
     failed: int = 0
 
 
@@ -100,6 +117,29 @@ async def create_operational_events_batch_endpoint(
 ) -> OperationalEventsBatchResponse:
     result = await ingest_events_batch(project_id, request.events)
     return OperationalEventsBatchResponse(**result)
+
+
+@router.post("/operational-events/{project_id}/import/whatsapp-export", response_model=WhatsAppExportImportResponse)
+async def import_whatsapp_export_endpoint(
+    project_id: str,
+    request: WhatsAppExportImportRequest,
+) -> WhatsAppExportImportResponse:
+    parsed = parse_whatsapp_export(
+        request.raw_text,
+        project_id=project_id,
+        source_name=request.source_name,
+        timezone=request.timezone,
+    )
+    result = await ingest_events_batch(project_id, parsed.events)
+    return WhatsAppExportImportResponse(
+        project_id=project_id,
+        source_name=request.source_name,
+        parsed=len(parsed.events),
+        accepted=result["accepted"],
+        duplicates=result["duplicates"],
+        ignored=parsed.ignored,
+        failed=result["failed"],
+    )
 
 
 @router.get("/operational-events/{project_id}", response_model=list[OperationalEvent])

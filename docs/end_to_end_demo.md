@@ -89,6 +89,25 @@ GET /operational-state/{project_id}/snapshots
 GET /operational-state/{project_id}/daily-report
 ```
 
+## Import offline da export WhatsApp
+
+La demo supporta anche un flusso offline da export `.txt`:
+
+```text
+POST /operational-events/{project_id}/import/whatsapp-export
+POST /operational-events/{project_id}/process-pending
+GET /operational-state/{project_id}/daily-report
+```
+
+Fixture:
+
+```text
+tests/fixtures/whatsapp_export_sample.txt
+```
+
+Questo flusso serve a validare conversazioni reali esportate senza collegamento
+live a WhatsApp.
+
 ## Cosa valida questa demo
 
 - Gli eventi vengono accettati come stream simulato.
