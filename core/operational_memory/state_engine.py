@@ -4,7 +4,7 @@ from typing import TypeVar
 
 from core.log import log
 from core.operational_memory.extractor import extract_state
-from core.operational_memory.models import OperationalItem, OperationalState, utc_now_iso
+from core.operational_memory.models import OperationalEvent, OperationalItem, OperationalState, utc_now_iso
 from core.operational_memory.state_store import load_state, save_state
 
 
@@ -46,9 +46,14 @@ async def get_project_state(project_id: str) -> OperationalState:
     return await load_state(project_id)
 
 
-async def ingest_messages(project_id: str, messages: list[str]) -> OperationalState:
+async def ingest_messages(
+    project_id: str,
+    messages: list[str],
+    source_event: OperationalEvent | None = None,
+    nearby_messages: list[str] | None = None,
+) -> OperationalState:
     existing = await load_state(project_id)
-    incoming = await extract_state(messages)
+    incoming = await extract_state(messages, source_event=source_event, nearby_messages=nearby_messages)
     merged = merge_state(existing, incoming)
     saved = await save_state(project_id, merged)
     log(

@@ -17,6 +17,16 @@ class OperationalItem(BaseModel):
     text: str
     source: str
     confidence: Confidence = "medium"
+    source_event_id: Optional[str] = None
+    source_timestamp: Optional[str] = None
+    source_sender: Optional[str] = None
+    source_excerpt: Optional[str] = None
+    context_area: Optional[str] = None
+    context_system: Optional[str] = None
+    context_level: Optional[str] = None
+    context_location: Optional[str] = None
+    context_tags: list[str] = Field(default_factory=list)
+    intent: Optional[str] = None
 
 
 class Decision(OperationalItem):
@@ -86,6 +96,7 @@ class DailyReport(BaseModel):
     issues_open: list[str] = Field(default_factory=list)
     information: list[str] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
+    items_to_verify: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
     markdown: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)

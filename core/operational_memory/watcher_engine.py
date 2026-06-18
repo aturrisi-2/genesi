@@ -91,11 +91,27 @@ async def process_pending_events(project_id: str) -> dict:
     for event in pending:
         try:
             message = event_to_extraction_message(event)
+            event_index = next((idx for idx, candidate in enumerate(events) if candidate.event_id == event.event_id), -1)
+            context_events = []
+            if event_index >= 0:
+                start = max(0, event_index - 2)
+                end = min(len(events), event_index + 3)
+                context_events = [
+                    candidate
+                    for candidate in events[start:end]
+                    if candidate.event_id != event.event_id
+                ]
+            nearby_messages = [event_to_extraction_message(candidate) for candidate in context_events]
             if not message:
                 await mark_event_status(project_id, event.event_id, "processed")
                 processed += 1
                 continue
-            state = await ingest_messages(project_id, [message])
+            state = await ingest_messages(
+                project_id,
+                [message],
+                source_event=event,
+                nearby_messages=nearby_messages,
+            )
             await mark_event_status(project_id, event.event_id, "processed")
             processed += 1
         except Exception as exc:

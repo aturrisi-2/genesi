@@ -46,6 +46,13 @@ _SOCIAL_PHRASES = {
     "adesso",
 }
 
+_GENERIC_OPERATIONAL_PHRASES = {
+    "da controllare",
+    "controllare",
+    "da verificare",
+    "verificare",
+}
+
 _TECHNICAL_KEYWORDS = (
     "manca",
     "mancano",
@@ -111,6 +118,8 @@ def is_technically_significant(text: str) -> bool:
     normalized = normalize_quality_text(text)
     if is_noise_text(normalized):
         return False
+    if normalized in _GENERIC_OPERATIONAL_PHRASES:
+        return False
     if any(keyword in normalized for keyword in _TECHNICAL_KEYWORDS):
         return True
     return bool(_TECHNICAL_CODE_RE.search(text or ""))
@@ -119,6 +128,8 @@ def is_technically_significant(text: str) -> bool:
 def should_include_in_report(item: OperationalItem) -> bool:
     if is_noise_text(item.text):
         return False
+    if should_verify_item(item):
+        return False
     if item.confidence == "high":
         return True
     if item.confidence == "medium":
@@ -126,6 +137,24 @@ def should_include_in_report(item: OperationalItem) -> bool:
             return True
         return is_technically_significant(item.text)
     return False
+
+
+def has_item_context(item: OperationalItem) -> bool:
+    return bool(
+        item.context_area
+        or item.context_system
+        or item.context_level
+        or item.context_location
+        or item.context_tags
+    )
+
+
+def should_verify_item(item: OperationalItem) -> bool:
+    if is_noise_text(item.text):
+        return False
+    if item.confidence == "low":
+        return False
+    return not has_item_context(item) and not is_technically_significant(item.text)
 
 
 def next_action_priority(item: OperationalItem) -> int:
