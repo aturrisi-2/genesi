@@ -69,18 +69,28 @@ def event_to_extraction_message(event: OperationalEvent) -> str:
 
     attachment = event.attachment_metadata or {}
     file_name = attachment.get("file_name") or attachment.get("name") or "attachment"
-    simulated_text = (
-        event.extracted_text
-        or attachment.get("simulated_ocr")
-        or attachment.get("simulated_text")
-        or attachment.get("description")
-        or event.media_description
-        or event.content
-    )
+    extracted_text = (event.extracted_text or "").strip()
+    caption = (event.content or "").strip()
+    simulated_text = attachment.get("simulated_ocr") or attachment.get("simulated_text") or ""
+    text_parts = []
+    for candidate in (caption, extracted_text, simulated_text):
+        candidate = (candidate or "").strip()
+        if candidate and candidate not in text_parts:
+            text_parts.append(candidate)
+    useful_text = "\n".join(text_parts)
+    if not useful_text:
+        return ""
+    source_bits = []
+    if extracted_text:
+        source_bits.append("testo OCR")
+    if caption:
+        source_bits.append("caption")
+    if simulated_text and not extracted_text:
+        source_bits.append("testo simulato")
     return (
         f"[{event.timestamp}] {event.sender} ha inviato {event.type} '{file_name}'. "
-        f"Descrizione media: {event.media_description or attachment.get('description') or ''}. "
-        f"Testo estratto o simulato: {simulated_text}"
+        f"Fonte media: {', '.join(source_bits)}. "
+        f"Testo operativo: {useful_text}"
     ).strip()
 
 

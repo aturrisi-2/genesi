@@ -131,7 +131,11 @@ def _markdown(report: DailyReport) -> str:
     return "\n".join(lines).strip()
 
 
-def _media_label(event: OperationalEvent) -> str:
+def _media_label(
+    event: OperationalEvent,
+    nearby_context: str = "",
+    operational_items: list[OperationalItem] | None = None,
+) -> str:
     file_name = None
     if event.attachment_path:
         file_name = event.attachment_path.replace("\\", "/").split("/")[-1]
@@ -145,14 +149,40 @@ def _media_label(event: OperationalEvent) -> str:
         context_parts.append(f"autore: {event.sender}")
     if event.timestamp:
         context_parts.append(f"data: {_format_timestamp(event.timestamp)}")
+    item_lines = []
+    for item in operational_items or []:
+        item_lines.append(f"{item.__class__.__name__}: {item.text}")
     return "\n".join(
         [
             f"{file_name} ({event.attachment_type or event.type})",
             f"  Contesto collegato: {' | '.join(context_parts) if context_parts else 'non disponibile'}",
-            f"  Testo estratto: {extracted or 'non disponibile'}",
-            f"  Possibile significato operativo: {description or 'media collegato alla conversazione'}",
+            f"  Contesto messaggi vicini: {nearby_context or 'non disponibile'}",
+            f"  Testo OCR: {extracted or 'non rilevato'}",
+            f"  Stato OCR: {event.extraction_status or 'non analizzato'}",
+            f"  Descrizione sintetica: {description or 'media collegato alla conversazione'}",
+            f"  Elementi operativi dal media: {'; '.join(item_lines) if item_lines else 'nessuno'}",
         ]
     )
+
+
+def _nearby_context_for_event(event: OperationalEvent, events: list[OperationalEvent]) -> str:
+    event_index = next((idx for idx, candidate in enumerate(events) if candidate.event_id == event.event_id), -1)
+    if event_index < 0:
+        return ""
+    snippets = []
+    start = max(0, event_index - 2)
+    end = min(len(events), event_index + 3)
+    for candidate in events[start:end]:
+        if candidate.event_id == event.event_id:
+            continue
+        text = (candidate.content or candidate.extracted_text or "").strip()
+        if not text:
+            continue
+        text = " ".join(text.split())
+        if len(text) > 90:
+            text = text[:87].rstrip() + "..."
+        snippets.append(text)
+    return " | ".join(snippets[:3])
 
 
 async def build_daily_report(project_id: str) -> DailyReport:
@@ -184,6 +214,10 @@ async def build_daily_report(project_id: str) -> DailyReport:
         for event in events
         if event.attachment_path and event.attachment_type in {"image", "pdf", "document"}
     ]
+    items_by_event_id: dict[str, list[OperationalItem]] = {}
+    for item in [*state.decisions, *state.tasks, *state.issues, *state.information, *state.open_questions]:
+        if item.source_event_id:
+            items_by_event_id.setdefault(item.source_event_id, []).append(item)
 
     report = DailyReport(
         title=f"Aggiornamento giornaliero - {project_id}",
@@ -195,7 +229,14 @@ async def build_daily_report(project_id: str) -> DailyReport:
         issues_open=[_item_label(item, "ISSUE") for item in issues],
         information=[item.text for item in information],
         open_questions=[item.text for item in open_questions],
-        media_relevant=[_media_label(event) for event in media_events],
+        media_relevant=[
+            _media_label(
+                event,
+                nearby_context=_nearby_context_for_event(event, events),
+                operational_items=items_by_event_id.get(event.event_id, []),
+            )
+            for event in media_events
+        ],
         items_to_verify=[_item_label(item, "VERIFY") for item in items_to_verify],
         next_actions=_next_actions(state),
         metadata={

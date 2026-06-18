@@ -212,7 +212,12 @@ def parse_whatsapp_export(
                 if not cleaned_content:
                     media_ignored += 1
         timestamp = _parse_timestamp(current["date"], current["time"], timezone)
-        event_content = cleaned_content or content
+        if media_analysis is not None:
+            event_content = cleaned_content
+        elif _is_media_message(content) or attachment_name:
+            event_content = attachment_metadata.get("description", "") if media_root is None else cleaned_content
+        else:
+            event_content = cleaned_content or content
         if media_analysis is not None and media_analysis.extracted_text:
             event_content = f"{event_content}\n{media_analysis.extracted_text}".strip()
         events.append(
