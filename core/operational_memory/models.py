@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
+
+
+EventType = Literal["text", "image", "pdf", "document"]
+ProcessedStatus = Literal["pending", "processed", "failed"]
 
 
 class OperationalItem(BaseModel):
@@ -45,3 +49,15 @@ class OperationalState(BaseModel):
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+class OperationalEvent(BaseModel):
+    event_id: str
+    project_id: str
+    source: str = Field(default="simulated")
+    sender: str = Field(default="")
+    timestamp: str = Field(default_factory=utc_now_iso)
+    type: EventType = "text"
+    content: str = Field(default="")
+    attachment_metadata: dict = Field(default_factory=dict)
+    processed_status: ProcessedStatus = "pending"

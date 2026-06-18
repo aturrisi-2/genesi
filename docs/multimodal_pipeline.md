@@ -16,6 +16,12 @@ Il Daily Digest non e il prodotto. E solo una vista derivata dello stato.
 Input
   |
   v
+Event Ingestion Layer
+  |
+  v
+Watcher Engine
+  |
+  v
 Content Classification
   |
   v
@@ -35,6 +41,52 @@ Persistent Operational State
 ```
 
 ## Componenti
+
+### 0. Event Ingestion Layer
+
+Prima del parsing multimodale ogni input viene normalizzato come
+`OperationalEvent`.
+
+Questo consente di separare gli adapter futuri dalla logica del prodotto:
+
+```text
+WhatsApp reale / export / simulatore
+  -> OperationalEvent
+  -> Event Store
+  -> Watcher Engine
+  -> Operational State
+```
+
+Nel MVP attuale gli eventi sono simulati e salvati localmente in:
+
+```text
+memory/operational_events/{project_id}.json
+```
+
+Campi principali:
+
+- `event_id`
+- `project_id`
+- `source`
+- `sender`
+- `timestamp`
+- `type`: `text`, `image`, `pdf`, `document`
+- `content`
+- `attachment_metadata`
+- `processed_status`
+
+### 0-bis. Watcher Engine
+
+Il watcher legge gli eventi `pending`, li trasforma in input testuale per
+l'extraction engine, aggiorna lo Stato Operativo Persistente e marca gli eventi
+come `processed`.
+
+In questa fase:
+
+- non ascolta WhatsApp reale;
+- non usa OCR reale;
+- usa allegati simulati tramite `simulated_ocr`, `simulated_text` o `description`;
+- rende il sistema un osservatore permanente simulato, non solo un tool manuale.
 
 ### 1. Input Adapter
 

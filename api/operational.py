@@ -7,8 +7,13 @@ from core.operational_memory.extractor import (
     OperationalMemoryExtractionError,
     extract_state,
 )
-from core.operational_memory.models import OperationalState
+from core.operational_memory.models import OperationalEvent, OperationalState
 from core.operational_memory.state_engine import get_project_state, ingest_messages
+from core.operational_memory.watcher_engine import (
+    get_events,
+    ingest_event,
+    process_pending_events,
+)
 
 
 router = APIRouter(tags=["operational-memory"])
@@ -16,6 +21,14 @@ router = APIRouter(tags=["operational-memory"])
 
 class OperationalStateRequest(BaseModel):
     messages: list[str] = Field(default_factory=list)
+
+
+class ProcessPendingResponse(BaseModel):
+    project_id: str
+    processed: int
+    failed: int
+    pending_remaining: int
+    state: OperationalState | None = None
 
 
 @router.post("/operational-state", response_model=OperationalState)
@@ -48,3 +61,26 @@ async def ingest_operational_messages_endpoint(
         return await ingest_messages(project_id, messages)
     except OperationalMemoryExtractionError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/operational-events/{project_id}", response_model=OperationalEvent)
+async def create_operational_event_endpoint(
+    project_id: str,
+    event: OperationalEvent,
+) -> OperationalEvent:
+    if event.project_id and event.project_id != project_id:
+        raise HTTPException(status_code=400, detail="event project_id must match path project_id")
+    event.project_id = project_id
+    stored, _created = await ingest_event(event)
+    return stored
+
+
+@router.get("/operational-events/{project_id}", response_model=list[OperationalEvent])
+async def list_operational_events_endpoint(project_id: str) -> list[OperationalEvent]:
+    return await get_events(project_id)
+
+
+@router.post("/operational-events/{project_id}/process-pending", response_model=ProcessPendingResponse)
+async def process_pending_operational_events_endpoint(project_id: str) -> ProcessPendingResponse:
+    result = await process_pending_events(project_id)
+    return ProcessPendingResponse(**result)

@@ -1,0 +1,89 @@
+from __future__ import annotations
+
+from core.log import log
+from core.operational_memory.event_store import (
+    append_event,
+    list_events,
+    mark_event_status,
+)
+from core.operational_memory.models import OperationalEvent, OperationalState
+from core.operational_memory.state_engine import ingest_messages
+
+
+def normalize_event(event: OperationalEvent) -> OperationalEvent:
+    event.content = (event.content or "").strip()
+    event.sender = (event.sender or "").strip()
+    event.source = (event.source or "simulated").strip()
+    event.processed_status = event.processed_status or "pending"
+    return event
+
+
+async def ingest_event(event: OperationalEvent) -> tuple[OperationalEvent, bool]:
+    normalized = normalize_event(event)
+    stored, created = await append_event(normalized)
+    log(
+        "OPERATIONAL_EVENT_INGESTED",
+        project_id=stored.project_id,
+        event_id=stored.event_id,
+        created=created,
+        type=stored.type,
+    )
+    return stored, created
+
+
+async def get_events(project_id: str) -> list[OperationalEvent]:
+    return await list_events(project_id)
+
+
+def event_to_extraction_message(event: OperationalEvent) -> str:
+    if event.type == "text":
+        return f"[{event.timestamp}] {event.sender}: {event.content}".strip()
+
+    attachment = event.attachment_metadata or {}
+    file_name = attachment.get("file_name") or attachment.get("name") or "attachment"
+    simulated_text = (
+        attachment.get("simulated_ocr")
+        or attachment.get("simulated_text")
+        or attachment.get("description")
+        or event.content
+    )
+    return (
+        f"[{event.timestamp}] {event.sender} ha inviato {event.type} '{file_name}'. "
+        f"Contenuto simulato: {simulated_text}"
+    ).strip()
+
+
+async def process_pending_events(project_id: str) -> dict:
+    events = await list_events(project_id)
+    pending = [event for event in events if event.processed_status == "pending"]
+    processed = 0
+    failed = 0
+    state: OperationalState | None = None
+
+    for event in pending:
+        try:
+            message = event_to_extraction_message(event)
+            if not message:
+                await mark_event_status(project_id, event.event_id, "processed")
+                processed += 1
+                continue
+            state = await ingest_messages(project_id, [message])
+            await mark_event_status(project_id, event.event_id, "processed")
+            processed += 1
+        except Exception as exc:
+            failed += 1
+            await mark_event_status(project_id, event.event_id, "failed")
+            log(
+                "OPERATIONAL_EVENT_PROCESS_ERROR",
+                project_id=project_id,
+                event_id=event.event_id,
+                error=str(exc),
+            )
+
+    return {
+        "project_id": project_id,
+        "processed": processed,
+        "failed": failed,
+        "pending_remaining": len([event for event in await list_events(project_id) if event.processed_status == "pending"]),
+        "state": state,
+    }
