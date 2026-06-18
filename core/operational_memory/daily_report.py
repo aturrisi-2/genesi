@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from core.operational_memory.event_store import list_events
-from core.operational_memory.models import DailyReport, OperationalEvent, OperationalItem, OperationalState
+from core.operational_memory.models import DailyReport, Domain, OperationalEvent, OperationalItem, OperationalState, ReportMode
 from core.operational_memory.quality import (
     has_item_context,
     next_action_priority,
@@ -76,7 +76,11 @@ def _task_label(task) -> str:
     return _item_label(task, "TASK")
 
 
-def _next_actions(state: OperationalState) -> list[str]:
+def _next_actions(
+    state: OperationalState,
+    event_by_id: dict[str, OperationalEvent] | None = None,
+    report_mode: ReportMode = "OPERATIVE_ONLY",
+) -> list[str]:
     prioritized: list[tuple[int, str]] = []
     seen: set[str] = set()
 
@@ -87,9 +91,18 @@ def _next_actions(state: OperationalState) -> list[str]:
         seen.add(key)
         prioritized.append((priority, action))
 
-    reportable_issues = [issue for issue in state.issues if should_include_in_report(issue)]
-    reportable_tasks = [task for task in state.tasks if should_include_in_report(task)]
-    reportable_questions = [question for question in state.open_questions if should_include_in_report(question)]
+    event_by_id = event_by_id or {}
+    reportable_issues = [
+        issue for issue in state.issues if should_include_in_report(issue) and _item_allowed(issue, event_by_id, report_mode)
+    ]
+    reportable_tasks = [
+        task for task in state.tasks if should_include_in_report(task) and _item_allowed(task, event_by_id, report_mode)
+    ]
+    reportable_questions = [
+        question
+        for question in state.open_questions
+        if should_include_in_report(question) and _item_allowed(question, event_by_id, report_mode)
+    ]
 
     for issue in reportable_issues:
         add(next_action_priority(issue), f"Chiarire piano di risoluzione: {issue.text}")
@@ -108,6 +121,55 @@ def _next_actions(state: OperationalState) -> list[str]:
     return [action for _priority, action in sorted(prioritized, key=lambda item: item[0])[:10]]
 
 
+def _allowed_domains(report_mode: ReportMode) -> set[Domain]:
+    operative: set[Domain] = {"TECHNICAL_OPERATION", "TECHNICAL_ISSUE", "TASK_ASSIGNMENT"}
+    if report_mode == "OPERATIVE_PLUS_LOGISTICS":
+        return {*operative, "LOGISTICS"}
+    if report_mode == "FULL_CONTEXT":
+        return {
+            "TECHNICAL_OPERATION",
+            "TECHNICAL_ISSUE",
+            "TASK_ASSIGNMENT",
+            "LOGISTICS",
+            "PERSONNEL",
+            "SOCIAL",
+            "MEDIA_EVIDENCE",
+            "UNKNOWN",
+        }
+    return operative
+
+
+def _event_domains(event: OperationalEvent) -> set[Domain]:
+    return {event.domain, *event.secondary_domains}
+
+
+def _item_allowed(item: OperationalItem, event_by_id: dict[str, OperationalEvent], report_mode: ReportMode) -> bool:
+    if not item.source_event_id:
+        return True
+    event = event_by_id.get(item.source_event_id)
+    if event is None:
+        return True
+    return bool(_event_domains(event) & _allowed_domains(report_mode))
+
+
+def _event_allowed(event: OperationalEvent, report_mode: ReportMode) -> bool:
+    return bool(_event_domains(event) & _allowed_domains(report_mode))
+
+
+def _noise_summary(events: list[OperationalEvent], report_mode: ReportMode) -> list[str]:
+    allowed = _allowed_domains(report_mode)
+    excluded = [event for event in events if not (_event_domains(event) & allowed)]
+
+    def count(domain: Domain) -> int:
+        return len([event for event in excluded if domain in _event_domains(event)])
+
+    return [
+        f"Eventi social esclusi: {count('SOCIAL')}",
+        f"Eventi logistici esclusi: {count('LOGISTICS')}",
+        f"Eventi personali esclusi: {count('PERSONNEL')}",
+    ]
+
+
 def _markdown(report: DailyReport) -> str:
     sections = [
         ("Decisioni", report.decisions),
@@ -119,8 +181,9 @@ def _markdown(report: DailyReport) -> str:
         ("Media rilevanti", report.media_relevant),
         ("Elementi da verificare", report.items_to_verify),
         ("Prossime azioni suggerite", report.next_actions),
+        ("Rumore Conversazionale Filtrato", report.conversational_noise_filtered),
     ]
-    lines = [f"# {report.title}", "", f"Data: {report.date}", ""]
+    lines = [f"# {report.title}", "", f"Data: {report.date}", f"Modalita report: {report.report_mode}", ""]
     for title, items in sections:
         lines.append(f"## {title}")
         if items:
@@ -185,15 +248,18 @@ def _nearby_context_for_event(event: OperationalEvent, events: list[OperationalE
     return " | ".join(snippets[:3])
 
 
-async def build_daily_report(project_id: str) -> DailyReport:
+async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATIVE_ONLY") -> DailyReport:
     state = await load_state(project_id)
     events = await list_events(project_id)
+    event_by_id = {event.event_id: event for event in events}
     today = datetime.now(timezone.utc).date().isoformat()
-    decisions = [item for item in state.decisions if should_include_in_report(item)]
-    tasks = [task for task in state.tasks if should_include_in_report(task)]
-    issues = [item for item in state.issues if should_include_in_report(item)]
-    information = [item for item in state.information if should_include_in_report(item)]
-    open_questions = [item for item in state.open_questions if should_include_in_report(item)]
+    decisions = [item for item in state.decisions if should_include_in_report(item) and _item_allowed(item, event_by_id, report_mode)]
+    tasks = [task for task in state.tasks if should_include_in_report(task) and _item_allowed(task, event_by_id, report_mode)]
+    issues = [item for item in state.issues if should_include_in_report(item) and _item_allowed(item, event_by_id, report_mode)]
+    information = [item for item in state.information if should_include_in_report(item) and _item_allowed(item, event_by_id, report_mode)]
+    open_questions = [
+        item for item in state.open_questions if should_include_in_report(item) and _item_allowed(item, event_by_id, report_mode)
+    ]
     items_to_verify = [
         item
         for item in [
@@ -203,7 +269,7 @@ async def build_daily_report(project_id: str) -> DailyReport:
             *state.information,
             *state.open_questions,
         ]
-        if should_verify_item(item)
+        if should_verify_item(item) and _item_allowed(item, event_by_id, report_mode)
     ]
     operational_items = [*decisions, *tasks, *issues]
     context_complete = len([item for item in operational_items if has_item_context(item)])
@@ -213,6 +279,7 @@ async def build_daily_report(project_id: str) -> DailyReport:
         event
         for event in events
         if event.attachment_path and event.attachment_type in {"image", "pdf", "document"}
+        and _event_allowed(event, report_mode)
     ]
     items_by_event_id: dict[str, list[OperationalItem]] = {}
     for item in [*state.decisions, *state.tasks, *state.issues, *state.information, *state.open_questions]:
@@ -223,6 +290,7 @@ async def build_daily_report(project_id: str) -> DailyReport:
         title=f"Aggiornamento giornaliero - {project_id}",
         date=today,
         project_id=project_id,
+        report_mode=report_mode,
         decisions=[_item_label(item, "DECISION") for item in decisions],
         tasks_open=[_task_label(task) for task in tasks if getattr(task, "status", "open") == "open"],
         tasks_completed=[_task_label(task) for task in tasks if getattr(task, "status", "open") == "completed"],
@@ -238,10 +306,13 @@ async def build_daily_report(project_id: str) -> DailyReport:
             for event in media_events
         ],
         items_to_verify=[_item_label(item, "VERIFY") for item in items_to_verify],
-        next_actions=_next_actions(state),
+        next_actions=_next_actions(state, event_by_id, report_mode),
+        conversational_noise_filtered=_noise_summary(events, report_mode),
         metadata={
             "source_event_count": len(events),
             "state_updated_at": state.updated_at,
+            "report_mode": report_mode,
+            "domain_stats": state.domain_stats,
             "context_complete_items": context_complete,
             "context_total_items": context_total,
             "context_completeness": (context_complete / context_total) if context_total else 0,

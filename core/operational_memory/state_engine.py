@@ -39,6 +39,7 @@ def merge_state(existing: OperationalState, incoming: OperationalState) -> Opera
         issues=_merge_items(existing.issues, incoming.issues),
         information=_merge_items(existing.information, incoming.information),
         open_questions=_merge_items(existing.open_questions, incoming.open_questions),
+        domain_stats=dict(existing.domain_stats),
     )
 
 

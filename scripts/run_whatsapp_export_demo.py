@@ -47,6 +47,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--media-dir", default=None, help="Optional WhatsApp export media directory")
     parser.add_argument("--timezone", default=DEFAULT_TIMEZONE)
     parser.add_argument("--report-format", choices=("markdown", "json"), default="markdown")
+    parser.add_argument(
+        "--report-mode",
+        choices=("OPERATIVE_ONLY", "OPERATIVE_PLUS_LOGISTICS", "FULL_CONTEXT"),
+        default="OPERATIVE_ONLY",
+    )
     parser.add_argument("--no-snapshot", action="store_true", help="Do not create a snapshot")
     parser.add_argument("--verbose", action="store_true", help="Show internal processing logs")
     return parser
@@ -68,6 +73,7 @@ async def _run(args: argparse.Namespace) -> dict:
         create_snapshot=not args.no_snapshot,
         report_format=args.report_format,
         media_dir=str(media_dir) if media_dir is not None else None,
+        report_mode=args.report_mode,
     )
     if args.verbose:
         response = await run_whatsapp_export_demo(args.project_id, request)
@@ -98,6 +104,7 @@ async def _run(args: argparse.Namespace) -> dict:
         "snapshot_created": response.snapshot.created,
         "snapshot_id": response.snapshot.snapshot_id,
         "report_path": str(output_path),
+        "report_mode": args.report_mode,
     }
 
 

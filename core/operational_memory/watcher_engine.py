@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from core.log import log
+from core.operational_memory.domain_classifier import classify_event, should_extract_operationally
 from core.operational_memory.event_store import (
     append_event,
     list_events,
     mark_event_status,
+    save_events,
 )
 from core.operational_memory.models import OperationalEvent, OperationalState
 from core.operational_memory.state_engine import ingest_messages
+from core.operational_memory.state_store import load_state, save_state
 
 
 def normalize_event(event: OperationalEvent) -> OperationalEvent:
@@ -15,7 +18,34 @@ def normalize_event(event: OperationalEvent) -> OperationalEvent:
     event.sender = (event.sender or "").strip()
     event.source = (event.source or "simulated").strip()
     event.processed_status = event.processed_status or "pending"
-    return event
+    return classify_event(event)
+
+
+def _domain_stats(events: list[OperationalEvent]) -> dict[str, int]:
+    def has_domain(event: OperationalEvent, domain: str) -> bool:
+        return event.domain == domain or domain in event.secondary_domains
+
+    return {
+        "technical_events": len(
+            [
+                event
+                for event in events
+                if event.domain in {"TECHNICAL_OPERATION", "TECHNICAL_ISSUE", "TASK_ASSIGNMENT"}
+                or any(domain in {"TECHNICAL_OPERATION", "TECHNICAL_ISSUE", "TASK_ASSIGNMENT"} for domain in event.secondary_domains)
+            ]
+        ),
+        "logistics_events": len([event for event in events if has_domain(event, "LOGISTICS")]),
+        "personnel_events": len([event for event in events if has_domain(event, "PERSONNEL")]),
+        "social_events": len([event for event in events if has_domain(event, "SOCIAL")]),
+        "media_events": len([event for event in events if has_domain(event, "MEDIA_EVIDENCE")]),
+    }
+
+
+async def _save_domain_stats(project_id: str) -> None:
+    events = await list_events(project_id)
+    state = await load_state(project_id)
+    state.domain_stats = _domain_stats(events)
+    await save_state(project_id, state)
 
 
 async def ingest_event(event: OperationalEvent) -> tuple[OperationalEvent, bool]:
@@ -103,6 +133,16 @@ async def process_pending_events(project_id: str) -> dict:
 
     for event in pending:
         try:
+            if event.domain == "UNKNOWN" and event.operational_relevance_score == 0:
+                event = normalize_event(event)
+                events = [event if candidate.event_id == event.event_id else candidate for candidate in events]
+                await save_events(project_id, events)
+
+            if not should_extract_operationally(event):
+                await mark_event_status(project_id, event.event_id, "processed")
+                processed += 1
+                continue
+
             message = event_to_extraction_message(event)
             event_index = next((idx for idx, candidate in enumerate(events) if candidate.event_id == event.event_id), -1)
             context_events = []
@@ -136,6 +176,8 @@ async def process_pending_events(project_id: str) -> dict:
                 event_id=event.event_id,
                 error=str(exc),
             )
+
+    await _save_domain_stats(project_id)
 
     return {
         "project_id": project_id,

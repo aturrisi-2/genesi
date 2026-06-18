@@ -20,6 +20,7 @@ from core.operational_memory.models import (
     OperationalEvent,
     OperationalSnapshot,
     OperationalState,
+    ReportMode,
 )
 from core.operational_memory.snapshot_store import create_snapshot, list_snapshots
 from core.operational_memory.state_engine import get_project_state, ingest_messages
@@ -172,8 +173,11 @@ async def list_operational_state_snapshots_endpoint(project_id: str) -> list[Ope
 
 
 @router.get("/operational-state/{project_id}/daily-report", response_model=DailyReport)
-async def get_operational_daily_report_endpoint(project_id: str) -> DailyReport:
-    return await build_daily_report(project_id)
+async def get_operational_daily_report_endpoint(
+    project_id: str,
+    report_mode: ReportMode = "OPERATIVE_ONLY",
+) -> DailyReport:
+    return await build_daily_report(project_id, report_mode=report_mode)
 
 
 @router.post("/operational-demo/{project_id}/whatsapp-export/run", response_model=OfflineWhatsAppDemoResponse)

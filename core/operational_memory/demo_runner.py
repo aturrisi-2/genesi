@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from core.operational_memory.daily_report import build_daily_report
 from core.operational_memory.importers.whatsapp_export import parse_whatsapp_export
-from core.operational_memory.models import DailyReport, OperationalSnapshot
+from core.operational_memory.models import DailyReport, OperationalSnapshot, ReportMode
 from core.operational_memory.snapshot_store import create_snapshot
 from core.operational_memory.watcher_engine import ingest_events_batch, process_pending_events
 
@@ -21,6 +21,7 @@ class OfflineWhatsAppDemoRequest(BaseModel):
     create_snapshot: bool = True
     report_format: ReportFormat = "markdown"
     media_dir: str | None = None
+    report_mode: ReportMode = "OPERATIVE_ONLY"
 
 
 class OfflineWhatsAppDemoImportSummary(BaseModel):
@@ -108,7 +109,7 @@ async def run_whatsapp_export_demo(
             snapshot_id=snapshot.snapshot_id,
         )
 
-    report = await build_daily_report(project_id)
+    report = await build_daily_report(project_id, report_mode=request.report_mode)
     include_json = request.report_format == "json"
 
     return OfflineWhatsAppDemoResponse(

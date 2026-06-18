@@ -10,6 +10,17 @@ EventType = Literal["text", "image", "pdf", "document"]
 ProcessedStatus = Literal["pending", "processed", "failed"]
 TaskStatus = Literal["open", "completed"]
 Confidence = Literal["high", "medium", "low"]
+Domain = Literal[
+    "TECHNICAL_OPERATION",
+    "TECHNICAL_ISSUE",
+    "TASK_ASSIGNMENT",
+    "LOGISTICS",
+    "PERSONNEL",
+    "SOCIAL",
+    "MEDIA_EVIDENCE",
+    "UNKNOWN",
+]
+ReportMode = Literal["OPERATIVE_ONLY", "OPERATIVE_PLUS_LOGISTICS", "FULL_CONTEXT"]
 
 
 class OperationalItem(BaseModel):
@@ -59,6 +70,7 @@ class OperationalState(BaseModel):
     issues: list[Issue] = Field(default_factory=list)
     information: list[Information] = Field(default_factory=list)
     open_questions: list[OperationalQuestion] = Field(default_factory=list)
+    domain_stats: dict[str, int] = Field(default_factory=dict)
 
 
 def utc_now_iso() -> str:
@@ -80,6 +92,10 @@ class OperationalEvent(BaseModel):
     media_description: Optional[str] = None
     extraction_status: Optional[str] = None
     extraction_confidence: Optional[Confidence] = None
+    domain: Domain = "UNKNOWN"
+    domain_confidence: Confidence = "low"
+    secondary_domains: list[Domain] = Field(default_factory=list)
+    operational_relevance_score: int = 0
     processed_status: ProcessedStatus = "pending"
 
 
@@ -96,6 +112,7 @@ class DailyReport(BaseModel):
     title: str
     date: str
     project_id: str
+    report_mode: ReportMode = "OPERATIVE_ONLY"
     decisions: list[str] = Field(default_factory=list)
     tasks_open: list[str] = Field(default_factory=list)
     tasks_completed: list[str] = Field(default_factory=list)
@@ -105,5 +122,6 @@ class DailyReport(BaseModel):
     media_relevant: list[str] = Field(default_factory=list)
     items_to_verify: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
+    conversational_noise_filtered: list[str] = Field(default_factory=list)
     markdown: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
