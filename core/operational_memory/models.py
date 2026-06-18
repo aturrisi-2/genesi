@@ -23,6 +23,8 @@ Domain = Literal[
 ]
 ReportMode = Literal["OPERATIVE_ONLY", "OPERATIVE_PLUS_LOGISTICS", "FULL_CONTEXT"]
 ThreadStatus = Literal["open", "in_progress", "waiting", "resolved", "stale"]
+EvidenceStrength = Literal["none", "weak", "medium", "high"]
+GroupingConfidence = Literal["low", "medium", "high"]
 
 
 class OperationalItem(BaseModel):
@@ -81,6 +83,11 @@ class OperationalThread(BaseModel):
     context_tags: list[str] = Field(default_factory=list)
     summary: str = ""
     unresolved_questions: list[str] = Field(default_factory=list)
+    creation_reason: str = ""
+    continuity_signals: list[str] = Field(default_factory=list)
+    resolution_signals: list[str] = Field(default_factory=list)
+    related_past_thread_ids: list[str] = Field(default_factory=list)
+    grouping_confidence: GroupingConfidence = "low"
 
 
 class OperationalState(BaseModel):
@@ -121,6 +128,12 @@ class OperationalEvent(BaseModel):
     operational_relevance_score: int = 0
     impact_reason: str = ""
     thread_id: Optional[str] = None
+    topic_shift_score: int = 0
+    thread_continuity_score: int = 0
+    resolution_signal: bool = False
+    reopen_signal: bool = False
+    evidence_strength: EvidenceStrength = "none"
+    thread_link_reason: str = ""
     processed_status: ProcessedStatus = "pending"
 
 
