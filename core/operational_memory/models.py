@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -33,8 +34,14 @@ class OperationalQuestion(OperationalItem):
 
 
 class OperationalState(BaseModel):
+    project_id: Optional[str] = None
+    updated_at: Optional[str] = None
     decisions: list[Decision] = Field(default_factory=list)
     tasks: list[OperationalTask] = Field(default_factory=list)
     issues: list[Issue] = Field(default_factory=list)
     information: list[Information] = Field(default_factory=list)
     open_questions: list[OperationalQuestion] = Field(default_factory=list)
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
