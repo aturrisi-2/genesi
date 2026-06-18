@@ -1,0 +1,110 @@
+[
+  {
+    "expected_thread_label": "UTA_T7_PRESSIONE_CANALE",
+    "title": "Pressione statica canale aria esterna UTA T7",
+    "expected_event_ids": ["val_001", "val_002", "val_003"],
+    "should_be_open": true,
+    "should_be_resolved": false,
+    "should_have_media": false,
+    "notes": "Macro-tema su pressione/canale/UTA T7; potrebbe diventare macro-thread con sottothread canale."
+  },
+  {
+    "expected_thread_label": "PD_VERIFICA",
+    "title": "PD verifica quadro",
+    "expected_event_ids": ["val_004", "val_005", "val_035"],
+    "should_be_open": false,
+    "should_be_resolved": true,
+    "should_have_media": false,
+    "notes": "Thread breve con chiusura esplicita."
+  },
+  {
+    "expected_thread_label": "EWC05_MONTANTE_L4",
+    "title": "EWC05 collegamento montante L4",
+    "expected_event_ids": ["val_006", "val_007", "val_008", "val_009"],
+    "should_be_open": false,
+    "should_be_resolved": true,
+    "should_have_media": false,
+    "notes": "Thread principale EWC05 fino alla prima chiusura."
+  },
+  {
+    "expected_thread_label": "EWC05_MONTANTE_L4_FOLLOWUP",
+    "title": "EWC05 follow-up collegamento L4",
+    "expected_event_ids": ["val_036"],
+    "should_be_open": true,
+    "should_be_resolved": false,
+    "should_have_media": false,
+    "notes": "Follow-up collegato al thread passato, non fusione automatica."
+  },
+  {
+    "expected_thread_label": "T7_M2_NON_PARTE",
+    "title": "T7 M2 non parte",
+    "expected_event_ids": ["val_010", "val_011", "val_012", "val_013", "val_014"],
+    "should_be_open": false,
+    "should_be_resolved": true,
+    "should_have_media": true,
+    "notes": "Media senza OCR e' evidenza debole collegabile solo per contesto T7/M2."
+  },
+  {
+    "expected_thread_label": "T7_M2_NON_PARTE_FOLLOWUP",
+    "title": "T7 M2 follow-up dopo chiusura",
+    "expected_event_ids": ["val_015"],
+    "should_be_open": true,
+    "should_be_resolved": false,
+    "should_have_media": false,
+    "notes": "Riapertura/follow-up con related_past_thread_ids."
+  },
+  {
+    "expected_thread_label": "STF_T7_ALIMENTAZIONE",
+    "title": "STF T7 alimentazione",
+    "expected_event_ids": ["val_016", "val_017", "val_018"],
+    "should_be_open": false,
+    "should_be_resolved": true,
+    "should_have_media": false,
+    "notes": "Thread alimentazione distinto da T7 M2 anche se condivide T7."
+  },
+  {
+    "expected_thread_label": "ELS07_COPERTURA_T2_POTENZIOMETRO",
+    "title": "ELS07 COPERTURA T2 potenziometro",
+    "expected_event_ids": ["val_019", "val_020", "val_034"],
+    "should_be_open": false,
+    "should_be_resolved": true,
+    "should_have_media": false,
+    "notes": "Deve restare distinto da SS01 Mandata T7."
+  },
+  {
+    "expected_thread_label": "SS01_MANDATA_T7",
+    "title": "SS01 Mandata T7",
+    "expected_event_ids": ["val_021", "val_022", "val_033"],
+    "should_be_open": false,
+    "should_be_resolved": true,
+    "should_have_media": false,
+    "notes": "Condivide T7 con altri thread ma SS01 deve prevalere come codice specifico."
+  },
+  {
+    "expected_thread_label": "AREA_BREAK_PORTATA",
+    "title": "Area break portata rumore",
+    "expected_event_ids": ["val_023", "val_024"],
+    "should_be_open": true,
+    "should_be_resolved": false,
+    "should_have_media": false,
+    "notes": "Non deve fondersi con T7 M2 per sola vicinanza temporale."
+  },
+  {
+    "expected_thread_label": "BDF_200x100",
+    "title": "BDF 200x100",
+    "expected_event_ids": ["val_025", "val_026"],
+    "should_be_open": true,
+    "should_be_resolved": false,
+    "should_have_media": false,
+    "notes": "Thread materiale/dimensione."
+  },
+  {
+    "expected_thread_label": "PRE_RISCALDO",
+    "title": "Pre riscaldo",
+    "expected_event_ids": ["val_027", "val_028"],
+    "should_be_open": false,
+    "should_be_resolved": true,
+    "should_have_media": false,
+    "notes": "Thread breve chiuso da funziona."
+  }
+]

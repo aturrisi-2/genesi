@@ -284,6 +284,8 @@ def _best_thread_match(
     threads: list[OperationalThread],
     event_time: datetime,
 ) -> tuple[OperationalThread | None, BoundaryEvaluation | None]:
+    if event.domain in NON_THREAD_DOMAINS or any(domain in NON_THREAD_DOMAINS for domain in event.secondary_domains):
+        return None, None
     best_thread: OperationalThread | None = None
     best_evaluation: BoundaryEvaluation | None = None
     best_score = -1
