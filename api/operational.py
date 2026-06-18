@@ -4,6 +4,12 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from core.operational_memory.importers.whatsapp_export import parse_whatsapp_export
+from core.operational_memory.demo_runner import (
+    OfflineWhatsAppDemoError,
+    OfflineWhatsAppDemoRequest,
+    OfflineWhatsAppDemoResponse,
+    run_whatsapp_export_demo,
+)
 from core.operational_memory.extractor import (
     OperationalMemoryExtractionError,
     extract_state,
@@ -166,3 +172,14 @@ async def list_operational_state_snapshots_endpoint(project_id: str) -> list[Ope
 @router.get("/operational-state/{project_id}/daily-report", response_model=DailyReport)
 async def get_operational_daily_report_endpoint(project_id: str) -> DailyReport:
     return await build_daily_report(project_id)
+
+
+@router.post("/operational-demo/{project_id}/whatsapp-export/run", response_model=OfflineWhatsAppDemoResponse)
+async def run_offline_whatsapp_demo_endpoint(
+    project_id: str,
+    request: OfflineWhatsAppDemoRequest,
+) -> OfflineWhatsAppDemoResponse:
+    try:
+        return await run_whatsapp_export_demo(project_id, request)
+    except OfflineWhatsAppDemoError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

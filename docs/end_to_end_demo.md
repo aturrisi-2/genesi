@@ -108,6 +108,62 @@ tests/fixtures/whatsapp_export_sample.txt
 Questo flusso serve a validare conversazioni reali esportate senza collegamento
 live a WhatsApp.
 
+## Validazione offline in un solo endpoint
+
+Per prove prodotto piu rapide esiste anche un endpoint demo che esegue tutto il
+flusso offline in una singola chiamata:
+
+```text
+POST /operational-demo/{project_id}/whatsapp-export/run
+```
+
+Input minimo:
+
+```json
+{
+  "raw_text": "12/06/26, 08:31 - Marco: manca il materiale in cantiere"
+}
+```
+
+Output sintetico:
+
+```json
+{
+  "project_id": "site-demo",
+  "import": {
+    "parsed": 1,
+    "accepted": 1,
+    "duplicates": 0,
+    "ignored": 0,
+    "failed": 0
+  },
+  "processing": {
+    "processed": 1,
+    "failed": 0,
+    "pending_after": 0
+  },
+  "snapshot": {
+    "created": true,
+    "snapshot_id": "..."
+  },
+  "state_counts": {
+    "decisions": 0,
+    "open_tasks": 0,
+    "completed_tasks": 0,
+    "issues": 1,
+    "information": 0,
+    "questions": 0
+  },
+  "daily_report_markdown": "..."
+}
+```
+
+Dettagli operativi:
+
+```text
+docs/offline_validation_flow.md
+```
+
 ## Cosa valida questa demo
 
 - Gli eventi vengono accettati come stream simulato.
