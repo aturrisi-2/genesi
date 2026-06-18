@@ -8,6 +8,7 @@ from core.operational_memory.models import (
     Domain,
     OperationalEvent,
     OperationalItem,
+    OperationalMacroThread,
     OperationalState,
     OperationalThread,
     ReportMode,
@@ -130,6 +131,41 @@ def _thread_label(thread: OperationalThread, event_by_id: dict[str, OperationalE
             f"  Problemi collegati: {len(thread.related_issues)}",
             f"  Media collegati: {len(thread.related_media)}",
             f"  Prossima azione: {_thread_next_action(thread)}",
+        ]
+    )
+
+
+def _macro_next_action(macro: OperationalMacroThread, child_threads: list[OperationalThread]) -> str:
+    unresolved = [thread for thread in child_threads if thread.status in {"open", "in_progress", "waiting", "stale"}]
+    if not unresolved:
+        return "verificare chiusura finale del macro-tema"
+    critical = [thread for thread in unresolved if thread.project_impact_score >= 80]
+    if critical:
+        return f"prioritizzare sottothread critico: {critical[0].title}"
+    return f"verificare avanzamento sottothread: {unresolved[0].title}"
+
+
+def _macro_label(macro: OperationalMacroThread, thread_by_id: dict[str, OperationalThread]) -> str:
+    child_threads = [thread_by_id[thread_id] for thread_id in macro.child_thread_ids if thread_id in thread_by_id]
+    context = " / ".join(macro.context_tags[:10]) if macro.context_tags else "contesto non rilevato"
+    child_lines = [f"    - {thread.title} ({thread.status})" for thread in child_threads[:10]]
+    if not child_lines:
+        child_lines.append("    - Nessun sottothread collegato")
+    return "\n".join(
+        [
+            f"[MACRO] {macro.title}",
+            f"  Stato: {macro.status}",
+            f"  Confidenza: {macro.confidence}",
+            f"  Contesto: {context}",
+            f"  Sottothread: {len(macro.child_thread_ids)}",
+            f"  Criticita: {macro.critical_items_count}",
+            f"  Task aperti: {macro.open_items_count}",
+            f"  Prima segnalazione: {_format_timestamp(macro.started_at)}",
+            f"  Ultimo aggiornamento: {_format_timestamp(macro.last_updated_at)}",
+            "  Sottothread collegati:",
+            *child_lines,
+            f"  Sintesi: {macro.summary}",
+            f"  Prossima azione macro: {_macro_next_action(macro, child_threads)}",
         ]
     )
 
@@ -266,6 +302,7 @@ def _markdown(report: DailyReport) -> str:
         ("Informazioni rilevanti", report.information),
         ("Domande aperte", report.open_questions),
         ("Media rilevanti", report.media_relevant),
+        ("Macro-thread operativi", report.operational_macro_threads),
         ("Thread operativi aperti", report.operational_threads),
         ("Elementi da verificare", report.items_to_verify),
         ("Prossime azioni suggerite", report.next_actions),
@@ -379,6 +416,8 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
         for thread in state.threads
         if thread.status in {"open", "in_progress", "waiting", "stale"} and thread.project_impact_score >= 50
     ]
+    thread_by_id = {thread.thread_id: thread for thread in state.threads}
+    macro_threads = [macro for macro in state.macro_threads if macro.child_thread_ids]
     events_linked_to_threads = len({event_id for thread in state.threads for event_id in thread.related_event_ids})
 
     report = DailyReport(
@@ -400,6 +439,7 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
             )
             for event in media_events
         ],
+        operational_macro_threads=[_macro_label(macro, thread_by_id) for macro in macro_threads],
         operational_threads=[_thread_label(thread, event_by_id) for thread in open_threads],
         items_to_verify=[_item_label(item, "VERIFY") for item in items_to_verify],
         next_actions=_next_actions(state, event_by_id, report_mode),
@@ -423,6 +463,9 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
             "threads_open": len(open_threads),
             "threads_resolved": len([thread for thread in state.threads if thread.status == "resolved"]),
             "events_linked_to_threads": events_linked_to_threads,
+            "macro_threads_total": len(macro_threads),
+            "threads_linked_to_macro_threads": len([thread for thread in state.threads if thread.macro_thread_id]),
+            "threads_without_macro_thread": len([thread for thread in state.threads if not thread.macro_thread_id]),
             "related_past_thread_ids": len({thread_id for thread in state.threads for thread_id in thread.related_past_thread_ids}),
             "low_confidence_threads": len([thread for thread in state.threads if thread.grouping_confidence == "low"]),
             "isolated_issues": len([issue for issue in issues if not issue.source_event_id or not event_by_id.get(issue.source_event_id) or not event_by_id[issue.source_event_id].thread_id]),

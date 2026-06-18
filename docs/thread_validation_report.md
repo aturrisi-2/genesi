@@ -14,7 +14,7 @@ Fixture annotata:
 Il dataset contiene eventi reali anonimizzati derivati dal flusso WhatsApp offline e casi mirati su:
 
 - T7 / M2
-- STF / T7
+- STF / STA / STM / T7
 - ELS07 COPERTURA T2
 - SS01 Mandata T7
 - EWC05 montante L4
@@ -22,50 +22,95 @@ Il dataset contiene eventi reali anonimizzati derivati dal flusso WhatsApp offli
 - Area break / portata
 - BDF 200x100
 - Pre riscaldo
+- B02 porta 034 / porta 40
+- L3 T7 SSLE SPECIALI
 - media senza OCR
 - eventi personali/logistici/sociali da escludere
 
-## Numeri
+## Numeri thread
 
-- Eventi annotati: 36
-- Thread attesi: 12
-- Thread generati dal motore corrente: 15
-- Precisione raggruppamento: 0.6452
-- Recall raggruppamento: 0.5882
-- Overmerge rate: 0.3548
-- Fragmentation rate: 0.4118
-- Related past thread ids creati: 2
+- Eventi annotati: 40
+- Thread attesi: 15
+- Thread generati dal motore corrente: 18
+- Precisione raggruppamento: 0.6562
+- Recall raggruppamento: 0.6000
+- Overmerge rate: 0.3438
+- Fragmentation rate: 0.4000
+
+## Numeri macro-thread
+
+- Macro-thread attesi: 4
+- Macro-thread generati: 4
+- Thread collegati a macro-thread: 13
+- Eventi operativi orfani: 5
+- Macro precision: 0.3571
+- Macro recall: 0.5556
+- Macro overmerge rate: 0.6429
+- Macro fragmentation rate: 0.4444
+- Subthread preservation rate: 1.0000
+
+Interpretazione:
+
+Il livello macro-thread e' non distruttivo: conserva i thread operativi distinti e li collega tramite `macro_thread_id`, senza fonderli. Tuttavia la qualita' del raggruppamento macro e' ancora da calibrare: il motore usa tag comuni come `T7` con troppo peso e questo crea macro-thread troppo larghi.
+
+## Report reale rigenerato
+
+Report:
+
+- `output/reports/tab-cefla-hq-enel-roma_macro_report.md`
+
+Statistiche dal flusso reale offline:
+
+- Eventi processati: 140
+- Media rilevati: 64
+- Media analizzati: 43
+- Media con testo estratto: 0
+- Thread operativi totali: 37
+- Macro-thread operativi: 4
+- Thread collegati a macro-thread: 23
+- Thread senza macro-thread: 14
+- Macro-thread aperti/waiting/in progress: 2
+- Macro-thread risolti: 0
+- Critical item dentro macro-thread: 12
+- Open item dentro macro-thread: 9
 
 ## Casi problematici principali
 
-### Overmerge
+### Overmerge thread
 
-Il caso principale di overmerge rilevato e':
+Il motore thread mantiene ancora un rischio di fusione parziale quando tag generici e vicinanza temporale si sommano.
 
-- Thread generato `thread_8224131f857b`
-- Label fuse:
-  - `STF_T7_ALIMENTAZIONE`: `val_016`, `val_017`, `val_018`
-  - `SS01_MANDATA_T7`: `val_021`, `val_033`
+Caso indicativo:
+
+- `STF_T7_ALIMENTAZIONE`
+- `SS01_MANDATA_T7`
 
 Interpretazione:
 
-Il motore usa ancora `T7` come continuita' forte in alcuni casi, ma `SS01 Mandata T7` dovrebbe restare distinto da `STF T7 alimentazione`. Serve pesare meglio il codice piu' specifico rispetto al tag comune `T7`.
+`T7` e' un contesto utile, ma non basta per fondere automaticamente sottosistemi distinti. I codici piu' specifici (`SS01`, `STF`, `ELS07`, `EWC05`) devono pesare piu' dei tag generici.
+
+### Overmerge macro
+
+Casi rilevati:
+
+- Macro `macro_476f855f971b` collega `L3_T7_SSLE_SPECIALI`, `SS01_MANDATA_T7`, `STF_T7_ALIMENTAZIONE`, `T7_M2_NON_PARTE_FOLLOWUP`, `UTA_T7_PRESSIONE_CANALE`.
+- Macro `macro_b6e2db245fb5` collega `EWC05_MONTANTE_L4`, `EWC05_MONTANTE_L4_FOLLOWUP`, `T7_M2_NON_PARTE`.
+
+Interpretazione:
+
+Il macro-layer riduce la frammentazione percepita, ma in questa baseline tende a creare macro-temi troppo ampi quando trova sistemi generici condivisi o sequenze operative vicine.
 
 ### Frammentazione
 
-Casi principali:
+Casi rilevati:
 
-- `UTA_T7_PRESSIONE_CANALE` spezzato in 3 thread generati.
-- `PD_VERIFICA` spezzato in 3 thread generati.
-- `EWC05_MONTANTE_L4` spezzato in 2 thread generati.
-- `SS01_MANDATA_T7` spezzato in 2 thread generati e parzialmente fuso con STF.
-- `AREA_BREAK_PORTATA` ha un evento mancante (`val_024`).
-- `BDF_200x100` non apre thread operativo.
-- `PRE_RISCALDO` non apre thread operativo.
+- `SS01_T7_MANDATA_RIPRESA` non collega ancora correttamente tutti i sottothread attesi, in particolare `BDF_200x100`.
+- `UTA_T7_CANALE_PRESSIONE` resta separato da `PRE_RISCALDO`.
+- Alcuni elementi brevi o logistico-operativi leggeri restano orfani.
 
 Interpretazione:
 
-Il motore e' diventato conservativo: riduce le fusioni ampie, ma perde continuita' su thread brevi, codici sintetici e macro-temi operativi leggeri.
+Il sistema non deve tornare a fondere aggressivamente. La direzione corretta e' migliorare il macro-layer, non indebolire la separazione dei thread.
 
 ## Eventi operativi orfani
 
@@ -75,26 +120,37 @@ Il motore e' diventato conservativo: riduce le fusioni ampie, ma perde continuit
 - `val_027`: Pre riscaldo da provare domani
 - `val_028`: Pre riscaldo funziona
 
+## Valutazione
+
+Overmerge ridotto:
+
+- A livello thread: resta misurabile ma controllato.
+- A livello macro: non ancora. Il valore 0.6429 indica che la prima versione macro e' troppo permissiva.
+
+Frammentazione mitigata:
+
+- Parzialmente. 13 thread su 18 nel dataset e 23 thread su 37 nel report reale sono collegati a macro-thread.
+- Rimangono orfani e macro-frammentazioni da analizzare prima di avanzare di fase.
+
+Leggibilita' del report:
+
+- Migliorata. La sezione `Macro-thread operativi` fornisce una vista superiore dei pacchetti di lavoro senza cancellare i sottothread.
+- Non ancora affidabile come metrica decisionale autonoma, perche' alcune macro sono troppo larghe.
+
 ## Raccomandazioni
 
-Raccomandazione principale: **introdurre macro-thread/sottothread**.
+Raccomandazione principale: **restare in FASE 3 e calibrare il macro-thread engine**.
 
-Motivo:
+Azioni precise:
 
-- Ridurre solo frammentazione rischia di riaprire il problema delle fusioni aggressive.
-- Ridurre solo overmerge renderebbe il sistema ancora piu' frammentato.
-- I dati mostrano entrambi i problemi: overmerge su tag comuni (`T7`) e frammentazione su temi leggeri (`PD`, `UTA`, `BDF`, `Pre riscaldo`).
-
-Prossima azione consigliata:
-
-1. Tenere le regole attuali come baseline misurata.
-2. Introdurre un livello `macro_thread` sopra i thread operativi.
-3. Collegare thread distinti tramite `parent_thread_id` o `macro_thread_id` quando condividono area/sistema ma non abbastanza segnali per fondersi.
-4. Aggiungere una soglia di specificita': tag generici come `T7` non devono dominare tag piu' specifici come `SS01`, `STF`, `ELS07`, `EWC05`.
-5. Ripetere questa validazione dopo la modifica e confrontare precision/recall.
+1. Mantenere il layer macro-thread, perche' preserva i sottothread (`subthread_preservation_rate = 1.0000`).
+2. Ridurre il peso dei tag generici (`T7`, `UTA`) quando non sono accompagnati da almeno un codice specifico o un work package coerente.
+3. Aumentare il peso di codici specifici e coppie contesto-componente, per esempio `SS01 + Mandata`, `EWC05 + montante`, `B02 + porta`.
+4. Non fondere macro-thread tramite sola sequenza temporale.
+5. Ripetere la validazione dopo la calibrazione e puntare prima a ridurre `macro_overmerge_rate` sotto 0.30.
 
 ## Decisione
 
 Restare in FASE 3.
 
-La qualita' dei thread ora e' misurabile, ma non ancora ottimizzata. La fase successiva non va avviata finche' non viene introdotto e validato il concetto di macro-thread/sottothread o una strategia equivalente di collegamento non distruttivo tra discussioni correlate.
+Il macro-layer e' stato introdotto come collegamento non distruttivo, ma non e' ancora abbastanza preciso da considerare chiusa la qualita' dei thread. La fase successiva non va avviata finche' la validazione non mostra macro-thread piu' affidabili e meno dipendenti da tag generici.

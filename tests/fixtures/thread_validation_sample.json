@@ -4,7 +4,11 @@
     "timestamp": "2026-05-25T14:39:00+02:00",
     "sender": "utente_01",
     "content": "Pressione statica Canale aria esterna 1000x800 -406 Pa",
-    "context_tags": ["canale", "aria esterna", "1000x800"],
+    "context_tags": [
+      "canale",
+      "aria esterna",
+      "1000x800"
+    ],
     "expected_thread_label": "UTA_T7_PRESSIONE_CANALE",
     "expected_role": "opens_thread"
   },
@@ -13,7 +17,9 @@
     "timestamp": "2026-05-25T15:02:00+02:00",
     "sender": "utente_02",
     "content": "Da verificare domani canale",
-    "context_tags": ["canale"],
+    "context_tags": [
+      "canale"
+    ],
     "expected_thread_label": "UTA_T7_PRESSIONE_CANALE",
     "expected_role": "continues_thread"
   },
@@ -22,7 +28,10 @@
     "timestamp": "2026-05-25T15:20:00+02:00",
     "sender": "utente_03",
     "content": "UTA T7 -01 M ora lavora al 90%",
-    "context_tags": ["UTA", "T7"],
+    "context_tags": [
+      "UTA",
+      "T7"
+    ],
     "expected_thread_label": "UTA_T7_PRESSIONE_CANALE",
     "expected_role": "continues_thread"
   },
@@ -31,7 +40,9 @@
     "timestamp": "2026-05-25T15:47:00+02:00",
     "sender": "utente_01",
     "content": "PD",
-    "context_tags": ["PD"],
+    "context_tags": [
+      "PD"
+    ],
     "expected_thread_label": "PD_VERIFICA",
     "expected_role": "opens_thread"
   },
@@ -40,7 +51,9 @@
     "timestamp": "2026-05-25T15:50:00+02:00",
     "sender": "utente_02",
     "content": "PD verificato quadro, resta da allineare",
-    "context_tags": ["PD"],
+    "context_tags": [
+      "PD"
+    ],
     "expected_thread_label": "PD_VERIFICA",
     "expected_role": "continues_thread"
   },
@@ -49,7 +62,9 @@
     "timestamp": "2026-05-26T08:12:00+02:00",
     "sender": "utente_03",
     "content": "EWC05 Tutte le valvole installate",
-    "context_tags": ["EWC05"],
+    "context_tags": [
+      "EWC05"
+    ],
     "expected_thread_label": "EWC05_MONTANTE_L4",
     "expected_role": "opens_thread"
   },
@@ -58,7 +73,11 @@
     "timestamp": "2026-05-26T08:30:00+02:00",
     "sender": "utente_01",
     "content": "EWC05 manca collegamento montante da L4 in su",
-    "context_tags": ["EWC05", "montante", "L4"],
+    "context_tags": [
+      "EWC05",
+      "montante",
+      "L4"
+    ],
     "expected_thread_label": "EWC05_MONTANTE_L4",
     "expected_role": "continues_thread"
   },
@@ -67,7 +86,10 @@
     "timestamp": "2026-05-26T09:05:00+02:00",
     "sender": "utente_02",
     "content": "Domani chiudiamo collegamento montante EWC05",
-    "context_tags": ["EWC05", "montante"],
+    "context_tags": [
+      "EWC05",
+      "montante"
+    ],
     "expected_thread_label": "EWC05_MONTANTE_L4",
     "expected_role": "continues_thread"
   },
@@ -76,7 +98,10 @@
     "timestamp": "2026-05-26T09:40:00+02:00",
     "sender": "utente_01",
     "content": "EWC05 collegamento montante fatto",
-    "context_tags": ["EWC05", "montante"],
+    "context_tags": [
+      "EWC05",
+      "montante"
+    ],
     "expected_thread_label": "EWC05_MONTANTE_L4",
     "expected_role": "closes_thread"
   },
@@ -85,7 +110,10 @@
     "timestamp": "2026-05-26T10:15:00+02:00",
     "sender": "utente_03",
     "content": "T7 M2 non parte",
-    "context_tags": ["T7", "M2"],
+    "context_tags": [
+      "T7",
+      "M2"
+    ],
     "expected_thread_label": "T7_M2_NON_PARTE",
     "expected_role": "opens_thread"
   },
@@ -94,7 +122,10 @@
     "timestamp": "2026-05-26T10:20:00+02:00",
     "sender": "utente_02",
     "content": "Non funziona ancora",
-    "context_tags": ["T7", "M2"],
+    "context_tags": [
+      "T7",
+      "M2"
+    ],
     "expected_thread_label": "T7_M2_NON_PARTE",
     "expected_role": "continues_thread"
   },
@@ -103,7 +134,10 @@
     "timestamp": "2026-05-26T10:28:00+02:00",
     "sender": "utente_01",
     "content": "Foto quadro T7 M2 senza OCR disponibile",
-    "context_tags": ["T7", "M2"],
+    "context_tags": [
+      "T7",
+      "M2"
+    ],
     "expected_thread_label": "T7_M2_NON_PARTE",
     "expected_role": "weak_evidence",
     "type": "image",
@@ -114,7 +148,10 @@
     "timestamp": "2026-05-26T11:00:00+02:00",
     "sender": "utente_03",
     "content": "La sostituisco stamattina T7 M2",
-    "context_tags": ["T7", "M2"],
+    "context_tags": [
+      "T7",
+      "M2"
+    ],
     "expected_thread_label": "T7_M2_NON_PARTE",
     "expected_role": "continues_thread"
   },
@@ -123,7 +160,10 @@
     "timestamp": "2026-05-26T16:13:00+02:00",
     "sender": "utente_02",
     "content": "T7 M2 risolto e verificato",
-    "context_tags": ["T7", "M2"],
+    "context_tags": [
+      "T7",
+      "M2"
+    ],
     "expected_thread_label": "T7_M2_NON_PARTE",
     "expected_role": "closes_thread"
   },
@@ -132,7 +172,10 @@
     "timestamp": "2026-05-27T08:10:00+02:00",
     "sender": "utente_01",
     "content": "T7 M2 non funziona ancora dopo chiusura",
-    "context_tags": ["T7", "M2"],
+    "context_tags": [
+      "T7",
+      "M2"
+    ],
     "expected_thread_label": "T7_M2_NON_PARTE_FOLLOWUP",
     "expected_role": "follow_up"
   },
@@ -141,7 +184,10 @@
     "timestamp": "2026-05-27T09:00:00+02:00",
     "sender": "utente_03",
     "content": "STF T7 disalimentate chiuse",
-    "context_tags": ["STF", "T7"],
+    "context_tags": [
+      "STF",
+      "T7"
+    ],
     "expected_thread_label": "STF_T7_ALIMENTAZIONE",
     "expected_role": "opens_thread"
   },
@@ -150,7 +196,12 @@
     "timestamp": "2026-05-27T09:12:00+02:00",
     "sender": "utente_02",
     "content": "STF B1 V10 Mandata T7 non alimentata",
-    "context_tags": ["STF", "B1 V10", "Mandata", "T7"],
+    "context_tags": [
+      "STF",
+      "B1 V10",
+      "Mandata",
+      "T7"
+    ],
     "expected_thread_label": "STF_T7_ALIMENTAZIONE",
     "expected_role": "continues_thread"
   },
@@ -159,7 +210,10 @@
     "timestamp": "2026-05-27T11:39:00+02:00",
     "sender": "utente_01",
     "content": "T7 alimentazione STF sistemata",
-    "context_tags": ["T7", "STF"],
+    "context_tags": [
+      "T7",
+      "STF"
+    ],
     "expected_thread_label": "STF_T7_ALIMENTAZIONE",
     "expected_role": "closes_thread"
   },
@@ -168,7 +222,11 @@
     "timestamp": "2026-05-28T08:00:00+02:00",
     "sender": "utente_03",
     "content": "ELS07 COPERTURA T2 manca potenziometro",
-    "context_tags": ["ELS07", "COPERTURA T2", "potenziometro"],
+    "context_tags": [
+      "ELS07",
+      "COPERTURA T2",
+      "potenziometro"
+    ],
     "expected_thread_label": "ELS07_COPERTURA_T2_POTENZIOMETRO",
     "expected_role": "opens_thread"
   },
@@ -177,7 +235,10 @@
     "timestamp": "2026-05-28T08:20:00+02:00",
     "sender": "utente_02",
     "content": "Arriva potenziometro ELS07 domani",
-    "context_tags": ["ELS07", "potenziometro"],
+    "context_tags": [
+      "ELS07",
+      "potenziometro"
+    ],
     "expected_thread_label": "ELS07_COPERTURA_T2_POTENZIOMETRO",
     "expected_role": "continues_thread"
   },
@@ -186,7 +247,11 @@
     "timestamp": "2026-05-28T09:00:00+02:00",
     "sender": "utente_01",
     "content": "SS01 Mandata T7 da verificare",
-    "context_tags": ["SS01", "Mandata", "T7"],
+    "context_tags": [
+      "SS01",
+      "Mandata",
+      "T7"
+    ],
     "expected_thread_label": "SS01_MANDATA_T7",
     "expected_role": "opens_thread"
   },
@@ -195,7 +260,9 @@
     "timestamp": "2026-05-28T09:30:00+02:00",
     "sender": "utente_03",
     "content": "Domani iniziamo SS01",
-    "context_tags": ["SS01"],
+    "context_tags": [
+      "SS01"
+    ],
     "expected_thread_label": "SS01_MANDATA_T7",
     "expected_role": "continues_thread"
   },
@@ -204,7 +271,10 @@
     "timestamp": "2026-05-28T10:00:00+02:00",
     "sender": "utente_02",
     "content": "Area break per avere rumore accettabile -58% la portata",
-    "context_tags": ["area break", "portata"],
+    "context_tags": [
+      "area break",
+      "portata"
+    ],
     "expected_thread_label": "AREA_BREAK_PORTATA",
     "expected_role": "opens_thread"
   },
@@ -213,7 +283,9 @@
     "timestamp": "2026-05-28T10:15:00+02:00",
     "sender": "utente_01",
     "content": "Area break ora non balla più adesso",
-    "context_tags": ["area break"],
+    "context_tags": [
+      "area break"
+    ],
     "expected_thread_label": "AREA_BREAK_PORTATA",
     "expected_role": "continues_thread"
   },
@@ -222,7 +294,10 @@
     "timestamp": "2026-05-28T11:00:00+02:00",
     "sender": "utente_03",
     "content": "BDF 200x100 da ordinare",
-    "context_tags": ["BDF", "200x100"],
+    "context_tags": [
+      "BDF",
+      "200x100"
+    ],
     "expected_thread_label": "BDF_200x100",
     "expected_role": "opens_thread"
   },
@@ -231,7 +306,10 @@
     "timestamp": "2026-05-28T11:18:00+02:00",
     "sender": "utente_02",
     "content": "BDF 200x100 confermare misura",
-    "context_tags": ["BDF", "200x100"],
+    "context_tags": [
+      "BDF",
+      "200x100"
+    ],
     "expected_thread_label": "BDF_200x100",
     "expected_role": "continues_thread"
   },
@@ -240,7 +318,9 @@
     "timestamp": "2026-05-28T12:10:00+02:00",
     "sender": "utente_01",
     "content": "Pre riscaldo da provare domani",
-    "context_tags": ["pre riscaldo"],
+    "context_tags": [
+      "pre riscaldo"
+    ],
     "expected_thread_label": "PRE_RISCALDO",
     "expected_role": "opens_thread"
   },
@@ -249,7 +329,9 @@
     "timestamp": "2026-05-28T12:35:00+02:00",
     "sender": "utente_03",
     "content": "Pre riscaldo funziona",
-    "context_tags": ["pre riscaldo"],
+    "context_tags": [
+      "pre riscaldo"
+    ],
     "expected_thread_label": "PRE_RISCALDO",
     "expected_role": "closes_thread"
   },
@@ -296,7 +378,11 @@
     "timestamp": "2026-05-29T08:00:00+02:00",
     "sender": "utente_01",
     "content": "SS01 Mandata T7 verificata",
-    "context_tags": ["SS01", "Mandata", "T7"],
+    "context_tags": [
+      "SS01",
+      "Mandata",
+      "T7"
+    ],
     "expected_thread_label": "SS01_MANDATA_T7",
     "expected_role": "closes_thread"
   },
@@ -305,7 +391,10 @@
     "timestamp": "2026-05-29T08:20:00+02:00",
     "sender": "utente_03",
     "content": "ELS07 potenziometro montato e sistemato",
-    "context_tags": ["ELS07", "potenziometro"],
+    "context_tags": [
+      "ELS07",
+      "potenziometro"
+    ],
     "expected_thread_label": "ELS07_COPERTURA_T2_POTENZIOMETRO",
     "expected_role": "closes_thread"
   },
@@ -314,7 +403,9 @@
     "timestamp": "2026-05-29T09:00:00+02:00",
     "sender": "utente_02",
     "content": "PD ok chiuso",
-    "context_tags": ["PD"],
+    "context_tags": [
+      "PD"
+    ],
     "expected_thread_label": "PD_VERIFICA",
     "expected_role": "closes_thread"
   },
@@ -323,8 +414,64 @@
     "timestamp": "2026-05-29T09:30:00+02:00",
     "sender": "utente_01",
     "content": "EWC05 manca ancora collegamento L4",
-    "context_tags": ["EWC05", "L4"],
+    "context_tags": [
+      "EWC05",
+      "L4"
+    ],
     "expected_thread_label": "EWC05_MONTANTE_L4_FOLLOWUP",
     "expected_role": "follow_up"
+  },
+  {
+    "event_id": "val_037",
+    "timestamp": "2026-05-29T10:00:00+02:00",
+    "sender": "utente_02",
+    "content": "B02 porta 034 fancoil perde acqua",
+    "context_tags": [
+      "B02",
+      "porta 034",
+      "fancoil"
+    ],
+    "expected_thread_label": "B02_PORTA_034_FANCOIL",
+    "expected_role": "opens_thread"
+  },
+  {
+    "event_id": "val_038",
+    "timestamp": "2026-05-29T10:20:00+02:00",
+    "sender": "utente_01",
+    "content": "B02 porta 40 serranda manca collegamento",
+    "context_tags": [
+      "B02",
+      "porta 40",
+      "serranda",
+      "collegamento"
+    ],
+    "expected_thread_label": "B02_PORTA_40_SERRANDA",
+    "expected_role": "opens_thread"
+  },
+  {
+    "event_id": "val_039",
+    "timestamp": "2026-05-29T11:00:00+02:00",
+    "sender": "utente_03",
+    "content": "L3 T7 SSLE speciali da confermare",
+    "context_tags": [
+      "L3",
+      "T7",
+      "SSLE"
+    ],
+    "expected_thread_label": "L3_T7_SSLE_SPECIALI",
+    "expected_role": "opens_thread"
+  },
+  {
+    "event_id": "val_040",
+    "timestamp": "2026-05-29T11:30:00+02:00",
+    "sender": "utente_02",
+    "content": "L3 T7 SSLE speciali confermate",
+    "context_tags": [
+      "L3",
+      "T7",
+      "SSLE"
+    ],
+    "expected_thread_label": "L3_T7_SSLE_SPECIALI",
+    "expected_role": "closes_thread"
   }
 ]

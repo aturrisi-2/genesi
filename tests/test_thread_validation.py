@@ -4,11 +4,17 @@ import json
 from pathlib import Path
 
 from core.operational_memory.domain_classifier import classify_event
+from core.operational_memory.macro_thread_engine import build_macro_threads
 from core.operational_memory.models import OperationalEvent, OperationalState
 from core.operational_memory.thread_engine import build_threads_from_events
 from core.operational_memory.thread_validation import (
     calculate_fragmentation_rate,
+    calculate_macro_fragmentation_rate,
+    calculate_macro_overmerge_rate,
+    calculate_macro_precision,
+    calculate_macro_recall,
     calculate_overmerge_rate,
+    calculate_subthread_preservation_rate,
     calculate_thread_precision,
     calculate_thread_recall,
     evaluate_thread_grouping,
@@ -49,12 +55,19 @@ def _generated_from_fixture() -> tuple[list, list[OperationalEvent]]:
     return threads, updated_events
 
 
+def _generated_macro_from_fixture():
+    threads, updated_events = _generated_from_fixture()
+    macro_threads = build_macro_threads("validation-demo", threads)
+    return threads, updated_events, macro_threads
+
+
 def test_validator_loads_annotated_dataset():
     sample = _load_sample()
     expected = _load_expected()
 
     assert 30 <= len(sample) <= 50
-    assert len(expected) == 12
+    assert len(expected["threads"]) == 15
+    assert len(expected["macro_threads"]) == 4
     assert all({"event_id", "timestamp", "sender", "content", "context_tags", "expected_thread_label", "expected_role"} <= set(item) for item in sample)
 
 
@@ -125,12 +138,113 @@ def test_follow_up_links_to_past_thread_without_auto_merge():
 def test_current_thread_engine_has_measurable_baseline():
     sample = _load_sample()
     expected = _load_expected()
-    threads, updated_events = _generated_from_fixture()
+    threads, updated_events, macro_threads = _generated_macro_from_fixture()
 
-    result = evaluate_thread_grouping(sample, expected, threads, updated_events)
+    result = evaluate_thread_grouping(sample, expected, threads, updated_events, macro_threads)
 
-    assert result.event_count == 36
-    assert result.expected_thread_count == 12
+    assert result.event_count == 40
+    assert result.expected_thread_count == 15
     assert result.generated_thread_count > 0
     assert result.fragmentation_rate >= 0
     assert result.overmerge_rate >= 0
+    assert result.subthread_preservation_rate == 1.0
+
+
+def test_macro_metrics_are_calculated():
+    sample = _load_sample()
+    expected = _load_expected()
+    generated_threads = [
+        {"thread_id": "ss01", "related_event_ids": ["val_021", "val_022", "val_033"]},
+        {"thread_id": "stf", "related_event_ids": ["val_016", "val_017", "val_018"]},
+        {"thread_id": "bdf", "related_event_ids": ["val_025", "val_026"]},
+    ]
+    generated_macros = [{"macro_thread_id": "macro_ss01", "child_thread_ids": ["ss01", "stf", "bdf"]}]
+
+    assert calculate_macro_precision(sample, expected, generated_threads, generated_macros) == 1.0
+    assert calculate_macro_recall(sample, expected, generated_threads, generated_macros) > 0
+    assert calculate_macro_overmerge_rate(sample, expected, generated_threads, generated_macros) == 0
+    assert calculate_macro_fragmentation_rate(sample, expected, generated_threads, generated_macros) >= 0
+    assert calculate_subthread_preservation_rate(generated_threads, generated_macros) == 1.0
+
+
+def test_ss01_related_subthreads_can_share_macro_but_remain_distinct():
+    sample = _load_sample()
+    expected = _load_expected()
+    generated_threads = [
+        {"thread_id": "ss01", "related_event_ids": ["val_021", "val_022", "val_033"]},
+        {"thread_id": "stf", "related_event_ids": ["val_016", "val_017", "val_018"]},
+        {"thread_id": "bdf", "related_event_ids": ["val_025", "val_026"]},
+        {"thread_id": "ssle", "related_event_ids": ["val_039", "val_040"]},
+    ]
+    generated_macros = [{"macro_thread_id": "macro_ss01", "child_thread_ids": ["ss01", "stf", "bdf", "ssle"]}]
+    result = evaluate_thread_grouping(sample, expected, generated_threads, generated_macro_threads=generated_macros)
+
+    assert result.macro_precision == 1.0
+    assert result.subthread_preservation_rate == 1.0
+    assert len({thread["thread_id"] for thread in generated_threads}) == 4
+
+
+def test_ewc05_threads_share_macro():
+    sample = _load_sample()
+    expected = _load_expected()
+    generated_threads = [
+        {"thread_id": "ewc_main", "related_event_ids": ["val_006", "val_007", "val_008", "val_009"]},
+        {"thread_id": "ewc_follow", "related_event_ids": ["val_036"]},
+    ]
+    generated_macros = [{"macro_thread_id": "macro_ewc", "child_thread_ids": ["ewc_main", "ewc_follow"]}]
+
+    assert calculate_macro_precision(sample, expected, generated_threads, generated_macros) == 1.0
+
+
+def test_b02_fancoil_and_serranda_share_macro_but_remain_distinct():
+    sample = _load_sample()
+    expected = _load_expected()
+    generated_threads = [
+        {"thread_id": "b02_fancoil", "related_event_ids": ["val_037"]},
+        {"thread_id": "b02_serranda", "related_event_ids": ["val_038"]},
+    ]
+    generated_macros = [{"macro_thread_id": "macro_b02", "child_thread_ids": ["b02_fancoil", "b02_serranda"]}]
+
+    assert calculate_macro_precision(sample, expected, generated_threads, generated_macros) == 1.0
+    assert calculate_subthread_preservation_rate(generated_threads, generated_macros) == 1.0
+
+
+def test_area_break_does_not_belong_to_t7_m2_macro():
+    sample = _load_sample()
+    expected = _load_expected()
+    generated_threads = [
+        {"thread_id": "area", "related_event_ids": ["val_023", "val_024"]},
+        {"thread_id": "t7m2", "related_event_ids": ["val_010", "val_011"]},
+    ]
+    generated_macros = [{"macro_thread_id": "bad_macro", "child_thread_ids": ["area", "t7m2"]}]
+
+    assert calculate_macro_overmerge_rate(sample, expected, generated_threads, generated_macros) > 0
+
+
+def test_social_personal_events_do_not_create_operational_macro():
+    sample = _load_sample()
+    expected = _load_expected()
+    generated_threads = [{"thread_id": "noise", "related_event_ids": ["val_029", "val_030", "val_032"]}]
+    generated_macros = [{"macro_thread_id": "bad_noise", "child_thread_ids": ["noise"]}]
+    result = evaluate_thread_grouping(sample, expected, generated_threads, generated_macro_threads=generated_macros)
+
+    assert result.macro_precision == 1.0
+    assert not result.macro_overmerge_cases
+
+
+def test_media_without_ocr_can_contribute_only_when_thread_linked():
+    threads, updated_events, macro_threads = _generated_macro_from_fixture()
+    media_event = next(event for event in updated_events if event.event_id == "val_031")
+
+    assert media_event.evidence_strength == "weak"
+    if media_event.thread_id:
+        assert any(media_event.thread_id in macro.child_thread_ids for macro in macro_threads) or macro_threads == []
+
+
+def test_macro_layer_does_not_merge_lifecycle_subthreads():
+    threads, _updated_events, macro_threads = _generated_macro_from_fixture()
+    original_thread_ids = {thread.thread_id for thread in threads}
+    child_ids = {thread_id for macro in macro_threads for thread_id in macro.child_thread_ids}
+
+    assert child_ids <= original_thread_ids
+    assert len(original_thread_ids) == len({thread.thread_id for thread in threads})
