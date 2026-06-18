@@ -17,6 +17,7 @@ from core.operational_memory.models import (
 from core.operational_memory.project_impact import classify_impact_level
 from core.operational_memory.quality import (
     has_item_context,
+    is_technically_significant,
     next_action_priority,
     should_include_in_report,
     should_verify_item,
@@ -178,10 +179,15 @@ def _profile_label(profile: AdaptiveChatProfile | None) -> list[str]:
     if profile is None:
         return ["Profilo non ancora disponibile"]
     workflow = " -> ".join(profile.workflow_patterns) if profile.workflow_patterns else "non rilevato"
+    rejected = [
+        f"{term} ({profile.rejection_reasons.get(term, 'rejected')})"
+        for term in profile.rejected_terms[:10]
+    ]
     return [
         f"Dominio inferito: {profile.inferred_domain} ({profile.domain_confidence})",
         f"Termini generici rilevati: {', '.join(profile.generic_terms[:12]) if profile.generic_terms else 'nessuno'}",
         f"Termini specifici rilevati: {', '.join(profile.specific_terms[:12]) if profile.specific_terms else 'nessuno'}",
+        f"Termini scartati principali: {', '.join(rejected) if rejected else 'nessuno'}",
         f"Workflow probabile: {workflow}",
         f"Pattern problema: {', '.join(profile.recurring_problem_terms[:10]) if profile.recurring_problem_terms else 'nessuno'}",
         f"Pattern completamento: {', '.join(profile.recurring_completion_terms[:10]) if profile.recurring_completion_terms else 'nessuno'}",
@@ -259,19 +265,49 @@ def _event_domains(event: OperationalEvent) -> set[Domain]:
 
 def _item_allowed(item: OperationalItem, event_by_id: dict[str, OperationalEvent], report_mode: ReportMode) -> bool:
     if not item.source_event_id:
+        if report_mode == "OPERATIVE_ONLY":
+            return is_technically_significant(item.text)
         return True
     event = event_by_id.get(item.source_event_id)
     if event is None:
+        if report_mode == "OPERATIVE_ONLY":
+            return is_technically_significant(item.text)
         return True
     return _event_allowed(event, report_mode)
 
 
 def _event_allowed(event: OperationalEvent, report_mode: ReportMode) -> bool:
+    domains = _event_domains(event)
     if report_mode == "OPERATIVE_ONLY" and event.project_impact_score < 50:
         return False
+    if report_mode == "OPERATIVE_ONLY" and event.operational_relevance_score < 50:
+        return False
+    if report_mode == "OPERATIVE_ONLY" and domains & {"LOGISTICS_PERSONAL", "PERSONNEL", "SOCIAL"}:
+        if not domains & {"TECHNICAL_ISSUE", "TASK_ASSIGNMENT"}:
+            return False
     if report_mode == "OPERATIVE_PLUS_LOGISTICS" and event.project_impact_score < 20:
         return False
-    return bool(_event_domains(event) & _allowed_domains(report_mode))
+    return bool(domains & _allowed_domains(report_mode))
+
+
+def _thread_allowed(thread: OperationalThread, event_by_id: dict[str, OperationalEvent], report_mode: ReportMode) -> bool:
+    if report_mode != "OPERATIVE_ONLY":
+        return True
+    return any(_event_allowed(event_by_id[event_id], report_mode) for event_id in thread.related_event_ids if event_id in event_by_id)
+
+
+def _macro_allowed(
+    macro: OperationalMacroThread,
+    thread_by_id: dict[str, OperationalThread],
+    event_by_id: dict[str, OperationalEvent],
+    report_mode: ReportMode,
+) -> bool:
+    if report_mode != "OPERATIVE_ONLY":
+        return True
+    return any(
+        thread_id in thread_by_id and _thread_allowed(thread_by_id[thread_id], event_by_id, report_mode)
+        for thread_id in macro.child_thread_ids
+    )
 
 
 def _noise_summary(events: list[OperationalEvent], report_mode: ReportMode) -> list[str]:
@@ -374,7 +410,7 @@ def _media_label(
     )
 
 
-def _nearby_context_for_event(event: OperationalEvent, events: list[OperationalEvent]) -> str:
+def _nearby_context_for_event(event: OperationalEvent, events: list[OperationalEvent], report_mode: ReportMode = "OPERATIVE_ONLY") -> str:
     event_index = next((idx for idx, candidate in enumerate(events) if candidate.event_id == event.event_id), -1)
     if event_index < 0:
         return ""
@@ -383,6 +419,8 @@ def _nearby_context_for_event(event: OperationalEvent, events: list[OperationalE
     end = min(len(events), event_index + 3)
     for candidate in events[start:end]:
         if candidate.event_id == event.event_id:
+            continue
+        if not _event_allowed(candidate, report_mode):
             continue
         text = (candidate.content or candidate.extracted_text or "").strip()
         if not text:
@@ -415,7 +453,7 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
             *state.information,
             *state.open_questions,
         ]
-        if should_verify_item(item) and _item_allowed(item, event_by_id, report_mode)
+        if should_verify_item(item)
     ]
     operational_items = [*decisions, *tasks, *issues]
     context_complete = len([item for item in operational_items if has_item_context(item)])
@@ -434,10 +472,16 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
     open_threads = [
         thread
         for thread in state.threads
-        if thread.status in {"open", "in_progress", "waiting", "stale"} and thread.project_impact_score >= 50
+        if thread.status in {"open", "in_progress", "waiting", "stale"}
+        and thread.project_impact_score >= 50
+        and _thread_allowed(thread, event_by_id, report_mode)
     ]
     thread_by_id = {thread.thread_id: thread for thread in state.threads}
-    macro_threads = [macro for macro in state.macro_threads if macro.child_thread_ids]
+    macro_threads = [
+        macro
+        for macro in state.macro_threads
+        if macro.child_thread_ids and _macro_allowed(macro, thread_by_id, event_by_id, report_mode)
+    ]
     events_linked_to_threads = len({event_id for thread in state.threads for event_id in thread.related_event_ids})
 
     report = DailyReport(
@@ -454,7 +498,7 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
         media_relevant=[
             _media_label(
                 event,
-                nearby_context=_nearby_context_for_event(event, events),
+                nearby_context=_nearby_context_for_event(event, events, report_mode),
                 operational_items=items_by_event_id.get(event.event_id, []),
             )
             for event in media_events

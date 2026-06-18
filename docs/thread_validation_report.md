@@ -62,12 +62,15 @@ Metriche aggregate sulle fixture:
 
 - Adaptive profile accuracy: 1.0000
 - Generic term detection rate: 1.0000
-- Specific term detection rate: 0.7917
+- Specific term detection rate: 0.8750
 - Workflow detection confidence: 0.7533
+- Vocabulary noise rate: 0.0000
+- Accepted operational term rate: 0.8750
+- Operative report leakage rate: 0.0000
 
 Risultati per dominio:
 
-- Construction: dominio `construction_site`, generic rate 1.0000, specific rate 0.6667, workflow confidence 1.0000.
+- Construction: dominio `construction_site`, generic rate 1.0000, specific rate 1.0000, workflow confidence 1.0000.
 - Logistics: dominio `logistics`, generic rate 1.0000, specific rate 0.5000, workflow confidence 0.9600.
 - Family: dominio `family_coordination`, generic rate 1.0000, specific rate 1.0000, workflow confidence 0.2533.
 - Customer support: dominio `customer_support`, generic rate 1.0000, specific rate 1.0000, workflow confidence 0.8000.
@@ -111,6 +114,51 @@ Statistiche dal flusso reale offline con profilo adattivo:
 - Thread collegati a macro-thread: 17
 - Thread senza macro-thread: 20
 - Macro principali: `t7 / v10 / stf t7 / mandata t7`, `torre 2`, `ewc05`, `els07`
+
+Report adattivo raffinato con quality gate:
+
+- `output/reports/tab-cefla-hq-enel-roma_adaptive_profile_refined_report.md`
+
+Statistiche dal flusso reale offline con vocabolario e report gate raffinati:
+
+- Eventi processati: 140
+- Media rilevati: 64
+- Media analizzati: 43
+- Media con testo estratto: 0
+- Decisioni: 0
+- Task aperti: 7
+- Task completati: 0
+- Problemi: 20
+- Domande aperte: 3
+- Thread operativi totali: 37
+- Macro-thread operativi: 3
+- Thread collegati a macro-thread: 16
+- Thread senza macro-thread: 21
+- Frase logistica personale `Il treno sta andando sulla linea normale...`: esclusa dal report OPERATIVE_ONLY.
+- Termine generico rumoroso `non`: non renderizzato nel profilo.
+
+Termini rumorosi ora scartati o non promossi:
+
+- `58 la`
+- `davvero il`
+- `break avere`
+- `il problema`
+- `non`
+- placeholder media senza OCR non disponibili
+
+Termini operativi ancora mantenuti o promossi:
+
+- `t7 disalimentate`
+- `stf t7`
+- `b1 v10`
+- `mandata t7`
+- `fancoil perde acqua`
+- `errore login`
+- `magazzino nord`
+
+Nota di qualita':
+
+Il filtro elimina i frammenti linguistici piu' evidenti e impedisce leak logistici nel report OPERATIVE_ONLY. Rimangono pero' alcune frasi locali imperfette, ad esempio combinazioni come `accettabile 58 portata` o `break rumore`, che sono operative ma non ancora canoniche. Il prossimo raffinamento deve normalizzare questi termini senza introdurre regole specifiche per TAB CEFLA.
 
 ## Casi problematici principali
 
@@ -186,7 +234,8 @@ Azioni precise:
 2. Mantenere l'Adaptive Chat Profile come fonte primaria: ogni chat deve calcolare i propri termini generici e specifici.
 3. Ridurre il peso di frasi locali rumorose, messaggi di sistema e placeholder media senza OCR.
 4. Non fondere macro-thread tramite sola sequenza temporale.
-5. Ripetere la validazione dopo la calibrazione e puntare prima a ridurre `macro_overmerge_rate` sotto 0.30 e aumentare `specific_term_detection_rate` sopra 0.85.
+5. Ripetere la validazione dopo la calibrazione e puntare prima a ridurre `macro_overmerge_rate` sotto 0.30 mantenendo `specific_term_detection_rate` sopra 0.85.
+6. Introdurre una normalizzazione/canonicalizzazione dei termini, cosi' da trasformare frasi locali rumorose in etichette operative piu' stabili senza perdere adattivita' multi-dominio.
 
 ## Decisione
 

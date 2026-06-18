@@ -2,7 +2,7 @@
   "project_id": "profile-support",
   "expected_domain": "customer_support",
   "expected_generic_terms": ["cliente"],
-  "expected_specific_terms": ["ticket 1042", "cliente beta"],
+  "expected_specific_terms": ["errore login", "ticket 1042 chiuso", "problema fattura"],
   "events": [
     {"event_id": "s01", "sender": "operatore_1", "timestamp": "2026-06-12T08:00:00+00:00", "content": "Cliente Beta apre ticket 1042 per errore login"},
     {"event_id": "s02", "sender": "operatore_2", "timestamp": "2026-06-12T08:15:00+00:00", "content": "Ticket 1042 diagnosi: password scaduta"},

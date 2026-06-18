@@ -157,6 +157,9 @@ class AdaptiveChatProfile(BaseModel):
     topic_candidates: list[str] = Field(default_factory=list)
     workflow_patterns: list[str] = Field(default_factory=list)
     term_specificity: dict[str, float] = Field(default_factory=dict)
+    term_quality_scores: dict[str, float] = Field(default_factory=dict)
+    rejected_terms: list[str] = Field(default_factory=list)
+    rejection_reasons: dict[str, str] = Field(default_factory=dict)
     last_updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 

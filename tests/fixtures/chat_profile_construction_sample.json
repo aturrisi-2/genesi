@@ -2,7 +2,7 @@
   "project_id": "profile-construction",
   "expected_domain": "construction_site",
   "expected_generic_terms": ["t7"],
-  "expected_specific_terms": ["porta 034", "ss01", "fancoil"],
+  "expected_specific_terms": ["porta 034 fancoil", "ss01 mandata sistemata", "fancoil perde acqua"],
   "events": [
     {"event_id": "c01", "sender": "persona_1", "timestamp": "2026-06-12T08:00:00+00:00", "content": "T7 piano 2 controllo mandata"},
     {"event_id": "c02", "sender": "persona_2", "timestamp": "2026-06-12T08:05:00+00:00", "content": "T7 porta 034 fancoil perde acqua"},

@@ -14,7 +14,9 @@ STOPWORDS = {
     "ciao",
     "come",
     "con",
+    "da",
     "dai",
+    "davvero",
     "del",
     "della",
     "delle",
@@ -28,10 +30,20 @@ STOPWORDS = {
     "fai",
     "grazie",
     "allegato",
+    "adesso",
+    "allora",
+    "avere",
+    "bisogno",
+    "compagnia",
+    "il",
+    "in",
     "ieri",
     "immagine",
     "importato",
     "locale",
+    "la",
+    "le",
+    "lo",
     "offline",
     "ocr",
     "oggi",
@@ -40,6 +52,8 @@ STOPWORDS = {
     "parte",
     "per",
     "poi",
+    "proprio",
+    "qualcosa",
     "qui",
     "questo",
     "quindi",
@@ -83,6 +97,33 @@ ACTION_TERMS = {
     "sostituire",
     "verificare",
 }
+OBJECT_TERMS = {
+    "accesso",
+    "acqua",
+    "bolletta",
+    "camion",
+    "canale",
+    "cliente",
+    "compiti",
+    "consegna",
+    "errore",
+    "fancoil",
+    "griglia",
+    "login",
+    "magazzino",
+    "montante",
+    "ordine",
+    "porta",
+    "portata",
+    "potenziometro",
+    "pressione",
+    "rumore",
+    "scuola",
+    "serranda",
+    "spesa",
+    "ticket",
+    "visita",
+}
 PROBLEM_TERMS = {
     "anomalia",
     "bloccato",
@@ -99,6 +140,9 @@ PROBLEM_TERMS = {
 COMPLETION_TERMS = {"chiuso", "completato", "confermato", "fatto", "funziona", "risolto", "sistemato", "verificato"}
 LOCATION_HINT_RE = re.compile(r"\b(?:piano|porta|magazzino|scuola|casa|stazione|aeroporto|sala|ufficio)\s+\w+\b", re.IGNORECASE)
 TOKEN_RE = re.compile(r"\b[\w][\w.-]{1,}\b", re.IGNORECASE)
+CODE_RE = re.compile(r"\b(?:[a-z]{1,5}[-]?\d{1,5}|\d{1,5}[a-z]{1,4})\b", re.IGNORECASE)
+BAD_EDGE_TERMS = STOPWORDS | {"avere", "era", "andando", "sta"}
+BAD_CONNECTOR_TERMS = {"avere", "allora", "qualcosa", "proprio", "bisogno", "compagnia"}
 
 
 def _normalize(value: str) -> str:
@@ -137,15 +181,121 @@ def _tokenize(text: str) -> list[str]:
     return tokens
 
 
-def _bigrams(tokens: list[str]) -> list[str]:
-    return [f"{left} {right}" for left, right in zip(tokens, tokens[1:]) if left not in STOPWORDS and right not in STOPWORDS]
+def clean_candidate_term(term: str) -> str:
+    tokens = _tokenize(term)
+    while tokens and tokens[0] in BAD_EDGE_TERMS:
+        tokens.pop(0)
+    while tokens and tokens[-1] in BAD_EDGE_TERMS:
+        tokens.pop()
+    return " ".join(tokens)
+
+
+def calculate_phrase_cohesion(term: str) -> float:
+    tokens = clean_candidate_term(term).split()
+    if not tokens:
+        return 0.0
+    if len(tokens) == 1:
+        token = tokens[0]
+        if token in STOPWORDS:
+            return 0.0
+        if CODE_RE.search(token) or token in OBJECT_TERMS or token in ACTION_TERMS or token in PROBLEM_TERMS:
+            return 0.8
+        return 0.45
+    stopword_ratio = len([token for token in tokens if token in STOPWORDS]) / len(tokens)
+    has_signal = any(token in OBJECT_TERMS or token in ACTION_TERMS or token in PROBLEM_TERMS or CODE_RE.search(token) for token in tokens)
+    has_problem_or_action = any(token in ACTION_TERMS or token in PROBLEM_TERMS for token in tokens)
+    score = 0.45
+    if has_signal:
+        score += 0.25
+    if has_problem_or_action:
+        score += 0.15
+    if len(tokens) >= 3:
+        score += 0.10
+    score -= stopword_ratio * 0.5
+    return round(max(0.0, min(1.0, score)), 4)
+
+
+def is_operational_term(term: str) -> bool:
+    cleaned = clean_candidate_term(term)
+    if not cleaned:
+        return False
+    tokens = cleaned.split()
+    if cleaned in STOPWORDS:
+        return False
+    if CODE_RE.search(cleaned):
+        return True
+    if any(token in OBJECT_TERMS for token in tokens):
+        return True
+    if any(token in ACTION_TERMS or token in PROBLEM_TERMS or token in COMPLETION_TERMS for token in tokens):
+        return True
+    return False
+
+
+def is_linguistic_fragment(term: str) -> bool:
+    raw_tokens = _normalize(term).split()
+    if raw_tokens and (raw_tokens[0] in BAD_EDGE_TERMS or raw_tokens[-1] in BAD_EDGE_TERMS):
+        return True
+    cleaned = clean_candidate_term(term)
+    tokens = cleaned.split()
+    if not tokens:
+        return True
+    if cleaned in STOPWORDS or cleaned in {"non", "ok", "si", "ciao", "fatto"}:
+        return True
+    if len(tokens) == 1:
+        token = tokens[0]
+        if token.isdigit() and not CODE_RE.search(token):
+            return True
+        return not is_operational_term(token)
+    if any(token in BAD_CONNECTOR_TERMS for token in _normalize(term).split()):
+        return True
+    if tokens[0] in BAD_EDGE_TERMS or tokens[-1] in BAD_EDGE_TERMS:
+        return True
+    if any(token.isdigit() for token in tokens) and any(token in STOPWORDS for token in tokens):
+        return True
+    return calculate_phrase_cohesion(cleaned) < 0.55
+
+
+def calculate_term_quality_score(term: str, specificity: float = 0.0, recurrence: int = 1) -> float:
+    cleaned = clean_candidate_term(term)
+    if not cleaned or is_linguistic_fragment(cleaned):
+        return 0.0
+    cohesion = calculate_phrase_cohesion(cleaned)
+    recurrence_bonus = min(0.15, max(0, recurrence - 1) * 0.05)
+    signal_bonus = 0.15 if is_operational_term(cleaned) else 0.0
+    return round(min(1.0, (cohesion * 0.45) + (specificity * 0.35) + recurrence_bonus + signal_bonus), 4)
+
+
+def _rejection_reason(term: str) -> str:
+    cleaned = clean_candidate_term(term)
+    if not cleaned:
+        return "empty_after_cleaning"
+    tokens = cleaned.split()
+    if cleaned in STOPWORDS or cleaned in {"non", "ok", "si", "ciao", "fatto"}:
+        return "stopword_or_social_fragment"
+    if any(token.isdigit() for token in tokens) and any(token in STOPWORDS for token in tokens):
+        return "numeric_stopword_fragment"
+    if calculate_phrase_cohesion(cleaned) < 0.55:
+        return "low_phrase_cohesion"
+    return "low_operational_quality"
+
+
+def extract_candidate_phrases(tokens: list[str]) -> list[str]:
+    candidates: list[str] = []
+    for size in (1, 2, 3):
+        for idx in range(0, max(0, len(tokens) - size + 1)):
+            phrase = clean_candidate_term(" ".join(tokens[idx: idx + size]))
+            if phrase:
+                candidates.append(phrase)
+    return candidates
 
 
 def _identifier_phrases(tokens: list[str]) -> list[str]:
     phrases = []
     for left, right in zip(tokens, tokens[1:]):
         if any(char.isdigit() for char in left) or any(char.isdigit() for char in right):
-            phrases.append(f"{left} {right}")
+            phrase = clean_candidate_term(f"{left} {right}")
+            if phrase:
+                phrases.append(phrase)
     return phrases
 
 
@@ -222,10 +372,10 @@ def build_adaptive_chat_profile(
     tokenized = [_tokenize(text) for text in texts]
     all_tokens = [token for tokens in tokenized for token in tokens]
     token_counter = Counter(all_tokens)
-    phrase_counter = Counter(phrase for tokens in tokenized for phrase in [*_bigrams(tokens), *_identifier_phrases(tokens)])
+    phrase_counter = Counter(phrase for tokens in tokenized for phrase in extract_candidate_phrases(tokens))
     event_term_counts: Counter[str] = Counter()
     for tokens in tokenized:
-        for term in set([*tokens, *_bigrams(tokens), *_identifier_phrases(tokens)]):
+        for term in set([*extract_candidate_phrases(tokens), *_identifier_phrases(tokens)]):
             event_term_counts[term] += 1
     thread_terms = _thread_distribution(threads)
     specificity = {
@@ -233,16 +383,33 @@ def build_adaptive_chat_profile(
         for term in event_term_counts
         if event_term_counts[term] >= 1
     }
-    recurring_terms = [term for term, count in event_term_counts.most_common() if count >= 2]
+    term_quality_scores = {
+        term: calculate_term_quality_score(term, specificity.get(term, 0), event_term_counts[term])
+        for term in event_term_counts
+    }
+    rejected_terms = [
+        term
+        for term, quality in sorted(term_quality_scores.items(), key=lambda item: (item[1], item[0]))
+        if quality <= 0 or is_linguistic_fragment(term)
+    ][:40]
+    rejection_reasons = {term: _rejection_reason(term) for term in rejected_terms}
+    recurring_terms = [
+        term
+        for term, count in event_term_counts.most_common()
+        if count >= 2 and term_quality_scores.get(term, 0) > 0
+    ]
     generic_terms = [
         term
         for term in recurring_terms
-        if specificity.get(term, 0) < 0.48 and event_term_counts[term] >= max(2, int(len(events) * 0.12))
+        if term not in STOPWORDS
+        and term_quality_scores.get(term, 0) >= 0.45
+        and specificity.get(term, 0) < 0.48
+        and event_term_counts[term] >= max(2, int(len(events) * 0.12))
     ][:20]
     specific_terms = [
         term
         for term, score in sorted(specificity.items(), key=lambda item: item[1], reverse=True)
-        if score >= 0.72 and term not in generic_terms
+        if score >= 0.72 and term not in generic_terms and term_quality_scores.get(term, 0) >= 0.62
     ][:25]
     domain, confidence = _infer_domain(all_tokens)
     lower_text = "\n".join(texts).lower()
@@ -250,7 +417,11 @@ def build_adaptive_chat_profile(
     completion_terms = [term for term in COMPLETION_TERMS if term in lower_text]
     action_terms = [term for term in ACTION_TERMS if term in set(all_tokens) or term in lower_text]
     locations = _top(Counter(match.group(0).lower() for text in texts for match in LOCATION_HINT_RE.finditer(text)), limit=12)
-    topic_candidates = _top(phrase_counter, limit=20, minimum=2)
+    topic_candidates = [
+        phrase
+        for phrase, count in phrase_counter.most_common()
+        if count >= 2 and term_quality_scores.get(phrase, 0) >= 0.55 and not is_linguistic_fragment(phrase)
+    ][:20]
     objects = [term for term in specific_terms if any(char.isdigit() for char in term) or len(term.split()) > 1][:15]
     return AdaptiveChatProfile(
         project_id=project_id,
@@ -269,5 +440,10 @@ def build_adaptive_chat_profile(
         topic_candidates=topic_candidates,
         workflow_patterns=[],
         term_specificity=specificity,
+        term_quality_scores=term_quality_scores,
+        rejected_terms=rejected_terms,
+        rejection_reasons=rejection_reasons,
         last_updated_at=datetime.now(timezone.utc).isoformat(),
     )
+    "area",
+    "break",

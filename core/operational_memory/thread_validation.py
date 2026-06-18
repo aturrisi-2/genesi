@@ -5,6 +5,7 @@ from itertools import combinations
 from typing import Any
 
 from core.operational_memory.models import AdaptiveChatProfile, OperationalEvent, OperationalMacroThread, OperationalThread
+from core.operational_memory.chat_profile_engine import is_linguistic_fragment, is_operational_term
 
 
 OPERATIONAL_ROLES = {"opens_thread", "continues_thread", "closes_thread", "weak_evidence", "follow_up"}
@@ -37,6 +38,10 @@ class ThreadValidationResult:
     workflow_detection_confidence: float = 0.0
     macro_thread_adaptive_precision: float = 1.0
     macro_thread_adaptive_recall: float = 1.0
+    vocabulary_noise_rate: float = 0.0
+    rejected_fragment_rate: float = 1.0
+    accepted_operational_term_rate: float = 1.0
+    operative_report_leakage_rate: float = 0.0
 
 
 def _event_id(event: dict[str, Any] | OperationalEvent) -> str:
@@ -446,6 +451,38 @@ def calculate_macro_thread_adaptive_recall(
     return calculate_macro_recall(annotated_events, expected_threads, generated_threads, generated_macro_threads)
 
 
+def calculate_vocabulary_noise_rate(profile: AdaptiveChatProfile | dict[str, Any]) -> float:
+    specific_terms = profile.get("specific_terms", []) if isinstance(profile, dict) else profile.specific_terms
+    if not specific_terms:
+        return 0.0
+    noisy = [term for term in specific_terms if is_linguistic_fragment(term)]
+    return len(noisy) / len(specific_terms)
+
+
+def calculate_rejected_fragment_rate(expected_fragments: list[str], profile: AdaptiveChatProfile | dict[str, Any]) -> float:
+    if not expected_fragments:
+        return 1.0
+    rejected = profile.get("rejected_terms", []) if isinstance(profile, dict) else profile.rejected_terms
+    rejected_normalized = {term.lower() for term in rejected}
+    return len({term.lower() for term in expected_fragments} & rejected_normalized) / len(expected_fragments)
+
+
+def calculate_accepted_operational_term_rate(expected_terms: list[str], profile: AdaptiveChatProfile | dict[str, Any]) -> float:
+    if not expected_terms:
+        return 1.0
+    specific_terms = profile.get("specific_terms", []) if isinstance(profile, dict) else profile.specific_terms
+    accepted = {term.lower() for term in specific_terms if is_operational_term(term)}
+    return len({term.lower() for term in expected_terms} & accepted) / len(expected_terms)
+
+
+def calculate_operative_report_leakage_rate(report_items: list[str], forbidden_terms: list[str]) -> float:
+    if not forbidden_terms:
+        return 0.0
+    body = "\n".join(report_items).lower()
+    leaked = [term for term in forbidden_terms if term.lower() in body]
+    return len(leaked) / len(forbidden_terms)
+
+
 def _macro_overmerge_cases(
     annotated_events: list[dict[str, Any]],
     expected_threads: list[dict[str, Any]] | dict[str, Any],
@@ -543,4 +580,13 @@ def evaluate_thread_grouping(
             generated_threads,
             generated_macro_threads,
         ),
+        vocabulary_noise_rate=calculate_vocabulary_noise_rate(adaptive_profile) if adaptive_profile else 0.0,
+        rejected_fragment_rate=calculate_rejected_fragment_rate(
+            list(expected_threads.get("expected_rejected_fragments", [])) if isinstance(expected_threads, dict) else [],
+            adaptive_profile,
+        ) if adaptive_profile else 1.0,
+        accepted_operational_term_rate=calculate_accepted_operational_term_rate(
+            list(expected_threads.get("expected_accepted_operational_terms", [])) if isinstance(expected_threads, dict) else [],
+            adaptive_profile,
+        ) if adaptive_profile else 1.0,
     )
