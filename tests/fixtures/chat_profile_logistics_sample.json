@@ -1,0 +1,14 @@
+{
+  "project_id": "profile-logistics",
+  "expected_domain": "logistics",
+  "expected_generic_terms": ["ordine"],
+  "expected_specific_terms": ["ordine ax45", "magazzino nord"],
+  "events": [
+    {"event_id": "l01", "sender": "persona_1", "timestamp": "2026-06-12T08:00:00+00:00", "content": "Ordine AX45 pronto in magazzino nord"},
+    {"event_id": "l02", "sender": "persona_2", "timestamp": "2026-06-12T08:20:00+00:00", "content": "Ordine AX45 consegna in ritardo per mezzo fermo"},
+    {"event_id": "l03", "sender": "persona_3", "timestamp": "2026-06-12T08:40:00+00:00", "content": "Corriere conferma ritiro ordine AX45 alle 11"},
+    {"event_id": "l04", "sender": "persona_2", "timestamp": "2026-06-12T09:00:00+00:00", "content": "Ordine BY77 in magazzino sud da preparare"},
+    {"event_id": "l05", "sender": "persona_1", "timestamp": "2026-06-12T09:30:00+00:00", "content": "Ordine BY77 ddt mancante"},
+    {"event_id": "l06", "sender": "persona_3", "timestamp": "2026-06-12T10:00:00+00:00", "content": "Ordine BY77 ddt sistemato e consegna confermata"}
+  ]
+}

@@ -49,9 +49,32 @@ Il dataset contiene eventi reali anonimizzati derivati dal flusso WhatsApp offli
 - Macro fragmentation rate: 0.4444
 - Subthread preservation rate: 1.0000
 
+## Numeri Adaptive Chat Profile
+
+Fixture multi-dominio introdotte:
+
+- `tests/fixtures/chat_profile_construction_sample.json`
+- `tests/fixtures/chat_profile_logistics_sample.json`
+- `tests/fixtures/chat_profile_family_sample.json`
+- `tests/fixtures/chat_profile_customer_support_sample.json`
+
+Metriche aggregate sulle fixture:
+
+- Adaptive profile accuracy: 1.0000
+- Generic term detection rate: 1.0000
+- Specific term detection rate: 0.7917
+- Workflow detection confidence: 0.7533
+
+Risultati per dominio:
+
+- Construction: dominio `construction_site`, generic rate 1.0000, specific rate 0.6667, workflow confidence 1.0000.
+- Logistics: dominio `logistics`, generic rate 1.0000, specific rate 0.5000, workflow confidence 0.9600.
+- Family: dominio `family_coordination`, generic rate 1.0000, specific rate 1.0000, workflow confidence 0.2533.
+- Customer support: dominio `customer_support`, generic rate 1.0000, specific rate 1.0000, workflow confidence 0.8000.
+
 Interpretazione:
 
-Il livello macro-thread e' non distruttivo: conserva i thread operativi distinti e li collega tramite `macro_thread_id`, senza fonderli. Tuttavia la qualita' del raggruppamento macro e' ancora da calibrare: il motore usa tag comuni come `T7` con troppo peso e questo crea macro-thread troppo larghi.
+Il livello macro-thread e' non distruttivo: conserva i thread operativi distinti e li collega tramite `macro_thread_id`, senza fonderli. Con l'introduzione dell'Adaptive Chat Profile il motore non usa piu' liste fisse basate sulla chat TAB CEFLA. La qualita' del raggruppamento macro e' ancora da calibrare: ora dipende dalla specificita' calcolata per progetto, ma su chat reali rumorose emergono anche frasi locali poco utili.
 
 ## Report reale rigenerato
 
@@ -74,6 +97,21 @@ Statistiche dal flusso reale offline:
 - Critical item dentro macro-thread: 12
 - Open item dentro macro-thread: 9
 
+Report adattivo rigenerato:
+
+- `output/reports/tab-cefla-hq-enel-roma_adaptive_profile_report.md`
+
+Statistiche dal flusso reale offline con profilo adattivo:
+
+- Dominio inferito: `construction_site`
+- Confidenza dominio: `medium`
+- Workflow probabile: `problem report -> verification -> request or assignment -> intervention -> completion`
+- Thread operativi totali: 37
+- Macro-thread operativi: 4
+- Thread collegati a macro-thread: 17
+- Thread senza macro-thread: 20
+- Macro principali: `t7 / v10 / stf t7 / mandata t7`, `torre 2`, `ewc05`, `els07`
+
 ## Casi problematici principali
 
 ### Overmerge thread
@@ -91,14 +129,14 @@ Interpretazione:
 
 ### Overmerge macro
 
-Casi rilevati:
+Casi rilevati nella baseline pre-adattiva:
 
 - Macro `macro_476f855f971b` collega `L3_T7_SSLE_SPECIALI`, `SS01_MANDATA_T7`, `STF_T7_ALIMENTAZIONE`, `T7_M2_NON_PARTE_FOLLOWUP`, `UTA_T7_PRESSIONE_CANALE`.
 - Macro `macro_b6e2db245fb5` collega `EWC05_MONTANTE_L4`, `EWC05_MONTANTE_L4_FOLLOWUP`, `T7_M2_NON_PARTE`.
 
 Interpretazione:
 
-Il macro-layer riduce la frammentazione percepita, ma in questa baseline tende a creare macro-temi troppo ampi quando trova sistemi generici condivisi o sequenze operative vicine.
+Il macro-layer riduce la frammentazione percepita. La versione adattiva evita liste hardcoded, ma puo' ancora creare macro-temi troppo ampi se un termine risulta specifico solo per distribuzione locale e non per reale utilita' operativa.
 
 ### Frammentazione
 
@@ -135,19 +173,20 @@ Frammentazione mitigata:
 Leggibilita' del report:
 
 - Migliorata. La sezione `Macro-thread operativi` fornisce una vista superiore dei pacchetti di lavoro senza cancellare i sottothread.
-- Non ancora affidabile come metrica decisionale autonoma, perche' alcune macro sono troppo larghe.
+- Migliorata ulteriormente con la sezione `Profilo adattivo della chat`, che mostra dominio, termini generici, termini specifici, workflow probabile e pattern di problema/completamento.
+- Non ancora affidabile come metrica decisionale autonoma, perche' alcune macro sono troppo larghe e alcuni termini specifici sono ancora frasi locali rumorose.
 
 ## Raccomandazioni
 
-Raccomandazione principale: **restare in FASE 3 e calibrare il macro-thread engine**.
+Raccomandazione principale: **restare in FASE 3 e calibrare il profilo adattivo + macro-thread engine**.
 
 Azioni precise:
 
 1. Mantenere il layer macro-thread, perche' preserva i sottothread (`subthread_preservation_rate = 1.0000`).
-2. Ridurre il peso dei tag generici (`T7`, `UTA`) quando non sono accompagnati da almeno un codice specifico o un work package coerente.
-3. Aumentare il peso di codici specifici e coppie contesto-componente, per esempio `SS01 + Mandata`, `EWC05 + montante`, `B02 + porta`.
+2. Mantenere l'Adaptive Chat Profile come fonte primaria: ogni chat deve calcolare i propri termini generici e specifici.
+3. Ridurre il peso di frasi locali rumorose, messaggi di sistema e placeholder media senza OCR.
 4. Non fondere macro-thread tramite sola sequenza temporale.
-5. Ripetere la validazione dopo la calibrazione e puntare prima a ridurre `macro_overmerge_rate` sotto 0.30.
+5. Ripetere la validazione dopo la calibrazione e puntare prima a ridurre `macro_overmerge_rate` sotto 0.30 e aumentare `specific_term_detection_rate` sopra 0.85.
 
 ## Decisione
 

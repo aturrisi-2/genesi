@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from core.operational_memory.context_extractor import extract_context
+from core.operational_memory.chat_profile_engine import build_adaptive_chat_profile
 from core.operational_memory.event_store import list_events, save_events
 from core.operational_memory.macro_thread_engine import build_macro_threads
 from core.operational_memory.models import OperationalEvent, OperationalItem, OperationalState, OperationalThread, ThreadStatus
@@ -470,9 +471,11 @@ async def rebuild_project_threads(project_id: str, stale_days: int = DEFAULT_STA
     events = await list_events(project_id)
     state = await load_state(project_id)
     threads, updated_events = build_threads_from_events(project_id, events, state, stale_days=stale_days)
-    macro_threads = build_macro_threads(project_id, threads)
+    profile = build_adaptive_chat_profile(project_id, updated_events, threads)
+    macro_threads = build_macro_threads(project_id, threads, updated_events, profile)
     state.threads = threads
     state.macro_threads = macro_threads
+    state.adaptive_chat_profile = profile
     await save_events(project_id, updated_events)
     await save_state(project_id, state)
     return threads

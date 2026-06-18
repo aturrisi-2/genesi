@@ -5,6 +5,7 @@ Transforms unstructured text messages into a minimal operational state.
 
 from .extractor import extract_state
 from .models import (
+    AdaptiveChatProfile,
     Decision,
     Information,
     Issue,
@@ -16,6 +17,7 @@ from .models import (
 )
 
 __all__ = [
+    "AdaptiveChatProfile",
     "Decision",
     "Information",
     "Issue",

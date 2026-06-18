@@ -21,6 +21,20 @@ Domain = Literal[
     "MEDIA_EVIDENCE",
     "UNKNOWN",
 ]
+InferredChatDomain = Literal[
+    "construction_site",
+    "maintenance",
+    "engineering",
+    "logistics",
+    "sales",
+    "customer_support",
+    "family_coordination",
+    "school",
+    "travel",
+    "event_planning",
+    "generic_group_chat",
+    "unknown",
+]
 ReportMode = Literal["OPERATIVE_ONLY", "OPERATIVE_PLUS_LOGISTICS", "FULL_CONTEXT"]
 ThreadStatus = Literal["open", "in_progress", "waiting", "resolved", "stale"]
 EvidenceStrength = Literal["none", "weak", "medium", "high"]
@@ -121,6 +135,29 @@ class OperationalMacroThread(BaseModel):
     confidence: GroupingConfidence = "low"
     open_items_count: int = 0
     critical_items_count: int = 0
+    creation_reason: str = ""
+    adaptive_patterns: list[str] = Field(default_factory=list)
+    ignored_generic_terms: list[str] = Field(default_factory=list)
+
+
+class AdaptiveChatProfile(BaseModel):
+    project_id: str
+    inferred_domain: InferredChatDomain = "unknown"
+    domain_confidence: Confidence = "low"
+    recurring_entities: list[str] = Field(default_factory=list)
+    recurring_locations: list[str] = Field(default_factory=list)
+    recurring_people: list[str] = Field(default_factory=list)
+    recurring_objects: list[str] = Field(default_factory=list)
+    recurring_actions: list[str] = Field(default_factory=list)
+    recurring_problem_terms: list[str] = Field(default_factory=list)
+    recurring_completion_terms: list[str] = Field(default_factory=list)
+    recurring_question_patterns: list[str] = Field(default_factory=list)
+    generic_terms: list[str] = Field(default_factory=list)
+    specific_terms: list[str] = Field(default_factory=list)
+    topic_candidates: list[str] = Field(default_factory=list)
+    workflow_patterns: list[str] = Field(default_factory=list)
+    term_specificity: dict[str, float] = Field(default_factory=dict)
+    last_updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class OperationalState(BaseModel):
@@ -133,6 +170,7 @@ class OperationalState(BaseModel):
     open_questions: list[OperationalQuestion] = Field(default_factory=list)
     threads: list[OperationalThread] = Field(default_factory=list)
     macro_threads: list[OperationalMacroThread] = Field(default_factory=list)
+    adaptive_chat_profile: Optional[AdaptiveChatProfile] = None
     domain_stats: dict[str, int] = Field(default_factory=dict)
 
 
@@ -192,6 +230,7 @@ class DailyReport(BaseModel):
     information: list[str] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
     media_relevant: list[str] = Field(default_factory=list)
+    adaptive_chat_profile_report: list[str] = Field(default_factory=list)
     operational_threads: list[str] = Field(default_factory=list)
     operational_macro_threads: list[str] = Field(default_factory=list)
     items_to_verify: list[str] = Field(default_factory=list)

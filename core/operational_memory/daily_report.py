@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from core.operational_memory.event_store import list_events
 from core.operational_memory.models import (
+    AdaptiveChatProfile,
     DailyReport,
     Domain,
     OperationalEvent,
@@ -157,6 +158,9 @@ def _macro_label(macro: OperationalMacroThread, thread_by_id: dict[str, Operatio
             f"  Stato: {macro.status}",
             f"  Confidenza: {macro.confidence}",
             f"  Contesto: {context}",
+            f"  Creato per: {macro.creation_reason or 'pattern adattivo condiviso'}",
+            f"  Pattern adattivi: {'; '.join(macro.adaptive_patterns) if macro.adaptive_patterns else 'non disponibili'}",
+            f"  Termini generici ignorati: {', '.join(macro.ignored_generic_terms) if macro.ignored_generic_terms else 'nessuno'}",
             f"  Sottothread: {len(macro.child_thread_ids)}",
             f"  Criticita: {macro.critical_items_count}",
             f"  Task aperti: {macro.open_items_count}",
@@ -168,6 +172,21 @@ def _macro_label(macro: OperationalMacroThread, thread_by_id: dict[str, Operatio
             f"  Prossima azione macro: {_macro_next_action(macro, child_threads)}",
         ]
     )
+
+
+def _profile_label(profile: AdaptiveChatProfile | None) -> list[str]:
+    if profile is None:
+        return ["Profilo non ancora disponibile"]
+    workflow = " -> ".join(profile.workflow_patterns) if profile.workflow_patterns else "non rilevato"
+    return [
+        f"Dominio inferito: {profile.inferred_domain} ({profile.domain_confidence})",
+        f"Termini generici rilevati: {', '.join(profile.generic_terms[:12]) if profile.generic_terms else 'nessuno'}",
+        f"Termini specifici rilevati: {', '.join(profile.specific_terms[:12]) if profile.specific_terms else 'nessuno'}",
+        f"Workflow probabile: {workflow}",
+        f"Pattern problema: {', '.join(profile.recurring_problem_terms[:10]) if profile.recurring_problem_terms else 'nessuno'}",
+        f"Pattern completamento: {', '.join(profile.recurring_completion_terms[:10]) if profile.recurring_completion_terms else 'nessuno'}",
+        f"Topic candidati: {', '.join(profile.topic_candidates[:10]) if profile.topic_candidates else 'nessuno'}",
+    ]
 
 
 def _next_actions(
@@ -302,6 +321,7 @@ def _markdown(report: DailyReport) -> str:
         ("Informazioni rilevanti", report.information),
         ("Domande aperte", report.open_questions),
         ("Media rilevanti", report.media_relevant),
+        ("Profilo adattivo della chat", report.adaptive_chat_profile_report),
         ("Macro-thread operativi", report.operational_macro_threads),
         ("Thread operativi aperti", report.operational_threads),
         ("Elementi da verificare", report.items_to_verify),
@@ -439,6 +459,7 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
             )
             for event in media_events
         ],
+        adaptive_chat_profile_report=_profile_label(state.adaptive_chat_profile),
         operational_macro_threads=[_macro_label(macro, thread_by_id) for macro in macro_threads],
         operational_threads=[_thread_label(thread, event_by_id) for thread in open_threads],
         items_to_verify=[_item_label(item, "VERIFY") for item in items_to_verify],
@@ -450,6 +471,7 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
             "state_updated_at": state.updated_at,
             "report_mode": report_mode,
             "domain_stats": state.domain_stats,
+            "adaptive_chat_profile": state.adaptive_chat_profile.model_dump() if state.adaptive_chat_profile else None,
             "impact_distribution": {
                 "noise": len([event for event in events if classify_impact_level(event.project_impact_score) == "noise"]),
                 "context": len([event for event in events if classify_impact_level(event.project_impact_score) == "context"]),

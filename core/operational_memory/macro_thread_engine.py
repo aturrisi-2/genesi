@@ -2,42 +2,21 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections import Counter
 from datetime import datetime, timezone
 
-from core.operational_memory.models import GroupingConfidence, MacroRelation, OperationalMacroThread, OperationalThread
-
-
-SYSTEM_TAGS = {"SS01", "EWC05", "ELS07", "POL-03", "UTA", "T7", "B02"}
-AREA_RE = re.compile(r"^(?:L\d{1,2}|piano\s+\d{1,2}|copertura\s+t\d+|torre\s+\d+|porta\s+\d{1,4}|B\d{2})$", re.IGNORECASE)
-WORK_PACKAGE_TAGS = {
-    "alimentazione",
-    "mandata",
-    "ripresa",
-    "bilanciamento",
-    "serranda",
-    "fancoil",
-    "plenum",
-    "vele",
-    "vela",
-    "canale",
-    "collegamento",
-    "collegamenti",
-    "montante",
-    "potenziometro",
-    "valvole",
-    "pressione",
-    "pre riscaldo",
-}
-COMPONENT_FAMILY_TAGS = {"serranda", "fancoil", "plenum", "vele", "vela", "canale", "BDF", "potenziometro", "montante"}
-GENERIC_SYSTEM_TAGS = {"T7", "UTA"}
+from core.operational_memory.chat_profile_engine import build_adaptive_chat_profile
+from core.operational_memory.models import (
+    AdaptiveChatProfile,
+    GroupingConfidence,
+    MacroRelation,
+    OperationalEvent,
+    OperationalMacroThread,
+    OperationalThread,
+)
+from core.operational_memory.workflow_engine import infer_workflow_patterns
 
 
 def _norm(value: str) -> str:
-    return re.sub(r"\s+", " ", value.strip()).upper()
-
-
-def _lower(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip().lower())
 
 
@@ -53,12 +32,6 @@ def _parse_timestamp(value: str | None) -> datetime:
         return datetime.now(timezone.utc)
 
 
-def _macro_id(project_id: str, tags: list[str]) -> str:
-    seed = "|".join(_norm(tag) for tag in tags[:5]) or "macro"
-    digest = hashlib.sha1(f"{project_id}:{seed}".encode("utf-8")).hexdigest()[:12]
-    return f"macro_{digest}"
-
-
 def _unique(values: list[str]) -> list[str]:
     result: list[str] = []
     seen: set[str] = set()
@@ -71,80 +44,103 @@ def _unique(values: list[str]) -> list[str]:
     return result
 
 
-def _thread_tags(thread: OperationalThread) -> list[str]:
-    tags = list(thread.context_tags)
-    text = " ".join([thread.title, *thread.related_tasks, *thread.related_issues]).lower()
-    for tag in WORK_PACKAGE_TAGS:
-        if tag in text:
-            tags.append(tag)
-    return _unique(tags)
+def _macro_id(project_id: str, tags: list[str]) -> str:
+    seed = "|".join(_norm(tag) for tag in tags[:6]) or "macro"
+    digest = hashlib.sha1(f"{project_id}:{seed}".encode("utf-8")).hexdigest()[:12]
+    return f"macro_{digest}"
 
 
-def detect_work_package(thread: OperationalThread) -> list[str]:
-    tags = _thread_tags(thread)
-    packages = []
-    lowered = {_lower(tag) for tag in tags}
-    text = _lower(" ".join([thread.title, *thread.related_tasks, *thread.related_issues]))
-    for package in WORK_PACKAGE_TAGS:
-        if package in lowered or package in text:
-            packages.append(package)
-    return _unique(packages)
+def _profile_terms(profile: AdaptiveChatProfile, terms: list[str], source: str) -> set[str]:
+    available = {_norm(term) for term in terms}
+    return {_norm(term) for term in getattr(profile, source) if _norm(term) in available}
 
 
-def _system_tags(tags: list[str]) -> set[str]:
-    return {_norm(tag) for tag in tags if _norm(tag) in SYSTEM_TAGS}
+def _thread_text(thread: OperationalThread) -> str:
+    return " ".join([thread.title, *thread.context_tags, *thread.related_tasks, *thread.related_issues, *thread.unresolved_questions])
 
 
-def _area_tags(tags: list[str]) -> set[str]:
-    return {_norm(tag) for tag in tags if AREA_RE.match(tag)}
+def _thread_terms(thread: OperationalThread, profile: AdaptiveChatProfile) -> list[str]:
+    text = _norm(_thread_text(thread))
+    terms = []
+    for term in [*profile.specific_terms, *profile.topic_candidates, *profile.recurring_actions, *profile.recurring_problem_terms]:
+        normalized = _norm(term)
+        if normalized and normalized in text and normalized not in {_norm(value) for value in profile.generic_terms}:
+            terms.append(term)
+    for tag in thread.context_tags:
+        normalized = _norm(tag)
+        if normalized not in {_norm(value) for value in profile.generic_terms}:
+            terms.append(tag)
+    return _unique(terms)
 
 
-def _component_tags(tags: list[str]) -> set[str]:
-    return {_norm(tag) for tag in tags if _norm(tag) in {_norm(value) for value in COMPONENT_FAMILY_TAGS}}
+def detect_work_package(thread: OperationalThread, profile: AdaptiveChatProfile | None = None) -> list[str]:
+    if profile is None:
+        profile = build_adaptive_chat_profile(thread.project_id, [], [thread])
+    terms = _thread_terms(thread, profile)
+    action_terms = _profile_terms(profile, terms, "recurring_actions")
+    problem_terms = _profile_terms(profile, terms, "recurring_problem_terms")
+    topic_terms = _profile_terms(profile, terms, "topic_candidates")
+    return _unique([*action_terms, *problem_terms, *topic_terms])
 
 
-def _work_package_tags(tags: list[str]) -> set[str]:
-    return {_lower(tag) for tag in tags if _lower(tag) in WORK_PACKAGE_TAGS}
+def _shared_specific_terms(left: OperationalThread, right: OperationalThread, profile: AdaptiveChatProfile) -> set[str]:
+    left_terms = {_norm(term) for term in _thread_terms(left, profile)}
+    right_terms = {_norm(term) for term in _thread_terms(right, profile)}
+    generic = {_norm(term) for term in profile.generic_terms}
+    specific = {_norm(term) for term in profile.specific_terms}
+    shared = (left_terms & right_terms) - generic
+    return {term for term in shared if term in specific or " " in term or any(char.isdigit() for char in term)}
 
 
-def _specific_system_overlap(left: set[str], right: set[str]) -> set[str]:
-    overlap = left & right
-    specific = {tag for tag in overlap if tag not in GENERIC_SYSTEM_TAGS}
-    return specific or overlap
+def _shared_topic_terms(left: OperationalThread, right: OperationalThread, profile: AdaptiveChatProfile) -> set[str]:
+    left_terms = {_norm(term) for term in _thread_terms(left, profile)}
+    right_terms = {_norm(term) for term in _thread_terms(right, profile)}
+    topics = {_norm(term) for term in profile.topic_candidates}
+    generic = {_norm(term) for term in profile.generic_terms}
+    return (left_terms & right_terms & topics) - generic
 
 
-def _relation_for_threads(left: OperationalThread, right: OperationalThread) -> MacroRelation | None:
-    left_tags = _thread_tags(left)
-    right_tags = _thread_tags(right)
-    system_overlap = _specific_system_overlap(_system_tags(left_tags), _system_tags(right_tags))
-    if system_overlap:
+def _shared_workflow_terms(left: OperationalThread, right: OperationalThread, profile: AdaptiveChatProfile) -> set[str]:
+    left_terms = {_norm(term) for term in _thread_terms(left, profile)}
+    right_terms = {_norm(term) for term in _thread_terms(right, profile)}
+    workflow = {_norm(term) for term in [*profile.recurring_actions, *profile.recurring_problem_terms, *profile.recurring_completion_terms]}
+    generic = {_norm(term) for term in profile.generic_terms}
+    return (left_terms & right_terms & workflow) - generic
+
+
+def _relation_for_threads(left: OperationalThread, right: OperationalThread, profile: AdaptiveChatProfile) -> MacroRelation | None:
+    if _shared_specific_terms(left, right, profile):
         return "same_system"
-    if _area_tags(left_tags) & _area_tags(right_tags):
-        return "same_area"
-    if _work_package_tags(left_tags) & _work_package_tags(right_tags):
+    if _shared_topic_terms(left, right, profile):
         return "same_work_package"
-    if _component_tags(left_tags) & _component_tags(right_tags):
+    if _shared_workflow_terms(left, right, profile):
         return "same_component_family"
     return None
 
 
-def calculate_macro_similarity(left: OperationalThread, right: OperationalThread) -> float:
-    left_tags = _thread_tags(left)
-    right_tags = _thread_tags(right)
+def calculate_macro_similarity(
+    left: OperationalThread,
+    right: OperationalThread,
+    profile: AdaptiveChatProfile | None = None,
+) -> float:
+    if profile is None:
+        profile = build_adaptive_chat_profile(left.project_id, [], [left, right])
     score = 0.0
-    system_overlap = _specific_system_overlap(_system_tags(left_tags), _system_tags(right_tags))
-    if system_overlap:
-        score += 0.45
-    if _area_tags(left_tags) & _area_tags(right_tags):
-        score += 0.25
-    if _work_package_tags(left_tags) & _work_package_tags(right_tags):
+    specific_overlap = _shared_specific_terms(left, right, profile)
+    topic_overlap = _shared_topic_terms(left, right, profile)
+    workflow_overlap = _shared_workflow_terms(left, right, profile)
+    if specific_overlap:
+        score += 0.55
+    if len(specific_overlap) >= 2:
         score += 0.20
-    if _component_tags(left_tags) & _component_tags(right_tags):
+    if topic_overlap:
+        score += 0.25
+    if workflow_overlap and (specific_overlap or topic_overlap):
         score += 0.15
     return min(score, 1.0)
 
 
-def calculate_macro_confidence(threads: list[OperationalThread]) -> GroupingConfidence:
+def calculate_macro_confidence(threads: list[OperationalThread], profile: AdaptiveChatProfile | None = None) -> GroupingConfidence:
     if len(threads) >= 3:
         return "high"
     if len(threads) == 2:
@@ -152,12 +148,30 @@ def calculate_macro_confidence(threads: list[OperationalThread]) -> GroupingConf
     return "low"
 
 
-def _macro_title(tags: list[str]) -> str:
-    systems = [tag for tag in tags if _norm(tag) in SYSTEM_TAGS]
-    packages = [tag for tag in tags if _lower(tag) in WORK_PACKAGE_TAGS]
-    areas = [tag for tag in tags if AREA_RE.match(tag)]
-    parts = _unique([*systems[:2], *areas[:1], *packages[:2]])
-    return " / ".join(parts) if parts else "Macro-thread operativo"
+def calculate_macro_adaptive_patterns(child_threads: list[OperationalThread], profile: AdaptiveChatProfile) -> list[str]:
+    patterns = []
+    for left_index, left in enumerate(child_threads):
+        for right in child_threads[left_index + 1:]:
+            for term in sorted(_shared_specific_terms(left, right, profile)):
+                patterns.append(f"termine specifico condiviso: {term}")
+            for term in sorted(_shared_topic_terms(left, right, profile)):
+                patterns.append(f"topic ricorrente condiviso: {term}")
+            for term in sorted(_shared_workflow_terms(left, right, profile)):
+                patterns.append(f"segnale workflow condiviso: {term}")
+    return _unique(patterns)[:12]
+
+
+def _macro_title(child_threads: list[OperationalThread], profile: AdaptiveChatProfile) -> str:
+    shared_terms = []
+    for left_index, left in enumerate(child_threads):
+        for right in child_threads[left_index + 1:]:
+            shared_terms.extend(sorted(_shared_specific_terms(left, right, profile)))
+            shared_terms.extend(sorted(_shared_topic_terms(left, right, profile)))
+    readable = _unique(shared_terms)
+    if readable:
+        return " / ".join(term for term in readable[:4])
+    context = _unique([tag for thread in child_threads for tag in _thread_terms(thread, profile)])
+    return " / ".join(context[:4]) if context else "Macro-thread operativo"
 
 
 def summarize_macro_thread(macro: OperationalMacroThread, child_threads: list[OperationalThread]) -> str:
@@ -177,33 +191,48 @@ def _status_for_macro(child_threads: list[OperationalThread]) -> str:
     return "resolved"
 
 
-def _macro_from_threads(project_id: str, child_threads: list[OperationalThread]) -> OperationalMacroThread:
-    context_tags = _unique([tag for thread in child_threads for tag in _thread_tags(thread)])
+def _macro_from_threads(
+    project_id: str,
+    child_threads: list[OperationalThread],
+    profile: AdaptiveChatProfile,
+) -> OperationalMacroThread:
+    context_tags = _unique([tag for thread in child_threads for tag in _thread_terms(thread, profile)])
     started_at = min(child_threads, key=lambda thread: _parse_timestamp(thread.started_at)).started_at
     last_updated_at = max(child_threads, key=lambda thread: _parse_timestamp(thread.last_updated_at)).last_updated_at
+    patterns = calculate_macro_adaptive_patterns(child_threads, profile)
+    ignored = [term for term in profile.generic_terms if any(_norm(term) in _norm(_thread_text(thread)) for thread in child_threads)]
     macro = OperationalMacroThread(
         macro_thread_id=_macro_id(project_id, context_tags),
         project_id=project_id,
-        title=_macro_title(context_tags),
+        title=_macro_title(child_threads, profile),
         status=_status_for_macro(child_threads),
         started_at=started_at,
         last_updated_at=last_updated_at,
         context_tags=context_tags,
         child_thread_ids=[thread.thread_id for thread in child_threads],
         related_event_ids=_unique([event_id for thread in child_threads for event_id in thread.related_event_ids]),
-        confidence=calculate_macro_confidence(child_threads),
+        confidence=calculate_macro_confidence(child_threads, profile),
         open_items_count=sum(len(thread.related_tasks) + len(thread.unresolved_questions) for thread in child_threads if thread.status != "resolved"),
         critical_items_count=len([thread for thread in child_threads if thread.project_impact_score >= 80]),
+        creation_reason="macro-thread creato da pattern specifici del profilo adattivo",
+        adaptive_patterns=patterns,
+        ignored_generic_terms=_unique(ignored)[:10],
     )
     macro.summary = summarize_macro_thread(macro, child_threads)
     return macro
 
 
-def assign_thread_to_macro(thread: OperationalThread, macro_threads: list[OperationalMacroThread]) -> OperationalMacroThread | None:
+def assign_thread_to_macro(
+    thread: OperationalThread,
+    macro_threads: list[OperationalMacroThread],
+    profile: AdaptiveChatProfile | None = None,
+) -> OperationalMacroThread | None:
+    if profile is None:
+        profile = build_adaptive_chat_profile(thread.project_id, [], [thread])
     best_macro = None
     best_score = 0.0
-    pseudo_threads = [
-        OperationalThread(
+    for macro in macro_threads:
+        pseudo = OperationalThread(
             thread_id=macro.macro_thread_id,
             project_id=macro.project_id,
             title=macro.title,
@@ -211,34 +240,54 @@ def assign_thread_to_macro(thread: OperationalThread, macro_threads: list[Operat
             last_updated_at=macro.last_updated_at,
             context_tags=macro.context_tags,
         )
-        for macro in macro_threads
-    ]
-    for macro, pseudo in zip(macro_threads, pseudo_threads):
-        score = calculate_macro_similarity(thread, pseudo)
+        score = calculate_macro_similarity(thread, pseudo, profile)
         if score > best_score:
             best_macro = macro
             best_score = score
-    return best_macro if best_score > 0 else None
+    return best_macro if best_score >= 0.55 else None
 
 
-def build_macro_threads(project_id: str, threads: list[OperationalThread]) -> list[OperationalMacroThread]:
+def _profile_events_from_threads(project_id: str, threads: list[OperationalThread]) -> list[OperationalEvent]:
+    return [
+        OperationalEvent(
+            event_id=f"profile_{thread.thread_id}",
+            project_id=project_id,
+            source="thread-summary",
+            sender="",
+            timestamp=thread.last_updated_at,
+            content=_thread_text(thread),
+            processed_status="processed",
+        )
+        for thread in threads
+    ]
+
+
+def build_macro_threads(
+    project_id: str,
+    threads: list[OperationalThread],
+    events: list[OperationalEvent] | None = None,
+    profile: AdaptiveChatProfile | None = None,
+) -> list[OperationalMacroThread]:
     candidates = [thread for thread in threads if thread.related_event_ids and thread.project_impact_score >= 50]
+    profile = profile or build_adaptive_chat_profile(project_id, events or _profile_events_from_threads(project_id, candidates), candidates)
+    workflow_patterns, _workflow_confidence = infer_workflow_patterns(events or [], profile)
+    profile.workflow_patterns = workflow_patterns or profile.workflow_patterns
     groups: list[list[OperationalThread]] = []
 
     for thread in candidates:
         matched_group = None
         best_score = 0.0
         for group in groups:
-            score = max(calculate_macro_similarity(thread, existing) for existing in group)
+            score = max(calculate_macro_similarity(thread, existing, profile) for existing in group)
             if score > best_score:
                 best_score = score
                 matched_group = group
-        if matched_group is not None and best_score > 0:
+        if matched_group is not None and best_score >= 0.55:
             matched_group.append(thread)
         else:
             groups.append([thread])
 
-    macro_threads = [_macro_from_threads(project_id, group) for group in groups if len(group) >= 2]
+    macro_threads = [_macro_from_threads(project_id, group, profile) for group in groups if len(group) >= 2]
     macro_by_child: dict[str, OperationalMacroThread] = {}
     for macro in macro_threads:
         for child_id in macro.child_thread_ids:
@@ -260,9 +309,7 @@ def build_macro_threads(project_id: str, threads: list[OperationalThread]) -> li
         thread.macro_title = macro.title
         thread.macro_context_tags = list(macro.context_tags)
         thread.macro_confidence = macro.confidence
-        thread.relation_to_macro = _relation_for_threads(
-            thread,
-            next(candidate for candidate in threads if candidate.thread_id != thread.thread_id and candidate.thread_id in macro.child_thread_ids),
-        ) or "weak_relation"
+        siblings = [candidate for candidate in threads if candidate.thread_id != thread.thread_id and candidate.thread_id in macro.child_thread_ids]
+        thread.relation_to_macro = (_relation_for_threads(thread, siblings[0], profile) if siblings else None) or "weak_relation"
 
     return macro_threads

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from itertools import combinations
 from typing import Any
 
-from core.operational_memory.models import OperationalEvent, OperationalMacroThread, OperationalThread
+from core.operational_memory.models import AdaptiveChatProfile, OperationalEvent, OperationalMacroThread, OperationalThread
 
 
 OPERATIONAL_ROLES = {"opens_thread", "continues_thread", "closes_thread", "weak_evidence", "follow_up"}
@@ -31,6 +31,12 @@ class ThreadValidationResult:
     subthread_preservation_rate: float = 1.0
     macro_overmerge_cases: list[dict[str, Any]] = field(default_factory=list)
     macro_fragmentation_cases: list[dict[str, Any]] = field(default_factory=list)
+    adaptive_profile_accuracy: float = 1.0
+    generic_term_detection_rate: float = 1.0
+    specific_term_detection_rate: float = 1.0
+    workflow_detection_confidence: float = 0.0
+    macro_thread_adaptive_precision: float = 1.0
+    macro_thread_adaptive_recall: float = 1.0
 
 
 def _event_id(event: dict[str, Any] | OperationalEvent) -> str:
@@ -384,6 +390,62 @@ def calculate_subthread_preservation_rate(
     return len(valid_child_ids) / len(generated_threads)
 
 
+def calculate_adaptive_profile_accuracy(expected_domain: str, profile: AdaptiveChatProfile | dict[str, Any]) -> float:
+    inferred = profile.get("inferred_domain") if isinstance(profile, dict) else profile.inferred_domain
+    if not expected_domain:
+        return 1.0
+    if inferred == expected_domain:
+        return 1.0
+    compatible = {
+        ("construction_site", "maintenance"),
+        ("maintenance", "construction_site"),
+    }
+    return 0.8 if (expected_domain, inferred) in compatible else 0.0
+
+
+def calculate_generic_term_detection_rate(expected_terms: list[str], profile: AdaptiveChatProfile | dict[str, Any]) -> float:
+    if not expected_terms:
+        return 1.0
+    detected = set(profile.get("generic_terms", []) if isinstance(profile, dict) else profile.generic_terms)
+    expected = {term.lower() for term in expected_terms}
+    detected_normalized = {term.lower() for term in detected}
+    return len(expected & detected_normalized) / len(expected)
+
+
+def calculate_specific_term_detection_rate(expected_terms: list[str], profile: AdaptiveChatProfile | dict[str, Any]) -> float:
+    if not expected_terms:
+        return 1.0
+    detected = set(profile.get("specific_terms", []) if isinstance(profile, dict) else profile.specific_terms)
+    expected = {term.lower() for term in expected_terms}
+    detected_normalized = {term.lower() for term in detected}
+    return len(expected & detected_normalized) / len(expected)
+
+
+def calculate_workflow_detection_confidence(profile: AdaptiveChatProfile | dict[str, Any], fallback_confidence: float = 0.0) -> float:
+    patterns = profile.get("workflow_patterns", []) if isinstance(profile, dict) else profile.workflow_patterns
+    if not patterns:
+        return fallback_confidence
+    return min(1.0, max(fallback_confidence, len(patterns) / 5))
+
+
+def calculate_macro_thread_adaptive_precision(
+    annotated_events: list[dict[str, Any]],
+    expected_threads: list[dict[str, Any]] | dict[str, Any],
+    generated_threads: list[dict[str, Any] | OperationalThread],
+    generated_macro_threads: list[dict[str, Any] | OperationalMacroThread],
+) -> float:
+    return calculate_macro_precision(annotated_events, expected_threads, generated_threads, generated_macro_threads)
+
+
+def calculate_macro_thread_adaptive_recall(
+    annotated_events: list[dict[str, Any]],
+    expected_threads: list[dict[str, Any]] | dict[str, Any],
+    generated_threads: list[dict[str, Any] | OperationalThread],
+    generated_macro_threads: list[dict[str, Any] | OperationalMacroThread],
+) -> float:
+    return calculate_macro_recall(annotated_events, expected_threads, generated_threads, generated_macro_threads)
+
+
 def _macro_overmerge_cases(
     annotated_events: list[dict[str, Any]],
     expected_threads: list[dict[str, Any]] | dict[str, Any],
@@ -431,6 +493,7 @@ def evaluate_thread_grouping(
     generated_threads: list[dict[str, Any] | OperationalThread],
     generated_events: list[dict[str, Any] | OperationalEvent] | None = None,
     generated_macro_threads: list[dict[str, Any] | OperationalMacroThread] | None = None,
+    adaptive_profile: AdaptiveChatProfile | None = None,
 ) -> ThreadValidationResult:
     generated_macro_threads = generated_macro_threads or []
     return ThreadValidationResult(
@@ -455,4 +518,29 @@ def evaluate_thread_grouping(
         subthread_preservation_rate=calculate_subthread_preservation_rate(generated_threads, generated_macro_threads),
         macro_overmerge_cases=_macro_overmerge_cases(annotated_events, expected_threads, generated_threads, generated_macro_threads),
         macro_fragmentation_cases=_macro_fragmentation_cases(annotated_events, expected_threads, generated_threads, generated_macro_threads),
+        adaptive_profile_accuracy=calculate_adaptive_profile_accuracy(
+            str(expected_threads.get("expected_domain", "")) if isinstance(expected_threads, dict) else "",
+            adaptive_profile,
+        ) if adaptive_profile else 1.0,
+        generic_term_detection_rate=calculate_generic_term_detection_rate(
+            list(expected_threads.get("expected_generic_terms", [])) if isinstance(expected_threads, dict) else [],
+            adaptive_profile,
+        ) if adaptive_profile else 1.0,
+        specific_term_detection_rate=calculate_specific_term_detection_rate(
+            list(expected_threads.get("expected_specific_terms", [])) if isinstance(expected_threads, dict) else [],
+            adaptive_profile,
+        ) if adaptive_profile else 1.0,
+        workflow_detection_confidence=calculate_workflow_detection_confidence(adaptive_profile) if adaptive_profile else 0.0,
+        macro_thread_adaptive_precision=calculate_macro_thread_adaptive_precision(
+            annotated_events,
+            expected_threads,
+            generated_threads,
+            generated_macro_threads,
+        ),
+        macro_thread_adaptive_recall=calculate_macro_thread_adaptive_recall(
+            annotated_events,
+            expected_threads,
+            generated_threads,
+            generated_macro_threads,
+        ),
     )
