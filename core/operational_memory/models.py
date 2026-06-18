@@ -22,6 +22,7 @@ Domain = Literal[
     "UNKNOWN",
 ]
 ReportMode = Literal["OPERATIVE_ONLY", "OPERATIVE_PLUS_LOGISTICS", "FULL_CONTEXT"]
+ThreadStatus = Literal["open", "in_progress", "waiting", "resolved", "stale"]
 
 
 class OperationalItem(BaseModel):
@@ -63,6 +64,25 @@ class OperationalQuestion(OperationalItem):
     pass
 
 
+class OperationalThread(BaseModel):
+    thread_id: str
+    project_id: str
+    title: str
+    status: ThreadStatus = "open"
+    started_at: str
+    last_updated_at: str
+    closed_at: Optional[str] = None
+    primary_domain: Domain = "UNKNOWN"
+    project_impact_score: int = 0
+    related_event_ids: list[str] = Field(default_factory=list)
+    related_tasks: list[str] = Field(default_factory=list)
+    related_issues: list[str] = Field(default_factory=list)
+    related_media: list[str] = Field(default_factory=list)
+    context_tags: list[str] = Field(default_factory=list)
+    summary: str = ""
+    unresolved_questions: list[str] = Field(default_factory=list)
+
+
 class OperationalState(BaseModel):
     project_id: Optional[str] = None
     updated_at: Optional[str] = None
@@ -71,6 +91,7 @@ class OperationalState(BaseModel):
     issues: list[Issue] = Field(default_factory=list)
     information: list[Information] = Field(default_factory=list)
     open_questions: list[OperationalQuestion] = Field(default_factory=list)
+    threads: list[OperationalThread] = Field(default_factory=list)
     domain_stats: dict[str, int] = Field(default_factory=dict)
 
 
@@ -99,6 +120,7 @@ class OperationalEvent(BaseModel):
     project_impact_score: int = 0
     operational_relevance_score: int = 0
     impact_reason: str = ""
+    thread_id: Optional[str] = None
     processed_status: ProcessedStatus = "pending"
 
 
@@ -123,6 +145,7 @@ class DailyReport(BaseModel):
     information: list[str] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
     media_relevant: list[str] = Field(default_factory=list)
+    operational_threads: list[str] = Field(default_factory=list)
     items_to_verify: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
     conversational_noise_filtered: list[str] = Field(default_factory=list)

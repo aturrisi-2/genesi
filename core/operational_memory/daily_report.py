@@ -3,7 +3,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from core.operational_memory.event_store import list_events
-from core.operational_memory.models import DailyReport, Domain, OperationalEvent, OperationalItem, OperationalState, ReportMode
+from core.operational_memory.models import (
+    DailyReport,
+    Domain,
+    OperationalEvent,
+    OperationalItem,
+    OperationalState,
+    OperationalThread,
+    ReportMode,
+)
 from core.operational_memory.project_impact import classify_impact_level
 from core.operational_memory.quality import (
     has_item_context,
@@ -75,6 +83,50 @@ def _item_label(item: OperationalItem, kind: str) -> str:
 
 def _task_label(task) -> str:
     return _item_label(task, "TASK")
+
+
+def _thread_next_action(thread: OperationalThread) -> str:
+    if thread.status == "waiting":
+        return "sbloccare attesa o conferma tecnica"
+    if thread.unresolved_questions:
+        return f"rispondere a: {thread.unresolved_questions[0]}"
+    if thread.related_issues and not thread.related_tasks:
+        return "definire piano di risoluzione"
+    if thread.related_tasks:
+        return "verificare avanzamento task collegati"
+    if thread.status == "stale":
+        return "verificare se il tema e ancora aperto"
+    return "monitorare prossimo aggiornamento operativo"
+
+
+def _thread_label(thread: OperationalThread, event_by_id: dict[str, OperationalEvent]) -> str:
+    context = " / ".join(thread.context_tags[:8]) if thread.context_tags else "contesto non rilevato"
+    event_lines = []
+    for event_id in thread.related_event_ids[:8]:
+        event = event_by_id.get(event_id)
+        text = (event.content or event.extracted_text or event.media_description or event_id).strip() if event else event_id
+        text = " ".join(text.split())
+        if len(text) > 120:
+            text = text[:117].rstrip() + "..."
+        event_lines.append(f"    - {text}")
+    if not event_lines:
+        event_lines.append("    - Nessun evento collegato")
+    return "\n".join(
+        [
+            f"[THREAD] {thread.title}",
+            f"  Stato: {thread.status}",
+            f"  Impatto: {classify_impact_level(thread.project_impact_score)} ({thread.project_impact_score})",
+            f"  Contesto: {context}",
+            f"  Prima segnalazione: {_format_timestamp(thread.started_at)}",
+            f"  Ultimo aggiornamento: {_format_timestamp(thread.last_updated_at)}",
+            f"  Eventi collegati: {len(thread.related_event_ids)}",
+            *event_lines,
+            f"  Task collegati: {len(thread.related_tasks)}",
+            f"  Problemi collegati: {len(thread.related_issues)}",
+            f"  Media collegati: {len(thread.related_media)}",
+            f"  Prossima azione: {_thread_next_action(thread)}",
+        ]
+    )
 
 
 def _next_actions(
@@ -209,6 +261,7 @@ def _markdown(report: DailyReport) -> str:
         ("Informazioni rilevanti", report.information),
         ("Domande aperte", report.open_questions),
         ("Media rilevanti", report.media_relevant),
+        ("Thread operativi aperti", report.operational_threads),
         ("Elementi da verificare", report.items_to_verify),
         ("Prossime azioni suggerite", report.next_actions),
         ("Rumore Conversazionale Filtrato", report.conversational_noise_filtered),
@@ -316,6 +369,12 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
     for item in [*state.decisions, *state.tasks, *state.issues, *state.information, *state.open_questions]:
         if item.source_event_id:
             items_by_event_id.setdefault(item.source_event_id, []).append(item)
+    open_threads = [
+        thread
+        for thread in state.threads
+        if thread.status in {"open", "in_progress", "waiting", "stale"} and thread.project_impact_score >= 50
+    ]
+    events_linked_to_threads = len({event_id for thread in state.threads for event_id in thread.related_event_ids})
 
     report = DailyReport(
         title=f"Aggiornamento giornaliero - {project_id}",
@@ -336,6 +395,7 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
             )
             for event in media_events
         ],
+        operational_threads=[_thread_label(thread, event_by_id) for thread in open_threads],
         items_to_verify=[_item_label(item, "VERIFY") for item in items_to_verify],
         next_actions=_next_actions(state, event_by_id, report_mode),
         conversational_noise_filtered=_noise_summary(events, report_mode),
@@ -354,6 +414,11 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
             "context_complete_items": context_complete,
             "context_total_items": context_total,
             "context_completeness": (context_complete / context_total) if context_total else 0,
+            "threads_total": len(state.threads),
+            "threads_open": len(open_threads),
+            "threads_resolved": len([thread for thread in state.threads if thread.status == "resolved"]),
+            "events_linked_to_threads": events_linked_to_threads,
+            "isolated_issues": len([issue for issue in issues if not issue.source_event_id or not event_by_id.get(issue.source_event_id) or not event_by_id[issue.source_event_id].thread_id]),
         },
     )
     report.markdown = _markdown(report)

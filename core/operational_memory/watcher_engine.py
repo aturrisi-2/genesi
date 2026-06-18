@@ -11,6 +11,7 @@ from core.operational_memory.event_store import (
 from core.operational_memory.models import OperationalEvent, OperationalState
 from core.operational_memory.state_engine import ingest_messages
 from core.operational_memory.state_store import load_state, save_state
+from core.operational_memory.thread_engine import rebuild_project_threads
 
 
 def normalize_event(event: OperationalEvent) -> OperationalEvent:
@@ -179,11 +180,13 @@ async def process_pending_events(project_id: str) -> dict:
             )
 
     await _save_domain_stats(project_id)
+    threads = await rebuild_project_threads(project_id)
 
     return {
         "project_id": project_id,
         "processed": processed,
         "failed": failed,
         "pending_remaining": len([event for event in await list_events(project_id) if event.processed_status == "pending"]),
+        "threads": len(threads),
         "state": state,
     }

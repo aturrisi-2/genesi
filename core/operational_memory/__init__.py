@@ -11,6 +11,7 @@ from .models import (
     OperationalQuestion,
     OperationalState,
     OperationalTask,
+    OperationalThread,
 )
 
 __all__ = [
@@ -20,5 +21,6 @@ __all__ = [
     "OperationalQuestion",
     "OperationalState",
     "OperationalTask",
+    "OperationalThread",
     "extract_state",
 ]
