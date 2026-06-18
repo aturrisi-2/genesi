@@ -6,6 +6,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 from core.operational_memory.models import Domain, OperationalEvent
+from core.operational_memory.project_impact import apply_project_impact
 
 
 OPERATIVE_DOMAINS: set[Domain] = {
@@ -18,7 +19,8 @@ DOMAIN_WEIGHTS: dict[Domain, int] = {
     "TASK_ASSIGNMENT": 85,
     "TECHNICAL_OPERATION": 75,
     "MEDIA_EVIDENCE": 65,
-    "LOGISTICS": 45,
+    "LOGISTICS_OPERATIONAL": 55,
+    "LOGISTICS_PERSONAL": 15,
     "PERSONNEL": 25,
     "SOCIAL": 10,
     "UNKNOWN": 20,
@@ -115,6 +117,25 @@ _LOGISTICS_TERMS = {
     "orario",
     "ore",
 }
+_PERSONAL_LOGISTICS_TERMS = {
+    "termini",
+    "treno",
+    "stazione",
+    "viaggio",
+    "parto",
+    "arrivo",
+    "arriviamo",
+}
+_OPERATIONAL_LOGISTICS_TERMS = {
+    "consegna",
+    "ritiro",
+    "materiale",
+    "profili",
+    "pannelli",
+    "fornitore",
+    "ddt",
+    "ordine",
+}
 _PERSONNEL_TERMS = {
     "schiena",
     "salute",
@@ -142,6 +163,7 @@ _SOCIAL_TERMS = {
     "buonasera",
     "andiamo al mare",
     "ci vediamo",
+    "manca solo",
 }
 
 
@@ -187,14 +209,20 @@ def _score_text(text: str, event_type: str = "text") -> list[_DomainScore]:
 
     if technical_code_hits or technical_component_hits:
         scores["TECHNICAL_OPERATION"] += 35 + (technical_code_hits * 15) + (technical_component_hits * 8)
-    if issue_hits and not personnel_hits and (technical_code_hits or technical_component_hits or issue_hits >= 1):
+    if issue_hits and not personnel_hits and not social_hits and (technical_code_hits or technical_component_hits or issue_hits >= 1):
         scores["TECHNICAL_ISSUE"] += 55 + (issue_hits * 15) + (technical_code_hits * 10) + (technical_component_hits * 8)
     if task_hits and (technical_code_hits or technical_component_hits or "domani" in normalized or "oggi" in normalized):
         scores["TASK_ASSIGNMENT"] += 45 + (task_hits * 12) + (technical_code_hits * 8)
     if logistics_hits:
-        scores["LOGISTICS"] += 30 + (logistics_hits * 12)
+        if _contains_any(normalized, _OPERATIONAL_LOGISTICS_TERMS) or technical_component_hits or technical_code_hits:
+            scores["LOGISTICS_OPERATIONAL"] += 30 + (logistics_hits * 12)
+        if _contains_any(normalized, _PERSONAL_LOGISTICS_TERMS) or not scores.get("LOGISTICS_OPERATIONAL"):
+            scores["LOGISTICS_PERSONAL"] += 30 + (logistics_hits * 12)
     if re.search(r"\b\d{1,2}[:.]\d{2}\b", normalized):
-        scores["LOGISTICS"] += 18
+        if scores.get("LOGISTICS_OPERATIONAL"):
+            scores["LOGISTICS_OPERATIONAL"] += 18
+        else:
+            scores["LOGISTICS_PERSONAL"] += 18
     if personnel_hits:
         scores["PERSONNEL"] += 35 + (personnel_hits * 12)
     if social_hits:
@@ -254,7 +282,7 @@ def classify_event(event: OperationalEvent) -> OperationalEvent:
     event.secondary_domains = secondary
     event.domain_confidence = confidence_score(text, primary, event_type=event.type)
     event.operational_relevance_score = operational_relevance_score(primary, secondary)
-    return event
+    return apply_project_impact(event)
 
 
 def should_extract_operationally(event: OperationalEvent) -> bool:
@@ -263,6 +291,6 @@ def should_extract_operationally(event: OperationalEvent) -> bool:
         return True
     if event.domain == "UNKNOWN":
         return True
-    if event.operational_relevance_score >= 70:
+    if event.project_impact_score >= 50:
         return True
     return False

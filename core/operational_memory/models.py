@@ -14,7 +14,8 @@ Domain = Literal[
     "TECHNICAL_OPERATION",
     "TECHNICAL_ISSUE",
     "TASK_ASSIGNMENT",
-    "LOGISTICS",
+    "LOGISTICS_OPERATIONAL",
+    "LOGISTICS_PERSONAL",
     "PERSONNEL",
     "SOCIAL",
     "MEDIA_EVIDENCE",
@@ -95,7 +96,9 @@ class OperationalEvent(BaseModel):
     domain: Domain = "UNKNOWN"
     domain_confidence: Confidence = "low"
     secondary_domains: list[Domain] = Field(default_factory=list)
+    project_impact_score: int = 0
     operational_relevance_score: int = 0
+    impact_reason: str = ""
     processed_status: ProcessedStatus = "pending"
 
 
@@ -123,5 +126,6 @@ class DailyReport(BaseModel):
     items_to_verify: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
     conversational_noise_filtered: list[str] = Field(default_factory=list)
+    impact_statistics: list[str] = Field(default_factory=list)
     markdown: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)

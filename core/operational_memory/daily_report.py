@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from core.operational_memory.event_store import list_events
 from core.operational_memory.models import DailyReport, Domain, OperationalEvent, OperationalItem, OperationalState, ReportMode
+from core.operational_memory.project_impact import classify_impact_level
 from core.operational_memory.quality import (
     has_item_context,
     next_action_priority,
@@ -124,13 +125,14 @@ def _next_actions(
 def _allowed_domains(report_mode: ReportMode) -> set[Domain]:
     operative: set[Domain] = {"TECHNICAL_OPERATION", "TECHNICAL_ISSUE", "TASK_ASSIGNMENT"}
     if report_mode == "OPERATIVE_PLUS_LOGISTICS":
-        return {*operative, "LOGISTICS"}
+        return {*operative, "LOGISTICS_OPERATIONAL"}
     if report_mode == "FULL_CONTEXT":
         return {
             "TECHNICAL_OPERATION",
             "TECHNICAL_ISSUE",
             "TASK_ASSIGNMENT",
-            "LOGISTICS",
+            "LOGISTICS_OPERATIONAL",
+            "LOGISTICS_PERSONAL",
             "PERSONNEL",
             "SOCIAL",
             "MEDIA_EVIDENCE",
@@ -149,10 +151,14 @@ def _item_allowed(item: OperationalItem, event_by_id: dict[str, OperationalEvent
     event = event_by_id.get(item.source_event_id)
     if event is None:
         return True
-    return bool(_event_domains(event) & _allowed_domains(report_mode))
+    return _event_allowed(event, report_mode)
 
 
 def _event_allowed(event: OperationalEvent, report_mode: ReportMode) -> bool:
+    if report_mode == "OPERATIVE_ONLY" and event.project_impact_score < 50:
+        return False
+    if report_mode == "OPERATIVE_PLUS_LOGISTICS" and event.project_impact_score < 20:
+        return False
     return bool(_event_domains(event) & _allowed_domains(report_mode))
 
 
@@ -165,8 +171,32 @@ def _noise_summary(events: list[OperationalEvent], report_mode: ReportMode) -> l
 
     return [
         f"Eventi social esclusi: {count('SOCIAL')}",
-        f"Eventi logistici esclusi: {count('LOGISTICS')}",
+        f"Eventi logistici personali esclusi: {count('LOGISTICS_PERSONAL')}",
+        f"Eventi logistici operativi esclusi: {count('LOGISTICS_OPERATIONAL')}",
         f"Eventi personali esclusi: {count('PERSONNEL')}",
+    ]
+
+
+def _impact_statistics(events: list[OperationalEvent], report_mode: ReportMode) -> list[str]:
+    low_impact_excluded = len(
+        [
+            event
+            for event in events
+            if event.project_impact_score < 50 and not _event_allowed(event, report_mode)
+        ]
+    )
+    levels = [classify_impact_level(event.project_impact_score) for event in events]
+    return [
+        f"Eventi esclusi per basso impatto: {low_impact_excluded}",
+        f"Eventi operativi: {levels.count('operative')}",
+        f"Eventi critici: {levels.count('critical')}",
+        (
+            "Distribuzione impatto: "
+            f"rumore={levels.count('noise')}, "
+            f"contesto={levels.count('context')}, "
+            f"operativo={levels.count('operative')}, "
+            f"critico={levels.count('critical')}"
+        ),
     ]
 
 
@@ -182,6 +212,7 @@ def _markdown(report: DailyReport) -> str:
         ("Elementi da verificare", report.items_to_verify),
         ("Prossime azioni suggerite", report.next_actions),
         ("Rumore Conversazionale Filtrato", report.conversational_noise_filtered),
+        ("Statistiche Impatto Progetto", report.impact_statistics),
     ]
     lines = [f"# {report.title}", "", f"Data: {report.date}", f"Modalita report: {report.report_mode}", ""]
     for title, items in sections:
@@ -308,11 +339,18 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
         items_to_verify=[_item_label(item, "VERIFY") for item in items_to_verify],
         next_actions=_next_actions(state, event_by_id, report_mode),
         conversational_noise_filtered=_noise_summary(events, report_mode),
+        impact_statistics=_impact_statistics(events, report_mode),
         metadata={
             "source_event_count": len(events),
             "state_updated_at": state.updated_at,
             "report_mode": report_mode,
             "domain_stats": state.domain_stats,
+            "impact_distribution": {
+                "noise": len([event for event in events if classify_impact_level(event.project_impact_score) == "noise"]),
+                "context": len([event for event in events if classify_impact_level(event.project_impact_score) == "context"]),
+                "operative": len([event for event in events if classify_impact_level(event.project_impact_score) == "operative"]),
+                "critical": len([event for event in events if classify_impact_level(event.project_impact_score) == "critical"]),
+            },
             "context_complete_items": context_complete,
             "context_total_items": context_total,
             "context_completeness": (context_complete / context_total) if context_total else 0,

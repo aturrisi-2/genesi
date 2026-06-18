@@ -34,7 +34,8 @@ def _domain_stats(events: list[OperationalEvent]) -> dict[str, int]:
                 or any(domain in {"TECHNICAL_OPERATION", "TECHNICAL_ISSUE", "TASK_ASSIGNMENT"} for domain in event.secondary_domains)
             ]
         ),
-        "logistics_events": len([event for event in events if has_domain(event, "LOGISTICS")]),
+        "logistics_operational_events": len([event for event in events if has_domain(event, "LOGISTICS_OPERATIONAL")]),
+        "logistics_personal_events": len([event for event in events if has_domain(event, "LOGISTICS_PERSONAL")]),
         "personnel_events": len([event for event in events if has_domain(event, "PERSONNEL")]),
         "social_events": len([event for event in events if has_domain(event, "SOCIAL")]),
         "media_events": len([event for event in events if has_domain(event, "MEDIA_EVIDENCE")]),
