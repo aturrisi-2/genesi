@@ -73,6 +73,27 @@ def _thread_terms(thread: OperationalThread, profile: AdaptiveChatProfile) -> li
     return _unique(terms)
 
 
+def _thread_canonical_terms(thread: OperationalThread, profile: AdaptiveChatProfile) -> list[str]:
+    text = _norm(_thread_text(thread))
+    labels: list[str] = []
+    for canonical in profile.canonical_terms:
+        label = _norm(canonical.label)
+        sources = [_norm(term) for term in canonical.source_terms]
+        if label and label in text:
+            labels.append(canonical.label)
+            continue
+        if any(source and source in text for source in sources):
+            labels.append(canonical.label)
+            continue
+        head = _norm(canonical.head_entity or "")
+        action = _norm(canonical.action_or_problem or "")
+        modifiers = [_norm(modifier) for modifier in canonical.context_modifiers]
+        strong_hits = len([value for value in [head, action, *modifiers] if value and value in text])
+        if strong_hits >= 2:
+            labels.append(canonical.label)
+    return _unique(labels)
+
+
 def detect_work_package(thread: OperationalThread, profile: AdaptiveChatProfile | None = None) -> list[str]:
     if profile is None:
         profile = build_adaptive_chat_profile(thread.project_id, [], [thread])
@@ -81,6 +102,12 @@ def detect_work_package(thread: OperationalThread, profile: AdaptiveChatProfile 
     problem_terms = _profile_terms(profile, terms, "recurring_problem_terms")
     topic_terms = _profile_terms(profile, terms, "topic_candidates")
     return _unique([*action_terms, *problem_terms, *topic_terms])
+
+
+def _shared_canonical_terms(left: OperationalThread, right: OperationalThread, profile: AdaptiveChatProfile) -> set[str]:
+    left_terms = {_norm(term) for term in _thread_canonical_terms(left, profile)}
+    right_terms = {_norm(term) for term in _thread_canonical_terms(right, profile)}
+    return left_terms & right_terms
 
 
 def _shared_specific_terms(left: OperationalThread, right: OperationalThread, profile: AdaptiveChatProfile) -> set[str]:
@@ -109,6 +136,8 @@ def _shared_workflow_terms(left: OperationalThread, right: OperationalThread, pr
 
 
 def _relation_for_threads(left: OperationalThread, right: OperationalThread, profile: AdaptiveChatProfile) -> MacroRelation | None:
+    if _shared_canonical_terms(left, right, profile):
+        return "same_work_package"
     if _shared_specific_terms(left, right, profile):
         return "same_system"
     if _shared_topic_terms(left, right, profile):
@@ -126,17 +155,22 @@ def calculate_macro_similarity(
     if profile is None:
         profile = build_adaptive_chat_profile(left.project_id, [], [left, right])
     score = 0.0
+    canonical_overlap = _shared_canonical_terms(left, right, profile)
     specific_overlap = _shared_specific_terms(left, right, profile)
     topic_overlap = _shared_topic_terms(left, right, profile)
     workflow_overlap = _shared_workflow_terms(left, right, profile)
-    if specific_overlap:
-        score += 0.55
-    if len(specific_overlap) >= 2:
-        score += 0.20
-    if topic_overlap:
-        score += 0.25
-    if workflow_overlap and (specific_overlap or topic_overlap):
+    if canonical_overlap:
+        score += 0.70
+    if len(canonical_overlap) >= 2:
         score += 0.15
+    if specific_overlap:
+        score += 0.30
+    if len(specific_overlap) >= 2:
+        score += 0.10
+    if topic_overlap:
+        score += 0.10
+    if workflow_overlap and (specific_overlap or topic_overlap):
+        score += 0.05
     return min(score, 1.0)
 
 
@@ -152,6 +186,8 @@ def calculate_macro_adaptive_patterns(child_threads: list[OperationalThread], pr
     patterns = []
     for left_index, left in enumerate(child_threads):
         for right in child_threads[left_index + 1:]:
+            for term in sorted(_shared_canonical_terms(left, right, profile)):
+                patterns.append(f"termine canonico condiviso: {term}")
             for term in sorted(_shared_specific_terms(left, right, profile)):
                 patterns.append(f"termine specifico condiviso: {term}")
             for term in sorted(_shared_topic_terms(left, right, profile)):
@@ -162,6 +198,13 @@ def calculate_macro_adaptive_patterns(child_threads: list[OperationalThread], pr
 
 
 def _macro_title(child_threads: list[OperationalThread], profile: AdaptiveChatProfile) -> str:
+    canonical_terms = []
+    for left_index, left in enumerate(child_threads):
+        for right in child_threads[left_index + 1:]:
+            canonical_terms.extend(sorted(_shared_canonical_terms(left, right, profile)))
+    readable_canonical = _unique(canonical_terms)
+    if readable_canonical:
+        return readable_canonical[0]
     shared_terms = []
     for left_index, left in enumerate(child_threads):
         for right in child_threads[left_index + 1:]:
@@ -196,7 +239,13 @@ def _macro_from_threads(
     child_threads: list[OperationalThread],
     profile: AdaptiveChatProfile,
 ) -> OperationalMacroThread:
-    context_tags = _unique([tag for thread in child_threads for tag in _thread_terms(thread, profile)])
+    context_tags = _unique(
+        [
+            tag
+            for thread in child_threads
+            for tag in [*_thread_canonical_terms(thread, profile), *_thread_terms(thread, profile)]
+        ]
+    )
     started_at = min(child_threads, key=lambda thread: _parse_timestamp(thread.started_at)).started_at
     last_updated_at = max(child_threads, key=lambda thread: _parse_timestamp(thread.last_updated_at)).last_updated_at
     patterns = calculate_macro_adaptive_patterns(child_threads, profile)
@@ -214,7 +263,7 @@ def _macro_from_threads(
         confidence=calculate_macro_confidence(child_threads, profile),
         open_items_count=sum(len(thread.related_tasks) + len(thread.unresolved_questions) for thread in child_threads if thread.status != "resolved"),
         critical_items_count=len([thread for thread in child_threads if thread.project_impact_score >= 80]),
-        creation_reason="macro-thread creato da pattern specifici del profilo adattivo",
+        creation_reason="macro-thread creato da termini canonici del profilo adattivo",
         adaptive_patterns=patterns,
         ignored_generic_terms=_unique(ignored)[:10],
     )

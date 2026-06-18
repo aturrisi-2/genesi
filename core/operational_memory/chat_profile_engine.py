@@ -5,6 +5,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
 from core.operational_memory.models import AdaptiveChatProfile, Confidence, InferredChatDomain, OperationalEvent, OperationalThread
+from core.operational_memory.term_canonicalizer import canonicalize_terms
 
 
 STOPWORDS = {
@@ -374,9 +375,13 @@ def build_adaptive_chat_profile(
     token_counter = Counter(all_tokens)
     phrase_counter = Counter(phrase for tokens in tokenized for phrase in extract_candidate_phrases(tokens))
     event_term_counts: Counter[str] = Counter()
+    term_timestamps: dict[str, list[str]] = defaultdict(list)
     for tokens in tokenized:
         for term in set([*extract_candidate_phrases(tokens), *_identifier_phrases(tokens)]):
             event_term_counts[term] += 1
+    for event, tokens in zip(events, tokenized):
+        for term in set([*extract_candidate_phrases(tokens), *_identifier_phrases(tokens)]):
+            term_timestamps[term].append(event.timestamp)
     thread_terms = _thread_distribution(threads)
     specificity = {
         term: calculate_term_specificity(term, event_term_counts, len(events), thread_terms)
@@ -423,6 +428,17 @@ def build_adaptive_chat_profile(
         if count >= 2 and term_quality_scores.get(phrase, 0) >= 0.55 and not is_linguistic_fragment(phrase)
     ][:20]
     objects = [term for term in specific_terms if any(char.isdigit() for char in term) or len(term.split()) > 1][:15]
+    canonical_terms = canonicalize_terms(
+        [*specific_terms, *topic_candidates, *objects, *action_terms, *problem_terms],
+        domain=domain,
+        threads=threads,
+        term_quality_scores=term_quality_scores,
+        term_timestamps=term_timestamps,
+    )
+    canonical_confidence: Confidence = "low"
+    if canonical_terms:
+        high_count = len([term for term in canonical_terms if term.confidence == "high"])
+        canonical_confidence = "high" if high_count >= 2 else "medium"
     return AdaptiveChatProfile(
         project_id=project_id,
         inferred_domain=domain,
@@ -443,7 +459,8 @@ def build_adaptive_chat_profile(
         term_quality_scores=term_quality_scores,
         rejected_terms=rejected_terms,
         rejection_reasons=rejection_reasons,
+        canonical_terms=canonical_terms,
+        canonical_topic_candidates=[term.label for term in canonical_terms[:15]],
+        canonicalization_confidence=canonical_confidence,
         last_updated_at=datetime.now(timezone.utc).isoformat(),
     )
-    "area",
-    "break",

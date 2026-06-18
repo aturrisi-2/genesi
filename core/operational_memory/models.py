@@ -48,6 +48,16 @@ MacroRelation = Literal[
     "temporal_sequence",
     "weak_relation",
 ]
+CanonicalTermType = Literal[
+    "object",
+    "location",
+    "issue",
+    "task",
+    "material",
+    "person_role",
+    "workflow_step",
+    "mixed",
+]
 
 
 class OperationalItem(BaseModel):
@@ -140,6 +150,21 @@ class OperationalMacroThread(BaseModel):
     ignored_generic_terms: list[str] = Field(default_factory=list)
 
 
+class CanonicalOperationalTerm(BaseModel):
+    canonical_id: str
+    label: str
+    domain: InferredChatDomain = "unknown"
+    confidence: Confidence = "low"
+    source_terms: list[str] = Field(default_factory=list)
+    head_entity: Optional[str] = None
+    action_or_problem: Optional[str] = None
+    context_modifiers: list[str] = Field(default_factory=list)
+    term_type: CanonicalTermType = "mixed"
+    first_seen_at: Optional[str] = None
+    last_seen_at: Optional[str] = None
+    evidence_count: int = 0
+
+
 class AdaptiveChatProfile(BaseModel):
     project_id: str
     inferred_domain: InferredChatDomain = "unknown"
@@ -160,6 +185,9 @@ class AdaptiveChatProfile(BaseModel):
     term_quality_scores: dict[str, float] = Field(default_factory=dict)
     rejected_terms: list[str] = Field(default_factory=list)
     rejection_reasons: dict[str, str] = Field(default_factory=dict)
+    canonical_terms: list[CanonicalOperationalTerm] = Field(default_factory=list)
+    canonical_topic_candidates: list[str] = Field(default_factory=list)
+    canonicalization_confidence: Confidence = "low"
     last_updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 

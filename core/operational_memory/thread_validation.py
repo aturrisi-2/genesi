@@ -42,6 +42,12 @@ class ThreadValidationResult:
     rejected_fragment_rate: float = 1.0
     accepted_operational_term_rate: float = 1.0
     operative_report_leakage_rate: float = 0.0
+    canonical_term_precision: float = 1.0
+    canonical_term_recall: float = 1.0
+    raw_term_reduction_rate: float = 0.0
+    canonicalization_confidence: float = 0.0
+    macro_overmerge_after_canonicalization: float = 0.0
+    macro_readability_score: float = 0.0
 
 
 def _event_id(event: dict[str, Any] | OperationalEvent) -> str:
@@ -483,6 +489,69 @@ def calculate_operative_report_leakage_rate(report_items: list[str], forbidden_t
     return len(leaked) / len(forbidden_terms)
 
 
+def _profile_canonical_labels(profile: AdaptiveChatProfile | dict[str, Any]) -> list[str]:
+    canonical_terms = profile.get("canonical_terms", []) if isinstance(profile, dict) else profile.canonical_terms
+    labels = []
+    for term in canonical_terms:
+        labels.append(str(term.get("label", "")) if isinstance(term, dict) else term.label)
+    return [label.lower() for label in labels if label]
+
+
+def calculate_canonical_term_precision(expected_labels: list[str], profile: AdaptiveChatProfile | dict[str, Any]) -> float:
+    labels = set(_profile_canonical_labels(profile))
+    if not labels:
+        return 1.0 if not expected_labels else 0.0
+    expected = {label.lower() for label in expected_labels}
+    if not expected:
+        return 1.0
+    return len(labels & expected) / len(labels)
+
+
+def calculate_canonical_term_recall(expected_labels: list[str], profile: AdaptiveChatProfile | dict[str, Any]) -> float:
+    if not expected_labels:
+        return 1.0
+    labels = set(_profile_canonical_labels(profile))
+    expected = {label.lower() for label in expected_labels}
+    return len(labels & expected) / len(expected)
+
+
+def calculate_raw_term_reduction_rate(profile: AdaptiveChatProfile | dict[str, Any]) -> float:
+    specific_terms = profile.get("specific_terms", []) if isinstance(profile, dict) else profile.specific_terms
+    canonical_terms = profile.get("canonical_terms", []) if isinstance(profile, dict) else profile.canonical_terms
+    if not specific_terms:
+        return 0.0
+    canonical_count = len(canonical_terms)
+    return max(0.0, min(1.0, (len(specific_terms) - canonical_count) / len(specific_terms)))
+
+
+def calculate_canonicalization_confidence(profile: AdaptiveChatProfile | dict[str, Any]) -> float:
+    value = profile.get("canonicalization_confidence", "low") if isinstance(profile, dict) else profile.canonicalization_confidence
+    return {"low": 0.33, "medium": 0.66, "high": 1.0}.get(str(value), 0.0)
+
+
+def calculate_macro_overmerge_after_canonicalization(
+    annotated_events: list[dict[str, Any]],
+    expected_threads: list[dict[str, Any]] | dict[str, Any],
+    generated_threads: list[dict[str, Any] | OperationalThread],
+    generated_macro_threads: list[dict[str, Any] | OperationalMacroThread],
+) -> float:
+    return calculate_macro_overmerge_rate(annotated_events, expected_threads, generated_threads, generated_macro_threads)
+
+
+def calculate_macro_readability_score(generated_macro_threads: list[dict[str, Any] | OperationalMacroThread]) -> float:
+    if not generated_macro_threads:
+        return 1.0
+    readable = 0
+    for macro in generated_macro_threads:
+        title = str(macro.get("title", "") if isinstance(macro, dict) else macro.title)
+        parts = [part.strip() for part in title.split("/") if part.strip()]
+        has_compact_shape = 2 <= len(parts) <= 4
+        avoids_raw_noise = not any(fragment in title.lower() for fragment in ("non disponibili", "macro-thread operativo"))
+        if has_compact_shape and avoids_raw_noise:
+            readable += 1
+    return readable / len(generated_macro_threads)
+
+
 def _macro_overmerge_cases(
     annotated_events: list[dict[str, Any]],
     expected_threads: list[dict[str, Any]] | dict[str, Any],
@@ -589,4 +658,21 @@ def evaluate_thread_grouping(
             list(expected_threads.get("expected_accepted_operational_terms", [])) if isinstance(expected_threads, dict) else [],
             adaptive_profile,
         ) if adaptive_profile else 1.0,
+        canonical_term_precision=calculate_canonical_term_precision(
+            list(expected_threads.get("expected_canonical_terms", [])) if isinstance(expected_threads, dict) else [],
+            adaptive_profile,
+        ) if adaptive_profile else 1.0,
+        canonical_term_recall=calculate_canonical_term_recall(
+            list(expected_threads.get("expected_canonical_terms", [])) if isinstance(expected_threads, dict) else [],
+            adaptive_profile,
+        ) if adaptive_profile else 1.0,
+        raw_term_reduction_rate=calculate_raw_term_reduction_rate(adaptive_profile) if adaptive_profile else 0.0,
+        canonicalization_confidence=calculate_canonicalization_confidence(adaptive_profile) if adaptive_profile else 0.0,
+        macro_overmerge_after_canonicalization=calculate_macro_overmerge_after_canonicalization(
+            annotated_events,
+            expected_threads,
+            generated_threads,
+            generated_macro_threads,
+        ),
+        macro_readability_score=calculate_macro_readability_score(generated_macro_threads),
     )

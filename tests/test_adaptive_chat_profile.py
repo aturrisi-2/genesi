@@ -20,10 +20,15 @@ from core.operational_memory.state_store import save_state
 from core.operational_memory.thread_validation import (
     calculate_adaptive_profile_accuracy,
     calculate_accepted_operational_term_rate,
+    calculate_canonical_term_precision,
+    calculate_canonical_term_recall,
+    calculate_canonicalization_confidence,
     calculate_generic_term_detection_rate,
     calculate_macro_thread_adaptive_precision,
     calculate_macro_thread_adaptive_recall,
+    calculate_macro_readability_score,
     calculate_operative_report_leakage_rate,
+    calculate_raw_term_reduction_rate,
     calculate_rejected_fragment_rate,
     calculate_specific_term_detection_rate,
     calculate_vocabulary_noise_rate,
@@ -68,6 +73,28 @@ def _thread(thread_id: str, project_id: str, title: str, tags: list[str], events
         context_tags=tags,
         related_issues=[title],
     )
+
+
+def _profile_from_messages(project_id: str, messages: list[str]):
+    events = [
+        classify_event(
+            OperationalEvent(
+                event_id=f"{project_id}-{index}",
+                project_id=project_id,
+                source="canonical-fixture",
+                sender="persona_1",
+                timestamp=f"2026-06-12T08:{index:02d}:00+00:00",
+                content=message,
+                processed_status="processed",
+            )
+        )
+        for index, message in enumerate(messages)
+    ]
+    return build_adaptive_chat_profile(project_id, events), events
+
+
+def _canonical_labels(profile) -> list[str]:
+    return [term.label.lower() for term in profile.canonical_terms]
 
 
 def test_construction_profile_infers_construction_or_maintenance():
@@ -242,6 +269,131 @@ def test_non_is_never_rendered_as_useful_generic_term():
 
     assert "non" not in profile.generic_terms
     assert "non" not in profile.specific_terms
+
+
+def test_construction_area_break_variants_are_canonicalized():
+    profile, _events = _profile_from_messages(
+        "canonical-area-break",
+        [
+            "Area break pressione statica rumore accettabile",
+            "Area break rumore accettabile 58 portata",
+            "58 portata da ricontrollare",
+            "Rumore area break ancora da verificare",
+        ],
+    )
+
+    labels = _canonical_labels(profile)
+    assert any("break" in label and "rumore" in label and "portata" in label for label in labels)
+    assert calculate_raw_term_reduction_rate(profile) > 0
+    assert calculate_canonicalization_confidence(profile) >= 0.66
+
+
+def test_construction_t7_stf_disalimentazione_variants_are_canonicalized():
+    profile, _events = _profile_from_messages(
+        "canonical-t7-stf",
+        [
+            "T7 disalimentate chiuse",
+            "STF T7 disalimentate",
+            "T7 STF non alimentata",
+            "Verificare disalimentazione T7 STF",
+        ],
+    )
+
+    labels = _canonical_labels(profile)
+    assert any("t7" in label and "stf" in label and "disalimentazione" in label for label in labels)
+    assert calculate_canonical_term_recall(["T7 / Stf / Disalimentazione"], profile) == 1.0
+
+
+def test_logistics_order_delivery_delay_is_canonicalized_without_construction_bias():
+    profile, _events = _profile_from_messages(
+        "canonical-logistics",
+        [
+            "Ordine AX45 consegna in ritardo",
+            "Consegna ordine AX45 ritardo corriere",
+            "Ordine AX45 ddt mancante",
+            "AX45 consegna confermata domani",
+        ],
+    )
+
+    labels = _canonical_labels(profile)
+    assert profile.inferred_domain == "logistics"
+    assert any("ax45" in label and "consegna" in label and "ritardo" in label for label in labels)
+    assert not any("t7" in label or "stf" in label for label in labels)
+
+
+def test_family_school_homework_deadline_is_canonicalized_without_technical_false_positive():
+    profile, _events = _profile_from_messages(
+        "canonical-family",
+        [
+            "Scuola compiti da consegnare domani",
+            "Compiti scuola scadenza venerdi",
+            "Verificare scadenza compiti",
+            "Scuola conferma compiti fatti",
+        ],
+    )
+
+    labels = _canonical_labels(profile)
+    assert profile.inferred_domain in {"school", "family_coordination"}
+    assert any("compiti" in label and "scuola" in label and "scadenza" in label for label in labels)
+    assert not any("t7" in label or "fancoil" in label or "ss01" in label for label in labels)
+
+
+def test_customer_support_ticket_login_error_is_canonicalized():
+    profile, _events = _profile_from_messages(
+        "canonical-support",
+        [
+            "Ticket 1042 errore login cliente beta",
+            "Errore login ticket 1042 ancora aperto",
+            "Intervento ticket 1042 in corso",
+            "Ticket 1042 errore login risolto",
+        ],
+    )
+
+    labels = _canonical_labels(profile)
+    assert profile.inferred_domain == "customer_support"
+    assert any("1042" in label and "ticket" in label and "errore login" in label for label in labels)
+    assert calculate_canonical_term_precision([profile.canonical_terms[0].label], profile) > 0
+
+
+def test_isolated_generic_term_does_not_become_canonical_term():
+    profile, _events = _profile_from_messages(
+        "canonical-generic-only",
+        [
+            "Problema",
+            "T7",
+            "Porta",
+            "Canale",
+        ],
+    )
+
+    assert not profile.canonical_terms
+
+
+def test_macro_threads_use_canonical_terms_instead_of_raw_specific_terms():
+    profile, events = _profile_from_messages(
+        "canonical-macro",
+        [
+            "T7 disalimentate chiuse",
+            "STF T7 disalimentate",
+            "T7 STF non alimentata",
+            "Ordine AX45 consegna in ritardo",
+            "Consegna ordine AX45 ritardo corriere",
+        ],
+    )
+    threads = [
+        _thread("t7-a", "canonical-macro", "T7 disalimentate chiuse", ["t7", "stf"], [events[0].event_id]),
+        _thread("t7-b", "canonical-macro", "STF T7 non alimentata", ["t7", "stf"], [events[1].event_id]),
+        _thread("order-a", "canonical-macro", "Ordine AX45 consegna in ritardo", ["ordine", "ax45"], [events[3].event_id]),
+        _thread("order-b", "canonical-macro", "Consegna ordine AX45 ritardo corriere", ["ordine", "ax45"], [events[4].event_id]),
+    ]
+    for thread in threads:
+        thread.project_impact_score = 85
+    profile = build_adaptive_chat_profile("canonical-macro", events, threads)
+    macros = build_macro_threads("canonical-macro", threads, events, profile)
+
+    assert len(macros) == 2
+    assert all("termine canonico condiviso" in "; ".join(macro.adaptive_patterns) for macro in macros)
+    assert calculate_macro_readability_score(macros) > 0
 
 
 @pytest.mark.asyncio

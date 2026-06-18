@@ -160,6 +160,45 @@ Nota di qualita':
 
 Il filtro elimina i frammenti linguistici piu' evidenti e impedisce leak logistici nel report OPERATIVE_ONLY. Rimangono pero' alcune frasi locali imperfette, ad esempio combinazioni come `accettabile 58 portata` o `break rumore`, che sono operative ma non ancora canoniche. Il prossimo raffinamento deve normalizzare questi termini senza introdurre regole specifiche per TAB CEFLA.
 
+Report con canonicalizzazione adattiva:
+
+- `output/reports/tab-cefla-hq-enel-roma_canonical_profile_report.md`
+
+Statistiche dal flusso reale offline con canonical terms:
+
+- Eventi processati: 140
+- Media rilevati: 64
+- Media analizzati: 43
+- Media con testo estratto: 0
+- Decisioni: 0
+- Task aperti nel report: 7
+- Task completati nel report: 0
+- Problemi nel report: 20
+- Domande aperte nel report: 3
+- Thread operativi totali: 37
+- Termini specifici grezzi nel profilo: 25
+- Termini canonici nel profilo: 4
+- Raw term reduction rate: 0.8400
+- Canonicalization confidence: 0.6600 (`medium`)
+- Macro-thread operativi: 1
+- Macro readability score: 1.0000
+- Operative report leakage rate: 0.0000
+
+Canonical terms principali rilevati:
+
+- `T7 / V10 / Mandata / Stf`
+  - Varianti: `t7 disalimentate`, `stf t7 disalimentate`, `stf t7`, `t7 disalimentate chiuse`, `stf b1 v10`, `b1 v10`
+- `58 / Rumore / Portata`
+  - Varianti: `58 portata`, `accettabile 58 portata`, `break rumore`, `rumore accettabile 58`, `area break rumore`
+- `B02 / Porta`
+  - Varianti: `b02`, `b02 porta`
+- `Manca / Collegamento`
+  - Varianti: `manca collegamento`
+
+Interpretazione canonicalizzazione:
+
+Il layer riduce l'esposizione di n-gram grezzi nel profilo e nel macro-thread engine. I macro-thread ora nascono da concetti canonici condivisi come segnale primario, mentre i termini specifici grezzi restano fallback controllato. La riduzione dei macro-thread nel report reale indica minore overmerge macro rispetto alla baseline precedente, ma la label canonica puo' ancora essere migliorata nella resa linguistica (`Stf` invece di `STF`, `58 / Rumore / Portata` invece di `Area break / Rumore / Portata`).
+
 ## Casi problematici principali
 
 ### Overmerge thread
@@ -236,6 +275,7 @@ Azioni precise:
 4. Non fondere macro-thread tramite sola sequenza temporale.
 5. Ripetere la validazione dopo la calibrazione e puntare prima a ridurre `macro_overmerge_rate` sotto 0.30 mantenendo `specific_term_detection_rate` sopra 0.85.
 6. Introdurre una normalizzazione/canonicalizzazione dei termini, cosi' da trasformare frasi locali rumorose in etichette operative piu' stabili senza perdere adattivita' multi-dominio.
+7. Prossimo ciclo consigliato: validazione manuale delle canonical label e normalizzazione tipografica dei codici/acronimi, mantenendo invariati i gate OPERATIVE_ONLY.
 
 ## Decisione
 

@@ -183,10 +183,29 @@ def _profile_label(profile: AdaptiveChatProfile | None) -> list[str]:
         f"{term} ({profile.rejection_reasons.get(term, 'rejected')})"
         for term in profile.rejected_terms[:10]
     ]
+    canonical_lines = []
+    for canonical in profile.canonical_terms[:8]:
+        variants = ", ".join(canonical.source_terms[:5]) if canonical.source_terms else "nessuna variante"
+        canonical_lines.append(f"{canonical.label} | Varianti: {variants} | Confidenza: {canonical.confidence}")
+    canonical_source_terms = {term for canonical in profile.canonical_terms for term in canonical.source_terms}
+    non_canonical_raw = [
+        term
+        for term in profile.specific_terms[:20]
+        if term not in canonical_source_terms and term not in profile.canonical_topic_candidates
+    ][:10]
+    normalization_examples = [
+        f"{', '.join(canonical.source_terms[:3])} -> {canonical.label}"
+        for canonical in profile.canonical_terms[:5]
+        if canonical.source_terms
+    ]
     return [
         f"Dominio inferito: {profile.inferred_domain} ({profile.domain_confidence})",
         f"Termini generici rilevati: {', '.join(profile.generic_terms[:12]) if profile.generic_terms else 'nessuno'}",
         f"Termini specifici rilevati: {', '.join(profile.specific_terms[:12]) if profile.specific_terms else 'nessuno'}",
+        f"Termini canonici rilevati: {'; '.join(canonical_lines) if canonical_lines else 'nessuno'}",
+        f"Confidenza canonicalizzazione: {profile.canonicalization_confidence}",
+        f"Termini grezzi non canonizzati: {', '.join(non_canonical_raw) if non_canonical_raw else 'nessuno'}",
+        f"Esempi normalizzazione: {'; '.join(normalization_examples) if normalization_examples else 'nessuno'}",
         f"Termini scartati principali: {', '.join(rejected) if rejected else 'nessuno'}",
         f"Workflow probabile: {workflow}",
         f"Pattern problema: {', '.join(profile.recurring_problem_terms[:10]) if profile.recurring_problem_terms else 'nessuno'}",
