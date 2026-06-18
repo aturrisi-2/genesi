@@ -7,11 +7,19 @@ from core.operational_memory.extractor import (
     OperationalMemoryExtractionError,
     extract_state,
 )
-from core.operational_memory.models import OperationalEvent, OperationalState
+from core.operational_memory.daily_report import build_daily_report
+from core.operational_memory.models import (
+    DailyReport,
+    OperationalEvent,
+    OperationalSnapshot,
+    OperationalState,
+)
+from core.operational_memory.snapshot_store import create_snapshot, list_snapshots
 from core.operational_memory.state_engine import get_project_state, ingest_messages
 from core.operational_memory.watcher_engine import (
     get_events,
     ingest_event,
+    ingest_events_batch,
     process_pending_events,
 )
 
@@ -29,6 +37,16 @@ class ProcessPendingResponse(BaseModel):
     failed: int
     pending_remaining: int
     state: OperationalState | None = None
+
+
+class OperationalEventsBatchRequest(BaseModel):
+    events: list[OperationalEvent] = Field(default_factory=list)
+
+
+class OperationalEventsBatchResponse(BaseModel):
+    accepted: int = 0
+    duplicates: int = 0
+    failed: int = 0
 
 
 @router.post("/operational-state", response_model=OperationalState)
@@ -75,6 +93,15 @@ async def create_operational_event_endpoint(
     return stored
 
 
+@router.post("/operational-events/{project_id}/batch", response_model=OperationalEventsBatchResponse)
+async def create_operational_events_batch_endpoint(
+    project_id: str,
+    request: OperationalEventsBatchRequest,
+) -> OperationalEventsBatchResponse:
+    result = await ingest_events_batch(project_id, request.events)
+    return OperationalEventsBatchResponse(**result)
+
+
 @router.get("/operational-events/{project_id}", response_model=list[OperationalEvent])
 async def list_operational_events_endpoint(project_id: str) -> list[OperationalEvent]:
     return await get_events(project_id)
@@ -84,3 +111,18 @@ async def list_operational_events_endpoint(project_id: str) -> list[OperationalE
 async def process_pending_operational_events_endpoint(project_id: str) -> ProcessPendingResponse:
     result = await process_pending_events(project_id)
     return ProcessPendingResponse(**result)
+
+
+@router.post("/operational-state/{project_id}/snapshot", response_model=OperationalSnapshot)
+async def create_operational_state_snapshot_endpoint(project_id: str) -> OperationalSnapshot:
+    return await create_snapshot(project_id)
+
+
+@router.get("/operational-state/{project_id}/snapshots", response_model=list[OperationalSnapshot])
+async def list_operational_state_snapshots_endpoint(project_id: str) -> list[OperationalSnapshot]:
+    return await list_snapshots(project_id)
+
+
+@router.get("/operational-state/{project_id}/daily-report", response_model=DailyReport)
+async def get_operational_daily_report_endpoint(project_id: str) -> DailyReport:
+    return await build_daily_report(project_id)

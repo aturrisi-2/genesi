@@ -1,0 +1,113 @@
+[
+  {
+    "event_id": "day-001",
+    "project_id": "cantiere-demo",
+    "source": "simulated-whatsapp",
+    "sender": "Marco",
+    "timestamp": "2026-06-18T07:42:00+02:00",
+    "type": "text",
+    "content": "Buongiorno, oggi iniziamo posa cartongesso al piano 2. Luca verifica il materiale entro le 10.",
+    "attachment_metadata": {},
+    "processed_status": "pending"
+  },
+  {
+    "event_id": "day-002",
+    "project_id": "cantiere-demo",
+    "source": "simulated-whatsapp",
+    "sender": "Sara",
+    "timestamp": "2026-06-18T08:05:00+02:00",
+    "type": "image",
+    "content": "Foto materiale arrivato",
+    "attachment_metadata": {
+      "file_name": "materiale_arrivato.jpg",
+      "simulated_ocr": "DDT 184 - pannelli cartongesso consegnati 42 pezzi. Mancano 12 profili metallici."
+    },
+    "processed_status": "pending"
+  },
+  {
+    "event_id": "day-003",
+    "project_id": "cantiere-demo",
+    "source": "simulated-whatsapp",
+    "sender": "Luca",
+    "timestamp": "2026-06-18T08:21:00+02:00",
+    "type": "text",
+    "content": "Confermo: mancano 12 profili metallici, senza quelli il vano scala resta bloccato.",
+    "attachment_metadata": {},
+    "processed_status": "pending"
+  },
+  {
+    "event_id": "day-004",
+    "project_id": "cantiere-demo",
+    "source": "simulated-whatsapp",
+    "sender": "Direzione Lavori",
+    "timestamp": "2026-06-18T09:10:00+02:00",
+    "type": "text",
+    "content": "Decisione: spostiamo la posa del vano scala a venerdi mattina e oggi completiamo le pareti uffici.",
+    "attachment_metadata": {},
+    "processed_status": "pending"
+  },
+  {
+    "event_id": "day-005",
+    "project_id": "cantiere-demo",
+    "source": "simulated-whatsapp",
+    "sender": "Sara",
+    "timestamp": "2026-06-18T09:35:00+02:00",
+    "type": "pdf",
+    "content": "Ordine aggiornato fornitore",
+    "attachment_metadata": {
+      "file_name": "ordine_profili.pdf",
+      "simulated_text": "Ordine integrativo: 12 profili metallici. Consegna prevista venerdi ore 8:30. Responsabile ritiro: Luca."
+    },
+    "processed_status": "pending"
+  },
+  {
+    "event_id": "day-006",
+    "project_id": "cantiere-demo",
+    "source": "simulated-whatsapp",
+    "sender": "Marco",
+    "timestamp": "2026-06-18T11:02:00+02:00",
+    "type": "document",
+    "content": "Report avanzamento mattina",
+    "attachment_metadata": {
+      "file_name": "report_mattina.docx",
+      "simulated_text": "Pareti uffici completate al 60%. Task: Gianni chiude stuccatura entro oggi. Problema aperto: vano scala fermo per profili mancanti."
+    },
+    "processed_status": "pending"
+  },
+  {
+    "event_id": "day-007",
+    "project_id": "cantiere-demo",
+    "source": "simulated-whatsapp",
+    "sender": "Gianni",
+    "timestamp": "2026-06-18T15:40:00+02:00",
+    "type": "text",
+    "content": "Stuccatura pareti uffici completata.",
+    "attachment_metadata": {},
+    "processed_status": "pending"
+  },
+  {
+    "event_id": "day-008",
+    "project_id": "cantiere-demo",
+    "source": "simulated-whatsapp",
+    "sender": "Direzione Lavori",
+    "timestamp": "2026-06-18T16:05:00+02:00",
+    "type": "image",
+    "content": "Screenshot cronoprogramma aggiornato",
+    "attachment_metadata": {
+      "file_name": "cronoprogramma.png",
+      "description": "Screenshot cronoprogramma: pareti uffici oggi, vano scala venerdi, verifica materiale venerdi ore 8:30."
+    },
+    "processed_status": "pending"
+  },
+  {
+    "event_id": "day-009",
+    "project_id": "cantiere-demo",
+    "source": "simulated-whatsapp",
+    "sender": "Luca",
+    "timestamp": "2026-06-18T16:20:00+02:00",
+    "type": "text",
+    "content": "Chi conferma domani mattina la ricezione dei profili?",
+    "attachment_metadata": {},
+    "processed_status": "pending"
+  }
+]

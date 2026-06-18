@@ -17,13 +17,16 @@ def _item_key(item: OperationalItem) -> tuple[str, str]:
 
 def _merge_items(existing: list[T], incoming: list[T]) -> list[T]:
     merged = list(existing)
-    seen = {_item_key(item) for item in merged}
+    seen = {_item_key(item): item for item in merged}
     for item in incoming:
         key = _item_key(item)
         if key in seen:
+            current = seen[key]
+            if getattr(item, "status", None) == "completed" and hasattr(current, "status"):
+                current.status = "completed"
             continue
         merged.append(item)
-        seen.add(key)
+        seen[key] = item
     return merged
 
 

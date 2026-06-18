@@ -31,6 +31,34 @@ async def ingest_event(event: OperationalEvent) -> tuple[OperationalEvent, bool]
     return stored, created
 
 
+async def ingest_events_batch(project_id: str, events: list[OperationalEvent]) -> dict:
+    accepted = 0
+    duplicates = 0
+    failed = 0
+
+    for event in events:
+        try:
+            if event.project_id and event.project_id != project_id:
+                failed += 1
+                continue
+            event.project_id = project_id
+            _stored, created = await ingest_event(event)
+            if created:
+                accepted += 1
+            else:
+                duplicates += 1
+        except Exception as exc:
+            failed += 1
+            log(
+                "OPERATIONAL_EVENT_BATCH_INGEST_ERROR",
+                project_id=project_id,
+                event_id=getattr(event, "event_id", ""),
+                error=str(exc),
+            )
+
+    return {"accepted": accepted, "duplicates": duplicates, "failed": failed}
+
+
 async def get_events(project_id: str) -> list[OperationalEvent]:
     return await list_events(project_id)
 

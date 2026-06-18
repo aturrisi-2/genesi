@@ -112,7 +112,7 @@ Regole:
 Formato obbligatorio:
 {
   "decisions": [{"text": "...", "source": "msg N"}],
-  "tasks": [{"text": "...", "owner": null, "due": null, "source": "msg N"}],
+  "tasks": [{"text": "...", "owner": null, "due": null, "status": "open", "source": "msg N"}],
   "issues": [{"text": "...", "source": "msg N"}],
   "information": [{"text": "...", "source": "msg N"}],
   "open_questions": [{"text": "...", "source": "msg N"}]

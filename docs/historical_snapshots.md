@@ -32,6 +32,21 @@ Formato:
 }
 ```
 
+## Endpoint MVP
+
+```text
+POST /operational-state/{project_id}/snapshot
+GET /operational-state/{project_id}/snapshots
+```
+
+La snapshot MVP salva:
+
+- `project_id`
+- `timestamp`
+- stato operativo completo
+- conteggio decisioni/task/issues/information/questions
+- `source_event_count`
+
 ## Quando salvare
 
 MVP:

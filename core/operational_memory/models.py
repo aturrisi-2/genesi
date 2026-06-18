@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
 
 EventType = Literal["text", "image", "pdf", "document"]
 ProcessedStatus = Literal["pending", "processed", "failed"]
+TaskStatus = Literal["open", "completed"]
 
 
 class OperationalItem(BaseModel):
@@ -23,6 +24,7 @@ class Decision(OperationalItem):
 class OperationalTask(OperationalItem):
     owner: Optional[str] = None
     due: Optional[str] = None
+    status: TaskStatus = "open"
 
 
 class Issue(OperationalItem):
@@ -61,3 +63,27 @@ class OperationalEvent(BaseModel):
     content: str = Field(default="")
     attachment_metadata: dict = Field(default_factory=dict)
     processed_status: ProcessedStatus = "pending"
+
+
+class OperationalSnapshot(BaseModel):
+    snapshot_id: str
+    project_id: str
+    timestamp: str = Field(default_factory=utc_now_iso)
+    state: OperationalState
+    counts: dict[str, int] = Field(default_factory=dict)
+    source_event_count: int = 0
+
+
+class DailyReport(BaseModel):
+    title: str
+    date: str
+    project_id: str
+    decisions: list[str] = Field(default_factory=list)
+    tasks_open: list[str] = Field(default_factory=list)
+    tasks_completed: list[str] = Field(default_factory=list)
+    issues_open: list[str] = Field(default_factory=list)
+    information: list[str] = Field(default_factory=list)
+    open_questions: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
+    markdown: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
