@@ -468,6 +468,139 @@ def build_threads_from_events(
     return threads, sorted_events
 
 
+def _attach_or_create_thread(
+    project_id: str,
+    event: OperationalEvent,
+    event_tags: list[str],
+    threads: list[OperationalThread],
+    event_time: datetime,
+    task_texts: list[str],
+    issue_texts: list[str],
+    question_texts: list[str],
+) -> OperationalThread | None:
+    """Match a single event to an existing thread or open a new one.
+
+    Returns the thread the event was linked to (existing or freshly created),
+    or None when the event is not an operational thread candidate. Shared by
+    the full rebuild and the incremental path so both stay behaviourally
+    identical — no semantics diverge between the two."""
+    matched, evaluation = _best_thread_match(event, event_tags, threads, event_time)
+    if matched is None and _is_operational_thread_candidate(event, event_tags):
+        related_past_thread_ids = []
+        if evaluation and evaluation.related_past_thread_id:
+            related_past_thread_ids.append(evaluation.related_past_thread_id)
+        seed = f"{event_tags[0] if event_tags else 'event'}:{event.event_id}"
+        creation_reason = (
+            "nuovo thread: evento operativo senza continuita forte"
+            if not related_past_thread_ids
+            else "follow-up: tema simile a thread storico chiuso/stale"
+        )
+        matched = OperationalThread(
+            thread_id=_stable_thread_id(project_id, seed),
+            project_id=project_id,
+            title=_title_from_event(event, event_tags),
+            status=_status_from_text(_event_text(event), "open"),
+            started_at=event.timestamp,
+            last_updated_at=event.timestamp,
+            primary_domain=event.domain,
+            project_impact_score=event.project_impact_score,
+            context_tags=list(event_tags),
+            summary="Thread operativo in osservazione",
+            creation_reason=creation_reason,
+            related_past_thread_ids=related_past_thread_ids,
+            grouping_confidence="medium" if event_tags else "low",
+        )
+        threads.append(matched)
+        evaluation = BoundaryEvaluation(
+            continuity_score=0,
+            topic_shift_score=100,
+            signals=["evento operativo iniziale"],
+            resolution_signal=_has_resolution_signal(_event_text(event)),
+            reopen_signal=bool(related_past_thread_ids),
+            evidence_strength=event.evidence_strength,
+        )
+    if matched is not None:
+        _link_event_to_thread(
+            matched,
+            event,
+            event_tags,
+            evaluation or BoundaryEvaluation(evidence_strength=event.evidence_strength),
+            task_texts,
+            issue_texts,
+            question_texts,
+        )
+    return matched
+
+
+def incremental_update_threads(
+    project_id: str,
+    all_events: list[OperationalEvent],
+    state: OperationalState,
+    existing_threads: list[OperationalThread],
+    known_event_ids: set[str],
+    stale_days: int = DEFAULT_STALE_DAYS,
+    now: datetime | None = None,
+) -> tuple[list[OperationalThread], list[OperationalEvent], set[str], list[str]]:
+    """Fold only the new (not-yet-known) events into the existing thread set.
+
+    Existing threads are preserved untouched unless a new event attaches to
+    them. Returns (threads, updated_events, dirty_thread_ids, new_event_ids)."""
+    now = now or datetime.now(timezone.utc)
+    sorted_events = sorted(all_events, key=lambda event: _parse_timestamp(event.timestamp))
+    task_by_event = _items_by_event_id(state.tasks)
+    issue_by_event = _items_by_event_id(state.issues)
+    question_by_event = _items_by_event_id(state.open_questions)
+    threads = list(existing_threads)
+    dirty_thread_ids: set[str] = set()
+    new_event_ids: list[str] = []
+
+    for idx, event in enumerate(sorted_events):
+        # Only fold events that have actually been processed and are not yet
+        # known to the thread layer. Pending/failed events are left untouched
+        # until a later batch processes them.
+        if event.processed_status != "processed" or event.event_id in known_event_ids:
+            continue
+        new_event_ids.append(event.event_id)
+        event.thread_id = None
+        event.thread_continuity_score = 0
+        event.topic_shift_score = 100
+        event.resolution_signal = False
+        event.reopen_signal = False
+        event.thread_link_reason = ""
+        nearby_texts = [
+            _event_text(candidate)
+            for candidate in sorted_events[max(0, idx - 2): min(len(sorted_events), idx + 3)]
+            if candidate.event_id != event.event_id
+        ]
+        event_tags = _lifecycle_tags_for_event(event, nearby_texts)
+        event.evidence_strength = _evidence_strength(event, event_tags)
+        event_time = _parse_timestamp(event.timestamp)
+        before_count = len(threads)
+        matched = _attach_or_create_thread(
+            project_id,
+            event,
+            event_tags,
+            threads,
+            event_time,
+            task_by_event.get(event.event_id, []),
+            issue_by_event.get(event.event_id, []),
+            question_by_event.get(event.event_id, []),
+        )
+        if matched is not None:
+            dirty_thread_ids.add(matched.thread_id)
+        if len(threads) > before_count:
+            dirty_thread_ids.add(threads[-1].thread_id)
+
+    stale_delta = timedelta(days=stale_days)
+    for thread in threads:
+        if thread.status not in {"resolved", "stale"} and now - _parse_timestamp(thread.last_updated_at) > stale_delta:
+            if thread.status != "stale":
+                dirty_thread_ids.add(thread.thread_id)
+            thread.status = "stale"
+
+    return threads, sorted_events, dirty_thread_ids, new_event_ids
+
+
 async def rebuild_project_threads(project_id: str, stale_days: int = DEFAULT_STALE_DAYS) -> list[OperationalThread]:
     events = await list_events(project_id)
     state = await load_state(project_id)

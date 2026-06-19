@@ -469,3 +469,76 @@ def build_macro_threads(
         thread.relation_to_macro = (_relation_for_threads(thread, siblings[0], profile) if siblings else None) or "weak_relation"
 
     return macro_threads
+
+
+def incremental_build_macro_threads(
+    project_id: str,
+    threads: list[OperationalThread],
+    dirty_thread_ids: set[str],
+    dirty_canonical_terms: set[str],
+    existing_macros: list[OperationalMacroThread],
+    events: list[OperationalEvent] | None = None,
+    profile: AdaptiveChatProfile | None = None,
+    stats: dict | None = None,
+) -> list[OperationalMacroThread]:
+    """Rebuild only the macros affected by dirty threads; reuse the rest.
+
+    A macro is rebuilt when one of its children is dirty, when it shares a
+    canonical term that changed, or when a new dirty thread is strongly linked
+    to one of its children. Untouched macros (and their threads' macro_* fields)
+    are kept verbatim."""
+    candidates = [thread for thread in threads if thread.related_event_ids and thread.project_impact_score >= 50]
+    profile = profile or build_adaptive_chat_profile(
+        project_id, events or _profile_events_from_threads(project_id, candidates), candidates
+    )
+    thread_by_id = {thread.thread_id: thread for thread in candidates}
+    dirty_norm_terms = {_norm(term) for term in dirty_canonical_terms}
+
+    # Expand the affected frontier: dirty threads + anything strongly linked to them.
+    affected: set[str] = {tid for tid in dirty_thread_ids if tid in thread_by_id}
+    if affected:
+        changed = True
+        while changed:
+            changed = False
+            for thread in candidates:
+                if thread.thread_id in affected:
+                    continue
+                for other_id in list(affected):
+                    other = thread_by_id.get(other_id)
+                    if other is None:
+                        continue
+                    if _strong_shared_canonical_terms(thread, other, profile):
+                        affected.add(thread.thread_id)
+                        changed = True
+                        break
+
+    def _macro_is_affected(macro: OperationalMacroThread) -> bool:
+        if any(child_id in affected for child_id in macro.child_thread_ids):
+            return True
+        if dirty_norm_terms and {_norm(tag) for tag in macro.context_tags} & dirty_norm_terms:
+            return True
+        return False
+
+    reused_macros = [macro for macro in existing_macros if not _macro_is_affected(macro)]
+    # Children locked into reused macros must not be regrouped.
+    locked_child_ids = {child_id for macro in reused_macros for child_id in macro.child_thread_ids}
+
+    if not dirty_thread_ids:
+        if stats is not None:
+            stats.clear()
+            stats.update({"mode": "incremental", "macros_rebuilt": 0, "macros_reused": len(existing_macros)})
+        return list(existing_macros)
+
+    recompute_threads = [thread for thread in candidates if thread.thread_id not in locked_child_ids]
+    rebuilt_macros = build_macro_threads(project_id, recompute_threads, events, profile)
+
+    if stats is not None:
+        stats.clear()
+        stats.update(
+            {
+                "mode": "incremental",
+                "macros_rebuilt": len(rebuilt_macros),
+                "macros_reused": len(reused_macros),
+            }
+        )
+    return reused_macros + rebuilt_macros

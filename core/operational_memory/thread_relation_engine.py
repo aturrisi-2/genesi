@@ -482,6 +482,221 @@ def build_thread_relation_candidates(
     return sorted(relations, key=lambda item: (item.should_promote_to_macro, item.score), reverse=True)
 
 
+def pair_key(left_id: str, right_id: str) -> str:
+    """Stable, order-independent key for a thread pair (A-B == B-A)."""
+    return "|".join(sorted([left_id, right_id]))
+
+
+def build_blocking_index(
+    threads: list[OperationalThread],
+    profile: AdaptiveChatProfile,
+    all_threads: list[OperationalThread],
+) -> dict[str, set[str]]:
+    """Map every adaptive blocking key to the set of thread ids that carry it.
+
+    Lets the incremental path find, for a dirty thread, only the threads it
+    could plausibly relate to — instead of pairing it against everything."""
+    index: dict[str, set[str]] = {}
+    for thread in threads:
+        for key in _blocking_keys(thread, profile, all_threads):
+            index.setdefault(key, set()).add(thread.thread_id)
+    return index
+
+
+def apply_relations_to_threads(
+    threads: list[OperationalThread],
+    relations: list[ThreadRelationCandidate],
+) -> None:
+    """Recompute the per-thread candidate_* fields from a final relation set
+    without rescoring anything. Used so the incremental path leaves thread
+    objects in the same shape the full rebuild would."""
+    _reset_thread_relation_fields(threads)
+    thread_by_id = {thread.thread_id: thread for thread in threads}
+    for relation in relations:
+        for thread_id, opposite_id in (
+            (relation.source_thread_id, relation.target_thread_id),
+            (relation.target_thread_id, relation.source_thread_id),
+        ):
+            thread = thread_by_id.get(thread_id)
+            if thread is None:
+                continue
+            _append_unique(thread.candidate_relation_ids, relation.relation_id)
+            if relation.should_remain_candidate:
+                _append_unique(thread.candidate_child_ids, opposite_id)
+            if relation.should_promote_to_macro:
+                _append_unique(thread.candidate_parent_ids, opposite_id)
+            thread.relation_confidence_summary[relation.confidence] = (
+                thread.relation_confidence_summary.get(relation.confidence, 0) + 1
+            )
+
+
+def incremental_thread_relation_candidates(
+    project_id: str,
+    threads: list[OperationalThread],
+    dirty_thread_ids: set[str],
+    existing_relations: list[ThreadRelationCandidate],
+    events: list[OperationalEvent] | None = None,
+    profile: AdaptiveChatProfile | None = None,
+    include_rejected: bool = True,
+    relation_window_days: int | None = DEFAULT_RELATION_WINDOW_DAYS,
+    relation_max_candidates_per_thread: int = DEFAULT_MAX_CANDIDATES_PER_THREAD,
+    stats: dict | None = None,
+) -> list[ThreadRelationCandidate]:
+    """Recompute relation candidates only for pairs touching a dirty thread.
+
+    Pairs where neither endpoint changed are reused verbatim from
+    ``existing_relations``. Stale relations whose endpoints no longer exist are
+    dropped. Scoring is identical to :func:`build_thread_relation_candidates`."""
+    operational_threads = [
+        thread
+        for thread in threads
+        if thread.related_event_ids and thread.project_impact_score >= 50
+    ]
+    profile = profile or build_adaptive_chat_profile(project_id, events or [], operational_threads)
+    op_ids = {thread.thread_id for thread in operational_threads}
+    thread_by_id = {thread.thread_id: thread for thread in operational_threads}
+    dirty_op_ids = dirty_thread_ids & op_ids
+
+    # 1. Reuse every relation whose pair is fully intact and untouched.
+    reused: dict[str, ThreadRelationCandidate] = {}
+    for relation in existing_relations:
+        src, tgt = relation.source_thread_id, relation.target_thread_id
+        if src not in op_ids or tgt not in op_ids:
+            continue  # stale: endpoint gone / demoted below threshold
+        if src in dirty_op_ids or tgt in dirty_op_ids:
+            continue  # touched: will be recomputed below
+        reused[pair_key(src, tgt)] = relation
+
+    # 2. Enumerate candidate pairs that involve a dirty thread, via blocking buckets.
+    blocking_index = build_blocking_index(operational_threads, profile, operational_threads)
+    candidate_pairs: set[tuple[str, str]] = set()
+    for dirty_id in dirty_op_ids:
+        thread = thread_by_id.get(dirty_id)
+        if thread is None:
+            continue
+        neighbors: set[str] = set()
+        for key in _blocking_keys(thread, profile, operational_threads):
+            neighbors |= blocking_index.get(key, set())
+        neighbors.discard(dirty_id)
+        for other in neighbors:
+            left, right = sorted([dirty_id, other])
+            candidate_pairs.add((left, right))
+
+    recalculated = 0
+    pruning_reasons: dict[str, int] = {}
+    penalized_terms: dict[str, int] = {}
+    per_thread_kept: dict[str, int] = {}
+    for relation in reused.values():
+        per_thread_kept[relation.source_thread_id] = per_thread_kept.get(relation.source_thread_id, 0) + 1
+        per_thread_kept[relation.target_thread_id] = per_thread_kept.get(relation.target_thread_id, 0) + 1
+
+    recomputed: dict[str, ThreadRelationCandidate] = {}
+    for left_id, right_id in candidate_pairs:
+        left = thread_by_id[left_id]
+        right = thread_by_id[right_id]
+        recalculated += 1
+        reason = _pair_pruning_reason(left, right, profile, operational_threads, relation_window_days)
+        if reason:
+            pruning_reasons[reason] = pruning_reasons.get(reason, 0) + 1
+            continue
+        if relation_max_candidates_per_thread > 0:
+            left_count = per_thread_kept.get(left_id, 0)
+            right_count = per_thread_kept.get(right_id, 0)
+            if (
+                left_count >= relation_max_candidates_per_thread
+                or right_count >= relation_max_candidates_per_thread
+            ) and not _has_strong_canonical_overlap(left, right, profile, operational_threads):
+                pruning_reasons["max candidates per thread raggiunto"] = (
+                    pruning_reasons.get("max candidates per thread raggiunto", 0) + 1
+                )
+                continue
+        relation = score_thread_relation(left, right, profile, operational_threads)
+        for rejection in relation.rejection_reasons:
+            if rejection.startswith("canonical term troppo diffuso:"):
+                for term in rejection.split(":", 1)[1].split(","):
+                    key = term.strip()
+                    if key:
+                        penalized_terms[key] = penalized_terms.get(key, 0) + 1
+        if relation.confidence == "low" and not include_rejected:
+            continue
+        if not _relation_is_relevant(relation):
+            continue
+        recomputed[pair_key(left_id, right_id)] = relation
+        per_thread_kept[left_id] = per_thread_kept.get(left_id, 0) + 1
+        per_thread_kept[right_id] = per_thread_kept.get(right_id, 0) + 1
+
+    # 3. Merge reused + recomputed (recomputed wins on key collision).
+    merged: dict[str, ThreadRelationCandidate] = dict(reused)
+    merged.update(recomputed)
+    relations = list(merged.values())
+    apply_relations_to_threads(threads, relations)
+
+    if stats is not None:
+        stats.clear()
+        stats.update(
+            {
+                "mode": "incremental",
+                "raw_pairs": len(candidate_pairs),
+                "kept_pairs": len(relations),
+                "pruned_pairs": sum(pruning_reasons.values()),
+                "relation_pairs_recalculated": recalculated,
+                "relation_pairs_reused": len(reused),
+                "dirty_threads_in_relations": len(dirty_op_ids),
+                "relation_window_days": relation_window_days,
+                "relation_max_candidates_per_thread": relation_max_candidates_per_thread,
+                "pruning_reasons": dict(sorted(pruning_reasons.items(), key=lambda item: item[1], reverse=True)),
+                "penalized_canonical_terms": dict(sorted(penalized_terms.items(), key=lambda item: item[1], reverse=True)),
+            }
+        )
+    return sorted(relations, key=lambda item: (item.should_promote_to_macro, item.score), reverse=True)
+
+
+def canonical_term_distribution_report(
+    threads: list[OperationalThread],
+    profile: AdaptiveChatProfile,
+    broad_coverage_ratio: float = 0.4,
+    discriminative_floor: float = 0.35,
+) -> list[dict]:
+    """Generic diagnostics on how wide each canonical term spreads.
+
+    Terms that touch a large share of threads and generate many pairs while
+    scoring low discriminative power surface here as ``broad`` — emergent, not
+    hardcoded against any specific token."""
+    operational_threads = [
+        thread
+        for thread in threads
+        if thread.related_event_ids and thread.project_impact_score >= 50
+    ]
+    total = max(1, len(operational_threads))
+    distribution = _canonical_distribution(operational_threads, profile)
+    rows: list[dict] = []
+    label_by_norm = {_norm(term.label): term for term in profile.canonical_terms}
+    for norm_label, coverage in distribution.items():
+        canonical = label_by_norm.get(norm_label)
+        label = canonical.label if canonical else norm_label
+        power = calculate_canonical_discriminative_power(label, profile, operational_threads)
+        coverage_ratio = coverage / total
+        pair_generation_count = coverage * (coverage - 1) // 2
+        is_broad = coverage_ratio >= broad_coverage_ratio and power < discriminative_floor
+        is_weak_context = bool(
+            canonical
+            and (canonical.boundary_confidence == "low" or canonical.confidence == "low")
+        )
+        rows.append(
+            {
+                "label": label,
+                "thread_coverage": coverage,
+                "coverage_ratio": round(coverage_ratio, 4),
+                "pair_generation_count": pair_generation_count,
+                "discriminative_power": power,
+                "broad_canonical_term": is_broad,
+                "weak_context_term": is_weak_context,
+            }
+        )
+    rows.sort(key=lambda row: (row["pair_generation_count"], row["thread_coverage"]), reverse=True)
+    return rows
+
+
 def promoted_relation_groups(relations: list[ThreadRelationCandidate]) -> list[set[str]]:
     groups: list[set[str]] = []
     for relation in relations:

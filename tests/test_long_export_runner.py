@@ -120,6 +120,8 @@ async def test_long_export_runner_resume_processes_pending_without_duplicates(mo
         relation_max_candidates_per_thread=20,
         create_snapshot=False,
         verbose=False,
+        incremental=False,
+        force_full_rebuild=False,
     )
 
     first = await _run(Namespace(**base, resume=False, max_batches=1))

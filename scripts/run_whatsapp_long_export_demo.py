@@ -21,6 +21,7 @@ from core.operational_memory.importers.whatsapp_export import parse_whatsapp_exp
 from core.operational_memory.macro_thread_engine import build_macro_threads
 from core.operational_memory.snapshot_store import create_snapshot
 from core.operational_memory.state_store import load_state, save_state
+from core.operational_memory.incremental_rebuild import incremental_rebuild
 from core.operational_memory.thread_engine import rebuild_project_threads
 from core.operational_memory.thread_relation_engine import build_thread_relation_candidates
 from core.operational_memory.thread_validation import (
@@ -160,6 +161,59 @@ async def _rebuild_profile_macro_relations(
     }
 
 
+def _append_incremental_diagnostics(summary: dict) -> list[str]:
+    inc = summary.get("incremental", {})
+    timings = summary.get("timings", {})
+    broad = inc.get("broad_canonical_terms", []) or []
+    canonical = inc.get("canonical_distribution", []) or []
+    lines = [
+        "",
+        "## Diagnostica incremental rebuild",
+        f"- run mode: {inc.get('mode')}",
+        f"- full rebuild avoided: {'yes' if inc.get('full_rebuild_avoided') else 'no'}",
+        f"- reason if full rebuild happened: {inc.get('rebuild_reason') or '(nessuno)'}",
+        f"- events processed this run: {inc.get('events_processed_this_run')}",
+        f"- dirty threads: {inc.get('dirty_threads')}",
+        f"- dirty canonical terms: {inc.get('dirty_canonical_terms')}",
+        f"- dirty relation pairs: {inc.get('dirty_relation_pairs')}",
+        f"- relation pairs recalculated: {inc.get('relation_pairs_recalculated')}",
+        f"- relation pairs reused: {inc.get('relation_pairs_reused')}",
+        f"- macros rebuilt: {inc.get('macros_rebuilt')}",
+        f"- macros reused: {inc.get('macros_reused')}",
+        "",
+        "## Diagnostica canonical term distribution",
+        "| termine canonico | thread coverage | pair generation count | discriminative power | broad | weak context |",
+        "| --- | ---: | ---: | ---: | :---: | :---: |",
+    ]
+    for row in canonical[:15]:
+        lines.append(
+            f"| {row['label']} | {row['thread_coverage']} | {row['pair_generation_count']} | "
+            f"{row['discriminative_power']} | {'yes' if row['broad_canonical_term'] else 'no'} | "
+            f"{'yes' if row['weak_context_term'] else 'no'} |"
+        )
+    if broad:
+        lines.append("")
+        lines.append(f"- broad canonical terms emersi (non hardcoded): {', '.join(row['label'] for row in broad[:10])}")
+    lines.extend(
+        [
+            "",
+            "## Diagnostica performance",
+            f"- import time: {timings.get('import_seconds', 0.0):.2f}s",
+            f"- processing time: {timings.get('processing_seconds', 0.0):.2f}s",
+            f"- thread engine time: {timings.get('thread_engine_seconds', 0.0):.2f}s",
+            f"- profile time: {timings.get('profile_seconds', 0.0):.2f}s",
+            f"- macro engine time: {timings.get('macro_engine_seconds', 0.0):.2f}s",
+            f"- relation engine time: {timings.get('relation_engine_seconds', 0.0):.2f}s",
+            f"- report time: {timings.get('report_seconds', 0.0):.2f}s",
+            f"- total time: {sum(timings.values()):.2f}s",
+            "",
+            f"- Stato run: {summary.get('run_status')} "
+            f"(mode={inc.get('mode')}, full rebuild avoided={'yes' if inc.get('full_rebuild_avoided') else 'no'})",
+        ]
+    )
+    return lines
+
+
 def _append_long_diagnostics(markdown: str, summary: dict, short_metrics: dict, long_metrics: dict) -> str:
     lines = [
         markdown.rstrip(),
@@ -208,6 +262,7 @@ def _append_long_diagnostics(markdown: str, summary: dict, short_metrics: dict, 
     ]
     for key in keys:
         lines.append(f"| {key} | {short_metrics.get(key)} | {long_metrics.get(key)} |")
+    lines.extend(_append_incremental_diagnostics(summary))
     return "\n".join(lines).strip()
 
 
@@ -303,14 +358,42 @@ async def _run(args: argparse.Namespace) -> dict:
             break
     timings["processing_seconds"] = time.perf_counter() - started
 
-    timings.update(
-        await _rebuild_profile_macro_relations(
+    if args.incremental or args.force_full_rebuild:
+        rebuild_metrics = await incremental_rebuild(
             args.project_id,
             relation_window_days=args.relation_window_days,
             relation_max_candidates_per_thread=args.relation_max_candidates_per_thread,
+            force_full_rebuild=args.force_full_rebuild,
         )
-    )
-    relation_stats = dict(timings.pop("relation_stats", {}))
+        timings.update(rebuild_metrics.pop("timings", {}))
+        relation_stats = dict(rebuild_metrics.pop("relation_stats", {}))
+        incremental_metrics = rebuild_metrics
+    else:
+        timings.update(
+            await _rebuild_profile_macro_relations(
+                args.project_id,
+                relation_window_days=args.relation_window_days,
+                relation_max_candidates_per_thread=args.relation_max_candidates_per_thread,
+            )
+        )
+        relation_stats = dict(timings.pop("relation_stats", {}))
+        incremental_metrics = {
+            "mode": "full",
+            "full_rebuild": True,
+            "full_rebuild_avoided": False,
+            "rebuild_reason": "legacy full rebuild (flag --incremental assente)",
+            "events_processed_this_run": processed_total,
+            "dirty_threads": None,
+            "dirty_canonical_terms": None,
+            "dirty_relation_pairs": None,
+            "relation_pairs_recalculated": relation_stats.get("kept_pairs"),
+            "relation_pairs_reused": 0,
+            "macros_rebuilt": None,
+            "macros_reused": None,
+            "canonical_distribution": [],
+            "broad_canonical_terms": [],
+            "weak_context_terms": [],
+        }
 
     snapshot_id = None
     if args.create_snapshot:
@@ -358,6 +441,7 @@ async def _run(args: argparse.Namespace) -> dict:
         ),
         "checkpoint_path": str(_checkpoint_path(args.project_id)),
         "relation_scaling": relation_stats,
+        "incremental": incremental_metrics,
         "snapshot_id": snapshot_id,
         "short_metrics": short_metrics,
         "long_metrics": long_metrics,
@@ -373,6 +457,35 @@ async def _run(args: argparse.Namespace) -> dict:
         "relation_scaling": relation_stats,
         "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
+    checkpoint["incremental"] = {
+        "incremental_mode": bool(args.incremental),
+        "force_full_rebuild": bool(args.force_full_rebuild),
+        "mode": incremental_metrics.get("mode"),
+        "full_rebuild_avoided": incremental_metrics.get("full_rebuild_avoided"),
+        "rebuild_reason": incremental_metrics.get("rebuild_reason"),
+        "events_processed_this_run": incremental_metrics.get("events_processed_this_run"),
+        "dirty_threads": incremental_metrics.get("dirty_threads"),
+        "dirty_canonical_terms": incremental_metrics.get("dirty_canonical_terms"),
+        "dirty_relation_pairs": incremental_metrics.get("dirty_relation_pairs"),
+        "relation_pairs_recalculated": incremental_metrics.get("relation_pairs_recalculated"),
+        "relation_pairs_reused": incremental_metrics.get("relation_pairs_reused"),
+        "macros_rebuilt": incremental_metrics.get("macros_rebuilt"),
+        "macros_reused": incremental_metrics.get("macros_reused"),
+    }
+    checkpoint["timings"] = timings
+    checkpoint["thread_metrics"] = {
+        "threads": long_metrics.get("threads"),
+        "macro_threads": long_metrics.get("macro_threads"),
+        "largest_macro": long_metrics.get("largest_macro"),
+    }
+    checkpoint["relation_metrics"] = {
+        "relation_candidates": long_metrics.get("relation_candidates"),
+        "promoted_relations": long_metrics.get("promoted_relations"),
+        "rejected_relations": long_metrics.get("rejected_relations"),
+        "stored_relations": long_metrics.get("stored_relations"),
+    }
+    checkpoint["status"] = summary["run_status"]
+    checkpoint["last_processed_event_id"] = (events[-1].event_id if events else None)
     _save_checkpoint(args.project_id, checkpoint)
     return summary
 
@@ -391,6 +504,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-process-events", type=int, default=0)
     parser.add_argument("--max-batches", type=int, default=0)
     parser.add_argument("--resume", action="store_true", default=False)
+    parser.add_argument("--incremental", action="store_true", default=False)
+    parser.add_argument("--force-full-rebuild", action="store_true", default=False)
     parser.add_argument("--detect-media", action="store_true", default=True)
     parser.add_argument("--analyze-media", action="store_true", default=False)
     parser.add_argument("--skip-media-analysis", action="store_true", default=True)
