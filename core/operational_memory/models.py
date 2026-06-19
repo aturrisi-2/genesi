@@ -365,6 +365,37 @@ class OperationalState(BaseModel):
     lifecycle_snapshot: Optional[OperationalLifecycleSnapshot] = None
 
 
+class QueryAnswerItem(BaseModel):
+    item_id: str = ""
+    category: str = ""
+    status: str = ""
+    text: str
+    confidence: Confidence = "medium"
+    evidence_event_ids: list[str] = Field(default_factory=list)
+    reason: str = ""
+
+
+class QueryResult(BaseModel):
+    query: str
+    intent: str
+    summary: str = ""
+    count: int = 0
+    items: list[QueryAnswerItem] = Field(default_factory=list)
+
+
+class OperationalDigest(BaseModel):
+    project_id: str
+    generated_at: str
+    headline: str = ""
+    open_tasks: list[QueryAnswerItem] = Field(default_factory=list)
+    open_issues: list[QueryAnswerItem] = Field(default_factory=list)
+    resolved_issues: list[QueryAnswerItem] = Field(default_factory=list)
+    active_decisions: list[QueryAnswerItem] = Field(default_factory=list)
+    unanswered_questions: list[QueryAnswerItem] = Field(default_factory=list)
+    attention_items: list[QueryAnswerItem] = Field(default_factory=list)
+    recent_changes: list[str] = Field(default_factory=list)
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
