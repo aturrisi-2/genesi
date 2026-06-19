@@ -183,6 +183,70 @@ def test_multidomain_text_agnostic():
     assert ids == {"log", "cs", "con"}  # completed excluded, all domains handled
 
 
+# --------------------------------------------------------------------------- #
+# General Operational Briefing
+# --------------------------------------------------------------------------- #
+
+
+from core.operational_memory.query_engine import build_briefing, render_briefing_markdown
+
+
+@pytest.mark.parametrize("text", [
+    "fammi il punto",
+    "riassumi la situazione",
+    "cosa c'è da sapere?",
+    "fammi il report",
+    "com'è messa la chat?",
+    "cosa resta aperto?",
+    "dammi il quadro operativo",
+])
+def test_generic_queries_route_to_briefing(text):
+    assert classify_query_intent(text) == "briefing"
+
+
+def test_build_briefing_structure_and_active_flags():
+    briefing = build_briefing(_state())
+    by_key = {row.key: row for row in briefing.rows}
+    # counts mirror structured queries
+    assert by_key["open_tasks"].count == 2 and by_key["open_tasks"].active is True
+    assert by_key["resolved_issues"].count == 1 and by_key["resolved_issues"].active is False
+    assert by_key["superseded_decisions"].active is False
+    assert by_key["reopened_issues"].count == 1
+    assert briefing.synthesis and briefing.recommended_action
+    assert briefing.headline
+
+
+def test_briefing_does_not_report_resolved_as_active():
+    briefing = build_briefing(_state())
+    by_key = {row.key: row for row in briefing.rows}
+    # resolved issue i2 must be in resolved (closed) row, never in open_issues
+    assert "i2" not in {it.item_id for it in by_key["open_issues"].items}
+    assert "i2" in {it.item_id for it in by_key["resolved_issues"].items}
+
+
+def test_briefing_markdown_export_has_table_synthesis_evidence():
+    briefing = build_briefing(_state())
+    md = briefing.markdown
+    assert "| Categoria | N |" in md  # mobile-readable compact table
+    assert "## Sintesi" in md and "Azione consigliata" in md
+    assert "## Dettaglio" in md
+    assert "evidenza:" in md  # references preserved
+    # closed sections labelled, not active
+    assert "CHIUSO/NON ATTIVO" in md
+
+
+def test_answer_query_briefing_intent():
+    res = answer_query(_state(), "fammi il punto")
+    assert res.intent == "briefing"
+    assert "task aperti" in res.summary
+
+
+def test_render_briefing_markdown_is_pure():
+    briefing = build_briefing(_state())
+    again = render_briefing_markdown(briefing)
+    assert again == briefing.markdown  # rendering is deterministic and data-driven
+
+
 def test_no_hardcoded_domain_tokens_in_query_module():
     import re as _re
 

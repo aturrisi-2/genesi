@@ -17,7 +17,9 @@ from typing import Callable
 
 from core.operational_memory.lifecycle_engine import initial_status, is_active_status
 from core.operational_memory.models import (
+    BriefingRow,
     LifecycleCategory,
+    OperationalBriefing,
     OperationalDigest,
     OperationalItem,
     OperationalState,
@@ -180,12 +182,167 @@ def build_digest(state: OperationalState) -> OperationalDigest:
     )
 
 
+def completed_tasks(state: OperationalState) -> list[QueryAnswerItem]:
+    return _collect(state, "task", lambda s: s in {"completed", "verified"})
+
+
+def answered_questions(state: OperationalState) -> list[QueryAnswerItem]:
+    return _collect(state, "question", lambda s: s == "answered")
+
+
+def reopened_issues(state: OperationalState) -> list[QueryAnswerItem]:
+    return _collect(state, "issue", lambda s: s == "reopened")
+
+
+def superseded_decisions(state: OperationalState) -> list[QueryAnswerItem]:
+    return _collect(state, "decision", lambda s: s in {"superseded", "revoked", "expired"})
+
+
+def stale_items(state: OperationalState) -> list[QueryAnswerItem]:
+    out: list[QueryAnswerItem] = []
+    for category, _field in _CATEGORY_FIELDS:
+        out.extend(_collect(state, category, lambda s: s == "stale"))
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# General Operational Briefing (3 levels: table data, synthesis, markdown)
+# --------------------------------------------------------------------------- #
+
+
+def build_briefing(state: OperationalState) -> OperationalBriefing:
+    """Structured, generic, adaptive briefing. Separates DATA (rows + synthesis)
+    from RENDERING (markdown). Active vs closed are kept apart so resolved /
+    superseded items are never reported as active."""
+    ot, ct = open_tasks(state), completed_tasks(state)
+    oi, ri, repi = open_issues(state), resolved_issues(state), reopened_issues(state)
+    ad, sd = active_decisions(state), superseded_decisions(state)
+    uq, aq = unanswered_questions(state), answered_questions(state)
+    stale, sup, att = stale_items(state), superseded_items(state), attention_items(state)
+    changes = [item.text for item in changed_since(state)]
+
+    rows = [
+        BriefingRow(key="open_tasks", label="Task aperti", count=len(ot), active=True, items=ot),
+        BriefingRow(key="completed_tasks", label="Task completati", count=len(ct), active=False, items=ct),
+        BriefingRow(key="open_issues", label="Problemi aperti", count=len(oi), active=True, items=oi),
+        BriefingRow(key="resolved_issues", label="Problemi risolti", count=len(ri), active=False, items=ri),
+        BriefingRow(key="reopened_issues", label="Problemi riaperti", count=len(repi), active=True, items=repi),
+        BriefingRow(key="active_decisions", label="Decisioni attive", count=len(ad), active=True, items=ad),
+        BriefingRow(key="superseded_decisions", label="Decisioni superate", count=len(sd), active=False, items=sd),
+        BriefingRow(key="open_questions", label="Domande aperte", count=len(uq), active=True, items=uq),
+        BriefingRow(key="answered_questions", label="Domande risposte", count=len(aq), active=False, items=aq),
+        BriefingRow(key="stale_items", label="Elementi stale/aging", count=len(stale), active=False, items=stale),
+        BriefingRow(key="superseded_items", label="Elementi superati (non piu attivi)", count=len(sup), active=False, items=sup),
+        BriefingRow(key="changes", label="Cambiamenti dallo snapshot precedente", count=len(changes), active=True,
+                    note="; ".join(changes[:5])),
+        BriefingRow(key="attention", label="Priorita/Attenzione", count=len(att), active=True, items=att),
+    ]
+
+    headline = (
+        f"{len(ot)} task aperti, {len(oi)} problemi aperti ({len(repi)} riaperti), "
+        f"{len(ri)} risolti, {len(ad)} decisioni attive, {len(uq)} domande aperte, "
+        f"{len(att)} da attenzionare"
+    )
+
+    risk_bits = []
+    if repi:
+        risk_bits.append(f"{len(repi)} problemi riaperti")
+    if oi:
+        risk_bits.append(f"{len(oi)} problemi ancora aperti")
+    if att:
+        risk_bits.append(f"{len(att)} elementi da attenzionare")
+    risks = ", ".join(risk_bits) if risk_bits else "nessun rischio operativo evidente"
+    change_phrase = (
+        f"Dallo snapshot precedente: {len(changes)} cambiamenti." if changes else "Nessun cambiamento dallo snapshot precedente."
+    )
+    not_active = (
+        f"{len(ri)} problemi risolti e {len(sup)} elementi superati non vanno piu considerati attivi."
+        if (ri or sup) else "Nessun elemento risolto o superato da escludere."
+    )
+    synthesis = (
+        f"Stato operativo: {len(ot)} task e {len(oi)} problemi aperti, {len(ad)} decisioni attive. "
+        f"Attenzioni principali: {risks}. {change_phrase} {not_active}"
+    )
+
+    if repi:
+        recommended = f"Affrontare prima i {len(repi)} problemi riaperti."
+    elif att:
+        recommended = f"Verificare i {len(att)} elementi che richiedono attenzione."
+    elif oi:
+        recommended = f"Pianificare la risoluzione dei {len(oi)} problemi aperti."
+    elif ot:
+        recommended = f"Avanzare sui {len(ot)} task aperti."
+    else:
+        recommended = "Monitorare il prossimo aggiornamento operativo."
+
+    briefing = OperationalBriefing(
+        project_id=state.project_id or "",
+        generated_at=utc_now_iso(),
+        headline=headline,
+        rows=rows,
+        synthesis=synthesis,
+        recommended_action=recommended,
+        changes_since_previous=changes[:50],
+    )
+    briefing.markdown = render_briefing_markdown(briefing)
+    return briefing
+
+
+def _evidence_suffix(item: QueryAnswerItem) -> str:
+    return f" [evidenza: {', '.join(item.evidence_event_ids)}]" if item.evidence_event_ids else ""
+
+
+def render_briefing_markdown(briefing: OperationalBriefing) -> str:
+    """Pure renderer: turn briefing DATA into an exportable Markdown report."""
+    lines = [
+        f"# Briefing operativo — {briefing.project_id}",
+        "",
+        f"Generato: {briefing.generated_at}",
+        "",
+        "## Quadro sintetico",
+        "",
+        "| Categoria | N |",
+        "| --- | ---: |",
+    ]
+    for row in briefing.rows:
+        lines.append(f"| {row.label} | {row.count} |")
+    lines.extend([
+        "",
+        "## Sintesi",
+        "",
+        briefing.synthesis,
+        "",
+        f"**Azione consigliata:** {briefing.recommended_action}",
+        "",
+        "## Dettaglio",
+        "",
+    ])
+    for row in briefing.rows:
+        if not row.items and not row.note:
+            continue
+        tag = "ATTIVO" if row.active else "CHIUSO/NON ATTIVO"
+        lines.append(f"### {row.label} ({row.count}) — {tag}")
+        if row.note:
+            lines.append(f"- {row.note}")
+        for item in row.items[:30]:
+            status = f" ({item.status})" if item.status else ""
+            lines.append(f"- {item.text}{status}{_evidence_suffix(item)}")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
 # --------------------------------------------------------------------------- #
 # Natural-language intent routing (keyword/regex, no LLM)
 # --------------------------------------------------------------------------- #
 
 # Ordered: more specific intents first. Patterns are generic IT + EN.
 _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
+    ("briefing", re.compile(
+        r"(fammi\s+il\s+punto|punto\s+della\s+situazione|riassumi\s+la\s+situazione|"
+        r"cosa\s+c'?[eè]\s+da\s+sapere|fammi\s+il\s+report|com'?[eè]\s+messa|quadro\s+operativo|"
+        r"resta\s+apert\w*|cosa\s+resta\s+apert\w*|briefing|fammi\s+un?\s+report|"
+        r"operational\s+briefing|how\s+are\s+(we|things)\s+doing|give\s+me\s+the\s+(picture|briefing))",
+        re.IGNORECASE)),
     ("digest", re.compile(r"\b(digest|riass\w*|sommario|panoramica|summary|overview|stato\s+(del\s+)?(progetto|chat|lavori)|status)\b", re.IGNORECASE)),
     ("changed", re.compile(r"\b(cambiat\w*|cambia|da\s+ieri|novit[aà]|aggiornament\w*|changed|since\s+yesterday|what'?s\s+new|differenz\w*)\b", re.IGNORECASE)),
     ("resolved_issues", re.compile(r"\b(risolt\w*|resolved|fixed|chius\w*\s+problem\w*|problem\w*\s+chius\w*)\b", re.IGNORECASE)),
@@ -232,6 +389,15 @@ def classify_query_intent(text: str) -> str:
 
 def answer_query(state: OperationalState, text: str) -> QueryResult:
     intent = classify_query_intent(text)
+    if intent == "briefing":
+        briefing = build_briefing(state)
+        return QueryResult(
+            query=text,
+            intent="briefing",
+            summary=f"{briefing.headline}. {briefing.synthesis}",
+            count=len(briefing.rows),
+            items=briefing.rows and [item for row in briefing.rows if row.active for item in row.items] or [],
+        )
     if intent == "digest":
         digest = build_digest(state)
         return QueryResult(query=text, intent="digest", summary=digest.headline, count=0, items=[])

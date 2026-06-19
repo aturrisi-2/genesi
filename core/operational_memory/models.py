@@ -396,6 +396,26 @@ class OperationalDigest(BaseModel):
     recent_changes: list[str] = Field(default_factory=list)
 
 
+class BriefingRow(BaseModel):
+    key: str
+    label: str
+    count: int = 0
+    active: bool = True
+    items: list[QueryAnswerItem] = Field(default_factory=list)
+    note: str = ""
+
+
+class OperationalBriefing(BaseModel):
+    project_id: str
+    generated_at: str
+    headline: str = ""
+    rows: list[BriefingRow] = Field(default_factory=list)
+    synthesis: str = ""
+    recommended_action: str = ""
+    changes_since_previous: list[str] = Field(default_factory=list)
+    markdown: str = ""
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
