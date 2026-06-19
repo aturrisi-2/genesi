@@ -15,6 +15,7 @@ from core.operational_memory.incremental_index import (
     touch_thread_rebuild,
 )
 from core.operational_memory.lifecycle_engine import (
+    apply_cross_item_transitions,
     apply_lifecycle_transitions,
     build_operational_snapshot,
 )
@@ -212,19 +213,39 @@ async def incremental_rebuild(
                 ):
                     dirty_item_ids.add(item.id)
     started = time.perf_counter()
+    reference_now = datetime.now(timezone.utc)
     transitions = apply_lifecycle_transitions(
         state,
         updated_events,
         threads=threads,
         event_thread_map=event_thread_map,
         dirty_item_ids=dirty_item_ids,
-        reference_now=datetime.now(timezone.utc),
+        reference_now=reference_now,
     )
-    snapshot = build_operational_snapshot(state, transitions)
+    cross_metrics: dict = {}
+    cross_transitions = apply_cross_item_transitions(
+        state,
+        updated_events,
+        threads=threads,
+        relations=relations,
+        event_thread_map=event_thread_map,
+        dirty_item_ids=dirty_item_ids,
+        reference_now=reference_now,
+        metrics=cross_metrics,
+    )
+    all_transitions = transitions + cross_transitions
+    snapshot = build_operational_snapshot(state, all_transitions)
     state.lifecycle_snapshot = snapshot
     timings["lifecycle_engine_seconds"] = time.perf_counter() - started
-    metrics["lifecycle_transitions"] = len(transitions)
+    metrics["lifecycle_transitions"] = len(all_transitions)
     metrics["dirty_lifecycle_items"] = 0 if dirty_item_ids is None else len(dirty_item_ids)
+    metrics["cross_item_pairs_scanned"] = cross_metrics.get("cross_item_pairs_scanned", 0)
+    metrics["cross_item_pairs_reused"] = cross_metrics.get("cross_item_pairs_reused", 0)
+    metrics["supersessions_detected"] = cross_metrics.get("supersessions_detected", 0)
+    metrics["contradictions_detected"] = cross_metrics.get("contradictions_detected", 0)
+    metrics["partially_answered_detected"] = len(snapshot.partially_answered_questions)
+    metrics["mitigated_detected"] = len(snapshot.mitigated_issues)
+    metrics["full_lifecycle_rebuild_avoided"] = dirty_item_ids is not None
 
     # Persist state.
     state.threads = threads
@@ -260,9 +281,21 @@ async def incremental_rebuild(
     }
     index.dirty_lifecycle_items = sorted(dirty_item_ids) if dirty_item_ids else []
     index.lifecycle_transition_keys = sorted(
-        f"{record.item_id}:{record.new_status}" for record in transitions
+        f"{record.item_id}:{record.new_status}" for record in all_transitions
     )
+    index.supersession_pair_keys = sorted(
+        f"{record.related_item_id}|{record.item_id}"
+        for record in cross_transitions
+        if record.transition_kind == "supersession" and record.related_item_id
+    )
+    index.contradiction_pair_keys = sorted(
+        f"{record.related_item_id}|{record.item_id}"
+        for record in cross_transitions
+        if record.transition_kind == "contradiction" and record.related_item_id
+    )
+    index.dirty_cross_item_pairs = index.supersession_pair_keys + index.contradiction_pair_keys
     index.last_lifecycle_update_at = utc_now_iso()
+    index.last_cross_item_lifecycle_update_at = utc_now_iso()
     touch_thread_rebuild(index)
     touch_relation_rebuild(index)
     touch_macro_rebuild(index)

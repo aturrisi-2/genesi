@@ -45,12 +45,17 @@ class IncrementalIndex(BaseModel):
     last_relation_rebuild_at: str | None = None
     last_macro_rebuild_at: str | None = None
     last_lifecycle_update_at: str | None = None
+    last_cross_item_lifecycle_update_at: str | None = None
     # item_id -> current lifecycle status (snapshot for drift detection)
     lifecycle_item_map: dict[str, str] = Field(default_factory=dict)
     # item ids touched by the most recent lifecycle update
     dirty_lifecycle_items: list[str] = Field(default_factory=list)
     # stable keys (item_id:new_status) of transitions already emitted
     lifecycle_transition_keys: list[str] = Field(default_factory=list)
+    # normalized older|newer item-id pairs already resolved
+    supersession_pair_keys: list[str] = Field(default_factory=list)
+    contradiction_pair_keys: list[str] = Field(default_factory=list)
+    dirty_cross_item_pairs: list[str] = Field(default_factory=list)
     full_rebuild_required: bool = False
     rebuild_reason: str = ""
     # diagnostics from the most recent run (not load-bearing, pure reporting)

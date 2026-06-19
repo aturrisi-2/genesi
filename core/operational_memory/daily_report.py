@@ -457,7 +457,31 @@ def _lifecycle_sections(state: OperationalState) -> tuple[list[str], list[str], 
         )
     if not transitions:
         transitions.append("Nessuna transizione di stato in questo aggiornamento")
-    return changes, current, transitions
+
+    superseded: list[str] = []
+    for record in snapshot.superseded_pairs:
+        superseded.append(
+            f"[{record.category}] precedente: '{record.text}' -> {record.new_status} "
+            f"| sostituito da: '{record.related_text}' | motivo: {record.reason} "
+            f"| confidence: {record.confidence} | evidenza: {', '.join(record.evidence_event_ids) or 'n/d'}"
+        )
+    if not superseded:
+        superseded.append("Nessun elemento superato o sostituito")
+
+    contradictions: list[str] = []
+    for record in snapshot.contradictions:
+        contradictions.append(
+            f"[{record.category}] A: '{record.text}' vs B: '{record.related_text}' "
+            f"| risoluzione: A -> {record.new_status} | motivo: {record.reason} "
+            f"| confidence: {record.confidence} | evidenza: {', '.join(record.evidence_event_ids) or 'n/d'}"
+        )
+    if not contradictions:
+        contradictions.append("Nessuna contraddizione risolta")
+
+    partially = [f"{text}" for text in snapshot.partially_answered_questions] or ["Nessuna domanda parzialmente risposta"]
+    mitigated = [f"{text}" for text in snapshot.mitigated_issues] or ["Nessun problema mitigato"]
+
+    return changes, current, transitions, superseded, contradictions, partially, mitigated
 
 
 def _markdown(report: DailyReport) -> str:
@@ -476,6 +500,10 @@ def _markdown(report: DailyReport) -> str:
         ("Cambiamenti da ultimo aggiornamento", report.lifecycle_changes),
         ("Stato operativo attuale", report.lifecycle_current_state),
         ("Transizioni rilevate", report.lifecycle_transitions),
+        ("Elementi superati o sostituiti", report.lifecycle_superseded),
+        ("Contraddizioni risolte", report.lifecycle_contradictions),
+        ("Domande parzialmente risposte", report.lifecycle_partially_answered),
+        ("Problemi mitigati", report.lifecycle_mitigated),
         ("Elementi da verificare", report.items_to_verify),
         ("Prossime azioni suggerite", report.next_actions),
         ("Rumore Conversazionale Filtrato", report.conversational_noise_filtered),
@@ -605,7 +633,15 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
     ][:30]
     events_linked_to_threads = len({event_id for thread in state.threads for event_id in thread.related_event_ids})
 
-    lifecycle_changes, lifecycle_current_state, lifecycle_transitions = _lifecycle_sections(state)
+    (
+        lifecycle_changes,
+        lifecycle_current_state,
+        lifecycle_transitions,
+        lifecycle_superseded,
+        lifecycle_contradictions,
+        lifecycle_partially_answered,
+        lifecycle_mitigated,
+    ) = _lifecycle_sections(state)
 
     report = DailyReport(
         title=f"Aggiornamento giornaliero - {project_id}",
@@ -615,6 +651,10 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
         lifecycle_changes=lifecycle_changes,
         lifecycle_current_state=lifecycle_current_state,
         lifecycle_transitions=lifecycle_transitions,
+        lifecycle_superseded=lifecycle_superseded,
+        lifecycle_contradictions=lifecycle_contradictions,
+        lifecycle_partially_answered=lifecycle_partially_answered,
+        lifecycle_mitigated=lifecycle_mitigated,
         decisions=[_item_label(item, "DECISION") for item in decisions],
         tasks_open=[_task_label(task) for task in tasks if getattr(task, "status", "open") == "open"],
         tasks_completed=[_task_label(task) for task in tasks if getattr(task, "status", "open") == "completed"],

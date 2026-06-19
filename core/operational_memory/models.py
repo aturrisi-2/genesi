@@ -289,6 +289,10 @@ class LifecycleTransitionRecord(BaseModel):
     reason: str = ""
     confidence: Confidence = "medium"
     evidence_event_ids: list[str] = Field(default_factory=list)
+    # "single_item" | "supersession" | "contradiction" | "partial_answer" | "mitigation"
+    transition_kind: str = "single_item"
+    related_item_id: Optional[str] = None
+    related_text: str = ""
 
 
 class OperationalLifecycleSnapshot(BaseModel):
@@ -306,6 +310,10 @@ class OperationalLifecycleSnapshot(BaseModel):
     high_attention_items: list[str] = Field(default_factory=list)
     changed_since_last_snapshot: list[str] = Field(default_factory=list)
     transitions: list[LifecycleTransitionRecord] = Field(default_factory=list)
+    superseded_pairs: list[LifecycleTransitionRecord] = Field(default_factory=list)
+    contradictions: list[LifecycleTransitionRecord] = Field(default_factory=list)
+    partially_answered_questions: list[str] = Field(default_factory=list)
+    mitigated_issues: list[str] = Field(default_factory=list)
     delta: OperationalLifecycleDelta = Field(default_factory=OperationalLifecycleDelta)
 
 
@@ -392,5 +400,9 @@ class DailyReport(BaseModel):
     lifecycle_changes: list[str] = Field(default_factory=list)
     lifecycle_current_state: list[str] = Field(default_factory=list)
     lifecycle_transitions: list[str] = Field(default_factory=list)
+    lifecycle_superseded: list[str] = Field(default_factory=list)
+    lifecycle_contradictions: list[str] = Field(default_factory=list)
+    lifecycle_partially_answered: list[str] = Field(default_factory=list)
+    lifecycle_mitigated: list[str] = Field(default_factory=list)
     markdown: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
