@@ -4,7 +4,13 @@ from dataclasses import dataclass, field
 from itertools import combinations
 from typing import Any
 
-from core.operational_memory.models import AdaptiveChatProfile, OperationalEvent, OperationalMacroThread, OperationalThread
+from core.operational_memory.models import (
+    AdaptiveChatProfile,
+    OperationalEvent,
+    OperationalMacroThread,
+    OperationalThread,
+    ThreadRelationCandidate,
+)
 from core.operational_memory.chat_profile_engine import is_linguistic_fragment, is_operational_term
 
 
@@ -54,6 +60,14 @@ class ThreadValidationResult:
     macro_heterogeneity_score: float = 0.0
     rejected_macro_link_count: int = 0
     unassigned_thread_rate: float = 0.0
+    candidate_relation_count: int = 0
+    candidate_relation_precision: float = 1.0
+    candidate_relation_recall: float = 1.0
+    promoted_relation_count: int = 0
+    rejected_relation_count: int = 0
+    false_macro_prevention_rate: float = 0.0
+    useful_unassigned_thread_rate: float = 0.0
+    isolated_thread_rate: float = 0.0
 
 
 def _event_id(event: dict[str, Any] | OperationalEvent) -> str:
@@ -90,6 +104,26 @@ def _thread_event_ids(thread: dict[str, Any] | OperationalThread) -> list[str]:
 
 def _macro_child_thread_ids(macro: dict[str, Any] | OperationalMacroThread) -> list[str]:
     return list(macro.get("child_thread_ids", [])) if isinstance(macro, dict) else list(macro.child_thread_ids)
+
+
+def _relation_source_id(relation: dict[str, Any] | ThreadRelationCandidate) -> str:
+    return str(relation.get("source_thread_id", "") if isinstance(relation, dict) else relation.source_thread_id)
+
+
+def _relation_target_id(relation: dict[str, Any] | ThreadRelationCandidate) -> str:
+    return str(relation.get("target_thread_id", "") if isinstance(relation, dict) else relation.target_thread_id)
+
+
+def _relation_confidence(relation: dict[str, Any] | ThreadRelationCandidate) -> str:
+    return str(relation.get("confidence", "low") if isinstance(relation, dict) else relation.confidence)
+
+
+def _relation_promoted(relation: dict[str, Any] | ThreadRelationCandidate) -> bool:
+    return bool(relation.get("should_promote_to_macro", False) if isinstance(relation, dict) else relation.should_promote_to_macro)
+
+
+def _relation_candidate(relation: dict[str, Any] | ThreadRelationCandidate) -> bool:
+    return bool(relation.get("should_remain_candidate", False) if isinstance(relation, dict) else relation.should_remain_candidate)
 
 
 def _related_past_thread_ids(thread: dict[str, Any] | OperationalThread) -> list[str]:
@@ -653,6 +687,150 @@ def calculate_unassigned_thread_rate(
     return len([thread for thread in operational_threads if _thread_id(thread) not in assigned]) / len(operational_threads)
 
 
+def _expected_relation_pairs(
+    annotated_events: list[dict[str, Any]],
+    generated_threads: list[dict[str, Any] | OperationalThread],
+    expected_threads: list[dict[str, Any]] | dict[str, Any] | None = None,
+) -> set[tuple[str, str]]:
+    labels = _label_by_event(annotated_events)
+    thread_labels = _thread_label_by_generated_id(annotated_events, generated_threads)
+    pairs: set[tuple[str, str]] = set()
+    expected_macro_pairs = _pair_set_from_label_sets(_expected_macro_label_sets(expected_threads or []))
+    for left, right in combinations(sorted(thread_labels), 2):
+        left_label = thread_labels[left]
+        right_label = thread_labels[right]
+        if left_label == right_label:
+            pairs.add((left, right))
+            continue
+        if tuple(sorted((left_label, right_label))) in expected_macro_pairs:
+            pairs.add((left, right))
+            continue
+        left_events = set(_thread_event_ids(next(thread for thread in generated_threads if _thread_id(thread) == left)))
+        right_events = set(_thread_event_ids(next(thread for thread in generated_threads if _thread_id(thread) == right)))
+        left_roles = {_event_role(event) for event in annotated_events if _event_id(event) in left_events}
+        right_roles = {_event_role(event) for event in annotated_events if _event_id(event) in right_events}
+        if "follow_up" in left_roles or "follow_up" in right_roles or "weak_evidence" in left_roles or "weak_evidence" in right_roles:
+            if left_label and right_label and left_label.split("_")[0] == right_label.split("_")[0]:
+                pairs.add((left, right))
+    return pairs
+
+
+def _generated_relation_pairs(relations: list[dict[str, Any] | ThreadRelationCandidate], include_promoted: bool = True) -> set[tuple[str, str]]:
+    pairs: set[tuple[str, str]] = set()
+    for relation in relations:
+        if _relation_confidence(relation) == "low":
+            continue
+        if not include_promoted and _relation_promoted(relation):
+            continue
+        if not (_relation_candidate(relation) or _relation_promoted(relation)):
+            continue
+        pairs.add(tuple(sorted((_relation_source_id(relation), _relation_target_id(relation)))))
+    return pairs
+
+
+def calculate_candidate_relation_count(relations: list[dict[str, Any] | ThreadRelationCandidate]) -> int:
+    return len([relation for relation in relations if _relation_candidate(relation)])
+
+
+def calculate_candidate_relation_precision(
+    annotated_events: list[dict[str, Any]],
+    generated_threads: list[dict[str, Any] | OperationalThread],
+    relations: list[dict[str, Any] | ThreadRelationCandidate],
+    expected_threads: list[dict[str, Any]] | dict[str, Any] | None = None,
+) -> float:
+    generated_pairs = _generated_relation_pairs(relations)
+    if not generated_pairs:
+        return 1.0
+    expected_pairs = _expected_relation_pairs(annotated_events, generated_threads, expected_threads)
+    return len(generated_pairs & expected_pairs) / len(generated_pairs)
+
+
+def calculate_candidate_relation_recall(
+    annotated_events: list[dict[str, Any]],
+    generated_threads: list[dict[str, Any] | OperationalThread],
+    relations: list[dict[str, Any] | ThreadRelationCandidate],
+    expected_threads: list[dict[str, Any]] | dict[str, Any] | None = None,
+) -> float:
+    expected_pairs = _expected_relation_pairs(annotated_events, generated_threads, expected_threads)
+    if not expected_pairs:
+        return 1.0
+    generated_pairs = _generated_relation_pairs(relations)
+    return len(generated_pairs & expected_pairs) / len(expected_pairs)
+
+
+def calculate_promoted_relation_count(relations: list[dict[str, Any] | ThreadRelationCandidate]) -> int:
+    return len([relation for relation in relations if _relation_promoted(relation)])
+
+
+def calculate_rejected_relation_count(relations: list[dict[str, Any] | ThreadRelationCandidate]) -> int:
+    return len([relation for relation in relations if not _relation_candidate(relation) and not _relation_promoted(relation)])
+
+
+def calculate_false_macro_prevention_rate(
+    generated_threads: list[dict[str, Any] | OperationalThread],
+    generated_macro_threads: list[dict[str, Any] | OperationalMacroThread],
+    relations: list[dict[str, Any] | ThreadRelationCandidate],
+) -> float:
+    rejected_or_candidate_pairs = _generated_relation_pairs(relations, include_promoted=False)
+    if not rejected_or_candidate_pairs:
+        return 0.0
+    macro_pairs: set[tuple[str, str]] = set()
+    for macro in generated_macro_threads:
+        for left, right in combinations(sorted(_macro_child_thread_ids(macro)), 2):
+            macro_pairs.add((left, right))
+    prevented = len([pair for pair in rejected_or_candidate_pairs if pair not in macro_pairs])
+    return prevented / len(rejected_or_candidate_pairs)
+
+
+def calculate_useful_unassigned_thread_rate(
+    generated_threads: list[dict[str, Any] | OperationalThread],
+    generated_macro_threads: list[dict[str, Any] | OperationalMacroThread],
+    relations: list[dict[str, Any] | ThreadRelationCandidate],
+) -> float:
+    if not generated_threads:
+        return 0.0
+    assigned = {thread_id for macro in generated_macro_threads for thread_id in _macro_child_thread_ids(macro)}
+    relation_thread_ids = {
+        thread_id
+        for relation in relations
+        if _relation_candidate(relation) or _relation_promoted(relation)
+        for thread_id in (_relation_source_id(relation), _relation_target_id(relation))
+    }
+    operational = [
+        thread
+        for thread in generated_threads
+        if (thread.get("project_impact_score", 0) if isinstance(thread, dict) else thread.project_impact_score) >= 50
+    ]
+    unassigned = [thread for thread in operational if _thread_id(thread) not in assigned]
+    if not unassigned:
+        return 0.0
+    useful = [thread for thread in unassigned if _thread_id(thread) in relation_thread_ids]
+    return len(useful) / len(unassigned)
+
+
+def calculate_isolated_thread_rate(
+    generated_threads: list[dict[str, Any] | OperationalThread],
+    generated_macro_threads: list[dict[str, Any] | OperationalMacroThread],
+    relations: list[dict[str, Any] | ThreadRelationCandidate],
+) -> float:
+    operational = [
+        thread
+        for thread in generated_threads
+        if (thread.get("project_impact_score", 0) if isinstance(thread, dict) else thread.project_impact_score) >= 50
+    ]
+    if not operational:
+        return 0.0
+    assigned = {thread_id for macro in generated_macro_threads for thread_id in _macro_child_thread_ids(macro)}
+    relation_thread_ids = {
+        thread_id
+        for relation in relations
+        if _relation_candidate(relation) or _relation_promoted(relation)
+        for thread_id in (_relation_source_id(relation), _relation_target_id(relation))
+    }
+    isolated = [thread for thread in operational if _thread_id(thread) not in assigned and _thread_id(thread) not in relation_thread_ids]
+    return len(isolated) / len(operational)
+
+
 def _macro_overmerge_cases(
     annotated_events: list[dict[str, Any]],
     expected_threads: list[dict[str, Any]] | dict[str, Any],
@@ -700,9 +878,11 @@ def evaluate_thread_grouping(
     generated_threads: list[dict[str, Any] | OperationalThread],
     generated_events: list[dict[str, Any] | OperationalEvent] | None = None,
     generated_macro_threads: list[dict[str, Any] | OperationalMacroThread] | None = None,
+    generated_thread_relations: list[dict[str, Any] | ThreadRelationCandidate] | None = None,
     adaptive_profile: AdaptiveChatProfile | None = None,
 ) -> ThreadValidationResult:
     generated_macro_threads = generated_macro_threads or []
+    generated_thread_relations = generated_thread_relations or []
     return ThreadValidationResult(
         event_count=len(annotated_events),
         expected_thread_count=len(_expected_thread_list(expected_threads)),
@@ -782,4 +962,12 @@ def evaluate_thread_grouping(
         macro_heterogeneity_score=calculate_macro_heterogeneity_score(generated_macro_threads),
         rejected_macro_link_count=calculate_rejected_macro_link_count(generated_macro_threads),
         unassigned_thread_rate=calculate_unassigned_thread_rate(generated_threads, generated_macro_threads),
+        candidate_relation_count=calculate_candidate_relation_count(generated_thread_relations),
+        candidate_relation_precision=calculate_candidate_relation_precision(annotated_events, generated_threads, generated_thread_relations, expected_threads),
+        candidate_relation_recall=calculate_candidate_relation_recall(annotated_events, generated_threads, generated_thread_relations, expected_threads),
+        promoted_relation_count=calculate_promoted_relation_count(generated_thread_relations),
+        rejected_relation_count=calculate_rejected_relation_count(generated_thread_relations),
+        false_macro_prevention_rate=calculate_false_macro_prevention_rate(generated_threads, generated_macro_threads, generated_thread_relations),
+        useful_unassigned_thread_rate=calculate_useful_unassigned_thread_rate(generated_threads, generated_macro_threads, generated_thread_relations),
+        isolated_thread_rate=calculate_isolated_thread_rate(generated_threads, generated_macro_threads, generated_thread_relations),
     )

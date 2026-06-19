@@ -11,6 +11,7 @@ from core.operational_memory.event_store import list_events, save_events
 from core.operational_memory.macro_thread_engine import build_macro_threads
 from core.operational_memory.models import OperationalEvent, OperationalItem, OperationalState, OperationalThread, ThreadStatus
 from core.operational_memory.state_store import load_state, save_state
+from core.operational_memory.thread_relation_engine import build_thread_relation_candidates
 
 
 OPERATIVE_DOMAINS = {"TECHNICAL_OPERATION", "TECHNICAL_ISSUE", "TASK_ASSIGNMENT", "MEDIA_EVIDENCE"}
@@ -473,8 +474,10 @@ async def rebuild_project_threads(project_id: str, stale_days: int = DEFAULT_STA
     threads, updated_events = build_threads_from_events(project_id, events, state, stale_days=stale_days)
     profile = build_adaptive_chat_profile(project_id, updated_events, threads)
     macro_threads = build_macro_threads(project_id, threads, updated_events, profile)
+    thread_relation_candidates = build_thread_relation_candidates(project_id, threads, updated_events, profile)
     state.threads = threads
     state.macro_threads = macro_threads
+    state.thread_relation_candidates = thread_relation_candidates
     state.adaptive_chat_profile = profile
     await save_events(project_id, updated_events)
     await save_state(project_id, state)

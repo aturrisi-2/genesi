@@ -13,6 +13,7 @@ from core.operational_memory.models import (
     OperationalState,
     OperationalThread,
     ReportMode,
+    ThreadRelationCandidate,
 )
 from core.operational_memory.project_impact import classify_impact_level
 from core.operational_memory.quality import (
@@ -174,6 +175,41 @@ def _macro_label(macro: OperationalMacroThread, thread_by_id: dict[str, Operatio
             *child_lines,
             f"  Sintesi: {macro.summary}",
             f"  Prossima azione macro: {_macro_next_action(macro, child_threads)}",
+        ]
+    )
+
+
+def _relation_status(relation: ThreadRelationCandidate) -> str:
+    if relation.should_promote_to_macro:
+        return "promosso a macro"
+    if relation.should_remain_candidate:
+        return "candidato, non promosso a macro"
+    return "scartato"
+
+
+def _relation_next_action(relation: ThreadRelationCandidate) -> str:
+    if relation.should_promote_to_macro:
+        return "verificare se la promozione macro resta coerente nel tempo"
+    if relation.confidence == "medium":
+        return "osservare prossimi aggiornamenti prima di fondere"
+    return "nessuna azione: segnale insufficiente"
+
+
+def _relation_label(relation: ThreadRelationCandidate, thread_by_id: dict[str, OperationalThread]) -> str:
+    source = thread_by_id.get(relation.source_thread_id)
+    target = thread_by_id.get(relation.target_thread_id)
+    evidence = relation.evidence or relation.rejection_reasons or ["nessuna evidenza leggibile"]
+    return "\n".join(
+        [
+            "[RELATION CANDIDATE]",
+            f"  Thread A: {source.title if source else relation.source_thread_id}",
+            f"  Thread B: {target.title if target else relation.target_thread_id}",
+            f"  Tipo: {relation.relation_type}",
+            f"  Confidenza: {relation.confidence}",
+            f"  Score: {relation.score:.2f}",
+            f"  Motivo: {'; '.join(evidence)}",
+            f"  Stato: {_relation_status(relation)}",
+            f"  Prossima azione: {_relation_next_action(relation)}",
         ]
     )
 
@@ -382,6 +418,7 @@ def _markdown(report: DailyReport) -> str:
         ("Media rilevanti", report.media_relevant),
         ("Profilo adattivo della chat", report.adaptive_chat_profile_report),
         ("Macro-thread operativi", report.operational_macro_threads),
+        ("Relazioni candidate tra thread", report.thread_relation_candidates),
         ("Thread operativi aperti", report.operational_threads),
         ("Elementi da verificare", report.items_to_verify),
         ("Prossime azioni suggerite", report.next_actions),
@@ -505,6 +542,11 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
         for macro in state.macro_threads
         if macro.child_thread_ids and _macro_allowed(macro, thread_by_id, event_by_id, report_mode)
     ]
+    relation_candidates = [
+        relation
+        for relation in state.thread_relation_candidates
+        if relation.should_promote_to_macro or relation.should_remain_candidate
+    ][:30]
     events_linked_to_threads = len({event_id for thread in state.threads for event_id in thread.related_event_ids})
 
     report = DailyReport(
@@ -528,6 +570,7 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
         ],
         adaptive_chat_profile_report=_profile_label(state.adaptive_chat_profile),
         operational_macro_threads=[_macro_label(macro, thread_by_id) for macro in macro_threads],
+        thread_relation_candidates=[_relation_label(relation, thread_by_id) for relation in relation_candidates],
         operational_threads=[_thread_label(thread, event_by_id) for thread in open_threads],
         items_to_verify=[_item_label(item, "VERIFY") for item in items_to_verify],
         next_actions=_next_actions(state, event_by_id, report_mode),
@@ -555,6 +598,9 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
             "macro_threads_total": len(macro_threads),
             "threads_linked_to_macro_threads": len([thread for thread in state.threads if thread.macro_thread_id]),
             "threads_without_macro_thread": len([thread for thread in state.threads if not thread.macro_thread_id]),
+            "candidate_relation_count": len([relation for relation in state.thread_relation_candidates if relation.should_remain_candidate]),
+            "promoted_relation_count": len([relation for relation in state.thread_relation_candidates if relation.should_promote_to_macro]),
+            "rejected_relation_count": len([relation for relation in state.thread_relation_candidates if not relation.should_promote_to_macro and not relation.should_remain_candidate]),
             "related_past_thread_ids": len({thread_id for thread in state.threads for thread_id in thread.related_past_thread_ids}),
             "low_confidence_threads": len([thread for thread in state.threads if thread.grouping_confidence == "low"]),
             "isolated_issues": len([issue for issue in issues if not issue.source_event_id or not event_by_id.get(issue.source_event_id) or not event_by_id[issue.source_event_id].thread_id]),

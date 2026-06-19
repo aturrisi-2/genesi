@@ -41,6 +41,7 @@ def merge_state(existing: OperationalState, incoming: OperationalState) -> Opera
         open_questions=_merge_items(existing.open_questions, incoming.open_questions),
         threads=list(existing.threads),
         macro_threads=list(existing.macro_threads),
+        thread_relation_candidates=list(existing.thread_relation_candidates),
         adaptive_chat_profile=existing.adaptive_chat_profile,
         domain_stats=dict(existing.domain_stats),
     )

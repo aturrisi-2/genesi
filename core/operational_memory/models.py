@@ -58,6 +58,16 @@ CanonicalTermType = Literal[
     "workflow_step",
     "mixed",
 ]
+ThreadRelationType = Literal[
+    "same_object",
+    "same_location",
+    "same_work_package",
+    "same_problem",
+    "same_owner",
+    "same_workflow_sequence",
+    "follow_up",
+    "weak_context",
+]
 
 
 class OperationalItem(BaseModel):
@@ -129,6 +139,28 @@ class OperationalThread(BaseModel):
     macro_context_tags: list[str] = Field(default_factory=list)
     macro_confidence: GroupingConfidence = "low"
     relation_to_macro: Optional[MacroRelation] = None
+    candidate_relation_ids: list[str] = Field(default_factory=list)
+    candidate_parent_ids: list[str] = Field(default_factory=list)
+    candidate_child_ids: list[str] = Field(default_factory=list)
+    relation_confidence_summary: dict[str, int] = Field(default_factory=dict)
+
+
+class ThreadRelationCandidate(BaseModel):
+    relation_id: str
+    project_id: str
+    source_thread_id: str
+    target_thread_id: str
+    relation_type: ThreadRelationType = "weak_context"
+    confidence: GroupingConfidence = "low"
+    score: float = 0.0
+    shared_canonical_terms: list[str] = Field(default_factory=list)
+    shared_context_tags: list[str] = Field(default_factory=list)
+    shared_workflow_steps: list[str] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
+    rejection_reasons: list[str] = Field(default_factory=list)
+    should_promote_to_macro: bool = False
+    should_remain_candidate: bool = False
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class OperationalMacroThread(BaseModel):
@@ -207,6 +239,7 @@ class OperationalState(BaseModel):
     open_questions: list[OperationalQuestion] = Field(default_factory=list)
     threads: list[OperationalThread] = Field(default_factory=list)
     macro_threads: list[OperationalMacroThread] = Field(default_factory=list)
+    thread_relation_candidates: list[ThreadRelationCandidate] = Field(default_factory=list)
     adaptive_chat_profile: Optional[AdaptiveChatProfile] = None
     domain_stats: dict[str, int] = Field(default_factory=dict)
 
@@ -270,6 +303,7 @@ class DailyReport(BaseModel):
     adaptive_chat_profile_report: list[str] = Field(default_factory=list)
     operational_threads: list[str] = Field(default_factory=list)
     operational_macro_threads: list[str] = Field(default_factory=list)
+    thread_relation_candidates: list[str] = Field(default_factory=list)
     items_to_verify: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
     conversational_noise_filtered: list[str] = Field(default_factory=list)
