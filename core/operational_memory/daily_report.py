@@ -481,7 +481,44 @@ def _lifecycle_sections(state: OperationalState) -> tuple[list[str], list[str], 
     partially = [f"{text}" for text in snapshot.partially_answered_questions] or ["Nessuna domanda parzialmente risposta"]
     mitigated = [f"{text}" for text in snapshot.mitigated_issues] or ["Nessun problema mitigato"]
 
-    return changes, current, transitions, superseded, contradictions, partially, mitigated
+    temporal: list[str] = []
+    sdelta = snapshot.snapshot_delta
+    if sdelta is None:
+        temporal.append("Nessuno snapshot precedente con cui confrontare")
+    else:
+        ref = sdelta.previous_generated_at or "snapshot iniziale"
+        temporal.append(f"Confronto rispetto a: {ref}")
+
+        def _add_t(title: str, items: list[str]) -> None:
+            if items:
+                temporal.append(f"{title}:")
+                temporal.extend(f"  - {item}" for item in items[:30])
+
+        _add_t("Nuovi elementi aperti", sdelta.newly_opened)
+        _add_t("Completati dall'ultimo snapshot", sdelta.newly_completed)
+        _add_t("Risolti dall'ultimo snapshot", sdelta.newly_resolved)
+        _add_t("Superati/sostituiti dall'ultimo snapshot", sdelta.newly_superseded)
+        _add_t("Riapparsi/riaperti", sdelta.reopened_items)
+        _add_t("Diventati stale", sdelta.newly_stale)
+        if len(temporal) == 1:
+            temporal.append("Nessun cambiamento rispetto allo snapshot precedente")
+
+    by_age: list[str] = []
+    if sdelta is not None and sdelta.unresolved_items_by_age:
+        order = ["fresh", "recent", "aging", "old", "unknown"]
+        for bucket in order:
+            items = sdelta.unresolved_items_by_age.get(bucket)
+            if items:
+                by_age.append(f"{bucket}: {len(items)}")
+                by_age.extend(f"  - {item}" for item in items[:15])
+    if not by_age:
+        by_age.append("Nessun elemento non risolto da classificare per età")
+
+    aging = list(sdelta.aging_attention_items) if sdelta else []
+    if not aging:
+        aging = ["Nessun elemento attivo oltre la soglia di attenzione"]
+
+    return changes, current, transitions, superseded, contradictions, partially, mitigated, temporal, by_age, aging
 
 
 def _markdown(report: DailyReport) -> str:
@@ -498,6 +535,9 @@ def _markdown(report: DailyReport) -> str:
         ("Relazioni candidate tra thread", report.thread_relation_candidates),
         ("Thread operativi aperti", report.operational_threads),
         ("Cambiamenti da ultimo aggiornamento", report.lifecycle_changes),
+        ("Cambiamenti dallo snapshot precedente", report.lifecycle_temporal_delta),
+        ("Elementi non risolti per età", report.lifecycle_unresolved_by_age),
+        ("Elementi che richiedono attenzione (aging)", report.lifecycle_aging_attention),
         ("Stato operativo attuale", report.lifecycle_current_state),
         ("Transizioni rilevate", report.lifecycle_transitions),
         ("Elementi superati o sostituiti", report.lifecycle_superseded),
@@ -641,6 +681,9 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
         lifecycle_contradictions,
         lifecycle_partially_answered,
         lifecycle_mitigated,
+        lifecycle_temporal_delta,
+        lifecycle_unresolved_by_age,
+        lifecycle_aging_attention,
     ) = _lifecycle_sections(state)
 
     report = DailyReport(
@@ -655,6 +698,9 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
         lifecycle_contradictions=lifecycle_contradictions,
         lifecycle_partially_answered=lifecycle_partially_answered,
         lifecycle_mitigated=lifecycle_mitigated,
+        lifecycle_temporal_delta=lifecycle_temporal_delta,
+        lifecycle_unresolved_by_age=lifecycle_unresolved_by_age,
+        lifecycle_aging_attention=lifecycle_aging_attention,
         decisions=[_item_label(item, "DECISION") for item in decisions],
         tasks_open=[_task_label(task) for task in tasks if getattr(task, "status", "open") == "open"],
         tasks_completed=[_task_label(task) for task in tasks if getattr(task, "status", "open") == "completed"],

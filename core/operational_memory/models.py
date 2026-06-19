@@ -295,6 +295,37 @@ class LifecycleTransitionRecord(BaseModel):
     related_text: str = ""
 
 
+class LifecycleItemState(BaseModel):
+    item_id: str
+    category: LifecycleCategory
+    status: str
+    text: str = ""
+    first_seen_at: Optional[str] = None
+    last_evidence_at: Optional[str] = None
+
+
+class SnapshotDelta(BaseModel):
+    previous_snapshot_id: Optional[str] = None
+    previous_generated_at: Optional[str] = None
+    newly_opened: list[str] = Field(default_factory=list)
+    newly_completed: list[str] = Field(default_factory=list)
+    newly_resolved: list[str] = Field(default_factory=list)
+    newly_superseded: list[str] = Field(default_factory=list)
+    newly_stale: list[str] = Field(default_factory=list)
+    reopened_items: list[str] = Field(default_factory=list)
+    still_active: list[str] = Field(default_factory=list)
+    historical_superseded_items: list[str] = Field(default_factory=list)
+    aging_attention_items: list[str] = Field(default_factory=list)
+    unresolved_items_by_age: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class StoredLifecycleSnapshot(BaseModel):
+    snapshot_id: str
+    project_id: str
+    generated_at: str
+    item_states: list[LifecycleItemState] = Field(default_factory=list)
+
+
 class OperationalLifecycleSnapshot(BaseModel):
     project_id: str
     generated_at: str
@@ -315,6 +346,7 @@ class OperationalLifecycleSnapshot(BaseModel):
     partially_answered_questions: list[str] = Field(default_factory=list)
     mitigated_issues: list[str] = Field(default_factory=list)
     delta: OperationalLifecycleDelta = Field(default_factory=OperationalLifecycleDelta)
+    snapshot_delta: Optional["SnapshotDelta"] = None
 
 
 class OperationalState(BaseModel):
@@ -404,5 +436,8 @@ class DailyReport(BaseModel):
     lifecycle_contradictions: list[str] = Field(default_factory=list)
     lifecycle_partially_answered: list[str] = Field(default_factory=list)
     lifecycle_mitigated: list[str] = Field(default_factory=list)
+    lifecycle_temporal_delta: list[str] = Field(default_factory=list)
+    lifecycle_unresolved_by_age: list[str] = Field(default_factory=list)
+    lifecycle_aging_attention: list[str] = Field(default_factory=list)
     markdown: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)

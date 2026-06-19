@@ -23,7 +23,12 @@ from core.operational_memory.macro_thread_engine import (
     build_macro_threads,
     incremental_build_macro_threads,
 )
-from core.operational_memory.models import OperationalThread, utc_now_iso
+from core.operational_memory.models import OperationalThread, StoredLifecycleSnapshot, utc_now_iso
+from core.operational_memory.snapshot_delta import compute_snapshot_delta, item_status_index
+from core.operational_memory.snapshot_store import (
+    load_latest_lifecycle_snapshot,
+    save_lifecycle_snapshot,
+)
 from core.operational_memory.state_store import load_state, save_state
 from core.operational_memory.thread_engine import incremental_update_threads
 from core.operational_memory.thread_relation_engine import (
@@ -235,7 +240,27 @@ async def incremental_rebuild(
     )
     all_transitions = transitions + cross_transitions
     snapshot = build_operational_snapshot(state, all_transitions)
+
+    # FASE 4.3: temporal delta vs the previous persisted lifecycle snapshot.
+    previous_record = load_latest_lifecycle_snapshot(project_id)
+    snapshot.snapshot_delta = compute_snapshot_delta(
+        previous_record.item_states if previous_record else None,
+        state,
+        reference_now=reference_now,
+        previous_snapshot_id=previous_record.snapshot_id if previous_record else None,
+        previous_generated_at=previous_record.generated_at if previous_record else None,
+    )
     state.lifecycle_snapshot = snapshot
+    generated_at = snapshot.generated_at
+    save_lifecycle_snapshot(
+        project_id,
+        StoredLifecycleSnapshot(
+            snapshot_id=f"lcsnap_{generated_at}",
+            project_id=project_id,
+            generated_at=generated_at,
+            item_states=item_status_index(state),
+        ),
+    )
     timings["lifecycle_engine_seconds"] = time.perf_counter() - started
     metrics["lifecycle_transitions"] = len(all_transitions)
     metrics["dirty_lifecycle_items"] = 0 if dirty_item_ids is None else len(dirty_item_ids)
@@ -246,6 +271,15 @@ async def incremental_rebuild(
     metrics["partially_answered_detected"] = len(snapshot.partially_answered_questions)
     metrics["mitigated_detected"] = len(snapshot.mitigated_issues)
     metrics["full_lifecycle_rebuild_avoided"] = dirty_item_ids is not None
+    _delta = snapshot.snapshot_delta
+    if _delta is not None:
+        metrics["delta_newly_opened"] = len(_delta.newly_opened)
+        metrics["delta_newly_resolved"] = len(_delta.newly_resolved)
+        metrics["delta_newly_completed"] = len(_delta.newly_completed)
+        metrics["delta_newly_superseded"] = len(_delta.newly_superseded)
+        metrics["delta_reopened"] = len(_delta.reopened_items)
+        metrics["delta_aging_attention"] = len(_delta.aging_attention_items)
+        metrics["delta_historical_superseded"] = len(_delta.historical_superseded_items)
 
     # Persist state.
     state.threads = threads
