@@ -32,7 +32,10 @@ def test_same_t7_m2_context_events_go_to_same_thread():
         tasks=[OperationalTask(text="Sostituire T7 M2", source="msg", source_event_id="evt-3")],
     )
 
-    threads, updated_events = build_threads_from_events("thread-demo", events, state)
+    # Fixed reference clock: assert the open/in_progress lifecycle without the
+    # result drifting to "stale" as wall-clock time moves past the stale window.
+    reference_now = datetime(2026, 6, 12, 9, 0, tzinfo=timezone.utc)
+    threads, updated_events = build_threads_from_events("thread-demo", events, state, now=reference_now)
 
     assert len(threads) == 1
     assert threads[0].status == "in_progress"

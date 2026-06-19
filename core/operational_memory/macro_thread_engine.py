@@ -494,23 +494,45 @@ def incremental_build_macro_threads(
     thread_by_id = {thread.thread_id: thread for thread in candidates}
     dirty_norm_terms = {_norm(term) for term in dirty_canonical_terms}
 
-    # Expand the affected frontier: dirty threads + anything strongly linked to them.
+    if not dirty_thread_ids:
+        if stats is not None:
+            stats.clear()
+            stats.update({"mode": "incremental", "macros_rebuilt": 0, "macros_reused": len(existing_macros)})
+        return list(existing_macros)
+
+    # Broad canonical terms (high coverage) must NOT be used to link affected
+    # threads, otherwise one dirty thread carrying a widespread term (e.g. an
+    # over-distributed code) would transitively pull most of the graph into the
+    # recompute set and collapse incremental macro back to a full rebuild. This
+    # is generic: broad-ness is measured from the live distribution, never from
+    # any hardcoded token.
+    total = max(1, len(candidates))
+    canonical_terms_by_thread = {
+        thread.thread_id: {_norm(term) for term in _thread_canonical_terms(thread, profile)}
+        for thread in candidates
+    }
+    coverage: dict[str, int] = {}
+    for terms in canonical_terms_by_thread.values():
+        for term in terms:
+            coverage[term] = coverage.get(term, 0) + 1
+    broad_terms = {term for term, count in coverage.items() if count / total >= 0.25}
+
+    def _discriminative_link(a: str, b: str) -> bool:
+        shared = (canonical_terms_by_thread.get(a, set()) & canonical_terms_by_thread.get(b, set())) - broad_terms
+        if not shared:
+            return False
+        left, right = thread_by_id[a], thread_by_id[b]
+        return bool(_strong_shared_canonical_terms(left, right, profile) & shared)
+
+    # Affected frontier: dirty threads + ONE hop of non-broad strong canonical
+    # neighbours. No transitive closure — bounds the recompute set.
     affected: set[str] = {tid for tid in dirty_thread_ids if tid in thread_by_id}
-    if affected:
-        changed = True
-        while changed:
-            changed = False
-            for thread in candidates:
-                if thread.thread_id in affected:
-                    continue
-                for other_id in list(affected):
-                    other = thread_by_id.get(other_id)
-                    if other is None:
-                        continue
-                    if _strong_shared_canonical_terms(thread, other, profile):
-                        affected.add(thread.thread_id)
-                        changed = True
-                        break
+    for dirty_id in list(affected):
+        for thread in candidates:
+            if thread.thread_id in affected:
+                continue
+            if _discriminative_link(dirty_id, thread.thread_id):
+                affected.add(thread.thread_id)
 
     def _macro_is_affected(macro: OperationalMacroThread) -> bool:
         if any(child_id in affected for child_id in macro.child_thread_ids):
@@ -520,17 +542,15 @@ def incremental_build_macro_threads(
         return False
 
     reused_macros = [macro for macro in existing_macros if not _macro_is_affected(macro)]
-    # Children locked into reused macros must not be regrouped.
-    locked_child_ids = {child_id for macro in reused_macros for child_id in macro.child_thread_ids}
+    affected_macros = [macro for macro in existing_macros if _macro_is_affected(macro)]
 
-    if not dirty_thread_ids:
-        if stats is not None:
-            stats.clear()
-            stats.update({"mode": "incremental", "macros_rebuilt": 0, "macros_reused": len(existing_macros)})
-        return list(existing_macros)
-
-    recompute_threads = [thread for thread in candidates if thread.thread_id not in locked_child_ids]
-    rebuilt_macros = build_macro_threads(project_id, recompute_threads, events, profile)
+    # Recompute only the small affected slice: dirty threads, their non-broad
+    # neighbours, and every child of the macros being rebuilt.
+    recompute_ids = set(affected)
+    for macro in affected_macros:
+        recompute_ids |= {cid for cid in macro.child_thread_ids if cid in thread_by_id}
+    recompute_threads = [thread for thread in candidates if thread.thread_id in recompute_ids]
+    rebuilt_macros = build_macro_threads(project_id, recompute_threads, events, profile) if recompute_threads else []
 
     if stats is not None:
         stats.clear()
