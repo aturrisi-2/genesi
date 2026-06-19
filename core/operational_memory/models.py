@@ -148,6 +148,10 @@ class OperationalMacroThread(BaseModel):
     creation_reason: str = ""
     adaptive_patterns: list[str] = Field(default_factory=list)
     ignored_generic_terms: list[str] = Field(default_factory=list)
+    boundary_confidence: GroupingConfidence = "low"
+    split_recommendation: Optional[str] = None
+    rejected_macro_links: list[str] = Field(default_factory=list)
+    macro_boundary_reasons: list[str] = Field(default_factory=list)
 
 
 class CanonicalOperationalTerm(BaseModel):
@@ -163,6 +167,8 @@ class CanonicalOperationalTerm(BaseModel):
     first_seen_at: Optional[str] = None
     last_seen_at: Optional[str] = None
     evidence_count: int = 0
+    boundary_confidence: Confidence = "low"
+    boundary_reasons: list[str] = Field(default_factory=list)
 
 
 class AdaptiveChatProfile(BaseModel):

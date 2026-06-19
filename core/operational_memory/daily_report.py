@@ -158,9 +158,12 @@ def _macro_label(macro: OperationalMacroThread, thread_by_id: dict[str, Operatio
             f"[MACRO] {macro.title}",
             f"  Stato: {macro.status}",
             f"  Confidenza: {macro.confidence}",
+            f"  Boundary macro: {macro.boundary_confidence}",
             f"  Contesto: {context}",
             f"  Creato per: {macro.creation_reason or 'pattern adattivo condiviso'}",
             f"  Pattern adattivi: {'; '.join(macro.adaptive_patterns) if macro.adaptive_patterns else 'non disponibili'}",
+            f"  Motivi boundary: {'; '.join(macro.macro_boundary_reasons) if macro.macro_boundary_reasons else 'non disponibili'}",
+            f"  Raccomandazione split: {macro.split_recommendation or 'nessuna'}",
             f"  Termini generici ignorati: {', '.join(macro.ignored_generic_terms) if macro.ignored_generic_terms else 'nessuno'}",
             f"  Sottothread: {len(macro.child_thread_ids)}",
             f"  Criticita: {macro.critical_items_count}",
@@ -186,7 +189,8 @@ def _profile_label(profile: AdaptiveChatProfile | None) -> list[str]:
     canonical_lines = []
     for canonical in profile.canonical_terms[:8]:
         variants = ", ".join(canonical.source_terms[:5]) if canonical.source_terms else "nessuna variante"
-        canonical_lines.append(f"{canonical.label} | Varianti: {variants} | Confidenza: {canonical.confidence}")
+        boundary = f"Boundary: {canonical.boundary_confidence}"
+        canonical_lines.append(f"{canonical.label} | Varianti: {variants} | Confidenza: {canonical.confidence} | {boundary}")
     canonical_source_terms = {term for canonical in profile.canonical_terms for term in canonical.source_terms}
     non_canonical_raw = [
         term

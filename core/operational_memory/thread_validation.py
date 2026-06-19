@@ -48,6 +48,12 @@ class ThreadValidationResult:
     canonicalization_confidence: float = 0.0
     macro_overmerge_after_canonicalization: float = 0.0
     macro_readability_score: float = 0.0
+    canonical_label_quality_score: float = 0.0
+    canonical_boundary_confidence: float = 0.0
+    macro_boundary_confidence: float = 0.0
+    macro_heterogeneity_score: float = 0.0
+    rejected_macro_link_count: int = 0
+    unassigned_thread_rate: float = 0.0
 
 
 def _event_id(event: dict[str, Any] | OperationalEvent) -> str:
@@ -552,6 +558,101 @@ def calculate_macro_readability_score(generated_macro_threads: list[dict[str, An
     return readable / len(generated_macro_threads)
 
 
+def _confidence_value(value: str) -> float:
+    return {"low": 0.33, "medium": 0.66, "high": 1.0}.get(str(value), 0.0)
+
+
+def calculate_canonical_label_quality_score(profile: AdaptiveChatProfile | dict[str, Any]) -> float:
+    canonical_terms = profile.get("canonical_terms", []) if isinstance(profile, dict) else profile.canonical_terms
+    if not canonical_terms:
+        return 0.0
+    scores = []
+    for term in canonical_terms:
+        label = str(term.get("label", "") if isinstance(term, dict) else term.label)
+        parts = [part.strip() for part in label.split("/") if part.strip()]
+        source_terms = term.get("source_terms", []) if isinstance(term, dict) else term.source_terms
+        head = term.get("head_entity") if isinstance(term, dict) else term.head_entity
+        action = term.get("action_or_problem") if isinstance(term, dict) else term.action_or_problem
+        modifiers = term.get("context_modifiers", []) if isinstance(term, dict) else term.context_modifiers
+        score = 0.0
+        if 2 <= len(parts) <= 4:
+            score += 0.35
+        if head or modifiers:
+            score += 0.25
+        if action or len(modifiers) >= 2:
+            score += 0.25
+        if len(source_terms) >= 2:
+            score += 0.15
+        scores.append(min(1.0, score))
+    return sum(scores) / len(scores)
+
+
+def calculate_canonical_boundary_confidence(profile: AdaptiveChatProfile | dict[str, Any]) -> float:
+    canonical_terms = profile.get("canonical_terms", []) if isinstance(profile, dict) else profile.canonical_terms
+    if not canonical_terms:
+        return 0.0
+    values = [
+        _confidence_value(str(term.get("boundary_confidence", "low") if isinstance(term, dict) else term.boundary_confidence))
+        for term in canonical_terms
+    ]
+    return sum(values) / len(values)
+
+
+def calculate_macro_boundary_confidence(generated_macro_threads: list[dict[str, Any] | OperationalMacroThread]) -> float:
+    if not generated_macro_threads:
+        return 1.0
+    values = [
+        _confidence_value(str(macro.get("boundary_confidence", "low") if isinstance(macro, dict) else macro.boundary_confidence))
+        for macro in generated_macro_threads
+    ]
+    return sum(values) / len(values)
+
+
+def calculate_macro_heterogeneity_score(generated_macro_threads: list[dict[str, Any] | OperationalMacroThread]) -> float:
+    if not generated_macro_threads:
+        return 0.0
+    values = []
+    for macro in generated_macro_threads:
+        child_ids = _macro_child_thread_ids(macro)
+        context_tags = list(macro.get("context_tags", []) if isinstance(macro, dict) else macro.context_tags)
+        canonical_tags = [tag for tag in context_tags if "/" in str(tag)]
+        boundary = str(macro.get("boundary_confidence", "low") if isinstance(macro, dict) else macro.boundary_confidence)
+        if canonical_tags:
+            diversity = max(0.0, (len(set(str(tag).lower() for tag in canonical_tags)) - 1) / max(1, len(child_ids) + 1))
+        else:
+            diversity = len(set(str(tag).lower() for tag in context_tags)) / max(1, len(child_ids) * 4)
+        if boundary == "high":
+            diversity *= 0.6
+        elif boundary == "medium":
+            diversity *= 0.8
+        values.append(min(1.0, diversity))
+    return sum(values) / len(values)
+
+
+def calculate_rejected_macro_link_count(generated_macro_threads: list[dict[str, Any] | OperationalMacroThread]) -> int:
+    return sum(
+        len(macro.get("rejected_macro_links", []) if isinstance(macro, dict) else macro.rejected_macro_links)
+        for macro in generated_macro_threads
+    )
+
+
+def calculate_unassigned_thread_rate(
+    generated_threads: list[dict[str, Any] | OperationalThread],
+    generated_macro_threads: list[dict[str, Any] | OperationalMacroThread],
+) -> float:
+    if not generated_threads:
+        return 0.0
+    assigned = {thread_id for macro in generated_macro_threads for thread_id in _macro_child_thread_ids(macro)}
+    operational_threads = [
+        thread
+        for thread in generated_threads
+        if (thread.get("project_impact_score", 0) if isinstance(thread, dict) else thread.project_impact_score) >= 50
+    ]
+    if not operational_threads:
+        return 0.0
+    return len([thread for thread in operational_threads if _thread_id(thread) not in assigned]) / len(operational_threads)
+
+
 def _macro_overmerge_cases(
     annotated_events: list[dict[str, Any]],
     expected_threads: list[dict[str, Any]] | dict[str, Any],
@@ -675,4 +776,10 @@ def evaluate_thread_grouping(
             generated_macro_threads,
         ),
         macro_readability_score=calculate_macro_readability_score(generated_macro_threads),
+        canonical_label_quality_score=calculate_canonical_label_quality_score(adaptive_profile) if adaptive_profile else 0.0,
+        canonical_boundary_confidence=calculate_canonical_boundary_confidence(adaptive_profile) if adaptive_profile else 0.0,
+        macro_boundary_confidence=calculate_macro_boundary_confidence(generated_macro_threads),
+        macro_heterogeneity_score=calculate_macro_heterogeneity_score(generated_macro_threads),
+        rejected_macro_link_count=calculate_rejected_macro_link_count(generated_macro_threads),
+        unassigned_thread_rate=calculate_unassigned_thread_rate(generated_threads, generated_macro_threads),
     )

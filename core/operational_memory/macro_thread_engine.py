@@ -77,6 +77,8 @@ def _thread_canonical_terms(thread: OperationalThread, profile: AdaptiveChatProf
     text = _norm(_thread_text(thread))
     labels: list[str] = []
     for canonical in profile.canonical_terms:
+        if canonical.boundary_confidence == "low":
+            continue
         label = _norm(canonical.label)
         sources = [_norm(term) for term in canonical.source_terms]
         if label and label in text:
@@ -88,9 +90,16 @@ def _thread_canonical_terms(thread: OperationalThread, profile: AdaptiveChatProf
         head = _norm(canonical.head_entity or "")
         action = _norm(canonical.action_or_problem or "")
         modifiers = [_norm(modifier) for modifier in canonical.context_modifiers]
-        strong_hits = len([value for value in [head, action, *modifiers] if value and value in text])
-        if strong_hits >= 2:
+        has_action = bool(action and action in text)
+        has_anchor = bool(head and head in text) or len([modifier for modifier in modifiers if modifier and modifier in text]) >= 1
+        if has_action and has_anchor:
             labels.append(canonical.label)
+            continue
+        if not action:
+            label_parts = [part.strip() for part in label.split("/") if part.strip()]
+            label_hits = len([part for part in label_parts if part and part in text])
+            if label_hits >= 2:
+                labels.append(canonical.label)
     return _unique(labels)
 
 
@@ -108,6 +117,20 @@ def _shared_canonical_terms(left: OperationalThread, right: OperationalThread, p
     left_terms = {_norm(term) for term in _thread_canonical_terms(left, profile)}
     right_terms = {_norm(term) for term in _thread_canonical_terms(right, profile)}
     return left_terms & right_terms
+
+
+def _canonical_by_label(profile: AdaptiveChatProfile) -> dict[str, object]:
+    return {_norm(canonical.label): canonical for canonical in profile.canonical_terms}
+
+
+def _strong_shared_canonical_terms(left: OperationalThread, right: OperationalThread, profile: AdaptiveChatProfile) -> set[str]:
+    canonical_by_label = _canonical_by_label(profile)
+    return {
+        term
+        for term in _shared_canonical_terms(left, right, profile)
+        if getattr(canonical_by_label.get(term), "confidence", "low") in {"medium", "high"}
+        and getattr(canonical_by_label.get(term), "boundary_confidence", "low") in {"medium", "high"}
+    }
 
 
 def _shared_specific_terms(left: OperationalThread, right: OperationalThread, profile: AdaptiveChatProfile) -> set[str]:
@@ -136,7 +159,7 @@ def _shared_workflow_terms(left: OperationalThread, right: OperationalThread, pr
 
 
 def _relation_for_threads(left: OperationalThread, right: OperationalThread, profile: AdaptiveChatProfile) -> MacroRelation | None:
-    if _shared_canonical_terms(left, right, profile):
+    if _strong_shared_canonical_terms(left, right, profile):
         return "same_work_package"
     if _shared_specific_terms(left, right, profile):
         return "same_system"
@@ -155,7 +178,7 @@ def calculate_macro_similarity(
     if profile is None:
         profile = build_adaptive_chat_profile(left.project_id, [], [left, right])
     score = 0.0
-    canonical_overlap = _shared_canonical_terms(left, right, profile)
+    canonical_overlap = _strong_shared_canonical_terms(left, right, profile)
     specific_overlap = _shared_specific_terms(left, right, profile)
     topic_overlap = _shared_topic_terms(left, right, profile)
     workflow_overlap = _shared_workflow_terms(left, right, profile)
@@ -163,12 +186,14 @@ def calculate_macro_similarity(
         score += 0.70
     if len(canonical_overlap) >= 2:
         score += 0.15
+    if not canonical_overlap:
+        return 0.0
     if specific_overlap:
-        score += 0.30
+        score += 0.10
     if len(specific_overlap) >= 2:
-        score += 0.10
+        score += 0.05
     if topic_overlap:
-        score += 0.10
+        score += 0.05
     if workflow_overlap and (specific_overlap or topic_overlap):
         score += 0.05
     return min(score, 1.0)
@@ -182,11 +207,75 @@ def calculate_macro_confidence(threads: list[OperationalThread], profile: Adapti
     return "low"
 
 
+def _group_common_canonical_terms(group: list[OperationalThread], profile: AdaptiveChatProfile) -> set[str]:
+    if not group:
+        return set()
+    common = {_norm(term) for term in _thread_canonical_terms(group[0], profile)}
+    for thread in group[1:]:
+        common &= {_norm(term) for term in _thread_canonical_terms(thread, profile)}
+    canonical_by_label = _canonical_by_label(profile)
+    return {
+        term
+        for term in common
+        if getattr(canonical_by_label.get(term), "boundary_confidence", "low") in {"medium", "high"}
+    }
+
+
+def calculate_macro_heterogeneity(child_threads: list[OperationalThread], profile: AdaptiveChatProfile) -> float:
+    if len(child_threads) <= 1:
+        return 0.0
+    canonical_sets = [{_norm(term) for term in _thread_canonical_terms(thread, profile)} for thread in child_threads]
+    union = set().union(*canonical_sets) if canonical_sets else set()
+    common = set(canonical_sets[0]) if canonical_sets else set()
+    for terms in canonical_sets[1:]:
+        common &= terms
+    canonical_diversity = 0.0 if not union else 1.0 - (len(common) / len(union))
+    domain_diversity = len({thread.primary_domain for thread in child_threads}) / max(1, len(child_threads))
+    context_diversity = len({_norm(tag) for thread in child_threads for tag in thread.context_tags}) / max(1, len(child_threads) * 4)
+    score = (canonical_diversity * 0.55) + (domain_diversity * 0.25) + (context_diversity * 0.20)
+    if common:
+        score *= 0.65
+    return round(min(1.0, score), 4)
+
+
+def validate_macro_boundary(child_threads: list[OperationalThread], profile: AdaptiveChatProfile) -> dict[str, object]:
+    if len(child_threads) < 2:
+        return {"confidence": "low", "heterogeneity": 1.0, "reasons": ["meno di due sottothread"]}
+    common_canonical = _group_common_canonical_terms(child_threads, profile)
+    heterogeneity = calculate_macro_heterogeneity(child_threads, profile)
+    reasons: list[str] = []
+    score = 0.25
+    if common_canonical:
+        score += 0.45
+        reasons.append("canonical term forte condiviso dal gruppo")
+    else:
+        reasons.append("nessun canonical term comune a tutti i sottothread")
+    if heterogeneity <= 0.35:
+        score += 0.25
+    elif heterogeneity <= 0.55:
+        score += 0.10
+        reasons.append("eterogeneita moderata")
+    else:
+        score -= 0.30
+        reasons.append("eterogeneita macro elevata")
+    if len(child_threads) > 6:
+        score -= 0.15
+        reasons.append("macro con molti sottothread")
+    score = max(0.0, min(1.0, score))
+    if score >= 0.75:
+        confidence: GroupingConfidence = "high"
+    elif score >= 0.55:
+        confidence = "medium"
+    else:
+        confidence = "low"
+    return {"confidence": confidence, "heterogeneity": heterogeneity, "reasons": reasons}
+
+
 def calculate_macro_adaptive_patterns(child_threads: list[OperationalThread], profile: AdaptiveChatProfile) -> list[str]:
     patterns = []
     for left_index, left in enumerate(child_threads):
         for right in child_threads[left_index + 1:]:
-            for term in sorted(_shared_canonical_terms(left, right, profile)):
+            for term in sorted(_strong_shared_canonical_terms(left, right, profile)):
                 patterns.append(f"termine canonico condiviso: {term}")
             for term in sorted(_shared_specific_terms(left, right, profile)):
                 patterns.append(f"termine specifico condiviso: {term}")
@@ -201,7 +290,7 @@ def _macro_title(child_threads: list[OperationalThread], profile: AdaptiveChatPr
     canonical_terms = []
     for left_index, left in enumerate(child_threads):
         for right in child_threads[left_index + 1:]:
-            canonical_terms.extend(sorted(_shared_canonical_terms(left, right, profile)))
+            canonical_terms.extend(sorted(_strong_shared_canonical_terms(left, right, profile)))
     readable_canonical = _unique(canonical_terms)
     if readable_canonical:
         return readable_canonical[0]
@@ -249,6 +338,7 @@ def _macro_from_threads(
     started_at = min(child_threads, key=lambda thread: _parse_timestamp(thread.started_at)).started_at
     last_updated_at = max(child_threads, key=lambda thread: _parse_timestamp(thread.last_updated_at)).last_updated_at
     patterns = calculate_macro_adaptive_patterns(child_threads, profile)
+    boundary = validate_macro_boundary(child_threads, profile)
     ignored = [term for term in profile.generic_terms if any(_norm(term) in _norm(_thread_text(thread)) for thread in child_threads)]
     macro = OperationalMacroThread(
         macro_thread_id=_macro_id(project_id, context_tags),
@@ -266,6 +356,13 @@ def _macro_from_threads(
         creation_reason="macro-thread creato da termini canonici del profilo adattivo",
         adaptive_patterns=patterns,
         ignored_generic_terms=_unique(ignored)[:10],
+        boundary_confidence=boundary["confidence"],  # type: ignore[arg-type]
+        split_recommendation=(
+            "dividere o lasciare thread non assegnati"
+            if boundary["confidence"] == "low"
+            else None
+        ),
+        macro_boundary_reasons=list(boundary["reasons"]),
     )
     macro.summary = summarize_macro_thread(macro, child_threads)
     return macro
@@ -328,15 +425,25 @@ def build_macro_threads(
         best_score = 0.0
         for group in groups:
             score = max(calculate_macro_similarity(thread, existing, profile) for existing in group)
+            prospective_common = _group_common_canonical_terms([*group, thread], profile)
+            if not prospective_common:
+                continue
             if score > best_score:
                 best_score = score
                 matched_group = group
-        if matched_group is not None and best_score >= 0.55:
+        if matched_group is not None and best_score >= 0.70:
             matched_group.append(thread)
         else:
             groups.append([thread])
 
-    macro_threads = [_macro_from_threads(project_id, group, profile) for group in groups if len(group) >= 2]
+    macro_threads = []
+    for group in groups:
+        if len(group) < 2:
+            continue
+        boundary = validate_macro_boundary(group, profile)
+        if boundary["confidence"] == "low":
+            continue
+        macro_threads.append(_macro_from_threads(project_id, group, profile))
     macro_by_child: dict[str, OperationalMacroThread] = {}
     for macro in macro_threads:
         for child_id in macro.child_thread_ids:
