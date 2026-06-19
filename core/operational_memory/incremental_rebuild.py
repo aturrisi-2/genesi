@@ -14,6 +14,10 @@ from core.operational_memory.incremental_index import (
     touch_relation_rebuild,
     touch_thread_rebuild,
 )
+from core.operational_memory.lifecycle_engine import (
+    apply_lifecycle_transitions,
+    build_operational_snapshot,
+)
 from core.operational_memory.macro_thread_engine import (
     build_macro_threads,
     incremental_build_macro_threads,
@@ -189,6 +193,39 @@ async def incremental_rebuild(
     metrics["events_processed_this_run"] = len(new_event_ids)
     metrics["dirty_threads"] = len(dirty_thread_ids)
 
+    # --- FASE 4: operational lifecycle update (incremental-aware) ------------
+    event_thread_map = {event.event_id: event.thread_id for event in updated_events if event.thread_id}
+    if full_rebuild:
+        dirty_item_ids = None  # recompute lifecycle for every item
+    else:
+        dirty_event_ids = set(new_event_ids)
+        dirty_item_ids = set()
+        for category_field in ("tasks", "issues", "decisions", "information", "open_questions"):
+            for item in getattr(state, category_field):
+                src = item.source_event_id
+                if src is None:
+                    continue
+                if (
+                    src in dirty_event_ids
+                    or event_thread_map.get(src) in dirty_thread_ids
+                    or item.lifecycle is None
+                ):
+                    dirty_item_ids.add(item.id)
+    started = time.perf_counter()
+    transitions = apply_lifecycle_transitions(
+        state,
+        updated_events,
+        threads=threads,
+        event_thread_map=event_thread_map,
+        dirty_item_ids=dirty_item_ids,
+        reference_now=datetime.now(timezone.utc),
+    )
+    snapshot = build_operational_snapshot(state, transitions)
+    state.lifecycle_snapshot = snapshot
+    timings["lifecycle_engine_seconds"] = time.perf_counter() - started
+    metrics["lifecycle_transitions"] = len(transitions)
+    metrics["dirty_lifecycle_items"] = 0 if dirty_item_ids is None else len(dirty_item_ids)
+
     # Persist state.
     state.threads = threads
     state.adaptive_chat_profile = profile
@@ -215,6 +252,17 @@ async def incremental_rebuild(
         row["label"]: row["thread_coverage"]
         for row in canonical_term_distribution_report(threads, profile)
     }
+    index.lifecycle_item_map = {
+        item.id: item.lifecycle.current_status
+        for field_name in ("tasks", "issues", "decisions", "information", "open_questions")
+        for item in getattr(state, field_name)
+        if item.lifecycle is not None
+    }
+    index.dirty_lifecycle_items = sorted(dirty_item_ids) if dirty_item_ids else []
+    index.lifecycle_transition_keys = sorted(
+        f"{record.item_id}:{record.new_status}" for record in transitions
+    )
+    index.last_lifecycle_update_at = utc_now_iso()
     touch_thread_rebuild(index)
     touch_relation_rebuild(index)
     touch_macro_rebuild(index)

@@ -15,6 +15,7 @@ from core.operational_memory.models import (
     ReportMode,
     ThreadRelationCandidate,
 )
+from core.operational_memory.lifecycle_engine import build_operational_snapshot
 from core.operational_memory.project_impact import classify_impact_level
 from core.operational_memory.quality import (
     has_item_context,
@@ -407,6 +408,58 @@ def _impact_statistics(events: list[OperationalEvent], report_mode: ReportMode) 
     ]
 
 
+def _lifecycle_sections(state: OperationalState) -> tuple[list[str], list[str], list[str]]:
+    snapshot = state.lifecycle_snapshot
+    if snapshot is None:
+        snapshot = build_operational_snapshot(state)
+    delta = snapshot.delta
+
+    changes: list[str] = []
+
+    def _add_change(title: str, items: list[str]) -> None:
+        if items:
+            changes.append(f"{title}:")
+            changes.extend(f"  - {item}" for item in items)
+
+    _add_change("Nuovi task", delta.newly_opened)
+    _add_change("Task completati", delta.newly_completed)
+    _add_change("Problemi risolti", delta.newly_resolved)
+    _add_change("Problemi riaperti", delta.reopened)
+    _add_change("Decisioni/informazioni superate", delta.superseded)
+    _add_change("Elementi diventati stale", delta.newly_stale)
+    if not changes:
+        changes.append("Nessun cambiamento rilevato dall'ultimo aggiornamento")
+
+    current: list[str] = []
+
+    def _add_state(title: str, items: list[str]) -> None:
+        current.append(f"{title}: {len(items)}")
+        current.extend(f"  - {item}" for item in items[:20])
+
+    _add_state("Criticita/Problemi aperti", snapshot.active_issues)
+    _add_state("Problemi risolti", snapshot.resolved_issues)
+    _add_state("Task aperti", snapshot.active_tasks)
+    _add_state("Task completati/verificati", snapshot.completed_tasks)
+    _add_state("Decisioni attive", snapshot.decisions_active)
+    _add_state("Decisioni superate", snapshot.decisions_superseded)
+    _add_state("Domande aperte", snapshot.open_questions)
+    _add_state("Domande risposte", snapshot.answered_questions)
+    _add_state("Elementi stale da verificare", snapshot.stale_items)
+    if snapshot.high_attention_items:
+        _add_state("Elementi ad alta attenzione", snapshot.high_attention_items)
+
+    transitions: list[str] = []
+    for record in snapshot.transitions:
+        transitions.append(
+            f"[{record.category}] {record.text}: {record.previous_status or 'iniziale'} -> {record.new_status} "
+            f"| motivo: {record.reason} | confidence: {record.confidence} "
+            f"| evidenza: {', '.join(record.evidence_event_ids) if record.evidence_event_ids else 'n/d'}"
+        )
+    if not transitions:
+        transitions.append("Nessuna transizione di stato in questo aggiornamento")
+    return changes, current, transitions
+
+
 def _markdown(report: DailyReport) -> str:
     sections = [
         ("Decisioni", report.decisions),
@@ -420,6 +473,9 @@ def _markdown(report: DailyReport) -> str:
         ("Macro-thread operativi", report.operational_macro_threads),
         ("Relazioni candidate tra thread", report.thread_relation_candidates),
         ("Thread operativi aperti", report.operational_threads),
+        ("Cambiamenti da ultimo aggiornamento", report.lifecycle_changes),
+        ("Stato operativo attuale", report.lifecycle_current_state),
+        ("Transizioni rilevate", report.lifecycle_transitions),
         ("Elementi da verificare", report.items_to_verify),
         ("Prossime azioni suggerite", report.next_actions),
         ("Rumore Conversazionale Filtrato", report.conversational_noise_filtered),
@@ -549,11 +605,16 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
     ][:30]
     events_linked_to_threads = len({event_id for thread in state.threads for event_id in thread.related_event_ids})
 
+    lifecycle_changes, lifecycle_current_state, lifecycle_transitions = _lifecycle_sections(state)
+
     report = DailyReport(
         title=f"Aggiornamento giornaliero - {project_id}",
         date=today,
         project_id=project_id,
         report_mode=report_mode,
+        lifecycle_changes=lifecycle_changes,
+        lifecycle_current_state=lifecycle_current_state,
+        lifecycle_transitions=lifecycle_transitions,
         decisions=[_item_label(item, "DECISION") for item in decisions],
         tasks_open=[_task_label(task) for task in tasks if getattr(task, "status", "open") == "open"],
         tasks_completed=[_task_label(task) for task in tasks if getattr(task, "status", "open") == "completed"],

@@ -70,11 +70,52 @@ ThreadRelationType = Literal[
 ]
 
 
+LifecycleCategory = Literal["task", "issue", "decision", "question", "information"]
+TaskLifecycle = Literal[
+    "open", "in_progress", "blocked", "completed", "verified", "cancelled", "superseded", "stale"
+]
+IssueLifecycle = Literal[
+    "open", "confirmed", "investigating", "mitigated", "resolved", "reopened", "stale", "superseded"
+]
+DecisionLifecycle = Literal["proposed", "confirmed", "active", "superseded", "revoked", "expired"]
+QuestionLifecycle = Literal["open", "answered", "partially_answered", "stale", "superseded"]
+InformationLifecycle = Literal["current", "updated", "superseded", "stale", "historical"]
+
+
+class LifecycleHistoryEntry(BaseModel):
+    status: str
+    changed_at: str
+    reason: str = ""
+    evidence_event_ids: list[str] = Field(default_factory=list)
+
+
+class LifecycleState(BaseModel):
+    """Persistent operational lifecycle for a single operational item.
+
+    Domain-agnostic: statuses are generic (open/resolved/superseded/stale...),
+    never tied to any profession, site or platform. Every transition keeps the
+    evidence event ids and a human-readable reason so it stays explainable."""
+
+    category: LifecycleCategory
+    current_status: str
+    previous_status: Optional[str] = None
+    status_changed_at: Optional[str] = None
+    status_reason: str = ""
+    confidence: Confidence = "medium"
+    evidence_event_ids: list[str] = Field(default_factory=list)
+    last_evidence_at: Optional[str] = None
+    stale_after_days: int = 14
+    superseded_by: Optional[str] = None
+    reopened_by: Optional[str] = None
+    lifecycle_history: list[LifecycleHistoryEntry] = Field(default_factory=list)
+
+
 class OperationalItem(BaseModel):
     id: str = Field(default="")
     text: str
     source: str
     confidence: Confidence = "medium"
+    lifecycle: Optional[LifecycleState] = None
     source_event_id: Optional[str] = None
     source_timestamp: Optional[str] = None
     source_sender: Optional[str] = None
@@ -229,6 +270,45 @@ class AdaptiveChatProfile(BaseModel):
     last_updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
+class OperationalLifecycleDelta(BaseModel):
+    newly_opened: list[str] = Field(default_factory=list)
+    newly_resolved: list[str] = Field(default_factory=list)
+    newly_completed: list[str] = Field(default_factory=list)
+    newly_stale: list[str] = Field(default_factory=list)
+    reopened: list[str] = Field(default_factory=list)
+    superseded: list[str] = Field(default_factory=list)
+    unchanged_active: list[str] = Field(default_factory=list)
+
+
+class LifecycleTransitionRecord(BaseModel):
+    item_id: str
+    category: LifecycleCategory
+    text: str = ""
+    previous_status: Optional[str] = None
+    new_status: str
+    reason: str = ""
+    confidence: Confidence = "medium"
+    evidence_event_ids: list[str] = Field(default_factory=list)
+
+
+class OperationalLifecycleSnapshot(BaseModel):
+    project_id: str
+    generated_at: str
+    active_tasks: list[str] = Field(default_factory=list)
+    completed_tasks: list[str] = Field(default_factory=list)
+    active_issues: list[str] = Field(default_factory=list)
+    resolved_issues: list[str] = Field(default_factory=list)
+    stale_items: list[str] = Field(default_factory=list)
+    decisions_active: list[str] = Field(default_factory=list)
+    decisions_superseded: list[str] = Field(default_factory=list)
+    open_questions: list[str] = Field(default_factory=list)
+    answered_questions: list[str] = Field(default_factory=list)
+    high_attention_items: list[str] = Field(default_factory=list)
+    changed_since_last_snapshot: list[str] = Field(default_factory=list)
+    transitions: list[LifecycleTransitionRecord] = Field(default_factory=list)
+    delta: OperationalLifecycleDelta = Field(default_factory=OperationalLifecycleDelta)
+
+
 class OperationalState(BaseModel):
     project_id: Optional[str] = None
     updated_at: Optional[str] = None
@@ -242,6 +322,7 @@ class OperationalState(BaseModel):
     thread_relation_candidates: list[ThreadRelationCandidate] = Field(default_factory=list)
     adaptive_chat_profile: Optional[AdaptiveChatProfile] = None
     domain_stats: dict[str, int] = Field(default_factory=dict)
+    lifecycle_snapshot: Optional[OperationalLifecycleSnapshot] = None
 
 
 def utc_now_iso() -> str:
@@ -308,5 +389,8 @@ class DailyReport(BaseModel):
     next_actions: list[str] = Field(default_factory=list)
     conversational_noise_filtered: list[str] = Field(default_factory=list)
     impact_statistics: list[str] = Field(default_factory=list)
+    lifecycle_changes: list[str] = Field(default_factory=list)
+    lifecycle_current_state: list[str] = Field(default_factory=list)
+    lifecycle_transitions: list[str] = Field(default_factory=list)
     markdown: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
