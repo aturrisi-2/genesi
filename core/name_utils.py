@@ -10,6 +10,20 @@ Principio: un sistema maturo non salva mai "mia mamma" come nome. Salva "Iolanda
 import re
 from typing import Optional
 
+_COMMON_FIRST_NAMES = {
+    "alessandro", "alessandra", "ale", "alfio", "andrea", "anna", "antonio",
+    "carlo", "claudio", "daniele", "davide", "domenico", "elena", "fabio",
+    "francesca", "francesco", "fra", "giovanni", "giulia", "giuseppe",
+    "luca", "luigi", "marco", "maria", "mario", "michele", "mimmo", "paolo",
+    "pino", "rita", "roberto", "sara", "sofia", "stefano",
+}
+
+_DISPLAY_NAME_STOPWORDS = {
+    "admin", "arch", "assistente", "bot", "capo", "dott", "dottore", "dottssa",
+    "geom", "ing", "officina", "reparto", "service", "servizio", "sig",
+    "sigra", "squadra", "ufficio", "zio", "zia",
+}
+
 # ── Sostantivi relazionali che NON sono nomi propri ──────────────────────────
 
 _RELATIONAL_NOUNS = {
@@ -41,6 +55,89 @@ _INVALID_NAMES = {
     "io", "lui", "lei", "tu", "noi", "voi", "loro",
     "ragazzo", "ragazza", "uomo", "donna", "bambino", "bambina",
 }
+
+
+def _clean_display_name(display_name: str) -> str:
+    text = str(display_name or "")
+    text = re.sub(r"[_/|]+", " ", text)
+    text = re.sub(r"[^\w\sÀ-ÖØ-öø-ÿ'’.+-]", " ", text, flags=re.UNICODE)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:80]
+
+
+def extract_first_name_from_display_name(display_name: str, fallback_id: str | None = None) -> dict:
+    """
+    Estrae in modo prudente un probabile nome di battesimo da display name sporchi.
+
+    Non inventa nomi: se trova solo numeri, sigle, titoli o ruoli restituisce
+    first_name=None. Il display name originale resta sempre disponibile.
+    """
+    normalized = _clean_display_name(display_name)
+    result = {
+        "first_name": None,
+        "confidence": 0.0,
+        "source": "none",
+        "reason": "empty" if not normalized else "no_confident_first_name",
+        "original_display_name": display_name or "",
+        "normalized_display_name": normalized,
+    }
+    if not normalized:
+        return result
+
+    compact_digits = re.sub(r"\D", "", normalized)
+    if compact_digits and len(compact_digits) >= max(6, len(normalized.replace(" ", "")) - 3):
+        result["reason"] = "phone_or_numeric"
+        return result
+
+    raw_tokens = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ'’.+-]+", normalized)
+    candidates = []
+    for index, raw in enumerate(raw_tokens):
+        token = raw.strip(" .'’-+")
+        if not token:
+            continue
+        low = token.lower()
+        if len(token) == 1 or re.fullmatch(r"[A-Z]\.?", token):
+            continue
+        if low in _DISPLAY_NAME_STOPWORDS:
+            continue
+        if token.isupper() and low not in _COMMON_FIRST_NAMES:
+            continue
+        candidates.append((index, token.title(), low))
+
+    if not candidates:
+        result["reason"] = "only_roles_titles_numbers_or_acronyms"
+        return result
+
+    known = [(idx, token, low) for idx, token, low in candidates if low in _COMMON_FIRST_NAMES]
+    if known:
+        idx, token, _ = known[0]
+        confidence = 0.95 if idx == 0 else 0.82
+        result.update({
+            "first_name": token,
+            "confidence": confidence,
+            "source": "common_first_name",
+            "reason": "known_first_name",
+        })
+        return result
+
+    if len(candidates) == 1:
+        _, token, _ = candidates[0]
+        result.update({
+            "first_name": token,
+            "confidence": 0.35,
+            "source": "single_clean_token",
+            "reason": "low_confidence_single_token",
+        })
+        return result
+
+    idx, token, _ = candidates[0]
+    result.update({
+        "first_name": token,
+        "confidence": 0.45 if idx == 0 else 0.4,
+        "source": "clean_token_order",
+        "reason": "low_confidence_order_guess",
+    })
+    return result
 
 
 def is_relational_descriptor(name: str) -> bool:

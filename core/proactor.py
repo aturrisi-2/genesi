@@ -31,7 +31,7 @@ from core.context_assembler import ContextAssembler, build_conversation_context,
 from core.llm_service import llm_service, model_selector, LLM_DEFAULT_MODEL
 from core.fallback_knowledge import lookup_fallback
 from core.identity_service import handle_identity_question
-from core.response_filter import filter_response
+from core.response_filter import filter_response, strip_leading_speaker_prefix
 from core.tool_context import (save_tool_context, resolve_elliptical_city,
                                is_elliptical_weather_followup,
                                is_elliptical_news_followup, resolve_elliptical_news,
@@ -301,6 +301,9 @@ class Proactor:
             for pat in _WIDGET_ONBOARDING_PATTERNS:
                 response = _re_w.sub(pat, '', response, flags=_re_w.IGNORECASE)
             response = _re_w.sub(r'\n{3,}', '\n\n', response).strip()
+
+        if response:
+            response = strip_leading_speaker_prefix(response)
 
         return response
 

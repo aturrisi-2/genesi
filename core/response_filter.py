@@ -80,6 +80,20 @@ TEMPLATE_BLACKLIST = [
 # Compiled for performance
 _BLACKLIST_COMPILED = [re.compile(p, re.IGNORECASE) for p in TEMPLATE_BLACKLIST]
 
+_BOT_SPEAKER_RE = re.compile(
+    r"^\s*(?:genesi|assistant|assistente|bot|ai|nome\s*del\s*bot)\s*:\s*",
+    re.IGNORECASE,
+)
+_NAME_SPEAKER_RE = re.compile(
+    r"^\s*([A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'’-]{1,24})\s*:\s+(.+)$",
+    re.DOTALL,
+)
+_ASSISTANT_OPENERS_RE = re.compile(
+    r"^(?:s[iì]|ok|okay|va bene|certo|certamente|procedo|perfetto|ti rispondo|"
+    r"ecco|capito|ricevuto|fatto|dimmi|tranquill[oa])\b",
+    re.IGNORECASE,
+)
+
 
 # ═══════════════════════════════════════════════════════════════
 # LOOP DETECTOR — blocca risposte identiche consecutive (FASE 4)
@@ -94,6 +108,31 @@ _repeat_counts: dict = defaultdict(int)
 def _normalize_for_comparison(text: str) -> str:
     """Normalize text for loop comparison (lowercase, strip, collapse whitespace)."""
     return re.sub(r'\s+', ' ', text.lower().strip())
+
+
+def strip_leading_speaker_prefix(response: str) -> str:
+    """
+    Rimuove prefissi speaker iniziali generati dal modello, senza toccare citazioni interne.
+
+    I prefissi del bot/assistant vengono sempre rimossi. I prefissi con nome proprio
+    vengono rimossi solo quando il testo dopo i due punti assomiglia a una risposta
+    diretta dell'assistente, evitando casi narrativi tipo "Marco: ha detto...".
+    """
+    if not response or not isinstance(response, str):
+        return response
+
+    cleaned = _BOT_SPEAKER_RE.sub("", response, count=1).lstrip()
+    if cleaned != response:
+        return cleaned
+
+    match = _NAME_SPEAKER_RE.match(response)
+    if not match:
+        return response
+
+    rest = match.group(2).lstrip()
+    if _ASSISTANT_OPENERS_RE.search(rest):
+        return rest
+    return response
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -115,7 +154,7 @@ def filter_response(response: str, user_id: str = "") -> str:
         return response
 
     original = response
-    filtered = response
+    filtered = strip_leading_speaker_prefix(response)
 
     # STEP 1: Strip blacklisted phrases
     for pattern in _BLACKLIST_COMPILED:

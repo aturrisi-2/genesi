@@ -240,7 +240,14 @@ async def update_member_seen(from_id: int, first_name: str):
     if not member.get("preferred_name"):
         _clean = _sanitize_member_name(first_name)
         if _clean:
-            member["first_name"] = _clean
+            from core.name_utils import extract_first_name_from_display_name
+            parsed = extract_first_name_from_display_name(_clean, fallback_id=str(from_id))
+            member["display_name"] = _clean
+            member["name_parse"] = parsed
+            if parsed.get("first_name") and parsed.get("confidence", 0.0) >= 0.65:
+                member["first_name"] = parsed["first_name"]
+            elif not member.get("first_name"):
+                member["first_name"] = _clean
     member["last_seen"]     = int(time.time())
     member["message_count"] = member.get("message_count", 0) + 1
     if "joined_at" not in member:
