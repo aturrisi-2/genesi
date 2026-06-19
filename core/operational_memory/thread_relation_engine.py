@@ -43,10 +43,24 @@ _PROBLEM_FAMILIES = {
     "power": {"non alimentata", "disalimentata", "alimentazione"},
     "school_deadline": {"compiti", "scadenza", "scuola"},
 }
+DEFAULT_RELATION_WINDOW_DAYS = 21
+DEFAULT_MAX_CANDIDATES_PER_THREAD = 40
 
 
 def _norm(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip().lower())
+
+
+def _parse_timestamp(value: str | None) -> datetime:
+    if not value:
+        return datetime.now(timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except ValueError:
+        return datetime.now(timezone.utc)
 
 
 def _relation_id(project_id: str, left_id: str, right_id: str) -> str:
@@ -99,6 +113,35 @@ def _canonical_terms(thread: OperationalThread, profile: AdaptiveChatProfile) ->
             if len([part for part in parts if part in text]) >= 2:
                 labels.add(canonical.label)
     return labels
+
+
+def _canonical_distribution(threads: list[OperationalThread], profile: AdaptiveChatProfile) -> dict[str, int]:
+    distribution: dict[str, int] = {}
+    for thread in threads:
+        for term in _canonical_terms(thread, profile):
+            distribution[_norm(term)] = distribution.get(_norm(term), 0) + 1
+    return distribution
+
+
+def calculate_canonical_discriminative_power(
+    canonical_label: str,
+    profile: AdaptiveChatProfile,
+    threads: list[OperationalThread] | None = None,
+) -> float:
+    label = _norm(canonical_label)
+    canonical = next((term for term in profile.canonical_terms if _norm(term.label) == label), None)
+    if canonical is None:
+        return 0.0
+    if canonical.boundary_confidence == "low":
+        return 0.1
+    if not threads or len(threads) < 8:
+        return 1.0 if canonical.boundary_confidence == "high" else 0.75
+    distribution = _canonical_distribution(threads, profile)
+    coverage = distribution.get(label, 0) / max(1, len(threads))
+    boundary_factor = {"high": 1.0, "medium": 0.75, "low": 0.35}.get(canonical.boundary_confidence, 0.35)
+    confidence_factor = {"high": 1.0, "medium": 0.85, "low": 0.55}.get(canonical.confidence, 0.55)
+    power = (1.0 - coverage) * boundary_factor * confidence_factor
+    return round(max(0.0, min(1.0, power)), 4)
 
 
 def _problem_families(thread: OperationalThread) -> set[str]:
@@ -209,6 +252,7 @@ def score_thread_relation(
     left: OperationalThread,
     right: OperationalThread,
     profile: AdaptiveChatProfile | None = None,
+    all_threads: list[OperationalThread] | None = None,
 ) -> ThreadRelationCandidate:
     profile = profile or build_adaptive_chat_profile(left.project_id, [], [left, right])
     shared_canonical_terms = sorted(_canonical_terms(left, profile) & _canonical_terms(right, profile))
@@ -223,6 +267,14 @@ def score_thread_relation(
     if shared_canonical_terms:
         score += 0.45
         evidence.append(f"termini canonici condivisi: {', '.join(shared_canonical_terms[:3])}")
+        broad_terms = [
+            term
+            for term in shared_canonical_terms
+            if calculate_canonical_discriminative_power(term, profile, all_threads) < 0.35
+        ]
+        if broad_terms:
+            score -= 0.15
+            rejection_reasons.append(f"canonical term troppo diffuso: {', '.join(broad_terms[:3])}")
     if shared_context_tags:
         score += 0.20
         evidence.append(f"contesto condiviso: {', '.join(shared_context_tags[:4])}")
@@ -282,6 +334,58 @@ def _relation_is_relevant(relation: ThreadRelationCandidate) -> bool:
     return bool(relation.evidence)
 
 
+def _blocking_keys(thread: OperationalThread, profile: AdaptiveChatProfile, all_threads: list[OperationalThread]) -> set[str]:
+    keys: set[str] = set()
+    for canonical in _canonical_terms(thread, profile):
+        power = calculate_canonical_discriminative_power(canonical, profile, all_threads)
+        if power >= 0.25:
+            keys.add(f"canonical:{_norm(canonical)}")
+    for tag in _meaningful_tags(thread, profile):
+        keys.add(f"context:{tag}")
+    for family in _problem_families(thread):
+        keys.add(f"problem:{family}")
+    for step in _workflow_steps(thread, profile):
+        keys.add(f"workflow:{step}")
+    return keys
+
+
+def _has_strong_canonical_overlap(
+    left: OperationalThread,
+    right: OperationalThread,
+    profile: AdaptiveChatProfile,
+    all_threads: list[OperationalThread],
+) -> bool:
+    shared = _canonical_terms(left, profile) & _canonical_terms(right, profile)
+    return any(calculate_canonical_discriminative_power(term, profile, all_threads) >= 0.45 for term in shared)
+
+
+def _within_relation_window(left: OperationalThread, right: OperationalThread, relation_window_days: int | None) -> bool:
+    if relation_window_days is None or relation_window_days <= 0:
+        return True
+    left_time = _parse_timestamp(left.last_updated_at or left.started_at)
+    right_time = _parse_timestamp(right.last_updated_at or right.started_at)
+    return abs((left_time - right_time).days) <= relation_window_days
+
+
+def _pair_pruning_reason(
+    left: OperationalThread,
+    right: OperationalThread,
+    profile: AdaptiveChatProfile,
+    all_threads: list[OperationalThread],
+    relation_window_days: int | None,
+) -> str | None:
+    shared_keys = _blocking_keys(left, profile, all_threads) & _blocking_keys(right, profile, all_threads)
+    strong_canonical = _has_strong_canonical_overlap(left, right, profile, all_threads)
+    if not shared_keys and not strong_canonical:
+        return "nessuna blocking key adattiva condivisa"
+    if not _within_relation_window(left, right, relation_window_days) and not strong_canonical:
+        return "fuori finestra temporale relation"
+    shared_canonical = _canonical_terms(left, profile) & _canonical_terms(right, profile)
+    if shared_canonical and not strong_canonical and not (_meaningful_tags(left, profile) & _meaningful_tags(right, profile)) and not (_problem_families(left) & _problem_families(right)):
+        return "solo canonical term a bassa discriminazione"
+    return None
+
+
 def _reset_thread_relation_fields(threads: list[OperationalThread]) -> None:
     for thread in threads:
         thread.candidate_relation_ids = []
@@ -301,6 +405,9 @@ def build_thread_relation_candidates(
     events: list[OperationalEvent] | None = None,
     profile: AdaptiveChatProfile | None = None,
     include_rejected: bool = True,
+    relation_window_days: int | None = DEFAULT_RELATION_WINDOW_DAYS,
+    relation_max_candidates_per_thread: int = DEFAULT_MAX_CANDIDATES_PER_THREAD,
+    stats: dict | None = None,
 ) -> list[ThreadRelationCandidate]:
     operational_threads = [
         thread
@@ -311,14 +418,40 @@ def build_thread_relation_candidates(
     _reset_thread_relation_fields(threads)
     relations: list[ThreadRelationCandidate] = []
     thread_by_id = {thread.thread_id: thread for thread in threads}
+    per_thread_kept: dict[str, int] = {}
+    raw_pairs = 0
+    pruned_pairs = 0
+    pruning_reasons: dict[str, int] = {}
+    penalized_terms: dict[str, int] = {}
 
     for left, right in combinations(operational_threads, 2):
-        relation = score_thread_relation(left, right, profile)
+        raw_pairs += 1
+        reason = _pair_pruning_reason(left, right, profile, operational_threads, relation_window_days)
+        if reason:
+            pruned_pairs += 1
+            pruning_reasons[reason] = pruning_reasons.get(reason, 0) + 1
+            continue
+        if relation_max_candidates_per_thread > 0:
+            left_count = per_thread_kept.get(left.thread_id, 0)
+            right_count = per_thread_kept.get(right.thread_id, 0)
+            if (left_count >= relation_max_candidates_per_thread or right_count >= relation_max_candidates_per_thread) and not _has_strong_canonical_overlap(left, right, profile, operational_threads):
+                pruned_pairs += 1
+                pruning_reasons["max candidates per thread raggiunto"] = pruning_reasons.get("max candidates per thread raggiunto", 0) + 1
+                continue
+        relation = score_thread_relation(left, right, profile, operational_threads)
+        for rejection in relation.rejection_reasons:
+            if rejection.startswith("canonical term troppo diffuso:"):
+                for term in rejection.split(":", 1)[1].split(","):
+                    key = term.strip()
+                    if key:
+                        penalized_terms[key] = penalized_terms.get(key, 0) + 1
         if relation.confidence == "low" and not include_rejected:
             continue
         if not _relation_is_relevant(relation):
             continue
         relations.append(relation)
+        per_thread_kept[left.thread_id] = per_thread_kept.get(left.thread_id, 0) + 1
+        per_thread_kept[right.thread_id] = per_thread_kept.get(right.thread_id, 0) + 1
         for thread_id, opposite_id in (
             (relation.source_thread_id, relation.target_thread_id),
             (relation.target_thread_id, relation.source_thread_id),
@@ -333,6 +466,19 @@ def build_thread_relation_candidates(
                 _append_unique(thread.candidate_parent_ids, opposite_id)
             thread.relation_confidence_summary[relation.confidence] = thread.relation_confidence_summary.get(relation.confidence, 0) + 1
 
+    if stats is not None:
+        stats.clear()
+        stats.update(
+            {
+                "raw_pairs": raw_pairs,
+                "pruned_pairs": pruned_pairs,
+                "kept_pairs": len(relations),
+                "relation_window_days": relation_window_days,
+                "relation_max_candidates_per_thread": relation_max_candidates_per_thread,
+                "pruning_reasons": dict(sorted(pruning_reasons.items(), key=lambda item: item[1], reverse=True)),
+                "penalized_canonical_terms": dict(sorted(penalized_terms.items(), key=lambda item: item[1], reverse=True)),
+            }
+        )
     return sorted(relations, key=lambda item: (item.should_promote_to_macro, item.score), reverse=True)
 
 

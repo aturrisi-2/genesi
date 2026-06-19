@@ -5,6 +5,7 @@ import asyncio
 import contextlib
 import io
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -37,6 +38,7 @@ from core.operational_memory.watcher_engine import ingest_events_batch, process_
 
 DEFAULT_PROJECT_ID = "tab-cefla-hq-enel-roma-long-relations-01"
 DEFAULT_SHORT_PROJECT_ID = "tab-cefla-hq-enel-roma-boundary-02"
+CHECKPOINT_DIR = Path("memory/operational_checkpoints")
 
 
 def _read_text(path: Path) -> str:
@@ -60,6 +62,36 @@ def _resolve_input(path: Path) -> tuple[Path, Path | None]:
     return (preferred[0] if preferred else txt_files[0]), path
 
 
+def _checkpoint_path(project_id: str) -> Path:
+    safe = "".join(char if char.isalnum() or char in "._-" else "_" for char in project_id).strip("._")
+    return CHECKPOINT_DIR / f"{safe or 'default'}_long_export.json"
+
+
+def _load_checkpoint(project_id: str) -> dict:
+    path = _checkpoint_path(project_id)
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_checkpoint(project_id: str, data: dict) -> None:
+    path = _checkpoint_path(project_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _run_status(pending: int, max_batches_reached: bool, timeout_seconds: float | None = None) -> str:
+    if timeout_seconds is not None:
+        return "TIMEOUT"
+    if pending > 0:
+        return "RESUMABLE_PENDING" if max_batches_reached else "PARTIAL"
+    return "COMPLETE"
+
+
 def _metrics_for_state(project_id: str, state, events_count: int | None = None) -> dict:
     relations = state.thread_relation_candidates
     macros = state.macro_threads
@@ -81,7 +113,11 @@ def _metrics_for_state(project_id: str, state, events_count: int | None = None) 
     }
 
 
-async def _rebuild_profile_macro_relations(project_id: str) -> dict:
+async def _rebuild_profile_macro_relations(
+    project_id: str,
+    relation_window_days: int,
+    relation_max_candidates_per_thread: int,
+) -> dict:
     started = time.perf_counter()
     threads = await rebuild_project_threads(project_id)
     thread_engine_seconds = time.perf_counter() - started
@@ -98,7 +134,16 @@ async def _rebuild_profile_macro_relations(project_id: str) -> dict:
     macro_seconds = time.perf_counter() - started
 
     started = time.perf_counter()
-    relations = build_thread_relation_candidates(project_id, threads, events, profile)
+    relation_stats: dict = {}
+    relations = build_thread_relation_candidates(
+        project_id,
+        threads,
+        events,
+        profile,
+        relation_window_days=relation_window_days,
+        relation_max_candidates_per_thread=relation_max_candidates_per_thread,
+        stats=relation_stats,
+    )
     relation_seconds = time.perf_counter() - started
 
     state.threads = threads
@@ -111,6 +156,7 @@ async def _rebuild_profile_macro_relations(project_id: str) -> dict:
         "profile_seconds": profile_seconds,
         "macro_engine_seconds": macro_seconds,
         "relation_engine_seconds": relation_seconds,
+        "relation_stats": relation_stats,
     }
 
 
@@ -130,6 +176,18 @@ def _append_long_diagnostics(markdown: str, summary: dict, short_metrics: dict, 
         f"- Tempo thread engine: {summary['timings']['thread_engine_seconds']:.2f}s",
         f"- Tempo relation engine: {summary['timings']['relation_engine_seconds']:.2f}s",
         f"- Tempo report: {summary['timings']['report_seconds']:.2f}s",
+        f"- Stato run: {summary['run_status']}",
+        f"- Eventi pending: {summary['processing']['pending_after']}",
+        f"- Batch completati: {summary['processing']['batches_completed']}",
+        "",
+        "## Diagnostica scalabilita relation candidates",
+        f"- Candidate raw prima del pruning: {summary['relation_scaling']['raw_pairs']}",
+        f"- Candidate dopo pruning: {summary['relation_scaling']['kept_pairs']}",
+        f"- Candidate pruned: {summary['relation_scaling']['pruned_pairs']}",
+        f"- Max candidates per thread: {summary['relation_scaling']['relation_max_candidates_per_thread']}",
+        f"- Relation window days: {summary['relation_scaling']['relation_window_days']}",
+        f"- Top pruning reasons: {json.dumps(summary['relation_scaling']['pruning_reasons'], ensure_ascii=False)}",
+        f"- Canonical terms penalizzati: {json.dumps(summary['relation_scaling']['penalized_canonical_terms'], ensure_ascii=False)}",
         "",
         "## Confronto Short vs Long",
         "| metrica | short | long |",
@@ -157,6 +215,16 @@ async def _run(args: argparse.Namespace) -> dict:
     input_path, media_dir = _resolve_input(Path(args.input))
     output_path = Path(args.output)
     timings: dict[str, float] = {}
+    checkpoint = _load_checkpoint(args.project_id) if args.resume else {}
+    checkpoint.update(
+        {
+            "project_id": args.project_id,
+            "input": str(input_path),
+            "output": str(output_path),
+            "resume_enabled": bool(args.resume),
+            "started_at": checkpoint.get("started_at") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+    )
 
     started = time.perf_counter()
     raw_text = _read_text(input_path)
@@ -166,16 +234,28 @@ async def _run(args: argparse.Namespace) -> dict:
         source_name=args.source_name,
         timezone=args.timezone,
         media_dir=media_dir if args.detect_media else None,
-        analyze_attachments=args.analyze_media,
+        analyze_attachments=args.analyze_media and not args.skip_media_analysis,
     )
     if args.max_events and args.max_events > 0:
         parsed.events = parsed.events[: args.max_events]
     import_result = await ingest_events_batch(args.project_id, parsed.events)
     timings["import_seconds"] = time.perf_counter() - started
+    checkpoint["last_import"] = {
+        "parsed": len(parsed.events),
+        "accepted": import_result["accepted"],
+        "duplicates": import_result["duplicates"],
+        "failed": import_result["failed"],
+        "media_detected": parsed.media_detected,
+        "media_analyzed": parsed.media_analyzed,
+        "media_ignored": parsed.media_ignored,
+    }
+    _save_checkpoint(args.project_id, checkpoint)
 
     started = time.perf_counter()
     processed_total = 0
     failed_total = 0
+    batches_completed = 0
+    max_batches_reached = False
     while True:
         if args.verbose:
             batch_result = await process_pending_events(
@@ -192,6 +272,15 @@ async def _run(args: argparse.Namespace) -> dict:
                 )
         processed_total += batch_result["processed"]
         failed_total += batch_result["failed"]
+        batches_completed += 1
+        checkpoint["last_processing"] = {
+            "processed_total": processed_total,
+            "failed_total": failed_total,
+            "pending_remaining": batch_result["pending_remaining"],
+            "batches_completed": batches_completed,
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        _save_checkpoint(args.project_id, checkpoint)
         print(
             json.dumps(
                 {
@@ -199,6 +288,7 @@ async def _run(args: argparse.Namespace) -> dict:
                     "processed_total": processed_total,
                     "failed_total": failed_total,
                     "pending_remaining": batch_result["pending_remaining"],
+                    "batch": batches_completed,
                 },
                 ensure_ascii=True,
             ),
@@ -208,9 +298,19 @@ async def _run(args: argparse.Namespace) -> dict:
             break
         if args.max_process_events and processed_total >= args.max_process_events:
             break
+        if args.max_batches and batches_completed >= args.max_batches:
+            max_batches_reached = True
+            break
     timings["processing_seconds"] = time.perf_counter() - started
 
-    timings.update(await _rebuild_profile_macro_relations(args.project_id))
+    timings.update(
+        await _rebuild_profile_macro_relations(
+            args.project_id,
+            relation_window_days=args.relation_window_days,
+            relation_max_candidates_per_thread=args.relation_max_candidates_per_thread,
+        )
+    )
+    relation_stats = dict(timings.pop("relation_stats", {}))
 
     snapshot_id = None
     if args.create_snapshot:
@@ -248,8 +348,16 @@ async def _run(args: argparse.Namespace) -> dict:
             "processed": processed_total,
             "failed": failed_total,
             "pending_after": len([event for event in events if event.processed_status == "pending"]),
+            "batches_completed": batches_completed,
+            "max_batches_reached": max_batches_reached,
         },
         "timings": timings,
+        "run_status": _run_status(
+            len([event for event in events if event.processed_status == "pending"]),
+            max_batches_reached,
+        ),
+        "checkpoint_path": str(_checkpoint_path(args.project_id)),
+        "relation_scaling": relation_stats,
         "snapshot_id": snapshot_id,
         "short_metrics": short_metrics,
         "long_metrics": long_metrics,
@@ -258,6 +366,14 @@ async def _run(args: argparse.Namespace) -> dict:
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(_append_long_diagnostics(report.markdown, summary, short_metrics, long_metrics), encoding="utf-8")
+    checkpoint["last_report"] = {
+        "path": str(output_path),
+        "run_status": summary["run_status"],
+        "pending_after": summary["processing"]["pending_after"],
+        "relation_scaling": relation_stats,
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    _save_checkpoint(args.project_id, checkpoint)
     return summary
 
 
@@ -273,10 +389,16 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--process-batch-size", type=int, default=100)
     parser.add_argument("--max-events", type=int, default=0)
     parser.add_argument("--max-process-events", type=int, default=0)
+    parser.add_argument("--max-batches", type=int, default=0)
+    parser.add_argument("--resume", action="store_true", default=False)
     parser.add_argument("--detect-media", action="store_true", default=True)
     parser.add_argument("--analyze-media", action="store_true", default=False)
+    parser.add_argument("--skip-media-analysis", action="store_true", default=True)
+    parser.add_argument("--relation-window-days", type=int, default=21)
+    parser.add_argument("--relation-max-candidates-per-thread", type=int, default=40)
     parser.add_argument("--create-snapshot", action="store_true", default=False)
     parser.add_argument("--verbose", action="store_true", default=False)
+    parser.add_argument("--force-exit", action="store_true", default=False)
     return parser
 
 
@@ -289,6 +411,9 @@ def main() -> int:
         parser.error(str(exc))
         return 2
     print(json.dumps(summary, ensure_ascii=True, indent=2))
+    sys.stdout.flush()
+    if args.force_exit:
+        os._exit(0)
     return 0
 
 

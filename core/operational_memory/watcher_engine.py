@@ -67,6 +67,8 @@ async def ingest_events_batch(project_id: str, events: list[OperationalEvent]) -
     accepted = 0
     duplicates = 0
     failed = 0
+    stored_events = await list_events(project_id)
+    by_id = {event.event_id: event for event in stored_events}
 
     for event in events:
         try:
@@ -74,11 +76,20 @@ async def ingest_events_batch(project_id: str, events: list[OperationalEvent]) -
                 failed += 1
                 continue
             event.project_id = project_id
-            _stored, created = await ingest_event(event)
-            if created:
-                accepted += 1
-            else:
+            normalized = normalize_event(event)
+            if normalized.event_id in by_id:
                 duplicates += 1
+                continue
+            by_id[normalized.event_id] = normalized
+            stored_events.append(normalized)
+            accepted += 1
+            log(
+                "OPERATIONAL_EVENT_INGESTED",
+                project_id=normalized.project_id,
+                event_id=normalized.event_id,
+                created=True,
+                type=normalized.type,
+            )
         except Exception as exc:
             failed += 1
             log(
@@ -88,6 +99,8 @@ async def ingest_events_batch(project_id: str, events: list[OperationalEvent]) -
                 error=str(exc),
             )
 
+    if accepted:
+        await save_events(project_id, stored_events)
     return {"accepted": accepted, "duplicates": duplicates, "failed": failed}
 
 

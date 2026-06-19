@@ -6,6 +6,7 @@ from core.operational_memory.macro_thread_engine import build_macro_threads
 from core.operational_memory.models import OperationalEvent, OperationalThread
 from core.operational_memory.thread_relation_engine import (
     build_thread_relation_candidates,
+    calculate_canonical_discriminative_power,
     score_thread_relation,
 )
 from core.operational_memory.thread_validation import (
@@ -194,3 +195,47 @@ def test_relation_metrics_expose_useful_unassigned_threads():
     assert calculate_useful_unassigned_thread_rate(threads, [], relations) > 0
     assert calculate_isolated_thread_rate(threads, [], relations) < 1
     assert calculate_false_macro_prevention_rate(threads, [], relations) >= 0
+
+
+def test_relation_pruning_limits_many_similar_threads_without_hardcoded_terms():
+    project_id = "relation-pruning-generic"
+    threads = [
+        _thread(f"thread-{index}", project_id, f"Area comune modulo {index} da verificare", ["area comune"], f"evt-{index}")
+        for index in range(20)
+    ]
+    profile, events = _profile(project_id, [thread.title for thread in threads], threads)
+    stats: dict = {}
+
+    relations = build_thread_relation_candidates(
+        project_id,
+        threads,
+        events,
+        profile,
+        relation_max_candidates_per_thread=3,
+        stats=stats,
+    )
+
+    assert stats["raw_pairs"] == 190
+    assert stats["pruned_pairs"] > 0
+    assert len(relations) < stats["raw_pairs"]
+    assert max(len(thread.candidate_relation_ids) for thread in threads) <= 6
+
+
+def test_diffuse_canonical_term_is_penalized_generically():
+    project_id = "relation-diffuse-canonical"
+    threads = [
+        _thread(f"thread-{index}", project_id, f"Cliente alfa tema {index} da verificare", ["cliente alfa"], f"evt-{index}")
+        for index in range(12)
+    ]
+    profile, events = _profile(project_id, [thread.title for thread in threads], threads)
+
+    powers = [
+        calculate_canonical_discriminative_power(canonical.label, profile, threads)
+        for canonical in profile.canonical_terms
+    ]
+    stats: dict = {}
+    build_thread_relation_candidates(project_id, threads, events, profile, stats=stats)
+
+    assert powers
+    assert min(powers) < 0.75
+    assert stats["raw_pairs"] >= stats["kept_pairs"]
