@@ -14,6 +14,13 @@ from __future__ import annotations
 
 import time
 
+from core.affective_event_decay import (
+    ACUTE_SUPPORT,
+    GENTLE_AWARENESS,
+    affective_decay_stage,
+    is_sensitive_affective_text,
+)
+
 # (platform, group_id, user_id) -> timestamp ultimo messaggio
 _ARRIVALS: dict[tuple, float] = {}
 
@@ -100,15 +107,17 @@ def detect_group_emotional_tone(raw_msgs: list, lookback: int = 20) -> dict:
 
     grief_score = 0
     humor_score = 0
+    latest_grief_ts = None
 
     for m in msgs:
         text_lower = (m.get("text") or "").lower()
         text_orig  = (m.get("text") or "")
 
-        # --- Lutto ---
+        # --- Evento delicato ---
         for phrase in _GRIEF_PHRASES:
             if phrase in text_lower:
                 grief_score += 3
+                latest_grief_ts = m.get("ts", latest_grief_ts)
                 break
         else:
             # Solo se nessuna frase composta trovata, controlla parole singole
@@ -116,7 +125,12 @@ def detect_group_emotional_tone(raw_msgs: list, lookback: int = 20) -> dict:
             for word in _GRIEF_WORDS:
                 if _re.search(r"\b" + word + r"\b", text_lower):
                     grief_score += 3
+                    latest_grief_ts = m.get("ts", latest_grief_ts)
                     break
+            else:
+                if is_sensitive_affective_text(text_lower):
+                    grief_score += 3
+                    latest_grief_ts = m.get("ts", latest_grief_ts)
 
         # --- Umorismo ---
         for phrase in _HUMOR_PHRASES:
@@ -130,15 +144,28 @@ def detect_group_emotional_tone(raw_msgs: list, lookback: int = 20) -> dict:
                     break
 
     if grief_score >= 3:
+        stage = affective_decay_stage(latest_grief_ts)
+        if stage not in (ACUTE_SUPPORT, GENTLE_AWARENESS):
+            return {
+                "tone": "normal",
+                "note": "memoria storica di evento delicato non piu in stato attivo",
+                "stage": stage,
+                "prompt_block": "",
+            }
         note = "lutto o perdita rilevata nella conversazione del gruppo"
-        block = (
-            "[⚫ TONO DEL GRUPPO — LUTTO/DOLORE: Nella chat è emersa una notizia di perdita, lutto "
-            "o dolore profondo. Rispondi con rispetto, calore e vicinanza emotiva. "
-            "Esprimi le condoglianze in modo sincero se appropriato. "
-            "NON scherzare, NON cambiare argomento bruscamente, NON fare domande futili. "
-            "Sii presente, umana, vicina — come farebbe un familiare affettuoso.]\n"
-        )
-        return {"tone": "grief", "note": note, "prompt_block": block}
+        if stage == ACUTE_SUPPORT:
+            block = (
+                "[TONO DEL GRUPPO - EVENTO DELICATO RECENTE: Nella chat e emersa una perdita "
+                "o una situazione dolorosa recente. Rispondi con rispetto, calore e vicinanza emotiva "
+                "solo se il messaggio corrente lo rende appropriato. Evita scherzi fuori luogo e non forzare domande.]\n"
+            )
+        else:
+            block = (
+                "[TONO DEL GRUPPO - CONSAPEVOLEZZA DELICATA: Nel gruppo e emerso nei giorni scorsi "
+                "un evento doloroso. Mantieni delicatezza di fondo, ma non riportare il tema al centro "
+                "e non usare tono condolente se il messaggio corrente e generico.]\n"
+            )
+        return {"tone": "grief", "note": note, "stage": stage, "prompt_block": block}
 
     if humor_score >= 4:
         note = "conversazione giocosa e ironica nel gruppo"

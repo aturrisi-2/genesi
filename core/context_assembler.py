@@ -13,6 +13,11 @@ from core.chat_memory import chat_memory
 from core.document_memory import load_document
 from core.document_selector import resolve_documents
 from core.log import log as _structured_log
+from core.affective_event_decay import (
+    ACUTE_SUPPORT,
+    GENTLE_AWARENESS,
+    classify_affective_event,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -223,17 +228,39 @@ class ContextAssembler:
                 all_pf = await _pfs.get_all(user_id)
                 relevant_pf = sorted(all_pf, key=lambda f: f.get("saved_at", ""), reverse=True)[:5]
             if relevant_pf:
-                pf_lines = [f"• {pf['text']}" for pf in relevant_pf]
-                pf_block = "\n".join(pf_lines)
-                context["personal_facts"] = pf_block
-                summary += f"\n[FATTI PERSONALI APPRESI]\n{pf_block}"
-                try:
-                    _gmap = _build_gender_map_from_facts(relevant_pf)
-                    if _gmap:
-                        _gh = chr(10) + "[GENERE PERSONE MENZIONATE (usa accordo grammaticale corretto)]" + chr(10)
-                        summary += _gh + chr(10).join("  " + e for e in _gmap)
-                except Exception:
-                    pass
+                pf_lines = []
+                affective_background = []
+                active_pf = []
+                for pf in relevant_pf:
+                    fact_text = pf.get("text", "")
+                    affective = classify_affective_event(
+                        fact_text,
+                        pf.get("saved_at"),
+                        current_message=user_message,
+                    )
+                    if affective and affective["stage"] not in (ACUTE_SUPPORT, GENTLE_AWARENESS):
+                        affective_background.append(
+                            {"text": fact_text, "stage": affective["stage"]}
+                        )
+                        continue
+                    active_pf.append(pf)
+                    if affective and affective.get("reactivated"):
+                        pf_lines.append(f"- {fact_text} [riattivato dal contesto corrente: usa con prudenza]")
+                    else:
+                        pf_lines.append(f"- {fact_text}")
+                if affective_background:
+                    context["affective_background"] = affective_background
+                if pf_lines:
+                    pf_block = "\n".join(pf_lines)
+                    context["personal_facts"] = pf_block
+                    summary += f"\n[FATTI PERSONALI APPRESI]\n{pf_block}"
+                    try:
+                        _gmap = _build_gender_map_from_facts(active_pf)
+                        if _gmap:
+                            _gh = chr(10) + "[GENERE PERSONE MENZIONATE (usa accordo grammaticale corretto)]" + chr(10)
+                            summary += _gh + chr(10).join("  " + e for e in _gmap)
+                    except Exception:
+                        pass
         except Exception:
             pass
 
