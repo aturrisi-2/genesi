@@ -126,9 +126,15 @@ def event_to_extraction_message(event: OperationalEvent) -> str:
     ).strip()
 
 
-async def process_pending_events(project_id: str) -> dict:
+async def process_pending_events(
+    project_id: str,
+    limit: int | None = None,
+    rebuild_threads: bool = True,
+) -> dict:
     events = await list_events(project_id)
     pending = [event for event in events if event.processed_status == "pending"]
+    if limit is not None and limit > 0:
+        pending = pending[:limit]
     processed = 0
     failed = 0
     state: OperationalState | None = None
@@ -180,7 +186,9 @@ async def process_pending_events(project_id: str) -> dict:
             )
 
     await _save_domain_stats(project_id)
-    threads = await rebuild_project_threads(project_id)
+    threads = []
+    if rebuild_threads:
+        threads = await rebuild_project_threads(project_id)
 
     return {
         "project_id": project_id,

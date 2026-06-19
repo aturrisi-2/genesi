@@ -99,6 +99,10 @@ def _event_type_for_media(content: str) -> str:
 
 
 _ATTACHED_RE = re.compile(r"<(?:attached|allegato):\s*(?P<name>[^>]+)>", re.IGNORECASE)
+_FILE_ATTACHED_RE = re.compile(
+    r"(?P<name>[\w .()\-À-ÿ]+\.(?:jpe?g|png|webp|pdf|docx?|xlsx?|mp4|opus|vcf))\s*\(file allegato\)",
+    re.IGNORECASE,
+)
 _LRM = "\u200e"
 
 
@@ -108,13 +112,17 @@ def _clean_whatsapp_control_chars(text: str) -> str:
 
 def _extract_attachment_name(content: str) -> str | None:
     match = _ATTACHED_RE.search(content or "")
-    if not match:
-        return None
-    return match.group("name").strip()
+    if match:
+        return match.group("name").strip()
+    match = _FILE_ATTACHED_RE.search(content or "")
+    if match:
+        return match.group("name").strip()
+    return None
 
 
 def _content_without_attachment_marker(content: str) -> str:
     cleaned = _ATTACHED_RE.sub("", content or "")
+    cleaned = _FILE_ATTACHED_RE.sub("", cleaned)
     cleaned = re.sub(r"<media omess[oi]>", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"media omitted", "", cleaned, flags=re.IGNORECASE)
     return re.sub(r"\s+", " ", cleaned).strip()
@@ -152,6 +160,7 @@ def parse_whatsapp_export(
     source_name: str = "whatsapp-export",
     timezone: str = "Europe/Rome",
     media_dir: str | Path | None = None,
+    analyze_attachments: bool = True,
 ) -> WhatsAppParseResult:
     events: list[OperationalEvent] = []
     ignored = 0
@@ -194,12 +203,15 @@ def parse_whatsapp_export(
                 attachment_type = attachment_type_for_path(attachment_path)
                 attachment_metadata["file_name"] = attachment_path.name
                 attachment_metadata["file_exists"] = True
-                if is_supported_attachment(attachment_path):
+                if is_supported_attachment(attachment_path) and analyze_attachments:
                     media_analysis = analyze_media(attachment_path)
                     media_analyzed += 1
                     if media_analysis.extracted_text.strip():
                         media_text_extracted += 1
                     event_type = "pdf" if media_analysis.attachment_type == "pdf" else "image"
+                elif is_supported_attachment(attachment_path):
+                    event_type = attachment_type if attachment_type in {"image", "pdf", "document"} else event_type
+                    attachment_metadata["analysis_skipped"] = True
                 else:
                     media_ignored += 1
                     if cleaned_content:
