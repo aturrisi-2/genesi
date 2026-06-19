@@ -76,6 +76,24 @@ def _collect(state: OperationalState, category: LifecycleCategory, predicate: Ca
 # --------------------------------------------------------------------------- #
 
 
+def list_items(
+    state: OperationalState,
+    category: str | None = None,
+    status: str | None = None,
+) -> list[QueryAnswerItem]:
+    """Flat, filterable view of every operational item with its lifecycle
+    status + evidence. Generic: filters are plain category/status strings."""
+    out: list[QueryAnswerItem] = []
+    for cat, _field in _CATEGORY_FIELDS:
+        if category and cat != category:
+            continue
+        for answer in _collect(state, cat, lambda s: True):
+            if status and answer.status != status:
+                continue
+            out.append(answer)
+    return out
+
+
 def open_tasks(state: OperationalState) -> list[QueryAnswerItem]:
     return _collect(state, "task", lambda s: is_active_status("task", s))
 

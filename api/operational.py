@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from core.operational_memory.importers.whatsapp_export import parse_whatsapp_export
@@ -17,13 +17,32 @@ from core.operational_memory.extractor import (
 from core.operational_memory.daily_report import build_daily_report
 from core.operational_memory.models import (
     DailyReport,
+    OperationalBriefing,
+    OperationalDigest,
     OperationalEvent,
+    OperationalLifecycleSnapshot,
     OperationalSnapshot,
     OperationalState,
+    OperationalThread,
+    QueryAnswerItem,
+    QueryResult,
     ReportMode,
+    SnapshotDelta,
 )
-from core.operational_memory.snapshot_store import create_snapshot, list_snapshots
+from core.operational_memory.query_engine import (
+    answer_query,
+    build_briefing,
+    build_digest,
+    list_items,
+)
+from core.operational_memory.snapshot_delta import compute_snapshot_delta
+from core.operational_memory.snapshot_store import (
+    create_snapshot,
+    list_snapshots,
+    load_latest_lifecycle_snapshot,
+)
 from core.operational_memory.state_engine import get_project_state, ingest_messages
+from core.operational_memory.state_store import load_state
 from core.operational_memory.watcher_engine import (
     get_events,
     ingest_event,
@@ -189,3 +208,106 @@ async def run_offline_whatsapp_demo_endpoint(
         return await run_whatsapp_export_demo(project_id, request)
     except OfflineWhatsAppDemoError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# --------------------------------------------------------------------------- #
+# FASE 6 — Operational Runtime MVP (briefing / report / digest / ask / delta /
+# snapshot / items / threads). Read-only over the persisted operational state;
+# generic and explainable; no domain-specific logic.
+# --------------------------------------------------------------------------- #
+
+_API = "/api/operational/projects/{project_id}"
+
+
+class AskRequest(BaseModel):
+    query: str = ""
+
+
+class IngestTestRequest(BaseModel):
+    events: list[OperationalEvent] = Field(default_factory=list)
+
+
+@router.get(f"{_API}/briefing", response_model=OperationalBriefing)
+async def operational_briefing_endpoint(project_id: str) -> OperationalBriefing:
+    state = await load_state(project_id)
+    return build_briefing(state)
+
+
+@router.get(f"{_API}/digest", response_model=OperationalDigest)
+async def operational_digest_endpoint(project_id: str) -> OperationalDigest:
+    state = await load_state(project_id)
+    return build_digest(state)
+
+
+@router.get(f"{_API}/snapshot", response_model=OperationalLifecycleSnapshot)
+async def operational_snapshot_endpoint(project_id: str) -> OperationalLifecycleSnapshot:
+    state = await load_state(project_id)
+    if state.lifecycle_snapshot is None:
+        raise HTTPException(status_code=404, detail="no lifecycle snapshot for this project yet")
+    return state.lifecycle_snapshot
+
+
+@router.get(f"{_API}/delta", response_model=SnapshotDelta)
+async def operational_delta_endpoint(project_id: str) -> SnapshotDelta:
+    state = await load_state(project_id)
+    if state.lifecycle_snapshot is not None and state.lifecycle_snapshot.snapshot_delta is not None:
+        return state.lifecycle_snapshot.snapshot_delta
+    previous = load_latest_lifecycle_snapshot(project_id)
+    return compute_snapshot_delta(
+        previous.item_states if previous else None,
+        state,
+        previous_snapshot_id=previous.snapshot_id if previous else None,
+        previous_generated_at=previous.generated_at if previous else None,
+    )
+
+
+@router.post(f"{_API}/ask", response_model=QueryResult)
+async def operational_ask_endpoint(project_id: str, request: AskRequest) -> QueryResult:
+    if not request.query.strip():
+        raise HTTPException(status_code=400, detail="query must not be empty")
+    state = await load_state(project_id)
+    return answer_query(state, request.query)
+
+
+@router.get(f"{_API}/items", response_model=list[QueryAnswerItem])
+async def operational_items_endpoint(
+    project_id: str,
+    category: str | None = None,
+    status: str | None = None,
+) -> list[QueryAnswerItem]:
+    state = await load_state(project_id)
+    return list_items(state, category=category, status=status)
+
+
+@router.get(f"{_API}/threads", response_model=list[OperationalThread])
+async def operational_threads_endpoint(project_id: str) -> list[OperationalThread]:
+    state = await load_state(project_id)
+    return state.threads
+
+
+@router.get(f"{_API}/report")
+async def operational_report_endpoint(project_id: str) -> Response:
+    state = await load_state(project_id)
+    markdown = build_briefing(state).markdown
+    return Response(content=markdown, media_type="text/markdown; charset=utf-8")
+
+
+@router.get(f"{_API}/report/download")
+async def operational_report_download_endpoint(project_id: str) -> Response:
+    state = await load_state(project_id)
+    markdown = build_briefing(state).markdown
+    safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in project_id).strip("._") or "project"
+    return Response(
+        content=markdown,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="briefing_{safe}.md"'},
+    )
+
+
+@router.post(f"{_API}/ingest-test", response_model=OperationalEventsBatchResponse)
+async def operational_ingest_test_endpoint(
+    project_id: str,
+    request: IngestTestRequest,
+) -> OperationalEventsBatchResponse:
+    result = await ingest_events_batch(project_id, request.events)
+    return OperationalEventsBatchResponse(**result)
