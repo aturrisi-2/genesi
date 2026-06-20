@@ -907,13 +907,13 @@ async def handle_update(payload: dict):
                     gid = raw_group_id or msg.get("context", {}).get("id", "")
                     from core.telegram_group_memory import stable_hash
                     chat_id = stable_hash(gid) if gid else 0
-                    await _process_message(msg, name_map, is_group=msg_is_group, chat_id=chat_id)
+                    await _process_message(msg, name_map, is_group=msg_is_group, chat_id=chat_id, group_jid=gid)
 
     except Exception as e:
         logger.error("WA_HANDLE_UPDATE_ERROR err=%s", e)
 
 
-async def _process_message(msg: dict, name_map: dict, is_group: bool = False, chat_id: int = 0):
+async def _process_message(msg: dict, name_map: dict, is_group: bool = False, chat_id: int = 0, group_jid: str = ""):
     try:
         wa_id      = msg.get("from", "")
         msg_id     = msg.get("id", "")   # ID messaggio per typing + mark-as-read
@@ -1173,6 +1173,25 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 asyncio.create_task(append_raw_message(chat_id, stable_hash(wa_id), first_name, msg_text))
 
         # ── FILTRO GRUPPI (LLM-based) ──────────────────────────────────────────
+        # ── Operational Memory bridge (opt-in, flag-gated, default OFF) ──────
+        # No-op unless OPERATIONAL_MEMORY_WHATSAPP_ENABLED and this group JID is
+        # mapped to an operational project. For a mapped group it claims the
+        # message (silent ingest; reply only on explicit invocation when reply is
+        # enabled) and we stop here so the empathic pipeline does not answer in
+        # parallel. Flag OFF or unmapped => zero behaviour change.
+        if is_group and group_jid:
+            try:
+                from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+                if await maybe_handle_whatsapp_operational(
+                    group_jid=group_jid, sender_jid=wa_id, first_name=first_name,
+                    text=(text or caption or ""), send_message=send_message,
+                    message_id=msg.get("id"),
+                    media_type=(msg_type if msg_type in ("image", "document", "video", "audio", "voice") else ""),
+                ):
+                    return
+            except Exception as _ome:
+                logger.debug("OPERATIONAL_WHATSAPP_HOOK_ERR %s", _ome)
+
         _reply_to_genesi = False
         if is_group:
             combined = f"{text} {caption}".strip()
