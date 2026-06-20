@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Body, HTTPException, Response
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from core.operational_memory.importers.whatsapp_export import parse_whatsapp_export
 from core.operational_memory.demo_runner import (
@@ -297,7 +297,7 @@ async def operational_threads_endpoint(project_id: str) -> list[OperationalThrea
 async def operational_report_endpoint(project_id: str) -> Response:
     state = await load_state(project_id)
     markdown = build_briefing(state).markdown
-    return Response(content=markdown, media_type="text/markdown; charset=utf-8")
+    return Response(content=markdown, media_type="text/markdown")
 
 
 @router.get(f"{_API}/report/download")
@@ -307,7 +307,7 @@ async def operational_report_download_endpoint(project_id: str) -> Response:
     safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in project_id).strip("._") or "project"
     return Response(
         content=markdown,
-        media_type="text/markdown; charset=utf-8",
+        media_type="text/markdown",
         headers={"Content-Disposition": f'attachment; filename="briefing_{safe}.md"'},
     )
 
@@ -327,6 +327,9 @@ async def operational_ingest_test_endpoint(
 
 
 class ChatIncomingRequest(BaseModel):
+    """Nested chat request (documentation/back-compat). The endpoint also accepts
+    a flat body where the message fields sit at the top level."""
+
     message: ChatMessage
     config: InvocationConfig | None = None
 
@@ -339,15 +342,31 @@ class ChatPresenceResponse(BaseModel):
 @router.post(f"{_API}/chat", response_model=ChatPresenceResponse)
 async def operational_chat_endpoint(
     project_id: str,
-    request: ChatIncomingRequest,
+    payload: dict = Body(...),
 ) -> ChatPresenceResponse:
-    message = request.message
-    if message.project_id and message.project_id != project_id:
+    # Accept BOTH a nested body {"message": {...}, "config": {...}} and a flat
+    # body {"message_id": ..., "text": ..., ...}. project_id is inherited from
+    # the path when not supplied in the body.
+    config_data = payload.get("config") if isinstance(payload.get("config"), dict) else None
+    if isinstance(payload.get("message"), dict):
+        raw = dict(payload["message"])
+    else:
+        raw = {key: value for key, value in payload.items() if key != "config"}
+
+    body_project_id = raw.get("project_id")
+    if body_project_id and body_project_id != project_id:
         raise HTTPException(status_code=400, detail="message project_id must match path project_id")
-    message.project_id = project_id
-    if not message.message_id.strip():
+    raw["project_id"] = project_id
+    if not str(raw.get("message_id") or "").strip():
         raise HTTPException(status_code=400, detail="message_id is required")
-    reply = await handle_incoming(message, config=request.config)
+
+    try:
+        message = ChatMessage(**raw)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+    config = InvocationConfig(**config_data) if config_data is not None else None
+
+    reply = await handle_incoming(message, config=config)
     return ChatPresenceResponse(silent=reply is None, reply=reply)
 
 
@@ -364,19 +383,22 @@ async def operational_report_get_endpoint(project_id: str, report_id: str) -> St
     return report
 
 
-@router.get(f"{_API}/reports/{{report_id}}/download")
+# GET + HEAD so link checkers / monitors / pre-deploy health checks can probe
+# the report without downloading it. HEAD reuses the same handler; Starlette
+# drops the body for HEAD requests.
+@router.api_route(f"{_API}/reports/{{report_id}}/download", methods=["GET", "HEAD"])
 async def operational_report_stored_download_endpoint(project_id: str, report_id: str) -> Response:
     report = load_report(project_id, report_id)
     if report is None:
         raise HTTPException(status_code=404, detail="report not found")
     return Response(
         content=report.markdown,
-        media_type="text/markdown; charset=utf-8",
+        media_type="text/markdown",
         headers={"Content-Disposition": f'attachment; filename="{report_id}.md"'},
     )
 
 
-@router.get(f"{_API}/reports/{{report_id}}/view", response_class=HTMLResponse)
+@router.api_route(f"{_API}/reports/{{report_id}}/view", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def operational_report_view_endpoint(project_id: str, report_id: str) -> HTMLResponse:
     report = load_report(project_id, report_id)
     if report is None:

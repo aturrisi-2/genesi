@@ -117,6 +117,37 @@ async def test_download_still_works(app):
 
 
 @pytest.mark.asyncio
+async def test_head_view_existing_and_missing(app):
+    rid = app.state.report_id
+    async with _client(app) as c:
+        ok = await c.head(f"/api/operational/projects/{PROJECT}/reports/{rid}/view")
+        missing = await c.head(f"/api/operational/projects/{PROJECT}/reports/nope/view")
+    assert ok.status_code == 200 and "text/html" in ok.headers["content-type"]
+    assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_head_download_existing_and_missing(app):
+    rid = app.state.report_id
+    async with _client(app) as c:
+        ok = await c.head(f"/api/operational/projects/{PROJECT}/reports/{rid}/download")
+        missing = await c.head(f"/api/operational/projects/{PROJECT}/reports/nope/download")
+    assert ok.status_code == 200
+    assert "attachment" in ok.headers.get("content-disposition", "")
+    assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_download_content_type_no_duplicate_charset(app):
+    rid = app.state.report_id
+    async with _client(app) as c:
+        r = await c.get(f"/api/operational/projects/{PROJECT}/reports/{rid}/download")
+    ctype = r.headers["content-type"]
+    assert ctype.count("charset") <= 1
+    assert ctype.startswith("text/markdown")
+
+
+@pytest.mark.asyncio
 async def test_harness_page(app):
     async with _client(app) as c:
         r = await c.get("/operational/harness")

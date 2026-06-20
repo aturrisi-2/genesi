@@ -249,6 +249,46 @@ async def test_chat_endpoint_reply_on_invocation(app_with_reports):
 
 
 @pytest.mark.asyncio
+async def test_chat_flat_body_inherits_project_id(app_with_reports):
+    # Flat body (no "message" wrapper, no project_id) -> project_id from path.
+    import core.operational_memory.chat_presence as cp
+
+    async def noop(message):
+        return None
+
+    orig = cp.silent_update
+    cp.silent_update = noop
+    try:
+        async with _client(app_with_reports) as c:
+            normal = await c.post(_url("/chat"), json={"message_id": "flat-1", "sender": "t", "text": "messaggio normale"})
+            invoked = await c.post(_url("/chat"), json={"message_id": "flat-2", "text": "Genesi, fammi il punto"})
+            missing_id = await c.post(_url("/chat"), json={"text": "Genesi, fammi il punto"})
+    finally:
+        cp.silent_update = orig
+    assert normal.status_code == 200 and normal.json()["silent"] is True
+    assert invoked.status_code == 200 and invoked.json()["silent"] is False
+    assert invoked.json()["reply"]["report_url"]
+    assert missing_id.status_code == 400  # message_id required
+
+
+@pytest.mark.asyncio
+async def test_chat_nested_body_still_works(app_with_reports):
+    import core.operational_memory.chat_presence as cp
+
+    async def noop(message):
+        return None
+
+    orig = cp.silent_update
+    cp.silent_update = noop
+    try:
+        async with _client(app_with_reports) as c:
+            r = await c.post(_url("/chat"), json={"message": {"project_id": PROJECT, "message_id": "nest-1", "text": "ciao"}})
+    finally:
+        cp.silent_update = orig
+    assert r.status_code == 200 and r.json()["silent"] is True
+
+
+@pytest.mark.asyncio
 async def test_stored_report_get_and_download(app_with_reports):
     from core.operational_memory.report_store import save_report
 
