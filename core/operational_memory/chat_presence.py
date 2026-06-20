@@ -139,6 +139,34 @@ def build_chat_reply(
     )
 
 
+def _report_url(project_id: str, report_id: str, base_url: str = "") -> str:
+    path = f"/api/operational/projects/{project_id}/reports/{report_id}/view"
+    base = (base_url or "").rstrip("/")
+    return f"{base}{path}" if base else path
+
+
+async def build_operational_reply(
+    project_id: str,
+    query: str,
+    report_base_url: str = "",
+    invoked_by: str = "",
+    save: bool = True,
+) -> ChatReply:
+    """Service-layer entry point: build the operational chat reply for a query
+    over the current state, optionally persisting the full report and linking it.
+
+    Transport bridges (e.g. Telegram) call this instead of re-implementing the
+    operational orchestration. No empathic logic, no LLM."""
+    state = await load_state(project_id)
+    report_id = ""
+    report_url = ""
+    if save:
+        report = save_report(project_id, build_briefing(state).markdown)
+        report_id = report.report_id
+        report_url = _report_url(project_id, report_id, report_base_url)
+    return build_chat_reply(state, query, report_id=report_id, report_url=report_url, invoked_by=invoked_by)
+
+
 async def handle_incoming(
     message: ChatMessage,
     config: Optional[InvocationConfig] = None,

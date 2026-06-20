@@ -142,6 +142,64 @@ def test_mapping_configurable_via_env(monkeypatch):
     assert project_for_chat(-300) is None
 
 
+@pytest.mark.asyncio
+async def test_no_double_reply_contract(env):
+    # Contract: handled==True is the signal for the caller (telegram_bot) to stop,
+    # so the empathic pipeline never sends a second reply on the same update.
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_operational(CHAT_ID, 1, "Ann", "Genesi, fammi il punto", send, message_id="d1", updater=updater)
+    await asyncio.sleep(0)
+    assert handled is True       # caller returns -> existing pipeline skipped
+    assert len(sent) == 1        # exactly one (operational) reply, never two
+    # And a non-invocation never claims the update (empathic pipeline keeps it).
+    handled2 = await maybe_handle_operational(CHAT_ID, 1, "Ann", "ciao a tutti", send, message_id="d2", updater=updater)
+    await asyncio.sleep(0)
+    assert handled2 is False
+
+
+def test_bridge_does_not_import_empathic_or_whatsapp():
+    # The bridge must not IMPORT the empathic persona/proactor/chat pipeline or
+    # WhatsApp. Inspect actual import statements (not doc comments).
+    import core.operational_memory.telegram_operational as mod
+    import_lines = [
+        line.strip().lower()
+        for line in open(mod.__file__, "r", encoding="utf-8")
+        if line.lstrip().startswith(("import ", "from "))
+    ]
+    blob = "\n".join(import_lines)
+    for forbidden in ["proactor", "simple_chat", "message_pipeline", "whatsapp",
+                      "api.chat", "persona", "telegram_bot", "llm_service"]:
+        assert forbidden not in blob, f"bridge imports forbidden dependency: {forbidden}"
+    # It DOES delegate to the operational service layer.
+    src = open(mod.__file__, "r", encoding="utf-8").read()
+    assert "build_operational_reply" in src
+
+
+@pytest.mark.asyncio
+async def test_bridge_delegates_to_service(env, monkeypatch):
+    # The bridge calls the service layer (build_operational_reply); stub it to
+    # prove the bridge holds no reply-building logic of its own.
+    import core.operational_memory.telegram_operational as mod
+    from core.operational_memory.models import ChatReply
+
+    called = {}
+
+    async def fake_service(project_id, query, report_base_url="", invoked_by="", save=True):
+        called["project_id"] = project_id
+        called["query"] = query
+        called["base"] = report_base_url
+        return ChatReply(project_id=project_id, intent="briefing", reply_markdown="STUB-REPLY", report_id="r", report_url="u")
+
+    monkeypatch.setattr(mod, "build_operational_reply", fake_service)
+    sent, ingested, send, updater = _spies()
+    handled = await mod.maybe_handle_operational(CHAT_ID, 1, "Ann", "Genesi, fammi il punto", send, message_id="s1", updater=updater)
+    await asyncio.sleep(0)
+    assert handled is True
+    assert called["project_id"] == PROJECT and called["base"] == "https://genesi.example.com"
+    assert sent == [(CHAT_ID, "STUB-REPLY")]
+
+
 def test_no_hardcoded_domain_tokens():
     import re
     import core.operational_memory.telegram_operational as mod

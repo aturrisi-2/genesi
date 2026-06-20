@@ -19,12 +19,9 @@ from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
 from core.log import log
-from core.operational_memory.chat_presence import build_chat_reply, silent_update
+from core.operational_memory.chat_presence import build_operational_reply, silent_update
 from core.operational_memory.invocation_router import is_invoked
 from core.operational_memory.models import ChatMessage, InvocationConfig
-from core.operational_memory.report_store import save_report
-from core.operational_memory.state_store import load_state
-from core.operational_memory.query_engine import build_briefing
 
 
 _CONFIG_FILE = Path("config/telegram_operational.json")
@@ -77,12 +74,6 @@ def project_for_chat(chat_id) -> Optional[str]:
     return _load_chat_project_map().get(str(chat_id))
 
 
-def _report_url(project_id: str, report_id: str) -> str:
-    path = f"/api/operational/projects/{project_id}/reports/{report_id}/view"
-    base = _public_base_url()
-    return f"{base}{path}" if base else path
-
-
 SendMessage = Callable[..., Awaitable[None]]
 Updater = Callable[[ChatMessage], Awaitable[None]]
 
@@ -130,15 +121,15 @@ async def maybe_handle_operational(
         if not reply_enabled():
             return False  # invoked but operational reply disabled → let existing pipeline answer
 
-        # 3. Build + send the operational reply from the current state.
-        state = await load_state(project_id)
-        report = save_report(project_id, build_briefing(state).markdown)
-        report_url = _report_url(project_id, report.report_id)
-        reply = build_chat_reply(state, decision.query, report_id=report.report_id,
-                                 report_url=report_url, invoked_by=first_name or "")
+        # 3. Delegate reply construction to the operational service layer, then
+        #    just transport it. The bridge holds no operational/empathic brain.
+        reply = await build_operational_reply(
+            project_id, decision.query,
+            report_base_url=_public_base_url(), invoked_by=first_name or "",
+        )
         await send_message(chat_id, reply.reply_markdown)
         log("OPERATIONAL_TELEGRAM_REPLY", chat_id=chat_id, project_id=project_id,
-            intent=reply.intent, report_id=report.report_id)
+            intent=reply.intent, report_id=reply.report_id)
         return True
     except Exception as exc:  # never break the existing bot
         log("OPERATIONAL_TELEGRAM_ERROR", chat_id=chat_id, error=str(exc))
