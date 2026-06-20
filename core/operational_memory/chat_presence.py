@@ -165,7 +165,7 @@ async def handle_incoming(
     if save_report_on_reply:
         report = save_report(message.project_id, build_briefing(state).markdown)
         report_id = report.report_id
-        report_url = f"/api/operational/projects/{message.project_id}/reports/{report_id}/download"
+        report_url = f"/api/operational/projects/{message.project_id}/reports/{report_id}/view"
     return build_chat_reply(
         state,
         decision.query,

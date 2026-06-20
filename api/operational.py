@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Response
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from core.operational_memory.importers.whatsapp_export import parse_whatsapp_export
@@ -35,6 +36,7 @@ from core.operational_memory.models import (
     StoredReport,
 )
 from core.operational_memory.report_store import list_reports, load_report
+from core.operational_memory.report_viewer import render_report_page
 from core.operational_memory.query_engine import (
     answer_query,
     build_briefing,
@@ -372,3 +374,54 @@ async def operational_report_stored_download_endpoint(project_id: str, report_id
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{report_id}.md"'},
     )
+
+
+@router.get(f"{_API}/reports/{{report_id}}/view", response_class=HTMLResponse)
+async def operational_report_view_endpoint(project_id: str, report_id: str) -> HTMLResponse:
+    report = load_report(project_id, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="report not found")
+    download_url = f"/api/operational/projects/{project_id}/reports/{report_id}/download"
+    return HTMLResponse(content=render_report_page(report, download_url))
+
+
+_HARNESS_HTML = """<!doctype html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Genesi — Test Harness</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:680px;margin:1rem auto;padding:0 1rem;line-height:1.5}
+input,textarea,button{font:inherit;width:100%;padding:.5rem;margin:.25rem 0;box-sizing:border-box}
+button{cursor:pointer;width:auto;padding:.5rem 1rem}
+pre{white-space:pre-wrap;background:#f5f5f5;padding:.75rem;border-radius:6px;overflow-x:auto}
+.silent{color:#888}
+</style></head>
+<body>
+<h1>Genesi — Test Harness</h1>
+<p>Simula un messaggio di chat. Genesi resta silenziosa salvo invocazione esplicita
+(es. "Genesi, fammi il punto").</p>
+<label>project_id<input id="pid" value="demo-project"></label>
+<label>message_id<input id="mid" value="m1"></label>
+<label>messaggio<textarea id="text" rows="3">Genesi, fammi il punto</textarea></label>
+<button onclick="send()">Invia</button>
+<div id="out"></div>
+<script>
+async function send(){
+  const pid=document.getElementById('pid').value.trim();
+  const body={message:{project_id:pid,message_id:document.getElementById('mid').value.trim(),text:document.getElementById('text').value}};
+  const r=await fetch(`/api/operational/projects/${pid}/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const data=await r.json();
+  const out=document.getElementById('out');
+  if(data.silent){out.innerHTML='<p class="silent">Silent — nessuna risposta in chat (memoria aggiornata).</p>';return;}
+  const rep=data.reply||{};
+  let html='<h2>Risposta</h2><pre>'+(rep.reply_markdown||'')+'</pre>';
+  if(rep.report_url){html+='<p><a href="'+rep.report_url+'">Apri report completo</a></p>';}
+  out.innerHTML=html;
+}
+</script>
+</body></html>"""
+
+
+@router.get("/operational/harness", response_class=HTMLResponse)
+async def operational_harness_endpoint() -> HTMLResponse:
+    return HTMLResponse(content=_HARNESS_HTML)
