@@ -181,7 +181,7 @@ def _analyze_image(path: Path) -> MediaAnalysisResult:
             attachment_path=str(path),
             attachment_type="image",
             extracted_text="",
-            media_description=f"Immagine WhatsApp offline: {path.name}. OCR saltato per dimensione file.",
+            media_description=f"Immagine offline: {path.name}. OCR saltato per dimensione file.",
             extraction_status="ocr_skipped_too_large",
             extraction_confidence="low",
             metadata={**metadata, "ocr_attempted": False},
@@ -191,7 +191,7 @@ def _analyze_image(path: Path) -> MediaAnalysisResult:
             attachment_path=str(path),
             attachment_type="image",
             extracted_text="",
-            media_description=f"Immagine WhatsApp offline: {path.name}. OCR saltato per risoluzione elevata.",
+            media_description=f"Immagine offline: {path.name}. OCR saltato per risoluzione elevata.",
             extraction_status="ocr_skipped_too_large",
             extraction_confidence="low",
             metadata={**metadata, "ocr_attempted": False},
@@ -212,9 +212,9 @@ def _analyze_image(path: Path) -> MediaAnalysisResult:
                 attachment_type="image",
                 extracted_text=text,
                 media_description=(
-                    f"Immagine WhatsApp analizzata localmente: {path.name}"
+                    f"Immagine analizzata localmente: {path.name}"
                     if text
-                    else f"Immagine WhatsApp analizzata localmente: {path.name}. Nessun testo OCR rilevato."
+                    else f"Immagine analizzata localmente: {path.name}. Nessun testo OCR rilevato."
                 ),
                 extraction_status="text_extracted" if text else "no_text_found",
                 extraction_confidence=_confidence_for_text(text),
@@ -228,7 +228,7 @@ def _analyze_image(path: Path) -> MediaAnalysisResult:
         attachment_path=str(path),
         attachment_type="image",
         extracted_text="",
-        media_description=f"Immagine WhatsApp offline: {path.name} ({dimensions}). OCR locale non disponibile.",
+        media_description=f"Immagine offline: {path.name} ({dimensions}). OCR locale non disponibile.",
         extraction_status="ocr_unavailable",
         extraction_confidence="low",
         metadata={**metadata, "ocr_attempted": False},
@@ -272,7 +272,7 @@ def analyze_media(path: Path) -> MediaAnalysisResult:
             attachment_path=str(path),
             attachment_type="pdf",
             extracted_text=text,
-            media_description=f"PDF WhatsApp offline: {path.name}",
+            media_description=f"PDF offline: {path.name}",
             extraction_status="text_extracted" if text else "pdf_text_unavailable",
             extraction_confidence="medium" if text else "low",
             metadata=metadata,
@@ -281,7 +281,7 @@ def analyze_media(path: Path) -> MediaAnalysisResult:
     return MediaAnalysisResult(
         attachment_path=str(path),
         attachment_type=attachment_type,
-        media_description=f"Allegato WhatsApp non analizzato: {path.name}",
+        media_description=f"Allegato non analizzato: {path.name}",
         extraction_status="ignored" if attachment_type in {"ignored", "sticker"} else "unsupported",
         extraction_confidence="low",
         metadata=metadata,
