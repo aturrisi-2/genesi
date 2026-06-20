@@ -57,6 +57,7 @@ from api.whatsapp import router as whatsapp_router
 from api.meta_messaging import router as meta_messaging_router
 from api.widget import router as widget_router
 from api.system_diagnostics import router as system_diagnostics_router
+from api.operational import router as operational_router
 from auth.database import init_db, async_session
 from auth.models import Visit
 from core.log import log
@@ -591,6 +592,8 @@ app.include_router(whatsapp_router)
 app.include_router(meta_messaging_router)
 app.include_router(widget_router)
 app.include_router(system_diagnostics_router)
+# Operational Memory tool (FASE 9b backport) — isolated, full-path routes, no prefix.
+app.include_router(operational_router)
 from api.weather_widget import router as weather_widget_router
 app.include_router(weather_widget_router)
 from api.push import router as push_router

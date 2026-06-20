@@ -1,0 +1,14 @@
+{
+  "project_id": "profile-support",
+  "expected_domain": "customer_support",
+  "expected_generic_terms": ["cliente"],
+  "expected_specific_terms": ["errore login", "ticket 1042 chiuso", "problema fattura"],
+  "events": [
+    {"event_id": "s01", "sender": "operatore_1", "timestamp": "2026-06-12T08:00:00+00:00", "content": "Cliente Beta apre ticket 1042 per errore login"},
+    {"event_id": "s02", "sender": "operatore_2", "timestamp": "2026-06-12T08:15:00+00:00", "content": "Ticket 1042 diagnosi: password scaduta"},
+    {"event_id": "s03", "sender": "operatore_1", "timestamp": "2026-06-12T08:30:00+00:00", "content": "Cliente Beta conferma accesso ripristinato"},
+    {"event_id": "s04", "sender": "operatore_2", "timestamp": "2026-06-12T08:40:00+00:00", "content": "Ticket 1042 chiuso"},
+    {"event_id": "s05", "sender": "operatore_3", "timestamp": "2026-06-12T09:00:00+00:00", "content": "Cliente Alfa segnala problema fattura"},
+    {"event_id": "s06", "sender": "operatore_1", "timestamp": "2026-06-12T09:20:00+00:00", "content": "Ticket 1043 aperto per Cliente Alfa"}
+  ]
+}

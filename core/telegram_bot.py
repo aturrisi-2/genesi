@@ -1409,6 +1409,23 @@ async def handle_update(update: dict):
             except Exception:
                 pass
 
+            # ── Operational Memory silent presence (opt-in, flag-gated) ──
+            # No-op unless OPERATIONAL_MEMORY_TELEGRAM_ENABLED and this chat is
+            # mapped to an operational project. When it answers an explicit
+            # operational invocation it returns True and we stop here (the
+            # existing empathic pipeline is skipped only for that operational
+            # query). Flag OFF => zero behaviour change.
+            try:
+                from core.operational_memory.telegram_operational import maybe_handle_operational
+                if await maybe_handle_operational(
+                    chat_id=chat_id, from_id=from_id, first_name=first_name,
+                    text=(text or caption or ""), send_message=send_message,
+                    message_id=msg.get("message_id"),
+                ):
+                    return
+            except Exception as _ome:
+                logger.debug("OPERATIONAL_TELEGRAM_HOOK_ERR %s", _ome)
+
         # Genesi decide autonomamente se e quando intervenire nel gruppo.
         if is_group:
             _is_family = _is_tg_family_group(chat_id)

@@ -1,0 +1,14 @@
+{
+  "project_id": "profile-family",
+  "expected_domain": "family_coordination",
+  "expected_generic_terms": [],
+  "expected_specific_terms": ["bambini scuola", "spesa fatta"],
+  "events": [
+    {"event_id": "f01", "sender": "persona_1", "timestamp": "2026-06-12T08:00:00+00:00", "content": "Domani chi porta i bambini a scuola"},
+    {"event_id": "f02", "sender": "persona_2", "timestamp": "2026-06-12T08:10:00+00:00", "content": "Domani li porto io a scuola"},
+    {"event_id": "f03", "sender": "persona_3", "timestamp": "2026-06-12T08:20:00+00:00", "content": "Serve fare la spesa per cena"},
+    {"event_id": "f04", "sender": "persona_1", "timestamp": "2026-06-12T08:30:00+00:00", "content": "Domani pago bolletta casa"},
+    {"event_id": "f05", "sender": "persona_2", "timestamp": "2026-06-12T09:00:00+00:00", "content": "Spesa fatta"},
+    {"event_id": "f06", "sender": "persona_3", "timestamp": "2026-06-12T09:20:00+00:00", "content": "Grazie"}
+  ]
+}
