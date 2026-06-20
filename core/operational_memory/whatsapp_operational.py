@@ -167,34 +167,44 @@ async def maybe_handle_whatsapp_operational(
         )
 
         decision = is_invoked(text, config)
+        reply_enabled = is_whatsapp_operational_reply_enabled()
 
-        # Silent (non-invoked) OR reply disabled → ingest in background and CLAIM
-        # the message so the empathic pipeline does not answer the operational group.
-        if not decision.respond or not is_whatsapp_operational_reply_enabled():
+        # Normal (non-invocation) message → silent ingest, claim (suppress empathic).
+        if not decision.respond:
             asyncio.create_task(_safe_update(update, message))
-            log("OPERATIONAL_WHATSAPP_SILENT", chat_id=group_jid, project_id=project_id,
-                invoked=decision.respond, reply_enabled=is_whatsapp_operational_reply_enabled())
+            log("OPERATIONAL_WHATSAPP_SILENT", chat_id=group_jid, project_id=project_id)
             return True  # operational-dominant: no parallel empathic reply
 
-        # Invoked + reply enabled → rebuild before reply (deterministic ordering).
+        # Invocation. Pure queries are NEVER stored as items (even when reply is
+        # disabled); update-bearing invocations are ingested.
         intent = classify_query_intent(decision.query)
-        log("OPERATIONAL_WHATSAPP_REBUILD_BEFORE_REPLY", project_id=project_id, mode=decision.mode)
-        if is_pure_operational_invocation(decision.query):
-            await flush_project(project_id)
+        pure = is_pure_operational_invocation(decision.query)
+        if pure:
             log("OPERATIONAL_WHATSAPP_INVOCATION_NOT_INGESTED",
                 project_id=project_id, intent=intent, reason="pure_invocation")
-        else:
+        elif reply_enabled:
             await _safe_update(update, message)
             log("OPERATIONAL_WHATSAPP_INVOCATION_INGESTED",
                 project_id=project_id, intent=intent, reason="contains_operational_update")
+        else:
+            # No live reply, but still capture the update silently.
+            asyncio.create_task(_safe_update(update, message))
+            log("OPERATIONAL_WHATSAPP_INVOCATION_INGESTED",
+                project_id=project_id, intent=intent, reason="contains_operational_update")
 
+        if not reply_enabled:
+            return True  # claimed, no live reply (reply flag OFF)
+
+        # Reply enabled → rebuild before reply (deterministic ordering), send to GROUP JID.
+        log("OPERATIONAL_WHATSAPP_REBUILD_BEFORE_REPLY", project_id=project_id, mode=decision.mode)
+        if pure:
+            await flush_project(project_id)
         reply = await build_operational_reply(
             project_id, decision.query,
             report_base_url=_public_base_url(), invoked_by=first_name or "",
         )
         log("OPERATIONAL_WHATSAPP_REPLY_AFTER_REBUILD", project_id=project_id)
-        # Reply goes to the GROUP JID, never the sender JID.
-        await send_message(group_jid, render_whatsapp_reply(reply))
+        await send_message(group_jid, render_whatsapp_reply(reply))  # GROUP JID, never sender
         log("OPERATIONAL_WHATSAPP_REPLY", chat_id=group_jid, project_id=project_id,
             intent=reply.intent, report_id=reply.report_id)
         return True
