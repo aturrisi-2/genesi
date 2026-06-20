@@ -69,6 +69,33 @@ Flow to validate:
    with the compact table + synthesis + report link, using the imported history.
 4. Open the report link (view), download, print.
 
-Do **not** implement the Telegram/WhatsApp integration in this cycle — this is a
-plan only. Default stays silent; no proactive messages; no LLM decides when to
-speak.
+Do **not** implement the Telegram/WhatsApp integration as a new bot — Genesi is
+already a Telegram bot. See §3.
+
+## 3. Telegram wiring (FASE 9b) — opt-in, non-destructive
+
+The existing Telegram bot (`core/telegram_bot.py`, webhook
+`/api/telegram/webhook` → `handle_update`) is preserved. The operational layer is
+an **opt-in bridge** (`core/operational_memory/telegram_operational.py`) wired by
+a single guarded call in `handle_update` right after the group message is saved.
+
+Flow when enabled and the chat is mapped:
+`message received → silent operational ingest (background) → invocation router →
+operational reply only if explicitly invoked → sendMessage only if reply present`.
+Default stays **silent**; no LLM decides when to speak.
+
+Flags (env):
+- `OPERATIONAL_MEMORY_TELEGRAM_ENABLED` (default **false**) — master switch. When
+  false the hook is a no-op and the existing bot behaves exactly as before.
+- `TELEGRAM_OPERATIONAL_REPLY_ENABLED` (default **true** once enabled) — set false
+  for pure silent-ingest (no operational replies; existing pipeline answers).
+- `PUBLIC_BASE_URL` — used to build absolute report links in the chat reply.
+
+Mapping `telegram_chat_id → project_id` (configurable, never hardcoded):
+- env `TELEGRAM_CHAT_PROJECT_MAP` = JSON, e.g. `{"-1001234567890":"my-project"}`
+- or `config/telegram_operational.json` `{ "chat_project_map": { "...": "..." } }`
+
+Only chats present in the map are touched by the operational layer; all others
+keep the existing behaviour untouched. The **real history stays imported in
+Genesi's operational memory** (as a dataset/project); the Telegram group is only
+an invocation surface — history is never copied into the chat.

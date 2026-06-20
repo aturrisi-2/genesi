@@ -1,0 +1,150 @@
+from __future__ import annotations
+
+import asyncio
+import json
+
+import pytest
+
+from core.operational_memory.models import (
+    Issue,
+    LifecycleHistoryEntry,
+    LifecycleState,
+    OperationalState,
+    OperationalTask,
+)
+
+
+CHAT_ID = -1001234567890
+PROJECT = "tg-proj-generic"
+
+
+def _lc(category, status):
+    return LifecycleState(category=category, current_status=status, evidence_event_ids=["ev1"],
+                          lifecycle_history=[LifecycleHistoryEntry(status=status, changed_at="2026-06-12T08:00:00+00:00")])
+
+
+def _seed():
+    return OperationalState(
+        project_id=PROJECT,
+        tasks=[OperationalTask(id="t1", text="ordinare materiale", source="m", source_event_id="e1", lifecycle=_lc("task", "open"))],
+        issues=[Issue(id="i1", text="consegna in ritardo", source="m", source_event_id="e2", lifecycle=_lc("issue", "open"))],
+    )
+
+
+@pytest.fixture
+def env(monkeypatch, tmp_path):
+    from core.operational_memory import state_store, report_store
+
+    monkeypatch.setattr(state_store, "_BASE_DIR", tmp_path / "state")
+    monkeypatch.setattr(report_store, "_BASE_DIR", tmp_path / "reports")
+    asyncio.run(state_store.save_state(PROJECT, _seed()))
+    monkeypatch.setenv("OPERATIONAL_MEMORY_TELEGRAM_ENABLED", "true")
+    monkeypatch.setenv("TELEGRAM_OPERATIONAL_REPLY_ENABLED", "true")
+    monkeypatch.setenv("TELEGRAM_CHAT_PROJECT_MAP", json.dumps({str(CHAT_ID): PROJECT}))
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://genesi.example.com/")
+    return monkeypatch
+
+
+def _spies():
+    sent = []
+    ingested = []
+
+    async def send(chat_id, text, *a, **k):
+        sent.append((chat_id, text))
+
+    async def updater(message):
+        ingested.append(message.message_id)
+
+    return sent, ingested, send, updater
+
+
+@pytest.mark.asyncio
+async def test_disabled_is_noop(monkeypatch):
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    monkeypatch.setenv("OPERATIONAL_MEMORY_TELEGRAM_ENABLED", "false")
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_operational(CHAT_ID, 1, "Ann", "Genesi, fammi il punto", send, updater=updater)
+    await asyncio.sleep(0)
+    assert handled is False and sent == [] and ingested == []
+
+
+@pytest.mark.asyncio
+async def test_unmapped_chat_is_noop(env):
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_operational(-999, 1, "Ann", "Genesi, fammi il punto", send, updater=updater)
+    await asyncio.sleep(0)
+    assert handled is False and sent == [] and ingested == []
+
+
+@pytest.mark.asyncio
+async def test_normal_message_silent_but_ingested(env):
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_operational(CHAT_ID, 1, "Ann", "ragazzi domani portiamo i pezzi", send,
+                                             message_id="m1", updater=updater)
+    await asyncio.sleep(0)
+    assert handled is False        # not invoked → existing pipeline proceeds
+    assert sent == []              # no operational reply
+    assert ingested == ["m1"]      # but memory was updated
+
+
+@pytest.mark.asyncio
+async def test_invocation_sends_reply_with_report_link(env):
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_operational(CHAT_ID, 1, "Ann", "Genesi, fammi il punto", send,
+                                             message_id="m2", updater=updater)
+    await asyncio.sleep(0)
+    assert handled is True
+    assert ingested == ["m2"]                     # ingested even when replying
+    assert len(sent) == 1
+    chat_id, text = sent[0]
+    assert chat_id == CHAT_ID
+    assert "Quadro operativo" in text
+    assert "https://genesi.example.com/api/operational/projects/" in text  # PUBLIC_BASE_URL used
+    assert "/view" in text
+
+
+@pytest.mark.asyncio
+async def test_specific_query_excludes_resolved(env, monkeypatch):
+    from core.operational_memory import state_store
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    # add a resolved issue; it must not be shown as active
+    state = _seed()
+    state.issues.append(Issue(id="i2", text="accesso non funzionante", source="m", source_event_id="e3", lifecycle=_lc("issue", "resolved")))
+    await state_store.save_state(PROJECT, state)
+    sent, ingested, send, updater = _spies()
+    await maybe_handle_operational(CHAT_ID, 1, "Ann", "Genesi, quali problemi sono aperti?", send, message_id="m3", updater=updater)
+    await asyncio.sleep(0)
+    text = sent[0][1]
+    assert "consegna in ritardo" in text
+    assert "accesso non funzionante" not in text
+
+
+@pytest.mark.asyncio
+async def test_reply_disabled_falls_through(env, monkeypatch):
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    monkeypatch.setenv("TELEGRAM_OPERATIONAL_REPLY_ENABLED", "false")
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_operational(CHAT_ID, 1, "Ann", "Genesi, fammi il punto", send, message_id="m4", updater=updater)
+    await asyncio.sleep(0)
+    assert handled is False          # let existing pipeline answer
+    assert sent == []
+    assert ingested == ["m4"]        # still ingested
+
+
+def test_mapping_configurable_via_env(monkeypatch):
+    from core.operational_memory.telegram_operational import project_for_chat
+    monkeypatch.setenv("TELEGRAM_CHAT_PROJECT_MAP", json.dumps({"-100": "alpha", "-200": "beta"}))
+    assert project_for_chat(-100) == "alpha"
+    assert project_for_chat(-200) == "beta"
+    assert project_for_chat(-300) is None
+
+
+def test_no_hardcoded_domain_tokens():
+    import re
+    import core.operational_memory.telegram_operational as mod
+    body = open(mod.__file__, "r", encoding="utf-8").read().upper()
+    for token in ["TAB CEFLA", "T6", "T7", "UTA", "EWC05", "SS01", "B02", "CANTIERE"]:
+        assert not re.search(rf"\b{re.escape(token)}\b", body), f"hardcoded token: {token}"
