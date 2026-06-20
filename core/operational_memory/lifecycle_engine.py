@@ -74,6 +74,10 @@ _CONDITIONAL_DECISION_RE = re.compile(
     r"\bse\b.+?\b(allora|altrimenti|in\s+caso\s+contrario|senn[oò]|"
     r"si\s+\w+|rimand\w*|ripianific\w*|rinvi\w*|spost\w*|procede\w*|procediamo)\b"
     r"|\bsolo\s+se\b|\ba\s+meno\s+che\b"
+    # standalone continuation of a prior condition ("in caso contrario si rinvia",
+    # "altrimenti si ripianifica") — still an operational decision.
+    r"|\b(in\s+caso\s+contrario|altrimenti)\b.+?\b(si\s+\w+|rimand\w*|ripianific\w*|"
+    r"rinvi\w*|spost\w*|procede\w*|reschedul\w*|postpone\w*)\b"
     r"|\bif\b.+?\b(then|otherwise|else|reschedul\w*|postpone\w*|move\w+\s+to)\b"
     r"|\bonly\s+if\b|\bunless\b",
     re.IGNORECASE,

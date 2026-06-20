@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from core.log import log
 from core.operational_memory.domain_classifier import classify_event, should_extract_operationally
+from core.operational_memory.lifecycle_engine import is_conditional_decision
 from core.operational_memory.event_store import (
     append_event,
     list_events,
@@ -159,7 +160,22 @@ async def process_pending_events(
                 events = [event if candidate.event_id == event.event_id else candidate for candidate in events]
                 await save_events(project_id, events)
 
-            if not should_extract_operationally(event):
+            # A conditional operational decision ("se X non è pronto entro Y, si
+            # rimanda a Z") can score low on domain classification (e.g. only a
+            # time token) and would otherwise be skipped. Route it to extraction
+            # regardless of domain so the decision is never lost. Generic IT+EN.
+            gate_text = (event.content or event.extracted_text or "").strip()
+            conditional_decision = is_conditional_decision(gate_text)
+            if conditional_decision:
+                log(
+                    "OPERATIONAL_CONDITIONAL_DECISION_CANDIDATE",
+                    project_id=project_id,
+                    event_id=event.event_id,
+                    matched=True,
+                    text_preview=gate_text[:60],
+                )
+
+            if not should_extract_operationally(event) and not conditional_decision:
                 await mark_event_status(project_id, event.event_id, "processed")
                 processed += 1
                 continue

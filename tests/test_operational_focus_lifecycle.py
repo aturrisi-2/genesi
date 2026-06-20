@@ -292,6 +292,125 @@ def test_unknown_does_not_return_card():
     assert "📌 Quadro operativo" not in reply.reply_markdown
 
 
+# --------------------------------------------------------------------------- #
+# Conditional decisions must survive the live extraction path
+# --------------------------------------------------------------------------- #
+
+import json as _json
+from unittest.mock import AsyncMock
+
+from core.operational_memory.extractor import extract_state
+from core.operational_memory.models import OperationalEvent
+
+_EMPTY_LLM = _json.dumps(
+    {"decisions": [], "tasks": [], "issues": [], "information": [], "open_questions": []}
+)
+
+
+def _mock_llm(monkeypatch):
+    # LLM returns nothing → only the deterministic safety-net can create the decision.
+    monkeypatch.setattr(
+        "core.operational_memory.extractor.llm_service._call_model",
+        AsyncMock(return_value=_EMPTY_LLM),
+    )
+
+
+def _evt(content: str, project: str = "p") -> OperationalEvent:
+    return OperationalEvent(event_id="ev1", project_id=project, source="telegram", sender="Ann", content=content)
+
+
+@pytest.mark.asyncio
+async def test_live_phrase_conditional_decision_is_extracted(monkeypatch):
+    _mock_llm(monkeypatch)
+    phrase = "Se il corridoio non è libero entro le 10:00, si rimanda tutto a lunedì."
+    state = await extract_state([phrase], source_event=_evt(phrase))
+    assert len(state.decisions) == 1
+    assert len(active_decisions(state)) == 1
+
+
+@pytest.mark.asyncio
+async def test_generic_conditional_decision_with_only_if(monkeypatch):
+    _mock_llm(monkeypatch)
+    phrase = "Si procede venerdì solo se il materiale è confermato."
+    assert is_conditional_decision(phrase)
+    state = await extract_state([phrase], source_event=_evt(phrase))
+    assert len(active_decisions(state)) == 1
+
+
+@pytest.mark.asyncio
+async def test_generic_conditional_decision_in_case_otherwise(monkeypatch):
+    _mock_llm(monkeypatch)
+    phrase = "In caso contrario si ripianifica a lunedì."
+    assert is_conditional_decision(phrase)
+    state = await extract_state([phrase], source_event=_evt(phrase))
+    # Stable behaviour: it becomes an active decision, never a generic task.
+    assert len(active_decisions(state)) == 1
+    assert state.tasks == []
+
+
+@pytest.mark.asyncio
+async def test_english_conditional_decision_is_extracted(monkeypatch):
+    _mock_llm(monkeypatch)
+    phrase = "If the access is not clear by 10:00, reschedule to Monday."
+    assert is_conditional_decision(phrase)
+    state = await extract_state([phrase], source_event=_evt(phrase))
+    assert len(active_decisions(state)) == 1
+
+
+@pytest.mark.asyncio
+async def test_active_decisions_query_returns_conditional_decision(monkeypatch):
+    _mock_llm(monkeypatch)
+    phrase = "Se non arriva il materiale entro venerdì, si rimanda a lunedì."
+    state = await extract_state([phrase], source_event=_evt(phrase))
+    items = active_decisions(state)
+    assert len(items) == 1
+    assert items[0].status in {"confirmed", "active", "proposed"}
+
+
+@pytest.mark.asyncio
+async def test_conditional_decision_not_created_from_question(monkeypatch):
+    _mock_llm(monkeypatch)
+    phrase = "Se non è libero entro le 10:00 cosa facciamo?"
+    assert is_conditional_decision(phrase) is False
+    state = await extract_state([phrase], source_event=_evt(phrase))
+    assert len(active_decisions(state)) == 0
+
+
+@pytest.mark.asyncio
+async def test_conditional_decision_extracted_via_pending_pipeline(monkeypatch, tmp_path):
+    # End-to-end live path: event stored → domain gate (low score) → routed to
+    # extraction because it is a conditional decision → safety-net creates it.
+    from core.operational_memory import event_store, state_store
+    from core.operational_memory.watcher_engine import ingest_event, process_pending_events
+
+    monkeypatch.setattr(state_store, "_BASE_DIR", tmp_path / "state")
+    monkeypatch.setattr(event_store, "_BASE_DIR", tmp_path / "events")
+    _mock_llm(monkeypatch)
+    ev = OperationalEvent(
+        event_id="e1", project_id="proj", source="telegram", sender="Ann",
+        content="Se l'area non è libera entro le 10:00, si rimanda tutto a lunedì.",
+    )
+    await ingest_event(ev)
+    await process_pending_events("proj", rebuild_threads=False)
+    state = await state_store.load_state("proj")
+    assert len(active_decisions(state)) == 1
+
+
+def test_no_domain_hardcoding_for_conditional_decision_extractor():
+    import re
+
+    import core.operational_memory.extractor as m_ext
+    import core.operational_memory.lifecycle_engine as m_life
+    import core.operational_memory.query_engine as m_query
+    import core.operational_memory.watcher_engine as m_watch
+
+    forbidden = ["corridoio", "quadro elettrico", "pane", "test tab", "tab cefla", "cantiere", "magnetotermici"]
+    for mod in (m_ext, m_life, m_query, m_watch):
+        body = open(mod.__file__, "r", encoding="utf-8").read().lower()
+        for token in forbidden:
+            assert not re.search(rf"\b{re.escape(token)}\b", body), f"hardcoded '{token}' in {mod.__name__}"
+
+
 def test_no_domain_hardcoding():
     import re
 

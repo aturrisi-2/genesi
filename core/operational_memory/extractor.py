@@ -201,6 +201,7 @@ def _augment_conditional_decisions(
     state: OperationalState,
     messages: list[str],
     source_meta: dict[str, Any] | None,
+    project_id: str = "",
 ) -> None:
     """Deterministic safety net: ensure conditional operational decisions present
     in the raw messages are captured even if the LLM missed them. Generic and
@@ -209,21 +210,29 @@ def _augment_conditional_decisions(
     exists. Mutates `state.decisions` in place."""
     existing_tokens = [_aug_tokens(d.text) for d in state.decisions]
     for message in messages:
-        text = message.strip()
-        if not text or text.endswith("?"):
+        # Drop a leading "[timestamp] sender:" prefix added by the live event
+        # formatter, so the decision text stays clean. No-op for bare messages.
+        text = re.sub(r"^\[[^\]]*\]\s*[^:]{0,40}:\s*", "", message).strip()
+        if not text or not is_conditional_decision(text):
             continue
-        if is_non_operational_note(text) or not is_conditional_decision(text):
+        if text.endswith("?"):
+            log("OPERATIONAL_CONDITIONAL_DECISION_SKIPPED", project_id=project_id, reason="question")
+            continue
+        if is_non_operational_note(text):
+            log("OPERATIONAL_CONDITIONAL_DECISION_SKIPPED", project_id=project_id, reason="non_operational")
             continue
         tokens = _aug_tokens(text)
         if not tokens:
             continue
         # Skip if a decision with strong overlap already exists (LLM already got it).
         if any(len(tokens & ex) >= max(2, len(tokens) // 2) for ex in existing_tokens):
+            log("OPERATIONAL_CONDITIONAL_DECISION_SKIPPED", project_id=project_id, reason="duplicate")
             continue
+        decision_id = _stable_id("dec", text, text[:120])
         data: dict[str, Any] = {
             "text": text,
             "source": text[:120],
-            "id": _stable_id("dec", text, text[:120]),
+            "id": decision_id,
             "confidence": "medium",
             "intent": "decisione condizionale",
         }
@@ -232,6 +241,12 @@ def _augment_conditional_decisions(
                 data.setdefault(key, value)
         state.decisions.append(Decision(**data))
         existing_tokens.append(tokens)
+        log(
+            "OPERATIONAL_CONDITIONAL_DECISION_CREATED",
+            project_id=project_id,
+            decision_id=decision_id,
+            source="safety_net",
+        )
 
 
 async def extract_state(
@@ -261,7 +276,8 @@ async def extract_state(
         raise OperationalMemoryExtractionError("Extractor returned an empty response")
 
     state = _parse_state(raw, source_meta)
-    _augment_conditional_decisions(state, clean_messages, source_meta)
+    project_id = source_event.project_id if source_event is not None else ""
+    _augment_conditional_decisions(state, clean_messages, source_meta, project_id=project_id)
     log(
         "OPERATIONAL_MEMORY_EXTRACT_OK",
         decisions=len(state.decisions),
