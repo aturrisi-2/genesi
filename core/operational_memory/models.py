@@ -416,6 +416,62 @@ class OperationalBriefing(BaseModel):
     markdown: str = ""
 
 
+class InvocationConfig(BaseModel):
+    """Per-project rules that decide when Genesi is allowed to answer. Generic:
+    names/commands are configurable, never hardcoded to a chat or platform."""
+
+    bot_names: list[str] = Field(default_factory=lambda: ["genesi"])
+    command_prefixes: list[str] = Field(default_factory=lambda: ["/genesi", "!genesi"])
+    respond_in_dm: bool = True
+    authorized_triggers: list[str] = Field(default_factory=list)
+
+
+class InvocationDecision(BaseModel):
+    respond: bool = False
+    mode: str = "silent"  # silent | name | tag | command | dm | trigger
+    query: str = ""
+    reason: str = ""
+
+
+class ChatAttachment(BaseModel):
+    path: Optional[str] = None
+    type: Optional[str] = None  # image | pdf | document
+    extracted_text: Optional[str] = None
+    metadata: dict = Field(default_factory=dict)
+
+
+class ChatMessage(BaseModel):
+    project_id: str
+    message_id: str
+    text: str = ""
+    sender: str = ""
+    chat_id: str = ""
+    source: str = "chat"
+    timestamp: Optional[str] = None
+    is_dm: bool = False
+    attachments: list[ChatAttachment] = Field(default_factory=list)
+
+
+class ChatReply(BaseModel):
+    project_id: str
+    invoked_by: str = ""
+    intent: str = ""
+    table_markdown: str = ""
+    synthesis: str = ""
+    actions: list[str] = Field(default_factory=list)
+    evidence_event_ids: list[str] = Field(default_factory=list)
+    report_id: str = ""
+    report_url: str = ""
+    reply_markdown: str = ""
+
+
+class StoredReport(BaseModel):
+    report_id: str
+    project_id: str
+    generated_at: str
+    markdown: str = ""
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 

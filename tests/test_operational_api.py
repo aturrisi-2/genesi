@@ -195,3 +195,68 @@ async def test_resolved_not_reported_as_active_via_items(app):
         r = await c.get(_url("/items"), params={"category": "issue", "status": "open"})
     ids = {it["item_id"] for it in r.json()}
     assert "i2" not in ids and "i1" in ids
+
+
+# --- FASE 7: chat presence + report storage endpoints --- #
+
+
+@pytest.fixture
+def app_with_reports(app, monkeypatch, tmp_path):
+    from core.operational_memory import report_store
+    monkeypatch.setattr(report_store, "_BASE_DIR", tmp_path / "reports")
+    return app
+
+
+@pytest.mark.asyncio
+async def test_chat_endpoint_silent_for_normal_message(app_with_reports):
+    # No-op updater so the endpoint does not run the heavy pipeline/LLM.
+    import core.operational_memory.chat_presence as cp
+
+    async def noop(message):
+        return None
+
+    orig = cp.silent_update
+    cp.silent_update = noop
+    try:
+        async with _client(app_with_reports) as c:
+            body = {"message": {"project_id": PROJECT, "message_id": "cm1", "text": "ragazzi a che ora?"}}
+            r = await c.post(_url("/chat"), json=body)
+    finally:
+        cp.silent_update = orig
+    assert r.status_code == 200
+    assert r.json()["silent"] is True and r.json()["reply"] is None
+
+
+@pytest.mark.asyncio
+async def test_chat_endpoint_reply_on_invocation(app_with_reports):
+    import core.operational_memory.chat_presence as cp
+
+    async def noop(message):
+        return None
+
+    orig = cp.silent_update
+    cp.silent_update = noop
+    try:
+        async with _client(app_with_reports) as c:
+            body = {"message": {"project_id": PROJECT, "message_id": "cm2", "text": "Genesi, fammi il punto"}}
+            r = await c.post(_url("/chat"), json=body)
+    finally:
+        cp.silent_update = orig
+    assert r.status_code == 200
+    payload = r.json()
+    assert payload["silent"] is False
+    assert payload["reply"]["report_url"] and "Quadro operativo" in payload["reply"]["reply_markdown"]
+
+
+@pytest.mark.asyncio
+async def test_stored_report_get_and_download(app_with_reports):
+    from core.operational_memory.report_store import save_report
+
+    rep = save_report(PROJECT, "# test report\n\ncontenuto")
+    async with _client(app_with_reports) as c:
+        r1 = await c.get(_url(f"/reports/{rep.report_id}"))
+        r2 = await c.get(_url(f"/reports/{rep.report_id}/download"))
+        r3 = await c.get(_url("/reports/does-not-exist"))
+    assert r1.status_code == 200 and r1.json()["report_id"] == rep.report_id
+    assert r2.status_code == 200 and "attachment" in r2.headers.get("content-disposition", "")
+    assert r3.status_code == 404

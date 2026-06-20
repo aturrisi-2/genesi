@@ -15,8 +15,12 @@ from core.operational_memory.extractor import (
     extract_state,
 )
 from core.operational_memory.daily_report import build_daily_report
+from core.operational_memory.chat_presence import handle_incoming
 from core.operational_memory.models import (
+    ChatMessage,
+    ChatReply,
     DailyReport,
+    InvocationConfig,
     OperationalBriefing,
     OperationalDigest,
     OperationalEvent,
@@ -28,7 +32,9 @@ from core.operational_memory.models import (
     QueryResult,
     ReportMode,
     SnapshotDelta,
+    StoredReport,
 )
+from core.operational_memory.report_store import list_reports, load_report
 from core.operational_memory.query_engine import (
     answer_query,
     build_briefing,
@@ -311,3 +317,58 @@ async def operational_ingest_test_endpoint(
 ) -> OperationalEventsBatchResponse:
     result = await ingest_events_batch(project_id, request.events)
     return OperationalEventsBatchResponse(**result)
+
+
+# --------------------------------------------------------------------------- #
+# FASE 7 — Silent Chat Presence + Explicit Invocation + Report Storage
+# --------------------------------------------------------------------------- #
+
+
+class ChatIncomingRequest(BaseModel):
+    message: ChatMessage
+    config: InvocationConfig | None = None
+
+
+class ChatPresenceResponse(BaseModel):
+    silent: bool
+    reply: ChatReply | None = None
+
+
+@router.post(f"{_API}/chat", response_model=ChatPresenceResponse)
+async def operational_chat_endpoint(
+    project_id: str,
+    request: ChatIncomingRequest,
+) -> ChatPresenceResponse:
+    message = request.message
+    if message.project_id and message.project_id != project_id:
+        raise HTTPException(status_code=400, detail="message project_id must match path project_id")
+    message.project_id = project_id
+    if not message.message_id.strip():
+        raise HTTPException(status_code=400, detail="message_id is required")
+    reply = await handle_incoming(message, config=request.config)
+    return ChatPresenceResponse(silent=reply is None, reply=reply)
+
+
+@router.get(f"{_API}/reports", response_model=list[StoredReport])
+async def operational_reports_endpoint(project_id: str) -> list[StoredReport]:
+    return list_reports(project_id)
+
+
+@router.get(f"{_API}/reports/{{report_id}}", response_model=StoredReport)
+async def operational_report_get_endpoint(project_id: str, report_id: str) -> StoredReport:
+    report = load_report(project_id, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="report not found")
+    return report
+
+
+@router.get(f"{_API}/reports/{{report_id}}/download")
+async def operational_report_stored_download_endpoint(project_id: str, report_id: str) -> Response:
+    report = load_report(project_id, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="report not found")
+    return Response(
+        content=report.markdown,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{report_id}.md"'},
+    )
