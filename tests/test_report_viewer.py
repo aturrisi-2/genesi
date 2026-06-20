@@ -38,7 +38,7 @@ _SAMPLE_MD = """# Briefing operativo — viewer-proj
 
 def test_markdown_to_html_constructs():
     html = markdown_to_html(_SAMPLE_MD)
-    assert "<h1>" in html and "<h2>" in html and "<h3>" in html
+    assert "<h1>" in html and "<h2" in html and "<h3" in html
     assert "<table>" in html and "<th>" in html and "<td>" in html
     assert "<ul>" in html and "<li>" in html
     assert "<strong>Azione consigliata:</strong>" in html
@@ -60,6 +60,24 @@ def test_render_report_page_has_buttons_and_css():
     assert "@media print" in page and "no-print" in page
     assert "viewport" in page  # mobile-friendly
     assert PROJECT in page and "report_x" in page
+
+
+def test_headings_have_focus_ids():
+    # Section headings get stable ids so Telegram links can deep-link into them.
+    html = markdown_to_html(_SAMPLE_MD)
+    assert 'id="tasks-open"' in html       # "Task aperti (2) — ATTIVO"
+    assert 'id="overview"' in html         # "Quadro sintetico"
+    assert 'id="synthesis"' in html        # "Sintesi"
+
+
+def test_focus_support_present_in_page():
+    report = StoredReport(report_id="report_x", project_id=PROJECT, generated_at="2026-06-20T10:00:00+00:00", markdown=_SAMPLE_MD)
+    page = render_report_page(report, "/dl/report_x")
+    # JS reads ?focus=, highlights and scrolls; CSS class defined; print-safe.
+    assert "URLSearchParams" in page and 'get("focus")' in page
+    assert "scrollIntoView" in page
+    assert ".focused-section" in page
+    assert "focused-section" in page  # class applied via classList.add
 
 
 # --------------------------------------------------------------------------- #

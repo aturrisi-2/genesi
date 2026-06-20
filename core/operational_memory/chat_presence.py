@@ -96,6 +96,54 @@ def _mobile_card(briefing: OperationalBriefing) -> str:
     return "\n".join(lines)
 
 
+def _synthesis_lines(briefing: OperationalBriefing) -> list[str]:
+    """Structured bullet lines for the synthesis section (mobile-readable)."""
+    by_key = {r.key: r for r in briefing.rows}
+
+    ot = (by_key.get("open_tasks") or _zero()).count
+    oi = (by_key.get("open_issues") or _zero()).count
+    ad = (by_key.get("active_decisions") or _zero()).count
+    ri_c = (by_key.get("reopened_issues") or _zero()).count
+    att_c = (by_key.get("attention") or _zero()).count
+    ch_c = (by_key.get("changes") or _zero()).count
+    res_c = (by_key.get("resolved_issues") or _zero()).count
+    sup_c = (by_key.get("superseded_items") or _zero()).count
+
+    risk_parts: list[str] = []
+    if ri_c:
+        risk_parts.append(f"{ri_c} problemi riaperti")
+    if oi:
+        risk_parts.append(f"{oi} problemi aperti")
+    if att_c:
+        risk_parts.append(f"{att_c} elementi da attenzionare")
+
+    excl_parts: list[str] = []
+    if res_c:
+        excl_parts.append(f"{res_c} problemi risolti")
+    if sup_c:
+        excl_parts.append(f"{sup_c} elementi superati")
+
+    action = briefing.recommended_action
+    if action and action[0].isupper():
+        action = action[0].lower() + action[1:]
+
+    return [
+        f"• Stato: {ot} task aperti, {oi} problemi aperti, {ad} decisioni attive",
+        f"• Attenzione: {', '.join(risk_parts) if risk_parts else 'nessun rischio operativo evidente'}",
+        f"• Cambiamenti: {ch_c} dal precedente snapshot",
+        f"• Esclusioni: {', '.join(excl_parts) + ' esclusi' if excl_parts else 'nessun elemento da escludere'}",
+        f"• Azione consigliata: {action}",
+    ]
+
+
+class _ZeroRow:
+    count = 0
+
+
+def _zero() -> _ZeroRow:
+    return _ZeroRow()
+
+
 def build_chat_reply(
     state: OperationalState,
     query: str,
@@ -130,8 +178,9 @@ def build_chat_reply(
     parts.append("")
     parts.append(_mobile_card(briefing))
     parts.append("")
-    parts.append(f"Sintesi: {briefing.synthesis}")
-    parts.append(f"Azione consigliata: {briefing.recommended_action}")
+    parts.append("🧭 Sintesi operativa")
+    parts.append("")
+    parts.extend(_synthesis_lines(briefing))
     # report_url is NOT included in the text — the Telegram bridge sends it as
     # an inline button so the URL does not clutter the message body.
     reply_markdown = "\n".join(parts).strip()

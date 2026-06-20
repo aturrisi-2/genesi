@@ -13,15 +13,31 @@ Mapping telegram_chat_id → project_id is configurable, never hardcoded."""
 from __future__ import annotations
 
 import asyncio
+import html as _html
 import json
 import os
+import re
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
 from core.log import log
 from core.operational_memory.chat_presence import build_operational_reply, silent_update
 from core.operational_memory.invocation_router import is_invoked
-from core.operational_memory.models import ChatMessage, InvocationConfig
+from core.operational_memory.models import ChatMessage, ChatReply, InvocationConfig
+
+
+# Label → focus section ID (generic, no domain/profession hardcoding).
+_LABEL_FOCUS: dict[str, str] = {
+    "Task aperti": "tasks-open",
+    "Problemi aperti": "issues-open",
+    "Problemi riaperti": "issues-reopened",
+    "Decisioni attive": "decisions-active",
+    "Domande aperte": "questions-open",
+    "Cambiamenti dallo snapshot precedente": "snapshot-changes",
+    "Priorita/Attenzione": "attention",
+}
+
+_CARD_LINE_RE = re.compile(r"^• (.+?): (\d+)$")
 
 
 _CONFIG_FILE = Path("config/telegram_operational.json")
@@ -78,6 +94,35 @@ SendMessage = Callable[..., Awaitable[None]]
 Updater = Callable[[ChatMessage], Awaitable[None]]
 
 
+def _focus_url(base_url: str, section: str) -> str:
+    sep = "&" if "?" in base_url else "?"
+    return f"{base_url}{sep}focus={section}"
+
+
+def _telegram_html(reply: ChatReply) -> str:
+    """Convert plain-text reply_markdown to Telegram-safe HTML with focus links."""
+    lines_out: list[str] = []
+    for line in reply.reply_markdown.splitlines():
+        stripped = line.strip()
+        # Section headings → bold
+        if stripped.startswith("📌 ") or stripped.startswith("🧭 "):
+            emoji, rest = stripped[:2], stripped[2:].strip()
+            lines_out.append(f"{emoji} <b>{_html.escape(rest)}</b>")
+            continue
+        # Card bullet lines → clickable links if report_url available
+        m = _CARD_LINE_RE.match(stripped)
+        if m and reply.report_url:
+            label, count = m.group(1), m.group(2)
+            focus_id = _LABEL_FOCUS.get(label)
+            if focus_id:
+                url = _html.escape(_focus_url(reply.report_url, focus_id))
+                lines_out.append(f'• <a href="{url}">{_html.escape(label)}: {count}</a>')
+                continue
+        # Everything else → plain escaped
+        lines_out.append(_html.escape(stripped) if stripped else "")
+    return "\n".join(lines_out)
+
+
 async def maybe_handle_operational(
     chat_id,
     from_id,
@@ -130,9 +175,10 @@ async def maybe_handle_operational(
         reply_markup = None
         if reply.report_url:
             reply_markup = {
-                "inline_keyboard": [[{"text": "Apri report", "url": reply.report_url}]]
+                "inline_keyboard": [[{"text": "Apri report completo", "url": reply.report_url}]]
             }
-        await send_message(chat_id, reply.reply_markdown, reply_markup=reply_markup)
+        text_html = _telegram_html(reply)
+        await send_message(chat_id, text_html, reply_markup=reply_markup, parse_mode="HTML")
         log("OPERATIONAL_TELEGRAM_REPLY", chat_id=chat_id, project_id=project_id,
             intent=reply.intent, report_id=reply.report_id)
         return True

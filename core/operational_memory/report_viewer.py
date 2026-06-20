@@ -18,10 +18,38 @@ from core.operational_memory.models import StoredReport
 
 _BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
 
+# Heading text prefix → HTML id for deep-linking from Telegram.
+_HEADING_FOCUS_MAP: dict[str, str] = {
+    "Task aperti": "tasks-open",
+    "Task completati": "tasks-completed",
+    "Problemi aperti": "issues-open",
+    "Problemi risolti": "issues-resolved",
+    "Problemi riaperti": "issues-reopened",
+    "Decisioni attive": "decisions-active",
+    "Decisioni superate": "decisions-superseded",
+    "Domande aperte": "questions-open",
+    "Domande risposte": "questions-answered",
+    "Elementi stale": "stale",
+    "Elementi superati": "superseded",
+    "Cambiamenti": "snapshot-changes",
+    "Priorita": "attention",
+    "Quadro sintetico": "overview",
+    "Sintesi": "synthesis",
+    "Dettaglio": "detail",
+}
+
 
 def _inline(text: str) -> str:
     escaped = html.escape(text)
     return _BOLD_RE.sub(r"<strong>\1</strong>", escaped)
+
+
+def _heading_id(text: str) -> str:
+    """Map a heading's text to a focus ID using the prefix table."""
+    for prefix, focus_id in _HEADING_FOCUS_MAP.items():
+        if text.startswith(prefix):
+            return focus_id
+    return ""
 
 
 def _is_table_sep(line: str) -> bool:
@@ -75,7 +103,10 @@ def markdown_to_html(markdown: str) -> str:
         if heading:
             close_list()
             level = len(heading.group(1))
-            out.append(f"<h{level}>{_inline(heading.group(2))}</h{level}>")
+            h_text = heading.group(2)
+            h_id = _heading_id(h_text)
+            id_attr = f' id="{h_id}"' if h_id else ""
+            out.append(f"<h{level}{id_attr}>{_inline(h_text)}</h{level}>")
             i += 1
             continue
 
@@ -116,12 +147,33 @@ ul { padding-left: 1.2rem; } li { margin: 0.15rem 0; }
   font: inherit; padding: 0.5rem 0.9rem; border: 1px solid #888; border-radius: 6px;
   background: #f7f7f7; color: #1a1a1a; text-decoration: none; cursor: pointer;
 }
+.focused-section {
+  outline: 2px solid rgba(59, 130, 246, 0.5); border-radius: 8px;
+  background: rgba(59, 130, 246, 0.06); padding: 0.4rem; margin: -0.4rem;
+}
+@media (prefers-color-scheme: dark) {
+  .focused-section { outline-color: rgba(96, 165, 250, 0.5); background: rgba(96, 165, 250, 0.1); }
+}
 @media print {
   .no-print { display: none !important; }
+  .focused-section { outline: none; background: none; padding: 0; margin: 0; }
   body { max-width: none; padding: 0; }
   th { background: #eee !important; -webkit-print-color-adjust: exact; }
 }
 """.strip()
+
+
+_FOCUS_JS = """
+<script>
+(function(){
+  var p = new URLSearchParams(window.location.search).get("focus");
+  if (!p) return;
+  var el = document.getElementById(p);
+  if (!el) return;
+  el.classList.add("focused-section");
+  setTimeout(function(){ el.scrollIntoView({behavior:"smooth",block:"start"}); }, 120);
+})();
+</script>"""
 
 
 def render_report_page(report: StoredReport, download_url: str) -> str:
@@ -145,5 +197,6 @@ def render_report_page(report: StoredReport, download_url: str) -> str:
 <article>
 {body_html}
 </article>
+{_FOCUS_JS}
 </body>
 </html>"""

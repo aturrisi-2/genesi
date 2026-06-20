@@ -95,6 +95,11 @@ async def test_invocation_returns_reply(stores):
     assert "| Categoria | N |" not in reply.reply_markdown
     # Bullet card present
     assert "•" in reply.reply_markdown
+    # Structured synthesis section
+    assert "🧭 Sintesi operativa" in reply.reply_markdown
+    assert "• Stato:" in reply.reply_markdown
+    assert "• Attenzione:" in reply.reply_markdown
+    assert "• Azione consigliata:" in reply.reply_markdown
 
 
 @pytest.mark.asyncio
@@ -168,6 +173,15 @@ def test_event_from_message_maps_attachment():
 def test_event_from_message_plain_text():
     event = _event_from_message(ChatMessage(project_id=PROJECT, message_id="m9", text="ciao", sender="bob"))
     assert event.content == "ciao" and event.sender == "bob" and event.type == "text"
+
+
+def test_synthesis_is_structured_not_paragraph():
+    reply = build_chat_reply(_seed_state(), "fammi il punto")
+    md = reply.reply_markdown
+    # No single long synthesis line — should be separate bullet lines
+    assert "Sintesi operativa" in md
+    for key in ["Stato:", "Attenzione:", "Cambiamenti:", "Esclusioni:", "Azione consigliata:"]:
+        assert f"• {key}" in md, f"missing structured line: {key}"
 
 
 def test_no_hardcoded_domain_tokens_in_chat_presence():

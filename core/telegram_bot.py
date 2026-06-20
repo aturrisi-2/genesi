@@ -557,10 +557,12 @@ async def _save_city(token: str, city: str):
 
 # ── Telegram API helpers ───────────────────────────────────────────────────────
 
-async def send_message(chat_id: int, text: str, reply_markup: dict = None, reply_to_message_id: int = None):
+async def send_message(chat_id: int, text: str, reply_markup: dict = None, reply_to_message_id: int = None, parse_mode: str = None):
     if not text:
         return
     payload = {"chat_id": chat_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
     if reply_markup:
         payload["reply_markup"] = reply_markup
     if reply_to_message_id:

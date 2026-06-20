@@ -46,11 +46,11 @@ def env(monkeypatch, tmp_path):
 
 
 def _spies():
-    sent = []   # list of (chat_id, text, reply_markup)
+    sent = []   # list of (chat_id, text, reply_markup, parse_mode)
     ingested = []
 
-    async def send(chat_id, text, reply_markup=None, **k):
-        sent.append((chat_id, text, reply_markup))
+    async def send(chat_id, text, reply_markup=None, parse_mode=None, **k):
+        sent.append((chat_id, text, reply_markup, parse_mode))
 
     async def updater(message):
         ingested.append(message.message_id)
@@ -99,19 +99,26 @@ async def test_invocation_sends_reply_with_report_link(env):
     assert handled is True
     assert ingested == ["m2"]                     # ingested even when replying
     assert len(sent) == 1
-    chat_id, text, reply_markup = sent[0]
+    chat_id, text, reply_markup, parse_mode = sent[0]
     assert chat_id == CHAT_ID
+    assert parse_mode == "HTML"
     assert "Quadro operativo" in text
-    # URL is NOT in the message text — it goes in the inline button
-    assert "https://genesi.example.com" not in text
-    assert "| Categoria | N |" not in text        # no pipe table in chat message
-    assert "•" in text                             # mobile card bullet format
-    # inline button carries the report URL
+    # Telegram HTML: headings are bold
+    assert "<b>Quadro operativo</b>" in text
+    # Category links with focus parameter
+    assert 'focus=tasks-open' in text
+    assert 'focus=decisions-active' in text
+    assert '• <a href=' in text                     # clickable category links
+    # Structured synthesis
+    assert "<b>Sintesi operativa</b>" in text
+    # URL is NOT shown as plain text — only in links/button
+    assert "| Categoria | N |" not in text          # no pipe table in chat message
+    # inline button carries the full report URL
     assert reply_markup is not None
     kb = reply_markup["inline_keyboard"]
     assert len(kb) == 1 and len(kb[0]) == 1
     btn = kb[0][0]
-    assert btn["text"] == "Apri report"
+    assert btn["text"] == "Apri report completo"
     assert "https://genesi.example.com/api/operational/projects/" in btn["url"]
     assert "/view" in btn["url"]
 
@@ -210,7 +217,7 @@ async def test_bridge_delegates_to_service(env, monkeypatch):
     # sent[0] = (chat_id, text, reply_markup); stub report_url="u" → inline button present
     assert sent[0][0] == CHAT_ID
     assert sent[0][1] == "STUB-REPLY"
-    assert sent[0][2] == {"inline_keyboard": [[{"text": "Apri report", "url": "u"}]]}
+    assert sent[0][2] == {"inline_keyboard": [[{"text": "Apri report completo", "url": "u"}]]}
 
 
 def test_no_hardcoded_domain_tokens():
