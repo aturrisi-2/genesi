@@ -92,6 +92,39 @@ _TECHNICAL_KEYWORDS = (
 
 _TECHNICAL_CODE_RE = re.compile(r"\b[A-Z]{1,4}\d{1,4}\b|\b\d{1,3}[A-Z]\b")
 
+# Explicit, generic markers that a line is NOT operational (personal/domestic/
+# off-topic note). No domain object is hardcoded — only the speaker's own
+# "this is not operational" framing is honoured.
+_NON_OPERATIONAL_MARKERS = (
+    "nota non operativa",
+    "non operativa",
+    "non operativo",
+    "fuori contesto",
+    "off topic",
+    "off-topic",
+    "nota personale",
+    "promemoria personale",
+    "promemoria domestico",
+    "questione personale",
+    "niente di operativo",
+    "nulla di operativo",
+    "not operational",
+    "non-operational",
+    "personal note",
+)
+
+
+def is_non_operational_note(text: str) -> bool:
+    """True when the line explicitly frames itself as non-operational/personal.
+
+    Generic and conservative: it triggers only on an explicit marker, never on
+    the domestic object itself — so a real operational project ignores it while a
+    domestic/family project (which never adds such markers) keeps its items."""
+    normalized = normalize_quality_text(text)
+    if not normalized:
+        return False
+    return any(marker in normalized for marker in _NON_OPERATIONAL_MARKERS)
+
 
 def normalize_quality_text(text: str) -> str:
     normalized = unicodedata.normalize("NFKD", text or "")

@@ -136,6 +136,31 @@ def _synthesis_lines(briefing: OperationalBriefing) -> list[str]:
     ]
 
 
+# Category → human label for the focused "what remains open" answer. Generic.
+_OPEN_GROUP_LABELS: list[tuple[str, str]] = [
+    ("issue", "Problemi aperti"),
+    ("task", "Task aperti"),
+    ("question", "Domande aperte"),
+]
+
+
+def _grouped_open_lines(items: list) -> list[str]:
+    """Group the open items by category into labelled sections so the reply is a
+    specific list (problemi / task / domande), not just a number. Generic."""
+    lines: list[str] = []
+    for category, label in _OPEN_GROUP_LABELS:
+        group = [it for it in items if it.category == category]
+        if not group:
+            continue
+        lines.append(f"{label}:")
+        for it in group[:5]:
+            lines.append(f"- {it.text}")
+        if len(group) > 5:
+            lines.append(f"- … e altri {len(group) - 5}")
+        lines.append("")
+    return lines
+
+
 class _ZeroRow:
     count = 0
 
@@ -158,7 +183,11 @@ def build_chat_reply(
 
     evidence: list[str] = []
     focused_lines: list[str] = []
-    if focused and result.items:
+    if focused and result.items and result.intent == "remaining_open":
+        focused_lines = _grouped_open_lines(result.items)
+        for item in result.items:
+            evidence.extend(item.evidence_event_ids[:1])
+    elif focused and result.items:
         for item in result.items[:5]:
             status = f" ({item.status})" if item.status else ""
             focused_lines.append(f"- {item.text}{status}")

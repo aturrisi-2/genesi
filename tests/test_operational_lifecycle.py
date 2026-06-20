@@ -100,7 +100,10 @@ def test_question_answered():
 
 
 def test_stale_not_confused_with_resolved():
-    old = [_ev("e2", "ricevuto", "2026-05-01T09:00:00+00:00")]
+    # A neutral later message (no closure/supersession/reopen signal) must let the
+    # item decay to stale, not be mistaken for resolution. ("ricevuto"/"confermato"
+    # are now genuine closure signals and are covered separately.)
+    old = [_ev("e2", "ci sentiamo", "2026-05-01T09:00:00+00:00")]
     reference = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
     t = infer_task_transition("open", old, reference, stale_after_days=14)
     assert t is not None and t.new_status == "stale"

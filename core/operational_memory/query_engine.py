@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from core.operational_memory.lifecycle_engine import initial_status, is_active_status
+from core.operational_memory.quality import is_non_operational_note
 from core.operational_memory.models import (
     BriefingRow,
     LifecycleCategory,
@@ -71,6 +72,12 @@ def _collect(state: OperationalState, category: LifecycleCategory, predicate: Ca
     return out
 
 
+def _operational_only(items: list[QueryAnswerItem]) -> list[QueryAnswerItem]:
+    """Drop items explicitly framed as non-operational/personal so they never
+    surface as active work nor inflate the active counts."""
+    return [it for it in items if not is_non_operational_note(it.text)]
+
+
 # --------------------------------------------------------------------------- #
 # Structured queries
 # --------------------------------------------------------------------------- #
@@ -95,11 +102,11 @@ def list_items(
 
 
 def open_tasks(state: OperationalState) -> list[QueryAnswerItem]:
-    return _collect(state, "task", lambda s: is_active_status("task", s))
+    return _operational_only(_collect(state, "task", lambda s: is_active_status("task", s)))
 
 
 def open_issues(state: OperationalState) -> list[QueryAnswerItem]:
-    return _collect(state, "issue", lambda s: is_active_status("issue", s))
+    return _operational_only(_collect(state, "issue", lambda s: is_active_status("issue", s)))
 
 
 def resolved_issues(state: OperationalState) -> list[QueryAnswerItem]:
@@ -107,11 +114,22 @@ def resolved_issues(state: OperationalState) -> list[QueryAnswerItem]:
 
 
 def active_decisions(state: OperationalState) -> list[QueryAnswerItem]:
-    return _collect(state, "decision", lambda s: is_active_status("decision", s))
+    return _operational_only(_collect(state, "decision", lambda s: is_active_status("decision", s)))
 
 
 def unanswered_questions(state: OperationalState) -> list[QueryAnswerItem]:
-    return _collect(state, "question", lambda s: s in {"open", "partially_answered"})
+    return _operational_only(_collect(state, "question", lambda s: s in {"open", "partially_answered"}))
+
+
+def remaining_open(state: OperationalState) -> list[QueryAnswerItem]:
+    """Specific list of what is still open: active issues, then active tasks,
+    then unanswered questions. Generic, status-driven, non-operational notes
+    already excluded. This is what 'cosa resta aperto?' answers — not a count."""
+    out: list[QueryAnswerItem] = []
+    out.extend(open_issues(state))
+    out.extend(open_tasks(state))
+    out.extend(unanswered_questions(state))
+    return out
 
 
 def superseded_items(state: OperationalState) -> list[QueryAnswerItem]:
@@ -142,7 +160,7 @@ def attention_items(state: OperationalState) -> list[QueryAnswerItem]:
             )
             if flag:
                 out.append(_answer_item(item, category))
-    return out
+    return _operational_only(out)
 
 
 def changed_since(state: OperationalState) -> list[QueryAnswerItem]:
@@ -355,10 +373,18 @@ def render_briefing_markdown(briefing: OperationalBriefing) -> str:
 
 # Ordered: more specific intents first. Patterns are generic IT + EN.
 _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
+    # Specific "what is still open" → focused item list, NOT the aggregate briefing.
+    # Must precede the briefing pattern so it wins on "cosa resta aperto?".
+    ("remaining_open", re.compile(
+        r"(cosa\s+resta\s+apert\w*|cosa\s+rimane\s+apert\w*|cosa\s+(c'?[eè]\s+)?ancora\s+apert\w*|"
+        r"cosa\s+[eè]\s+(ancora\s+)?apert\w*|punti\s+apert\w*|element\w*\s+apert\w*|"
+        r"quali\s+punti\s+(sono\s+)?apert\w*|resta\s+qualcosa\s+(di\s+)?apert\w*|"
+        r"what'?s\s+still\s+open|what\s+(remains|is\s+still)\s+open|still\s+open|open\s+items)",
+        re.IGNORECASE)),
     ("briefing", re.compile(
         r"(fammi\s+il\s+punto|punto\s+della\s+situazione|riassumi\s+la\s+situazione|"
         r"cosa\s+c'?[eè]\s+da\s+sapere|fammi\s+il\s+report|com'?[eè]\s+messa|quadro\s+operativo|"
-        r"resta\s+apert\w*|cosa\s+resta\s+apert\w*|briefing|fammi\s+un?\s+report|"
+        r"briefing|fammi\s+un?\s+report|"
         r"operational\s+briefing|how\s+are\s+(we|things)\s+doing|give\s+me\s+the\s+(picture|briefing))",
         re.IGNORECASE)),
     ("digest", re.compile(r"\b(digest|riass\w*|sommario|panoramica|summary|overview|stato\s+(del\s+)?(progetto|chat|lavori)|status)\b", re.IGNORECASE)),
@@ -373,6 +399,7 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
 ]
 
 _INTENT_DISPATCH: dict[str, Callable[[OperationalState], list[QueryAnswerItem]]] = {
+    "remaining_open": remaining_open,
     "open_tasks": open_tasks,
     "open_issues": open_issues,
     "resolved_issues": resolved_issues,
@@ -384,6 +411,7 @@ _INTENT_DISPATCH: dict[str, Callable[[OperationalState], list[QueryAnswerItem]]]
 }
 
 _INTENT_SUMMARY = {
+    "remaining_open": "punti ancora aperti",
     "open_tasks": "task ancora aperti",
     "open_issues": "problemi ancora aperti",
     "resolved_issues": "problemi risolti",
@@ -416,6 +444,13 @@ def answer_query(state: OperationalState, text: str) -> QueryResult:
             count=len(briefing.rows),
             items=briefing.rows and [item for row in briefing.rows if row.active for item in row.items] or [],
         )
+    if intent == "remaining_open":
+        items = remaining_open(state)
+        summary = (
+            f"{len(items)} punti ancora aperti" if items
+            else "Non risultano punti aperti rilevanti."
+        )
+        return QueryResult(query=text, intent="remaining_open", summary=summary, count=len(items), items=items)
     if intent == "digest":
         digest = build_digest(state)
         return QueryResult(query=text, intent="digest", summary=digest.headline, count=0, items=[])

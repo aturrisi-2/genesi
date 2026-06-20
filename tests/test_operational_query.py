@@ -197,11 +197,21 @@ from core.operational_memory.query_engine import build_briefing, render_briefing
     "cosa c'è da sapere?",
     "fammi il report",
     "com'è messa la chat?",
-    "cosa resta aperto?",
     "dammi il quadro operativo",
 ])
 def test_generic_queries_route_to_briefing(text):
     assert classify_query_intent(text) == "briefing"
+
+
+@pytest.mark.parametrize("text", [
+    "cosa resta aperto?",
+    "cosa rimane aperto?",
+    "quali punti sono aperti?",
+    "what's still open?",
+])
+def test_remaining_open_routes_to_focused_query(text):
+    # "what is still open" must return specific items, not the aggregate briefing.
+    assert classify_query_intent(text) == "remaining_open"
 
 
 def test_build_briefing_structure_and_active_flags():

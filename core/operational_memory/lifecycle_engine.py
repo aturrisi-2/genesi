@@ -48,15 +48,42 @@ DEFAULT_STALE_AFTER_DAYS = 14
 
 _NEG_RESOLUTION_RE = re.compile(
     r"\b(non\s+funziona|non\s+risolt\w*|non\s+parte|non\s+va|not\s+working|not\s+fixed|"
-    r"not\s+resolved|still\s+broken|ancora\s+rotto|ancora\s+ko|non\s+completat\w*)\b",
+    r"not\s+resolved|still\s+broken|ancora\s+rotto|ancora\s+ko|non\s+completat\w*|"
+    r"non\s+ancora|not\s+yet|"
+    r"non\s+(?:e'\s+|è\s+|ancora\s+|stat[oaie]\s+|sono\s+|risult\w+\s+)?"
+    r"(?:disponibil\w*|confermat\w*|arrivat\w*|liberat\w*|liber[oi]\b|pront[oaie]\b|"
+    r"inviat\w*|mandat\w*|consegnat\w*|ricevut\w*|spedit\w*|rispost\w*|sgombrat\w*))\b",
     re.IGNORECASE,
 )
+# Generic operational closure signals. Participle/adjective stems only, so a
+# to-do phrased as an infinitive ("inviare la foto", "consegnare il materiale")
+# is NOT mistaken for a completion — only its past form ("inviata", "consegnato")
+# resolves the item. Negated forms are filtered out by _NEG_RESOLUTION_RE first.
 _RESOLUTION_RE = re.compile(
     r"\b(risolt\w*|sistemat\w*|completat\w*|fatt[oa]|chius[oa]|consegnat\w*|evas[oa]|"
-    r"a\s+posto|funziona|resolved|fixed|done|completed|delivered|closed|solved|"
-    r"works\s+now|working\s+now|fulfilled|sorted)\b",
+    r"a\s+posto|funziona|confermat\w*|disponibil\w*|arrivat\w*|ricevut\w*|inviat\w*|"
+    r"mandat\w*|spedit\w*|rispost[oi]\b|liberat\w*|sgombrat\w*|"
+    r"resolved|fixed|done|completed|delivered|closed|solved|"
+    r"works\s+now|working\s+now|fulfilled|sorted|available|confirmed|received|sent|cleared)\b",
     re.IGNORECASE,
 )
+# Generic conditional-decision signal (IT + EN): an operational decision whose
+# effect is gated on a condition ("se X non è pronto entro Y, si rimanda a Z",
+# "si procede solo se ...", "otherwise reschedule"). Domain-agnostic.
+_CONDITIONAL_DECISION_RE = re.compile(
+    r"\bse\b.+?\b(allora|altrimenti|in\s+caso\s+contrario|senn[oò]|"
+    r"si\s+\w+|rimand\w*|ripianific\w*|rinvi\w*|spost\w*|procede\w*|procediamo)\b"
+    r"|\bsolo\s+se\b|\ba\s+meno\s+che\b"
+    r"|\bif\b.+?\b(then|otherwise|else|reschedul\w*|postpone\w*|move\w+\s+to)\b"
+    r"|\bonly\s+if\b|\bunless\b",
+    re.IGNORECASE,
+)
+
+
+def is_conditional_decision(text: str) -> bool:
+    """True when the text expresses an operational decision gated on a condition.
+    Generic: no profession/site/platform vocabulary."""
+    return bool(text) and bool(_CONDITIONAL_DECISION_RE.search(text))
 _VERIFICATION_RE = re.compile(
     r"\b(verificat\w*|controllat\w*|collaudat\w*|validat\w*|verified|checked|validated|tested\s+ok)\b",
     re.IGNORECASE,

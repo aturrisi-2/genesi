@@ -17,7 +17,8 @@ from core.operational_memory.models import (
     OperationalTask,
 )
 from core.operational_memory.context_extractor import extract_context
-from core.operational_memory.quality import is_noise_text
+from core.operational_memory.lifecycle_engine import is_conditional_decision
+from core.operational_memory.quality import is_noise_text, is_non_operational_note
 
 
 class OperationalMemoryExtractionError(RuntimeError):
@@ -165,11 +166,16 @@ Regole:
 - Usa confidence "medium" per elementi operativi plausibili ma incompleti.
 - Usa confidence "low" per elementi vaghi, sociali o poco verificabili.
 - Le categorie sono:
-  decisions: decisioni gia' prese.
+  decisions: decisioni gia' prese, INCLUSE le decisioni condizionali
+    (es. "se X non e' pronto entro Y, si rimanda a Z", "si procede solo se ...",
+    "altrimenti si sposta a ..."). Una decisione condizionale resta una decisione.
   tasks: cose da fare, con owner/due solo se esplicitati.
   issues: problemi, blocchi, rischi aperti.
   information: fatti rilevanti o aggiornamenti.
   open_questions: domande o punti da chiarire.
+- Ignora note esplicitamente non operative o personali (es. marcate "nota non
+  operativa", "fuori contesto", promemoria personali/domestici): non trasformarle
+  in task o decisioni operative.
 
 Formato obbligatorio:
 {
@@ -182,6 +188,50 @@ Formato obbligatorio:
 """.strip()
     user_message = f"Messaggi:\n{numbered}"
     return system_prompt, user_message
+
+
+_AUG_TOKEN_RE = re.compile(r"[a-zà-ÿ0-9]+", re.IGNORECASE)
+
+
+def _aug_tokens(text: str) -> set[str]:
+    return {t for t in _AUG_TOKEN_RE.findall((text or "").lower()) if len(t) >= 3}
+
+
+def _augment_conditional_decisions(
+    state: OperationalState,
+    messages: list[str],
+    source_meta: dict[str, Any] | None,
+) -> None:
+    """Deterministic safety net: ensure conditional operational decisions present
+    in the raw messages are captured even if the LLM missed them. Generic and
+    conservative — only fires on an explicit conditional-decision pattern, skips
+    questions and non-operational notes, and de-duplicates against what already
+    exists. Mutates `state.decisions` in place."""
+    existing_tokens = [_aug_tokens(d.text) for d in state.decisions]
+    for message in messages:
+        text = message.strip()
+        if not text or text.endswith("?"):
+            continue
+        if is_non_operational_note(text) or not is_conditional_decision(text):
+            continue
+        tokens = _aug_tokens(text)
+        if not tokens:
+            continue
+        # Skip if a decision with strong overlap already exists (LLM already got it).
+        if any(len(tokens & ex) >= max(2, len(tokens) // 2) for ex in existing_tokens):
+            continue
+        data: dict[str, Any] = {
+            "text": text,
+            "source": text[:120],
+            "id": _stable_id("dec", text, text[:120]),
+            "confidence": "medium",
+            "intent": "decisione condizionale",
+        }
+        if source_meta:
+            for key, value in source_meta.items():
+                data.setdefault(key, value)
+        state.decisions.append(Decision(**data))
+        existing_tokens.append(tokens)
 
 
 async def extract_state(
@@ -211,6 +261,7 @@ async def extract_state(
         raise OperationalMemoryExtractionError("Extractor returned an empty response")
 
     state = _parse_state(raw, source_meta)
+    _augment_conditional_decisions(state, clean_messages, source_meta)
     log(
         "OPERATIONAL_MEMORY_EXTRACT_OK",
         decisions=len(state.decisions),
