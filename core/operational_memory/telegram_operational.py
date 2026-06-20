@@ -127,7 +127,12 @@ async def maybe_handle_operational(
             project_id, decision.query,
             report_base_url=_public_base_url(), invoked_by=first_name or "",
         )
-        await send_message(chat_id, reply.reply_markdown)
+        reply_markup = None
+        if reply.report_url:
+            reply_markup = {
+                "inline_keyboard": [[{"text": "Apri report", "url": reply.report_url}]]
+            }
+        await send_message(chat_id, reply.reply_markdown, reply_markup=reply_markup)
         log("OPERATIONAL_TELEGRAM_REPLY", chat_id=chat_id, project_id=project_id,
             intent=reply.intent, report_id=reply.report_id)
         return True

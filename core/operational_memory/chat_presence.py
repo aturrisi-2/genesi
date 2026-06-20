@@ -21,6 +21,7 @@ from core.operational_memory.models import (
     ChatMessage,
     ChatReply,
     InvocationConfig,
+    OperationalBriefing,
     OperationalEvent,
     OperationalState,
 )
@@ -86,6 +87,15 @@ def _compact_table(state: OperationalState) -> str:
     return "\n".join(lines)
 
 
+def _mobile_card(briefing: OperationalBriefing) -> str:
+    """Bullet-list card for Telegram/mobile. Active rows only, no pipe tables."""
+    lines = []
+    for row in briefing.rows:
+        if row.active:
+            lines.append(f"• {row.label}: {row.count}")
+    return "\n".join(lines)
+
+
 def build_chat_reply(
     state: OperationalState,
     query: str,
@@ -113,16 +123,17 @@ def build_chat_reply(
 
     parts: list[str] = []
     if focused:
-        parts.append(f"**{result.summary}**")
+        parts.append(result.summary)
         parts.extend(focused_lines)
         parts.append("")
-    parts.append("**Quadro operativo**")
-    parts.append(_compact_table(state))
+    parts.append("📌 Quadro operativo")
     parts.append("")
-    parts.append(f"**Sintesi:** {briefing.synthesis}")
-    parts.append(f"**Azione consigliata:** {briefing.recommended_action}")
-    if report_url:
-        parts.append(f"**Report completo:** {report_url}")
+    parts.append(_mobile_card(briefing))
+    parts.append("")
+    parts.append(f"Sintesi: {briefing.synthesis}")
+    parts.append(f"Azione consigliata: {briefing.recommended_action}")
+    # report_url is NOT included in the text — the Telegram bridge sends it as
+    # an inline button so the URL does not clutter the message body.
     reply_markdown = "\n".join(parts).strip()
 
     return ChatReply(

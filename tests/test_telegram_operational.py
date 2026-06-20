@@ -46,11 +46,11 @@ def env(monkeypatch, tmp_path):
 
 
 def _spies():
-    sent = []
+    sent = []   # list of (chat_id, text, reply_markup)
     ingested = []
 
-    async def send(chat_id, text, *a, **k):
-        sent.append((chat_id, text))
+    async def send(chat_id, text, reply_markup=None, **k):
+        sent.append((chat_id, text, reply_markup))
 
     async def updater(message):
         ingested.append(message.message_id)
@@ -99,11 +99,21 @@ async def test_invocation_sends_reply_with_report_link(env):
     assert handled is True
     assert ingested == ["m2"]                     # ingested even when replying
     assert len(sent) == 1
-    chat_id, text = sent[0]
+    chat_id, text, reply_markup = sent[0]
     assert chat_id == CHAT_ID
     assert "Quadro operativo" in text
-    assert "https://genesi.example.com/api/operational/projects/" in text  # PUBLIC_BASE_URL used
-    assert "/view" in text
+    # URL is NOT in the message text — it goes in the inline button
+    assert "https://genesi.example.com" not in text
+    assert "| Categoria | N |" not in text        # no pipe table in chat message
+    assert "•" in text                             # mobile card bullet format
+    # inline button carries the report URL
+    assert reply_markup is not None
+    kb = reply_markup["inline_keyboard"]
+    assert len(kb) == 1 and len(kb[0]) == 1
+    btn = kb[0][0]
+    assert btn["text"] == "Apri report"
+    assert "https://genesi.example.com/api/operational/projects/" in btn["url"]
+    assert "/view" in btn["url"]
 
 
 @pytest.mark.asyncio
@@ -197,7 +207,10 @@ async def test_bridge_delegates_to_service(env, monkeypatch):
     await asyncio.sleep(0)
     assert handled is True
     assert called["project_id"] == PROJECT and called["base"] == "https://genesi.example.com"
-    assert sent == [(CHAT_ID, "STUB-REPLY")]
+    # sent[0] = (chat_id, text, reply_markup); stub report_url="u" → inline button present
+    assert sent[0][0] == CHAT_ID
+    assert sent[0][1] == "STUB-REPLY"
+    assert sent[0][2] == {"inline_keyboard": [[{"text": "Apri report", "url": "u"}]]}
 
 
 def test_no_hardcoded_domain_tokens():
@@ -206,3 +219,31 @@ def test_no_hardcoded_domain_tokens():
     body = open(mod.__file__, "r", encoding="utf-8").read().upper()
     for token in ["TAB CEFLA", "T6", "T7", "UTA", "EWC05", "SS01", "B02", "CANTIERE"]:
         assert not re.search(rf"\b{re.escape(token)}\b", body), f"hardcoded token: {token}"
+
+
+@pytest.mark.asyncio
+async def test_inline_button_absent_when_no_report_url(env, monkeypatch):
+    """When report_url is empty, no inline button should be sent."""
+    import core.operational_memory.telegram_operational as mod
+    from core.operational_memory.models import ChatReply
+
+    async def fake_no_url(project_id, query, report_base_url="", invoked_by="", save=True):
+        return ChatReply(project_id=project_id, intent="briefing", reply_markdown="TEXT", report_id="", report_url="")
+
+    monkeypatch.setattr(mod, "build_operational_reply", fake_no_url)
+    sent, ingested, send, updater = _spies()
+    await mod.maybe_handle_operational(CHAT_ID, 1, "Ann", "Genesi, fammi il punto", send, message_id="nb1", updater=updater)
+    await asyncio.sleep(0)
+    assert sent[0][2] is None   # no reply_markup
+
+
+@pytest.mark.asyncio
+async def test_normal_message_empathic_send_not_broken(env):
+    """Non-invocation messages return False; the empathic pipeline is free to send
+    without reply_markup — verifies no regression on existing send signature."""
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_operational(CHAT_ID, 1, "Bob", "buongiorno a tutti", send, message_id="nb2", updater=updater)
+    await asyncio.sleep(0)
+    assert handled is False
+    assert sent == []   # empathic pipeline untouched

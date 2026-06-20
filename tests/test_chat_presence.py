@@ -88,7 +88,13 @@ async def test_invocation_returns_reply(stores):
     assert reply.report_id and reply.report_url
     assert "/reports/" in reply.report_url
     assert "Quadro operativo" in reply.reply_markdown
-    assert "Report completo:" in reply.reply_markdown
+    # URL is kept in report_url field, not embedded in the reply text
+    assert "Report completo:" not in reply.reply_markdown
+    assert reply.report_url not in reply.reply_markdown
+    # No pipe table in the reply text (mobile card format)
+    assert "| Categoria | N |" not in reply.reply_markdown
+    # Bullet card present
+    assert "•" in reply.reply_markdown
 
 
 @pytest.mark.asyncio
@@ -130,7 +136,11 @@ def test_build_chat_reply_focused_intent():
 def test_build_chat_reply_generic_briefing():
     reply = build_chat_reply(_seed_state(), "fammi il punto")
     assert reply.intent == "briefing"
+    # table_markdown still has the pipe table (for report/API use)
     assert "| Categoria | N |" in reply.table_markdown
+    # but reply_markdown uses the mobile card (no pipe tables)
+    assert "| Categoria | N |" not in reply.reply_markdown
+    assert "•" in reply.reply_markdown
     assert reply.synthesis and reply.actions
 
 
