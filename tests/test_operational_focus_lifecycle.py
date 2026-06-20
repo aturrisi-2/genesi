@@ -396,6 +396,117 @@ async def test_conditional_decision_extracted_via_pending_pipeline(monkeypatch, 
     assert len(active_decisions(state)) == 1
 
 
+# --------------------------------------------------------------------------- #
+# Resolution linking: completion updates close related open items (generic)
+# --------------------------------------------------------------------------- #
+
+from core.operational_memory.lifecycle_engine import apply_resolution_links
+
+
+def _open_task(i, text):
+    return OperationalTask(id=i, text=text, source="m", source_event_id=f"s{i}",
+                           source_timestamp="2026-06-12T08:00:00+00:00", lifecycle=_lc("task", "open"))
+
+
+def _open_issue(i, text):
+    return Issue(id=i, text=text, source="m", source_event_id=f"s{i}",
+                 source_timestamp="2026-06-12T08:00:00+00:00", lifecycle=_lc("issue", "open"))
+
+
+def _open_question(i, text):
+    return OperationalQuestion(id=i, text=text, source="m", source_event_id=f"s{i}",
+                              source_timestamp="2026-06-12T08:00:00+00:00", lifecycle=_lc("question", "open"))
+
+
+def _upd(eid, content, ts="2026-06-12T09:00:00+00:00"):
+    return OperationalEvent(event_id=eid, project_id="p", source="telegram", sender="A", content=content, timestamp=ts)
+
+
+def test_access_cleared_closes_related_open_issue_live_path():
+    state = OperationalState(project_id="p", issues=[_open_issue("i1", "l'accesso all'area non è ancora libero")])
+    events = [_upd("e1", "l'accesso all'area non è ancora libero", "2026-06-12T08:00:00+00:00"),
+              _upd("e2", "Aggiornamento: l'accesso all'area è stato liberato")]
+    apply_resolution_links(state, events)
+    assert open_issues(state) == []
+    assert remaining_open(state) == []
+
+
+def test_sent_document_closes_related_photo_task_live_path():
+    state = OperationalState(project_id="p", tasks=[_open_task("t1", "serve mandare la foto al cliente")])
+    events = [_upd("e2", "Aggiornamento: la foto è stata inviata al cliente")]
+    apply_resolution_links(state, events)
+    assert open_tasks(state) == []
+
+
+def test_supplier_reply_closes_open_answer_question():
+    state = OperationalState(project_id="p", open_questions=[_open_question("q1", "serve risposta del fornitore sul materiale")])
+    events = [_upd("e2", "Il fornitore ha risposto: materiale disponibile")]
+    apply_resolution_links(state, events)
+    assert all(it.text != "serve risposta del fornitore sul materiale" for it in remaining_open(state))
+
+
+def test_confirmation_closes_material_task_but_not_unrelated_access_issue():
+    state = OperationalState(
+        project_id="p",
+        tasks=[_open_task("t1", "materiale da confermare")],
+        issues=[_open_issue("i1", "accesso non libero")],
+    )
+    events = [_upd("e2", "materiale confermato")]
+    apply_resolution_links(state, events)
+    assert open_tasks(state) == []                       # material closed
+    assert {it.item_id for it in open_issues(state)} == {"i1"}  # access stays open
+
+
+def test_negated_resolution_does_not_close():
+    state = OperationalState(project_id="p", tasks=[_open_task("t1", "foto da inviare")])
+    events = [_upd("e2", "La foto non è stata ancora inviata.")]
+    apply_resolution_links(state, events)
+    assert {it.item_id for it in open_tasks(state)} == {"t1"}   # still open
+
+
+def test_live_update_corridor_photo_closes_only_matching_items():
+    state = OperationalState(
+        project_id="p",
+        issues=[_open_issue("i1", "il passaggio non è ancora libero")],
+        tasks=[_open_task("t1", "serve mandare una foto al cliente"),
+               _open_task("t2", "materiale da confermare")],
+    )
+    events = [_upd("e2", "Aggiornamento: il passaggio è stato liberato e la foto è stata mandata al cliente")]
+    apply_resolution_links(state, events)
+    assert open_issues(state) == []                        # passage closed
+    assert {it.item_id for it in open_tasks(state)} == {"t2"}  # photo closed, material untouched
+
+
+def test_remaining_open_excludes_resolved_items_after_resolution():
+    state = OperationalState(
+        project_id="p",
+        issues=[_open_issue("i1", "accesso non libero")],
+        tasks=[_open_task("t1", "mandare la documentazione")],
+    )
+    before = {it.text for it in remaining_open(state)}
+    assert "accesso non libero" in before
+    events = [_upd("e2", "accesso liberato"), _upd("e3", "documentazione inviata")]
+    apply_resolution_links(state, events)
+    after = {it.text for it in remaining_open(state)}
+    assert after == set()
+
+
+def test_no_domain_hardcoding_for_resolution_linking():
+    import re
+
+    import core.operational_memory.extractor as m_ext
+    import core.operational_memory.incremental_rebuild as m_reb
+    import core.operational_memory.lifecycle_engine as m_life
+    import core.operational_memory.query_engine as m_query
+    import core.operational_memory.watcher_engine as m_watch
+
+    forbidden = ["test tab", "tab cefla", "cantiere", "quadro elettrico", "corridoio", "sara", "pane", "-5408248562"]
+    for mod in (m_life, m_watch, m_ext, m_query, m_reb):
+        body = open(mod.__file__, "r", encoding="utf-8").read().lower()
+        for token in forbidden:
+            assert not re.search(rf"\b{re.escape(token)}\b", body), f"hardcoded '{token}' in {mod.__name__}"
+
+
 def test_no_domain_hardcoding_for_conditional_decision_extractor():
     import re
 

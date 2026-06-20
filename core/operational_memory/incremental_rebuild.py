@@ -17,6 +17,7 @@ from core.operational_memory.incremental_index import (
 from core.operational_memory.lifecycle_engine import (
     apply_cross_item_transitions,
     apply_lifecycle_transitions,
+    apply_resolution_links,
     build_operational_snapshot,
 )
 from core.operational_memory.macro_thread_engine import (
@@ -238,7 +239,14 @@ async def incremental_rebuild(
         reference_now=reference_now,
         metrics=cross_metrics,
     )
-    all_transitions = transitions + cross_transitions
+    # Resolution linking: close open items named by a later completion update
+    # event even when no thread/relation links them (object-overlap based).
+    resolution_metrics: dict = {}
+    resolution_transitions = apply_resolution_links(
+        state, updated_events, reference_now=reference_now, metrics=resolution_metrics
+    )
+    all_transitions = transitions + cross_transitions + resolution_transitions
+    metrics["resolution_links_applied"] = resolution_metrics.get("resolution_links_applied", 0)
     snapshot = build_operational_snapshot(state, all_transitions)
 
     # FASE 4.3: temporal delta vs the previous persisted lifecycle snapshot.

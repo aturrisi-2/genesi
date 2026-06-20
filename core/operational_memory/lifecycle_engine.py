@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
+from core.log import log
 from core.operational_memory.models import (
     LifecycleCategory,
     LifecycleHistoryEntry,
@@ -49,10 +50,10 @@ DEFAULT_STALE_AFTER_DAYS = 14
 _NEG_RESOLUTION_RE = re.compile(
     r"\b(non\s+funziona|non\s+risolt\w*|non\s+parte|non\s+va|not\s+working|not\s+fixed|"
     r"not\s+resolved|still\s+broken|ancora\s+rotto|ancora\s+ko|non\s+completat\w*|"
-    r"non\s+ancora|not\s+yet|"
-    r"non\s+(?:e'\s+|è\s+|ancora\s+|stat[oaie]\s+|sono\s+|risult\w+\s+)?"
-    r"(?:disponibil\w*|confermat\w*|arrivat\w*|liberat\w*|liber[oi]\b|pront[oaie]\b|"
-    r"inviat\w*|mandat\w*|consegnat\w*|ricevut\w*|spedit\w*|rispost\w*|sgombrat\w*))\b",
+    r"non\s+ancora|not\s+yet|ancora\s+da\b|"
+    # "non ... <participle>" with a short gap (e.g. "non è stata ancora inviata")
+    r"non[\w\s',]{0,25}?\b(?:disponibil\w*|confermat\w*|arrivat\w*|liberat\w*|liber[oi]|"
+    r"pront[oaie]|inviat\w*|mandat\w*|consegnat\w*|ricevut\w*|spedit\w*|rispost\w*|sgombrat\w*))\b",
     re.IGNORECASE,
 )
 # Generic operational closure signals. Participle/adjective stems only, so a
@@ -972,3 +973,167 @@ def build_operational_snapshot(
     ]
     snapshot.delta = delta
     return snapshot
+
+
+# --------------------------------------------------------------------------- #
+# FASE 4.4 — Resolution linking (object-overlap, thread-independent)
+# --------------------------------------------------------------------------- #
+#
+# A completion update ("X è stato liberato", "il documento è stato inviato")
+# may arrive as a standalone event that the thread engine does not
+# group with the open item it closes. This pass links closure evidence to open
+# items by generic object overlap (significant nouns, plural-normalised, action/
+# closure verbs removed), so the right items get resolved/completed/answered even
+# without a shared thread. Domain-agnostic: no profession/site/object hardcoded.
+
+_RESOLUTION_CLOSE_STATUS: dict[LifecycleCategory, str] = {
+    "task": "completed",
+    "issue": "resolved",
+    "question": "answered",
+}
+
+# Generic action/closure/state words excluded from object matching so items are
+# linked on WHAT they are about, not on the closure verb itself.
+_ACTION_CLOSURE_WORDS = {
+    "liberato", "liberata", "liberati", "liberate", "libero", "libera",
+    "sgomberato", "sgombrato", "sgomberata", "mandato", "mandata", "mandare",
+    "inviato", "inviata", "inviare", "spedito", "spedita", "spedire",
+    "consegnato", "consegnata", "consegnare", "ricevuto", "ricevute",
+    "confermato", "confermata", "confermare", "conferma", "disponibile",
+    "arrivato", "arrivata", "arrivare", "risposto", "risponde", "rispondere",
+    "completato", "completata", "completare", "fatto", "fatta", "chiuso",
+    "chiusa", "risolto", "risolta", "risolvere", "stato", "stata", "stati",
+    "serve", "deve", "devo", "dobbiamo", "aggiornamento", "aggiorna",
+    "cleared", "clear", "sent", "send", "received", "receive", "confirmed",
+    "confirm", "available", "done", "closed", "close", "resolved", "resolve",
+    "replied", "reply", "arrived", "arrive", "update", "updated",
+}
+
+
+def _norm_plural(token: str) -> str:
+    """Light singular/plural normalisation (IT vowel ending + EN trailing s)."""
+    t = token
+    if len(t) > 4 and t.endswith("s"):
+        t = t[:-1]
+    if len(t) > 4 and t[-1] in "aeiou":
+        t = t[:-1]
+    return t
+
+
+def _object_tokens(text: str) -> set[str]:
+    return {
+        _norm_plural(tok)
+        for tok in _significant_tokens(text)
+        if tok not in _ACTION_CLOSURE_WORDS
+    }
+
+
+def apply_resolution_links(
+    state: OperationalState,
+    events: list[OperationalEvent],
+    reference_now: Optional[datetime] = None,
+    metrics: Optional[dict] = None,
+) -> list[LifecycleTransitionRecord]:
+    """Close open items whose object is named by a later, non-negated completion
+    update event. Returns the transitions applied. Idempotent: already-closed
+    items are skipped."""
+    project_id = state.project_id or ""
+    closures: list[tuple[str, str, str, set[str]]] = []  # (event_id, ts, text, tokens)
+    for event in sorted(events, key=lambda e: _parse_ts(e.timestamp)):
+        text = _event_text(event)
+        if not text or not detect_resolution_signal(text):
+            continue
+        tokens = _object_tokens(text)
+        if not tokens:
+            continue
+        closures.append((event.event_id, event.timestamp, text, tokens))
+        log(
+            "OPERATIONAL_RESOLUTION_CANDIDATE",
+            project_id=project_id,
+            event_id=event.event_id,
+            matched=True,
+            text_preview=_short(text, 60),
+        )
+
+    if not closures:
+        return []
+
+    transitions: list[LifecycleTransitionRecord] = []
+    applied = 0
+    for category, field_name in (("task", "tasks"), ("issue", "issues"), ("question", "open_questions")):
+        for item in getattr(state, field_name):
+            status = item.lifecycle.current_status if item.lifecycle else initial_status(category, item.text)
+            if not is_active_status(category, status):
+                continue
+            item_tokens = _object_tokens(item.text)
+            if not item_tokens:
+                continue
+            item_ts = _parse_ts(item.source_timestamp)
+            for event_id, ts, text, ev_tokens in closures:
+                if _parse_ts(ts) < item_ts:
+                    continue  # evidence must not predate the item
+                shared = item_tokens & ev_tokens
+                if not shared:
+                    continue
+                log(
+                    "OPERATIONAL_RESOLUTION_LINK_ATTEMPT",
+                    project_id=project_id,
+                    candidate=event_id,
+                    open_item=item.id,
+                    score=len(shared),
+                    reason="object_overlap",
+                )
+                new_status = _RESOLUTION_CLOSE_STATUS[category]
+                previous = status
+                reason = f"chiusura da aggiornamento collegato (oggetto: {', '.join(sorted(shared)[:3])}): '{_short(text)}'"
+                if item.lifecycle is None:
+                    item.lifecycle = LifecycleState(
+                        category=category,
+                        current_status=previous,
+                        status_changed_at=item.source_timestamp or utc_now_iso(),
+                    )
+                item.lifecycle.previous_status = previous
+                item.lifecycle.current_status = new_status
+                item.lifecycle.status_changed_at = utc_now_iso()
+                item.lifecycle.status_reason = reason
+                item.lifecycle.confidence = "high"  # type: ignore[assignment]
+                item.lifecycle.evidence_event_ids = [event_id]
+                item.lifecycle.last_evidence_at = ts
+                item.lifecycle.lifecycle_history.append(
+                    LifecycleHistoryEntry(
+                        status=new_status,
+                        changed_at=item.lifecycle.status_changed_at,
+                        reason=reason,
+                        evidence_event_ids=[event_id],
+                    )
+                )
+                transitions.append(
+                    LifecycleTransitionRecord(
+                        item_id=item.id,
+                        category=category,
+                        text=item.text,
+                        previous_status=previous,
+                        new_status=new_status,
+                        reason=reason,
+                        confidence="high",
+                        evidence_event_ids=[event_id],
+                        transition_kind="resolution_link",
+                        related_text=_short(text),
+                    )
+                )
+                applied += 1
+                log(
+                    "OPERATIONAL_RESOLUTION_APPLIED",
+                    project_id=project_id,
+                    item_id=item.id,
+                    old_status=previous,
+                    new_status=new_status,
+                    reason="object_overlap",
+                )
+                break  # item closed; stop scanning closures for it
+
+    if applied == 0:
+        log("OPERATIONAL_RESOLUTION_SKIPPED", project_id=project_id, reason="no_open_item_matched")
+    if metrics is not None:
+        metrics["resolution_links_applied"] = applied
+    return transitions
