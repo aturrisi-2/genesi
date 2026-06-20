@@ -21,9 +21,17 @@ from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
 from core.log import log
-from core.operational_memory.chat_presence import build_operational_reply, silent_update
+from core.operational_memory.chat_presence import (
+    build_operational_reply,
+    flush_project,
+    silent_update,
+)
 from core.operational_memory.invocation_router import is_invoked
 from core.operational_memory.models import ChatMessage, ChatReply, InvocationConfig
+from core.operational_memory.query_engine import (
+    classify_query_intent,
+    is_pure_operational_invocation,
+)
 
 
 # Label → focus section ID (generic, no domain/profession hardcoding).
@@ -169,8 +177,19 @@ async def maybe_handle_operational(
         # Invoked + reply enabled → ingest + rebuild SYNCHRONOUSLY before building
         # the reply, so the answer reflects the just-ingested event and all prior
         # ones. Deterministic ordering: no race condition, no sleep/delay.
+        intent = classify_query_intent(decision.query)
         log("OPERATIONAL_TELEGRAM_REBUILD_BEFORE_REPLY", project_id=project_id, mode=decision.mode)
-        await _safe_update(update, message)
+        if is_pure_operational_invocation(decision.query):
+            # Pure query: do NOT store the invocation text as a project item; just
+            # rebuild the state already produced by previous messages.
+            await flush_project(project_id)
+            log("OPERATIONAL_TELEGRAM_INVOCATION_NOT_INGESTED",
+                project_id=project_id, intent=intent, reason="pure_invocation")
+        else:
+            # Invocation carries a real operational update → ingest it, then rebuild.
+            await _safe_update(update, message)
+            log("OPERATIONAL_TELEGRAM_INVOCATION_INGESTED",
+                project_id=project_id, intent=intent, reason="contains_operational_update")
 
         # Delegate reply construction to the operational service layer, then just
         # transport it. The bridge holds no operational/empathic brain.

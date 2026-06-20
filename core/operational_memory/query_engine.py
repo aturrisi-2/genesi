@@ -433,6 +433,44 @@ def classify_query_intent(text: str) -> str:
     return "unknown"
 
 
+# Recognised read-only query intents: asking about the state, not adding to it.
+_PURE_QUERY_INTENTS = {
+    "briefing", "digest", "remaining_open", "active_decisions",
+    "open_tasks", "open_issues", "resolved_issues", "unanswered",
+    "superseded", "attention", "changed",
+}
+
+# Explicit declarative operational-update signals (generic verbs/markers, never
+# domain objects): an invocation that also records a new fact/update. Used to
+# decide whether the invocation text itself should be stored as operational
+# content. Interrogative phrasing ("quali problemi risolti?") does not match.
+_STRONG_UPDATE_RE = re.compile(
+    r"\b(aggiorna|segna|annota|nota|record|update|note)\b\s*:"
+    r"|\b(segna|annota|confermo|conferma|ricorda|registra)\s+che\b"
+    r"|\btieni\s+(aperto|presente|conto)\b"
+    r"|\bha\s+(mandato|inviato|consegnat\w*|spedit\w*|liberat\w*|risposto|chiesto|confermat\w*)\b"
+    r"|\bhanno\s+\w+at[oi]\b"
+    r"|\b(è|e')\s+stat[oaie]\b",
+    re.IGNORECASE,
+)
+
+
+def is_pure_operational_invocation(query: str) -> bool:
+    """True when the invocation text is only a query about the state and carries
+    no new operational content — so it must NOT be stored as a project item.
+
+    Generic and domain-agnostic: decision is driven by query intent + explicit
+    update signals, never by domain vocabulary. Conservative on the ingest side:
+    anything not recognised as a pure query (unknown / content-bearing) returns
+    False so real operational data is never dropped."""
+    q = (query or "").strip()
+    if not q:
+        return True  # bare invocation (e.g. "Genesi") → defaults to a briefing query
+    if classify_query_intent(q) not in _PURE_QUERY_INTENTS:
+        return False  # unknown or content-bearing → ingest, never lose data
+    return not _STRONG_UPDATE_RE.search(q)  # recognised query → pure unless explicit update
+
+
 def answer_query(state: OperationalState, text: str) -> QueryResult:
     intent = classify_query_intent(text)
     if intent == "briefing":

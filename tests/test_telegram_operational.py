@@ -97,7 +97,7 @@ async def test_invocation_sends_reply_with_report_link(env):
                                              message_id="m2", updater=updater)
     await asyncio.sleep(0)
     assert handled is True
-    assert ingested == ["m2"]                     # ingested even when replying
+    assert ingested == []                         # pure briefing query → not ingested as event
     assert len(sent) == 1
     chat_id, text, reply_markup, parse_mode = sent[0]
     assert chat_id == CHAT_ID
@@ -222,8 +222,8 @@ async def test_bridge_delegates_to_service(env, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_invocation_rebuilds_before_reply(env, monkeypatch):
-    # On invocation the ingest+rebuild must be AWAITED before the reply is built,
-    # so the answer reflects the just-ingested event (no race condition).
+    # On an update-bearing invocation the ingest must be AWAITED before the reply
+    # is built, so the answer reflects the just-ingested event (no race).
     import core.operational_memory.telegram_operational as mod
     from core.operational_memory.models import ChatReply
 
@@ -234,15 +234,105 @@ async def test_invocation_rebuilds_before_reply(env, monkeypatch):
 
     async def fake_reply(project_id, query, report_base_url="", invoked_by="", save=True):
         order.append("reply")
-        return ChatReply(project_id=project_id, intent="briefing", reply_markdown="X", report_id="r", report_url="u")
+        return ChatReply(project_id=project_id, intent="unknown", reply_markdown="X", report_id="r", report_url="u")
 
     monkeypatch.setattr(mod, "build_operational_reply", fake_reply)
     sent, ingested, send, _ = _spies()
     handled = await mod.maybe_handle_operational(
-        CHAT_ID, 1, "Ann", "Genesi, fammi il punto", send, message_id="ord1", updater=ordered_updater
+        CHAT_ID, 1, "Ann", "Genesi, segna che il materiale è confermato", send, message_id="ord1", updater=ordered_updater
     )
     assert handled is True
-    assert order == ["update", "reply"]   # rebuild strictly before reply
+    assert order == ["update", "reply"]   # ingest strictly before reply
+
+
+@pytest.mark.asyncio
+async def test_rebuild_still_happens_before_reply_for_pure_invocation(env, monkeypatch):
+    # Pure invocation: NO event ingest, but a flush/rebuild must still run BEFORE
+    # the reply so it reflects previously ingested messages.
+    import core.operational_memory.telegram_operational as mod
+    from core.operational_memory.models import ChatReply
+
+    order = []
+
+    async def fake_flush(project_id, rebuild=True):
+        order.append("flush")
+
+    async def fake_reply(project_id, query, report_base_url="", invoked_by="", save=True):
+        order.append("reply")
+        return ChatReply(project_id=project_id, intent="briefing", reply_markdown="X", report_id="r", report_url="u")
+
+    monkeypatch.setattr(mod, "flush_project", fake_flush)
+    monkeypatch.setattr(mod, "build_operational_reply", fake_reply)
+    sent, ingested, send, updater = _spies()
+    handled = await mod.maybe_handle_operational(
+        CHAT_ID, 1, "Ann", "Genesi, fammi il punto", send, message_id="pf1", updater=updater
+    )
+    assert handled is True
+    assert order == ["flush", "reply"]   # rebuild before reply, no ingest
+    assert ingested == []                # invocation text NOT stored
+
+
+@pytest.mark.asyncio
+async def test_pure_briefing_invocation_not_ingested_as_event(env):
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_operational(CHAT_ID, 1, "Ann", "Genesi, fammi il punto", send, message_id="pb1", updater=updater)
+    assert handled is True
+    assert len(sent) == 1
+    assert ingested == []   # pure query → not stored as operational event
+
+
+@pytest.mark.asyncio
+async def test_pure_remaining_open_invocation_not_ingested_as_question(env):
+    from core.operational_memory import state_store
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    sent, ingested, send, updater = _spies()
+    await maybe_handle_operational(CHAT_ID, 1, "Ann", "Genesi, cosa resta aperto?", send, message_id="pr1", updater=updater)
+    assert ingested == []   # the query itself is not ingested
+    state = await state_store.load_state(PROJECT)
+    # no new open_question created just for the invocation phrase
+    assert all("resta aperto" not in q.text.lower() for q in state.open_questions)
+
+
+@pytest.mark.asyncio
+async def test_pure_active_decisions_invocation_not_ingested_as_question(env):
+    from core.operational_memory import state_store
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    sent, ingested, send, updater = _spies()
+    await maybe_handle_operational(CHAT_ID, 1, "Ann", "Genesi, quali decisioni sono attive?", send, message_id="pa1", updater=updater)
+    assert ingested == []
+    state = await state_store.load_state(PROJECT)
+    assert all("decisioni sono attive" not in q.text.lower() for q in state.open_questions)
+
+
+@pytest.mark.asyncio
+async def test_update_invocation_is_ingested(env):
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_operational(
+        CHAT_ID, 1, "Ann", "Genesi, segna che il materiale è confermato", send, message_id="up1", updater=updater
+    )
+    assert handled is True
+    assert ingested == ["up1"]   # carries a real update → ingested
+
+
+@pytest.mark.asyncio
+async def test_silent_non_invocation_still_ingested(env):
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_operational(CHAT_ID, 1, "Ann", "ragazzi domani portiamo i pezzi", send, message_id="si1", updater=updater)
+    await asyncio.sleep(0)
+    assert handled is False
+    assert sent == []
+    assert ingested == ["si1"]   # normal message still silently ingested
+
+
+def test_no_domain_hardcoding_for_invocation_filter():
+    import re
+    import core.operational_memory.query_engine as mod
+    body = open(mod.__file__, "r", encoding="utf-8").read().lower()
+    for token in ["test tab", "-5408248562", "corridoio", "pane", "quadro elettrico", "tab cefla", "cantiere"]:
+        assert not re.search(rf"\b{re.escape(token)}\b", body), f"hardcoded token: {token}"
 
 
 @pytest.mark.asyncio

@@ -79,6 +79,19 @@ async def silent_update(message: ChatMessage, rebuild: bool = True) -> None:
         )
 
 
+async def flush_project(project_id: str, rebuild: bool = True) -> None:
+    """Update operational memory from already-ingested events WITHOUT adding a new
+    event. Used on pure invocations so the query text itself is never stored as a
+    project item, while the reply still reflects the latest rebuilt state."""
+    await process_pending_events(project_id, rebuild_threads=False)
+    if rebuild:
+        await incremental_rebuild(
+            project_id,
+            relation_window_days=21,
+            relation_max_candidates_per_thread=40,
+        )
+
+
 def _compact_table(state: OperationalState) -> str:
     briefing = build_briefing(state)
     lines = ["| Categoria | N |", "| --- | ---: |"]
