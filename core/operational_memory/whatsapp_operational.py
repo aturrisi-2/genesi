@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
 from core.log import log
@@ -29,6 +30,7 @@ from core.operational_memory.chat_presence import (
     silent_update,
 )
 from core.operational_memory.invocation_router import is_invoked
+from core.operational_memory.media_processor import analyze_attachment
 from core.operational_memory.models import (
     ChatAttachment,
     ChatMessage,
@@ -109,8 +111,34 @@ def _attachments_for(media_type: str) -> list[ChatAttachment]:
     if media_type not in _MEDIA_TYPES:
         return []
     norm = "document" if media_type == "document" else media_type
-    # Conservative placeholder: no OCR yet, just record that media was present.
+    # Conservative placeholder: no OCR (no file info), just record media presence.
     return [ChatAttachment(type=norm, metadata={"placeholder": True, "source": "whatsapp"})]
+
+
+async def _build_attachments(
+    media_type: str,
+    media_id: str,
+    media_dir: str,
+    filename: Optional[str],
+    mime_type: Optional[str],
+) -> list[ChatAttachment]:
+    """Run the shared media/OCR core on the downloaded file (if available) and
+    return a normalised attachment. No file info → conservative placeholder."""
+    if media_type not in _MEDIA_TYPES:
+        return []
+    if media_id and media_dir:
+        path = str(Path(media_dir) / media_id)
+        att = await analyze_attachment(
+            path,
+            media_type=media_type,
+            filename=filename,
+            mime_type=mime_type,
+            message_id=media_id,
+            platform="whatsapp",
+            allowed_dirs=[media_dir],
+        )
+        return [att]
+    return _attachments_for(media_type)
 
 
 def _fallback_message_id(group_jid: str, sender_jid: str, text: str) -> str:
@@ -137,6 +165,10 @@ async def maybe_handle_whatsapp_operational(
     send_message: SendMessage,
     message_id: Optional[str] = None,
     media_type: str = "",
+    media_id: str = "",
+    media_dir: str = "",
+    filename: Optional[str] = None,
+    mime_type: Optional[str] = None,
     config: Optional[InvocationConfig] = None,
     updater: Optional[Updater] = None,
 ) -> bool:
@@ -156,6 +188,7 @@ async def maybe_handle_whatsapp_operational(
             return False  # unmapped (personal/family) → legacy behaviour, no operational side effects
 
         update = updater or silent_update
+        attachments = await _build_attachments(media_type, media_id, media_dir, filename, mime_type)
         message = ChatMessage(
             project_id=project_id,
             message_id=str(message_id or _fallback_message_id(group_jid, sender_jid, text)),
@@ -163,7 +196,7 @@ async def maybe_handle_whatsapp_operational(
             chat_id=group_jid,
             source="whatsapp",
             text=text or "",
-            attachments=_attachments_for(media_type),
+            attachments=attachments,
         )
 
         decision = is_invoked(text, config)

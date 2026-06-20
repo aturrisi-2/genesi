@@ -356,3 +356,217 @@ def test_no_whatsapp_domain_hardcoding_step2():
     body = open(mod.__file__, "r", encoding="utf-8").read().lower()
     for token in ["test tab", "tab cefla", "cantiere", "corridoio", "pane", "quadro elettrico", "120363", "@g.us\":\"wa-"]:
         assert not re.search(rf"{re.escape(token)}", body), f"hardcoded token: {token}"
+
+
+# =========================================================================== #
+# MEDIA STEP 2 — media/OCR attached to silent ingest (mapped chats only)
+# =========================================================================== #
+
+from core.operational_memory.media_analyzer import MediaAnalysisResult
+
+
+def _img_res(text="ROOM 12 READY", status="text_extracted"):
+    return MediaAnalysisResult(
+        attachment_path="x", attachment_type="image", extracted_text=text,
+        media_description="immagine", extraction_status=status,
+        extraction_confidence="high" if text else "low", metadata={"file_name": "f"})
+
+
+def _analyzer_spy(monkeypatch, result=None, raises=False):
+    calls = {"n": 0}
+
+    def spy(p):
+        calls["n"] += 1
+        if raises:
+            raise RuntimeError("ocr boom")
+        return result if result is not None else _img_res()
+
+    monkeypatch.setattr("core.operational_memory.media_processor.analyze_media", spy)
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_mapped_image_media_runs_analyzer_and_silent_update(enabled, monkeypatch, tmp_path):
+    calls = _analyzer_spy(monkeypatch, _img_res("ROOM 12 READY"))
+    (tmp_path / "img1").write_bytes(b"fake")
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "vedi foto", send, message_id="i1",
+        media_type="image", media_id="img1", media_dir=str(tmp_path), updater=updater)
+    await asyncio.sleep(0)
+    assert handled is True and sent == []
+    assert calls["n"] == 1
+    att = ingested[0].attachments[0]
+    assert att.type == "image" and att.extracted_text == "ROOM 12 READY"
+    assert ingested[0].text == "vedi foto"          # original message text preserved
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_unmapped_media_does_not_run_analyzer(enabled, monkeypatch, tmp_path):
+    calls = _analyzer_spy(monkeypatch)
+    (tmp_path / "img1").write_bytes(b"fake")
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_whatsapp_operational(
+        "999@g.us", SENDER_JID, "Ann", "vedi foto", send, message_id="i2",
+        media_type="image", media_id="img1", media_dir=str(tmp_path), updater=updater)
+    await asyncio.sleep(0)
+    assert handled is False and ingested == [] and calls["n"] == 0
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_flag_off_media_does_not_run_analyzer(monkeypatch, tmp_path):
+    monkeypatch.delenv("OPERATIONAL_MEMORY_WHATSAPP_ENABLED", raising=False)
+    calls = _analyzer_spy(monkeypatch)
+    (tmp_path / "img1").write_bytes(b"fake")
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "vedi foto", send, message_id="i3",
+        media_type="image", media_id="img1", media_dir=str(tmp_path), updater=updater)
+    await asyncio.sleep(0)
+    assert handled is False and calls["n"] == 0
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_media_missing_file_becomes_placeholder(enabled, monkeypatch, tmp_path):
+    calls = _analyzer_spy(monkeypatch)   # must NOT be called (file missing)
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "", send, message_id="i4",
+        media_type="image", media_id="missing", media_dir=str(tmp_path), updater=updater)
+    await asyncio.sleep(0)
+    assert handled is True and sent == []
+    assert ingested[0].attachments[0].metadata["extraction_status"] == "file_missing"
+    assert calls["n"] == 0
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_media_path_outside_allowed_dir_rejected(enabled, monkeypatch, tmp_path):
+    calls = _analyzer_spy(monkeypatch)
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "", send, message_id="i5",
+        media_type="image", media_id="../../etc/passwd", media_dir=str(tmp_path), updater=updater)
+    await asyncio.sleep(0)
+    assert ingested[0].attachments[0].metadata["extraction_status"] == "rejected_path"
+    assert calls["n"] == 0   # never read the file
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_media_ocr_failure_does_not_block_ingest(enabled, monkeypatch, tmp_path):
+    _analyzer_spy(monkeypatch, raises=True)
+    (tmp_path / "img1").write_bytes(b"fake")
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "", send, message_id="i6",
+        media_type="image", media_id="img1", media_dir=str(tmp_path), updater=updater)
+    await asyncio.sleep(0)
+    assert handled is True
+    assert ingested[0].attachments[0].metadata["extraction_status"] == "analysis_error"
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_media_text_is_available_to_operational_event(enabled, monkeypatch, tmp_path):
+    from core.operational_memory.chat_presence import _event_from_message
+    _analyzer_spy(monkeypatch, _img_res("DELIVERY DONE"))
+    (tmp_path / "img1").write_bytes(b"fake")
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "guarda qui", send, message_id="i7",
+        media_type="image", media_id="img1", media_dir=str(tmp_path), updater=updater)
+    await asyncio.sleep(0)
+    event = _event_from_message(ingested[0])
+    assert event.extracted_text == "DELIVERY DONE"   # OCR available to the event
+    assert event.content == "guarda qui"             # original text not lost
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_media_no_reply_when_reply_disabled(enabled, monkeypatch, tmp_path):
+    _analyzer_spy(monkeypatch, _img_res("X"))
+    (tmp_path / "img1").write_bytes(b"fake")
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "vedi", send, message_id="i8",
+        media_type="image", media_id="img1", media_dir=str(tmp_path), updater=updater)
+    await asyncio.sleep(0)
+    assert handled is True and sent == []
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_media_reply_enabled_mock_sends_to_group_jid(enabled, monkeypatch, tmp_path):
+    monkeypatch.setenv("WHATSAPP_OPERATIONAL_REPLY_ENABLED", "true")
+    import core.operational_memory.whatsapp_operational as mod
+    _analyzer_spy(monkeypatch, _img_res("X"))
+    (tmp_path / "img1").write_bytes(b"fake")
+
+    async def fake_reply(project_id, query, report_base_url="", invoked_by="", save=True):
+        return ChatReply(project_id=project_id, intent="briefing", reply_markdown="B", report_id="r", report_url="u")
+
+    async def fake_flush(project_id, rebuild=True):
+        return None
+
+    monkeypatch.setattr(mod, "build_operational_reply", fake_reply)
+    monkeypatch.setattr(mod, "flush_project", fake_flush)
+    sent, ingested, send, updater = _spies()
+    await mod.maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "Genesi, fammi il punto", send, message_id="i9",
+        media_type="image", media_id="img1", media_dir=str(tmp_path), updater=updater)
+    assert len(sent) == 1 and sent[0][0] == GROUP_JID and sent[0][0] != SENDER_JID
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_media_no_double_reply_when_operational_handles(enabled, monkeypatch, tmp_path):
+    _analyzer_spy(monkeypatch, _img_res("X"))
+    (tmp_path / "img1").write_bytes(b"fake")
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "foto del lavoro", send, message_id="i10",
+        media_type="image", media_id="img1", media_dir=str(tmp_path), updater=updater)
+    await asyncio.sleep(0)
+    assert handled is True and sent == []
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_update_invocation_with_media_ingested(enabled, monkeypatch, tmp_path):
+    # Scenario 6: "Genesi, segna che il documento ricevuto è valido" + media → ingested, no send.
+    _analyzer_spy(monkeypatch, _img_res("DOC OK"))
+    (tmp_path / "doc1").write_bytes(b"fake")
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "Genesi, segna che il documento ricevuto è valido", send,
+        message_id="i11", media_type="document", media_id="doc1", media_dir=str(tmp_path), updater=updater)
+    await asyncio.sleep(0)
+    assert handled is True and sent == []
+    assert [m.message_id for m in ingested] == ["i11"]
+    assert ingested[0].attachments and ingested[0].attachments[0].extracted_text == "DOC OK"
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_pure_invocation_with_media_not_ingested(enabled, monkeypatch, tmp_path):
+    # Scenario 5: pure invocation with media, reply OFF → handled, no ingest item, no send.
+    _analyzer_spy(monkeypatch, _img_res("X"))
+    (tmp_path / "img1").write_bytes(b"fake")
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "Genesi, cosa resta aperto?", send, message_id="i12",
+        media_type="image", media_id="img1", media_dir=str(tmp_path), updater=updater)
+    await asyncio.sleep(0)
+    assert handled is True and sent == [] and ingested == []
+
+
+def test_whatsapp_media_no_hardcoding():
+    import re
+    import core.operational_memory.whatsapp_operational as mod
+    body = open(mod.__file__, "r", encoding="utf-8").read().lower()
+    for token in ["test tab", "tab cefla", "cantiere", "corridoio", "pane", "quadro elettrico", "120363", "genesi-baileys"]:
+        assert not re.search(rf"{re.escape(token)}", body), f"hardcoded token: {token}"
