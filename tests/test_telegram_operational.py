@@ -220,6 +220,43 @@ async def test_bridge_delegates_to_service(env, monkeypatch):
     assert sent[0][2] == {"inline_keyboard": [[{"text": "Apri report completo", "url": "u"}]]}
 
 
+@pytest.mark.asyncio
+async def test_invocation_rebuilds_before_reply(env, monkeypatch):
+    # On invocation the ingest+rebuild must be AWAITED before the reply is built,
+    # so the answer reflects the just-ingested event (no race condition).
+    import core.operational_memory.telegram_operational as mod
+    from core.operational_memory.models import ChatReply
+
+    order = []
+
+    async def ordered_updater(message):
+        order.append("update")
+
+    async def fake_reply(project_id, query, report_base_url="", invoked_by="", save=True):
+        order.append("reply")
+        return ChatReply(project_id=project_id, intent="briefing", reply_markdown="X", report_id="r", report_url="u")
+
+    monkeypatch.setattr(mod, "build_operational_reply", fake_reply)
+    sent, ingested, send, _ = _spies()
+    handled = await mod.maybe_handle_operational(
+        CHAT_ID, 1, "Ann", "Genesi, fammi il punto", send, message_id="ord1", updater=ordered_updater
+    )
+    assert handled is True
+    assert order == ["update", "reply"]   # rebuild strictly before reply
+
+
+@pytest.mark.asyncio
+async def test_telegram_ux_unchanged(env):
+    # parse_mode HTML, inline report button and focus links survive the fix.
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    sent, ingested, send, updater = _spies()
+    await maybe_handle_operational(CHAT_ID, 1, "Ann", "Genesi, fammi il punto", send, message_id="ux1", updater=updater)
+    chat_id, text, reply_markup, parse_mode = sent[0]
+    assert parse_mode == "HTML"
+    assert reply_markup is not None
+    assert "focus=" in text
+
+
 def test_no_hardcoded_domain_tokens():
     import re
     import core.operational_memory.telegram_operational as mod

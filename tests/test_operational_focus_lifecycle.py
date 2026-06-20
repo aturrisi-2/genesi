@@ -236,6 +236,62 @@ def test_counts_match_active_items_only():
 # --------------------------------------------------------------------------- #
 
 
+# --------------------------------------------------------------------------- #
+# Rendering: focused intents must NOT append the general briefing card
+# --------------------------------------------------------------------------- #
+
+
+def _render_state() -> OperationalState:
+    return OperationalState(
+        project_id="p",
+        tasks=[_task("t_open", "inviare la documentazione al cliente", "open")],
+        issues=[_issue("i_open", "passaggio cavi non verificato", "open")],
+        decisions=[_decision("d_cond", "se l'area non è libera entro le 10, si ripianifica a lunedì", "confirmed")],
+        open_questions=[_question("q_open", "disponibilità confermata?", "open")],
+    )
+
+
+def test_briefing_still_returns_card():
+    reply = build_chat_reply(_render_state(), "fammi il punto", report_url="/r")
+    assert reply.intent == "briefing"
+    assert "📌 Quadro operativo" in reply.reply_markdown
+    assert "🧭 Sintesi operativa" in reply.reply_markdown
+
+
+def test_remaining_open_does_not_append_briefing_card():
+    reply = build_chat_reply(_render_state(), "cosa resta aperto?", report_url="/r")
+    assert reply.intent == "remaining_open"
+    assert "📌 Quadro operativo" not in reply.reply_markdown
+
+
+def test_remaining_open_lists_specific_items():
+    md = build_chat_reply(_render_state(), "cosa resta aperto?").reply_markdown
+    assert ("Problemi aperti:" in md) or ("Non risultano punti aperti" in md)
+    assert "passaggio cavi non verificato" in md
+
+
+def test_active_decisions_does_not_append_briefing_card():
+    reply = build_chat_reply(_render_state(), "quali decisioni sono attive?")
+    assert reply.intent == "active_decisions"
+    assert "📌 Quadro operativo" not in reply.reply_markdown
+
+
+def test_active_decisions_lists_conditional_decision():
+    md = build_chat_reply(_render_state(), "quali decisioni sono attive?").reply_markdown
+    assert "Decisioni attive" in md
+    assert "si ripianifica a lunedì" in md
+
+
+def test_unknown_does_not_return_card():
+    state = OperationalState(
+        project_id="p",
+        tasks=[_task("n", "Nota non operativa: comprare il pane", "open")],
+    )
+    reply = build_chat_reply(state, "dimmi solo cosa comprare stasera")
+    assert reply.intent == "unknown"
+    assert "📌 Quadro operativo" not in reply.reply_markdown
+
+
 def test_no_domain_hardcoding():
     import re
 

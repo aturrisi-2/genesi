@@ -155,23 +155,30 @@ async def maybe_handle_operational(
             text=text or "",
         )
 
-        # 1. Always ingest + update memory silently (background, non-blocking).
-        asyncio.create_task(_safe_update(update, message))
-
-        # 2. Explicit invocation gate.
+        # Explicit invocation gate.
         decision = is_invoked(text, config)
-        if not decision.respond:
-            log("OPERATIONAL_TELEGRAM_SILENT", chat_id=chat_id, project_id=project_id)
-            return False  # silent: ingested, no reply, existing pipeline also stays silent on non-invocation
-        if not reply_enabled():
-            return False  # invoked but operational reply disabled → let existing pipeline answer
 
-        # 3. Delegate reply construction to the operational service layer, then
-        #    just transport it. The bridge holds no operational/empathic brain.
+        # Silent (non-invoked) OR reply disabled → ingest in the background and let
+        # the existing pipeline proceed. No operational reply is produced.
+        if not decision.respond or not reply_enabled():
+            asyncio.create_task(_safe_update(update, message))
+            if not decision.respond:
+                log("OPERATIONAL_TELEGRAM_SILENT", chat_id=chat_id, project_id=project_id)
+            return False  # ingested; existing pipeline keeps the update
+
+        # Invoked + reply enabled → ingest + rebuild SYNCHRONOUSLY before building
+        # the reply, so the answer reflects the just-ingested event and all prior
+        # ones. Deterministic ordering: no race condition, no sleep/delay.
+        log("OPERATIONAL_TELEGRAM_REBUILD_BEFORE_REPLY", project_id=project_id, mode=decision.mode)
+        await _safe_update(update, message)
+
+        # Delegate reply construction to the operational service layer, then just
+        # transport it. The bridge holds no operational/empathic brain.
         reply = await build_operational_reply(
             project_id, decision.query,
             report_base_url=_public_base_url(), invoked_by=first_name or "",
         )
+        log("OPERATIONAL_TELEGRAM_REPLY_AFTER_REBUILD", project_id=project_id)
         reply_markup = None
         if reply.report_url:
             reply_markup = {

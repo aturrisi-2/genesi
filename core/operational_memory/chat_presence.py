@@ -25,6 +25,7 @@ from core.operational_memory.models import (
     OperationalEvent,
     OperationalState,
 )
+from core.operational_memory.quality import is_non_operational_note
 from core.operational_memory.query_engine import answer_query, build_briefing
 from core.operational_memory.report_store import save_report
 from core.operational_memory.state_store import load_state
@@ -169,6 +170,81 @@ def _zero() -> _ZeroRow:
     return _ZeroRow()
 
 
+def _render_briefing_card(briefing: OperationalBriefing) -> str:
+    """The general '📌 Quadro operativo' card — only for briefing/digest."""
+    parts = [
+        "📌 Quadro operativo",
+        "",
+        _mobile_card(briefing),
+        "",
+        "🧭 Sintesi operativa",
+        "",
+        *_synthesis_lines(briefing),
+    ]
+    # report_url is NOT included in the text — the Telegram bridge sends it as an
+    # inline button so the URL does not clutter the message body.
+    return "\n".join(parts).strip()
+
+
+def _render_focused_reply(result) -> tuple[str, list[str]]:
+    """Specific list for a focused query — NEVER the general card."""
+    evidence: list[str] = []
+    intent = result.intent
+    if intent == "remaining_open":
+        if not result.items:
+            return "Non risultano punti aperti rilevanti.", evidence
+        lines = ["Punti ancora aperti", ""]
+        lines.extend(_grouped_open_lines(result.items))
+        for it in result.items:
+            evidence.extend(it.evidence_event_ids[:1])
+        return "\n".join(lines).strip(), evidence
+    if intent == "active_decisions":
+        if not result.items:
+            return "Non risultano decisioni attive.", evidence
+        lines = ["Decisioni attive", ""]
+        for it in result.items[:10]:
+            lines.append(f"- {it.text}")
+            evidence.extend(it.evidence_event_ids[:1])
+        return "\n".join(lines).strip(), evidence
+    # Generic focused list (open_tasks, open_issues, unanswered, resolved, …).
+    if not result.items:
+        return (result.summary or "Nessun elemento."), evidence
+    lines = [result.summary, ""] if result.summary else []
+    for it in result.items[:5]:
+        status = f" ({it.status})" if it.status else ""
+        lines.append(f"- {it.text}{status}")
+        evidence.extend(it.evidence_event_ids[:1])
+    if result.count > 5:
+        lines.append(f"- … e altri {result.count - 5}")
+    return "\n".join(lines).strip(), evidence
+
+
+def _non_operational_notes(state: OperationalState) -> list[str]:
+    """Items explicitly framed as non-operational, kept out of the operational
+    picture but surfaceable when the user asks something off-focus. Generic."""
+    notes: list[str] = []
+    seen: set[str] = set()
+    for field_name in ("tasks", "issues", "decisions", "information", "open_questions"):
+        for item in getattr(state, field_name):
+            if is_non_operational_note(item.text) and item.text not in seen:
+                seen.add(item.text)
+                notes.append(item.text)
+    return notes
+
+
+def _render_unknown_reply(state: OperationalState) -> str:
+    """Conservative textual fallback for off-focus queries — NEVER the card,
+    no empathic/LLM dependency. Distinguishes operational context from side notes."""
+    lines = ["Questa richiesta non rientra nel quadro operativo del progetto."]
+    notes = _non_operational_notes(state)
+    if notes:
+        lines.append("")
+        lines.append("Note non operative registrate (fuori dal quadro di progetto):")
+        for text in notes[:5]:
+            lines.append(f"- {text}")
+    return "\n".join(lines).strip()
+
+
 def build_chat_reply(
     state: OperationalState,
     query: str,
@@ -176,51 +252,36 @@ def build_chat_reply(
     report_url: str = "",
     invoked_by: str = "",
 ) -> ChatReply:
-    """Pure: turn the current state + the asked query into a compact chat reply."""
+    """Pure: turn the current state + the asked query into a compact chat reply.
+
+    Rendering is intent-aware:
+      * briefing/digest → the general '📌 Quadro operativo' card + synthesis;
+      * focused queries (remaining_open, active_decisions, open_*, …) → ONLY the
+        specific list of matching items — never the general card;
+      * unknown → a conservative textual reply, never the general card.
+    """
     briefing = build_briefing(state)
     result = answer_query(state, query)
-    focused = result.intent not in {"briefing", "digest", "unknown"}
+    intent = result.intent
 
     evidence: list[str] = []
-    focused_lines: list[str] = []
-    if focused and result.items and result.intent == "remaining_open":
-        focused_lines = _grouped_open_lines(result.items)
-        for item in result.items:
-            evidence.extend(item.evidence_event_ids[:1])
-    elif focused and result.items:
-        for item in result.items[:5]:
-            status = f" ({item.status})" if item.status else ""
-            focused_lines.append(f"- {item.text}{status}")
-            evidence.extend(item.evidence_event_ids[:1])
-        if result.count > 5:
-            focused_lines.append(f"- … e altri {result.count - 5}")
-
-    synthesis = result.summary if (focused and result.summary) else briefing.synthesis
-    actions = [briefing.recommended_action]
-
-    parts: list[str] = []
-    if focused:
-        parts.append(result.summary)
-        parts.extend(focused_lines)
-        parts.append("")
-    parts.append("📌 Quadro operativo")
-    parts.append("")
-    parts.append(_mobile_card(briefing))
-    parts.append("")
-    parts.append("🧭 Sintesi operativa")
-    parts.append("")
-    parts.extend(_synthesis_lines(briefing))
-    # report_url is NOT included in the text — the Telegram bridge sends it as
-    # an inline button so the URL does not clutter the message body.
-    reply_markdown = "\n".join(parts).strip()
+    if intent in {"briefing", "digest"}:
+        reply_markdown = _render_briefing_card(briefing)
+        synthesis = briefing.synthesis
+    elif intent == "unknown":
+        reply_markdown = _render_unknown_reply(state)
+        synthesis = result.summary
+    else:
+        reply_markdown, evidence = _render_focused_reply(result)
+        synthesis = result.summary or briefing.synthesis
 
     return ChatReply(
         project_id=state.project_id or "",
         invoked_by=invoked_by,
-        intent=result.intent,
+        intent=intent,
         table_markdown=_compact_table(state),
         synthesis=synthesis,
-        actions=actions,
+        actions=[briefing.recommended_action],
         evidence_event_ids=evidence,
         report_id=report_id,
         report_url=report_url,
