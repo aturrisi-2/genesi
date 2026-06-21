@@ -717,3 +717,52 @@ def test_api_chat_operational_hook_wired_and_no_hardcoding():
     low = src.lower()
     for token in ["120363428502905378", "genesi canary", "tab cefla", "cantiere", "corridoio"]:
         assert token not in low, f"hardcoded token in api/chat.py: {token}"
+
+
+# =========================================================================== #
+# B0.3 — should_respond gate override for mapped operational groups
+# =========================================================================== #
+
+
+def _patch_should_respond_llm(monkeypatch, intervieni=False):
+    import core.llm_service as llm
+    async def fake_call(*a, **k):
+        return '{"intervieni": %s, "motivo": "legacy"}' % ("true" if intervieni else "false")
+    monkeypatch.setattr(llm.llm_service, "_call_model", fake_call)
+
+
+@pytest.mark.asyncio
+async def test_should_respond_mapped_group_forces_forward(enabled):
+    import api.chat as apichat
+    req = apichat.ShouldRespondRequest(text="ciao a tutti", group_id=GROUP_JID, sender_name="Ann")
+    resp = await apichat.group_should_respond(req, user=None)
+    assert resp.intervieni is True and resp.motivo == "operational_ingest"
+
+
+@pytest.mark.asyncio
+async def test_should_respond_unmapped_group_uses_legacy(enabled, monkeypatch):
+    _patch_should_respond_llm(monkeypatch, intervieni=False)
+    import api.chat as apichat
+    req = apichat.ShouldRespondRequest(text="ciao", group_id="000000@g.us", sender_name="Ann")
+    resp = await apichat.group_should_respond(req, user=None)
+    assert resp.motivo != "operational_ingest"   # override skipped → legacy
+
+
+@pytest.mark.asyncio
+async def test_should_respond_disabled_uses_legacy(monkeypatch):
+    monkeypatch.delenv("OPERATIONAL_MEMORY_WHATSAPP_ENABLED", raising=False)
+    _patch_should_respond_llm(monkeypatch, intervieni=False)
+    import api.chat as apichat
+    req = apichat.ShouldRespondRequest(text="ciao", group_id=GROUP_JID, sender_name="Ann")
+    resp = await apichat.group_should_respond(req, user=None)
+    assert resp.motivo != "operational_ingest"
+
+
+def test_should_respond_override_wired_and_no_hardcoding():
+    src = open("api/chat.py", "r", encoding="utf-8").read()
+    assert "OPERATIONAL_BAILEYS_SHOULD_RESPOND_OVERRIDE" in src
+    assert 'motivo="operational_ingest"' in src
+    assert "resolve_whatsapp_project_id(request.group_id)" in src
+    low = src.lower()
+    for token in ["120363428502905378", "genesi canary"]:
+        assert token not in low

@@ -1361,6 +1361,26 @@ async def group_forget(request: GroupForgetRequest, user: AuthUser = Depends(req
 async def group_should_respond(request: ShouldRespondRequest, user: AuthUser = Depends(require_auth)):
     """LLM decide se Genesi deve intervenire nel gruppo WhatsApp."""
     try:
+        # ── Operational Memory override (flag-gated, default OFF) ────────────
+        # For a mapped operational group EVERY message must reach /group (the
+        # B0.2 hook does the silent ingest + suppresses the legacy reply). So we
+        # force forwarding here regardless of the LLM gate. Unmapped/OFF → legacy.
+        # No ingest here: ingest stays in /group to avoid duplicate events.
+        try:
+            from core.operational_memory.whatsapp_operational import (
+                is_whatsapp_operational_enabled,
+                resolve_whatsapp_project_id,
+            )
+            if (is_whatsapp_operational_enabled() and request.group_id
+                    and resolve_whatsapp_project_id(request.group_id)):
+                from core.telegram_group_memory import stable_hash as _sh_op
+                log("OPERATIONAL_BAILEYS_SHOULD_RESPOND_OVERRIDE", mapped=True,
+                    group_hash=_sh_op(request.group_id.split("@")[0].replace("-", "")),
+                    reason="operational_ingest")
+                return ShouldRespondResponse(intervieni=True, motivo="operational_ingest")
+        except Exception as _ooe:
+            log("OPERATIONAL_BAILEYS_SHOULD_RESPOND_ERR", error=str(_ooe))
+
         from core.llm_service import llm_service
         import json as _json
 
