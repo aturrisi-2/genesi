@@ -88,7 +88,9 @@ async def analyze_attachment(
         return _placeholder(media_type, {**base_meta, "path": path}, status="file_missing", path=path)
 
     try:
-        result = await asyncio.to_thread(analyze_media, Path(path))
+        # Pass the known category as a hint so extension-less cache files (e.g. an
+        # image named by id) are still analysed as their real kind, not 'unknown'.
+        result = await asyncio.to_thread(analyze_media, Path(path), media_type or "")
     except Exception as exc:
         log("OPERATIONAL_MEDIA_ANALYSIS_ERROR", error=str(exc))
         return _placeholder(

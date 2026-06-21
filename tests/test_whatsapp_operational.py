@@ -375,7 +375,7 @@ def _img_res(text="ROOM 12 READY", status="text_extracted"):
 def _analyzer_spy(monkeypatch, result=None, raises=False):
     calls = {"n": 0}
 
-    def spy(p):
+    def spy(p, _h=""):
         calls["n"] += 1
         if raises:
             raise RuntimeError("ocr boom")
@@ -637,6 +637,29 @@ async def test_whatsapp_canary_marker_does_not_change_processing_behavior(monkey
     bot, logs, calls = _patch_bot(monkeypatch)
     await bot.handle_update(_wa_payload("120999000000@g.us", MARKER))
     assert calls["process"] == 1   # message still flows to _process_message
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_image_no_extension_routed_to_ocr_event_image(enabled, tmp_path):
+    # B0.6 end-to-end: extension-less image + media_type=image → event type image
+    # (real analyzer, hint forces image branch), not degraded to document.
+    from PIL import Image, ImageDraw
+    from core.operational_memory.chat_presence import _event_from_message
+    f = tmp_path / "img_blob"   # NO extension (like a Baileys cache file)
+    img = Image.new("RGB", (500, 160), "white")
+    ImageDraw.Draw(img).text((20, 70), "DELIVERY DONE", fill="black")
+    img.save(f, format="PNG")
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "", send, message_id="ix1",
+        media_type="image", media_id="img_blob", media_dir=str(tmp_path), updater=updater)
+    await asyncio.sleep(0)
+    assert handled is True and sent == []
+    att = ingested[0].attachments[0]
+    assert att.type == "image"                          # not 'unknown'/'document'
+    event = _event_from_message(ingested[0])
+    assert event.type == "image"
 
 
 def test_no_hardcoding_canary_diagnostic():

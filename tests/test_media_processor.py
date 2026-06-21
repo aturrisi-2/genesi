@@ -27,7 +27,7 @@ async def test_analyze_attachment_image_with_text(monkeypatch, tmp_path):
     import core.operational_memory.media_processor as mp
     f = tmp_path / "img.png"
     f.write_bytes(b"fake")
-    monkeypatch.setattr(mp, "analyze_media", lambda p: _fake_result("ROOM 12 READY"))
+    monkeypatch.setattr(mp, "analyze_media", lambda p, _h="": _fake_result("ROOM 12 READY"))
     att = await analyze_attachment(str(f), media_type="image", filename="img.png")
     assert isinstance(att, ChatAttachment)
     assert att.type == "image"
@@ -47,7 +47,7 @@ async def test_analyze_attachment_uses_to_thread(monkeypatch, tmp_path):
         return fn(*a, **k)
 
     monkeypatch.setattr(mp.asyncio, "to_thread", fake_to_thread)
-    monkeypatch.setattr(mp, "analyze_media", lambda p: _fake_result("X"))
+    monkeypatch.setattr(mp, "analyze_media", lambda p, _h="": _fake_result("X"))
     att = await analyze_attachment(str(f), media_type="image")
     assert called.get("used") is True       # ran off the event loop
     assert att.extracted_text == "X"
@@ -80,7 +80,7 @@ async def test_ocr_failure_does_not_block_or_raise(monkeypatch, tmp_path):
     f = tmp_path / "img.png"
     f.write_bytes(b"fake")
 
-    def boom(p):
+    def boom(p, _h=""):
         raise RuntimeError("tesseract exploded")
 
     monkeypatch.setattr(mp, "analyze_media", boom)
@@ -95,7 +95,7 @@ async def test_attachment_metadata_preserved(monkeypatch, tmp_path):
     import core.operational_memory.media_processor as mp
     f = tmp_path / "img.png"
     f.write_bytes(b"fake")
-    monkeypatch.setattr(mp, "analyze_media", lambda p: _fake_result("X"))
+    monkeypatch.setattr(mp, "analyze_media", lambda p, _h="": _fake_result("X"))
     att = await analyze_attachment(
         str(f), media_type="image", filename="img.png", mime_type="image/png",
         message_id="m1", platform="generic",
@@ -136,7 +136,7 @@ async def test_chat_attachment_mapping(monkeypatch, tmp_path):
     from core.operational_memory.models import ChatMessage
     f = tmp_path / "img.png"
     f.write_bytes(b"fake")
-    monkeypatch.setattr(mp, "analyze_media", lambda p: _fake_result("DELIVERY DONE"))
+    monkeypatch.setattr(mp, "analyze_media", lambda p, _h="": _fake_result("DELIVERY DONE"))
     att = await analyze_attachment(str(f), media_type="image")
     msg = ChatMessage(project_id="p", message_id="e1", text="", attachments=[att])
     event = _event_from_message(msg)
@@ -168,6 +168,53 @@ async def test_real_ocr_image_optional(tmp_path):
     att = await analyze_attachment(str(f), media_type="image")
     assert att.type == "image"
     assert att.metadata["extraction_status"] in {"text_extracted", "no_text_found", "ocr_unavailable"}
+
+
+# --------------------------------------------------------------------------- #
+# B0.6 — type_hint: extension-less image cache files still get OCR
+# --------------------------------------------------------------------------- #
+
+
+def _png_no_ext(tmp_path, name="blob_no_ext", text="ROOM 12 READY"):
+    from PIL import Image, ImageDraw
+    f = tmp_path / name
+    img = Image.new("RGB", (600, 200), "white")
+    ImageDraw.Draw(img).text((20, 80), text, fill="black")
+    img.save(f, format="PNG")   # real PNG bytes, but NO extension in the name
+    return f
+
+
+def test_analyze_media_image_hint_no_extension():
+    from core.operational_memory.media_analyzer import analyze_media
+    import tempfile, pathlib
+    with tempfile.TemporaryDirectory() as d:
+        f = _png_no_ext(pathlib.Path(d))
+        res = analyze_media(f, "image")
+        assert res.attachment_type == "image"                 # hint forced image branch
+        assert res.extraction_status != "unsupported"          # OCR path ran (not degraded)
+
+
+def test_analyze_media_no_hint_no_extension_stays_unsupported():
+    from core.operational_memory.media_analyzer import analyze_media
+    import tempfile, pathlib
+    with tempfile.TemporaryDirectory() as d:
+        f = _png_no_ext(pathlib.Path(d))
+        res = analyze_media(f)                                  # no hint → suffix unknown
+        assert res.attachment_type == "unknown" and res.extraction_status == "unsupported"
+
+
+@pytest.mark.asyncio
+async def test_analyze_attachment_image_hint_no_extension(tmp_path):
+    f = _png_no_ext(tmp_path)
+    att = await analyze_attachment(str(f), media_type="image")
+    assert att.type == "image"                                 # not 'unknown'
+
+
+@pytest.mark.asyncio
+async def test_analyze_attachment_image_missing_keeps_image_type(tmp_path):
+    att = await analyze_attachment(str(tmp_path / "nope"), media_type="image")
+    assert att.metadata["extraction_status"] == "file_missing"
+    assert att.type == "image"                                 # placeholder keeps the known kind
 
 
 def test_no_platform_domain_hardcoding_media_processor():

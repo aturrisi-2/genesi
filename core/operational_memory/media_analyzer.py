@@ -261,9 +261,22 @@ def _extract_pdf_text(path: Path) -> tuple[str, dict[str, Any]]:
     return "", metadata
 
 
-def analyze_media(path: Path) -> MediaAnalysisResult:
+def analyze_media(path: Path, type_hint: str = "") -> MediaAnalysisResult:
     path = Path(path)
     attachment_type = attachment_type_for_path(path)
+    # Cache files (e.g. from a chat bridge) are often named by id WITHOUT an
+    # extension → suffix-based type is 'unknown'. When the caller knows the kind
+    # (type_hint, e.g. 'image'/'image/jpeg'), use it so a real image still gets
+    # OCR instead of being degraded to an unsupported placeholder. PIL/pdf libs
+    # detect the actual format from the bytes, not the extension.
+    if attachment_type in ("unknown", "ignored"):
+        hint = (type_hint or "").lower()
+        if any(k in hint for k in ("image", "photo", "screenshot", "jpeg", "jpg", "png", "webp")):
+            attachment_type = "image"
+        elif "pdf" in hint:
+            attachment_type = "pdf"
+        elif any(k in hint for k in ("document", "doc", "file", "application")):
+            attachment_type = "document"
     if attachment_type == "image":
         return _analyze_image(path)
     if attachment_type == "pdf":
