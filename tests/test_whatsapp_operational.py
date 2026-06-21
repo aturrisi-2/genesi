@@ -644,3 +644,76 @@ def test_no_hardcoding_canary_diagnostic():
     # marker is allowed; the diagnostic must log the variable, not a real jid
     assert MARKER in src
     assert 'log("WA_CANARY_GROUP_JID_SEEN", gid=gid' in src
+
+
+# =========================================================================== #
+# B0.2 — /api/chat (Baileys) bridge to WhatsApp operational memory
+# =========================================================================== #
+
+
+@pytest.mark.asyncio
+async def test_api_chat_group_mapped_claims_and_suppresses_legacy(enabled, monkeypatch):
+    import api.chat as apichat
+    captured = {}
+
+    async def fake_bridge(**kw):
+        captured.update(kw)
+        return True   # claimed, no send (reply OFF) → empty response
+
+    monkeypatch.setattr(
+        "core.operational_memory.whatsapp_operational.maybe_handle_whatsapp_operational", fake_bridge)
+    request = apichat.GroupChatRequest(text="ciao a tutti", sender_name="Ann", sender_id="3939", group_id=GROUP_JID)
+    resp = await apichat.group_chat_endpoint(request, req=None, user=None)
+    assert resp.status == "operational" and resp.response == ""     # legacy suppressed, silent
+    assert captured["group_jid"] == GROUP_JID                       # full JID mapping key, not truncated
+
+
+@pytest.mark.asyncio
+async def test_api_chat_group_reply_enabled_returns_text(enabled, monkeypatch):
+    monkeypatch.setenv("WHATSAPP_OPERATIONAL_REPLY_ENABLED", "true")
+    import api.chat as apichat
+
+    async def fake_bridge(group_jid, sender_jid, first_name, text, send_message, **kw):
+        await send_message(group_jid, "OP REPLY BODY")   # bridge sends via injected sender
+        return True
+
+    monkeypatch.setattr(
+        "core.operational_memory.whatsapp_operational.maybe_handle_whatsapp_operational", fake_bridge)
+    request = apichat.GroupChatRequest(text="Genesi, fammi il punto", sender_name="Ann", sender_id="3939", group_id=GROUP_JID)
+    resp = await apichat.group_chat_endpoint(request, req=None, user=None)
+    assert resp.status == "operational" and resp.response == "OP REPLY BODY"
+
+
+@pytest.mark.asyncio
+async def test_api_chat_group_unmapped_falls_through(enabled, monkeypatch):
+    # Unmapped group → bridge resolves no project → hook does not return → legacy.
+    # We assert the hook does NOT claim (no operational early-return) by spying the
+    # bridge: it must not be called for an unmapped group.
+    import api.chat as apichat
+    called = {"n": 0}
+
+    async def fake_bridge(**kw):
+        called["n"] += 1
+        return True
+
+    monkeypatch.setattr(
+        "core.operational_memory.whatsapp_operational.maybe_handle_whatsapp_operational", fake_bridge)
+    # group not in WHATSAPP_CHAT_PROJECT_MAP → resolve returns None → bridge skipped
+    request = apichat.GroupChatRequest(text="ciao", sender_name="Ann", sender_id="3939", group_id="000000@g.us")
+    # legacy path is heavy; assert only that the operational bridge was not invoked
+    try:
+        await apichat.group_chat_endpoint(request, req=None, user=None)
+    except Exception:
+        pass
+    assert called["n"] == 0
+
+
+def test_api_chat_operational_hook_wired_and_no_hardcoding():
+    src = open("api/chat.py", "r", encoding="utf-8").read()
+    assert "maybe_handle_whatsapp_operational(" in src
+    assert "group_jid=request.group_id" in src          # full JID, not truncated log value
+    assert "is_whatsapp_operational_enabled" in src       # flag-guarded
+    assert "group_hash=group_int" in src                  # privacy: hash, not full jid in check log
+    low = src.lower()
+    for token in ["120363428502905378", "genesi canary", "tab cefla", "cantiere", "corridoio"]:
+        assert token not in low, f"hardcoded token in api/chat.py: {token}"

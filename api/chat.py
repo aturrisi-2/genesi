@@ -759,6 +759,54 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             sender_int = 0
             group_int  = 0
 
+        # ── Operational Memory bridge (opt-in, flag-gated, default OFF) ──────
+        # Live WhatsApp (Baileys) reaches Genesi here, NOT via the Meta webhook.
+        # For a mapped operational group: silent ingest + claim → suppress the
+        # legacy empathic reply. Reply only when WHATSAPP_OPERATIONAL_REPLY_ENABLED
+        # (sent back as the HTTP response, never a separate push). Flag OFF or
+        # unmapped → fall through to the existing behaviour unchanged. The full
+        # group JID (request.group_id, '…@g.us') is the mapping key.
+        try:
+            from core.operational_memory.whatsapp_operational import (
+                is_whatsapp_operational_enabled,
+                is_whatsapp_operational_reply_enabled,
+                maybe_handle_whatsapp_operational,
+                resolve_whatsapp_project_id,
+            )
+            _op_enabled = is_whatsapp_operational_enabled()
+            _op_project = resolve_whatsapp_project_id(request.group_id) if _op_enabled else None
+            log("OPERATIONAL_BAILEYS_CHAT_PATH_CHECK", enabled=_op_enabled,
+                mapped=bool(_op_project), group_hash=group_int,
+                reply_enabled=is_whatsapp_operational_reply_enabled())
+            if _op_project:
+                _op_reply: dict = {}
+
+                async def _op_send(_to, _text, *a, **k):
+                    _op_reply["to"] = _to
+                    _op_reply["text"] = _text
+
+                _mt = (request.media_type or "").lower()
+                _op_media_type = next(
+                    (t for t in ("image", "video", "audio", "document")
+                     if t in _mt or (request.media_mime or "").lower().startswith(t)),
+                    "",
+                )
+                _handled = await maybe_handle_whatsapp_operational(
+                    group_jid=request.group_id, sender_jid=request.sender_id,
+                    first_name=request.sender_name, text=request.text,
+                    send_message=_op_send, message_id=request.media_id,
+                    media_type=_op_media_type, media_id=(request.media_id or ""),
+                    media_dir="/opt/genesi-baileys/media-cache" if request.media_id else "",
+                    mime_type=request.media_mime,
+                )
+                if _handled:
+                    _op_text = _op_reply.get("text", "") or ""
+                    log("OPERATIONAL_BAILEYS_HANDLED", project_id=_op_project,
+                        action=("reply" if _op_text else "silent_ingest"))
+                    return GroupChatResponse(response=_op_text, status="operational")
+        except Exception as _oe:
+            log("OPERATIONAL_BAILEYS_CHAT_ERR", error=str(_oe))
+
         # Reattività GLOBALE: segna l'arrivo (per scartare risposte stantie)
         from core.group_reactivity import mark_arrival, is_superseded
         _wa_arrival = mark_arrival("whatsapp", group_int, sender_int)
