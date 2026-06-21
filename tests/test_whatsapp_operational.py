@@ -570,3 +570,77 @@ def test_whatsapp_media_no_hardcoding():
     body = open(mod.__file__, "r", encoding="utf-8").read().lower()
     for token in ["test tab", "tab cefla", "cantiere", "corridoio", "pane", "quadro elettrico", "120363", "genesi-baileys"]:
         assert not re.search(rf"{re.escape(token)}", body), f"hardcoded token: {token}"
+
+
+# =========================================================================== #
+# B0.1 — marker-only canary group jid diagnostic (in whatsapp_bot.handle_update)
+# =========================================================================== #
+
+MARKER = "GENESI_CANARY_JID_CHECK_20260621"
+
+
+def _wa_payload(group_id, body, sender="393331234567", mtype="text"):
+    msg = {"from": sender, "id": "mk1", "type": mtype}
+    if mtype == "text":
+        msg["text"] = {"body": body}
+    value = {"contacts": [{"wa_id": sender, "profile": {"name": "Ann"}}], "messages": [msg]}
+    if group_id:
+        value["metadata"] = {"group_id": group_id}
+    return {"entry": [{"changes": [{"value": value}]}]}
+
+
+def _patch_bot(monkeypatch):
+    import core.whatsapp_bot as bot
+    logs = []
+    calls = {"process": 0}
+
+    def fake_log(event, **kw):
+        logs.append((event, kw))
+
+    async def fake_process(*a, **k):
+        calls["process"] += 1
+
+    monkeypatch.setattr(bot, "log", fake_log)
+    monkeypatch.setattr(bot, "_process_message", fake_process)
+    return bot, logs, calls
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_canary_marker_logs_group_jid(monkeypatch):
+    bot, logs, calls = _patch_bot(monkeypatch)
+    await bot.handle_update(_wa_payload("120999000000@g.us", MARKER))
+    seen = [kw for ev, kw in logs if ev == "WA_CANARY_GROUP_JID_SEEN"]
+    assert seen and seen[0]["gid"] == "120999000000@g.us"
+    assert "@g.us" in seen[0]["gid"]
+    assert seen[0]["sender"].endswith("***")          # sender masked
+    assert MARKER not in str(seen[0])                  # full text not logged
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_canary_marker_not_logged_for_normal_messages(monkeypatch):
+    bot, logs, calls = _patch_bot(monkeypatch)
+    await bot.handle_update(_wa_payload("120999000000@g.us", "ciao a tutti"))
+    assert not any(ev == "WA_CANARY_GROUP_JID_SEEN" for ev, _ in logs)
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_canary_marker_private_chat_does_not_log_group_jid(monkeypatch):
+    bot, logs, calls = _patch_bot(monkeypatch)
+    await bot.handle_update(_wa_payload(None, MARKER))   # no group_id → private
+    assert not any(ev == "WA_CANARY_GROUP_JID_SEEN" for ev, _ in logs)
+    # optional ignored log, never a group jid
+    assert all("@g.us" not in str(kw.get("gid", "")) for ev, kw in logs)
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_canary_marker_does_not_change_processing_behavior(monkeypatch):
+    bot, logs, calls = _patch_bot(monkeypatch)
+    await bot.handle_update(_wa_payload("120999000000@g.us", MARKER))
+    assert calls["process"] == 1   # message still flows to _process_message
+
+
+def test_no_hardcoding_canary_diagnostic():
+    src = open("core/whatsapp_bot.py", "r", encoding="utf-8").read()
+    # marker is allowed; the diagnostic must log the variable, not a real jid
+    assert MARKER in src
+    assert 'log("WA_CANARY_GROUP_JID_SEEN", gid=gid' in src

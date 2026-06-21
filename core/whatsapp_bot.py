@@ -907,6 +907,25 @@ async def handle_update(payload: dict):
                     gid = raw_group_id or msg.get("context", {}).get("id", "")
                     from core.telegram_group_memory import stable_hash
                     chat_id = stable_hash(gid) if gid else 0
+
+                    # Diagnostica marker-only per identificare il group jid del gruppo
+                    # canary. Logga il gid SOLO quando arriva il marker esatto in un
+                    # gruppo. Nessun log su messaggi normali; sender mascherato; il
+                    # testo completo non viene loggato. Non altera il flusso.
+                    _canary_text = (
+                        (msg.get("text", {}) or {}).get("body", "")
+                        or (msg.get("image", {}) or {}).get("caption", "")
+                        or (msg.get("document", {}) or {}).get("caption", "")
+                        or ""
+                    )
+                    if "GENESI_CANARY_JID_CHECK_20260621" in _canary_text:
+                        _snd = msg.get("from", "")
+                        _masked = (_snd[:4] + "***") if _snd else ""
+                        if msg_is_group and gid:
+                            log("WA_CANARY_GROUP_JID_SEEN", gid=gid, chat_id=chat_id, sender=_masked)
+                        else:
+                            log("WA_CANARY_GROUP_JID_CHECK_IGNORED", reason="not_group", sender=_masked)
+
                     await _process_message(msg, name_map, is_group=msg_is_group, chat_id=chat_id, group_jid=gid)
 
     except Exception as e:
