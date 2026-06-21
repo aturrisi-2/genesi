@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 EventType = Literal["text", "image", "pdf", "document"]
@@ -28,19 +28,19 @@ def normalize_media_category(raw_type: str | None, mime: str | None = None) -> s
 
 
 def normalize_event_type(raw_type: str | None) -> EventType:
-    """Map any attachment/media type to a VALID OperationalEvent.type. Unknown or
-    audio/video (no dedicated event type) safely fall back to 'document'; a bare
-    value with no media stays 'text'. Never returns an invalid literal."""
+    """Map ANY attachment/media type (substring-tolerant: 'imageMessage',
+    'documentMessage', 'audio/ogg', 'unknown', …) to a VALID OperationalEvent.type.
+    pdf→pdf, image-like→image, everything else with media→document, empty→text.
+    Never returns an invalid literal."""
     t = (raw_type or "").lower()
-    if t in ("image", "photo", "jpeg", "jpg", "png", "webp", "screenshot", "sticker"):
-        return "image"
-    if t == "pdf":
-        return "pdf"
-    if t in ("document", "doc", "docx", "xls", "xlsx", "sheet", "file", "application"):
-        return "document"
     if not t or t == "text":
         return "text"
-    return "document"  # video/audio/voice/ignored/unknown → safe valid fallback
+    if "pdf" in t:
+        return "pdf"
+    if any(k in t for k in ("image", "photo", "screenshot", "jpeg", "jpg", "png", "webp", "sticker")):
+        return "image"
+    # document/file/audio/video/voice/unknown/unsupported/ignored/… → safe fallback
+    return "document"
 ProcessedStatus = Literal["pending", "processed", "failed"]
 TaskStatus = Literal["open", "completed"]
 Confidence = Literal["high", "medium", "low"]
@@ -518,6 +518,23 @@ class OperationalEvent(BaseModel):
     timestamp: str = Field(default_factory=utc_now_iso)
     type: EventType = "text"
     content: str = Field(default="")
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def _coerce_event_type(cls, v):
+        """Final defensive guard: no raw/platform media type (unknown, audio,
+        video, imageMessage, …) can ever reach OperationalEvent.type. Closes EVERY
+        construction path. Raw value is preserved by callers in attachment_type."""
+        raw = v if isinstance(v, str) else ("" if v is None else str(v))
+        norm = normalize_event_type(raw)
+        if raw and raw not in ("text", "image", "pdf", "document") and raw != norm:
+            try:
+                from core.log import log
+                log("OPERATIONAL_EVENT_TYPE_NORMALIZED", raw_type=raw[:24],
+                    normalized_type=norm, source="event_model")
+            except Exception:
+                pass
+        return norm
     attachment_metadata: dict = Field(default_factory=dict)
     attachment_path: Optional[str] = None
     attachment_type: Optional[str] = None

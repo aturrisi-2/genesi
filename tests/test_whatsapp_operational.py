@@ -827,6 +827,33 @@ def test_text_only_message_stays_text_event_type():
     assert ev.type == "text"
 
 
+# =========================================================================== #
+# B0.5 — OperationalEvent.type validator (closes every construction path)
+# =========================================================================== #
+
+from core.operational_memory.models import OperationalEvent
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("unknown", "document"), ("unsupported", "document"), ("", "text"), (None, "text"),
+    ("audio", "document"), ("video", "document"), ("sticker", "image"),
+    ("imageMessage", "image"), ("documentMessage", "document"), ("application/pdf", "pdf"),
+    ("image/jpeg", "image"), ("text", "text"), ("image", "image"), ("pdf", "pdf"),
+])
+def test_operational_event_type_validator_always_valid(raw, expected):
+    # Direct construction with a raw/platform type must NEVER raise.
+    ev = OperationalEvent(event_id="e", project_id="p", type=raw)
+    assert ev.type == expected
+    assert ev.type in ("text", "image", "pdf", "document")
+
+
+def test_operational_event_reload_from_dict_coerces_bad_type():
+    # event_store reload path: OperationalEvent(**item) with a bad stored type.
+    item = {"event_id": "e1", "project_id": "p", "type": "unknown", "content": "x"}
+    ev = OperationalEvent(**item)
+    assert ev.type == "document"
+
+
 @pytest.mark.asyncio
 async def test_whatsapp_mapped_unknown_media_ingests_without_validation_error(enabled, monkeypatch, tmp_path):
     # Bridge → analyzer returns 'unknown' → silent ingest must not raise on event.
