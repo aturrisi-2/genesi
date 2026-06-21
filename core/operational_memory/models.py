@@ -7,6 +7,40 @@ from pydantic import BaseModel, Field
 
 
 EventType = Literal["text", "image", "pdf", "document"]
+
+
+def normalize_media_category(raw_type: str | None, mime: str | None = None) -> str:
+    """Generic media category from a raw platform type and/or mime, used to route
+    OCR/extraction. Returns one of image|video|audio|document, or "" if no media.
+    Domain/platform-agnostic — no hardcoded chat/group token."""
+    t = f"{(raw_type or '').lower()} {(mime or '').lower()}"
+    if not t.strip():
+        return ""
+    if any(k in t for k in ("image", "photo", "screenshot", "jpeg", "jpg", "png", "webp", "sticker")):
+        return "image"
+    if any(k in t for k in ("video", "mp4", "mov", "avi", "webm")):
+        return "video"
+    if any(k in t for k in ("audio", "voice", "ptt", "ogg", "opus", "mpeg", "mp3", "wav")):
+        return "audio"
+    if any(k in t for k in ("pdf", "document", "doc", "docx", "xls", "xlsx", "sheet", "file", "application")):
+        return "document"
+    return ""
+
+
+def normalize_event_type(raw_type: str | None) -> EventType:
+    """Map any attachment/media type to a VALID OperationalEvent.type. Unknown or
+    audio/video (no dedicated event type) safely fall back to 'document'; a bare
+    value with no media stays 'text'. Never returns an invalid literal."""
+    t = (raw_type or "").lower()
+    if t in ("image", "photo", "jpeg", "jpg", "png", "webp", "screenshot", "sticker"):
+        return "image"
+    if t == "pdf":
+        return "pdf"
+    if t in ("document", "doc", "docx", "xls", "xlsx", "sheet", "file", "application"):
+        return "document"
+    if not t or t == "text":
+        return "text"
+    return "document"  # video/audio/voice/ignored/unknown → safe valid fallback
 ProcessedStatus = Literal["pending", "processed", "failed"]
 TaskStatus = Literal["open", "completed"]
 Confidence = Literal["high", "medium", "low"]

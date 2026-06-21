@@ -785,12 +785,8 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                     _op_reply["to"] = _to
                     _op_reply["text"] = _text
 
-                _mt = (request.media_type or "").lower()
-                _op_media_type = next(
-                    (t for t in ("image", "video", "audio", "document")
-                     if t in _mt or (request.media_mime or "").lower().startswith(t)),
-                    "",
-                )
+                from core.operational_memory.models import normalize_media_category
+                _op_media_type = normalize_media_category(request.media_type, request.media_mime)
                 _handled = await maybe_handle_whatsapp_operational(
                     group_jid=request.group_id, sender_jid=request.sender_id,
                     first_name=request.sender_name, text=request.text,

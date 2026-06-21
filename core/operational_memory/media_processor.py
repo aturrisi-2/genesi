@@ -108,8 +108,8 @@ async def analyze_attachment(
     if result.media_description:
         merged_meta["media_description"] = result.media_description
 
-    log("OPERATIONAL_MEDIA_ANALYZED", type=att_type, status=result.extraction_status,
-        has_text=bool(result.extracted_text))
+    log("OPERATIONAL_MEDIA_ANALYZED", type=att_type, original_type=(media_type or result.attachment_type),
+        status=result.extraction_status, has_text=bool(result.extracted_text))
     return ChatAttachment(
         path=str(path),
         type=att_type,

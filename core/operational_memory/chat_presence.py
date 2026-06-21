@@ -24,6 +24,7 @@ from core.operational_memory.models import (
     OperationalBriefing,
     OperationalEvent,
     OperationalState,
+    normalize_event_type,
 )
 from core.operational_memory.quality import is_non_operational_note
 from core.operational_memory.query_engine import answer_query, build_briefing
@@ -47,7 +48,9 @@ def _event_from_message(message: ChatMessage) -> OperationalEvent:
         event.timestamp = message.timestamp
     if message.attachments:
         attachment = message.attachments[0]
-        event.type = attachment.type or "document"  # type: ignore[assignment]
+        # Map to a VALID OperationalEvent.type (never 'unknown' → no validation
+        # error). The raw type is preserved in attachment_type/metadata.
+        event.type = normalize_event_type(attachment.type)
         event.attachment_path = attachment.path
         event.attachment_type = attachment.type
         if attachment.extracted_text:

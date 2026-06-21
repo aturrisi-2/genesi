@@ -766,3 +766,83 @@ def test_should_respond_override_wired_and_no_hardcoding():
     low = src.lower()
     for token in ["120363428502905378", "genesi canary"]:
         assert token not in low
+
+
+# =========================================================================== #
+# B0.4 — normalize Baileys media types before OperationalEvent
+# =========================================================================== #
+
+from core.operational_memory.models import normalize_event_type, normalize_media_category
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("image", "image"), ("photo", "image"), ("png", "image"), ("sticker", "image"),
+    ("pdf", "pdf"), ("document", "document"), ("docx", "document"),
+    ("audio", "document"), ("video", "document"), ("voice", "document"),
+    ("unknown", "document"), ("ignored", "document"),
+    ("", "text"), (None, "text"), ("text", "text"),
+])
+def test_normalize_event_type_always_valid(raw, expected):
+    assert normalize_event_type(raw) == expected
+    assert normalize_event_type(raw) in ("text", "image", "pdf", "document")
+
+
+@pytest.mark.parametrize("raw,mime,expected", [
+    ("image", None, "image"), ("ImageMessage", None, "image"), (None, "image/jpeg", "image"),
+    (None, "application/pdf", "document"), ("document", None, "document"),
+    ("audio", None, "audio"), (None, "audio/ogg", "audio"),
+    ("video", None, "video"), (None, "video/mp4", "video"),
+    ("unknown", None, ""), (None, None, ""), ("", "", ""),
+])
+def test_normalize_media_category(raw, mime, expected):
+    assert normalize_media_category(raw, mime) == expected
+
+
+def test_unknown_attachment_type_maps_to_valid_event_type():
+    # Reproduces the live crash: attachment type 'unknown' must not reach
+    # OperationalEvent.type (Literal). _event_from_message normalises it.
+    from core.operational_memory.chat_presence import _event_from_message
+    from core.operational_memory.models import ChatAttachment, ChatMessage
+    msg = ChatMessage(
+        project_id="p", message_id="e1", text="foto",
+        attachments=[ChatAttachment(type="unknown", path="/tmp/x", metadata={"raw": "unknown"})],
+    )
+    event = _event_from_message(msg)            # must not raise
+    assert event.type == "document"              # valid fallback
+    assert event.attachment_type == "unknown"    # raw preserved
+
+
+def test_image_attachment_maps_to_image_event_type():
+    from core.operational_memory.chat_presence import _event_from_message
+    from core.operational_memory.models import ChatAttachment, ChatMessage
+    ev = _event_from_message(ChatMessage(project_id="p", message_id="e2", text="",
+        attachments=[ChatAttachment(type="image", path="/tmp/i")]))
+    assert ev.type == "image"
+
+
+def test_text_only_message_stays_text_event_type():
+    from core.operational_memory.chat_presence import _event_from_message
+    from core.operational_memory.models import ChatMessage
+    ev = _event_from_message(ChatMessage(project_id="p", message_id="e3", text="ciao"))
+    assert ev.type == "text"
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_mapped_unknown_media_ingests_without_validation_error(enabled, monkeypatch, tmp_path):
+    # Bridge → analyzer returns 'unknown' → silent ingest must not raise on event.
+    from core.operational_memory.chat_presence import _event_from_message
+    res = MediaAnalysisResult(attachment_path="x", attachment_type="unknown",
+                              extracted_text="", media_description="allegato non analizzato",
+                              extraction_status="unsupported", extraction_confidence="low", metadata={})
+    _analyzer_spy(monkeypatch, res)
+    (tmp_path / "blob1").write_bytes(b"\x00\x01")
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    handled = await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "", send, message_id="b1",
+        media_type="document", media_id="blob1", media_dir=str(tmp_path), updater=updater)
+    await asyncio.sleep(0)
+    assert handled is True and sent == []
+    event = _event_from_message(ingested[0])     # must not raise
+    assert event.type in ("text", "image", "pdf", "document")
+    assert event.attachment_metadata.get("extraction_status") == "unsupported"
