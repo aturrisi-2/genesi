@@ -27,11 +27,42 @@ from core.operational_memory.chat_presence import (
     silent_update,
 )
 from core.operational_memory.invocation_router import is_invoked
-from core.operational_memory.models import ChatMessage, ChatReply, InvocationConfig
+from core.operational_memory.media_processor import analyze_attachment
+from core.operational_memory.models import (
+    ChatAttachment,
+    ChatMessage,
+    ChatReply,
+    InvocationConfig,
+    normalize_media_category,
+)
 from core.operational_memory.query_engine import (
     classify_query_intent,
     is_pure_operational_invocation,
 )
+
+
+async def _telegram_attachments(
+    media_type: str,
+    media_path: str,
+    filename: Optional[str],
+    mime: Optional[str],
+) -> list[ChatAttachment]:
+    """Run the shared media/OCR core on a downloaded Telegram media file. The path
+    is confined to its own directory via allowed_dirs (no traversal). No file →
+    no attachment (text-only ingest). Generic — same core as every channel."""
+    category = normalize_media_category(media_type, mime)
+    if not media_path:
+        return []
+    allowed = [os.path.dirname(os.path.abspath(media_path))]
+    att = await analyze_attachment(
+        media_path,
+        media_type=category or media_type,
+        filename=filename,
+        mime_type=mime,
+        platform="telegram",
+        allowed_dirs=allowed,
+    )
+    return [att]
 
 
 # Label → focus section ID (generic, no domain/profession hardcoding).
@@ -138,6 +169,10 @@ async def maybe_handle_operational(
     text: str,
     send_message: SendMessage,
     message_id: Optional[str] = None,
+    media_type: str = "",
+    media_path: str = "",
+    media_filename: Optional[str] = None,
+    media_mime: Optional[str] = None,
     config: Optional[InvocationConfig] = None,
     updater: Optional[Updater] = None,
 ) -> bool:
@@ -154,6 +189,7 @@ async def maybe_handle_operational(
             return False  # chat not opted-in → existing behaviour, no operational side effects
 
         update = updater or silent_update
+        attachments = await _telegram_attachments(media_type, media_path, media_filename, media_mime)
         message = ChatMessage(
             project_id=project_id,
             message_id=str(message_id or f"tg_{chat_id}_{from_id}_{abs(hash(text)) % 10_000_000}"),
@@ -161,6 +197,7 @@ async def maybe_handle_operational(
             chat_id=str(chat_id),
             source="telegram",
             text=text or "",
+            attachments=attachments,
         )
 
         # Explicit invocation gate.

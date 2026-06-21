@@ -381,3 +381,134 @@ async def test_normal_message_empathic_send_not_broken(env):
     await asyncio.sleep(0)
     assert handled is False
     assert sent == []   # empathic pipeline untouched
+
+
+# =========================================================================== #
+# T3.1 — Telegram media → operational memory (shared media/OCR core)
+# =========================================================================== #
+
+from unittest.mock import AsyncMock
+
+
+def _capture():
+    msgs = []
+
+    async def updater(message):
+        msgs.append(message)
+
+    return msgs, updater
+
+
+def _png_no_ext(tmp_path, name="tg_blob", text="DELIVERY DONE"):
+    from PIL import Image, ImageDraw
+    f = tmp_path / name
+    img = Image.new("RGB", (500, 160), "white")
+    ImageDraw.Draw(img).text((20, 70), text, fill="black")
+    img.save(f, format="PNG")   # real PNG bytes, NO extension (like a downloaded file)
+    return f
+
+
+@pytest.mark.asyncio
+async def test_telegram_mapped_image_media_ingested_as_image(env, tmp_path):
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    from core.operational_memory.chat_presence import _event_from_message
+    f = _png_no_ext(tmp_path)
+    msgs, updater = _capture()
+    sent = []
+
+    async def send(*a, **k):
+        sent.append(a)
+
+    handled = await maybe_handle_operational(
+        CHAT_ID, 1, "Ann", "", send, message_id="m1",
+        media_type="image", media_path=str(f), updater=updater)
+    await asyncio.sleep(0)
+    assert handled is False and sent == []        # not invoked → silent, no reply
+    att = msgs[0].attachments[0]
+    assert att.type == "image"                     # OCR path (hint), not unknown
+    assert _event_from_message(msgs[0]).type == "image"
+
+
+@pytest.mark.asyncio
+async def test_telegram_unmapped_media_no_analyzer(env):
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    msgs, updater = _capture()
+    handled = await maybe_handle_operational(
+        -999, 1, "Ann", "", AsyncMock(), message_id="m2",
+        media_type="image", media_path="/tmp/whatever", updater=updater)
+    await asyncio.sleep(0)
+    assert handled is False and msgs == []         # unmapped → no operational ingest
+
+
+@pytest.mark.asyncio
+async def test_telegram_media_download_failed_text_only(env):
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    msgs, updater = _capture()
+    handled = await maybe_handle_operational(
+        CHAT_ID, 1, "Ann", "verifica documento", AsyncMock(), message_id="m3",
+        media_type="image", media_path="", updater=updater)   # empty path = download failed
+    await asyncio.sleep(0)
+    assert handled is False
+    assert msgs[0].attachments == []               # text-only, no crash
+    assert msgs[0].text == "verifica documento"
+
+
+@pytest.mark.asyncio
+async def test_telegram_media_path_traversal_rejected(env):
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    msgs, updater = _capture()
+    await maybe_handle_operational(
+        CHAT_ID, 1, "Ann", "", AsyncMock(), message_id="m4",
+        media_type="image", media_path="/tmp/genesi-telegram-media/../../etc/passwd", updater=updater)
+    await asyncio.sleep(0)
+    assert msgs[0].attachments[0].metadata["extraction_status"] == "rejected_path"
+
+
+@pytest.mark.asyncio
+async def test_telegram_media_ocr_failure_no_crash(env, tmp_path, monkeypatch):
+    monkeypatch.setattr("core.operational_memory.media_processor.analyze_media",
+                        lambda p, h="": (_ for _ in ()).throw(RuntimeError("ocr boom")))
+    f = _png_no_ext(tmp_path)
+    from core.operational_memory.telegram_operational import maybe_handle_operational
+    msgs, updater = _capture()
+    await maybe_handle_operational(
+        CHAT_ID, 1, "Ann", "", AsyncMock(), message_id="m5",
+        media_type="image", media_path=str(f), updater=updater)
+    await asyncio.sleep(0)
+    assert msgs[0].attachments[0].metadata["extraction_status"] == "analysis_error"
+
+
+@pytest.mark.asyncio
+async def test_telegram_pure_invocation_with_media_not_ingested(env, tmp_path, monkeypatch):
+    import core.operational_memory.telegram_operational as mod
+
+    async def fake_flush(project_id, rebuild=True):
+        return None
+
+    async def fake_reply(project_id, query, report_base_url="", invoked_by="", save=True):
+        from core.operational_memory.models import ChatReply
+        return ChatReply(project_id=project_id, intent="remaining_open", reply_markdown="X", report_id="", report_url="")
+
+    monkeypatch.setattr(mod, "flush_project", fake_flush)
+    monkeypatch.setattr(mod, "build_operational_reply", fake_reply)
+    f = _png_no_ext(tmp_path)
+    msgs, updater = _capture()
+    sent = []
+
+    async def send(*a, **k):
+        sent.append(a)
+
+    handled = await mod.maybe_handle_operational(
+        CHAT_ID, 1, "Ann", "Genesi, cosa resta aperto?", send, message_id="m6",
+        media_type="image", media_path=str(f), updater=updater)
+    await asyncio.sleep(0)
+    assert handled is True            # invoked + reply enabled → answered
+    assert msgs == []                 # pure invocation NOT ingested (even with media)
+
+
+def test_no_hardcoding_telegram_media():
+    import re
+    import core.operational_memory.telegram_operational as mod
+    body = open(mod.__file__, "r", encoding="utf-8").read().lower()
+    for token in ["test tab", "tab cefla", "cantiere", "corridoio", "pane", "quadro elettrico", "-1001234567890", "120363"]:
+        assert not re.search(rf"{re.escape(token)}", body), f"hardcoded: {token}"

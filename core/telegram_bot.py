@@ -723,6 +723,46 @@ async def download_file(file_id: str) -> bytes | None:
             return None
 
 
+_TG_OPERATIONAL_MEDIA_DIR = "/tmp/genesi-telegram-media"
+
+
+async def _download_operational_media(msg: dict) -> tuple:
+    """Download a Telegram photo/document into a dedicated temp dir for operational
+    OCR. Returns (media_type, path, filename, mime). On any failure the path is ""
+    (the bridge then ingests text-only — never crashes). Generic, no hardcoding."""
+    import os as _os
+    photo = msg.get("photo")
+    document = msg.get("document")
+    if photo:
+        file_id = photo[-1].get("file_id", "")          # largest size
+        media_type, filename, mime = "image", None, "image/jpeg"
+    elif document:
+        file_id = document.get("file_id", "")
+        media_type = "document"
+        filename = document.get("file_name")
+        mime = document.get("mime_type")
+    else:
+        return ("", "", None, None)
+    if not file_id:
+        return (media_type, "", filename, mime)
+    try:
+        data = await download_file(file_id)
+        if not data:
+            log("OPERATIONAL_TELEGRAM_MEDIA_DOWNLOADED", media_type=media_type, status="failed", size="unknown")
+            return (media_type, "", filename, mime)
+        _os.makedirs(_TG_OPERATIONAL_MEDIA_DIR, exist_ok=True)
+        safe_name = _os.path.basename(str(file_id))      # file_id is server-generated, no traversal
+        path = _os.path.join(_TG_OPERATIONAL_MEDIA_DIR, safe_name)
+        with open(path, "wb") as fh:
+            fh.write(data)
+        log("OPERATIONAL_TELEGRAM_MEDIA_DOWNLOADED", media_type=media_type, status="ok", size=len(data))
+        return (media_type, path, filename, mime)
+    except Exception as exc:
+        log("OPERATIONAL_TELEGRAM_MEDIA_DOWNLOADED", media_type=media_type, status="failed", size="unknown")
+        logger.debug("OPERATIONAL_TELEGRAM_MEDIA_ERR %s", exc)
+        return (media_type, "", filename, mime)
+
+
 async def set_webhook(webhook_url: str):
     global _BOT_USERNAME, _BOT_ID
     async with httpx.AsyncClient(timeout=10) as client:
@@ -1418,11 +1458,20 @@ async def handle_update(update: dict):
             # existing empathic pipeline is skipped only for that operational
             # query). Flag OFF => zero behaviour change.
             try:
-                from core.operational_memory.telegram_operational import maybe_handle_operational
+                from core.operational_memory.telegram_operational import (
+                    maybe_handle_operational, operational_enabled, project_for_chat,
+                )
+                _tg_media = ("", "", None, None)
+                # Download media only for opted-in operational chats (no waste/temp
+                # files for normal chats).
+                if _original_has_media and operational_enabled() and project_for_chat(chat_id):
+                    _tg_media = await _download_operational_media(msg)
                 if await maybe_handle_operational(
                     chat_id=chat_id, from_id=from_id, first_name=first_name,
                     text=(text or caption or ""), send_message=send_message,
                     message_id=msg.get("message_id"),
+                    media_type=_tg_media[0], media_path=_tg_media[1],
+                    media_filename=_tg_media[2], media_mime=_tg_media[3],
                 ):
                     return
             except Exception as _ome:
