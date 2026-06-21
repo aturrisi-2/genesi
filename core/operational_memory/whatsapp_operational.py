@@ -171,6 +171,7 @@ async def maybe_handle_whatsapp_operational(
     mime_type: Optional[str] = None,
     config: Optional[InvocationConfig] = None,
     updater: Optional[Updater] = None,
+    result: Optional[dict] = None,
 ) -> bool:
     """Returns True when the operational layer CLAIMS the message (the host bot
     must stop, avoiding a second/empathic reply); False to let the existing
@@ -202,10 +203,15 @@ async def maybe_handle_whatsapp_operational(
         decision = is_invoked(text, config)
         reply_enabled = is_whatsapp_operational_reply_enabled()
 
+        def _set_action(action: str) -> None:
+            if result is not None:
+                result["action"] = action
+
         # Normal (non-invocation) message → silent ingest, claim (suppress empathic).
         if not decision.respond:
             asyncio.create_task(_safe_update(update, message))
             log("OPERATIONAL_WHATSAPP_SILENT", chat_id=group_jid, project_id=project_id)
+            _set_action("silent_ingest")
             return True  # operational-dominant: no parallel empathic reply
 
         # Invocation. Pure queries are NEVER stored as items (even when reply is
@@ -226,6 +232,9 @@ async def maybe_handle_whatsapp_operational(
                 project_id=project_id, intent=intent, reason="contains_operational_update")
 
         if not reply_enabled:
+            # Distinguish: a pure query was claimed but NOT ingested vs an update
+            # that was captured. Neither sent a reply (reply OFF).
+            _set_action("claim_no_reply" if pure else "ingest_update")
             return True  # claimed, no live reply (reply flag OFF)
 
         # Reply enabled → rebuild before reply (deterministic ordering), send to GROUP JID.
@@ -240,6 +249,7 @@ async def maybe_handle_whatsapp_operational(
         await send_message(group_jid, render_whatsapp_reply(reply))  # GROUP JID, never sender
         log("OPERATIONAL_WHATSAPP_REPLY", chat_id=group_jid, project_id=project_id,
             intent=reply.intent, report_id=reply.report_id)
+        _set_action("reply")
         return True
     except Exception as exc:  # never break the existing WhatsApp bot
         log("OPERATIONAL_WHATSAPP_ERROR", chat_id=group_jid, error=str(exc))

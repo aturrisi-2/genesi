@@ -781,6 +781,74 @@ async def test_should_respond_disabled_uses_legacy(monkeypatch):
     assert resp.motivo != "operational_ingest"
 
 
+# =========================================================================== #
+# B0.7 — action classification for the BAILEYS_HANDLED log
+# =========================================================================== #
+
+
+@pytest.mark.asyncio
+async def test_action_normal_message_is_silent_ingest(enabled):
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    meta: dict = {}
+    await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "domani i pezzi", send, message_id="a1", updater=updater, result=meta)
+    await asyncio.sleep(0)
+    assert meta["action"] == "silent_ingest"
+
+
+@pytest.mark.asyncio
+async def test_action_pure_invocation_reply_off_is_claim_no_reply(enabled):
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    meta: dict = {}
+    handled = await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "Genesi, cosa resta aperto?", send, message_id="a2", updater=updater, result=meta)
+    await asyncio.sleep(0)
+    assert handled is True
+    assert meta["action"] == "claim_no_reply"
+    assert sent == [] and ingested == []      # no reply, no ingest
+
+
+@pytest.mark.asyncio
+async def test_action_update_invocation_reply_off_is_ingest_update(enabled):
+    from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+    sent, ingested, send, updater = _spies()
+    meta: dict = {}
+    await maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "Genesi, segna che il materiale è confermato", send,
+        message_id="a3", updater=updater, result=meta)
+    await asyncio.sleep(0)
+    assert meta["action"] == "ingest_update"
+    assert sent == [] and [m.message_id for m in ingested] == ["a3"]
+
+
+@pytest.mark.asyncio
+async def test_action_reply_enabled_is_reply(enabled, monkeypatch):
+    monkeypatch.setenv("WHATSAPP_OPERATIONAL_REPLY_ENABLED", "true")
+    import core.operational_memory.whatsapp_operational as mod
+
+    async def fake_flush(project_id, rebuild=True):
+        return None
+
+    async def fake_reply(project_id, query, report_base_url="", invoked_by="", save=True):
+        return ChatReply(project_id=project_id, intent="briefing", reply_markdown="B", report_id="r", report_url="u")
+
+    monkeypatch.setattr(mod, "flush_project", fake_flush)
+    monkeypatch.setattr(mod, "build_operational_reply", fake_reply)
+    sent, ingested, send, updater = _spies()
+    meta: dict = {}
+    await mod.maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "Genesi, fammi il punto", send, message_id="a4", updater=updater, result=meta)
+    assert meta["action"] == "reply" and len(sent) == 1
+
+
+def test_api_chat_handled_action_uses_bridge_result():
+    src = open("api/chat.py", "r", encoding="utf-8").read()
+    assert "result=_op_meta" in src
+    assert "_op_meta.get(\"action\")" in src
+
+
 def test_should_respond_override_wired_and_no_hardcoding():
     src = open("api/chat.py", "r", encoding="utf-8").read()
     assert "OPERATIONAL_BAILEYS_SHOULD_RESPOND_OVERRIDE" in src

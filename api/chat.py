@@ -787,18 +787,19 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
 
                 from core.operational_memory.models import normalize_media_category
                 _op_media_type = normalize_media_category(request.media_type, request.media_mime)
+                _op_meta: dict = {}
                 _handled = await maybe_handle_whatsapp_operational(
                     group_jid=request.group_id, sender_jid=request.sender_id,
                     first_name=request.sender_name, text=request.text,
                     send_message=_op_send, message_id=request.media_id,
                     media_type=_op_media_type, media_id=(request.media_id or ""),
                     media_dir="/opt/genesi-baileys/media-cache" if request.media_id else "",
-                    mime_type=request.media_mime,
+                    mime_type=request.media_mime, result=_op_meta,
                 )
                 if _handled:
                     _op_text = _op_reply.get("text", "") or ""
-                    log("OPERATIONAL_BAILEYS_HANDLED", project_id=_op_project,
-                        action=("reply" if _op_text else "silent_ingest"))
+                    _op_action = _op_meta.get("action") or ("reply" if _op_text else "silent_ingest")
+                    log("OPERATIONAL_BAILEYS_HANDLED", project_id=_op_project, action=_op_action)
                     return GroupChatResponse(response=_op_text, status="operational")
         except Exception as _oe:
             log("OPERATIONAL_BAILEYS_CHAT_ERR", error=str(_oe))
