@@ -727,15 +727,31 @@ _TG_OPERATIONAL_MEDIA_DIR = "/tmp/genesi-telegram-media"
 
 
 async def _download_operational_media(msg: dict) -> tuple:
-    """Download a Telegram photo/document into a dedicated temp dir for operational
-    OCR. Returns (media_type, path, filename, mime). On any failure the path is ""
-    (the bridge then ingests text-only — never crashes). Generic, no hardcoding."""
+    """Download a Telegram photo/document/voice/audio into a dedicated temp dir for
+    the operational core (OCR for images/PDF, transcription for audio/voice).
+    Returns (media_type, path, filename, mime). On any failure the path is "" (the
+    bridge then ingests text-only — never crashes). Generic, no hardcoding.
+
+    The core is the single source of transcription/cataloguing — this adapter only
+    recognises the media kind, saves the file to a safe path and forwards metadata."""
     import os as _os
     photo = msg.get("photo")
     document = msg.get("document")
+    voice = msg.get("voice")
+    audio = msg.get("audio")
     if photo:
         file_id = photo[-1].get("file_id", "")          # largest size
         media_type, filename, mime = "image", None, "image/jpeg"
+    elif voice:
+        file_id = voice.get("file_id", "")
+        media_type = "voice"
+        filename = None
+        mime = voice.get("mime_type") or "audio/ogg"
+    elif audio:
+        file_id = audio.get("file_id", "")
+        media_type = "audio"
+        filename = audio.get("file_name")
+        mime = audio.get("mime_type") or "audio/mpeg"
     elif document:
         file_id = document.get("file_id", "")
         media_type = "document"

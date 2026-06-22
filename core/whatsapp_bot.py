@@ -794,6 +794,33 @@ async def _upload_file(token: str, data: bytes, filename: str,
         return ""
 
 
+_WA_OPERATIONAL_MEDIA_DIR = "/tmp/genesi-whatsapp-media"
+
+
+def _save_operational_audio(audio_bytes: bytes, message_id, mime: str) -> tuple:
+    """Persist already-downloaded voice/audio bytes to a dedicated temp dir so the
+    operational core can transcribe it (path-based). Reuses the bytes the empathic
+    path already fetched — no second download. Returns (dir, filename) or ("", "")
+    on failure. The filename is derived from the server message id (no traversal).
+    Never logs audio content."""
+    import os as _os
+    if not audio_bytes:
+        return ("", "")
+    try:
+        _os.makedirs(_WA_OPERATIONAL_MEDIA_DIR, exist_ok=True)
+        ext = {"audio/ogg": ".ogg", "audio/mpeg": ".mp3", "audio/mp4": ".m4a",
+               "audio/wav": ".wav", "audio/aac": ".aac", "audio/amr": ".amr"}.get(
+                   (mime or "").split(";")[0].strip().lower(), ".ogg")
+        safe = _os.path.basename(str(message_id or "wa_voice")) + ext
+        path = _os.path.join(_WA_OPERATIONAL_MEDIA_DIR, safe)
+        with open(path, "wb") as fh:
+            fh.write(audio_bytes)
+        return (_WA_OPERATIONAL_MEDIA_DIR, safe)
+    except Exception as exc:
+        logger.debug("WA_OPERATIONAL_AUDIO_SAVE_ERR %s", exc)
+        return ("", "")
+
+
 async def _transcribe(token: str, audio_data: bytes,
                       content_type: str = "audio/ogg") -> str:
     async with httpx.AsyncClient(timeout=60) as client:
@@ -948,6 +975,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
         doc_id   = ""
         doc_name = ""
         video_id = ""
+        audio_bytes = None   # reused by the operational hook (no second download)
 
         if msg_type == "text":
             text = msg.get("text", {}).get("body", "").strip()
@@ -1202,14 +1230,23 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
             try:
                 from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
                 _op_media_type = msg_type if msg_type in ("image", "document", "video", "audio", "voice") else ""
-                _op_media_id = (photo_id or doc_id or video_id or voice_id or "") if _op_media_type else ""
+                if _op_media_type in ("audio", "voice"):
+                    # Voice/audio: reuse the bytes the empathic path already
+                    # downloaded (voice_id is cleared by then) → temp file → core
+                    # transcribes. No second download. File missing → bridge falls
+                    # back to an audio placeholder, never crashes.
+                    _op_media_dir, _op_media_id = _save_operational_audio(
+                        audio_bytes, msg.get("id"), mime_type_media)
+                else:
+                    _op_media_id = (photo_id or doc_id or video_id or "") if _op_media_type else ""
+                    _op_media_dir = "/opt/genesi-baileys/media-cache" if _op_media_id else ""
                 if await maybe_handle_whatsapp_operational(
                     group_jid=group_jid, sender_jid=wa_id, first_name=first_name,
                     text=(text or caption or ""), send_message=send_message,
                     message_id=msg.get("id"),
                     media_type=_op_media_type,
                     media_id=_op_media_id,
-                    media_dir="/opt/genesi-baileys/media-cache" if _op_media_id else "",
+                    media_dir=_op_media_dir,
                     filename=(doc_name or None),
                     mime_type=(mime_type_media or None),
                 ):
