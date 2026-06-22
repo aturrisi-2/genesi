@@ -73,11 +73,16 @@ async def silent_update(message: ChatMessage, rebuild: bool = True) -> None:
     """Listen + store + update memory. Never returns anything to the chat."""
     event = _event_from_message(message)
     if event.parent_event_id:
-        # Bind the replied/quoted parent's context (caption + OCR) so a reply (e.g.
-        # a voice note answering a photo) is interpreted as one complete item.
-        # Read-only lookup, never re-ingests the parent, never raises.
+        # Strong binding: replied/quoted parent (explicit). Read-only lookup, never
+        # re-ingests the parent, never raises. UNCHANGED behaviour.
         from core.operational_memory.context_binding import resolve_parent_context
         await resolve_parent_context(event, message.project_id)
+    else:
+        # Secondary, gated strategy (T-A4.1): infer a contextual parent when there
+        # is no explicit reply. No-op unless OPERATIONAL_CONTEXT_INFERENCE_ENABLED →
+        # with the flag OFF behaviour is identical to today.
+        from core.operational_memory.context_binding import infer_parent_context
+        await infer_parent_context(event, message.project_id)
     _stored, created = await ingest_event(event)
     log(
         "OPERATIONAL_SILENT_INGEST",

@@ -559,6 +559,9 @@ class OperationalEvent(BaseModel):
     parent_event_id: Optional[str] = None
     reply_relation: str = ""
     parent_context: str = ""
+    # Inferred-binding metadata (T-A4.1, gated). Empty for explicit reply binding.
+    # {confidence, reason, candidate_count, signals[]}. Non-breaking (default {}).
+    parent_binding_meta: dict = Field(default_factory=dict)
     domain: Domain = "UNKNOWN"
     domain_confidence: Confidence = "low"
     secondary_domains: list[Domain] = Field(default_factory=list)
