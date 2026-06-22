@@ -779,6 +779,33 @@ async def _download_operational_media(msg: dict) -> tuple:
         return (media_type, "", filename, mime)
 
 
+def _telegram_parent_from_reply(msg: dict) -> tuple:
+    """Extract a light reply/quoted snapshot from a Telegram reply_to_message for
+    the operational core: (reply_to_id, parent_text, parent_media_type,
+    parent_attachment_summary). reply_to_id matches the parent event id convention
+    (str of the replied message_id). No text logged here. Empty tuple-ish on no
+    reply. Generic, no hardcoding."""
+    reply_to = msg.get("reply_to_message") or {}
+    if not reply_to:
+        return ("", "", "", "")
+    rid = reply_to.get("message_id")
+    reply_to_id = str(rid) if rid else ""
+    parent_text = (reply_to.get("text") or reply_to.get("caption") or "").strip()
+    if reply_to.get("photo"):
+        ptype, psum = "image", "image"
+    elif reply_to.get("voice"):
+        ptype, psum = "voice", "voice"
+    elif reply_to.get("audio"):
+        ptype, psum = "audio", (reply_to.get("audio", {}).get("file_name") or "audio")
+    elif reply_to.get("document"):
+        ptype, psum = "document", (reply_to.get("document", {}).get("file_name") or "document")
+    elif reply_to.get("video"):
+        ptype, psum = "video", "video"
+    else:
+        ptype, psum = "", ""
+    return (reply_to_id, parent_text, ptype, psum)
+
+
 async def set_webhook(webhook_url: str):
     global _BOT_USERNAME, _BOT_ID
     async with httpx.AsyncClient(timeout=10) as client:
@@ -1482,12 +1509,15 @@ async def handle_update(update: dict):
                 # files for normal chats).
                 if _original_has_media and operational_enabled() and project_for_chat(chat_id):
                     _tg_media = await _download_operational_media(msg)
+                _tg_parent = _telegram_parent_from_reply(msg)
                 if await maybe_handle_operational(
                     chat_id=chat_id, from_id=from_id, first_name=first_name,
                     text=(text or caption or ""), send_message=send_message,
                     message_id=msg.get("message_id"),
                     media_type=_tg_media[0], media_path=_tg_media[1],
                     media_filename=_tg_media[2], media_mime=_tg_media[3],
+                    reply_to_id=(_tg_parent[0] or None), parent_text=_tg_parent[1],
+                    parent_media_type=_tg_parent[2], parent_attachment_summary=_tg_parent[3],
                 ):
                     return
             except Exception as _ome:

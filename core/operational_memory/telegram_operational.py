@@ -173,6 +173,10 @@ async def maybe_handle_operational(
     media_path: str = "",
     media_filename: Optional[str] = None,
     media_mime: Optional[str] = None,
+    reply_to_id: Optional[str] = None,
+    parent_text: str = "",
+    parent_media_type: str = "",
+    parent_attachment_summary: str = "",
     config: Optional[InvocationConfig] = None,
     updater: Optional[Updater] = None,
 ) -> bool:
@@ -198,6 +202,10 @@ async def maybe_handle_operational(
             source="telegram",
             text=text or "",
             attachments=attachments,
+            reply_to_id=(str(reply_to_id) if reply_to_id else None),
+            parent_text=parent_text or "",
+            parent_media_type=parent_media_type or "",
+            parent_attachment_summary=parent_attachment_summary or "",
         )
 
         # Explicit invocation gate.

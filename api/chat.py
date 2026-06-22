@@ -721,6 +721,9 @@ class GroupChatRequest(BaseModel):
     media_type: Optional[str] = None
     media_mime: Optional[str] = None
     recent_messages: Optional[list] = None  # thread recente [{name, text}] per seguire il contesto
+    reply_to_id: Optional[str] = None       # id del messaggio quotato/replied (operational binding); backward-compatible
+    parent_text: Optional[str] = None       # snapshot leggero del parent (fallback se evento non in store)
+    parent_media_type: Optional[str] = None
 
 class GroupChatResponse(BaseModel):
     response: str
@@ -794,7 +797,11 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                     send_message=_op_send, message_id=request.media_id,
                     media_type=_op_media_type, media_id=(request.media_id or ""),
                     media_dir="/opt/genesi-baileys/media-cache" if request.media_id else "",
-                    mime_type=request.media_mime, result=_op_meta,
+                    mime_type=request.media_mime,
+                    reply_to_id=request.reply_to_id,
+                    parent_text=(request.parent_text or ""),
+                    parent_media_type=(request.parent_media_type or ""),
+                    result=_op_meta,
                 )
                 if _handled:
                     _op_text = _op_reply.get("text", "") or ""

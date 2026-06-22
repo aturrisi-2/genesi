@@ -1240,6 +1240,9 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 else:
                     _op_media_id = (photo_id or doc_id or video_id or "") if _op_media_type else ""
                     _op_media_dir = "/opt/genesi-baileys/media-cache" if _op_media_id else ""
+                # Quoted/reply id (Meta Cloud payload exposes msg.context.id). Baileys
+                # index.js does not send it yet (T-A3.3) → empty there, schema ready.
+                _op_reply_to_id = (msg.get("context") or {}).get("id") or None
                 if await maybe_handle_whatsapp_operational(
                     group_jid=group_jid, sender_jid=wa_id, first_name=first_name,
                     text=(text or caption or ""), send_message=send_message,
@@ -1249,6 +1252,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     media_dir=_op_media_dir,
                     filename=(doc_name or None),
                     mime_type=(mime_type_media or None),
+                    reply_to_id=_op_reply_to_id,
                 ):
                     return
             except Exception as _ome:
