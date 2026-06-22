@@ -110,8 +110,14 @@ async def get_events(project_id: str) -> list[OperationalEvent]:
 
 
 def event_to_extraction_message(event: OperationalEvent) -> str:
+    parent_context = (event.parent_context or "").strip()
     if event.type == "text":
-        return f"[{event.timestamp}] {event.sender}: {event.content}".strip()
+        base = f"[{event.timestamp}] {event.sender}: {event.content}".strip()
+        if parent_context:
+            # Explicit reply: give the extractor the linked parent's context so the
+            # item is complete (not an isolated fragment).
+            base = f"{base}\n[Messaggio collegato] {parent_context}".strip()
+        return base
 
     attachment = event.attachment_metadata or {}
     file_name = attachment.get("file_name") or attachment.get("name") or "attachment"
@@ -119,7 +125,7 @@ def event_to_extraction_message(event: OperationalEvent) -> str:
     caption = (event.content or "").strip()
     simulated_text = attachment.get("simulated_ocr") or attachment.get("simulated_text") or ""
     text_parts = []
-    for candidate in (caption, extracted_text, simulated_text):
+    for candidate in (caption, extracted_text, simulated_text, parent_context):
         candidate = (candidate or "").strip()
         if candidate and candidate not in text_parts:
             text_parts.append(candidate)
@@ -133,6 +139,8 @@ def event_to_extraction_message(event: OperationalEvent) -> str:
         source_bits.append("caption")
     if simulated_text and not extracted_text:
         source_bits.append("testo simulato")
+    if parent_context:
+        source_bits.append("messaggio collegato")
     return (
         f"[{event.timestamp}] {event.sender} ha inviato {event.type} '{file_name}'. "
         f"Fonte media: {', '.join(source_bits)}. "

@@ -57,12 +57,27 @@ def _event_from_message(message: ChatMessage) -> OperationalEvent:
             event.extracted_text = attachment.extracted_text
         if attachment.metadata:
             event.attachment_metadata = dict(attachment.metadata)
+    # Explicit reply/quoted binding (platform-independent). The parent event id is
+    # the replied/quoted message id (event_id == message_id). Any inline parent
+    # snapshot is kept as a fallback context until/unless the parent event is found.
+    if message.reply_to_id:
+        event.parent_event_id = message.reply_to_id
+        event.reply_relation = "reply_to"
+        inline = "\n".join(p for p in (message.parent_text, message.parent_attachment_summary) if (p or "").strip())
+        if inline.strip():
+            event.parent_context = inline.strip()
     return event
 
 
 async def silent_update(message: ChatMessage, rebuild: bool = True) -> None:
     """Listen + store + update memory. Never returns anything to the chat."""
     event = _event_from_message(message)
+    if event.parent_event_id:
+        # Bind the replied/quoted parent's context (caption + OCR) so a reply (e.g.
+        # a voice note answering a photo) is interpreted as one complete item.
+        # Read-only lookup, never re-ingests the parent, never raises.
+        from core.operational_memory.context_binding import resolve_parent_context
+        await resolve_parent_context(event, message.project_id)
     _stored, created = await ingest_event(event)
     log(
         "OPERATIONAL_SILENT_INGEST",

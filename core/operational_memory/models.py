@@ -484,6 +484,14 @@ class ChatMessage(BaseModel):
     timestamp: Optional[str] = None
     is_dm: bool = False
     attachments: list[ChatAttachment] = Field(default_factory=list)
+    # Reply/quoted linkage (platform-independent). Adapters set reply_to_id to the
+    # quoted/replied message id; the optional parent_* fields carry an inline
+    # snapshot of the parent used as a fallback when the parent event is not (yet)
+    # in the store. No platform/domain token here.
+    reply_to_id: Optional[str] = None
+    parent_text: str = ""
+    parent_media_type: str = ""
+    parent_attachment_summary: str = ""
 
 
 class ChatReply(BaseModel):
@@ -542,6 +550,15 @@ class OperationalEvent(BaseModel):
     media_description: Optional[str] = None
     extraction_status: Optional[str] = None
     extraction_confidence: Optional[Confidence] = None
+    # Explicit reply/quoted binding (distinct from the semantic thread_id). When a
+    # message replies to a parent (e.g. a voice note answering a photo), the child
+    # event points to the parent via parent_event_id and carries the merged parent
+    # context (caption + OCR/extracted_text + media_description) for extraction.
+    # Evidence stays separate: parent_event_id is the parent pointer, the child's
+    # own evidence is its event_id. The parent is never re-ingested.
+    parent_event_id: Optional[str] = None
+    reply_relation: str = ""
+    parent_context: str = ""
     domain: Domain = "UNKNOWN"
     domain_confidence: Confidence = "low"
     secondary_domains: list[Domain] = Field(default_factory=list)
