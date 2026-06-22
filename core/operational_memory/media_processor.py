@@ -20,8 +20,9 @@ from pathlib import Path
 from typing import Optional
 
 from core.log import log
+from core.operational_memory.audio_transcriber import transcribe_audio_file
 from core.operational_memory.media_analyzer import analyze_media, attachment_type_for_path
-from core.operational_memory.models import ChatAttachment
+from core.operational_memory.models import ChatAttachment, normalize_media_category
 
 
 def _clean_meta(**fields) -> dict:
@@ -86,6 +87,35 @@ async def analyze_attachment(
 
     if not os.path.exists(path):
         return _placeholder(media_type, {**base_meta, "path": path}, status="file_missing", path=path)
+
+    # Audio/voice → transcription via the shared STT core (never OCR). Same
+    # boundary, every platform inherits it. Transcription rides in extracted_text
+    # so the operational engine treats it exactly like OCR text.
+    if normalize_media_category(media_type, mime_type) == "audio":
+        audio = await transcribe_audio_file(path, mime_type=mime_type)
+        att_type = media_type if media_type in {"voice", "audio"} else "audio"
+        text = audio.get("text") or ""
+        merged_meta = {
+            **base_meta,
+            "extraction_status": audio.get("transcription_status"),
+            "extraction_confidence": audio.get("confidence"),
+            "audio_kind": audio.get("kind"),
+        }
+        if audio.get("language"):
+            merged_meta["language"] = audio["language"]
+        if audio.get("description"):
+            merged_meta["media_description"] = audio["description"]
+        if audio.get("error"):
+            merged_meta["audio_error"] = audio["error"]
+        # Privacy: status / has_text only — never the transcription text.
+        log("OPERATIONAL_MEDIA_AUDIO", type=att_type,
+            status=audio.get("transcription_status"), has_text=bool(text))
+        return ChatAttachment(
+            path=str(path),
+            type=att_type,
+            extracted_text=(text or None),
+            metadata=merged_meta,
+        )
 
     try:
         # Pass the known category as a hint so extension-less cache files (e.g. an
