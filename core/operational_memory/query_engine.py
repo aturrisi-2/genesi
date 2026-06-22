@@ -373,6 +373,14 @@ def render_briefing_markdown(briefing: OperationalBriefing) -> str:
 
 # Ordered: more specific intents first. Patterns are generic IT + EN.
 _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
+    # Technical command shortcuts — exact-anchored single tokens (the invocation
+    # router has already stripped the "@genesi"/name prefix). Highest precedence
+    # so the bare command words win over the natural-language patterns; the exact
+    # anchoring means natural phrasing ("stato del progetto", "fammi il report")
+    # still falls through to digest/briefing and is unaffected.
+    ("cmd_stato", re.compile(r"^\s*stato\s*$", re.IGNORECASE)),
+    ("cmd_aperti", re.compile(r"^\s*aperti\s*$", re.IGNORECASE)),
+    ("cmd_report", re.compile(r"^\s*report\s*$", re.IGNORECASE)),
     # Specific "what is still open" → focused item list, NOT the aggregate briefing.
     # Must precede the briefing pattern so it wins on "cosa resta aperto?".
     ("remaining_open", re.compile(
@@ -438,6 +446,8 @@ _PURE_QUERY_INTENTS = {
     "briefing", "digest", "remaining_open", "active_decisions",
     "open_tasks", "open_issues", "resolved_issues", "unanswered",
     "superseded", "attention", "changed",
+    # Technical command shortcuts: read-only, never stored as project items.
+    "cmd_stato", "cmd_aperti", "cmd_report",
 }
 
 # Explicit declarative operational-update signals (generic verbs/markers, never
@@ -471,8 +481,35 @@ def is_pure_operational_invocation(query: str) -> bool:
     return not _STRONG_UPDATE_RE.search(q)  # recognised query → pure unless explicit update
 
 
+def command_status_line(state: OperationalState) -> str:
+    """Compact deterministic one-line status (no LLM): active counts per category
+    plus the last update timestamp when available. Backs the '@genesi stato'
+    technical command. Domain-agnostic, status-driven."""
+    ot = len(open_tasks(state))
+    oi = len(open_issues(state))
+    ri = len(resolved_issues(state))
+    ad = len(active_decisions(state))
+    info = len(state.information)
+    uq = len(unanswered_questions(state))
+    line = (
+        f"Task {ot} aperti · Problemi {oi} aperti ({ri} risolti) · "
+        f"Decisioni attive {ad} · Info {info} · Domande aperte {uq}"
+    )
+    if state.updated_at:
+        line += f" · agg. {state.updated_at}"
+    return line
+
+
 def answer_query(state: OperationalState, text: str) -> QueryResult:
     intent = classify_query_intent(text)
+    if intent == "cmd_stato":
+        return QueryResult(query=text, intent="cmd_stato", summary=command_status_line(state), count=0, items=[])
+    if intent == "cmd_aperti":
+        items = remaining_open(state)
+        summary = f"{len(items)} elementi aperti" if items else "Nessun elemento aperto."
+        return QueryResult(query=text, intent="cmd_aperti", summary=summary, count=len(items), items=items)
+    if intent == "cmd_report":
+        return QueryResult(query=text, intent="cmd_report", summary="Report operativo disponibile.", count=0, items=[])
     if intent == "briefing":
         briefing = build_briefing(state)
         return QueryResult(

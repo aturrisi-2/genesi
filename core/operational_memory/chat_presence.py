@@ -27,7 +27,7 @@ from core.operational_memory.models import (
     normalize_event_type,
 )
 from core.operational_memory.quality import is_non_operational_note
-from core.operational_memory.query_engine import answer_query, build_briefing
+from core.operational_memory.query_engine import answer_query, build_briefing, command_status_line
 from core.operational_memory.report_store import save_report
 from core.operational_memory.state_store import load_state
 from core.operational_memory.watcher_engine import ingest_event, process_pending_events
@@ -235,6 +235,26 @@ def _render_focused_reply(result) -> tuple[str, list[str]]:
     return "\n".join(lines).strip(), evidence
 
 
+def _render_command_open(result) -> tuple[str, list[str]]:
+    """Short technical list for the '@genesi aperti' command — grouped open
+    items, already capped per category. Never the general card."""
+    if not result.items:
+        return "Nessun elemento aperto.", []
+    lines = _grouped_open_lines(result.items)
+    evidence: list[str] = []
+    for it in result.items:
+        evidence.extend(it.evidence_event_ids[:1])
+    return "\n".join(lines).strip(), evidence[:5]
+
+
+def _render_command_report(report_url: str) -> str:
+    """Short technical report pointer for the '@genesi report' command — the
+    link if available, never an inline-generated long report."""
+    if report_url:
+        return f"📄 Report operativo: {report_url}"
+    return "Report operativo disponibile (nessun link configurato)."
+
+
 def _non_operational_notes(state: OperationalState) -> list[str]:
     """Items explicitly framed as non-operational, kept out of the operational
     picture but surfaceable when the user asks something off-focus. Generic."""
@@ -281,7 +301,16 @@ def build_chat_reply(
     intent = result.intent
 
     evidence: list[str] = []
-    if intent in {"briefing", "digest"}:
+    if intent == "cmd_stato":
+        reply_markdown = command_status_line(state)
+        synthesis = result.summary
+    elif intent == "cmd_aperti":
+        reply_markdown, evidence = _render_command_open(result)
+        synthesis = result.summary
+    elif intent == "cmd_report":
+        reply_markdown = _render_command_report(report_url)
+        synthesis = result.summary
+    elif intent in {"briefing", "digest"}:
         reply_markdown = _render_briefing_card(briefing)
         synthesis = briefing.synthesis
     elif intent == "unknown":
