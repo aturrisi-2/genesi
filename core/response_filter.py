@@ -96,6 +96,132 @@ _ASSISTANT_OPENERS_RE = re.compile(
 
 
 # ═══════════════════════════════════════════════════════════════
+# PROMPT-LEAK FILTER — blocca sezioni di prompt interno copiate
+# letteralmente nella risposta (FASE anti-leak gruppi)
+# ═══════════════════════════════════════════════════════════════
+
+# Keyword che identificano una sezione INTERNA del prompt. Se compaiono dentro
+# un blocco [...] o come titolo di riga, quel pezzo non deve mai uscire all'utente.
+# Nessun hardcoding di nomi: solo etichette strutturali del prompt.
+_LEAK_KEYWORDS = [
+    "CONTESTO FAMIGLIA",
+    "CONTESTO",
+    "REGOLE DI INFERENZA",
+    "REGOLA FONDAMENTALE",
+    "REGOLE ASSOLUTE",
+    "REGOLE",
+    "DISCUSSIONE IN CORSO",
+    "FINE DISCUSSIONE",
+    "RISPOSTE RECENTI",
+    "FINE RISPOSTE",
+    "COSA SO DI",
+    "DINAMICHE DELLA FAMIGLIA",
+    "RIEPILOGO DISCUSSIONI",
+    "ATTENZIONE ASSOLUTA",
+    "SOLLECITAZIONE",
+    "GRUPPO FAMILIARE",
+    "GRUPPO:",
+    "GRUPPO ",
+    "SISTEMA:",
+    "RISPONDI SOLO",
+    "NON NOMINARE",
+    "NON SEI NEL GRUPPO",
+    "TRATTALO",
+    "TRATTALA",
+    "LINEE GUIDA",
+]
+_LEAK_KW_RE = re.compile("|".join(re.escape(k) for k in _LEAK_KEYWORDS), re.IGNORECASE)
+
+# Blocco [...] (non annidato) che contiene almeno una keyword interna.
+_LEAK_BRACKET_RE = re.compile(r"\[[^\[\]]*\]", re.DOTALL)
+
+# Riga-trascrizione del contesto gruppo: "[10s fa] Marco: ..." o "→ Genesi: ..."
+_LEAK_TRANSCRIPT_RE = re.compile(
+    r"^\s*(?:\[\s*\d+\s*(?:s|min|h|sec|ore|minuti)\b[^\]]*\]\s*)?[^\n:]{1,30}:\s",
+    re.IGNORECASE,
+)
+_LEAK_GENESI_LINE_RE = re.compile(r"^\s*(?:→\s*)?genesi\s*:", re.IGNORECASE)
+
+# Istruzioni imperative interne ("Rispondi SOLO a...", "NON nominare...") fuori da []
+_LEAK_IMPERATIVE_RE = re.compile(
+    r"^\s*(?:rispondi solo\b|non nominare\b|trattal[oa]\b|non sei nel gruppo\b|"
+    r"regola fondamentale\b|regole assolute\b|linee guida\b)",
+    re.IGNORECASE,
+)
+
+
+def _bracket_has_leak(block: str) -> bool:
+    """True se un blocco [...] contiene una keyword di prompt interno."""
+    return bool(_LEAK_KW_RE.search(block))
+
+
+def strip_internal_prompt_leak(text: str) -> tuple[str, bool]:
+    """
+    Rimuove dalla risposta i frammenti di prompt interno copiati dal modello.
+
+    Ritorna (testo_pulito, heavy_leak):
+      - testo_pulito: risposta senza sezioni interne;
+      - heavy_leak: True se la contaminazione è grave (caller deve usare
+        fallback/rigenerazione invece di mandare il residuo).
+
+    Conserva le parentesi quadre "innocue" (es. emote [ride], [sorride]):
+    rimuove solo blocchi che contengono keyword strutturali del prompt.
+    """
+    if not text or not isinstance(text, str):
+        return text, False
+
+    original = text
+    orig_len = len(original.strip())
+
+    # 1) Rimuovi blocchi [...] che contengono keyword interne (preserva emote)
+    cleaned = _LEAK_BRACKET_RE.sub(
+        lambda m: "" if _bracket_has_leak(m.group(0)) else m.group(0),
+        text,
+    )
+
+    # 2) Pulizia riga per riga: titoli interni, trascrizioni gruppo, imperativi
+    kept_lines = []
+    for line in cleaned.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            kept_lines.append(line)
+            continue
+        if _LEAK_GENESI_LINE_RE.match(stripped):
+            continue
+        if _LEAK_IMPERATIVE_RE.match(stripped):
+            continue
+        # riga interamente MAIUSCOLA che è un titolo di sezione interna
+        if _LEAK_KW_RE.search(stripped) and stripped == stripped.upper() and len(stripped) > 3:
+            continue
+        # trascrizione "[Xs fa] Nome:" tipica del contesto gruppo iniettato
+        if stripped.startswith("[") and _LEAK_TRANSCRIPT_RE.match(stripped):
+            continue
+        kept_lines.append(line)
+    cleaned = "\n".join(kept_lines)
+
+    # 3) Normalizza spazi/righe vuote multiple
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+    cleaned = re.sub(r"^[,.\s]+", "", cleaned).strip()
+
+    if cleaned == original.strip():
+        return original, False
+
+    clean_len = len(cleaned)
+    # Heavy leak: residuo troppo eroso, vuoto, o keyword critica ancora presente
+    heavy = (
+        clean_len < 3
+        or (orig_len > 0 and clean_len < orig_len * 0.5)
+        or bool(_LEAK_KW_RE.search(cleaned))
+    )
+    logger.info(
+        "RESPONSE_LEAK_STRIPPED removed_chars=%d heavy=%s",
+        orig_len - clean_len, heavy,
+    )
+    return cleaned, heavy
+
+
+# ═══════════════════════════════════════════════════════════════
 # LOOP DETECTOR — blocca risposte identiche consecutive (FASE 4)
 # ═══════════════════════════════════════════════════════════════
 
@@ -155,6 +281,13 @@ def filter_response(response: str, user_id: str = "") -> str:
 
     original = response
     filtered = strip_leading_speaker_prefix(response)
+
+    # STEP 0: Anti prompt-leak — rimuovi sezioni di prompt interno copiate.
+    # Se la contaminazione è grave, segnala rigenerazione (return "").
+    filtered, heavy_leak = strip_internal_prompt_leak(filtered)
+    if heavy_leak:
+        logger.warning("RESPONSE_LEAK_HEAVY user=%s — signaling regeneration", user_id)
+        return ""
 
     # STEP 1: Strip blacklisted phrases
     for pattern in _BLACKLIST_COMPILED:
