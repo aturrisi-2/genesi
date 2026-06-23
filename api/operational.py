@@ -207,6 +207,20 @@ async def get_operational_daily_report_endpoint(
     return await build_daily_report(project_id, report_mode=report_mode)
 
 
+@router.get("/operational-report/{project_id}/latest", response_class=HTMLResponse)
+async def operational_report_latest_view(
+    project_id: str,
+    report_mode: ReportMode = "OPERATIVE_ONLY",
+) -> HTMLResponse:
+    """Print-friendly HTML view of the latest daily report. Reuses build_daily_report
+    (same logic as the JSON endpoint), rendering its markdown. No new auth (same as
+    other operational read endpoints), no store mutation."""
+    from core.operational_memory.report_viewer import render_daily_report_html
+    report = await build_daily_report(project_id, report_mode=report_mode)
+    json_url = f"/operational-state/{project_id}/daily-report"
+    return HTMLResponse(content=render_daily_report_html(report, json_url=json_url))
+
+
 @router.post("/operational-demo/{project_id}/whatsapp-export/run", response_model=OfflineWhatsAppDemoResponse)
 async def run_offline_whatsapp_demo_endpoint(
     project_id: str,

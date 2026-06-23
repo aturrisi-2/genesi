@@ -200,3 +200,37 @@ def render_report_page(report: StoredReport, download_url: str) -> str:
 {_FOCUS_JS}
 </body>
 </html>"""
+
+
+def render_daily_report_html(report, json_url: str = "") -> str:
+    """Standalone, print-friendly HTML page for a DailyReport. Renders its
+    `markdown` via the dependency-free subset renderer. Read-only; no store
+    access. `json_url` links back to the raw JSON endpoint when provided."""
+    body_html = markdown_to_html(getattr(report, "markdown", "") or "")
+    project_id = getattr(report, "project_id", "") or ""
+    rtitle = getattr(report, "title", "") or "Aggiornamento giornaliero"
+    date = getattr(report, "date", "") or ""
+    title = html.escape(f"Aggiornamento giornaliero - {project_id}")
+    json_link = (
+        f'<a href="{html.escape(json_url)}">JSON</a>' if json_url else ""
+    )
+    return f"""<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<style>{_PAGE_CSS}</style>
+</head>
+<body>
+<div class="actions no-print">
+  <button type="button" onclick="window.print()">Stampa</button>
+  {json_link}
+</div>
+<h1>{html.escape(rtitle)}</h1>
+<div class="meta">Progetto: {html.escape(project_id)}{(' · ' + html.escape(date)) if date else ''}</div>
+<article>
+{body_html}
+</article>
+</body>
+</html>"""
