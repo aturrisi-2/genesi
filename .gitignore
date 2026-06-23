@@ -90,3 +90,24 @@ import_log.txt
 monitor_trigger_count.txt
 tests/dummy_face_image*.jpg
 80
+
+# ===============================
+# Local tooling / assistant artifacts
+# ===============================
+.codex/
+Prompt Gpt*.txt
+
+# Graph / analysis outputs
+.graphify_detect.json
+graphify-out/
+output/
+
+# Real exports / sensitive local data
+real_exports/
+
+# Nested local clones
+genesi_gold_faro/
+
+# Local scratch files
+_t.pdf
+who_iris*.png
