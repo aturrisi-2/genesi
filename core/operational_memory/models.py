@@ -383,6 +383,20 @@ class OperationalLifecycleSnapshot(BaseModel):
     snapshot_delta: Optional["SnapshotDelta"] = None
 
 
+class ReviewItem(BaseModel):
+    """Extracted item NOT accepted into the active operational state, kept in a
+    reviewable queue (audit / filter tuning / human decision). Never shown as an
+    active task/issue/etc. nor in the main report. Non-breaking, default empty."""
+    proposed_type: str = ""        # task | issue | information | question | decision | unknown
+    reason: str = ""               # vague_question | meta_system | weak_task | possible_joke | missing_context | low_confidence
+    confidence: Confidence = "low"
+    evidence_event_id: str = ""
+    timestamp: str = ""            # set at creation (state_engine)
+    snippet: str = ""              # max 200 chars
+    source: str = ""
+    project_id: str = ""
+
+
 class OperationalState(BaseModel):
     project_id: Optional[str] = None
     updated_at: Optional[str] = None
@@ -391,6 +405,9 @@ class OperationalState(BaseModel):
     issues: list[Issue] = Field(default_factory=list)
     information: list[Information] = Field(default_factory=list)
     open_questions: list[OperationalQuestion] = Field(default_factory=list)
+    # Non-active reviewable queue (accepted/needs_review/ignored). Empty by default
+    # → non-breaking. Only `accepted` items reach the lists above.
+    review_queue: list[ReviewItem] = Field(default_factory=list)
     threads: list[OperationalThread] = Field(default_factory=list)
     macro_threads: list[OperationalMacroThread] = Field(default_factory=list)
     thread_relation_candidates: list[ThreadRelationCandidate] = Field(default_factory=list)
