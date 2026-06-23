@@ -182,6 +182,84 @@ def has_item_context(item: OperationalItem) -> bool:
     )
 
 
+# Generic markers that a message is about the SYSTEM/bot/test itself, not the
+# project's operational work. No chat/domain/person token hardcoded.
+_META_SYSTEM_MARKERS = (
+    "genesi", "gemini", "chatgpt", "chatbot", "assistente virtuale", "assistente ai",
+    "intelligenza artificiale", "per testare", "sto testando", "test del sistema",
+    "progetto di test", "progetto per testare", "bot nel gruppo", "testare la gestione",
+)
+
+
+def _looks_meta_system(text: str) -> bool:
+    normalized = normalize_quality_text(text)
+    return any(marker in normalized for marker in _META_SYSTEM_MARKERS)
+
+
+def classify_ingest(item: OperationalItem, category: str, parent_context: str = "") -> tuple[str, str]:
+    """Triage an extracted item into one of: 'accepted' | 'needs_review' | 'ignored'.
+
+    Returns (decision, reason). Deterministic, generic (no domain/chat token). Only
+    `accepted` items belong in the active operational state; `needs_review` go to a
+    reviewable queue; `ignored` is dropped. Conservative: items with real technical
+    signal or explicit context are accepted; clear noise/meta is ignored; weak or
+    contextless items are deferred to review, never silently kept as active."""
+    text = item.text or ""
+    ctx = has_item_context(item)
+    # Broader technical signal: reuse the context extractor (codes/zones/components,
+    # handles hyphenated codes like QF-01 / EWC-10). A bare generic keyword
+    # ("verificare", "documentazione") yields no tag → NOT strong enough to accept.
+    try:
+        from core.operational_memory.context_extractor import extract_context
+        extracted_tags = extract_context(text).context_tags
+    except Exception:
+        extracted_tags = []
+    strong = ctx or bool(extracted_tags) or bool(_TECHNICAL_CODE_RE.search(text))
+    weak_conf = getattr(item, "confidence", "medium") == "low"
+
+    # A meta-system message (about Genesi/bot/test) is dropped unless it carries a
+    # REAL technical code (generic tags like "progetto"/"test" do NOT rescue it).
+    has_code = bool(_TECHNICAL_CODE_RE.search(text))
+
+    # Clear drops first.
+    if is_non_operational_note(text):
+        return ("ignored", "non_operational_marker")
+    if _looks_meta_system(text) and not has_code:
+        return ("ignored", "meta_system")
+    if is_noise_text(text) and not strong:
+        return ("ignored", "possible_joke")
+
+    sig = is_technically_significant(text)
+
+    # Decisions are high-value and rare (incl. conditional safety-net) → never
+    # diverted by the noise filter; meta/noise drops above still apply.
+    if category == "decision":
+        return ("accepted", "")
+    # Question/task are the noisy categories → require a strong signal (code/zone/
+    # context), a generic keyword is NOT enough.
+    if category == "question":
+        if strong or (parent_context or "").strip():
+            return ("accepted", "")
+        return ("needs_review", "vague_question")
+    if category == "task":
+        actionable = bool(getattr(item, "owner", None) or getattr(item, "due", None)) or strong
+        if actionable and not weak_conf:
+            return ("accepted", "")
+        return ("needs_review", "weak_task")
+    # Issue/information: accept on strong signal OR real technical significance
+    # (keyword/anomaly), so genuine issues ("mancano 12 pannelli") are not lost.
+    if category == "issue":
+        if strong or sig:
+            return ("accepted", "")
+        return ("needs_review", "missing_context")
+    if category == "information":
+        if strong or sig:
+            return ("accepted", "")
+        return ("needs_review", "low_confidence")
+    # Unknown category → conservative accept (don't lose data).
+    return ("accepted", "")
+
+
 def should_verify_item(item: OperationalItem) -> bool:
     if is_noise_text(item.text):
         return False

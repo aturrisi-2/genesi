@@ -495,6 +495,9 @@ def command_status_line(state: OperationalState) -> str:
         f"Task {ot} aperti · Problemi {oi} aperti ({ri} risolti) · "
         f"Decisioni attive {ad} · Info {info} · Domande aperte {uq}"
     )
+    review = len(getattr(state, "review_queue", []) or [])
+    if review:
+        line += f" · dubbi {review}"
     if state.updated_at:
         line += f" · agg. {state.updated_at}"
     return line
