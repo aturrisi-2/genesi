@@ -217,10 +217,14 @@ def classify_ingest(item: OperationalItem, category: str, parent_context: str = 
     strong = ctx or bool(extracted_tags) or bool(_TECHNICAL_CODE_RE.search(text))
     weak_conf = getattr(item, "confidence", "medium") == "low"
 
+    # A meta-system message (about Genesi/bot/test) is dropped unless it carries a
+    # REAL technical code (generic tags like "progetto"/"test" do NOT rescue it).
+    has_code = bool(_TECHNICAL_CODE_RE.search(text))
+
     # Clear drops first.
     if is_non_operational_note(text):
         return ("ignored", "non_operational_marker")
-    if _looks_meta_system(text) and not strong:
+    if _looks_meta_system(text) and not has_code:
         return ("ignored", "meta_system")
     if is_noise_text(text) and not strong:
         return ("ignored", "possible_joke")
