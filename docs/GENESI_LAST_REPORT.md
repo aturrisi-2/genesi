@@ -59,9 +59,13 @@ File analizzati:
   - Log: `Restarting service: genesi` → `Deploy completed successfully` → `✅ Successfully executed commands to all hosts`.
 - **Verifica servizio active**: confermata indirettamente dal log di deploy (restart + success). SSH diretto al VPS non accessibile dal container (porta 22 bloccata).
 
-## ⚠️ Security follow-up (pre-esistente, non introdotto da questa patch)
-- Il workflow `deploy-vps.yml` stampa `DIAG_TOKEN_VALUE: <hex>` in chiaro nei log GitHub Actions.
-- Azione richiesta: **ruotare il token** e rimuovere la stampa dal workflow.
+## ⚠️ Security follow-up (pre-esistente, non introdotto dalla patch anti-leak)
+- **Origine reale:** `scripts/vps_autodeploy.sh` (non il YAML) stampava `DIAG_TOKEN_VALUE: <valore>` via `log` → stdout SSH → log GitHub Actions. Token = `LIVE_LOGS_TOKEN` (auth endpoint `/api/system/live-logs`).
+- **Patch preparata (non committata):** `scripts/vps_autodeploy.sh` righe ~128/139 — rimosso il print del valore, sostituito con diagnostica mascherata `LIVE_LOGS_TOKEN present=yes (len=N)`. `bash -n` OK. Le scritture su file (`.env`, `.live_logs_token`) restano (necessarie, non vanno su stdout).
+- **Azione manuale per Alfio (rotazione, da fare a mano):**
+  1. GitHub → repo Settings → Secrets and variables → Actions: ruotare eventuali secret correlati.
+  2. Sul VPS: rigenerare `LIVE_LOGS_TOKEN` in `/opt/genesi/.env` (nuovo valore), aggiornare `/opt/genesi/memory/.live_logs_token`, riavviare `genesi`.
+  3. I log Actions storici contengono ancora il vecchio valore → il vecchio token va considerato compromesso finché non ruotato.
 
 ## Nota commit
 - `docs/GENESI_LAST_REPORT.md` aggiornato DOPO il push (push/deploy + security note). **NON committato** — richiede nuova conferma.

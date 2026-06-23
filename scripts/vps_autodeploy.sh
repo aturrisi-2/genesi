@@ -125,7 +125,8 @@ if [[ -f "$_ENV_FILE" ]] && ! grep -q "^LIVE_LOGS_TOKEN=" "$_ENV_FILE"; then
   fi
   echo "LIVE_LOGS_TOKEN=$_NEW_TOKEN" >> "$_ENV_FILE"
   log "LIVE_LOGS_TOKEN generated and added to .env"
-  log "DIAG_TOKEN_VALUE: $_NEW_TOKEN"
+  # SECURITY: non stampare mai il valore del token nei log (finiscono in GitHub Actions).
+  log "DIAG: LIVE_LOGS_TOKEN present=yes (len=${#_NEW_TOKEN})"
   # Scrivi anche nel file di bootstrap (memory/ è esclusa da git clean)
   mkdir -p "$APP_DIR/memory"
   echo "$_NEW_TOKEN" > "$APP_DIR/memory/.live_logs_token"
@@ -136,7 +137,8 @@ elif [[ -f "$_ENV_FILE" ]]; then
     mkdir -p "$APP_DIR/memory"
     echo "$_EXISTING_TOKEN" > "$APP_DIR/memory/.live_logs_token"
     chmod 600 "$APP_DIR/memory/.live_logs_token"
-    log "DIAG_TOKEN_VALUE: $_EXISTING_TOKEN"
+    # SECURITY: non stampare mai il valore del token nei log.
+    log "DIAG: LIVE_LOGS_TOKEN present=yes (len=${#_EXISTING_TOKEN})"
   fi
 fi
 unset _ENV_FILE _NEW_TOKEN _EXISTING_TOKEN
