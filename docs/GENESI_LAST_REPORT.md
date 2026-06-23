@@ -51,4 +51,17 @@ File analizzati:
 - NON committare: `docs/project_current_status.md` (va su operational-memory-mvp), runtime artifacts.
 
 ## Push / Deploy
-- **NON eseguiti.** Nessun push, nessun deploy, VPS intatto.
+- **Push ESEGUITO** 2026-06-23 su `origin/gold-faro-stable` (autorizzato).
+  - Remote HEAD: `abe1c83ac051a79e84312b2f0c03b75586eff7d7`.
+  - Commit pushati: `e594698`, `91ef446`, `abe1c83`.
+  - Branch protection: avviso "changes must be made through PR / PR Validation" → push passato (bypass rule), exit 0.
+- **Auto Deploy VPS ESEGUITO** — run `28030572700` "Auto Deploy VPS", conclusion **success** (15s).
+  - Log: `Restarting service: genesi` → `Deploy completed successfully` → `✅ Successfully executed commands to all hosts`.
+- **Verifica servizio active**: confermata indirettamente dal log di deploy (restart + success). SSH diretto al VPS non accessibile dal container (porta 22 bloccata).
+
+## ⚠️ Security follow-up (pre-esistente, non introdotto da questa patch)
+- Il workflow `deploy-vps.yml` stampa `DIAG_TOKEN_VALUE: <hex>` in chiaro nei log GitHub Actions.
+- Azione richiesta: **ruotare il token** e rimuovere la stampa dal workflow.
+
+## Nota commit
+- `docs/GENESI_LAST_REPORT.md` aggiornato DOPO il push (push/deploy + security note). **NON committato** — richiede nuova conferma.
