@@ -21,6 +21,7 @@ from typing import Optional
 
 from core.log import log
 from core.operational_memory.audio_transcriber import transcribe_audio_file
+from core.operational_memory.video_describer import describe_video_file
 from core.operational_memory.media_analyzer import analyze_media, attachment_type_for_path
 from core.operational_memory.models import ChatAttachment, normalize_media_category
 
@@ -113,6 +114,32 @@ async def analyze_attachment(
         return ChatAttachment(
             path=str(path),
             type=att_type,
+            extracted_text=(text or None),
+            metadata=merged_meta,
+        )
+
+    # Video → frame extraction + vision description via the shared video core
+    # (never OCR). Description rides in extracted_text so the operational engine
+    # treats it like OCR/transcription. Analysis only — no reply is ever produced.
+    if normalize_media_category(media_type, mime_type) == "video":
+        video = await describe_video_file(path, mime_type=mime_type)
+        text = video.get("text") or ""
+        merged_meta = {
+            **base_meta,
+            "extraction_status": video.get("video_status"),
+            "extraction_confidence": video.get("confidence"),
+            "frames_count": video.get("frames_count"),
+        }
+        if video.get("description"):
+            merged_meta["media_description"] = video["description"]
+        if video.get("error"):
+            merged_meta["video_error"] = video["error"]
+        # Privacy: status / frames / has_text only — never the description text.
+        log("OPERATIONAL_MEDIA_VIDEO", type="video",
+            status=video.get("video_status"), frames=video.get("frames_count"), has_text=bool(text))
+        return ChatAttachment(
+            path=str(path),
+            type="video",
             extracted_text=(text or None),
             metadata=merged_meta,
         )

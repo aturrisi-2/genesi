@@ -70,8 +70,11 @@ async def test_unprocessable_media_returns_placeholder(tmp_path):
     f.write_bytes(b"\x00\x00\x00")
     att = await analyze_attachment(str(f), media_type="video")
     assert isinstance(att, ChatAttachment)
+    # Video is now a supported category: a fake/frameless clip yields no content
+    # via the video core (fail-safe), no crash, no extracted text.
     assert att.extracted_text is None
-    assert att.metadata.get("extraction_status") in {"ignored", "unsupported"}
+    assert att.metadata.get("extraction_status") in {
+        "ignored", "unsupported", "video_unavailable", "video_analysis_failed", "video_no_content"}
 
 
 @pytest.mark.asyncio
