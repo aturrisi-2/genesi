@@ -721,6 +721,9 @@ class GroupChatRequest(BaseModel):
     media_type: Optional[str] = None
     media_mime: Optional[str] = None
     recent_messages: Optional[list] = None  # thread recente [{name, text}] per seguire il contesto
+    reply_to_id: Optional[str] = None       # id del messaggio quotato/replied (operational binding); backward-compatible
+    parent_text: Optional[str] = None       # snapshot leggero del parent (fallback se evento non in store)
+    parent_media_type: Optional[str] = None
 
 class GroupChatResponse(BaseModel):
     response: str
@@ -758,6 +761,55 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
         except Exception:
             sender_int = 0
             group_int  = 0
+
+        # ── Operational Memory bridge (opt-in, flag-gated, default OFF) ──────
+        # Live WhatsApp (Baileys) reaches Genesi here, NOT via the Meta webhook.
+        # For a mapped operational group: silent ingest + claim → suppress the
+        # legacy empathic reply. Reply only when WHATSAPP_OPERATIONAL_REPLY_ENABLED
+        # (sent back as the HTTP response, never a separate push). Flag OFF or
+        # unmapped → fall through to the existing behaviour unchanged. The full
+        # group JID (request.group_id, '…@g.us') is the mapping key.
+        try:
+            from core.operational_memory.whatsapp_operational import (
+                is_whatsapp_operational_enabled,
+                is_whatsapp_operational_reply_enabled,
+                maybe_handle_whatsapp_operational,
+                resolve_whatsapp_project_id,
+            )
+            _op_enabled = is_whatsapp_operational_enabled()
+            _op_project = resolve_whatsapp_project_id(request.group_id) if _op_enabled else None
+            log("OPERATIONAL_BAILEYS_CHAT_PATH_CHECK", enabled=_op_enabled,
+                mapped=bool(_op_project), group_hash=group_int,
+                reply_enabled=is_whatsapp_operational_reply_enabled())
+            if _op_project:
+                _op_reply: dict = {}
+
+                async def _op_send(_to, _text, *a, **k):
+                    _op_reply["to"] = _to
+                    _op_reply["text"] = _text
+
+                from core.operational_memory.models import normalize_media_category
+                _op_media_type = normalize_media_category(request.media_type, request.media_mime)
+                _op_meta: dict = {}
+                _handled = await maybe_handle_whatsapp_operational(
+                    group_jid=request.group_id, sender_jid=request.sender_id,
+                    first_name=request.sender_name, text=request.text,
+                    send_message=_op_send, message_id=request.media_id,
+                    media_type=_op_media_type, media_id=(request.media_id or ""),
+                    media_dir="/opt/genesi-baileys/media-cache" if request.media_id else "",
+                    mime_type=request.media_mime,
+                    reply_to_id=request.reply_to_id,
+                    parent_text=(request.parent_text or ""),
+                    parent_media_type=(request.parent_media_type or ""),
+                    result=_op_meta,
+                )
+                if _handled:
+                    _op_text = _op_reply.get("text", "") or ""
+                    _op_action = _op_meta.get("action") or ("reply" if _op_text else "silent_ingest")
+                    log("OPERATIONAL_BAILEYS_HANDLED", project_id=_op_project, action=_op_action)
+                    return GroupChatResponse(response=_op_text, status="operational")
+        except Exception as _oe:
+            log("OPERATIONAL_BAILEYS_CHAT_ERR", error=str(_oe))
 
         # Reattività GLOBALE: segna l'arrivo (per scartare risposte stantie)
         from core.group_reactivity import mark_arrival, is_superseded
@@ -1313,6 +1365,26 @@ async def group_forget(request: GroupForgetRequest, user: AuthUser = Depends(req
 async def group_should_respond(request: ShouldRespondRequest, user: AuthUser = Depends(require_auth)):
     """LLM decide se Genesi deve intervenire nel gruppo WhatsApp."""
     try:
+        # ── Operational Memory override (flag-gated, default OFF) ────────────
+        # For a mapped operational group EVERY message must reach /group (the
+        # B0.2 hook does the silent ingest + suppresses the legacy reply). So we
+        # force forwarding here regardless of the LLM gate. Unmapped/OFF → legacy.
+        # No ingest here: ingest stays in /group to avoid duplicate events.
+        try:
+            from core.operational_memory.whatsapp_operational import (
+                is_whatsapp_operational_enabled,
+                resolve_whatsapp_project_id,
+            )
+            if (is_whatsapp_operational_enabled() and request.group_id
+                    and resolve_whatsapp_project_id(request.group_id)):
+                from core.telegram_group_memory import stable_hash as _sh_op
+                log("OPERATIONAL_BAILEYS_SHOULD_RESPOND_OVERRIDE", mapped=True,
+                    group_hash=_sh_op(request.group_id.split("@")[0].replace("-", "")),
+                    reason="operational_ingest")
+                return ShouldRespondResponse(intervieni=True, motivo="operational_ingest")
+        except Exception as _ooe:
+            log("OPERATIONAL_BAILEYS_SHOULD_RESPOND_ERR", error=str(_ooe))
+
         from core.llm_service import llm_service
         import json as _json
 

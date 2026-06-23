@@ -794,6 +794,33 @@ async def _upload_file(token: str, data: bytes, filename: str,
         return ""
 
 
+_WA_OPERATIONAL_MEDIA_DIR = "/tmp/genesi-whatsapp-media"
+
+
+def _save_operational_audio(audio_bytes: bytes, message_id, mime: str) -> tuple:
+    """Persist already-downloaded voice/audio bytes to a dedicated temp dir so the
+    operational core can transcribe it (path-based). Reuses the bytes the empathic
+    path already fetched — no second download. Returns (dir, filename) or ("", "")
+    on failure. The filename is derived from the server message id (no traversal).
+    Never logs audio content."""
+    import os as _os
+    if not audio_bytes:
+        return ("", "")
+    try:
+        _os.makedirs(_WA_OPERATIONAL_MEDIA_DIR, exist_ok=True)
+        ext = {"audio/ogg": ".ogg", "audio/mpeg": ".mp3", "audio/mp4": ".m4a",
+               "audio/wav": ".wav", "audio/aac": ".aac", "audio/amr": ".amr"}.get(
+                   (mime or "").split(";")[0].strip().lower(), ".ogg")
+        safe = _os.path.basename(str(message_id or "wa_voice")) + ext
+        path = _os.path.join(_WA_OPERATIONAL_MEDIA_DIR, safe)
+        with open(path, "wb") as fh:
+            fh.write(audio_bytes)
+        return (_WA_OPERATIONAL_MEDIA_DIR, safe)
+    except Exception as exc:
+        logger.debug("WA_OPERATIONAL_AUDIO_SAVE_ERR %s", exc)
+        return ("", "")
+
+
 async def _transcribe(token: str, audio_data: bytes,
                       content_type: str = "audio/ogg") -> str:
     async with httpx.AsyncClient(timeout=60) as client:
@@ -907,13 +934,32 @@ async def handle_update(payload: dict):
                     gid = raw_group_id or msg.get("context", {}).get("id", "")
                     from core.telegram_group_memory import stable_hash
                     chat_id = stable_hash(gid) if gid else 0
-                    await _process_message(msg, name_map, is_group=msg_is_group, chat_id=chat_id)
+
+                    # Diagnostica marker-only per identificare il group jid del gruppo
+                    # canary. Logga il gid SOLO quando arriva il marker esatto in un
+                    # gruppo. Nessun log su messaggi normali; sender mascherato; il
+                    # testo completo non viene loggato. Non altera il flusso.
+                    _canary_text = (
+                        (msg.get("text", {}) or {}).get("body", "")
+                        or (msg.get("image", {}) or {}).get("caption", "")
+                        or (msg.get("document", {}) or {}).get("caption", "")
+                        or ""
+                    )
+                    if "GENESI_CANARY_JID_CHECK_20260621" in _canary_text:
+                        _snd = msg.get("from", "")
+                        _masked = (_snd[:4] + "***") if _snd else ""
+                        if msg_is_group and gid:
+                            log("WA_CANARY_GROUP_JID_SEEN", gid=gid, chat_id=chat_id, sender=_masked)
+                        else:
+                            log("WA_CANARY_GROUP_JID_CHECK_IGNORED", reason="not_group", sender=_masked)
+
+                    await _process_message(msg, name_map, is_group=msg_is_group, chat_id=chat_id, group_jid=gid)
 
     except Exception as e:
         logger.error("WA_HANDLE_UPDATE_ERROR err=%s", e)
 
 
-async def _process_message(msg: dict, name_map: dict, is_group: bool = False, chat_id: int = 0):
+async def _process_message(msg: dict, name_map: dict, is_group: bool = False, chat_id: int = 0, group_jid: str = ""):
     try:
         wa_id      = msg.get("from", "")
         msg_id     = msg.get("id", "")   # ID messaggio per typing + mark-as-read
@@ -929,6 +975,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
         doc_id   = ""
         doc_name = ""
         video_id = ""
+        audio_bytes = None   # reused by the operational hook (no second download)
 
         if msg_type == "text":
             text = msg.get("text", {}).get("body", "").strip()
@@ -1173,6 +1220,44 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 asyncio.create_task(append_raw_message(chat_id, stable_hash(wa_id), first_name, msg_text))
 
         # ── FILTRO GRUPPI (LLM-based) ──────────────────────────────────────────
+        # ── Operational Memory bridge (opt-in, flag-gated, default OFF) ──────
+        # No-op unless OPERATIONAL_MEMORY_WHATSAPP_ENABLED and this group JID is
+        # mapped to an operational project. For a mapped group it claims the
+        # message (silent ingest; reply only on explicit invocation when reply is
+        # enabled) and we stop here so the empathic pipeline does not answer in
+        # parallel. Flag OFF or unmapped => zero behaviour change.
+        if is_group and group_jid:
+            try:
+                from core.operational_memory.whatsapp_operational import maybe_handle_whatsapp_operational
+                _op_media_type = msg_type if msg_type in ("image", "document", "video", "audio", "voice") else ""
+                if _op_media_type in ("audio", "voice"):
+                    # Voice/audio: reuse the bytes the empathic path already
+                    # downloaded (voice_id is cleared by then) → temp file → core
+                    # transcribes. No second download. File missing → bridge falls
+                    # back to an audio placeholder, never crashes.
+                    _op_media_dir, _op_media_id = _save_operational_audio(
+                        audio_bytes, msg.get("id"), mime_type_media)
+                else:
+                    _op_media_id = (photo_id or doc_id or video_id or "") if _op_media_type else ""
+                    _op_media_dir = "/opt/genesi-baileys/media-cache" if _op_media_id else ""
+                # Quoted/reply id (Meta Cloud payload exposes msg.context.id). Baileys
+                # index.js does not send it yet (T-A3.3) → empty there, schema ready.
+                _op_reply_to_id = (msg.get("context") or {}).get("id") or None
+                if await maybe_handle_whatsapp_operational(
+                    group_jid=group_jid, sender_jid=wa_id, first_name=first_name,
+                    text=(text or caption or ""), send_message=send_message,
+                    message_id=msg.get("id"),
+                    media_type=_op_media_type,
+                    media_id=_op_media_id,
+                    media_dir=_op_media_dir,
+                    filename=(doc_name or None),
+                    mime_type=(mime_type_media or None),
+                    reply_to_id=_op_reply_to_id,
+                ):
+                    return
+            except Exception as _ome:
+                logger.debug("OPERATIONAL_WHATSAPP_HOOK_ERR %s", _ome)
+
         _reply_to_genesi = False
         if is_group:
             combined = f"{text} {caption}".strip()

@@ -557,10 +557,12 @@ async def _save_city(token: str, city: str):
 
 # ── Telegram API helpers ───────────────────────────────────────────────────────
 
-async def send_message(chat_id: int, text: str, reply_markup: dict = None, reply_to_message_id: int = None):
+async def send_message(chat_id: int, text: str, reply_markup: dict = None, reply_to_message_id: int = None, parse_mode: str = None):
     if not text:
         return
     payload = {"chat_id": chat_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
     if reply_markup:
         payload["reply_markup"] = reply_markup
     if reply_to_message_id:
@@ -719,6 +721,89 @@ async def download_file(file_id: str) -> bytes | None:
         except Exception as e:
             logger.error("TELEGRAM_DOWNLOAD_ERROR file_id=%s err=%s", file_id, e)
             return None
+
+
+_TG_OPERATIONAL_MEDIA_DIR = "/tmp/genesi-telegram-media"
+
+
+async def _download_operational_media(msg: dict) -> tuple:
+    """Download a Telegram photo/document/voice/audio into a dedicated temp dir for
+    the operational core (OCR for images/PDF, transcription for audio/voice).
+    Returns (media_type, path, filename, mime). On any failure the path is "" (the
+    bridge then ingests text-only — never crashes). Generic, no hardcoding.
+
+    The core is the single source of transcription/cataloguing — this adapter only
+    recognises the media kind, saves the file to a safe path and forwards metadata."""
+    import os as _os
+    photo = msg.get("photo")
+    document = msg.get("document")
+    voice = msg.get("voice")
+    audio = msg.get("audio")
+    if photo:
+        file_id = photo[-1].get("file_id", "")          # largest size
+        media_type, filename, mime = "image", None, "image/jpeg"
+    elif voice:
+        file_id = voice.get("file_id", "")
+        media_type = "voice"
+        filename = None
+        mime = voice.get("mime_type") or "audio/ogg"
+    elif audio:
+        file_id = audio.get("file_id", "")
+        media_type = "audio"
+        filename = audio.get("file_name")
+        mime = audio.get("mime_type") or "audio/mpeg"
+    elif document:
+        file_id = document.get("file_id", "")
+        media_type = "document"
+        filename = document.get("file_name")
+        mime = document.get("mime_type")
+    else:
+        return ("", "", None, None)
+    if not file_id:
+        return (media_type, "", filename, mime)
+    try:
+        data = await download_file(file_id)
+        if not data:
+            log("OPERATIONAL_TELEGRAM_MEDIA_DOWNLOADED", media_type=media_type, status="failed", size="unknown")
+            return (media_type, "", filename, mime)
+        _os.makedirs(_TG_OPERATIONAL_MEDIA_DIR, exist_ok=True)
+        safe_name = _os.path.basename(str(file_id))      # file_id is server-generated, no traversal
+        path = _os.path.join(_TG_OPERATIONAL_MEDIA_DIR, safe_name)
+        with open(path, "wb") as fh:
+            fh.write(data)
+        log("OPERATIONAL_TELEGRAM_MEDIA_DOWNLOADED", media_type=media_type, status="ok", size=len(data))
+        return (media_type, path, filename, mime)
+    except Exception as exc:
+        log("OPERATIONAL_TELEGRAM_MEDIA_DOWNLOADED", media_type=media_type, status="failed", size="unknown")
+        logger.debug("OPERATIONAL_TELEGRAM_MEDIA_ERR %s", exc)
+        return (media_type, "", filename, mime)
+
+
+def _telegram_parent_from_reply(msg: dict) -> tuple:
+    """Extract a light reply/quoted snapshot from a Telegram reply_to_message for
+    the operational core: (reply_to_id, parent_text, parent_media_type,
+    parent_attachment_summary). reply_to_id matches the parent event id convention
+    (str of the replied message_id). No text logged here. Empty tuple-ish on no
+    reply. Generic, no hardcoding."""
+    reply_to = msg.get("reply_to_message") or {}
+    if not reply_to:
+        return ("", "", "", "")
+    rid = reply_to.get("message_id")
+    reply_to_id = str(rid) if rid else ""
+    parent_text = (reply_to.get("text") or reply_to.get("caption") or "").strip()
+    if reply_to.get("photo"):
+        ptype, psum = "image", "image"
+    elif reply_to.get("voice"):
+        ptype, psum = "voice", "voice"
+    elif reply_to.get("audio"):
+        ptype, psum = "audio", (reply_to.get("audio", {}).get("file_name") or "audio")
+    elif reply_to.get("document"):
+        ptype, psum = "document", (reply_to.get("document", {}).get("file_name") or "document")
+    elif reply_to.get("video"):
+        ptype, psum = "video", "video"
+    else:
+        ptype, psum = "", ""
+    return (reply_to_id, parent_text, ptype, psum)
 
 
 async def set_webhook(webhook_url: str):
@@ -1408,6 +1493,35 @@ async def handle_update(update: dict):
                     asyncio.create_task(try_extract_birthday(from_id, first_name, msg_text))
             except Exception:
                 pass
+
+            # ── Operational Memory silent presence (opt-in, flag-gated) ──
+            # No-op unless OPERATIONAL_MEMORY_TELEGRAM_ENABLED and this chat is
+            # mapped to an operational project. When it answers an explicit
+            # operational invocation it returns True and we stop here (the
+            # existing empathic pipeline is skipped only for that operational
+            # query). Flag OFF => zero behaviour change.
+            try:
+                from core.operational_memory.telegram_operational import (
+                    maybe_handle_operational, operational_enabled, project_for_chat,
+                )
+                _tg_media = ("", "", None, None)
+                # Download media only for opted-in operational chats (no waste/temp
+                # files for normal chats).
+                if _original_has_media and operational_enabled() and project_for_chat(chat_id):
+                    _tg_media = await _download_operational_media(msg)
+                _tg_parent = _telegram_parent_from_reply(msg)
+                if await maybe_handle_operational(
+                    chat_id=chat_id, from_id=from_id, first_name=first_name,
+                    text=(text or caption or ""), send_message=send_message,
+                    message_id=msg.get("message_id"),
+                    media_type=_tg_media[0], media_path=_tg_media[1],
+                    media_filename=_tg_media[2], media_mime=_tg_media[3],
+                    reply_to_id=(_tg_parent[0] or None), parent_text=_tg_parent[1],
+                    parent_media_type=_tg_parent[2], parent_attachment_summary=_tg_parent[3],
+                ):
+                    return
+            except Exception as _ome:
+                logger.debug("OPERATIONAL_TELEGRAM_HOOK_ERR %s", _ome)
 
         # Genesi decide autonomamente se e quando intervenire nel gruppo.
         if is_group:

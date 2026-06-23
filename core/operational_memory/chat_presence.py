@@ -1,0 +1,418 @@
+"""FASE 7 — Silent Chat Presence.
+
+Genesi listens to every message, stores it, and updates the operational memory
+— always, silently. It produces a visible chat reply ONLY when explicitly
+invoked (see invocation_router). When it does reply, the answer is a compact,
+mobile-readable payload (table + short synthesis + actions + a link to the full
+downloadable report) — never a wall of text.
+
+Generic and multimodal: text and attachments (image/pdf/document) both feed the
+memory. No chat/platform/profession token is hardcoded; no LLM decides when to
+speak."""
+
+from __future__ import annotations
+
+from typing import Awaitable, Callable, Optional
+
+from core.log import log
+from core.operational_memory.incremental_rebuild import incremental_rebuild
+from core.operational_memory.invocation_router import is_invoked
+from core.operational_memory.models import (
+    ChatMessage,
+    ChatReply,
+    InvocationConfig,
+    OperationalBriefing,
+    OperationalEvent,
+    OperationalState,
+    normalize_event_type,
+)
+from core.operational_memory.quality import is_non_operational_note
+from core.operational_memory.query_engine import answer_query, build_briefing, command_status_line
+from core.operational_memory.report_store import save_report
+from core.operational_memory.state_store import load_state
+from core.operational_memory.watcher_engine import ingest_event, process_pending_events
+
+
+Updater = Callable[[ChatMessage], Awaitable[None]]
+
+
+def _event_from_message(message: ChatMessage) -> OperationalEvent:
+    event = OperationalEvent(
+        event_id=message.message_id,
+        project_id=message.project_id,
+        source=message.source or "chat",
+        sender=message.sender or "",
+        content=message.text or "",
+    )
+    if message.timestamp:
+        event.timestamp = message.timestamp
+    if message.attachments:
+        attachment = message.attachments[0]
+        # Map to a VALID OperationalEvent.type (never 'unknown' → no validation
+        # error). The raw type is preserved in attachment_type/metadata.
+        event.type = normalize_event_type(attachment.type)
+        event.attachment_path = attachment.path
+        event.attachment_type = attachment.type
+        if attachment.extracted_text:
+            event.extracted_text = attachment.extracted_text
+        if attachment.metadata:
+            event.attachment_metadata = dict(attachment.metadata)
+    # Explicit reply/quoted binding (platform-independent). The parent event id is
+    # the replied/quoted message id (event_id == message_id). Any inline parent
+    # snapshot is kept as a fallback context until/unless the parent event is found.
+    if message.reply_to_id:
+        event.parent_event_id = message.reply_to_id
+        event.reply_relation = "reply_to"
+        inline = "\n".join(p for p in (message.parent_text, message.parent_attachment_summary) if (p or "").strip())
+        if inline.strip():
+            event.parent_context = inline.strip()
+    return event
+
+
+async def silent_update(message: ChatMessage, rebuild: bool = True) -> None:
+    """Listen + store + update memory. Never returns anything to the chat."""
+    event = _event_from_message(message)
+    if event.parent_event_id:
+        # Strong binding: replied/quoted parent (explicit). Read-only lookup, never
+        # re-ingests the parent, never raises. UNCHANGED behaviour.
+        from core.operational_memory.context_binding import resolve_parent_context
+        await resolve_parent_context(event, message.project_id)
+    else:
+        # Secondary, gated strategy (T-A4.1): infer a contextual parent when there
+        # is no explicit reply. No-op unless OPERATIONAL_CONTEXT_INFERENCE_ENABLED →
+        # with the flag OFF behaviour is identical to today.
+        from core.operational_memory.context_binding import infer_parent_context
+        await infer_parent_context(event, message.project_id)
+    _stored, created = await ingest_event(event)
+    log(
+        "OPERATIONAL_SILENT_INGEST",
+        project_id=message.project_id,
+        message_id=message.message_id,
+        created=created,
+        source=message.source,
+    )
+    if not created:
+        return  # idempotent: already seen, no duplicate processing
+    await process_pending_events(message.project_id, rebuild_threads=False)
+    if rebuild:
+        await incremental_rebuild(
+            message.project_id,
+            relation_window_days=21,
+            relation_max_candidates_per_thread=40,
+        )
+
+
+async def flush_project(project_id: str, rebuild: bool = True) -> None:
+    """Update operational memory from already-ingested events WITHOUT adding a new
+    event. Used on pure invocations so the query text itself is never stored as a
+    project item, while the reply still reflects the latest rebuilt state."""
+    await process_pending_events(project_id, rebuild_threads=False)
+    if rebuild:
+        await incremental_rebuild(
+            project_id,
+            relation_window_days=21,
+            relation_max_candidates_per_thread=40,
+        )
+
+
+def _compact_table(state: OperationalState) -> str:
+    briefing = build_briefing(state)
+    lines = ["| Categoria | N |", "| --- | ---: |"]
+    for row in briefing.rows:
+        if row.count:
+            lines.append(f"| {row.label} | {row.count} |")
+    return "\n".join(lines)
+
+
+def _mobile_card(briefing: OperationalBriefing) -> str:
+    """Bullet-list card for Telegram/mobile. Active rows only, no pipe tables."""
+    lines = []
+    for row in briefing.rows:
+        if row.active:
+            lines.append(f"• {row.label}: {row.count}")
+    return "\n".join(lines)
+
+
+def _synthesis_lines(briefing: OperationalBriefing) -> list[str]:
+    """Structured bullet lines for the synthesis section (mobile-readable)."""
+    by_key = {r.key: r for r in briefing.rows}
+
+    ot = (by_key.get("open_tasks") or _zero()).count
+    oi = (by_key.get("open_issues") or _zero()).count
+    ad = (by_key.get("active_decisions") or _zero()).count
+    ri_c = (by_key.get("reopened_issues") or _zero()).count
+    att_c = (by_key.get("attention") or _zero()).count
+    ch_c = (by_key.get("changes") or _zero()).count
+    res_c = (by_key.get("resolved_issues") or _zero()).count
+    sup_c = (by_key.get("superseded_items") or _zero()).count
+
+    risk_parts: list[str] = []
+    if ri_c:
+        risk_parts.append(f"{ri_c} problemi riaperti")
+    if oi:
+        risk_parts.append(f"{oi} problemi aperti")
+    if att_c:
+        risk_parts.append(f"{att_c} elementi da attenzionare")
+
+    excl_parts: list[str] = []
+    if res_c:
+        excl_parts.append(f"{res_c} problemi risolti")
+    if sup_c:
+        excl_parts.append(f"{sup_c} elementi superati")
+
+    action = briefing.recommended_action
+    if action and action[0].isupper():
+        action = action[0].lower() + action[1:]
+
+    return [
+        f"• Stato: {ot} task aperti, {oi} problemi aperti, {ad} decisioni attive",
+        f"• Attenzione: {', '.join(risk_parts) if risk_parts else 'nessun rischio operativo evidente'}",
+        f"• Cambiamenti: {ch_c} dal precedente snapshot",
+        f"• Esclusioni: {', '.join(excl_parts) + ' esclusi' if excl_parts else 'nessun elemento da escludere'}",
+        f"• Azione consigliata: {action}",
+    ]
+
+
+# Category → human label for the focused "what remains open" answer. Generic.
+_OPEN_GROUP_LABELS: list[tuple[str, str]] = [
+    ("issue", "Problemi aperti"),
+    ("task", "Task aperti"),
+    ("question", "Domande aperte"),
+]
+
+
+def _grouped_open_lines(items: list) -> list[str]:
+    """Group the open items by category into labelled sections so the reply is a
+    specific list (problemi / task / domande), not just a number. Generic."""
+    lines: list[str] = []
+    for category, label in _OPEN_GROUP_LABELS:
+        group = [it for it in items if it.category == category]
+        if not group:
+            continue
+        lines.append(f"{label}:")
+        for it in group[:5]:
+            lines.append(f"- {it.text}")
+        if len(group) > 5:
+            lines.append(f"- … e altri {len(group) - 5}")
+        lines.append("")
+    return lines
+
+
+class _ZeroRow:
+    count = 0
+
+
+def _zero() -> _ZeroRow:
+    return _ZeroRow()
+
+
+def _render_briefing_card(briefing: OperationalBriefing) -> str:
+    """The general '📌 Quadro operativo' card — only for briefing/digest."""
+    parts = [
+        "📌 Quadro operativo",
+        "",
+        _mobile_card(briefing),
+        "",
+        "🧭 Sintesi operativa",
+        "",
+        *_synthesis_lines(briefing),
+    ]
+    # report_url is NOT included in the text — the Telegram bridge sends it as an
+    # inline button so the URL does not clutter the message body.
+    return "\n".join(parts).strip()
+
+
+def _render_focused_reply(result) -> tuple[str, list[str]]:
+    """Specific list for a focused query — NEVER the general card."""
+    evidence: list[str] = []
+    intent = result.intent
+    if intent == "remaining_open":
+        if not result.items:
+            return "Non risultano punti aperti rilevanti.", evidence
+        lines = ["Punti ancora aperti", ""]
+        lines.extend(_grouped_open_lines(result.items))
+        for it in result.items:
+            evidence.extend(it.evidence_event_ids[:1])
+        return "\n".join(lines).strip(), evidence
+    if intent == "active_decisions":
+        if not result.items:
+            return "Non risultano decisioni attive.", evidence
+        lines = ["Decisioni attive", ""]
+        for it in result.items[:10]:
+            lines.append(f"- {it.text}")
+            evidence.extend(it.evidence_event_ids[:1])
+        return "\n".join(lines).strip(), evidence
+    # Generic focused list (open_tasks, open_issues, unanswered, resolved, …).
+    if not result.items:
+        return (result.summary or "Nessun elemento."), evidence
+    lines = [result.summary, ""] if result.summary else []
+    for it in result.items[:5]:
+        status = f" ({it.status})" if it.status else ""
+        lines.append(f"- {it.text}{status}")
+        evidence.extend(it.evidence_event_ids[:1])
+    if result.count > 5:
+        lines.append(f"- … e altri {result.count - 5}")
+    return "\n".join(lines).strip(), evidence
+
+
+def _render_command_open(result) -> tuple[str, list[str]]:
+    """Short technical list for the '@genesi aperti' command — grouped open
+    items, already capped per category. Never the general card."""
+    if not result.items:
+        return "Nessun elemento aperto.", []
+    lines = _grouped_open_lines(result.items)
+    evidence: list[str] = []
+    for it in result.items:
+        evidence.extend(it.evidence_event_ids[:1])
+    return "\n".join(lines).strip(), evidence[:5]
+
+
+def _render_command_report(report_url: str) -> str:
+    """Short technical report pointer for the '@genesi report' command — the
+    link if available, never an inline-generated long report."""
+    if report_url:
+        return f"📄 Report operativo: {report_url}"
+    return "Report operativo disponibile (nessun link configurato)."
+
+
+def _non_operational_notes(state: OperationalState) -> list[str]:
+    """Items explicitly framed as non-operational, kept out of the operational
+    picture but surfaceable when the user asks something off-focus. Generic."""
+    notes: list[str] = []
+    seen: set[str] = set()
+    for field_name in ("tasks", "issues", "decisions", "information", "open_questions"):
+        for item in getattr(state, field_name):
+            if is_non_operational_note(item.text) and item.text not in seen:
+                seen.add(item.text)
+                notes.append(item.text)
+    return notes
+
+
+def _render_unknown_reply(state: OperationalState) -> str:
+    """Conservative textual fallback for off-focus queries — NEVER the card,
+    no empathic/LLM dependency. Distinguishes operational context from side notes."""
+    lines = ["Questa richiesta non rientra nel quadro operativo del progetto."]
+    notes = _non_operational_notes(state)
+    if notes:
+        lines.append("")
+        lines.append("Note non operative registrate (fuori dal quadro di progetto):")
+        for text in notes[:5]:
+            lines.append(f"- {text}")
+    return "\n".join(lines).strip()
+
+
+def build_chat_reply(
+    state: OperationalState,
+    query: str,
+    report_id: str = "",
+    report_url: str = "",
+    invoked_by: str = "",
+) -> ChatReply:
+    """Pure: turn the current state + the asked query into a compact chat reply.
+
+    Rendering is intent-aware:
+      * briefing/digest → the general '📌 Quadro operativo' card + synthesis;
+      * focused queries (remaining_open, active_decisions, open_*, …) → ONLY the
+        specific list of matching items — never the general card;
+      * unknown → a conservative textual reply, never the general card.
+    """
+    briefing = build_briefing(state)
+    result = answer_query(state, query)
+    intent = result.intent
+
+    evidence: list[str] = []
+    if intent == "cmd_stato":
+        reply_markdown = command_status_line(state)
+        synthesis = result.summary
+    elif intent == "cmd_aperti":
+        reply_markdown, evidence = _render_command_open(result)
+        synthesis = result.summary
+    elif intent == "cmd_report":
+        reply_markdown = _render_command_report(report_url)
+        synthesis = result.summary
+    elif intent in {"briefing", "digest"}:
+        reply_markdown = _render_briefing_card(briefing)
+        synthesis = briefing.synthesis
+    elif intent == "unknown":
+        reply_markdown = _render_unknown_reply(state)
+        synthesis = result.summary
+    else:
+        reply_markdown, evidence = _render_focused_reply(result)
+        synthesis = result.summary or briefing.synthesis
+
+    return ChatReply(
+        project_id=state.project_id or "",
+        invoked_by=invoked_by,
+        intent=intent,
+        table_markdown=_compact_table(state),
+        synthesis=synthesis,
+        actions=[briefing.recommended_action],
+        evidence_event_ids=evidence,
+        report_id=report_id,
+        report_url=report_url,
+        reply_markdown=reply_markdown,
+    )
+
+
+def _report_url(project_id: str, report_id: str, base_url: str = "") -> str:
+    path = f"/api/operational/projects/{project_id}/reports/{report_id}/view"
+    base = (base_url or "").rstrip("/")
+    return f"{base}{path}" if base else path
+
+
+async def build_operational_reply(
+    project_id: str,
+    query: str,
+    report_base_url: str = "",
+    invoked_by: str = "",
+    save: bool = True,
+) -> ChatReply:
+    """Service-layer entry point: build the operational chat reply for a query
+    over the current state, optionally persisting the full report and linking it.
+
+    Transport bridges (e.g. Telegram) call this instead of re-implementing the
+    operational orchestration. No empathic logic, no LLM."""
+    state = await load_state(project_id)
+    report_id = ""
+    report_url = ""
+    if save:
+        report = save_report(project_id, build_briefing(state).markdown)
+        report_id = report.report_id
+        report_url = _report_url(project_id, report_id, report_base_url)
+    return build_chat_reply(state, query, report_id=report_id, report_url=report_url, invoked_by=invoked_by)
+
+
+async def handle_incoming(
+    message: ChatMessage,
+    config: Optional[InvocationConfig] = None,
+    updater: Optional[Updater] = None,
+    save_report_on_reply: bool = True,
+) -> Optional[ChatReply]:
+    """Always ingest + update memory silently. Return a ChatReply ONLY when the
+    message explicitly invokes Genesi; otherwise return None (stay silent)."""
+    config = config or InvocationConfig()
+    update = updater or silent_update
+
+    # 1. Silent listen + memory update — always, for every message.
+    await update(message)
+
+    # 2. Explicit invocation gate.
+    decision = is_invoked(message.text, config, is_dm=message.is_dm)
+    if not decision.respond:
+        return None
+
+    # 3. Build the reply from the (now updated) operational state.
+    state = await load_state(message.project_id)
+    report_id = ""
+    report_url = ""
+    if save_report_on_reply:
+        report = save_report(message.project_id, build_briefing(state).markdown)
+        report_id = report.report_id
+        report_url = f"/api/operational/projects/{message.project_id}/reports/{report_id}/view"
+    return build_chat_reply(
+        state,
+        decision.query,
+        report_id=report_id,
+        report_url=report_url,
+        invoked_by=message.sender,
+    )
