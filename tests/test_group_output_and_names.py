@@ -61,6 +61,17 @@ def test_extract_first_name_keeps_known_composite_first_names():
     assert extract_first_name_from_display_name("Gianluca")["first_name"] == "Gianluca"
 
 
+def test_extract_first_name_handles_surname_first_display_names():
+    # 3+ token con cognome iniziale: il nome proprio è il secondo token
+    assert extract_first_name_from_display_name("Rossi Pina Bianchi")["first_name"] == "Pina"
+    assert extract_first_name_from_display_name("Turrisi Pina Nino Calvagna")["first_name"] == "Pina"
+    # Composto in mezzo: intercettato come unico nome
+    assert extract_first_name_from_display_name("Rossi Maria Grazia Bianchi")["first_name"] == "Maria Grazia"
+    assert extract_first_name_from_display_name("Bianchi Anna Maria Verdi")["first_name"] == "Anna Maria"
+    # 2 token resta "Nome Cognome" → primo token
+    assert extract_first_name_from_display_name("Dora Cirasa")["first_name"] == "Dora"
+
+
 def test_non_person_display_name_is_not_confident():
     res = extract_first_name_from_display_name("Gruppo Enel Roma")
     assert res["confidence"] < 0.65
@@ -80,6 +91,22 @@ async def test_silent_participant_appears_with_short_name_not_full_display():
     )
     assert "Dora Cirasa" not in ctx
     assert "Dora" in ctx
+
+
+async def test_silent_participant_surname_first_appears_with_first_name():
+    import random
+    from core.telegram_group_memory import build_group_context
+
+    chat_id = random.randint(900_000_000, 999_999_999)
+    participants = [
+        {"id": "10000000002@s.whatsapp.net", "name": "Turrisi Pina Nino Calvagna", "is_me": False},
+    ]
+    ctx = await build_group_context(
+        chat_id, from_id=chat_id, first_name="Tester",
+        current_message="ciao", participants=participants,
+    )
+    assert "Turrisi Pina Nino Calvagna" not in ctx
+    assert "Pina" in ctx
 
 
 def test_group_formatting_helpers_do_not_contain_case_specific_hardcoding():

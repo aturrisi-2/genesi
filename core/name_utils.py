@@ -155,6 +155,21 @@ def extract_first_name_from_display_name(display_name: str, fallback_id: str | N
         })
         return result
 
+    # Forma "Cognome Nome [Cognome...]": 3+ token, primo non è un nome noto.
+    # In questo schema il nome proprio è tipicamente il secondo token
+    # (es. "Rossi Pina Bianchi" → "Pina", "Turrisi Pina Nino Calvagna" → "Pina").
+    # Con 2 soli token si assume invece "Nome Cognome" → primo token (sotto).
+    # I nomi composti noti sono già stati intercettati sopra in qualsiasi posizione.
+    if len(candidates) >= 3:
+        _, token, _ = candidates[1]
+        result.update({
+            "first_name": token,
+            "confidence": 0.5,
+            "source": "surname_first_guess",
+            "reason": "surname_first_second_token",
+        })
+        return result
+
     idx, token, _ = candidates[0]
     result.update({
         "first_name": token,
