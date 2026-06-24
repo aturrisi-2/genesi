@@ -61,8 +61,8 @@ async def test_report_viewer_returns_html(app):
     assert "text/html" in r.headers["content-type"]
     body = r.text
     assert "<html" in body.lower()
-    assert "Aggiornamento giornaliero" in body
-    assert "window.print()" in body                 # print button
+    assert "Aggiornamento operativo" in body         # V2 title
+    assert "window.print()" in body                  # print button
     assert f"/operational-state/{PROJECT}/daily-report" in body  # JSON link
 
 
@@ -71,8 +71,7 @@ async def test_report_viewer_contains_sections(app):
     async with _client(app) as c:
         r = await c.get(f"/operational-report/{PROJECT}/latest")
     body = r.text
-    # Markdown rendered to HTML headings/content (sections present in the report).
-    assert "Task" in body and "aperti" in body.lower()
+    assert "Task aperti" in body
     assert "intercetti vela" in body.lower() or "T7" in body   # issue content rendered
 
 
