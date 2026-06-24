@@ -217,6 +217,21 @@ def member_display_name(member: dict, fallback: str = "") -> str:
             or member.get("display_name") or fallback or "").strip()
 
 
+def _normalized_fallback_name(raw_name: str) -> str:
+    """Riduce un display name grezzo a un probabile nome breve, senza inventare.
+
+    Usa extract_first_name_from_display_name con gate di confidence: se il nome di
+    battesimo estratto è affidabile (>=0.65) lo usa, altrimenti restituisce il
+    display name semplicemente ripulito. Evita che un partecipante silente compaia
+    nella lista membri col cognome o nome completo registrato.
+    """
+    raw = _sanitize_member_name(raw_name)
+    if not raw:
+        return ""
+    from core.name_utils import normalize_person_display_name
+    return normalize_person_display_name(raw)["name"] or raw
+
+
 async def set_preferred_name(from_id: int, name: str):
     """Imposta il nome PREFERITO del membro (da una correzione): vince e non viene sovrascritto."""
     name = _sanitize_member_name(name)
@@ -240,14 +255,15 @@ async def update_member_seen(from_id: int, first_name: str):
     if not member.get("preferred_name"):
         _clean = _sanitize_member_name(first_name)
         if _clean:
-            from core.name_utils import extract_first_name_from_display_name
+            from core.name_utils import extract_first_name_from_display_name, normalize_person_display_name
             parsed = extract_first_name_from_display_name(_clean, fallback_id=str(from_id))
             member["display_name"] = _clean
             member["name_parse"] = parsed
             if parsed.get("first_name") and parsed.get("confidence", 0.0) >= 0.65:
                 member["first_name"] = parsed["first_name"]
             elif not member.get("first_name"):
-                member["first_name"] = _clean
+                # Mai salvare il display name completo grezzo: passa dalla pipeline core.
+                member["first_name"] = normalize_person_display_name(_clean)["name"] or _clean
     member["last_seen"]     = int(time.time())
     member["message_count"] = member.get("message_count", 0) + 1
     if "joined_at" not in member:
@@ -441,7 +457,12 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
             except Exception:
                 p_member = {}
                 
-            p_name = member_display_name(p_member, fallback=_sanitize_member_name(p.get("name") or ""))
+            from core.name_utils import normalize_person_display_name
+            p_name = normalize_person_display_name(
+                p.get("name") or "",
+                preferred_name=p_member.get("preferred_name"),
+                existing_first_name=p_member.get("first_name"),
+            )["name"] or _normalized_fallback_name(p.get("name") or "")
             if not p_name:
                 p_name = f"+{clean_jid}"
                 

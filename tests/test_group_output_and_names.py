@@ -1,6 +1,9 @@
 import inspect
 
-from core.name_utils import extract_first_name_from_display_name
+from core.name_utils import (
+    extract_first_name_from_display_name,
+    normalize_person_display_name,
+)
 from core.response_filter import strip_leading_speaker_prefix
 
 
@@ -39,6 +42,107 @@ def test_extract_first_name_refuses_low_confidence_or_non_names():
     assert extract_first_name_from_display_name("+39 333 1234567")["first_name"] is None
     assert extract_first_name_from_display_name("Capo squadra")["first_name"] is None
     assert extract_first_name_from_display_name("SSA_Ufficio")["first_name"] is None
+
+
+def test_extract_first_name_reduces_full_display_names_to_single_name():
+    assert extract_first_name_from_display_name("Dora Cirasa")["first_name"] == "Dora"
+    assert extract_first_name_from_display_name("🔥 Dora Cirasa 🍒")["first_name"] == "Dora"
+    assert extract_first_name_from_display_name("Marco TAB CEFLA")["first_name"] == "Marco"
+    assert extract_first_name_from_display_name("Zio Tony")["first_name"] == "Tony"
+    assert extract_first_name_from_display_name("Skipper")["first_name"] == "Skipper"
+
+
+def test_extract_first_name_keeps_known_composite_first_names():
+    mg = extract_first_name_from_display_name("Maria Grazia Rossi")
+    assert mg["first_name"] == "Maria Grazia"
+    assert mg["confidence"] >= 0.8
+    am = extract_first_name_from_display_name("Anna Maria Bianchi")
+    assert am["first_name"] == "Anna Maria"
+    gb = extract_first_name_from_display_name("Giovan Battista Verdi")
+    assert gb["first_name"] == "Giovan Battista"
+    # Nome già scritto unito non viene spezzato né alterato
+    assert extract_first_name_from_display_name("Gianluca")["first_name"] == "Gianluca"
+
+
+def test_extract_first_name_handles_surname_first_display_names():
+    # 3+ token con cognome iniziale: il nome proprio è il secondo token
+    assert extract_first_name_from_display_name("Rossi Pina Bianchi")["first_name"] == "Pina"
+    assert extract_first_name_from_display_name("Turrisi Pina Nino Calvagna")["first_name"] == "Pina"
+    # Composto in mezzo: intercettato come unico nome
+    assert extract_first_name_from_display_name("Rossi Maria Grazia Bianchi")["first_name"] == "Maria Grazia"
+    assert extract_first_name_from_display_name("Bianchi Anna Maria Verdi")["first_name"] == "Anna Maria"
+    # 2 token resta "Nome Cognome" → primo token
+    assert extract_first_name_from_display_name("Dora Cirasa")["first_name"] == "Dora"
+
+
+def test_extract_first_name_skips_surname_particles():
+    assert extract_first_name_from_display_name("simona di dio")["first_name"] == "Simona"
+    assert extract_first_name_from_display_name("Simona Di Dio")["first_name"] == "Simona"
+    assert extract_first_name_from_display_name("maria de luca")["first_name"] == "Maria"
+    # Cognome puro con particella: non deve mai produrre "Di" come nome
+    assert extract_first_name_from_display_name("Di Dio")["first_name"] != "Di"
+    # Regressioni surname-first / nome-cognome restano intatte
+    assert extract_first_name_from_display_name("Turrisi Pina Nino Calvag")["first_name"] == "Pina"
+    assert extract_first_name_from_display_name("Dora Cirasa")["first_name"] == "Dora"
+
+
+def test_non_person_display_name_is_not_confident():
+    res = extract_first_name_from_display_name("Gruppo Enel Roma")
+    assert res["confidence"] < 0.65
+
+
+async def test_silent_participant_appears_with_short_name_not_full_display():
+    import random
+    from core.telegram_group_memory import build_group_context
+
+    chat_id = random.randint(900_000_000, 999_999_999)
+    participants = [
+        {"id": "10000000001@s.whatsapp.net", "name": "Dora Cirasa", "is_me": False},
+    ]
+    ctx = await build_group_context(
+        chat_id, from_id=chat_id, first_name="Tester",
+        current_message="ciao", participants=participants,
+    )
+    assert "Dora Cirasa" not in ctx
+    assert "Dora" in ctx
+
+
+async def test_silent_participant_surname_first_appears_with_first_name():
+    import random
+    from core.telegram_group_memory import build_group_context
+
+    chat_id = random.randint(900_000_000, 999_999_999)
+    participants = [
+        {"id": "10000000002@s.whatsapp.net", "name": "Turrisi Pina Nino Calvagna", "is_me": False},
+    ]
+    ctx = await build_group_context(
+        chat_id, from_id=chat_id, first_name="Tester",
+        current_message="ciao", participants=participants,
+    )
+    assert "Turrisi Pina Nino Calvagna" not in ctx
+    assert "Pina" in ctx
+
+
+def test_normalize_person_display_name_is_the_single_core_rule():
+    # Override manuale vince sempre
+    assert normalize_person_display_name("Turrisi Pina Nino Calvag",
+                                         preferred_name="Pina")["name"] == "Pina"
+    # Nome grezzo multi-token (cognome-prima) ridotto a nome breve
+    assert normalize_person_display_name("Turrisi Pina Nino Calvag")["name"] == "Pina"
+    # Nome-cognome semplice
+    assert normalize_person_display_name("Dora Cirasa")["name"] == "Dora"
+    # Composto preservato
+    assert normalize_person_display_name("Maria Grazia Rossi")["name"] == "Maria Grazia"
+    # Particella di cognome mai scelta
+    assert normalize_person_display_name("simona di dio")["name"] == "Simona"
+    # Nickname singolo intatto
+    assert normalize_person_display_name("Skipper")["name"] == "Skipper"
+    # Mittente Meta/adapter con nome semplice resta invariato
+    assert normalize_person_display_name("Ann")["name"] == "Ann"
+    # Raw vuoto → ripiega sul first_name già salvato
+    assert normalize_person_display_name("", existing_first_name="Pina")["name"] == "Pina"
+    # Non-persona: bassa confidence
+    assert normalize_person_display_name("Gruppo Enel Roma")["confidence"] < 0.65
 
 
 def test_group_formatting_helpers_do_not_contain_case_specific_hardcoding():

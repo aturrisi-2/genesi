@@ -18,6 +18,24 @@ _COMMON_FIRST_NAMES = {
     "pino", "rita", "roberto", "sara", "sofia", "stefano",
 }
 
+# Nomi propri composti comuni: due token separati che formano UN solo nome.
+# Conservativo: si attiva solo se i due token compaiono separati e adiacenti.
+# "Gianluca" già scritto unito resta unito (non viene mai spezzato qui).
+_COMPOSITE_FIRST_NAMES = {
+    ("maria", "grazia"),
+    ("gian", "luca"),
+    ("giovan", "battista"),
+    ("pier", "paolo"),
+    ("anna", "maria"),
+}
+
+# Particelle / preposizioni di cognome ("Di Dio", "De Luca", "Van Gogh").
+# Non sono mai nomi propri: non vanno mai restituite come first_name.
+_NAME_PARTICLES = {
+    "di", "de", "del", "della", "delle", "dei", "degli",
+    "da", "dal", "dalla", "van", "von",
+}
+
 _DISPLAY_NAME_STOPWORDS = {
     "admin", "arch", "assistente", "bot", "capo", "dott", "dottore", "dottssa",
     "geom", "ing", "officina", "reparto", "service", "servizio", "sig",
@@ -108,6 +126,20 @@ def extract_first_name_from_display_name(display_name: str, fallback_id: str | N
         result["reason"] = "only_roles_titles_numbers_or_acronyms"
         return result
 
+    # Nome composto: due candidati separati e adiacenti che formano un nome unico
+    # (es. "Maria Grazia", "Giovan Battista"). Ha priorità sul primo nome singolo.
+    for i in range(len(candidates) - 1):
+        idx_a, token_a, low_a = candidates[i]
+        idx_b, token_b, low_b = candidates[i + 1]
+        if idx_b == idx_a + 1 and (low_a, low_b) in _COMPOSITE_FIRST_NAMES:
+            result.update({
+                "first_name": f"{token_a} {token_b}",
+                "confidence": 0.92 if idx_a == 0 else 0.8,
+                "source": "composite_first_name",
+                "reason": "known_composite_first_name",
+            })
+            return result
+
     known = [(idx, token, low) for idx, token, low in candidates if low in _COMMON_FIRST_NAMES]
     if known:
         idx, token, _ = known[0]
@@ -120,7 +152,7 @@ def extract_first_name_from_display_name(display_name: str, fallback_id: str | N
         })
         return result
 
-    if len(candidates) == 1:
+    if len(candidates) == 1 and candidates[0][2] not in _NAME_PARTICLES:
         _, token, _ = candidates[0]
         result.update({
             "first_name": token,
@@ -130,14 +162,96 @@ def extract_first_name_from_display_name(display_name: str, fallback_id: str | N
         })
         return result
 
-    idx, token, _ = candidates[0]
-    result.update({
-        "first_name": token,
-        "confidence": 0.45 if idx == 0 else 0.4,
-        "source": "clean_token_order",
-        "reason": "low_confidence_order_guess",
-    })
+    # "Nome di/de/van Cognome": se il secondo token è una particella di cognome
+    # (es. "... Di Dio", "... De Luca", "... Van Gogh"), il nome proprio è il
+    # PRIMO token, non la particella.
+    if (len(candidates) >= 2
+            and candidates[0][2] not in _NAME_PARTICLES
+            and candidates[1][2] in _NAME_PARTICLES):
+        _, token, _ = candidates[0]
+        result.update({
+            "first_name": token,
+            "confidence": 0.6,
+            "source": "name_before_particle",
+            "reason": "first_token_before_surname_particle",
+        })
+        return result
+
+    # Forma "Cognome Nome [Cognome...]": 3+ token, primo non è un nome noto.
+    # Il nome proprio è tipicamente il primo token NON-particella dal secondo in poi
+    # (es. "Rossi Pina Bianchi" → "Pina", "Turrisi Pina Nino Calvagna" → "Pina").
+    # Le particelle vengono saltate. Con 2 token si assume "Nome Cognome" → primo (sotto).
+    # I nomi composti noti sono già stati intercettati sopra in qualsiasi posizione.
+    if len(candidates) >= 3:
+        for idx, token, low in candidates[1:]:
+            if low not in _NAME_PARTICLES:
+                result.update({
+                    "first_name": token,
+                    "confidence": 0.5,
+                    "source": "surname_first_guess",
+                    "reason": "surname_first_second_token",
+                })
+                return result
+
+    # Fallback ordine: primo candidato NON-particella.
+    for idx, token, low in candidates:
+        if low not in _NAME_PARTICLES:
+            result.update({
+                "first_name": token,
+                "confidence": 0.45 if idx == 0 else 0.4,
+                "source": "clean_token_order",
+                "reason": "low_confidence_order_guess",
+            })
+            return result
+
+    # Solo particelle: nessun nome proprio affidabile.
+    result["reason"] = "only_surname_particles"
     return result
+
+
+def normalize_person_display_name(raw_name: str,
+                                  preferred_name: Optional[str] = None,
+                                  existing_first_name: Optional[str] = None) -> dict:
+    """
+    Regola UNICA cross-platform per ricavare l'appellativo breve di una persona.
+
+    Gli adapter (WhatsApp, Telegram, Meta, futuri canali) NON devono decidere il
+    nome: passano solo il nome grezzo (pushName / contact / participant name) e,
+    se noti, il nome preferito manuale e l'eventuale first_name già salvato.
+    Il core produce sempre un nome breve, senza cognomi/particelle/sigle/emoji.
+
+    Ritorna {name, confidence, source, reason}. Non inventa mai: se non c'è un
+    nome estraibile usa il primo token ripulito come fallback prudente.
+    """
+    if preferred_name and str(preferred_name).strip():
+        return {"name": str(preferred_name).strip(), "confidence": 1.0,
+                "source": "preferred", "reason": "manual_override"}
+
+    parsed = extract_first_name_from_display_name(raw_name or "")
+    fn = (parsed.get("first_name") or "").strip()
+    conf = parsed.get("confidence", 0.0)
+
+    # Estrazione affidabile dal nome grezzo (gate 0.4: l'alternativa è il nome
+    # completo, sempre peggiore). Vince anche su un first_name salvato sporco.
+    if fn and conf >= 0.4:
+        return {"name": fn, "confidence": conf,
+                "source": parsed.get("source"), "reason": parsed.get("reason")}
+
+    # Estrazione a bassa confidence ma già priva di particelle/cognomi evidenti.
+    if fn:
+        return {"name": fn, "confidence": conf,
+                "source": parsed.get("source"), "reason": "low_confidence_extract"}
+
+    # Nessun nome estraibile dal grezzo: ripiega su un first_name già salvato.
+    if existing_first_name and str(existing_first_name).strip():
+        return {"name": str(existing_first_name).strip(), "confidence": 0.5,
+                "source": "existing_first_name", "reason": "kept_existing"}
+
+    # Ultima spiaggia: primo token ripulito (mai un nome inventato).
+    raw = re.sub(r"\s+", " ", str(raw_name or "")).strip()
+    first_tok = raw.split(" ")[0] if raw else ""
+    return {"name": first_tok, "confidence": 0.2 if first_tok else 0.0,
+            "source": "raw_fallback", "reason": "no_extractable_name"}
 
 
 def is_relational_descriptor(name: str) -> bool:

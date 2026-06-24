@@ -964,7 +964,12 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
         wa_id      = msg.get("from", "")
         msg_id     = msg.get("id", "")   # ID messaggio per typing + mark-as-read
         msg_type   = msg.get("type", "")
-        first_name = name_map.get(wa_id, "").split()[0] if name_map.get(wa_id) else ""
+        _raw_name = name_map.get(wa_id, "")
+        if _raw_name:
+            from core.name_utils import normalize_person_display_name
+            first_name = normalize_person_display_name(_raw_name)["name"] or _raw_name.split()[0]
+        else:
+            first_name = ""
 
         # Estrai contenuti in base al tipo
         text     = ""
