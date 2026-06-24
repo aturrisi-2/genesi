@@ -217,6 +217,27 @@ def member_display_name(member: dict, fallback: str = "") -> str:
             or member.get("display_name") or fallback or "").strip()
 
 
+def _normalized_fallback_name(raw_name: str) -> str:
+    """Riduce un display name grezzo a un probabile nome breve, senza inventare.
+
+    Usa extract_first_name_from_display_name con gate di confidence: se il nome di
+    battesimo estratto è affidabile (>=0.65) lo usa, altrimenti restituisce il
+    display name semplicemente ripulito. Evita che un partecipante silente compaia
+    nella lista membri col cognome o nome completo registrato.
+    """
+    raw = _sanitize_member_name(raw_name)
+    if not raw:
+        return ""
+    from core.name_utils import extract_first_name_from_display_name
+    parsed = extract_first_name_from_display_name(raw)
+    # Soglia bassa (0.4) di proposito: qui l'alternativa è il display name COMPLETO
+    # (es. "Dora Cirasa"), peggiore di un primo nome plausibile. La soglia alta (0.65)
+    # resta in update_member_seen, dove invece si decide se SCRIVERE un nome salvato.
+    if parsed.get("first_name") and parsed.get("confidence", 0.0) >= 0.4:
+        return parsed["first_name"]
+    return raw
+
+
 async def set_preferred_name(from_id: int, name: str):
     """Imposta il nome PREFERITO del membro (da una correzione): vince e non viene sovrascritto."""
     name = _sanitize_member_name(name)
@@ -441,7 +462,7 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
             except Exception:
                 p_member = {}
                 
-            p_name = member_display_name(p_member, fallback=_sanitize_member_name(p.get("name") or ""))
+            p_name = member_display_name(p_member, fallback=_normalized_fallback_name(p.get("name") or ""))
             if not p_name:
                 p_name = f"+{clean_jid}"
                 

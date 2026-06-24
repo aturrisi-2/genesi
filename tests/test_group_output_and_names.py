@@ -41,6 +41,47 @@ def test_extract_first_name_refuses_low_confidence_or_non_names():
     assert extract_first_name_from_display_name("SSA_Ufficio")["first_name"] is None
 
 
+def test_extract_first_name_reduces_full_display_names_to_single_name():
+    assert extract_first_name_from_display_name("Dora Cirasa")["first_name"] == "Dora"
+    assert extract_first_name_from_display_name("🔥 Dora Cirasa 🍒")["first_name"] == "Dora"
+    assert extract_first_name_from_display_name("Marco TAB CEFLA")["first_name"] == "Marco"
+    assert extract_first_name_from_display_name("Zio Tony")["first_name"] == "Tony"
+    assert extract_first_name_from_display_name("Skipper")["first_name"] == "Skipper"
+
+
+def test_extract_first_name_keeps_known_composite_first_names():
+    mg = extract_first_name_from_display_name("Maria Grazia Rossi")
+    assert mg["first_name"] == "Maria Grazia"
+    assert mg["confidence"] >= 0.8
+    am = extract_first_name_from_display_name("Anna Maria Bianchi")
+    assert am["first_name"] == "Anna Maria"
+    gb = extract_first_name_from_display_name("Giovan Battista Verdi")
+    assert gb["first_name"] == "Giovan Battista"
+    # Nome già scritto unito non viene spezzato né alterato
+    assert extract_first_name_from_display_name("Gianluca")["first_name"] == "Gianluca"
+
+
+def test_non_person_display_name_is_not_confident():
+    res = extract_first_name_from_display_name("Gruppo Enel Roma")
+    assert res["confidence"] < 0.65
+
+
+async def test_silent_participant_appears_with_short_name_not_full_display():
+    import random
+    from core.telegram_group_memory import build_group_context
+
+    chat_id = random.randint(900_000_000, 999_999_999)
+    participants = [
+        {"id": "10000000001@s.whatsapp.net", "name": "Dora Cirasa", "is_me": False},
+    ]
+    ctx = await build_group_context(
+        chat_id, from_id=chat_id, first_name="Tester",
+        current_message="ciao", participants=participants,
+    )
+    assert "Dora Cirasa" not in ctx
+    assert "Dora" in ctx
+
+
 def test_group_formatting_helpers_do_not_contain_case_specific_hardcoding():
     forbidden = [
         "Simo" + "na",

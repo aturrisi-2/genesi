@@ -18,6 +18,17 @@ _COMMON_FIRST_NAMES = {
     "pino", "rita", "roberto", "sara", "sofia", "stefano",
 }
 
+# Nomi propri composti comuni: due token separati che formano UN solo nome.
+# Conservativo: si attiva solo se i due token compaiono separati e adiacenti.
+# "Gianluca" già scritto unito resta unito (non viene mai spezzato qui).
+_COMPOSITE_FIRST_NAMES = {
+    ("maria", "grazia"),
+    ("gian", "luca"),
+    ("giovan", "battista"),
+    ("pier", "paolo"),
+    ("anna", "maria"),
+}
+
 _DISPLAY_NAME_STOPWORDS = {
     "admin", "arch", "assistente", "bot", "capo", "dott", "dottore", "dottssa",
     "geom", "ing", "officina", "reparto", "service", "servizio", "sig",
@@ -107,6 +118,20 @@ def extract_first_name_from_display_name(display_name: str, fallback_id: str | N
     if not candidates:
         result["reason"] = "only_roles_titles_numbers_or_acronyms"
         return result
+
+    # Nome composto: due candidati separati e adiacenti che formano un nome unico
+    # (es. "Maria Grazia", "Giovan Battista"). Ha priorità sul primo nome singolo.
+    for i in range(len(candidates) - 1):
+        idx_a, token_a, low_a = candidates[i]
+        idx_b, token_b, low_b = candidates[i + 1]
+        if idx_b == idx_a + 1 and (low_a, low_b) in _COMPOSITE_FIRST_NAMES:
+            result.update({
+                "first_name": f"{token_a} {token_b}",
+                "confidence": 0.92 if idx_a == 0 else 0.8,
+                "source": "composite_first_name",
+                "reason": "known_composite_first_name",
+            })
+            return result
 
     known = [(idx, token, low) for idx, token, low in candidates if low in _COMMON_FIRST_NAMES]
     if known:
