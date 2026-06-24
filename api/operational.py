@@ -212,13 +212,41 @@ async def operational_report_latest_view(
     project_id: str,
     report_mode: ReportMode = "OPERATIVE_ONLY",
 ) -> HTMLResponse:
-    """Print-friendly HTML view of the latest daily report. Reuses build_daily_report
-    (same logic as the JSON endpoint), rendering its markdown. No new auth (same as
-    other operational read endpoints), no store mutation."""
-    from core.operational_memory.report_viewer import render_daily_report_html
+    """Print-friendly HTML view (V2): structured cards (issue/task/decision/question
+    /media with thumbnails) + a separate internal 'diary' page. Reads the same data
+    as the JSON endpoint (build_daily_report + state + events). No new auth, no store
+    mutation. Same URL as before."""
+    from core.operational_memory.report_viewer import render_operational_report_v2
+    from core.operational_memory.state_store import load_state
+    from core.operational_memory.event_store import list_events
     report = await build_daily_report(project_id, report_mode=report_mode)
+    state = await load_state(project_id)
+    events = await list_events(project_id)
     json_url = f"/operational-state/{project_id}/daily-report"
-    return HTMLResponse(content=render_daily_report_html(report, json_url=json_url))
+    def _thumb_url(media_id: str) -> str:
+        return f"/operational-report/{project_id}/media/{media_id}/thumbnail"
+    html_page = render_operational_report_v2(
+        state, report, events, project_id, json_url=json_url, thumb_url_fn=_thumb_url)
+    return HTMLResponse(content=html_page)
+
+
+@router.get("/operational-report/{project_id}/media/{media_id}/thumbnail")
+async def operational_report_media_thumbnail(project_id: str, media_id: str) -> Response:
+    """Serve a downscaled JPEG thumbnail for an image media that belongs to THIS
+    project's events. Security: media_id must be the basename of an image event's
+    attachment_path in the project AND inside an allowed media dir (no traversal, no
+    arbitrary path). 404 otherwise. Same exposure level as the report view."""
+    from core.operational_memory.event_store import list_events
+    from core.operational_memory.media_thumbnail import resolve_media_path, make_thumbnail_bytes
+    events = await list_events(project_id)
+    path = resolve_media_path(events, media_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="thumbnail not available")
+    data = make_thumbnail_bytes(path)
+    if not data:
+        raise HTTPException(status_code=404, detail="thumbnail not available")
+    return Response(content=data, media_type="image/jpeg",
+                    headers={"Cache-Control": "private, max-age=300"})
 
 
 @router.post("/operational-demo/{project_id}/whatsapp-export/run", response_model=OfflineWhatsAppDemoResponse)
