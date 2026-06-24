@@ -854,9 +854,11 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                 sender_name_lower = request.sender_name.lower()
                 for _v in ft.values():
                     if _v.get("name", "").lower() == sender_name_lower:
+                        from core.name_utils import normalize_person_display_name as _npdn
                         member["relationship_to_owner"] = _v.get("relationship", "")
                         member["display_name"] = _v.get("name", request.sender_name)
-                        member.setdefault("first_name", request.sender_name)
+                        member.setdefault("first_name",
+                                          _npdn(request.sender_name)["name"] or request.sender_name)
                         await _tgm_s.save(_member_key(sender_int), member)
                         log("WA_GROUP_MEMBER_AUTOLINKED", name=request.sender_name, rel=member["relationship_to_owner"])
                         break
@@ -895,7 +897,10 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                     # Non sovrascrivere un nome corretto dall'utente; pulisci i pushName strani
                     if p_member.get("preferred_name"):
                         continue
-                    _pname = _sanitize_member_name(p.name)
+                    from core.name_utils import normalize_person_display_name as _npdn
+                    # Mai salvare il participant name grezzo: pipeline core → nome breve.
+                    _pname = _npdn(p.name, existing_first_name=p_member.get("first_name"))["name"] \
+                        or _sanitize_member_name(p.name)
                     if _pname and p_member.get("first_name") != _pname:
                         import time
                         s = storage
@@ -1045,7 +1050,15 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             await _danc(sender_int, request.sender_name, request.text,
                         [p.dict() for p in request.participants] if request.participants else None)
             _smem = await _gm(sender_int)
-            eff_sender = _mdn(_smem, fallback=_san(request.sender_name)) or request.sender_name
+            # Invariante: l'appellativo nel prompt/risposta passa SEMPRE dal core.
+            # Il preferred (correzione manuale) vince; altrimenti si estrae dal pushName
+            # fresco, ignorando un first_name storico eventualmente sporco.
+            from core.name_utils import normalize_person_display_name as _npdn
+            eff_sender = _npdn(
+                request.sender_name,
+                preferred_name=_smem.get("preferred_name"),
+                existing_first_name=_smem.get("first_name"),
+            )["name"] or request.sender_name
         except Exception as _ne:
             log("WA_GROUP_EFF_NAME_FAIL", error=str(_ne))
 

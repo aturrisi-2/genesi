@@ -209,6 +209,51 @@ def extract_first_name_from_display_name(display_name: str, fallback_id: str | N
     return result
 
 
+def normalize_person_display_name(raw_name: str,
+                                  preferred_name: Optional[str] = None,
+                                  existing_first_name: Optional[str] = None) -> dict:
+    """
+    Regola UNICA cross-platform per ricavare l'appellativo breve di una persona.
+
+    Gli adapter (WhatsApp, Telegram, Meta, futuri canali) NON devono decidere il
+    nome: passano solo il nome grezzo (pushName / contact / participant name) e,
+    se noti, il nome preferito manuale e l'eventuale first_name già salvato.
+    Il core produce sempre un nome breve, senza cognomi/particelle/sigle/emoji.
+
+    Ritorna {name, confidence, source, reason}. Non inventa mai: se non c'è un
+    nome estraibile usa il primo token ripulito come fallback prudente.
+    """
+    if preferred_name and str(preferred_name).strip():
+        return {"name": str(preferred_name).strip(), "confidence": 1.0,
+                "source": "preferred", "reason": "manual_override"}
+
+    parsed = extract_first_name_from_display_name(raw_name or "")
+    fn = (parsed.get("first_name") or "").strip()
+    conf = parsed.get("confidence", 0.0)
+
+    # Estrazione affidabile dal nome grezzo (gate 0.4: l'alternativa è il nome
+    # completo, sempre peggiore). Vince anche su un first_name salvato sporco.
+    if fn and conf >= 0.4:
+        return {"name": fn, "confidence": conf,
+                "source": parsed.get("source"), "reason": parsed.get("reason")}
+
+    # Estrazione a bassa confidence ma già priva di particelle/cognomi evidenti.
+    if fn:
+        return {"name": fn, "confidence": conf,
+                "source": parsed.get("source"), "reason": "low_confidence_extract"}
+
+    # Nessun nome estraibile dal grezzo: ripiega su un first_name già salvato.
+    if existing_first_name and str(existing_first_name).strip():
+        return {"name": str(existing_first_name).strip(), "confidence": 0.5,
+                "source": "existing_first_name", "reason": "kept_existing"}
+
+    # Ultima spiaggia: primo token ripulito (mai un nome inventato).
+    raw = re.sub(r"\s+", " ", str(raw_name or "")).strip()
+    first_tok = raw.split(" ")[0] if raw else ""
+    return {"name": first_tok, "confidence": 0.2 if first_tok else 0.0,
+            "source": "raw_fallback", "reason": "no_extractable_name"}
+
+
 def is_relational_descriptor(name: str) -> bool:
     """
     True se il testo è un descrittore relazionale (non un nome proprio).

@@ -1,6 +1,9 @@
 import inspect
 
-from core.name_utils import extract_first_name_from_display_name
+from core.name_utils import (
+    extract_first_name_from_display_name,
+    normalize_person_display_name,
+)
 from core.response_filter import strip_leading_speaker_prefix
 
 
@@ -118,6 +121,28 @@ async def test_silent_participant_surname_first_appears_with_first_name():
     )
     assert "Turrisi Pina Nino Calvagna" not in ctx
     assert "Pina" in ctx
+
+
+def test_normalize_person_display_name_is_the_single_core_rule():
+    # Override manuale vince sempre
+    assert normalize_person_display_name("Turrisi Pina Nino Calvag",
+                                         preferred_name="Pina")["name"] == "Pina"
+    # Nome grezzo multi-token (cognome-prima) ridotto a nome breve
+    assert normalize_person_display_name("Turrisi Pina Nino Calvag")["name"] == "Pina"
+    # Nome-cognome semplice
+    assert normalize_person_display_name("Dora Cirasa")["name"] == "Dora"
+    # Composto preservato
+    assert normalize_person_display_name("Maria Grazia Rossi")["name"] == "Maria Grazia"
+    # Particella di cognome mai scelta
+    assert normalize_person_display_name("simona di dio")["name"] == "Simona"
+    # Nickname singolo intatto
+    assert normalize_person_display_name("Skipper")["name"] == "Skipper"
+    # Mittente Meta/adapter con nome semplice resta invariato
+    assert normalize_person_display_name("Ann")["name"] == "Ann"
+    # Raw vuoto → ripiega sul first_name già salvato
+    assert normalize_person_display_name("", existing_first_name="Pina")["name"] == "Pina"
+    # Non-persona: bassa confidence
+    assert normalize_person_display_name("Gruppo Enel Roma")["confidence"] < 0.65
 
 
 def test_group_formatting_helpers_do_not_contain_case_specific_hardcoding():

@@ -966,12 +966,8 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
         msg_type   = msg.get("type", "")
         _raw_name = name_map.get(wa_id, "")
         if _raw_name:
-            from core.name_utils import extract_first_name_from_display_name
-            _parsed_name = extract_first_name_from_display_name(_raw_name)
-            if _parsed_name.get("first_name") and _parsed_name.get("confidence", 0.0) >= 0.65:
-                first_name = _parsed_name["first_name"]
-            else:
-                first_name = _raw_name.split()[0]
+            from core.name_utils import normalize_person_display_name
+            first_name = normalize_person_display_name(_raw_name)["name"] or _raw_name.split()[0]
         else:
             first_name = ""
 
