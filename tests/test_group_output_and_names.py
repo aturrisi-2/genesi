@@ -72,6 +72,17 @@ def test_extract_first_name_handles_surname_first_display_names():
     assert extract_first_name_from_display_name("Dora Cirasa")["first_name"] == "Dora"
 
 
+def test_extract_first_name_skips_surname_particles():
+    assert extract_first_name_from_display_name("simona di dio")["first_name"] == "Simona"
+    assert extract_first_name_from_display_name("Simona Di Dio")["first_name"] == "Simona"
+    assert extract_first_name_from_display_name("maria de luca")["first_name"] == "Maria"
+    # Cognome puro con particella: non deve mai produrre "Di" come nome
+    assert extract_first_name_from_display_name("Di Dio")["first_name"] != "Di"
+    # Regressioni surname-first / nome-cognome restano intatte
+    assert extract_first_name_from_display_name("Turrisi Pina Nino Calvag")["first_name"] == "Pina"
+    assert extract_first_name_from_display_name("Dora Cirasa")["first_name"] == "Dora"
+
+
 def test_non_person_display_name_is_not_confident():
     res = extract_first_name_from_display_name("Gruppo Enel Roma")
     assert res["confidence"] < 0.65

@@ -29,6 +29,13 @@ _COMPOSITE_FIRST_NAMES = {
     ("anna", "maria"),
 }
 
+# Particelle / preposizioni di cognome ("Di Dio", "De Luca", "Van Gogh").
+# Non sono mai nomi propri: non vanno mai restituite come first_name.
+_NAME_PARTICLES = {
+    "di", "de", "del", "della", "delle", "dei", "degli",
+    "da", "dal", "dalla", "van", "von",
+}
+
 _DISPLAY_NAME_STOPWORDS = {
     "admin", "arch", "assistente", "bot", "capo", "dott", "dottore", "dottssa",
     "geom", "ing", "officina", "reparto", "service", "servizio", "sig",
@@ -145,7 +152,7 @@ def extract_first_name_from_display_name(display_name: str, fallback_id: str | N
         })
         return result
 
-    if len(candidates) == 1:
+    if len(candidates) == 1 and candidates[0][2] not in _NAME_PARTICLES:
         _, token, _ = candidates[0]
         result.update({
             "first_name": token,
@@ -155,28 +162,50 @@ def extract_first_name_from_display_name(display_name: str, fallback_id: str | N
         })
         return result
 
-    # Forma "Cognome Nome [Cognome...]": 3+ token, primo non è un nome noto.
-    # In questo schema il nome proprio è tipicamente il secondo token
-    # (es. "Rossi Pina Bianchi" → "Pina", "Turrisi Pina Nino Calvagna" → "Pina").
-    # Con 2 soli token si assume invece "Nome Cognome" → primo token (sotto).
-    # I nomi composti noti sono già stati intercettati sopra in qualsiasi posizione.
-    if len(candidates) >= 3:
-        _, token, _ = candidates[1]
+    # "Nome di/de/van Cognome": se il secondo token è una particella di cognome
+    # (es. "... Di Dio", "... De Luca", "... Van Gogh"), il nome proprio è il
+    # PRIMO token, non la particella.
+    if (len(candidates) >= 2
+            and candidates[0][2] not in _NAME_PARTICLES
+            and candidates[1][2] in _NAME_PARTICLES):
+        _, token, _ = candidates[0]
         result.update({
             "first_name": token,
-            "confidence": 0.5,
-            "source": "surname_first_guess",
-            "reason": "surname_first_second_token",
+            "confidence": 0.6,
+            "source": "name_before_particle",
+            "reason": "first_token_before_surname_particle",
         })
         return result
 
-    idx, token, _ = candidates[0]
-    result.update({
-        "first_name": token,
-        "confidence": 0.45 if idx == 0 else 0.4,
-        "source": "clean_token_order",
-        "reason": "low_confidence_order_guess",
-    })
+    # Forma "Cognome Nome [Cognome...]": 3+ token, primo non è un nome noto.
+    # Il nome proprio è tipicamente il primo token NON-particella dal secondo in poi
+    # (es. "Rossi Pina Bianchi" → "Pina", "Turrisi Pina Nino Calvagna" → "Pina").
+    # Le particelle vengono saltate. Con 2 token si assume "Nome Cognome" → primo (sotto).
+    # I nomi composti noti sono già stati intercettati sopra in qualsiasi posizione.
+    if len(candidates) >= 3:
+        for idx, token, low in candidates[1:]:
+            if low not in _NAME_PARTICLES:
+                result.update({
+                    "first_name": token,
+                    "confidence": 0.5,
+                    "source": "surname_first_guess",
+                    "reason": "surname_first_second_token",
+                })
+                return result
+
+    # Fallback ordine: primo candidato NON-particella.
+    for idx, token, low in candidates:
+        if low not in _NAME_PARTICLES:
+            result.update({
+                "first_name": token,
+                "confidence": 0.45 if idx == 0 else 0.4,
+                "source": "clean_token_order",
+                "reason": "low_confidence_order_guess",
+            })
+            return result
+
+    # Solo particelle: nessun nome proprio affidabile.
+    result["reason"] = "only_surname_particles"
     return result
 
 
