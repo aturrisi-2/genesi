@@ -22,6 +22,7 @@ from typing import Optional
 from core.log import log
 from core.operational_memory.audio_transcriber import transcribe_audio_file
 from core.operational_memory.video_describer import describe_video_file
+from core.operational_memory.image_describer import describe_image_file, _looks_weak_ocr
 from core.operational_memory.media_analyzer import analyze_media, attachment_type_for_path
 from core.operational_memory.models import ChatAttachment, normalize_media_category
 
@@ -158,6 +159,7 @@ async def analyze_attachment(
         )
 
     att_type = result.attachment_type or media_type or "document"
+    extracted_text = (result.extracted_text or "")
     merged_meta = {
         **base_meta,
         **(result.metadata or {}),
@@ -167,11 +169,22 @@ async def analyze_attachment(
     if result.media_description:
         merged_meta["media_description"] = result.media_description
 
+    # Photos read poorly by plain OCR (pytesseract → garbage). When the image OCR
+    # is weak/empty, fall back to the vision pipeline so equipment labels/codes are
+    # actually read. Vision description rides in extracted_text (operational content).
+    if att_type == "image" and _looks_weak_ocr(extracted_text):
+        vision = await describe_image_file(path)
+        if vision.get("text"):
+            extracted_text = vision["text"]
+            merged_meta["extraction_status"] = "vision_described"
+            merged_meta["media_description"] = vision["description"]
+            merged_meta["ocr_fallback"] = "vision"
+
     log("OPERATIONAL_MEDIA_ANALYZED", type=att_type, original_type=(media_type or result.attachment_type),
-        status=result.extraction_status, has_text=bool(result.extracted_text))
+        status=merged_meta.get("extraction_status"), has_text=bool(extracted_text))
     return ChatAttachment(
         path=str(path),
         type=att_type,
-        extracted_text=(result.extracted_text or None),
+        extracted_text=(extracted_text or None),
         metadata=merged_meta,
     )

@@ -196,6 +196,25 @@ def _looks_meta_system(text: str) -> bool:
     return any(marker in normalized for marker in _META_SYSTEM_MARKERS)
 
 
+# Pure media-trigger phrases: they only ask Genesi to look at an attachment, they
+# are NOT operational items themselves (the real content comes from OCR/vision).
+_MEDIA_TRIGGER_PHRASES = (
+    "analizza questa immagine", "analizza l'immagine", "analizza immagine",
+    "guarda questa immagine", "guarda questa foto", "guarda la foto",
+    "guarda questo video", "guarda il video", "ascolta questo audio",
+    "analizza questo video", "analizza questo audio",
+)
+
+
+def _is_media_trigger(text: str) -> bool:
+    normalized = normalize_quality_text(text)
+    if not normalized:
+        return False
+    # Trigger only if the message is essentially just the phrase (short), not when
+    # the phrase is embedded in a longer operational sentence.
+    return any(normalized == p or normalized.startswith(p) for p in _MEDIA_TRIGGER_PHRASES) and len(normalized) <= 60
+
+
 def classify_ingest(item: OperationalItem, category: str, parent_context: str = "") -> tuple[str, str]:
     """Triage an extracted item into one of: 'accepted' | 'needs_review' | 'ignored'.
 
@@ -224,6 +243,8 @@ def classify_ingest(item: OperationalItem, category: str, parent_context: str = 
     # Clear drops first.
     if is_non_operational_note(text):
         return ("ignored", "non_operational_marker")
+    if _is_media_trigger(text):
+        return ("ignored", "media_trigger")
     if _looks_meta_system(text) and not has_code:
         return ("ignored", "meta_system")
     if is_noise_text(text) and not strong:
