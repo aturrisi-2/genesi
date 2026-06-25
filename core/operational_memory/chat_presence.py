@@ -81,8 +81,13 @@ async def silent_update(message: ChatMessage, rebuild: bool = True) -> None:
         # Secondary, gated strategy (T-A4.1): infer a contextual parent when there
         # is no explicit reply. No-op unless OPERATIONAL_CONTEXT_INFERENCE_ENABLED →
         # with the flag OFF behaviour is identical to today.
-        from core.operational_memory.context_binding import infer_parent_context
+        from core.operational_memory.context_binding import infer_parent_context, infer_answer_binding
         await infer_parent_context(event, message.project_id)
+        if not event.parent_event_id:
+            # Semantic answer binding: a short availability/location reply gets linked
+            # to the single recent open issue/media (information/mitigation), without
+            # resolving it. Tightly constrained + fail-closed; own flag (default on).
+            await infer_answer_binding(event, message.project_id)
     _stored, created = await ingest_event(event)
     log(
         "OPERATIONAL_SILENT_INGEST",

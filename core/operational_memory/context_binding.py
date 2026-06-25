@@ -242,3 +242,98 @@ async def infer_parent_context(event: OperationalEvent, project_id: str) -> Oper
         score=round(best_score, 1), confidence=confidence,
         candidate_count=cc, signals=",".join(best_sig), ctx_len=len(event.parent_context or ""))
     return event
+
+
+# --------------------------------------------------------------------------- #
+# Semantic answer binding — link a short availability/location reply to a very
+# recent open issue/media, even without lexical overlap or explicit reply.
+# --------------------------------------------------------------------------- #
+
+ANSWER_WINDOW_MIN = 10  # reply must follow the issue/media within this window
+
+# Availability / localization answer cues (generic, IT). A short reply matching
+# these is "where/who has it" info, not a new problem.
+_ANSWER_CUE_RE = re.compile(
+    r"\b(in|nello|nella|nel|allo|alla)\s+(ufficio|magazzino|cantiere|box|officina|deposito|sede|cabina|scaffale|armadio|capannone|furgone|cassetta)\b"
+    r"|\bce\s+l'?ho\b|\bl'?ho\s+(io|qui)\b|\b(lo|la|li|le)\s+(porto|prendo|recupero|cerco|ho)\b"
+    r"|\bgi[uù]\s+in\b|\bsta\s+(in|nel|nella|su|giu)\b|\b[eè]\s+(in|nel|nella|da|gi[uù]|qui|li)\b"
+    r"|\bdisponibil\w*\b|\barrivat?\w*\b|\bpront[oa]\b",
+    re.IGNORECASE,
+)
+# Pure acknowledgements → never an answer binding.
+_GENERIC_ACK = {"ok", "okay", "va bene", "vabbene", "vabene", "grazie", "perfetto",
+                "ottimo", "si", "sì", "no", "ricevuto", "fatto", "bene", "👍", "ok grazie"}
+# Problem markers → identifies a candidate open issue/media.
+_PROBLEM_RE = re.compile(
+    r"\b(manca\w*|mancano|rott[oa]|guast\w*|chius[oa]|da\s+rifare|non\s+funziona|non\s+va|"
+    r"assent\w*|danneggiat\w*|da\s+sostituire|serve\b|difett\w*|da\s+verificare|da\s+collegare|da\s+siliconare)\b",
+    re.IGNORECASE,
+)
+
+
+def _answer_binding_enabled() -> bool:
+    val = os.getenv("OPERATIONAL_ANSWER_BINDING_ENABLED")
+    if val is None:
+        return True  # deterministic + tightly constrained → on by default
+    return val.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _looks_like_answer(text: str) -> bool:
+    t = (text or "").strip()
+    if not t or len(t) > 90:
+        return False
+    if t.lower().strip(" .!?👍") in _GENERIC_ACK:
+        return False
+    return bool(_ANSWER_CUE_RE.search(t))
+
+
+def _is_problem_candidate(ev: OperationalEvent) -> bool:
+    blob = " ".join([ev.content or "", ev.extracted_text or "", ev.media_description or ""])
+    if _PROBLEM_RE.search(blob):
+        return True
+    # A media event carrying any extracted text/description is a plausible subject.
+    is_media = "image" in str(getattr(ev, "attachment_type", "") or ev.type or "").lower() or bool(getattr(ev, "attachment_path", None))
+    return is_media and bool((ev.extracted_text or ev.media_description or "").strip())
+
+
+async def infer_answer_binding(event: OperationalEvent, project_id: str) -> OperationalEvent:
+    """Bind a short availability/location reply to the SINGLE recent open issue/media
+    in the same project (window ≤ ANSWER_WINDOW_MIN). Sets parent_event_id +
+    reply_relation='answer_binding' + parent_context (information/mitigation), WITHOUT
+    resolving the issue. Fail-closed: ambiguous (≥2) or none → no binding. Never
+    raises; never logs text. Skips if already bound or disabled."""
+    if event.parent_event_id or not _answer_binding_enabled():
+        return event
+    child_text = _child_text(event)
+    if not _looks_like_answer(child_text):
+        return event
+    try:
+        events = await list_events(project_id)
+    except Exception as exc:
+        log("OPERATIONAL_ANSWER_LOOKUP_ERROR", error=str(exc))
+        return event
+    child_time = _parse_ts(event.timestamp)
+    candidates = []
+    for cand in events:
+        if cand.event_id == event.event_id:
+            continue
+        gap = (child_time - _parse_ts(cand.timestamp)).total_seconds() / 60.0
+        if gap <= 0 or gap > ANSWER_WINDOW_MIN:
+            continue
+        if _is_problem_candidate(cand):
+            candidates.append((gap, cand))
+    if not candidates:
+        log("OPERATIONAL_ANSWER_NOT_FOUND", child_event_id=event.event_id[:24], reason="no_recent_open_issue")
+        return event
+    if len(candidates) > 1:
+        log("OPERATIONAL_ANSWER_AMBIGUOUS", child_event_id=event.event_id[:24], candidate_count=len(candidates))
+        return event
+    _gap, parent = candidates[0]
+    merged = _parent_context_text(parent)
+    if merged:
+        event.parent_context = merged
+    event.parent_event_id = parent.event_id
+    event.reply_relation = "answer_binding"
+    log("OPERATIONAL_ANSWER_BOUND", parent_event_id=parent.event_id, child_event_id=event.event_id,
+        parent_type=parent.type, gap_min=round(_gap, 1), ctx_len=len(event.parent_context or ""))
+    return event
