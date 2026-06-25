@@ -9,9 +9,13 @@ Funzioni:
    così Genesi può rispondere direttamente a quella persona.
 3) Rilevamento tono emotivo: analizza i messaggi recenti e identifica se il gruppo
    è in modalità umoristica, di lutto/dolore o neutrale, per adattare il tono di risposta.
+4) Emotional cooldown: dopo che Genesi risponde a un evento di lutto/ricordo,
+   entra in cooldown per quel tema (default 4h) e sopprime risposte empatiche
+   ripetitive alle reazioni minimali successive.
 """
 from __future__ import annotations
 
+import re
 import time
 
 from core.affective_event_decay import (
@@ -26,6 +30,166 @@ _ARRIVALS: dict[tuple, float] = {}
 
 # (platform, group_id) -> list of (user_id, ts) — tutti i messaggi arrivati
 _GROUP_ARRIVALS: dict[tuple, list] = {}
+
+
+# ── Emoji detection helpers ───────────────────────────────────────────────────
+
+_EMOJI_STRIP_RE = re.compile(
+    "[\U0001F300-\U0001FAFF"   # Main emoji + supplemental
+    "\U00002600-\U000027BF"    # Misc symbols
+    "\U0001F1E0-\U0001F1FF"    # Regional indicators (flags)
+    "\U0000FE00-\U0000FE0F"    # Variation selectors
+    "\U0001F900-\U0001F9FF"    # Supplemental symbols & pictographs
+    "\U00002300-\U000023FF"    # Misc technical
+    "\U0000200D"               # Zero-width joiner
+    "]+",
+    flags=re.UNICODE,
+)
+
+# Frasi brevi di solidarietà/condoglianza che non devono scatenare risposta
+_MINIMAL_REACTION_PHRASES = frozenset((
+    "ovunque sei", "sempre con noi", "sempre con te", "sempre tra noi",
+    "sempre nei nostri cuori", "sempre nel cuore", "sempre nel nostro cuore",
+    "ti pensiamo", "ci pensiamo", "pensando a te", "pensiamo a te",
+    "sei sempre", "è sempre con noi", "è sempre con te",
+    "sei sempre nel nostro cuore", "sei sempre con noi",
+    "un abbraccio", "abbracciamo", "tanti abbracci", "vi abbracciamo",
+    "in cielo", "con gli angeli", "tra gli angeli", "sei un angelo",
+    "è un angelo", "è con gli angeli", "è tra gli angeli",
+    "preghiamo", "nelle nostre preghiere", "nella nostra preghiera",
+    "riposa in pace", "rip",
+    "ci mancherai", "ci manca", "ci mancavi",
+    "nel nostro cuore", "nei nostri cuori",
+    "non ti dimenticheremo", "non ti dimentico", "non ti dimentichiamo",
+    "ti ricordiamo", "ti ricordo", "ti vogliamo bene",
+))
+
+_GRIEF_EMOJIS_SET = frozenset("🙏❤🤍🖤😢😭🕯🌹🕊✝💔😔🥺🫂")
+
+# Frasi canoniche di ricordo/lutto non coperte da _GRIEF_PHRASES
+_MEMORIAL_TRIGGER_PHRASES = (
+    "non è più con noi", "non è più tra noi", "non c'è più con noi",
+    "anche se non è più", "anche se non è più con noi",
+    "è sempre con noi", "è sempre tra noi",
+    "sempre con noi", "sempre nel cuore", "sempre nei nostri cuori",
+    "ricordiamo il suo compleanno", "ricordiamo il suo", "ricordiamo la sua",
+    "preghiera per", "con una preghiera", "una preghiera per lui",
+    "una preghiera per lei",
+    "è tra gli angeli", "è in cielo", "è con gli angeli",
+    "ci ha preceduto", "ci ha preceduta",
+    "il nostro angelo in cielo",
+)
+
+
+def is_emoji_only_or_reaction(text: str) -> bool:
+    """True if the text contains only emoji/symbols and whitespace — no meaningful letters."""
+    if not text or not text.strip():
+        return True
+    clean = _EMOJI_STRIP_RE.sub("", text.strip())
+    return not clean.strip()
+
+
+def is_minimal_social_reaction(text: str) -> bool:
+    """
+    True for short emotional solidarity messages that don't warrant a standalone
+    Genesi response during an emotional cooldown period:
+    - Emoji-only (🙏🙏❤️)
+    - Short condolence phrase + emoji without a question (❤️❤️❤️ ovunque sei ❤️)
+    False for direct questions, long messages, or topic changes.
+    """
+    if not text or not text.strip():
+        return True
+    stripped = text.strip()
+    # Questions always escape the minimal-reaction gate
+    if "?" in stripped:
+        return False
+    # Pure emoji → minimal
+    if is_emoji_only_or_reaction(stripped):
+        return True
+    # Strip emoji, check what text remains
+    text_no_emoji = _EMOJI_STRIP_RE.sub("", stripped).strip()
+    if not text_no_emoji:
+        return True
+    # Long text is substantive — not minimal
+    if len(text_no_emoji) > 80:
+        return False
+    text_lower = text_no_emoji.lower()
+    for phrase in _MINIMAL_REACTION_PHRASES:
+        if phrase in text_lower:
+            return True
+    # Short text (≤4 words) combined with grief emoji → social reaction
+    words = text_lower.split()
+    if len(words) <= 4 and any(e in stripped for e in _GRIEF_EMOJIS_SET):
+        return True
+    return False
+
+
+def is_memorial_trigger(text: str) -> bool:
+    """
+    True if the message describes a memorial/grief event that warrants setting the
+    emotional cooldown after Genesi responds to it.
+    Covers both the existing _GRIEF_PHRASES/_GRIEF_WORDS and additional Italian
+    canonical phrases like "non è più con noi" / "sempre con noi".
+    """
+    if not text:
+        return False
+    text_lower = text.lower()
+    for phrase in _GRIEF_PHRASES:
+        if phrase in text_lower:
+            return True
+    for word in _GRIEF_WORDS:
+        if re.search(r"\b" + word + r"\b", text_lower):
+            return True
+    for phrase in _MEMORIAL_TRIGGER_PHRASES:
+        if phrase in text_lower:
+            return True
+    return is_sensitive_affective_text(text_lower)
+
+
+# ── Emotional Cooldown (per-group, in-memory) ────────────────────────────────
+# Dopo che Genesi risponde a un evento di lutto/ricordo, il cooldown blocca
+# risposte empatiche ripetitive per EMOTIONAL_COOLDOWN_HOURS ore.
+# (In-memory: si azzera al riavvio del processo — accettabile per 4h.)
+
+EMOTIONAL_COOLDOWN_HOURS: float = 4.0
+
+# (platform, group_id) → {"topic": str, "set_at": float, "expires_at": float}
+_EMOTIONAL_COOLDOWNS: dict[tuple, dict] = {}
+
+
+def set_group_emotional_cooldown(
+    platform: str,
+    group_id,
+    topic: str = "memorial",
+    hours: float = EMOTIONAL_COOLDOWN_HOURS,
+) -> None:
+    """Activate (or extend) the emotional cooldown for a group.
+    Does not shorten an already longer active cooldown."""
+    key = (platform, str(group_id))
+    now = time.time()
+    new_expires = now + hours * 3600
+    existing = _EMOTIONAL_COOLDOWNS.get(key)
+    if existing and existing.get("expires_at", 0) >= new_expires:
+        return
+    _EMOTIONAL_COOLDOWNS[key] = {"topic": topic, "set_at": now, "expires_at": new_expires}
+
+
+def get_group_emotional_cooldown(platform: str, group_id) -> dict | None:
+    """Return the active cooldown dict or None if expired/absent.
+    Evicts expired entries automatically."""
+    key = (platform, str(group_id))
+    cd = _EMOTIONAL_COOLDOWNS.get(key)
+    if not cd:
+        return None
+    if time.time() >= cd.get("expires_at", 0):
+        _EMOTIONAL_COOLDOWNS.pop(key, None)
+        return None
+    return cd
+
+
+def clear_group_emotional_cooldown(platform: str, group_id) -> None:
+    """Explicitly clear the cooldown (e.g., after a clear topic change)."""
+    _EMOTIONAL_COOLDOWNS.pop((platform, str(group_id)), None)
 
 
 def mark_arrival(platform: str, group_id, user_id) -> float:
@@ -80,6 +244,10 @@ _GRIEF_PHRASES = (
     "ha perso la vita", "deceduto", "deceduta", "veglia funebre",
     "dolore immenso", "ci mancherà", "era una persona", "un grande vuoto",
     "addio per sempre", "lo ricorderemo", "la ricorderemo",
+    # Frasi canoniche italiane per ricordi di persone non più in vita
+    "non è più con noi", "non è più tra noi", "anche se non è più con noi",
+    "ci ha preceduto", "ci ha preceduta",
+    "è tra gli angeli", "è in cielo con",
 )
 # Parole singole di lutto (controllate come parola intera)
 _GRIEF_WORDS = ("morto", "morta", "morti", "morte", "perdita", "dolore")

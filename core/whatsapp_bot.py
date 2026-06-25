@@ -200,6 +200,8 @@ RISPONDI "NO" in tutti gli altri casi. In particolare, rispondi "NO" per:
 - Chiacchiere, aggiornamenti personali, stati d'animo o aggiornamenti di routine tra i membri del gruppo (es. "sto tornando dalle analisi", "prendo il brufen").
 - Saluti generici di inizio giornata o auguri (es. "Buongiorno a tutti", "Buon pranzo", "Buonanotte", "Auguri mamma!"). Questi sono scambi affettuosi tra umani; Genesi deve rimanere in silenzio e non intromettersi.
 - Messaggi in cui un utente risponde o parla con un altro membro umano del gruppo (es. Katia che risponde a Zoe, o Iolanda che saluta Mariella).
+- Messaggi composti solo da emoji o brevi reazioni emotive (es. "🙏🙏❤️", "❤️❤️❤️", "🕯️🙏", "sempre con noi ❤️", "ovunque sei ❤️"): sono gesti di solidarietà tra umani, non vanno interrotti da un'AI.
+- Partecipazione emotiva a un tema di lutto/ricordo/preghiera già trattato: se nella storia recente Genesi ha già risposto a un messaggio commemorativo, le successive reazioni degli altri membri ("❤️", "🙏", "sempre nel cuore", "ci pensiamo") NON devono generare un'altra risposta empatica. Una sola risposta sobria è sufficiente; il silenzio dopo è rispettoso.
 - Qualsiasi situazione di dubbio. Nel dubbio, non intervenire (rispondi "NO").
 
 Rispondi SOLO con JSON: {"intervieni": true, "motivo": "ragione breve"} oppure {"intervieni": false, "motivo": "ragione breve"}
@@ -1264,6 +1266,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 logger.debug("OPERATIONAL_WHATSAPP_HOOK_ERR %s", _ome)
 
         _reply_to_genesi = False
+        bot_mentioned = False  # default; set inside if is_group for closure access
         if is_group:
             combined = f"{text} {caption}".strip()
             bot_mentioned = False
@@ -1289,7 +1292,40 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     bot_mentioned=bot_mentioned,
                     has_media=_original_has_media
                 )
-                
+
+            # ── Emotional cooldown gate ──────────────────────────────────────
+            # Dopo una risposta empatica su lutto/ricordo, Genesi sopprime le
+            # reazioni minimali successive (emoji, frasi brevi di solidarietà)
+            # per EMOTIONAL_COOLDOWN_HOURS ore. Invocazioni esplicite passano sempre.
+            if should and not _reply_to_genesi and not was_awaiting_faces and not bot_mentioned:
+                try:
+                    from core.group_reactivity import (
+                        get_group_emotional_cooldown,
+                        is_minimal_social_reaction,
+                    )
+                    _grief_cd = get_group_emotional_cooldown("whatsapp", chat_id)
+                    if _grief_cd:
+                        _combined_cd = f"{text} {caption}".strip()
+                        if is_minimal_social_reaction(_combined_cd):
+                            should = False
+                            logger.info(
+                                "WA_GRIEF_COOLDOWN_SUPPRESS chat_id=%s from=%s "
+                                "topic=%s remaining_h=%.1f",
+                                chat_id, first_name,
+                                _grief_cd.get("topic", ""),
+                                (_grief_cd.get("expires_at", 0) - time.time()) / 3600,
+                            )
+                        elif _original_has_media:
+                            # Media durante cooldown senza invocazione esplicita → sopprimi
+                            should = False
+                            logger.info(
+                                "WA_GRIEF_COOLDOWN_MEDIA_SUPPRESS chat_id=%s from=%s",
+                                chat_id, first_name,
+                            )
+                except Exception as _cge:
+                    logger.debug("WA_GRIEF_COOLDOWN_GATE_ERR %s", _cge)
+            # ────────────────────────────────────────────────────────────────
+
             if not should:
                 logger.info("WA_GROUP_SILENT chat_id=%s from=%s msg=%.60s",
                             chat_id, first_name, f"{text} {caption}".strip())
@@ -1476,6 +1512,18 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     "ts":         time.time(),
                     "last_reply": reply[:300],
                 }
+                # ── Imposta cooldown emotivo dopo una risposta su lutto/ricordo ──
+                # Solo per risposte proattive (non per invocazioni dirette).
+                if not bot_mentioned and not _reply_to_genesi:
+                    try:
+                        from core.group_reactivity import is_memorial_trigger, set_group_emotional_cooldown
+                        _orig_text = (text or caption or "").strip()
+                        if is_memorial_trigger(_orig_text):
+                            set_group_emotional_cooldown("whatsapp", chat_id, topic="memorial")
+                            logger.info("WA_GRIEF_COOLDOWN_SET chat_id=%s", chat_id)
+                    except Exception as _cde:
+                        logger.debug("WA_GRIEF_COOLDOWN_SET_ERR %s", _cde)
+                # ─────────────────────────────────────────────────────────────
             return True
 
         # ── FOTO ──────────────────────────────────────────────────────────────
