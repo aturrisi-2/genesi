@@ -7,6 +7,8 @@ Covers the audit-derived cases + merge_state routing. No env/live.
 
 from __future__ import annotations
 
+import pytest
+
 from core.operational_memory.quality import classify_ingest
 from core.operational_memory.state_engine import merge_state
 from core.operational_memory.models import (
@@ -114,3 +116,42 @@ def test_merge_preserves_existing_state_untouched():
     incoming = OperationalState(project_id="p")
     merged = merge_state(existing, incoming)
     assert len(merged.tasks) == 1
+
+
+# --------------------------------------------------------------------------- #
+# Media-trigger exclusion incl. long media-id variant (fix GAP len<=60)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("text", [
+    "Analizza l'immagine.",
+    "Analizza l'immagine ACD482654EF33DD0DFB855B018D9FD80",
+    "Analizza questa immagine inviata",
+    "Analizza l'immagine inviata",
+    "Guarda questa foto",
+    "Vedi questa foto",
+    "Analizza questa immagine   ACD482654EF33DD0DFB855B018D9FD80",
+    "Guarda questo video qui",
+])
+def test_media_trigger_variants_ignored(text):
+    for cat in ("task", "question", "information"):
+        d, r = classify_ingest(_task(text) if cat == "task" else (_q(text) if cat == "question" else _info(text)), cat)
+        assert d == "ignored" and r == "media_trigger", f"{text} [{cat}] -> {d}/{r}"
+
+
+def test_trigger_with_real_content_not_ignored():
+    # Trigger + substantial technical content → preserve (not a pure trigger).
+    issue = Issue(id="i", text="Analizza questa immagine: manca BDF 200x150 dietro area ristoro",
+                  source="m", source_event_id="e")
+    d, r = classify_ingest(issue, "issue")
+    assert d == "accepted", f"got {d}/{r}"
+
+
+def test_bdf_issue_still_accepted():
+    d, r = classify_ingest(_issue("Manca BDF 200x150 BM dietro area ristoro cantiere 1"), "issue")
+    assert d == "accepted"
+
+
+def test_measurement_info_still_accepted():
+    d, r = classify_ingest(_info("Portata 20059 l/h, Pressione 15295 Pa, Valvola DN 125 PT878"), "information")
+    assert d == "accepted"

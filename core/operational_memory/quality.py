@@ -201,18 +201,51 @@ def _looks_meta_system(text: str) -> bool:
 _MEDIA_TRIGGER_PHRASES = (
     "analizza questa immagine", "analizza l'immagine", "analizza immagine",
     "guarda questa immagine", "guarda questa foto", "guarda la foto",
+    "vedi questa immagine", "vedi questa foto", "vedi la foto",
     "guarda questo video", "guarda il video", "ascolta questo audio",
     "analizza questo video", "analizza questo audio",
 )
 
+# Accessory words that may follow a trigger without adding operational content.
+_TRIGGER_ACCESSORY = {
+    "inviata", "inviato", "allegata", "allegato", "ricevuta", "ricevuto",
+    "qui", "sopra", "sotto", "questa", "questo", "qua", "grazie", "per", "favore",
+    "cortesia", "adesso", "ora", "subito",
+}
+
+
+def _is_only_media_ref(rest: str) -> bool:
+    """True if what follows a trigger phrase is empty, a media id/hash, or only
+    accessory words — i.e. NO real operational content."""
+    rest = rest.strip(" .:,;-–—\"'")
+    if not rest:
+        return True
+    for tok in rest.split():
+        t = tok.strip(" .:,;-–—\"'")
+        if not t:
+            continue
+        # media id / hash: long alphanumeric token
+        if len(t) >= 12 and t.replace("_", "").isalnum():
+            continue
+        if t in _TRIGGER_ACCESSORY:
+            continue
+        return False  # a real word / code → not just a media ref
+    return True
+
 
 def _is_media_trigger(text: str) -> bool:
+    """A pure media-trigger message ('analizza/guarda/vedi … immagine/foto/video',
+    optionally followed only by a media id or accessory words) is NOT an operational
+    item. A trigger followed by real technical content is preserved (returns False)."""
     normalized = normalize_quality_text(text)
     if not normalized:
         return False
-    # Trigger only if the message is essentially just the phrase (short), not when
-    # the phrase is embedded in a longer operational sentence.
-    return any(normalized == p or normalized.startswith(p) for p in _MEDIA_TRIGGER_PHRASES) and len(normalized) <= 60
+    for p in _MEDIA_TRIGGER_PHRASES:
+        if normalized == p:
+            return True
+        if normalized.startswith(p):
+            return _is_only_media_ref(normalized[len(p):])
+    return False
 
 
 def classify_ingest(item: OperationalItem, category: str, parent_context: str = "") -> tuple[str, str]:
