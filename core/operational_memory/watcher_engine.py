@@ -122,7 +122,11 @@ def event_to_extraction_message(event: OperationalEvent) -> str:
     attachment = event.attachment_metadata or {}
     file_name = attachment.get("file_name") or attachment.get("name") or "attachment"
     extracted_text = (event.extracted_text or "").strip()
-    caption = (event.content or "").strip()
+    # Sanitize the caption: a media-trigger phrase ("Analizza questa immagine"…)
+    # must NOT reach the extractor (it would fabricate an "Analizza l'immagine" task);
+    # any real content after the trigger is kept. Vision/OCR text is unaffected.
+    from core.operational_memory.quality import strip_media_trigger_prefix
+    caption = strip_media_trigger_prefix((event.content or "").strip())
     simulated_text = attachment.get("simulated_ocr") or attachment.get("simulated_text") or ""
     text_parts = []
     for candidate in (caption, extracted_text, simulated_text, parent_context):

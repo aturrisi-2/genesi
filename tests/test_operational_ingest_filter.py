@@ -155,3 +155,36 @@ def test_bdf_issue_still_accepted():
 def test_measurement_info_still_accepted():
     d, r = classify_ingest(_info("Portata 20059 l/h, Pressione 15295 Pa, Valvola DN 125 PT878"), "information")
     assert d == "accepted"
+
+
+# --------------------------------------------------------------------------- #
+# strip_media_trigger_prefix: trigger caption never reaches extractor as content
+# --------------------------------------------------------------------------- #
+
+from core.operational_memory.quality import strip_media_trigger_prefix
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Analizza questa immagine.", ""),
+    ("Analizza l'immagine ACD482654EF33DD0DFB855B018D9FD80", ""),
+    ("Analizza questa immagine inviata", ""),
+    ("Guarda questa foto", ""),
+    ("Analizza questa immagine: manca BDF 200x150 dietro area ristoro", "manca BDF 200x150 dietro area ristoro"),
+    ("Analizza l'immagine della valvola di bilanciamento priva di manopola", "della valvola di bilanciamento priva di manopola"),
+    ("Verificare quadro QF-01 sala tecnica", "Verificare quadro QF-01 sala tecnica"),
+    ("manca BDF da rifare", "manca BDF da rifare"),
+])
+def test_strip_media_trigger_prefix(text, expected):
+    assert strip_media_trigger_prefix(text) == expected
+
+
+def test_extraction_message_drops_pure_trigger_caption():
+    from core.operational_memory.watcher_engine import event_to_extraction_message
+    from core.operational_memory.models import OperationalEvent
+    ev = OperationalEvent(event_id="e", project_id="p", source="whatsapp", type="image",
+                          content="Analizza questa immagine.",
+                          extracted_text="valvola di bilanciamento priva di manopola V27 DN32",
+                          attachment_type="image")
+    msg = event_to_extraction_message(ev)
+    assert "Analizza questa immagine" not in msg     # trigger stripped
+    assert "valvola di bilanciamento" in msg          # real content kept

@@ -233,6 +233,30 @@ def _is_only_media_ref(rest: str) -> bool:
     return True
 
 
+_TRIGGER_PREFIX_RE = re.compile(
+    r"^\s*(analizza|guarda|vedi)\s+(quest[ao]\s+|la\s+|l['’]\s*)?(immagine|foto|video|audio)\b[\s:.,;–—-]*",
+    re.IGNORECASE,
+)
+
+
+def strip_media_trigger_prefix(text: str) -> str:
+    """Remove a leading media-trigger phrase ('analizza/guarda/vedi … immagine/
+    foto/video/audio') from a caption, keeping any real content that follows. If
+    what remains is empty or only a media id/accessory, returns "" (pure trigger).
+    Non-trigger text is returned unchanged. Used to sanitize captions BEFORE
+    extraction so a trigger never becomes a task, while real content survives."""
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    m = _TRIGGER_PREFIX_RE.match(raw)
+    if not m:
+        return raw
+    rest = raw[m.end():].strip(" :.,;–—-\"'")
+    if _is_only_media_ref(normalize_quality_text(rest)):
+        return ""
+    return rest
+
+
 def _is_media_trigger(text: str) -> bool:
     """A pure media-trigger message ('analizza/guarda/vedi … immagine/foto/video',
     optionally followed only by a media id or accessory words) is NOT an operational
