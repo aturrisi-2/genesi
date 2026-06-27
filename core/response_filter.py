@@ -151,6 +151,17 @@ _LEAK_IMPERATIVE_RE = re.compile(
     r"regola fondamentale\b|regole assolute\b|linee guida\b)",
     re.IGNORECASE,
 )
+_LEAK_PREFIX_TO_BOT_RE = re.compile(
+    r"^\s*(?:(?:con\s+coerenza\s+)?se\s+rilevante:\]|oggi\s+[èe]\b|"
+    r"sistema\s*:|prompt\s*:|istruzioni\s*:|devi\s+rispondere\b)"
+    r".*?\bgenesi\s*:\s*",
+    re.IGNORECASE | re.DOTALL,
+)
+_LEAK_LEADING_FRAGMENT_RE = re.compile(
+    r"^\s*(?:(?:con\s+coerenza\s+)?se\s+rilevante:\]|"
+    r"sistema\s*:|prompt\s*:|istruzioni\s*:|devi\s+rispondere\b)\s*",
+    re.IGNORECASE,
+)
 
 
 def _bracket_has_leak(block: str) -> bool:
@@ -182,6 +193,12 @@ def strip_internal_prompt_leak(text: str) -> tuple[str, bool]:
         text,
     )
 
+    # 1b) Se un prefisso interno tronco precede "Genesi:", taglia tutto il
+    # contesto leak e conserva solo la risposta effettiva del bot.
+    prefix_to_bot_cut = bool(_LEAK_PREFIX_TO_BOT_RE.search(cleaned))
+    cleaned = _LEAK_PREFIX_TO_BOT_RE.sub("", cleaned, count=1)
+    cleaned = _LEAK_LEADING_FRAGMENT_RE.sub("", cleaned, count=1)
+
     # 2) Pulizia riga per riga: titoli interni, trascrizioni gruppo, imperativi
     kept_lines = []
     for line in cleaned.splitlines():
@@ -206,6 +223,7 @@ def strip_internal_prompt_leak(text: str) -> tuple[str, bool]:
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned).strip()
     cleaned = re.sub(r"^[,.\s]+", "", cleaned).strip()
+    cleaned = strip_leading_speaker_prefix(cleaned)
 
     if cleaned == original.strip():
         return original, False
@@ -214,7 +232,7 @@ def strip_internal_prompt_leak(text: str) -> tuple[str, bool]:
     # Heavy leak: residuo troppo eroso, vuoto, o keyword critica ancora presente
     heavy = (
         clean_len < 3
-        or (orig_len > 0 and clean_len < orig_len * 0.5)
+        or (orig_len > 0 and clean_len < orig_len * 0.5 and not prefix_to_bot_cut)
         or bool(_LEAK_KW_RE.search(cleaned))
     )
     logger.info(

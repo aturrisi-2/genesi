@@ -148,11 +148,14 @@ function isClearlyDirectedFollowup(text) {
     if (!s || isEmojiOnlyMessage(s)) return false;
     if (GENESI_RE.test(s)) return true;
     return (
-        /\b(tu|te|ti|tua|tuo|tue|tuoi)\b/i.test(s)
-        || /\b(cosa ne pensi|che ne pensi|secondo te|che dici)\b/i.test(s)
+        /\b(cosa ne pensi|che ne pensi|secondo te|che dici)\b/i.test(s)
         || /\b(puoi|potresti|riesci|continua|spiega|spiegami|dimmi|aiutami|mi aiuti|rispondi|fammi capire)\b/i.test(s)
-        || (s.length <= 80 && /\?\s*$/.test(s))
     );
+}
+
+function isDelicateSupportCandidate(text) {
+    const s = (text || "").toLowerCase();
+    return /\b(lutto|perdita|morto|morta|mancare|venut[oa] a mancare|malattia|malato|malata|ospedale|dolore|triste|gi[uù]|a pezzi|supporto|ti siamo vicini|vi siamo vicini|condoglianze)\b/i.test(s);
 }
 
 async function shouldRespondDecision(text, recentMessages, token, groupId = "", senderName = "") {
@@ -698,7 +701,7 @@ async function startBaileys() {
                 } else if (genericMediaWithoutCaption) {
                     console.log(`WHATSAPP_GROUP_SILENT group=${maskJid(groupId)} name="${groupName}" reason=generic_media_without_caption media=${mediaType}`);
                     continue;
-                } else if (_engaged && isClearlyDirectedFollowup(text)) {
+                } else if (_engaged && !isDelicateSupportCandidate(text) && isClearlyDirectedFollowup(text)) {
                     console.log(`ENGAGED_FOLLOWUP_ALLOWED group=${maskJid(groupId)} name="${groupName}" sender="${senderName}"`);
                     shouldIntervene = true;
                     interventionReason = "engaged_direct_followup";

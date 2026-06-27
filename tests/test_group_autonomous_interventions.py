@@ -262,6 +262,24 @@ def test_baileys_engaged_is_not_total_bypass():
     assert "Conversazione attiva con" not in src
 
 
+def test_baileys_engaged_does_not_use_generic_pronouns_as_direct_followup():
+    src = _baileys_source()
+    followup_body = src.split("function isClearlyDirectedFollowup", 1)[1].split("async function shouldRespondDecision", 1)[0]
+
+    assert r"\b(tu|te|ti|tua|tuo|tue|tuoi)\b" not in followup_body
+    assert "cosa ne pensi" in followup_body
+    assert "puoi" in followup_body
+    assert "continua" in followup_body
+
+
+def test_baileys_delicate_messages_are_not_allowed_by_engaged_shortcut():
+    src = _baileys_source()
+
+    assert "function isDelicateSupportCandidate" in src
+    assert "_engaged && !isDelicateSupportCandidate(text) && isClearlyDirectedFollowup(text)" in src
+    assert "ti siamo vicini" in src
+
+
 def test_baileys_blocks_emoji_only_and_generic_media_before_backend():
     src = _baileys_source()
 

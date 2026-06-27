@@ -91,6 +91,30 @@ def test_genesi_prefix_removed():
     assert "Marco" in out
 
 
+def test_truncated_prompt_prefix_before_genesi_is_removed():
+    _reset("c5b")
+    out = filter_response(
+        "con coerenza se rilevante:] Oggi è Sabato, 27/06/2026. Genesi: Grazie, Alfio...",
+        "c5b",
+    )
+    assert out == "Grazie, Alfio..."
+    assert "coerenza se rilevante" not in out
+    assert "Oggi è" not in out
+    assert not out.lower().startswith("genesi:")
+
+
+def test_partial_leak_prefixes_cut_to_real_answer():
+    cases = [
+        ("se rilevante:] Genesi: Capisco...", "Capisco..."),
+        ("PROMPT: testo interno Genesi: Risposta vera", "Risposta vera"),
+        ("ISTRUZIONI: testo interno Genesi: Risposta vera", "Risposta vera"),
+        ("Sistema: testo interno Genesi: Risposta vera", "Risposta vera"),
+    ]
+    for idx, (raw, expected) in enumerate(cases):
+        _reset(f"c5c-{idx}")
+        assert filter_response(raw, f"c5c-{idx}") == expected
+
+
 # ── Caso 6: parentesi quadre con istruzioni interne → ripulite ───────────────
 def test_internal_instruction_brackets_removed():
     text = "Ti penso! [REGOLA FONDAMENTALE: Rispondi SOLO a ciò che viene detto adesso.]"
