@@ -1062,6 +1062,33 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
         except Exception as _ne:
             log("WA_GROUP_EFF_NAME_FAIL", error=str(_ne))
 
+        try:
+            from core.group_pragmatics import (
+                classify_group_message_role,
+                group_pragmatic_prompt,
+                sanitize_group_observer_response,
+            )
+            _pragmatic_role = classify_group_message_role(
+                processed_text,
+                bot_mentioned=("genesi" in (processed_text or "").lower()),
+                reply_to_genesi=(processed_text or "").lstrip().startswith("[Stai rispondendo a questo tuo messaggio precedente"),
+                has_media=bool(request.media_id),
+            )
+            _pragmatic_prompt = group_pragmatic_prompt(_pragmatic_role, eff_sender)
+            log(
+                "GROUP_PRAGMATIC_ROLE",
+                platform="whatsapp",
+                group_hash=group_int,
+                posture=_pragmatic_role.recommended_response_posture,
+                reason=_pragmatic_role.reason,
+                confidence=_pragmatic_role.confidence,
+            )
+        except Exception as _gpe:
+            log("GROUP_PRAGMATIC_ROLE_FAIL", error=str(_gpe))
+            _pragmatic_role = None
+            _pragmatic_prompt = ""
+            sanitize_group_observer_response = None
+
         # 4. Costruisci contesto gruppo (sincrono — serve per la risposta)
         group_ctx = await build_group_context(
             group_int,
@@ -1105,6 +1132,7 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                 f"{_identity_block}"
                 f"[MESSAGGIO ATTUALE — {eff_sender}]: {processed_text}\n\n"
                 f"[GRUPPO FAMILIARE: Reazione/emoji — risposta brevissima, calore familiare, zero domande.]\n"
+                f"{_pragmatic_prompt}"
                 f"{_uq_prefix}"
                 f"{group_ctx}"
             )
@@ -1117,6 +1145,7 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                 f"[GRUPPO FAMILIARE: Sei un membro della famiglia — rispondi con calore e concretezza, "
                 f"senza domande superflue. Usa il nome {eff_sender}. "
                 f"Rispondi SOLO al messaggio attuale, tenendo conto del filo nello storico.]\n"
+                f"{_pragmatic_prompt}"
                 f"{_uq_prefix}"
                 f"{group_ctx}"
             )
@@ -1164,6 +1193,20 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             response = _filtered_response or ""
         except Exception as _rfe:
             log("WA_GROUP_RESPONSE_FILTER_FAIL", error=str(_rfe))
+
+        try:
+            if _pragmatic_role and sanitize_group_observer_response:
+                _safe_response, _changed = sanitize_group_observer_response(response or "", _pragmatic_role)
+                if _changed:
+                    log(
+                        "GROUP_IMPERSONATION_FILTERED",
+                        platform="whatsapp",
+                        group_hash=group_int,
+                        posture=_pragmatic_role.recommended_response_posture,
+                    )
+                response = _safe_response or ""
+        except Exception as _gife:
+            log("GROUP_IMPERSONATION_FILTER_FAIL", error=str(_gife))
 
         # 7. Post-risposta in background
         _aio.create_task(append_group_history(group_int, sender_int, request.sender_name, request.text, response))

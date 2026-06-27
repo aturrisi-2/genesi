@@ -1437,6 +1437,17 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                         else:
                             photo_rules += 'Ci sono persone sconosciute in foto. Fai un commento colloquiale, curioso e intelligente. Includi con molta naturalezza una domanda per chiedere chi sono (se non lo sai dal contesto), ma non essere ripetitivo se l\'hai già chiesto di recente. '
                         domande_rule = ""
+                    try:
+                        from core.group_pragmatics import classify_group_message_role, group_pragmatic_prompt
+                        _prag_role = classify_group_message_role(
+                            message,
+                            bot_mentioned=bot_mentioned,
+                            reply_to_genesi=_reply_to_genesi,
+                            has_media=_original_has_media,
+                        )
+                        _pragmatic_block = group_pragmatic_prompt(_prag_role, first_name)
+                    except Exception:
+                        _pragmatic_block = ""
 
                     message = (
                         f"{msg_with_quote}\n\n"
@@ -1448,6 +1459,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                         f"a meno che {first_name} non li citi in questo messaggio. "
                         f"{photo_rules}"
                         f"Rispondi SOLO a quello che viene detto adesso.]{late_prompt}\n"
+                        f"{_pragmatic_block}"
                         f"{group_ctx}"
                     )
                 except Exception:
@@ -1513,8 +1525,33 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     await send_message(wa_id,
                         "Sessione scaduta. Inserisci la tua email:")
                 return False
-            await _send_response(wa_id, reply)
             # Traccia con chi Genesi stava conversando
+            if is_group and chat_id:
+                try:
+                    from core.group_pragmatics import (
+                        classify_group_message_role,
+                        sanitize_group_observer_response,
+                    )
+                    _role = classify_group_message_role(
+                        (text or caption or ""),
+                        bot_mentioned=bot_mentioned,
+                        reply_to_genesi=_reply_to_genesi,
+                        has_media=_original_has_media,
+                    )
+                    _safe_reply, _changed = sanitize_group_observer_response(reply, _role)
+                    if _changed:
+                        log(
+                            "GROUP_IMPERSONATION_FILTERED",
+                            platform="whatsapp",
+                            chat_id=chat_id,
+                            posture=_role.recommended_response_posture,
+                        )
+                        reply = _safe_reply or ""
+                        if not reply:
+                            return False
+                except Exception as _gife:
+                    logger.debug("WA_GROUP_IMPERSONATION_FILTER_ERR %s", _gife)
+            await _send_response(wa_id, reply)
             if is_group and chat_id:
                 _GROUP_CONV_STATE[chat_id] = {
                     "wa_id":      wa_id,

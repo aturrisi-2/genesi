@@ -1740,6 +1740,17 @@ async def handle_update(update: dict):
                 f"Il messaggio a cui DEVI rispondere è quello di {first_name} qui sotto, "
                 f"non quelli nello storico.]\n"
             )
+            try:
+                from core.group_pragmatics import classify_group_message_role, group_pragmatic_prompt
+                _prag_role = classify_group_message_role(
+                    _clean_message,
+                    bot_mentioned=_bot_mentioned,
+                    reply_to_genesi=_reply_to_genesi,
+                    has_media=_original_has_media,
+                )
+                pragmatic_block = group_pragmatic_prompt(_prag_role, first_name)
+            except Exception:
+                pragmatic_block = ""
 
             # Messaggio = SOLO direttiva di sistema (es. volti memorizzati): NON c'è
             # testo utente. Evita lo slot "Alfio: " vuoto che faceva dire al LLM
@@ -1750,6 +1761,7 @@ async def handle_update(update: dict):
                     f"[NESSUN NUOVO MESSAGGIO TESTUALE DA {first_name} — esegui l'azione "
                     f"di sistema qui sotto e rispondi in modo naturale, in prima persona come Genesi]\n"
                     f"{_sistema_block}\n"
+                    f"{pragmatic_block}"
                     f"\n[{group_type_label}: tono {role_label}, risposta misurata (3-4 righe max), "
                     f"{extra_rules}]\n"
                     f"{group_ctx}"
@@ -1763,6 +1775,7 @@ async def handle_update(update: dict):
                     f"{identity_block}"
                     f"[MESSAGGIO ATTUALE — {first_name}]: {_clean_message}\n\n"
                     f"[{group_type_label}: Reazione emoji — 1 riga max, naturale.]\n"
+                    f"{pragmatic_block}"
                     f"{group_ctx}"
                 )
             _sistema_sep = f"\n{_sistema_block}\n" if _sistema_block else ""
@@ -1776,6 +1789,7 @@ async def handle_update(update: dict):
                 f"tono {role_label}, {extra_rules}"
                 f"Rispondi SOLO al messaggio attuale di {first_name} sopra, "
                 f"tenendo conto del filo della conversazione nello storico.]\n"
+                f"{pragmatic_block}"
                 f"{group_ctx}"
             )
 
@@ -1948,6 +1962,31 @@ async def handle_update(update: dict):
                 if not reply:
                     logger.warning("GROUP_RESPONSE_SANITIZED_EMPTY chat_id=%s from=%s", chat_id, first_name)
                     return True
+
+                try:
+                    from core.group_pragmatics import (
+                        classify_group_message_role,
+                        sanitize_group_observer_response,
+                    )
+                    _role = classify_group_message_role(
+                        (text or caption or ""),
+                        bot_mentioned=_bot_mentioned,
+                        reply_to_genesi=_reply_to_genesi,
+                        has_media=_original_has_media,
+                    )
+                    _safe_reply, _changed = sanitize_group_observer_response(reply, _role)
+                    if _changed:
+                        log(
+                            "GROUP_IMPERSONATION_FILTERED",
+                            platform="telegram",
+                            chat_id=chat_id,
+                            posture=_role.recommended_response_posture,
+                        )
+                    reply = _safe_reply or ""
+                    if not reply:
+                        return True
+                except Exception as _gife:
+                    logger.debug("GROUP_IMPERSONATION_FILTER_ERR %s", _gife)
 
             # Legge il message_id originale per poter rispondere in thread se in gruppo
             reply_to = msg.get("message_id") if is_group else None
