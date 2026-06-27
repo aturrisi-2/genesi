@@ -134,9 +134,30 @@ function getRecentMessages(groupId, limit = 15) {
 // Fast-path locale solo per menzione diretta — tutto il resto decide l'LLM
 const GENESI_RE = /\bgenesi\b/i;
 
-async function shouldRespond(text, recentMessages, token, groupId = "", senderName = "") {
+function hasLettersOrNumbers(text) {
+    return /[\p{L}\p{N}]/u.test(text || "");
+}
+
+function isEmojiOnlyMessage(text) {
+    const s = (text || "").trim();
+    return !!s && !hasLettersOrNumbers(s);
+}
+
+function isClearlyDirectedFollowup(text) {
+    const s = (text || "").trim();
+    if (!s || isEmojiOnlyMessage(s)) return false;
+    if (GENESI_RE.test(s)) return true;
+    return (
+        /\b(tu|te|ti|tua|tuo|tue|tuoi)\b/i.test(s)
+        || /\b(cosa ne pensi|che ne pensi|secondo te|che dici)\b/i.test(s)
+        || /\b(puoi|potresti|riesci|continua|spiega|spiegami|dimmi|aiutami|mi aiuti|rispondi|fammi capire)\b/i.test(s)
+        || (s.length <= 80 && /\?\s*$/.test(s))
+    );
+}
+
+async function shouldRespondDecision(text, recentMessages, token, groupId = "", senderName = "") {
     // Fast-path: menzione diretta → sempre sì senza chiamare LLM
-    if (GENESI_RE.test(text)) return true;
+    if (GENESI_RE.test(text)) return { intervieni: true, motivo: "direct_mention" };
 
     // LLM decide per tutto il resto (saluti, buone notizie, ecc.)
     try {
@@ -149,11 +170,19 @@ async function shouldRespond(text, recentMessages, token, groupId = "", senderNa
             headers: { Authorization: `Bearer ${token}` },
             timeout: 8000,
         });
-        return res.data.intervieni === true;
+        return {
+            intervieni: res.data.intervieni === true,
+            motivo: res.data.motivo || "backend_filter",
+        };
     } catch (e) {
         // In caso di errore, non intervenire
-        return false;
+        return { intervieni: false, motivo: "should_respond_error" };
     }
+}
+
+async function shouldRespond(text, recentMessages, token, groupId = "", senderName = "") {
+    const decision = await shouldRespondDecision(text, recentMessages, token, groupId, senderName);
+    return decision.intervieni === true;
 }
 
 // ── Auth Genesi API ───────────────────────────────────────────────────────────
@@ -510,6 +539,7 @@ async function startBaileys() {
                     || msg.message?.videoMessage?.caption
                     || ""
                 ).trim();
+                const originalText = text;
 
                 const mType = Object.keys(msg.message || {})[0];
                 let mediaId = null;
@@ -641,13 +671,16 @@ async function startBaileys() {
 
                 // Estrai il testo quotato per iniettarlo nel contesto
                 let quotedText = "";
-                const hasLink = /https?:\/\/[^\s]+|www\.[^\s]+/i.test(text);
+                const genericMediaWithoutCaption = !!mediaType && !originalText.trim();
 
-                // Continuità: se Genesi ha appena risposto a QUESTA persona, è una
-                // conversazione attiva → continua a seguirla anche senza essere nominata.
+                // Continuità: engaged e' solo un segnale debole. Non deve trasformare
+                // ogni messaggio successivo in una richiesta a Genesi.
                 const _last = lastGenesiReply[groupId];
                 const _engaged = replyAllowed && _last && _last.to === senderName
                     && (Date.now() - _last.ts < ENGAGED_WINDOW);
+
+                let shouldIntervene = false;
+                let interventionReason = "";
 
                 if (isReplyToGenesi) {
                     const qm = contextInfo.quotedMessage;
@@ -657,23 +690,37 @@ async function startBaileys() {
                         || ""
                     ).trim().slice(0, 300);
                     console.log(`[Baileys] Reply diretta a Genesi da ${senderName} in ${groupName} → intervengo`);
-                } else if (mediaType) {
-                    console.log(`[Baileys] Messaggio contiene media (${mediaType}) in ${groupName} → bypasso filtro e intervengo`);
-                } else if (hasLink) {
-                    console.log(`[Baileys] Messaggio contiene link in ${groupName} → bypasso filtro e intervengo`);
-                } else if (_engaged) {
-                    console.log(`[Baileys] Conversazione attiva con ${senderName} in ${groupName} → continuo a seguire`);
+                    shouldIntervene = true;
+                    interventionReason = "reply_to_genesi";
+                } else if (isEmojiOnlyMessage(originalText || text)) {
+                    console.log(`WHATSAPP_GROUP_SILENT group=${maskJid(groupId)} name="${groupName}" reason=emoji_only`);
+                    continue;
+                } else if (genericMediaWithoutCaption) {
+                    console.log(`WHATSAPP_GROUP_SILENT group=${maskJid(groupId)} name="${groupName}" reason=generic_media_without_caption media=${mediaType}`);
+                    continue;
+                } else if (_engaged && isClearlyDirectedFollowup(text)) {
+                    console.log(`ENGAGED_FOLLOWUP_ALLOWED group=${maskJid(groupId)} name="${groupName}" sender="${senderName}"`);
+                    shouldIntervene = true;
+                    interventionReason = "engaged_direct_followup";
                 } else {
+                    if (_engaged) {
+                        console.log(`ENGAGED_IGNORED_NOT_DIRECTED group=${maskJid(groupId)} name="${groupName}" sender="${senderName}"`);
+                    }
                     const recentMsgs = getRecentMessages(groupId);
-                    if (!await shouldRespond(text, recentMsgs, token, groupId, senderName)) continue;
+                    const decision = await shouldRespondDecision(text, recentMsgs, token, groupId, senderName);
+                    if (!decision.intervieni) continue;
+                    shouldIntervene = true;
+                    interventionReason = decision.motivo;
                 }
+
+                if (!shouldIntervene) continue;
 
                 // Se c'è un messaggio quotato di Genesi, anteponi al testo per dare contesto
                 const textToSend = (isReplyToGenesi && quotedText)
                     ? `[Stai rispondendo a questo tuo messaggio precedente: "${quotedText}"]\n${text}`
                     : text;
 
-                console.log(`[Baileys] Intervengo in ${groupName} per: "${textToSend.slice(0, 50)}"`);
+                console.log(`[Baileys] Intervengo in ${groupName} motivo=${interventionReason} per: "${textToSend.slice(0, 50)}"`);
 
                 await sock.sendPresenceUpdate("composing", groupId);
                 const reply = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, participants, token, mediaId, mediaType, mediaMime, getRecentMessages(groupId), replyToId);

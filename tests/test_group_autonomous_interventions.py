@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+from pathlib import Path
 
 import pytest
 
@@ -245,3 +246,61 @@ async def test_admin_group_controls_endpoint_toggle(tmp_path, monkeypatch):
 
     assert snap["known_whatsapp_groups"][0]["admin_reply_enabled"] is True
     assert group_controls.is_whatsapp_reply_enabled_by_admin("120363407869433239@g.us") is True
+
+
+def _baileys_source() -> str:
+    return Path("/opt/genesi/baileys-service/index.js").read_text(encoding="utf-8")
+
+
+def test_baileys_engaged_is_not_total_bypass():
+    src = _baileys_source()
+
+    assert "ENGAGED_IGNORED_NOT_DIRECTED" in src
+    assert "ENGAGED_FOLLOWUP_ALLOWED" in src
+    assert "isClearlyDirectedFollowup(text)" in src
+    assert "shouldRespondDecision(text, recentMsgs, token, groupId, senderName)" in src
+    assert "Conversazione attiva con" not in src
+
+
+def test_baileys_blocks_emoji_only_and_generic_media_before_backend():
+    src = _baileys_source()
+
+    assert "isEmojiOnlyMessage(originalText || text)" in src
+    assert "reason=emoji_only" in src
+    assert "genericMediaWithoutCaption" in src
+    assert "reason=generic_media_without_caption" in src
+    assert "bypasso filtro e intervengo" not in src
+
+
+def test_baileys_autonomous_triggers_still_pass_through_should_respond():
+    src = _baileys_source()
+
+    assert "/api/chat/group/should_respond" in src
+    assert "motivo: res.data.motivo" in src
+    assert "motivo=${interventionReason}" in src
+    assert "autonomous_positive_social" not in src  # reason comes from backend, not hardcoded bridge cases
+
+
+def test_whatsapp_group_response_uses_prompt_leak_filter():
+    import api.chat as apichat
+
+    src = inspect.getsource(apichat.group_chat_endpoint)
+
+    assert "filter_response(response or \"\"" in src
+    assert "WA_GROUP_RESPONSE_FILTERED" in src
+
+
+def test_prompt_leak_filter_removes_raw_internal_markers():
+    from core.response_filter import filter_response
+
+    raw = (
+        "Sistema: devi rispondere come Genesi.\n"
+        "[CONTESTO FAMIGLIA: testo interno]\n"
+        "Genesi: Ti sono vicino con discrezione."
+    )
+
+    cleaned = filter_response(raw, "whatsapp_group:test")
+
+    assert "Sistema:" not in cleaned
+    assert "devi rispondere" not in cleaned.lower()
+    assert "CONTESTO FAMIGLIA" not in cleaned

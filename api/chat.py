@@ -1156,6 +1156,15 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                 response = "Ho preparato qualcosa, ma qui nel gruppo riesco a rispondere solo a parole 😊"
             log("GROUP_CHAT_IMAGE_JSON_STRIPPED", group=request.group_id[:20])
 
+        try:
+            from core.response_filter import filter_response
+            _filtered_response = filter_response(response or "", f"whatsapp_group:{group_int}")
+            if _filtered_response != response:
+                log("WA_GROUP_RESPONSE_FILTERED", group=request.group_id[:20])
+            response = _filtered_response or ""
+        except Exception as _rfe:
+            log("WA_GROUP_RESPONSE_FILTER_FAIL", error=str(_rfe))
+
         # 7. Post-risposta in background
         _aio.create_task(append_group_history(group_int, sender_int, request.sender_name, request.text, response))
         _aio.create_task(record_group_observation(group_int, sender_int, request.sender_name, request.text, response))

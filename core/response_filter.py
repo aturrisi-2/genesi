@@ -123,6 +123,9 @@ _LEAK_KEYWORDS = [
     "GRUPPO:",
     "GRUPPO ",
     "SISTEMA:",
+    "PROMPT:",
+    "ISTRUZIONI:",
+    "DEVI RISPONDERE",
     "RISPONDI SOLO",
     "NON NOMINARE",
     "NON SEI NEL GRUPPO",
@@ -144,7 +147,7 @@ _LEAK_GENESI_LINE_RE = re.compile(r"^\s*(?:→\s*)?genesi\s*:", re.IGNORECASE)
 
 # Istruzioni imperative interne ("Rispondi SOLO a...", "NON nominare...") fuori da []
 _LEAK_IMPERATIVE_RE = re.compile(
-    r"^\s*(?:rispondi solo\b|non nominare\b|trattal[oa]\b|non sei nel gruppo\b|"
+    r"^\s*(?:rispondi solo\b|devi rispondere\b|non nominare\b|trattal[oa]\b|non sei nel gruppo\b|"
     r"regola fondamentale\b|regole assolute\b|linee guida\b)",
     re.IGNORECASE,
 )
