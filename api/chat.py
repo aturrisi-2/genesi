@@ -1065,8 +1065,8 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
         try:
             from core.group_pragmatics import (
                 classify_group_message_role,
+                enforce_group_pragmatic_response,
                 group_pragmatic_prompt,
-                sanitize_group_observer_response,
             )
             _pragmatic_role = classify_group_message_role(
                 processed_text,
@@ -1087,7 +1087,7 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             log("GROUP_PRAGMATIC_ROLE_FAIL", error=str(_gpe))
             _pragmatic_role = None
             _pragmatic_prompt = ""
-            sanitize_group_observer_response = None
+            enforce_group_pragmatic_response = None
 
         # 4. Costruisci contesto gruppo (sincrono — serve per la risposta)
         group_ctx = await build_group_context(
@@ -1195,18 +1195,22 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             log("WA_GROUP_RESPONSE_FILTER_FAIL", error=str(_rfe))
 
         try:
-            if _pragmatic_role and sanitize_group_observer_response:
-                _safe_response, _changed = sanitize_group_observer_response(response or "", _pragmatic_role)
+            if _pragmatic_role and enforce_group_pragmatic_response:
+                _safe_response, _changed, _fallback_reason = enforce_group_pragmatic_response(
+                    response or "",
+                    _pragmatic_role,
+                )
                 if _changed:
                     log(
-                        "GROUP_IMPERSONATION_FILTERED",
+                        "GROUP_PRAGMATIC_FALLBACK_APPLIED",
                         platform="whatsapp",
                         group_hash=group_int,
                         posture=_pragmatic_role.recommended_response_posture,
+                        reason=_fallback_reason,
                     )
                 response = _safe_response or ""
         except Exception as _gife:
-            log("GROUP_IMPERSONATION_FILTER_FAIL", error=str(_gife))
+            log("GROUP_PRAGMATIC_FALLBACK_FAIL", error=str(_gife))
 
         # 7. Post-risposta in background
         _aio.create_task(append_group_history(group_int, sender_int, request.sender_name, request.text, response))

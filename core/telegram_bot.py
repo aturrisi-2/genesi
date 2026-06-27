@@ -1966,7 +1966,7 @@ async def handle_update(update: dict):
                 try:
                     from core.group_pragmatics import (
                         classify_group_message_role,
-                        sanitize_group_observer_response,
+                        enforce_group_pragmatic_response,
                     )
                     _role = classify_group_message_role(
                         (text or caption or ""),
@@ -1974,19 +1974,20 @@ async def handle_update(update: dict):
                         reply_to_genesi=_reply_to_genesi,
                         has_media=_original_has_media,
                     )
-                    _safe_reply, _changed = sanitize_group_observer_response(reply, _role)
+                    _safe_reply, _changed, _fallback_reason = enforce_group_pragmatic_response(reply, _role)
                     if _changed:
                         log(
-                            "GROUP_IMPERSONATION_FILTERED",
+                            "GROUP_PRAGMATIC_FALLBACK_APPLIED",
                             platform="telegram",
                             chat_id=chat_id,
                             posture=_role.recommended_response_posture,
+                            reason=_fallback_reason,
                         )
                     reply = _safe_reply or ""
                     if not reply:
                         return True
                 except Exception as _gife:
-                    logger.debug("GROUP_IMPERSONATION_FILTER_ERR %s", _gife)
+                    logger.debug("GROUP_PRAGMATIC_FALLBACK_ERR %s", _gife)
 
             # Legge il message_id originale per poter rispondere in thread se in gruppo
             reply_to = msg.get("message_id") if is_group else None

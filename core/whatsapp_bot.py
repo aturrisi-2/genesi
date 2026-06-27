@@ -1530,7 +1530,7 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                 try:
                     from core.group_pragmatics import (
                         classify_group_message_role,
-                        sanitize_group_observer_response,
+                        enforce_group_pragmatic_response,
                     )
                     _role = classify_group_message_role(
                         (text or caption or ""),
@@ -1538,19 +1538,20 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                         reply_to_genesi=_reply_to_genesi,
                         has_media=_original_has_media,
                     )
-                    _safe_reply, _changed = sanitize_group_observer_response(reply, _role)
+                    _safe_reply, _changed, _fallback_reason = enforce_group_pragmatic_response(reply, _role)
                     if _changed:
                         log(
-                            "GROUP_IMPERSONATION_FILTERED",
+                            "GROUP_PRAGMATIC_FALLBACK_APPLIED",
                             platform="whatsapp",
                             chat_id=chat_id,
                             posture=_role.recommended_response_posture,
+                            reason=_fallback_reason,
                         )
                         reply = _safe_reply or ""
                         if not reply:
                             return False
                 except Exception as _gife:
-                    logger.debug("WA_GROUP_IMPERSONATION_FILTER_ERR %s", _gife)
+                    logger.debug("WA_GROUP_PRAGMATIC_FALLBACK_ERR %s", _gife)
             await _send_response(wa_id, reply)
             if is_group and chat_id:
                 _GROUP_CONV_STATE[chat_id] = {

@@ -5,6 +5,7 @@ from core.group_pragmatics import (
     POSTURE_NEUTRAL_SUPPORT,
     POSTURE_SILENT,
     classify_group_message_role,
+    enforce_group_pragmatic_response,
     group_pragmatic_prompt,
     sanitize_group_observer_response,
 )
@@ -81,6 +82,35 @@ def test_draft_helper_for_reply_request():
     assert "non rispondere come se la frase citata fosse rivolta a te" in prompt.lower()
 
 
+def test_telegram_draft_helper_fallback_rewrites_direct_output():
+    role = classify_group_message_role(
+        "Genesi, rispondi in modo naturale a questa frase: mi dispiace per questa perdita."
+    )
+
+    cleaned, changed, reason = enforce_group_pragmatic_response(
+        "Mi dispiace per questa perdita. È sempre difficile affrontare momenti del genere.",
+        role,
+    )
+
+    assert changed is True
+    assert reason == "non_compliant_output"
+    assert cleaned.startswith("Puoi rispondere così:")
+    assert "Mi dispiace per questa perdita" not in cleaned
+
+
+def test_whatsapp_draft_helper_accepts_compliant_draft():
+    role = classify_group_message_role(
+        "Genesi, rispondi in modo naturale a questa frase: mi dispiace per questa perdita."
+    )
+    draft = "Puoi rispondere così: «Ti sono vicino/a in questo momento difficile.»"
+
+    cleaned, changed, reason = enforce_group_pragmatic_response(draft, role)
+
+    assert cleaned == draft
+    assert changed is False
+    assert reason == ""
+
+
 def test_direct_assistant_for_direct_question():
     role = classify_group_message_role("Genesi, cosa ne pensi?")
 
@@ -112,3 +142,16 @@ def test_prompt_leak_filtered_then_impersonation_filtered():
     assert changed is True
     assert "grazie per il sostegno" not in cleaned.lower()
     assert "la tua vicinanza mi aiuta" not in cleaned.lower()
+
+
+def test_observer_impersonation_still_uses_shared_enforcement():
+    role = classify_group_message_role("Mi dispiace tanto per questa perdita, ti siamo vicini.")
+
+    cleaned, changed, reason = enforce_group_pragmatic_response(
+        "Grazie per il sostegno, la tua vicinanza mi aiuta.",
+        role,
+    )
+
+    assert changed is True
+    assert reason == "impersonation_output"
+    assert "grazie per il sostegno" not in cleaned.lower()

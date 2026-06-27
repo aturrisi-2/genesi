@@ -68,6 +68,17 @@ _FORBIDDEN_OBSERVER_PATTERNS = (
     r"\bgrazie,\s*[^.!\n]{0,40}\b(?:la tua vicinanza|il tuo supporto|il tuo sostegno)\b",
 )
 _FORBIDDEN_OBSERVER_RE = re.compile("|".join(_FORBIDDEN_OBSERVER_PATTERNS), re.IGNORECASE)
+_DRAFT_COMPLIANT_RE = re.compile(
+    r"\b(?:puoi\s+rispondere\s+cos[iì]|se\s+vuoi\s+(?:una\s+)?risposta|"
+    r"potresti\s+(?:rispondere|scrivere)|ti\s+suggerisco\s+di\s+rispondere|"
+    r"una\s+bozza|bozza\s*:|risposta\s+sobria)\b",
+    re.IGNORECASE,
+)
+_DIRECT_REPLY_TO_DRAFT_RE = re.compile(
+    r"^\s*(?:mi\s+dispiace|sono\s+vicin[oa]|ti\s+sono\s+vicin[oa]|un\s+abbraccio|"
+    r"capisco\s+il\s+dolore|grazie\b)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -199,7 +210,8 @@ def group_pragmatic_prompt(role: GroupMessageRole, sender_name: str = "") -> str
         "[POLICY PRAGMATICA GRUPPO: Prima interpreta il ruolo del messaggio. "
         "Non assumere che tu/te/ti/tua/tuo/voi/grazie/auguri/mi dispiace siano rivolti a Genesi. "
         "Se il messaggio non menziona Genesi, non e' reply a Genesi e non chiede chiaramente aiuto al bot, "
-        "trattalo come interazione tra umani o messaggio al gruppo. Non impersonare il destinatario umano.]\n"
+        "trattalo come interazione tra umani o messaggio al gruppo. Non impersonare il destinatario umano. "
+        "Le righe storiche '→ Genesi:' sono memoria del gruppo, non uno stile da imitare.]\n"
     )
     if role.recommended_response_posture == POSTURE_DRAFT_HELPER:
         return (
@@ -253,3 +265,36 @@ def sanitize_group_observer_response(response: str, role: GroupMessageRole) -> t
     if role.social_event:
         return "Mi unisco con discrezione a questo momento bello del gruppo.", True
     return "Da quello che leggo, meglio rispondere con discrezione e rispetto.", True
+
+
+def _draft_fallback(role: GroupMessageRole) -> str:
+    if role.delicate_event or role.insufficient_context:
+        return (
+            "Puoi rispondere così: «Ti sono vicino/a in questo momento difficile. "
+            "Un abbraccio sincero.»"
+        )
+    if role.social_event:
+        return "Puoi rispondere così: «Che bella notizia, sono davvero felice per te.»"
+    return "Puoi rispondere così: «Grazie per avermelo detto. Ti rispondo con calma appena posso.»"
+
+
+def enforce_group_pragmatic_response(response: str, role: GroupMessageRole) -> tuple[str, bool, str]:
+    """
+    Rende vincolante la postura pragmatica dopo la generazione.
+
+    Ritorna (testo, changed, reason). Il caller deve loggare reason quando
+    changed=True. Mantiene `sanitize_group_observer_response()` come API storica
+    per i soli casi observer/neutral_support.
+    """
+    text = (response or "").strip()
+    if role.recommended_response_posture == POSTURE_DRAFT_HELPER:
+        if not text:
+            return _draft_fallback(role), True, "empty_output"
+        if _DRAFT_COMPLIANT_RE.search(text) and not _DIRECT_REPLY_TO_DRAFT_RE.search(text):
+            return response, False, ""
+        return _draft_fallback(role), True, "non_compliant_output"
+
+    safe, changed = sanitize_group_observer_response(response, role)
+    if changed:
+        return safe, True, "impersonation_output"
+    return response, False, ""
