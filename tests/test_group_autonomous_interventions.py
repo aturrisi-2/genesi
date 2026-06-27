@@ -1,6 +1,8 @@
 import asyncio
 import inspect
 
+import pytest
+
 from core.group_reactivity import (
     _EMOTIONAL_COOLDOWNS,
     clear_group_emotional_cooldown,
@@ -115,3 +117,131 @@ def test_reply_to_genesi_is_allowed_by_upstream_contract():
     assert "should = True" in tg_src
     assert "if _reply_to_genesi:" in wa_src
     assert "should = True" in wa_src
+
+
+async def _fake_group_should_respond_llm(*a, **k):
+    return '{"intervieni": false, "motivo": "legacy"}'
+
+
+@pytest.mark.asyncio
+async def test_baileys_should_respond_allows_whatsapp_auguri(monkeypatch):
+    import api.chat as apichat
+    import core.llm_service as llm
+
+    monkeypatch.setattr(llm.llm_service, "_call_model", _fake_group_should_respond_llm)
+    req = apichat.ShouldRespondRequest(
+        text="Tantissimi auguri Elena, buon compleanno!",
+        group_id="120363407869433239@g.us",
+        sender_name="Ada",
+    )
+
+    resp = await apichat.group_should_respond(req, user=None)
+
+    assert resp.intervieni is True
+    assert resp.motivo == "autonomous_positive_social"
+
+
+@pytest.mark.asyncio
+async def test_baileys_should_respond_allows_whatsapp_delicate(monkeypatch):
+    import api.chat as apichat
+    import core.llm_service as llm
+
+    monkeypatch.setattr(llm.llm_service, "_call_model", _fake_group_should_respond_llm)
+    req = apichat.ShouldRespondRequest(
+        text="Oggi sono molto giù, mi sento a pezzi e ho bisogno di supporto.",
+        group_id="120363407869433240@g.us",
+        sender_name="Ada",
+    )
+
+    resp = await apichat.group_should_respond(req, user=None)
+
+    assert resp.intervieni is True
+    assert resp.motivo == "autonomous_delicate_support"
+
+
+@pytest.mark.asyncio
+async def test_baileys_should_respond_keeps_normal_message_silent(monkeypatch):
+    import api.chat as apichat
+    import core.llm_service as llm
+
+    monkeypatch.setattr(llm.llm_service, "_call_model", _fake_group_should_respond_llm)
+    req = apichat.ShouldRespondRequest(
+        text="Sto facendo una prova, vediamo se il gruppo resta normale.",
+        group_id="120363407869433241@g.us",
+        sender_name="Ada",
+    )
+
+    resp = await apichat.group_should_respond(req, user=None)
+
+    assert resp.intervieni is False
+    assert resp.motivo == "legacy"
+
+
+@pytest.mark.asyncio
+async def test_baileys_should_respond_keeps_emoji_only_silent(monkeypatch):
+    import api.chat as apichat
+    import core.llm_service as llm
+
+    monkeypatch.setattr(llm.llm_service, "_call_model", _fake_group_should_respond_llm)
+    req = apichat.ShouldRespondRequest(
+        text="❤️❤️❤️🥳🥳🥳",
+        group_id="120363407869433242@g.us",
+        sender_name="Ada",
+    )
+
+    resp = await apichat.group_should_respond(req, user=None)
+
+    assert resp.intervieni is False
+    assert resp.motivo == "legacy"
+
+
+def test_group_controls_whatsapp_reply_toggle(tmp_path, monkeypatch):
+    from core import group_controls
+
+    controls_path = tmp_path / "admin" / "group_controls.json"
+    titles = tmp_path / "group_title"
+    jids = tmp_path / "wa_group_jid"
+    titles.mkdir()
+    jids.mkdir()
+    (titles / "272555882.json").write_text('"Prova Genesi"', encoding="utf-8")
+    (jids / "272555882.json").write_text('"120363407869433239@g.us"', encoding="utf-8")
+
+    monkeypatch.setattr(group_controls, "GROUP_CONTROLS_PATH", controls_path)
+    monkeypatch.setattr(group_controls, "_GROUP_TITLE_DIR", titles)
+    monkeypatch.setattr(group_controls, "_WA_GROUP_JID_DIR", jids)
+
+    assert group_controls.is_whatsapp_reply_enabled_by_admin("120363407869433239@g.us") is False
+    group_controls.set_whatsapp_reply_enabled("120363407869433239@g.us", True, label="Prova Genesi")
+    assert group_controls.is_whatsapp_reply_enabled_by_admin("120363407869433239@g.us") is True
+
+    snap = group_controls.snapshot()
+    assert snap["known_whatsapp_groups"][0]["title"] == "Prova Genesi"
+    assert snap["known_whatsapp_groups"][0]["admin_reply_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_admin_group_controls_endpoint_toggle(tmp_path, monkeypatch):
+    from api.admin import automation
+    from core import group_controls
+
+    controls_path = tmp_path / "admin" / "group_controls.json"
+    titles = tmp_path / "group_title"
+    jids = tmp_path / "wa_group_jid"
+    titles.mkdir()
+    jids.mkdir()
+    (titles / "272555882.json").write_text('"Prova Genesi"', encoding="utf-8")
+    (jids / "272555882.json").write_text('"120363407869433239@g.us"', encoding="utf-8")
+
+    monkeypatch.setattr(group_controls, "GROUP_CONTROLS_PATH", controls_path)
+    monkeypatch.setattr(group_controls, "_GROUP_TITLE_DIR", titles)
+    monkeypatch.setattr(group_controls, "_WA_GROUP_JID_DIR", jids)
+
+    payload = automation.WhatsAppGroupReplyPayload(
+        jid="120363407869433239@g.us",
+        enabled=True,
+        label="Prova Genesi",
+    )
+    snap = await automation.automation_group_controls_whatsapp_reply(payload, None)
+
+    assert snap["known_whatsapp_groups"][0]["admin_reply_enabled"] is True
+    assert group_controls.is_whatsapp_reply_enabled_by_admin("120363407869433239@g.us") is True

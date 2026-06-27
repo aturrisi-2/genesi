@@ -13,6 +13,7 @@ import os
 from auth.models import AuthUser
 from auth.router import require_admin
 from core import automation_flags
+from core import group_controls
 
 router = APIRouter(prefix="/admin/automation", tags=["admin-automation"])
 
@@ -31,6 +32,12 @@ _ON_REQUEST_FLAGS = {"calendar_check", "meta_dm_replies"}
 
 class AutomationConfigPayload(BaseModel):
     values: dict[str, bool]
+
+
+class WhatsAppGroupReplyPayload(BaseModel):
+    jid: str
+    enabled: bool
+    label: str = ""
 
 
 @router.get("/status")
@@ -55,6 +62,24 @@ async def automation_reset(_: AuthUser = Depends(require_admin)):
         "registry": automation_flags.registry(),
         "state": automation_flags.reset_config(),
     }
+
+
+@router.get("/group-controls")
+async def automation_group_controls(_: AuthUser = Depends(require_admin)):
+    return group_controls.snapshot()
+
+
+@router.post("/group-controls/whatsapp-reply")
+async def automation_group_controls_whatsapp_reply(
+    payload: WhatsAppGroupReplyPayload,
+    _: AuthUser = Depends(require_admin),
+):
+    group_controls.set_whatsapp_reply_enabled(
+        payload.jid,
+        payload.enabled,
+        label=payload.label,
+    )
+    return group_controls.snapshot()
 
 
 @router.get("/diagnostics")

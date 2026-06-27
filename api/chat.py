@@ -1398,6 +1398,41 @@ async def group_should_respond(request: ShouldRespondRequest, user: AuthUser = D
         except Exception as _ooe:
             log("OPERATIONAL_BAILEYS_SHOULD_RESPOND_ERR", error=str(_ooe))
 
+        # Trigger autonomi sociali/delicati consentiti anche con default silent.
+        # Questo endpoint e' il pre-gate live di Baileys: se qui diciamo NO,
+        # /group non viene chiamato e il gate principale non puo intervenire.
+        if request.group_id:
+            try:
+                from core.group_reactivity import (
+                    detect_autonomous_group_trigger,
+                    should_allow_autonomous_group_intervention,
+                )
+                from core.telegram_group_memory import stable_hash as _sh_auto
+                _gid_auto = _sh_auto(request.group_id.split("@")[0].replace("-", ""))
+                _trigger = detect_autonomous_group_trigger(request.text or "")
+                if _trigger and should_allow_autonomous_group_intervention(
+                    "whatsapp",
+                    _gid_auto,
+                    request.text or "",
+                ):
+                    _topic = _trigger.get("topic", "")
+                    _reason = (
+                        "autonomous_positive_social"
+                        if _topic == "positive_social"
+                        else "autonomous_delicate_support"
+                    )
+                    log(
+                        "GROUP_SHOULD_RESPOND_AUTONOMOUS",
+                        platform="whatsapp",
+                        group_hash=_gid_auto,
+                        topic=_topic,
+                        kind=_trigger.get("kind", ""),
+                        reason=_reason,
+                    )
+                    return ShouldRespondResponse(intervieni=True, motivo=_reason)
+            except Exception as _auto_e:
+                log("GROUP_SHOULD_RESPOND_AUTONOMOUS_ERR", error=str(_auto_e))
+
         from core.llm_service import llm_service
         import json as _json
 

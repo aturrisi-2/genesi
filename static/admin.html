@@ -472,6 +472,20 @@
                     <div id="automation-diagnostics-box"
                         style="display:none; background:rgba(0,0,0,0.22); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:12px; font-size:0.78rem; color:#d1d5db;"></div>
                 </div>
+                <div style="margin-top:14px; border-top:1px solid rgba(255,255,255,0.08); padding-top:12px;">
+                    <div style="display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+                        <div>
+                            <div style="font-size:0.82rem; color:#e5e7eb; font-weight:700;">Gruppi WhatsApp</div>
+                            <div style="font-size:0.73rem; color:#8b949e;">Abilita solo reply visibili per gruppi specifici.</div>
+                        </div>
+                        <button id="group-controls-refresh"
+                            style="padding:6px 12px; border-radius:6px; border:1px solid rgba(56,189,248,0.35); color:#7dd3fc; background:rgba(56,189,248,0.08); font-size:0.78rem; cursor:pointer;">
+                            Aggiorna
+                        </button>
+                    </div>
+                    <div id="group-controls-msg" style="font-size:0.76rem; color:#9ca3af; margin-bottom:6px;"></div>
+                    <div id="group-controls-list" style="display:grid; grid-template-columns:1fr; gap:8px;"></div>
+                </div>
             </div>
 
             <h2 style="font-size:1.1rem; margin-top:32px; color:#fff;">🧠 Deep Conversation Training</h2>
@@ -596,6 +610,7 @@
             loadCapabilityGaps();
             loadFacebookStatus();
             loadAutomationStatus();
+            loadGroupControls();
         }
 
         async function loadStats() {
@@ -1570,6 +1585,81 @@
                 msgEl.textContent = 'Errore verifica';
             }
         });
+
+        function maskWhatsappJid(jid) {
+            const s = String(jid || '');
+            const at = s.indexOf('@');
+            const local = at >= 0 ? s.slice(0, at) : s;
+            const dom = at >= 0 ? s.slice(at) : '';
+            if (local.length <= 6) return local.slice(0, 2) + '***' + dom;
+            return local.slice(0, 3) + '***' + local.slice(-2) + dom;
+        }
+
+        function renderGroupControls(data) {
+            const list = document.getElementById('group-controls-list');
+            const groups = data.known_whatsapp_groups || [];
+            if (!groups.length) {
+                list.innerHTML = '<div style="color:#9ca3af; font-size:0.78rem;">Nessun gruppo WhatsApp mappato trovato.</div>';
+                return;
+            }
+            list.innerHTML = groups.map(g => `
+                <label style="display:flex; gap:10px; align-items:flex-start; justify-content:space-between; padding:9px 10px; background:rgba(0,0,0,0.18); border:1px solid rgba(255,255,255,0.07); border-radius:8px;">
+                    <span style="min-width:0;">
+                        <span style="display:block; color:#e5e7eb; font-size:0.82rem; font-weight:650;">${automationEscapeHtml(g.title || 'WhatsApp Group')}</span>
+                        <span style="display:block; color:#8b949e; font-size:0.72rem; margin-top:2px;">${automationEscapeHtml(maskWhatsappJid(g.jid))}</span>
+                        <span style="display:block; color:${g.admin_reply_enabled ? '#86efac' : '#f87171'}; font-size:0.68rem; margin-top:4px;">${g.admin_reply_enabled ? 'REPLY ADMIN ON' : 'REPLY ADMIN OFF'}</span>
+                    </span>
+                    <input class="group-reply-toggle" data-jid="${automationEscapeHtml(g.jid)}" data-title="${automationEscapeHtml(g.title || '')}" type="checkbox" ${g.admin_reply_enabled ? 'checked' : ''}
+                        style="width:18px; height:18px; flex:0 0 auto; accent-color:#38bdf8; margin-top:2px;">
+                </label>
+            `).join('');
+            document.querySelectorAll('.group-reply-toggle').forEach(el => {
+                el.addEventListener('change', async () => {
+                    await saveGroupReplyControl(el.dataset.jid, el.checked, el.dataset.title || '');
+                });
+            });
+        }
+
+        async function loadGroupControls() {
+            const msgEl = document.getElementById('group-controls-msg');
+            msgEl.style.color = '#9ca3af';
+            msgEl.textContent = 'Caricamento gruppi...';
+            try {
+                const res = await fetch('/api/admin/automation/group-controls', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error(res.status);
+                renderGroupControls(await res.json());
+                msgEl.textContent = '';
+            } catch(e) {
+                msgEl.style.color = '#f87171';
+                msgEl.textContent = 'Errore caricamento gruppi';
+            }
+        }
+
+        async function saveGroupReplyControl(jid, enabled, label) {
+            const msgEl = document.getElementById('group-controls-msg');
+            msgEl.style.color = '#9ca3af';
+            msgEl.textContent = 'Salvataggio gruppo...';
+            try {
+                const res = await fetch('/api/admin/automation/group-controls/whatsapp-reply', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jid, enabled, label })
+                });
+                if (!res.ok) throw new Error(res.status);
+                renderGroupControls(await res.json());
+                msgEl.style.color = '#86efac';
+                msgEl.textContent = 'Gruppo salvato';
+                setTimeout(() => { msgEl.textContent = ''; }, 1800);
+            } catch(e) {
+                msgEl.style.color = '#f87171';
+                msgEl.textContent = 'Errore salvataggio gruppo';
+                await loadGroupControls();
+            }
+        }
+
+        document.getElementById('group-controls-refresh').addEventListener('click', loadGroupControls);
 
         function doLogout(e) {
             e && e.preventDefault();

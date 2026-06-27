@@ -29,6 +29,55 @@ const GROUP_PASSWORD   = process.env.GENESI_GROUP_PASSWORD || "changeme";
 const DIRECT_EMAIL     = process.env.GENESI_DIRECT_EMAIL || "alfio.turrisi@gmail.com";
 const DIRECT_PASSWORD  = process.env.GENESI_DIRECT_PASSWORD || "ZOEennio0810";
 const ALLOWED_GROUPS   = (process.env.ALLOWED_GROUPS || "").split(",").map(s => s.trim()).filter(Boolean);
+
+// ── REPLY WHITELIST (fix: gruppi operativi silenziosi) ──────────────────────
+// Default: SILENZIO. Env e Admin controls abilitano solo reply visibili, non la
+// partecipazione generale.
+const WHATSAPP_REPLY_ENABLED_GROUPS = (process.env.WHATSAPP_REPLY_ENABLED_GROUPS || "")
+    .split(",").map(s => s.trim()).filter(Boolean);
+const ADMIN_GROUP_CONTROLS_PATH = process.env.GENESI_GROUP_CONTROLS_PATH || "/opt/genesi/memory/admin/group_controls.json";
+const _lastAdminReplyAllowedLog = {};
+
+function maskJid(jid) {
+    if (!jid) return "<none>";
+    const at = jid.indexOf("@");
+    const local = at >= 0 ? jid.slice(0, at) : jid;
+    const dom = at >= 0 ? jid.slice(at) : "";
+    if (local.length <= 6) return local.slice(0, 2) + "***" + dom;
+    return local.slice(0, 3) + "***" + local.slice(-2) + dom;
+}
+
+function isWhatsAppGroupReplyEnabledByAdmin(groupId) {
+    if (!groupId) return false;
+    try {
+        if (!fs.existsSync(ADMIN_GROUP_CONTROLS_PATH)) return false;
+        const raw = fs.readFileSync(ADMIN_GROUP_CONTROLS_PATH, "utf8");
+        const data = JSON.parse(raw || "{}");
+        const info = data?.whatsapp_reply_enabled_groups?.[groupId];
+        const enabled = info?.enabled === true;
+        if (enabled) {
+            const now = Date.now();
+            if (!_lastAdminReplyAllowedLog[groupId] || now - _lastAdminReplyAllowedLog[groupId] > 60000) {
+                console.log(`[Baileys/GroupControls] Reply visibili abilitate da Admin controls per ${maskJid(groupId)}`);
+                _lastAdminReplyAllowedLog[groupId] = now;
+            }
+        }
+        return enabled;
+    } catch (err) {
+        console.error("[Baileys/GroupControls] Errore lettura controlli Admin:", err.message);
+        return false;
+    }
+}
+
+function whatsappGroupReplyGate(groupId) {
+    const env = !!groupId && WHATSAPP_REPLY_ENABLED_GROUPS.includes(groupId);
+    const admin = !env && isWhatsAppGroupReplyEnabledByAdmin(groupId);
+    return { allowed: env || admin, env, admin };
+}
+
+function isWhatsAppGroupReplyEnabled(groupId) {
+    return whatsappGroupReplyGate(groupId).allowed;
+}
 const AUTH_DIR         = "./baileys-auth";
 
 const logger = pino({ level: "silent" }); // silenzia i log interni di Baileys
@@ -121,7 +170,7 @@ async function getToken(type = "group") {
 }
 
 // ── Chiamata a Genesi — gruppo ────────────────────────────────────────────────
-async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "WhatsApp Group", participants = null, token = null, mediaId = null, mediaType = null, mediaMime = null, recentMessages = null) {
+async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "WhatsApp Group", participants = null, token = null, mediaId = null, mediaType = null, mediaMime = null, recentMessages = null, replyToId = null) {
     try {
         if (!token) token = await getToken("group");
         const res = await axios.post(`${GENESI_URL}/api/chat/group`, {
@@ -135,6 +184,7 @@ async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "
             media_type:  mediaType,
             media_mime:  mediaMime,
             recent_messages: recentMessages,
+            reply_to_id: replyToId,   // operational binding (T-A3.3); null se non e' una reply
         }, {
             headers: { Authorization: `Bearer ${token}` },
             timeout: 35000,
@@ -526,6 +576,9 @@ async function startBaileys() {
                 try {
                     const meta = await getGroupMetaCached(sock, groupId);
                     if (meta?.subject) groupName = meta.subject;
+                    // Diagnostica (solo nome+jid+participant, niente testo/token): aiuta a
+                    // mappare un gruppo reale al project_id senza indovinare il JID.
+                    console.log(`[Baileys/GroupJID] name="${groupName}" jid=${groupId} participant=${senderJid || "unknown"}`);
                     const cleanSender = senderJid.replace(/:.*@/, "@");
                     const p = meta?.participants?.find(x => x.id === senderJid);
                     let resolvedSenderName = p?.name || contactCache[cleanSender] || msg.pushName;
@@ -556,11 +609,32 @@ async function startBaileys() {
                 addToBuffer(groupId, senderName, text);
                 console.log(`[${senderName}@${groupName}] ${text.slice(0, 60)}`);
 
+                // ── REPLY GATE: whitelist, default SILENZIO ──────────────────
+                // NON blocca la POST/ingest backend: la chiamata a /api/chat/group
+                // resta (silent ingest/claim operational). La soppressione avviene
+                // SOLO al momento del send (vedi piu' sotto). Gruppi non whitelistati:
+                // backend chiamato per ingest, ma nessuna reply visibile, nessun
+                // engaged, nessun log "Genesi →". Whitelist => comportamento attuale.
+                const replyGate = whatsappGroupReplyGate(groupId);
+                const replyAllowed = replyGate.allowed;
+
                 // Filtra: LLM decide se intervenire
                 const token = await getToken("group");
 
-                // Fast-path: reply diretta a un messaggio di Genesi → sempre sì
-                const contextInfo = msg.message?.extendedTextMessage?.contextInfo || {};
+                // Fast-path: reply diretta a un messaggio di Genesi → sempre sì.
+                // contextInfo robusto: il quoted/reply puo' arrivare da qualsiasi tipo
+                // di messaggio (testo o media), non solo extendedTextMessage.
+                const _m = msg.message || {};
+                const contextInfo = _m.extendedTextMessage?.contextInfo
+                    || _m.imageMessage?.contextInfo
+                    || _m.audioMessage?.contextInfo
+                    || _m.documentMessage?.contextInfo
+                    || _m.videoMessage?.contextInfo
+                    || {};
+                // Operational binding (T-A3.3): id del messaggio quotato/replied →
+                // backend Python lo usa come reply_to_id. Assente → null (no-op).
+                const replyToId = contextInfo.stanzaId || null;
+                const replyToParticipant = contextInfo.participant || null;
                 const quotedParticipant = contextInfo.participant || contextInfo.remoteJid || "";
                 const myJid = sock.user?.id?.replace(/:.*@/, "@") || "";
                 const isReplyToGenesi = myJid && quotedParticipant && quotedParticipant.replace(/:.*@/, "@") === myJid;
@@ -572,7 +646,7 @@ async function startBaileys() {
                 // Continuità: se Genesi ha appena risposto a QUESTA persona, è una
                 // conversazione attiva → continua a seguirla anche senza essere nominata.
                 const _last = lastGenesiReply[groupId];
-                const _engaged = _last && _last.to === senderName
+                const _engaged = replyAllowed && _last && _last.to === senderName
                     && (Date.now() - _last.ts < ENGAGED_WINDOW);
 
                 if (isReplyToGenesi) {
@@ -602,13 +676,18 @@ async function startBaileys() {
                 console.log(`[Baileys] Intervengo in ${groupName} per: "${textToSend.slice(0, 50)}"`);
 
                 await sock.sendPresenceUpdate("composing", groupId);
-                const reply = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, participants, token, mediaId, mediaType, mediaMime, getRecentMessages(groupId));
+                const reply = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, participants, token, mediaId, mediaType, mediaMime, getRecentMessages(groupId), replyToId);
                 await sock.sendPresenceUpdate("paused", groupId);
 
-                if (reply) {
+                if (reply && replyAllowed) {
                     await sock.sendMessage(groupId, { text: reply });
                     lastGenesiReply[groupId] = { text: reply, ts: Date.now(), to: senderName };
                     console.log(`[Genesi → ${senderName} in ${groupName}] ${reply.slice(0, 80)}`);
+                } else if (reply && !replyAllowed) {
+                    // Gruppo non whitelistato: ingest gia' avvenuto via askGenesiGroup,
+                    // la reply backend viene SCARTATA. Nessun sendMessage, nessun
+                    // "Genesi →", nessun lastGenesiReply (engaged resta off).
+                    console.log(`GROUP_REPLY_SUPPRESSED group=${maskJid(groupId)} name="${groupName}" reason=not_reply_enabled env=${replyGate.env} admin=${replyGate.admin}`);
                 }
             } catch (e) {
                 console.error("[Baileys] Errore messaggio:", e.message);
