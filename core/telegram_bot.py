@@ -238,6 +238,15 @@ async def _group_should_intervene(
         automation_flags.flag_enabled("group_interventions")
         or automation_flags.flag_enabled("group_greeting_replies")
     ):
+        try:
+            from core.group_reactivity import should_allow_autonomous_group_intervention
+            if should_allow_autonomous_group_intervention(
+                "telegram", chat_id, _full, has_media=has_media
+            ):
+                logger.info("GROUP_INTERVENE_DECISION chat_id=%s from=%s intervieni=True motivo=autonomous_social_delicate", chat_id, first_name)
+                return True
+        except Exception as exc:
+            logger.debug("GROUP_AUTONOMOUS_TRIGGER_ERR err=%s", exc)
         return False
 
     has_link = bool(re.search(r'https?://[^\s]+|www\.[^\s]+', f"{text} {caption}", re.IGNORECASE))

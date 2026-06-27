@@ -225,6 +225,15 @@ async def _group_should_intervene(
         automation_flags.flag_enabled("group_interventions")
         or automation_flags.flag_enabled("group_greeting_replies")
     ):
+        try:
+            from core.group_reactivity import should_allow_autonomous_group_intervention
+            if should_allow_autonomous_group_intervention(
+                "whatsapp", chat_id, f"{text} {caption}", has_media=has_media
+            ):
+                logger.info("GROUP_INTERVENE_DECISION_WA chat_id=%s from=%s intervieni=True motivo=autonomous_social_delicate", chat_id, first_name)
+                return True
+        except Exception as exc:
+            logger.debug("GROUP_AUTONOMOUS_TRIGGER_ERR_WA err=%s", exc)
         return False
 
     import re

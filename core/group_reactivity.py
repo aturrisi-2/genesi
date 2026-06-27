@@ -156,6 +156,106 @@ EMOTIONAL_COOLDOWN_HOURS: float = 4.0
 # (platform, group_id) → {"topic": str, "set_at": float, "expires_at": float}
 _EMOTIONAL_COOLDOWNS: dict[tuple, dict] = {}
 
+POSITIVE_SOCIAL_COOLDOWN_HOURS: float = 2.0
+
+_POSITIVE_SOCIAL_PATTERNS = (
+    r"\baugur(?:i|oni)?\b",
+    r"\bbuon\s+compleanno\b",
+    r"\bcompleanno\b",
+    r"\bcongratulazion[ie]\b",
+    r"\bcomplimenti\b",
+    r"\bbravissim[oaie]\b",
+    r"\bbrav[oaie]\b.*\b(?:ce l'?hai fatta|finalmente|complimenti|congratulazioni)\b",
+    r"\bce l'?hai fatta\b",
+    r"\bce l'?ho fatta\b",
+    r"\bfinalmente\s+(?:liber[oaie]|finita|fatto|superat[oaie])\b",
+    r"\bmi sono tolt[oa]\s+finalmente\s+questo\s+peso\b",
+    r"\besame\s+superat[oa]\b",
+    r"\bpromoss[oaie]\b",
+    r"\blaureat[oaie]\b",
+    r"\bfesteggiam[oa]\b",
+    r"\bda festeggiare\b",
+)
+
+_DELICATE_SUPPORT_PATTERNS = (
+    r"\b(?:sto|stiamo|sta)\s+malissimo\b",
+    r"\bsono\s+disperat[oa]\b",
+    r"\bmi sento\s+(?:a pezzi|crollare|distrutt[oa])\b",
+    r"\btristezza\s+(?:forte|immensa|profonda)\b",
+    r"\bdolore\s+(?:forte|immenso|profondo)\b",
+    r"\bho bisogno\s+di\s+(?:aiuto|supporto|sostegno|conforto)\b",
+    r"\babbiamo bisogno\s+di\s+(?:aiuto|supporto|sostegno|conforto)\b",
+    r"\bmi serve\s+(?:aiuto|supporto|sostegno|conforto)\b",
+    r"\b(?:ricoverat[oaie]|ospedale|pronto soccorso|terapia intensiva)\b",
+    r"\b(?:tumore|cancro|chemioterapia)\b",
+    r"\b(?:intervento|operazione)\s+(?:grave|delicat[oa]|urgente)\b",
+    r"\bmalattia\s+(?:grave|seria|delicata)\b",
+)
+
+
+def _has_word_text(text: str) -> bool:
+    return bool(re.search(r"[a-zA-ZÀ-ÖØ-öø-ÿ]{3,}", text or ""))
+
+
+def detect_autonomous_group_trigger(text: str, has_media: bool = False) -> dict | None:
+    """
+    Trigger stretti per gli unici interventi autonomi ammessi nei gruppi.
+
+    Non abilita conversazioni generali, media generici, saluti o emoji-only:
+    ritorna un dict solo per ricorrenze positive/congratulazioni o situazioni
+    delicate che richiedono presenza umana sobria.
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    if is_emoji_only_or_reaction(raw) or not _has_word_text(raw):
+        return None
+
+    lower = raw.lower()
+    if is_memorial_trigger(lower):
+        return {"topic": "delicate_support", "kind": "grief"}
+
+    for pattern in _DELICATE_SUPPORT_PATTERNS:
+        if re.search(pattern, lower, flags=re.IGNORECASE):
+            return {"topic": "delicate_support", "kind": "support"}
+
+    for pattern in _POSITIVE_SOCIAL_PATTERNS:
+        if re.search(pattern, lower, flags=re.IGNORECASE):
+            return {"topic": "positive_social", "kind": "positive"}
+
+    return None
+
+
+def should_allow_autonomous_group_intervention(
+    platform: str,
+    group_id,
+    text: str,
+    has_media: bool = False,
+) -> bool:
+    """
+    True solo per trigger sociali/delicati ammessi, con cooldown per evitare spam.
+
+    Il cooldown viene impostato al momento dell'ammissione: è intenzionale, perché
+    il gate deve restare deterministico anche se la risposta viene poi scartata da
+    anti-stale/auth o altri filtri a valle.
+    """
+    trigger = detect_autonomous_group_trigger(text, has_media=has_media)
+    if not trigger:
+        return False
+
+    cd = get_group_emotional_cooldown(platform, group_id)
+    topic = trigger["topic"]
+    if cd:
+        active_topic = cd.get("topic", "")
+        if active_topic == topic or (
+            topic == "delicate_support" and active_topic in {"memorial", "delicate_support"}
+        ):
+            return False
+
+    hours = POSITIVE_SOCIAL_COOLDOWN_HOURS if topic == "positive_social" else EMOTIONAL_COOLDOWN_HOURS
+    set_group_emotional_cooldown(platform, group_id, topic=topic, hours=hours)
+    return True
+
 
 def set_group_emotional_cooldown(
     platform: str,
