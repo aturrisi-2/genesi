@@ -23,6 +23,24 @@ SUGGESTIONS_PATH = "memory/admin/suggestions.json"
 
 router = APIRouter(prefix="/admin/fallbacks", tags=["admin"])
 
+FALLBACK_CSV_FIELDS = [
+    "id",
+    "timestamp",
+    "user_id",
+    "user_message",
+    "response_given",
+    "fallback_type",
+    "reason",
+    "group_key",
+    "possible_solution",
+]
+
+
+def _fallback_csv_row(event: dict) -> dict:
+    if not isinstance(event, dict):
+        event = {}
+    return {field: event.get(field, "") for field in FALLBACK_CSV_FIELDS}
+
 # Nota: per ora usiamo get_current_user, ma in futuro potremmo aggiungere un check is_admin
 # Per semplicità in questa fase, chiunque sia loggato può vedere i fallback (se ha token).
 
@@ -49,9 +67,9 @@ async def download_fallbacks_csv(user: AuthUser = Depends(require_admin)):
 
     # Crea buffer in memoria per il CSV
     output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=["id", "timestamp", "user_id", "user_message", "response_given", "fallback_type", "reason", "group_key", "possible_solution"])
+    writer = csv.DictWriter(output, fieldnames=FALLBACK_CSV_FIELDS, extrasaction="ignore", restval="")
     writer.writeheader()
-    writer.writerows(events)
+    writer.writerows(_fallback_csv_row(event) for event in events)
     
     output.seek(0)
     

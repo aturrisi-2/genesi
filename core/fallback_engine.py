@@ -148,19 +148,21 @@ Rispondi con una singola frase pratica e concisa (max 20 parole) che spieghi COS
         """Ritorna una vista raggruppata per eventi simili"""
         groups = {}
         for ev in self.events:
-            gk = ev["group_key"]
+            if not isinstance(ev, dict):
+                continue
+            gk = ev.get("group_key") or self._generate_group_key(str(ev.get("user_message") or ev.get("id") or ""))
             if gk not in groups:
                 groups[gk] = {
                     "count": 0,
-                    "last_timestamp": ev["timestamp"],
+                    "last_timestamp": ev.get("timestamp") or "",
                     "examples": [],
-                    "possible_solution": ev["possible_solution"],
-                    "type": ev["fallback_type"]
+                    "possible_solution": ev.get("possible_solution") or "",
+                    "type": ev.get("fallback_type") or "unknown"
                 }
             groups[gk]["count"] += 1
-            groups[gk]["last_timestamp"] = max(groups[gk]["last_timestamp"], ev["timestamp"])
+            groups[gk]["last_timestamp"] = max(groups[gk]["last_timestamp"], ev.get("timestamp") or "")
             if len(groups[gk]["examples"]) < 3:
-                groups[gk]["examples"].append(ev["user_message"])
+                groups[gk]["examples"].append(ev.get("user_message") or "")
                 
         return sorted(list(groups.values()), key=lambda x: x["count"], reverse=True)
 
