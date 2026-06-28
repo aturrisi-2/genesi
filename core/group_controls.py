@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -90,11 +91,47 @@ def load_group_controls() -> dict[str, Any]:
         return _default_controls()
 
 
+def _fsync_directory(path: Path) -> None:
+    try:
+        fd = os.open(str(path), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def _write_text_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=str(path.parent),
+        text=True,
+    )
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+        _fsync_directory(path.parent)
+    except Exception:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
 def save_group_controls(controls: dict[str, Any]) -> dict[str, Any]:
-    GROUP_CONTROLS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    GROUP_CONTROLS_PATH.write_text(
+    _write_text_atomic(
+        GROUP_CONTROLS_PATH,
         json.dumps(controls, ensure_ascii=False, indent=2, sort_keys=True),
-        encoding="utf-8",
     )
     return controls
 

@@ -57,6 +57,7 @@ def test_group_controls_telegram_toggle_persists_and_appears_in_snapshot(tmp_pat
 
     saved = json.loads(controls_path.read_text(encoding="utf-8"))
     assert saved["telegram_reply_enabled_groups"]["-5007188402"]["enabled"] is True
+    assert list(controls_path.parent.glob(".group_controls.json.*.tmp")) == []
     assert group_controls.is_group_reply_enabled("telegram", -5007188402) is True
 
     snap = group_controls.snapshot()
@@ -64,6 +65,36 @@ def test_group_controls_telegram_toggle_persists_and_appears_in_snapshot(tmp_pat
     assert snap["known_telegram_groups"][0]["admin_reply_enabled"] is True
     assert snap["known_telegram_groups"][0]["ingest_enabled"] is True
     assert snap["known_groups"]["telegram"][0]["platform"] == "telegram"
+
+
+def test_group_controls_save_keeps_previous_file_if_replace_fails(tmp_path, monkeypatch):
+    group_controls, controls_path, _, _ = _configure_group_control_paths(tmp_path, monkeypatch)
+    original = {
+        "whatsapp_reply_enabled_groups": {
+            "120363407869433239@g.us": {
+                "enabled": True,
+                "label": "Prova Genesi",
+                "updated_at": "2026-06-27T21:37:46+00:00",
+                "observed_at": "",
+            }
+        },
+        "telegram_reply_enabled_groups": {},
+    }
+    controls_path.parent.mkdir(parents=True, exist_ok=True)
+    controls_path.write_text(json.dumps(original, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def fail_replace(_src, _dst):
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr(group_controls.os, "replace", fail_replace)
+
+    try:
+        group_controls.set_group_reply_enabled("telegram", "-5007188402", True, title="Alfio and Alfio")
+    except OSError:
+        pass
+
+    assert json.loads(controls_path.read_text(encoding="utf-8")) == original
+    assert list(controls_path.parent.glob(".group_controls.json.*.tmp")) == []
 
 
 def test_group_controls_project_id_is_read_only_metadata(tmp_path, monkeypatch):
