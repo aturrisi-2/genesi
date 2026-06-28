@@ -1024,6 +1024,15 @@ async def _transcribe(token: str, audio_data: bytes,
 
 # ── Risposta con immagini ──────────────────────────────────────────────────────
 
+def _telegram_group_reply_allowed_by_admin(chat_id: int) -> bool:
+    try:
+        from core.group_controls import is_group_reply_enabled
+        return is_group_reply_enabled("telegram", chat_id)
+    except Exception as exc:
+        logger.debug("TELEGRAM_GROUP_REPLY_CONTROL_ERR %s", exc)
+        return False
+
+
 async def _send_response(chat_id: int, reply: str, reply_to_message_id: int = None):
     """Invia la risposta: se contiene URL immagini le manda come foto Telegram."""
     # Cerca prima markdown immagini: ![alt](url)
@@ -1556,6 +1565,11 @@ async def handle_update(update: dict):
             if not should:
                 logger.info("TELEGRAM_GROUP_SILENT chat_id=%s from=%s msg=%.60s",
                             chat_id, first_name, f"{text} {caption}".strip())
+                return
+
+            if not _telegram_group_reply_allowed_by_admin(chat_id):
+                log("TELEGRAM_GROUP_REPLY_SUPPRESSED",
+                    chat_id=chat_id, reason="admin_reply_disabled")
                 return
 
             log("GROUP_INTERVENING", platform="telegram", chat_id=chat_id,

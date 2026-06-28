@@ -40,6 +40,13 @@ class WhatsAppGroupReplyPayload(BaseModel):
     label: str = ""
 
 
+class GroupReplyPayload(BaseModel):
+    platform: str
+    group_id: str
+    enabled: bool
+    title: str = ""
+
+
 @router.get("/status")
 async def automation_status(_: AuthUser = Depends(require_admin)):
     return {
@@ -78,6 +85,34 @@ async def automation_group_controls_whatsapp_reply(
         payload.jid,
         payload.enabled,
         label=payload.label,
+    )
+    return group_controls.snapshot()
+
+
+@router.post("/group-controls/reply")
+async def automation_group_controls_reply(
+    payload: GroupReplyPayload,
+    _: AuthUser = Depends(require_admin),
+):
+    group_controls.set_group_reply_enabled(
+        payload.platform,
+        payload.group_id,
+        payload.enabled,
+        title=payload.title,
+    )
+    return group_controls.snapshot()
+
+
+@router.post("/group-controls/telegram-reply")
+async def automation_group_controls_telegram_reply(
+    payload: GroupReplyPayload,
+    _: AuthUser = Depends(require_admin),
+):
+    group_controls.set_group_reply_enabled(
+        "telegram",
+        payload.group_id,
+        payload.enabled,
+        title=payload.title,
     )
     return group_controls.snapshot()
 

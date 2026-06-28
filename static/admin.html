@@ -475,8 +475,8 @@
                 <div style="margin-top:14px; border-top:1px solid rgba(255,255,255,0.08); padding-top:12px;">
                     <div style="display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
                         <div>
-                            <div style="font-size:0.82rem; color:#e5e7eb; font-weight:700;">Gruppi WhatsApp</div>
-                            <div style="font-size:0.73rem; color:#8b949e;">Abilita solo reply visibili per gruppi specifici.</div>
+                            <div style="font-size:0.82rem; color:#e5e7eb; font-weight:700;">Gruppi e risposte</div>
+                            <div style="font-size:0.73rem; color:#8b949e;">Genesi osserva e registra sempre i gruppi in cui è presente. Questa opzione controlla solo le risposte visibili.</div>
                         </div>
                         <button id="group-controls-refresh"
                             style="padding:6px 12px; border-radius:6px; border:1px solid rgba(56,189,248,0.35); color:#7dd3fc; background:rgba(56,189,248,0.08); font-size:0.78rem; cursor:pointer;">
@@ -484,7 +484,7 @@
                         </button>
                     </div>
                     <div id="group-controls-msg" style="font-size:0.76rem; color:#9ca3af; margin-bottom:6px;"></div>
-                    <div id="group-controls-list" style="display:grid; grid-template-columns:1fr; gap:8px;"></div>
+                    <div id="group-controls-list" style="display:grid; grid-template-columns:1fr; gap:12px;"></div>
                 </div>
             </div>
 
@@ -1595,27 +1595,66 @@
             return local.slice(0, 3) + '***' + local.slice(-2) + dom;
         }
 
-        function renderGroupControls(data) {
-            const list = document.getElementById('group-controls-list');
-            const groups = data.known_whatsapp_groups || [];
-            if (!groups.length) {
-                list.innerHTML = '<div style="color:#9ca3af; font-size:0.78rem;">Nessun gruppo WhatsApp mappato trovato.</div>';
-                return;
-            }
-            list.innerHTML = groups.map(g => `
+        function maskTelegramId(chatId) {
+            const s = String(chatId || '');
+            if (s.length <= 6) return s;
+            return s.slice(0, 4) + '***' + s.slice(-3);
+        }
+
+        function groupMaskedId(g) {
+            if (g.masked_id) return g.masked_id;
+            if (g.platform === 'telegram') return maskTelegramId(g.group_id);
+            return maskWhatsappJid(g.jid || g.group_id);
+        }
+
+        function renderGroupSection(title, platform, groups) {
+            const empty = `<div style="color:#9ca3af; font-size:0.78rem; padding:8px 0;">Nessun gruppo ${automationEscapeHtml(title)} registrato.</div>`;
+            return `
+                <div style="display:grid; gap:8px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                        <div style="font-size:0.78rem; color:#e5e7eb; font-weight:700;">${automationEscapeHtml(title)}</div>
+                        <div style="font-size:0.68rem; color:#8b949e;">Osservazione/ingest sempre attiva</div>
+                    </div>
+                    ${groups.length ? groups.map(g => renderGroupControlCard(platform, g)).join('') : empty}
+                </div>
+            `;
+        }
+
+        function renderGroupControlCard(platform, g) {
+            const rawId = g.group_id || g.jid || '';
+            const project = g.project_id ? `<span style="display:block; color:#8b949e; font-size:0.70rem; margin-top:2px;">project_id: ${automationEscapeHtml(g.project_id)}</span>` : '';
+            const observed = g.observed_at || g.updated_at || '';
+            const observedLine = observed ? `<span style="display:block; color:#6b7280; font-size:0.68rem; margin-top:2px;">aggiornato: ${automationEscapeHtml(observed)}</span>` : '';
+            return `
                 <label style="display:flex; gap:10px; align-items:flex-start; justify-content:space-between; padding:9px 10px; background:rgba(0,0,0,0.18); border:1px solid rgba(255,255,255,0.07); border-radius:8px;">
                     <span style="min-width:0;">
-                        <span style="display:block; color:#e5e7eb; font-size:0.82rem; font-weight:650;">${automationEscapeHtml(g.title || 'WhatsApp Group')}</span>
-                        <span style="display:block; color:#8b949e; font-size:0.72rem; margin-top:2px;">${automationEscapeHtml(maskWhatsappJid(g.jid))}</span>
+                        <span style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                            <span style="color:#e5e7eb; font-size:0.82rem; font-weight:650;">${automationEscapeHtml(g.title || (platform === 'telegram' ? 'Telegram Group' : 'WhatsApp Group'))}</span>
+                            <span style="font-size:0.62rem; color:#7dd3fc; border:1px solid rgba(125,211,252,0.35); border-radius:999px; padding:1px 6px;">${platform.toUpperCase()}</span>
+                        </span>
+                        <span style="display:block; color:#8b949e; font-size:0.72rem; margin-top:2px;">${automationEscapeHtml(groupMaskedId(g))}</span>
+                        ${project}
+                        ${observedLine}
                         <span style="display:block; color:${g.admin_reply_enabled ? '#86efac' : '#f87171'}; font-size:0.68rem; margin-top:4px;">${g.admin_reply_enabled ? 'REPLY ADMIN ON' : 'REPLY ADMIN OFF'}</span>
                     </span>
-                    <input class="group-reply-toggle" data-jid="${automationEscapeHtml(g.jid)}" data-title="${automationEscapeHtml(g.title || '')}" type="checkbox" ${g.admin_reply_enabled ? 'checked' : ''}
+                    <input class="group-reply-toggle" data-platform="${automationEscapeHtml(platform)}" data-group-id="${automationEscapeHtml(rawId)}" data-title="${automationEscapeHtml(g.title || '')}" type="checkbox" ${g.admin_reply_enabled ? 'checked' : ''}
                         style="width:18px; height:18px; flex:0 0 auto; accent-color:#38bdf8; margin-top:2px;">
                 </label>
-            `).join('');
+            `;
+        }
+
+        function renderGroupControls(data) {
+            const list = document.getElementById('group-controls-list');
+            const groupsByPlatform = data.known_groups || {};
+            const whatsappGroups = groupsByPlatform.whatsapp || data.known_whatsapp_groups || [];
+            const telegramGroups = groupsByPlatform.telegram || data.known_telegram_groups || [];
+            list.innerHTML = [
+                renderGroupSection('WhatsApp', 'whatsapp', whatsappGroups),
+                renderGroupSection('Telegram', 'telegram', telegramGroups),
+            ].join('');
             document.querySelectorAll('.group-reply-toggle').forEach(el => {
                 el.addEventListener('change', async () => {
-                    await saveGroupReplyControl(el.dataset.jid, el.checked, el.dataset.title || '');
+                    await saveGroupReplyControl(el.dataset.platform, el.dataset.groupId, el.checked, el.dataset.title || '');
                 });
             });
         }
@@ -1637,15 +1676,15 @@
             }
         }
 
-        async function saveGroupReplyControl(jid, enabled, label) {
+        async function saveGroupReplyControl(platform, groupId, enabled, title) {
             const msgEl = document.getElementById('group-controls-msg');
             msgEl.style.color = '#9ca3af';
             msgEl.textContent = 'Salvataggio gruppo...';
             try {
-                const res = await fetch('/api/admin/automation/group-controls/whatsapp-reply', {
+                const res = await fetch('/api/admin/automation/group-controls/reply', {
                     method: 'POST',
                     headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ jid, enabled, label })
+                    body: JSON.stringify({ platform, group_id: groupId, enabled, title })
                 });
                 if (!res.ok) throw new Error(res.status);
                 renderGroupControls(await res.json());
