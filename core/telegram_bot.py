@@ -1550,6 +1550,11 @@ async def handle_update(update: dict):
                 has_media=_original_has_media, bot_mentioned=_bot_mentioned,
                 text_preview=(text or caption or "")[:60])
 
+            if not _telegram_group_reply_allowed_by_admin(chat_id):
+                log("TELEGRAM_GROUP_REPLY_SUPPRESSED",
+                    chat_id=chat_id, reason="admin_reply_disabled")
+                return
+
             # Fast-path: reply diretta a un messaggio di Genesi → sempre sì
             if _reply_to_genesi:
                 should = True
@@ -1565,11 +1570,6 @@ async def handle_update(update: dict):
             if not should:
                 logger.info("TELEGRAM_GROUP_SILENT chat_id=%s from=%s msg=%.60s",
                             chat_id, first_name, f"{text} {caption}".strip())
-                return
-
-            if not _telegram_group_reply_allowed_by_admin(chat_id):
-                log("TELEGRAM_GROUP_REPLY_SUPPRESSED",
-                    chat_id=chat_id, reason="admin_reply_disabled")
                 return
 
             log("GROUP_INTERVENING", platform="telegram", chat_id=chat_id,

@@ -1,4 +1,6 @@
 import json
+import asyncio
+import inspect
 from pathlib import Path
 
 import pytest
@@ -126,6 +128,53 @@ def test_telegram_admin_reply_gate_blocks_and_allows(tmp_path, monkeypatch):
     group_controls.set_group_reply_enabled("telegram", "-5007188402", True, title="Alfio and Alfio")
 
     assert telegram_bot._telegram_group_reply_allowed_by_admin(-5007188402) is True
+
+
+def test_telegram_admin_gate_runs_before_spontaneous_decision():
+    import core.telegram_bot as telegram_bot
+
+    src = inspect.getsource(telegram_bot.handle_update)
+    gate_pos = src.index("_telegram_group_reply_allowed_by_admin(chat_id)")
+    decision_pos = src.index("should = await _group_should_intervene")
+
+    assert gate_pos < decision_pos
+
+
+def test_telegram_admin_off_does_not_consume_autonomous_cooldown(tmp_path, monkeypatch):
+    from core.group_reactivity import (
+        _EMOTIONAL_COOLDOWNS,
+        get_group_emotional_cooldown,
+    )
+    import core.telegram_bot as telegram_bot
+
+    group_controls, _, _, _ = _configure_group_control_paths(tmp_path, monkeypatch)
+    chat_id = -5007188402
+    text = "Tantissimi auguri Elena ❤️"
+    _EMOTIONAL_COOLDOWNS.clear()
+
+    assert telegram_bot._telegram_group_reply_allowed_by_admin(chat_id) is False
+    # The production router now returns before _group_should_intervene while Admin is OFF.
+    assert get_group_emotional_cooldown("telegram", chat_id) is None
+
+    group_controls.set_group_reply_enabled("telegram", str(chat_id), True, title="Alfio and Alfio")
+    assert telegram_bot._telegram_group_reply_allowed_by_admin(chat_id) is True
+
+    assert asyncio.run(telegram_bot._group_should_intervene(
+        text, "", chat_id, 494065944, "Alfio"
+    )) is True
+
+
+def test_telegram_admin_on_allows_explicit_invocation(tmp_path, monkeypatch):
+    group_controls, _, _, _ = _configure_group_control_paths(tmp_path, monkeypatch)
+    import core.telegram_bot as telegram_bot
+
+    chat_id = -5007188402
+    group_controls.set_group_reply_enabled("telegram", str(chat_id), True, title="Alfio and Alfio")
+
+    assert telegram_bot._telegram_group_reply_allowed_by_admin(chat_id) is True
+    assert asyncio.run(telegram_bot._group_should_intervene(
+        "Genesi ci sei?", "", chat_id, 494065944, "Alfio", bot_mentioned=True
+    )) is True
 
 
 def test_admin_html_contains_unified_group_controls():
