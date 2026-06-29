@@ -19,6 +19,34 @@ This document lists components that exist in the repository but should be treate
 | Old memory engines | `core/memory_engine_v2.py`, `core/memory_storage.py`, vector memory/data | Do not remove yet; isolate after import/use audit |
 | Golden/backup code | `core/llm_service.py.gold`, backup files/directories | Do not execute or refactor casually |
 
+## Import / Startup Side-Effect Policy
+
+Frozen or experimental modules must stay passive at import time. Importing a
+legacy module must not start async tasks, subprocesses, network calls, message
+sends, or writes to production `memory/` / `data/` paths.
+
+Current defensive coverage:
+
+- `tests/test_no_startup_side_effects.py` imports the main frozen candidates
+  under guards for task creation, subprocesses, HTTP requests, and risky writes.
+- The startup source path is checked to keep training/autopilot, Moltbook,
+  Instagram publishing, birthday greetings, lab cycle, and evolution behind
+  passive-mode or explicit automation flags.
+- Full `main` import is additionally guarded when optional template dependency
+  `jinja2` is available in the test environment.
+
+Known core import side effects that are not fixed in this legacy phase:
+
+- `core.storage` initializes memory directories.
+- `auth.config` initializes `data/auth`.
+- `core.fallback_engine` initializes `memory/admin`.
+- `core.document_memory` initializes `memory/documents`.
+- `core.reminder_engine` initializes `data/reminders`.
+
+Those are core boot behaviors, not permission to add more side effects to frozen
+modules. Any future cleanup of those core imports should be a separate
+stabilization task.
+
 ## Likely Dead Or Low-Reference Modules
 
 The audit found modules with zero or very low static references. Treat these as suspects, not proof of deletion safety:
@@ -54,4 +82,3 @@ Do not physically delete, move, or migrate any of the following during structura
 - `.env` or environment files
 - model files
 - user-uploaded/static generated assets
-

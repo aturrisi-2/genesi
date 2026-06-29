@@ -60,6 +60,23 @@ For each candidate component:
    - If files are moved later, preserve a backup path and update imports in one
      small commit.
 
+## Import / Startup Side-Effect Gate
+
+Before a frozen component can be treated as safe to keep in the live tree, it
+must pass a no-startup-side-effect gate:
+
+- importing the module must not create async tasks;
+- importing the module must not launch subprocesses;
+- importing the module must not make HTTP/network requests;
+- importing the module must not send Telegram, WhatsApp, Meta, email, or social
+  messages;
+- importing the module must not write `memory/`, `data/`, `lab/`, or generated
+  static assets.
+
+The current guard lives in `tests/test_no_startup_side_effects.py`. It is scoped
+to frozen/legacy modules. Existing core boot directory initialization remains a
+separate risk and should not be expanded by legacy code.
+
 ## Area-Specific Future Steps
 
 ### TTS / STT
