@@ -65,6 +65,10 @@ provider errors, and separation from group bridges. Recent production logs still
 do not confirm Web TTS/STT usage with real providers. See
 `docs/web_tts_stt_status.md`.
 
+Audio/cache cleanup must start from `docs/audio_cache_inventory.md`: files in
+`tts_cache/`, `data/tts*`, `static/voice_test/`, `voice_tests/`, and
+`voice_gold/` are candidates only after backup, manifest, and explicit approval.
+
 ## Verification After Each Promotion
 
 Use non-mutating checks only:
