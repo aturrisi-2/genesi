@@ -34,6 +34,25 @@ These files have appeared as dirty/untracked during audits and must not be commi
 - `genesi/ai_engineer_os/logs/coding_observations_2026-03-01.json`
 - `static/ig_posts/`
 
+## Core Import Side Effects
+
+Some core modules initialize local runtime directories when imported or when
+their global singleton is created. This is current behavior, not a new cleanup
+target.
+
+| Module | Import-time behavior | Classification | Test coverage |
+| --- | --- | --- | --- |
+| `core.storage` | creates `memory/short_term_chat`, `memory/long_term_profile`, `memory/relational_state`, `memory/semantic_facts`, `memory/episodes` | acceptable if confined to configured/current working path; future lazy-init candidate | `tests/test_core_import_side_effects.py` |
+| `auth.config` | creates `data/auth` and builds SQLite URL | acceptable boot prerequisite if confined to configured/current working path; future lazy-init candidate | `tests/test_core_import_side_effects.py` |
+| `core.fallback_engine` | creates/loads `memory/admin/fallbacks.json` path via singleton | acceptable monitoring boot behavior if confined; legacy records must stay tolerated | `tests/test_core_import_side_effects.py` |
+| `core.document_memory` | creates `memory/documents` at import | acceptable but should become lazy-init in a future focused cleanup | `tests/test_core_import_side_effects.py` |
+| `core.reminder_engine` | creates `data/reminders` through global singleton | acceptable boot behavior for reminder subsystem; future lazy-init candidate | `tests/test_core_import_side_effects.py` |
+
+The tests monkeypatch the current working directory to `tmp_path` and verify
+that importing these modules does not alter real `/opt/genesi/memory` or
+`/opt/genesi/data` files. Do not expand this pattern casually; new modules
+should avoid import-time writes unless there is a clear boot contract.
+
 ## Verification After Each Promotion
 
 Use non-mutating checks only:
@@ -49,4 +68,3 @@ journalctl -u genesi.service --since "15 minutes ago" --no-pager \
   | grep -aE "Application startup complete|Traceback|ImportError|ERROR" \
   | tail -220
 ```
-
