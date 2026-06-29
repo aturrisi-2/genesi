@@ -28,6 +28,30 @@ def _spies():
 
 @pytest.fixture
 def enabled(monkeypatch):
+    async def offline_image_description(path):
+        return {
+            "image_status": "image_no_content",
+            "text": "",
+            "description": "",
+            "error": "",
+        }
+
+    async def fail_real_vision_provider(path):
+        raise AssertionError("test must not call the real image vision provider")
+
+    monkeypatch.setattr(
+        "core.operational_memory.media_processor.describe_image_file",
+        offline_image_description,
+    )
+    monkeypatch.setattr(
+        "core.operational_memory.image_describer.describe_image_file",
+        offline_image_description,
+    )
+    monkeypatch.setattr(
+        "core.image_vision_service.describe_image",
+        fail_real_vision_provider,
+    )
+
     monkeypatch.setenv("OPERATIONAL_MEMORY_WHATSAPP_ENABLED", "true")
     monkeypatch.setenv("WHATSAPP_CHAT_PROJECT_MAP", json.dumps({GROUP_JID: PROJECT}))
     monkeypatch.setenv("PUBLIC_BASE_URL", "https://genesi.example.com/")

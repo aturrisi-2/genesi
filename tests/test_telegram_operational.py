@@ -37,6 +37,31 @@ def env(monkeypatch, tmp_path):
 
     monkeypatch.setattr(state_store, "_BASE_DIR", tmp_path / "state")
     monkeypatch.setattr(report_store, "_BASE_DIR", tmp_path / "reports")
+
+    async def offline_image_description(path):
+        return {
+            "image_status": "image_no_content",
+            "text": "",
+            "description": "",
+            "error": "",
+        }
+
+    async def fail_real_vision_provider(path):
+        raise AssertionError("test must not call the real image vision provider")
+
+    monkeypatch.setattr(
+        "core.operational_memory.media_processor.describe_image_file",
+        offline_image_description,
+    )
+    monkeypatch.setattr(
+        "core.operational_memory.image_describer.describe_image_file",
+        offline_image_description,
+    )
+    monkeypatch.setattr(
+        "core.image_vision_service.describe_image",
+        fail_real_vision_provider,
+    )
+
     asyncio.run(state_store.save_state(PROJECT, _seed()))
     monkeypatch.setenv("OPERATIONAL_MEMORY_TELEGRAM_ENABLED", "true")
     monkeypatch.setenv("TELEGRAM_OPERATIONAL_REPLY_ENABLED", "true")
