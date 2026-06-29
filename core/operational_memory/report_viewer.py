@@ -391,6 +391,25 @@ def render_operational_report_v2(state, daily_report, events, project_id: str,
             f'<div class="mediacard">{img}<div>{"".join(body)}</div></div></article>')
     media_html = "".join(media_cards) or '<p class="empty">Nessun media rilevante.</p>'
 
+    # ---- Media transparency (counts + declared hidden/unsupported media)
+    transp = getattr(daily_report, "media_transparency", {}) or {}
+    transp_counts = transp.get("counts", {}) if isinstance(transp, dict) else {}
+    if transp_counts:
+        rows = [
+            f"Ricevuti: {transp_counts.get('media_received_total', 0)} "
+            f"(immagini {transp_counts.get('images_received', 0)}, video {transp_counts.get('videos_received', 0)}, "
+            f"documenti {transp_counts.get('documents_received', 0)}, audio {transp_counts.get('audio_received', 0)})",
+            f"Analizzati con contenuto: {transp_counts.get('media_analyzed_with_content', 0)} · "
+            f"senza contenuto: {transp_counts.get('media_without_content', 0)} · "
+            f"non supportati: {transp_counts.get('media_unsupported', 0)}",
+            f"Visibili nel report: {transp_counts.get('media_visible_in_report', 0)} · "
+            f"analizzati ma non promossi: {transp_counts.get('media_hidden_by_filter', 0)}",
+        ]
+        rows += [str(n) for n in transp.get("diagnostic_notes", [])]
+        transp_html = "<ul>" + "".join(f"<li>{_esc(r)}</li>" for r in rows) + "</ul>"
+    else:
+        transp_html = '<p class="empty">Nessun media ricevuto.</p>'
+
     # ---- Next actions (from daily report strings)
     next_actions = getattr(daily_report, "next_actions", []) or []
     na_html = ("<ul>" + "".join(f"<li>{_esc(a)}</li>" for a in next_actions) + "</ul>") if next_actions else '<p class="empty">—</p>'
@@ -443,6 +462,8 @@ def render_operational_report_v2(state, daily_report, events, project_id: str,
 {q_html}
 <h2>5. Media rilevanti</h2>
 {media_html}
+<h2>5b. Affidabilità media e allegati</h2>
+{transp_html}
 <h2>6. Prossime azioni</h2>
 {na_html}
 

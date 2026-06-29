@@ -616,6 +616,7 @@ class DailyReport(BaseModel):
     information: list[str] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
     media_relevant: list[str] = Field(default_factory=list)
+    media_transparency: dict[str, Any] = Field(default_factory=dict)
     adaptive_chat_profile_report: list[str] = Field(default_factory=list)
     operational_threads: list[str] = Field(default_factory=list)
     operational_macro_threads: list[str] = Field(default_factory=list)

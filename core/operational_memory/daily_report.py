@@ -530,6 +530,7 @@ def _markdown(report: DailyReport) -> str:
         ("Informazioni rilevanti", report.information),
         ("Domande aperte", report.open_questions),
         ("Media rilevanti", report.media_relevant),
+        ("Affidabilita media e allegati", _media_transparency_lines(report.media_transparency)),
         ("Profilo adattivo della chat", report.adaptive_chat_profile_report),
         ("Macro-thread operativi", report.operational_macro_threads),
         ("Relazioni candidate tra thread", report.thread_relation_candidates),
@@ -616,6 +617,221 @@ def _nearby_context_for_event(event: OperationalEvent, events: list[OperationalE
     return " | ".join(snippets[:3])
 
 
+# ---------------------------------------------------------------------------
+# Media transparency (report-time only; never mutates the event store).
+#
+# The OPERATIVE_ONLY filter (`_event_allowed`) hides any media event whose
+# project/relevance score is below 50. Media tagged ``MEDIA_EVIDENCE`` keeps a
+# default score of 30 even when OCR/vision recovered real technical evidence,
+# so technically relevant photos/videos silently disappeared from the report.
+# The helpers below (a) re-include such media at report-time and (b) always
+# expose explicit counters so a media is never dropped without being declared.
+# ---------------------------------------------------------------------------
+
+_AUDIO_EXTS = (".ogg", ".opus", ".mp3", ".m4a", ".wav", ".aac", ".amr")
+_VIDEO_EXTS = (".mp4", ".mov", ".mkv", ".webm", ".3gp", ".avi")
+_UNSUPPORTED_STATUSES = {"unsupported"}
+_NO_CONTENT_STATUSES = {"no_text_found", "empty", "failed", "error"}
+
+
+def _media_text(event: OperationalEvent) -> str:
+    """All recovered text for a media event (OCR + vision + stored metadata)."""
+    meta = event.attachment_metadata or {}
+    parts = [
+        event.extracted_text or "",
+        event.media_description or "",
+        meta.get("media_description") or "",
+        meta.get("description") or "",
+    ]
+    return " ".join(part.strip() for part in parts if part and part.strip()).strip()
+
+
+def _media_kind(event: OperationalEvent) -> str:
+    """Best-effort media kind, independent of the loose ``attachment_type``."""
+    meta = event.attachment_metadata or {}
+    mime = (meta.get("mime_type") or "").lower()
+    att = (event.attachment_type or "").lower()
+    name = (meta.get("file_name") or event.attachment_path or "").lower()
+    status = (event.extraction_status or meta.get("extraction_status") or "").lower()
+    if att == "video" or mime.startswith("video/") or status == "video_analyzed" or name.endswith(_VIDEO_EXTS):
+        return "video"
+    if att == "audio" or mime.startswith("audio/") or name.endswith(_AUDIO_EXTS):
+        return "audio"
+    if att == "image" or mime.startswith("image/") or event.type == "image":
+        return "image"
+    return "document"
+
+
+def _media_status(event: OperationalEvent) -> str:
+    return (event.extraction_status or (event.attachment_metadata or {}).get("extraction_status") or "").lower()
+
+
+def _media_content_state(event: OperationalEvent) -> str:
+    """``unsupported`` | ``without_content`` | ``with_content``."""
+    status = _media_status(event)
+    if status in _UNSUPPORTED_STATUSES:
+        return "unsupported"
+    if not _media_text(event):
+        return "without_content"
+    if status in _NO_CONTENT_STATUSES:
+        return "without_content"
+    return "with_content"
+
+
+def _media_is_technical(event: OperationalEvent) -> bool:
+    """True when recovered media text carries real technical/site evidence."""
+    if _media_content_state(event) != "with_content":
+        return False
+    return is_technically_significant(_media_text(event))
+
+
+def _media_in_report(event: OperationalEvent, report_mode: ReportMode) -> bool:
+    """Whether a media event is surfaced in the report body.
+
+    Keeps the existing score-based rule, but rescues technically relevant
+    media that the score filter would otherwise hide — without touching the
+    stored scores. Genuine social/personal-logistic media stays out unless it
+    also carries technical evidence.
+    """
+    if _event_allowed(event, report_mode):
+        return True
+    if report_mode == "FULL_CONTEXT":
+        return True
+    domains = _event_domains(event)
+    pure_noise = bool(domains & {"LOGISTICS_PERSONAL", "PERSONNEL", "SOCIAL"}) and not (
+        domains & {"TECHNICAL_ISSUE", "TASK_ASSIGNMENT", "TECHNICAL_OPERATION", "MEDIA_EVIDENCE"}
+    )
+    if pure_noise:
+        return False
+    return _media_is_technical(event)
+
+
+def _media_short_id(event: OperationalEvent) -> str:
+    return (event.event_id or "")[:8]
+
+
+def compute_media_transparency(
+    all_media: list[OperationalEvent],
+    visible_ids: set[str],
+    report_mode: ReportMode,
+) -> dict[str, Any]:
+    """Pure, testable media-transparency summary over every received media.
+
+    Never mutates events. ``visible_ids`` is the set of media event ids that the
+    report body actually renders.
+    """
+    counts = {
+        "media_received_total": len(all_media),
+        "images_received": 0,
+        "videos_received": 0,
+        "documents_received": 0,
+        "audio_received": 0,
+        "media_analyzed_with_content": 0,
+        "media_without_content": 0,
+        "media_unsupported": 0,
+        "media_hidden_by_filter": 0,
+        "media_visible_in_report": 0,
+    }
+    visible_media: list[dict[str, Any]] = []
+    hidden_media_summary: list[dict[str, Any]] = []
+    unsupported_media_summary: list[dict[str, Any]] = []
+    analyzed_but_not_promoted: list[dict[str, Any]] = []
+
+    for event in all_media:
+        kind = _media_kind(event)
+        counts[{"image": "images_received", "video": "videos_received", "audio": "audio_received"}.get(kind, "documents_received")] += 1
+        content_state = _media_content_state(event)
+        if content_state == "with_content":
+            counts["media_analyzed_with_content"] += 1
+        elif content_state == "unsupported":
+            counts["media_unsupported"] += 1
+        else:
+            counts["media_without_content"] += 1
+
+        technical = _media_is_technical(event)
+        visible = event.event_id in visible_ids
+        entry = {
+            "media_id": _media_short_id(event),
+            "kind": kind,
+            "status": _media_status(event) or "unknown",
+            "content_state": content_state,
+            "technical": technical,
+            "sender": (event.sender or "?")[:1],
+            "timestamp": event.timestamp or "",
+        }
+        if visible:
+            counts["media_visible_in_report"] += 1
+            visible_media.append(entry)
+            continue
+        # not rendered in the body — classify why
+        if content_state == "unsupported":
+            unsupported_media_summary.append(entry)
+        elif content_state == "without_content":
+            hidden_media_summary.append({**entry, "reason": "no_useful_content"})
+        elif technical:
+            # has technical evidence but still not surfaced (should be rare)
+            entry["reason"] = "technical_media_not_promoted"
+            analyzed_but_not_promoted.append(entry)
+            counts["media_hidden_by_filter"] += 1
+            hidden_media_summary.append(entry)
+        else:
+            entry["reason"] = "analyzed_not_operational"
+            analyzed_but_not_promoted.append(entry)
+            counts["media_hidden_by_filter"] += 1
+            hidden_media_summary.append(entry)
+
+    diagnostic_notes: list[str] = []
+    if counts["media_received_total"] > counts["media_visible_in_report"]:
+        diagnostic_notes.append(
+            f"{counts['media_received_total']} media ricevuti, {counts['media_visible_in_report']} mostrati nel report; "
+            f"{counts['media_hidden_by_filter']} analizzati ma non promossi, "
+            f"{counts['media_without_content']} senza contenuto utile, {counts['media_unsupported']} non supportati."
+        )
+    tech_hidden = sum(1 for e in analyzed_but_not_promoted if e.get("reason") == "technical_media_not_promoted")
+    if tech_hidden:
+        diagnostic_notes.append(
+            f"ATTENZIONE: {tech_hidden} media con evidenza tecnica reale NON sono nel corpo del report."
+        )
+    if not diagnostic_notes:
+        diagnostic_notes.append("Tutti i media ricevuti sono rappresentati o dichiarati.")
+
+    return {
+        "counts": counts,
+        "visible_media": visible_media,
+        "hidden_media_summary": hidden_media_summary,
+        "unsupported_media_summary": unsupported_media_summary,
+        "analyzed_but_not_promoted": analyzed_but_not_promoted,
+        "diagnostic_notes": diagnostic_notes,
+    }
+
+
+def _media_transparency_lines(transparency: dict[str, Any]) -> list[str]:
+    """Readable Markdown lines for the media-transparency section."""
+    if not transparency:
+        return []
+    counts = transparency.get("counts", {})
+    lines = [
+        f"Media ricevuti totali: {counts.get('media_received_total', 0)} "
+        f"(immagini {counts.get('images_received', 0)}, video {counts.get('videos_received', 0)}, "
+        f"documenti {counts.get('documents_received', 0)}, audio {counts.get('audio_received', 0)})",
+        f"Media analizzati con contenuto: {counts.get('media_analyzed_with_content', 0)} | "
+        f"senza contenuto: {counts.get('media_without_content', 0)} | "
+        f"non supportati: {counts.get('media_unsupported', 0)}",
+        f"Media visibili nel report: {counts.get('media_visible_in_report', 0)} | "
+        f"analizzati ma non promossi: {counts.get('media_hidden_by_filter', 0)}",
+    ]
+    for note in transparency.get("diagnostic_notes", []):
+        lines.append(f"Nota: {note}")
+    for entry in transparency.get("analyzed_but_not_promoted", []):
+        lines.append(
+            f"Media tecnico non promosso: {entry.get('media_id')} ({entry.get('kind')}, "
+            f"{entry.get('status')}, {entry.get('reason')})"
+        )
+    for entry in transparency.get("unsupported_media_summary", []):
+        lines.append(f"Media non supportato: {entry.get('media_id')} ({entry.get('kind')}, {entry.get('status')})")
+    return lines
+
+
 async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATIVE_ONLY") -> DailyReport:
     state = await load_state(project_id)
     events = await list_events(project_id)
@@ -643,12 +859,13 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
     context_complete = len([item for item in operational_items if has_item_context(item)])
     context_total = len(operational_items)
 
-    media_events = [
-        event
-        for event in events
-        if event.attachment_path and event.attachment_type in {"image", "pdf", "document"}
-        and _event_allowed(event, report_mode)
-    ]
+    all_media = [event for event in events if event.attachment_path]
+    media_events = [event for event in all_media if _media_in_report(event, report_mode)]
+    media_transparency = compute_media_transparency(
+        all_media,
+        {event.event_id for event in media_events},
+        report_mode,
+    )
     items_by_event_id: dict[str, list[OperationalItem]] = {}
     for item in [*state.decisions, *state.tasks, *state.issues, *state.information, *state.open_questions]:
         if item.source_event_id:
@@ -715,6 +932,7 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
             )
             for event in media_events
         ],
+        media_transparency=media_transparency,
         adaptive_chat_profile_report=_profile_label(state.adaptive_chat_profile),
         operational_macro_threads=[_macro_label(macro, thread_by_id) for macro in macro_threads],
         thread_relation_candidates=[_relation_label(relation, thread_by_id) for relation in relation_candidates],
@@ -735,6 +953,7 @@ async def build_daily_report(project_id: str, report_mode: ReportMode = "OPERATI
                 "operative": len([event for event in events if classify_impact_level(event.project_impact_score) == "operative"]),
                 "critical": len([event for event in events if classify_impact_level(event.project_impact_score) == "critical"]),
             },
+            "media_counts": media_transparency.get("counts", {}),
             "context_complete_items": context_complete,
             "context_total_items": context_total,
             "context_completeness": (context_complete / context_total) if context_total else 0,
