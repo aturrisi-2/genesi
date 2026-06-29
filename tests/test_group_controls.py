@@ -218,6 +218,32 @@ def test_telegram_admin_gate_runs_before_spontaneous_decision():
     assert gate_pos < decision_pos
 
 
+def test_telegram_observes_group_before_admin_reply_gate():
+    import core.telegram_bot as telegram_bot
+
+    src = inspect.getsource(telegram_bot.handle_update)
+    raw_buffer_pos = src.index("append_raw_message(chat_id")
+    known_group_pos = src.index("register_known_group(chat_id, \"telegram\"")
+    gate_pos = src.index("_telegram_group_reply_allowed_by_admin(chat_id)")
+    suppress_pos = src.index("TELEGRAM_GROUP_REPLY_SUPPRESSED")
+    decision_pos = src.index("should = await _group_should_intervene")
+
+    assert raw_buffer_pos < gate_pos
+    assert known_group_pos < gate_pos
+    assert gate_pos < suppress_pos < decision_pos
+
+
+def test_whatsapp_source_keeps_env_and_admin_reply_gate():
+    src = Path("baileys-service/index.js").read_text(encoding="utf-8")
+
+    assert "WHATSAPP_REPLY_ENABLED_GROUPS" in src
+    assert "ADMIN_GROUP_CONTROLS_PATH" in src
+    assert "isWhatsAppGroupReplyEnabled(groupId)" in src
+    assert "GROUP_REPLY_SUPPRESSED" in src
+    assert "replyGate.env" in src
+    assert "replyGate.admin" in src
+
+
 def test_telegram_admin_off_does_not_consume_autonomous_cooldown(tmp_path, monkeypatch):
     from core.group_reactivity import (
         _EMOTIONAL_COOLDOWNS,
