@@ -60,8 +60,10 @@ TTS and STT are Web app features, not group features. The active Web paths are
 connected to WhatsApp, Telegram, Baileys, or automatic group audio replies.
 
 Current decision: keep them Web feature-gated. The static contract is coherent,
-but recent production logs do not confirm Web TTS/STT usage, and endpoint tests
-with mocked providers are still missing. See `docs/web_tts_stt_status.md`.
+and endpoint tests with mocked providers cover auth, payloads, controlled
+provider errors, and separation from group bridges. Recent production logs still
+do not confirm Web TTS/STT usage with real providers. See
+`docs/web_tts_stt_status.md`.
 
 ## Verification After Each Promotion
 

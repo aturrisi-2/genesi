@@ -52,8 +52,8 @@ Il default e OpenAI Whisper `whisper-1`. Se `STT_LOCAL=true`, il backend prova
 - Cache audio storiche in `tts_cache/`, `data/tts/`, `data/tts_cache/`,
   `voice_tests/`, `voice_gold/` e `static/voice_test/` non hanno retention
   documentata.
-- Mancano test endpoint Web TTS/STT con provider mockati e senza chiamate
-  esterne.
+- I test endpoint Web TTS/STT usano provider mockati e non chiamano servizi
+  esterni; resta non confermato l'uso recente con provider reali in produzione.
 
 ## Cose da non fare senza approvazione
 
@@ -63,10 +63,17 @@ Il default e OpenAI Whisper `whisper-1`. Se `STT_LOCAL=true`, il backend prova
 - Non attivare `STT_LOCAL` o cambiare provider/env senza test dedicati.
 - Non chiamare provider esterni nei test.
 
+## Test presenti
+
+- `tests/test_web_tts_stt_endpoints.py` copre TTS e STT via app ASGI in memoria.
+- TTS: auth assente, payload valido con provider mockato, testo mancante,
+  errore provider controllato.
+- STT: auth assente, upload finto in campo `audio`, campo mancante, errore
+  transcriber controllato.
+- Separazione gruppi: controllo statico leggero che i router Web TTS/STT non
+  importino WhatsApp, Telegram o Baileys.
+
 ## Test da aggiungere prima di modifiche future
 
-- TTS endpoint con provider mockato, auth 401, media type e fallback.
-- STT endpoint con `transcribe_audio` mockato, auth 401, form field `audio`,
-  stati `empty`/`error`.
-- Test statico che confermi che TTS/STT Web non sono importati o chiamati dai
-  path WhatsApp/Telegram/Baileys.
+- Test browser/manuale per microfono, playback e UX Web.
+- Test provider reale solo in ambiente controllato, con env e consenso espliciti.
