@@ -23,6 +23,7 @@ import os
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
+from core.env_flags import env_flag
 from core.log import log
 from core.operational_memory.chat_presence import (
     build_operational_reply,
@@ -53,21 +54,14 @@ _MEDIA_TYPES = {"image", "document", "video", "audio", "voice"}
 # --------------------------------------------------------------------------- #
 
 
-def _env_flag(name: str, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
 def is_whatsapp_operational_enabled() -> bool:
-    return _env_flag("OPERATIONAL_MEMORY_WHATSAPP_ENABLED", False)
+    return env_flag("OPERATIONAL_MEMORY_WHATSAPP_ENABLED", False)
 
 
 def is_whatsapp_operational_reply_enabled() -> bool:
     # Default OFF in this phase: ingest may run on mapped chats, but no live reply
     # is sent unless explicitly enabled.
-    return _env_flag("WHATSAPP_OPERATIONAL_REPLY_ENABLED", False)
+    return env_flag("WHATSAPP_OPERATIONAL_REPLY_ENABLED", False)
 
 
 def get_whatsapp_chat_project_map() -> dict[str, str]:

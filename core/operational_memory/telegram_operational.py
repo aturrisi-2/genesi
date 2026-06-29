@@ -20,6 +20,7 @@ import re
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
+from core.env_flags import env_flag
 from core.log import log
 from core.operational_memory.chat_presence import (
     build_operational_reply,
@@ -82,21 +83,14 @@ _CARD_LINE_RE = re.compile(r"^• (.+?): (\d+)$")
 _CONFIG_FILE = Path("config/telegram_operational.json")
 
 
-def _env_flag(name: str, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
 def operational_enabled() -> bool:
-    return _env_flag("OPERATIONAL_MEMORY_TELEGRAM_ENABLED", False)
+    return env_flag("OPERATIONAL_MEMORY_TELEGRAM_ENABLED", False)
 
 
 def reply_enabled() -> bool:
     # Reply is allowed by default once the integration is enabled; can be turned
     # off to run pure silent-ingest mode.
-    return _env_flag("TELEGRAM_OPERATIONAL_REPLY_ENABLED", True)
+    return env_flag("TELEGRAM_OPERATIONAL_REPLY_ENABLED", True)
 
 
 def _public_base_url() -> str:
