@@ -131,6 +131,53 @@ async def test_admin_group_controls_platform_aware_endpoint(tmp_path, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_admin_group_controls_get_uses_registry_without_writing(tmp_path, monkeypatch):
+    from api.admin import automation
+    from core import group_controls
+
+    _, controls_path, titles, jids = _configure_group_control_paths(tmp_path, monkeypatch)
+    controls_path.parent.mkdir(parents=True, exist_ok=True)
+    controls_path.write_text(
+        json.dumps({
+            "whatsapp_reply_enabled_groups": {
+                "120363407869433239@g.us": {
+                    "enabled": True,
+                    "label": "Prova Genesi",
+                    "updated_at": "2026-06-27T21:37:46+00:00",
+                    "observed_at": "",
+                }
+            },
+            "telegram_reply_enabled_groups": {
+                "-5007188402": {
+                    "enabled": False,
+                    "label": "Alfio and Alfio",
+                    "updated_at": "",
+                    "observed_at": "",
+                }
+            },
+        }),
+        encoding="utf-8",
+    )
+    titles.joinpath("272555882.json").write_text(json.dumps("Prova Genesi"), encoding="utf-8")
+    jids.joinpath("272555882.json").write_text(json.dumps("120363407869433239@g.us"), encoding="utf-8")
+    titles.joinpath("-5007188402.json").write_text(json.dumps("Alfio and Alfio"), encoding="utf-8")
+    before = controls_path.read_text(encoding="utf-8")
+
+    def fail_if_get_writes(_controls):
+        raise AssertionError("GET group-controls must be read-only")
+
+    monkeypatch.setattr(group_controls, "save_group_controls", fail_if_get_writes)
+
+    snap = await automation.automation_group_controls(None)
+
+    assert controls_path.read_text(encoding="utf-8") == before
+    assert snap["known_whatsapp_groups"][0]["admin_reply_enabled"] is True
+    assert snap["known_telegram_groups"][0]["admin_reply_enabled"] is False
+    assert snap["known_groups"]["whatsapp"][0]["ingest_enabled"] is True
+    assert snap["known_groups"]["telegram"][0]["ingest_enabled"] is True
+
+
+@pytest.mark.asyncio
 async def test_admin_group_controls_whatsapp_endpoint_stays_compatible(tmp_path, monkeypatch):
     from api.admin import automation
     from core import group_controls

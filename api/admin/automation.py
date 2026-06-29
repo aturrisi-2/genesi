@@ -14,6 +14,7 @@ from auth.models import AuthUser
 from auth.router import require_admin
 from core import automation_flags
 from core import group_controls
+from core import group_registry
 
 router = APIRouter(prefix="/admin/automation", tags=["admin-automation"])
 
@@ -73,7 +74,15 @@ async def automation_reset(_: AuthUser = Depends(require_admin)):
 
 @router.get("/group-controls")
 async def automation_group_controls(_: AuthUser = Depends(require_admin)):
-    return group_controls.snapshot()
+    return _group_controls_snapshot()
+
+
+def _group_controls_snapshot():
+    registry_snapshot = group_registry.snapshot()
+    registry_snapshot["controls"] = group_controls.load_group_controls()
+    registry_snapshot["known_whatsapp_groups"] = registry_snapshot["known_groups"]["whatsapp"]
+    registry_snapshot["known_telegram_groups"] = registry_snapshot["known_groups"]["telegram"]
+    return registry_snapshot
 
 
 @router.post("/group-controls/whatsapp-reply")
@@ -86,7 +95,7 @@ async def automation_group_controls_whatsapp_reply(
         payload.enabled,
         label=payload.label,
     )
-    return group_controls.snapshot()
+    return _group_controls_snapshot()
 
 
 @router.post("/group-controls/reply")
@@ -100,7 +109,7 @@ async def automation_group_controls_reply(
         payload.enabled,
         title=payload.title,
     )
-    return group_controls.snapshot()
+    return _group_controls_snapshot()
 
 
 @router.post("/group-controls/telegram-reply")
@@ -114,7 +123,7 @@ async def automation_group_controls_telegram_reply(
         payload.enabled,
         title=payload.title,
     )
-    return group_controls.snapshot()
+    return _group_controls_snapshot()
 
 
 @router.get("/diagnostics")

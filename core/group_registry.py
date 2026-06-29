@@ -50,11 +50,21 @@ def _registry_item(
     sources: list[str],
     group_hash: str | None = None,
 ) -> dict[str, Any]:
+    reply_enabled = bool(admin_info.get("enabled", False))
+    masked_id = (
+        group_controls._mask_whatsapp_jid(group_id)
+        if platform == "whatsapp"
+        else group_controls._mask_telegram_chat_id(group_id)
+    )
     item = {
         "platform": platform,
         "group_id": group_id,
         "title": title or None,
-        "reply_enabled": bool(admin_info.get("enabled", False)),
+        "masked_id": masked_id,
+        "reply_enabled": reply_enabled,
+        "admin_reply_enabled": reply_enabled,
+        "admin_label": admin_info.get("label", ""),
+        "ingest_enabled": True,
         "observed_at": admin_info.get("observed_at") or None,
         "updated_at": admin_info.get("updated_at") or None,
         "project_id": project_id or None,
@@ -170,4 +180,3 @@ def snapshot() -> dict[str, Any]:
             "telegram": [g for g in groups if g["platform"] == "telegram"],
         },
     }
-
