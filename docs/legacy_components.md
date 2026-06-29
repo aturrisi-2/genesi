@@ -11,7 +11,7 @@ This document lists components that exist in the repository but should be treate
 | Area | Evidence / files | Current decision |
 | --- | --- | --- |
 | Training / autopilot / evolution | `core/training_autopilot.py`, `core/auto_evolution_engine.py`, `core/evolution_*` | Keep off unless explicitly requested; do not enable during cleanup |
-| Legacy TTS/STT stacks | `tts/`, `core/tts_provider.py`, `api/stt.py`, audio caches | Freeze; validate with a separate media/audio task |
+| Legacy TTS/STT stacks | `tts/tts_api_legacy.py`, historical audio caches, voice demo assets | Freeze legacy/demo assets; keep active Web TTS/STT feature-gated |
 | Social publishing / browser automation | `core/facebook_service.py`, `core/instagram_publisher.py`, integration modules | Freeze; high external dependency and auth risk |
 | iCloud / Google integrations | `core/integrations/`, reminder/calendar code | Freeze until credentials and failure mode are documented |
 | OpenClaw / desktop send | `core/openclaw_memory_adapter.py`, related proactor paths | Freeze; do not rely on it for production cleanup |
@@ -46,6 +46,17 @@ Known core import side effects that are not fixed in this legacy phase:
 Those are core boot behaviors, not permission to add more side effects to frozen
 modules. Any future cleanup of those core imports should be a separate
 stabilization task.
+
+## Web TTS/STT Is Not Generic Legacy
+
+TTS/STT code should not be treated as legacy just because audio experiments and
+old cache files exist in the tree. The active TTS/STT paths are Web-only:
+`POST /api/tts/` and `POST /api/stt/`.
+
+Legacy candidates in this area are the unmounted old API (`tts/tts_api_legacy.py`)
+and historical voice/cache/demo assets. The Web feature itself should be kept
+feature-gated and tested before any runtime change. See
+`docs/web_tts_stt_status.md`.
 
 ## Likely Dead Or Low-Reference Modules
 

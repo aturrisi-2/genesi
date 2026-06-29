@@ -53,6 +53,16 @@ that importing these modules does not alter real `/opt/genesi/memory` or
 `/opt/genesi/data` files. Do not expand this pattern casually; new modules
 should avoid import-time writes unless there is a clear boot contract.
 
+## Web TTS/STT
+
+TTS and STT are Web app features, not group features. The active Web paths are
+`POST /api/tts/` and `POST /api/stt/`, both protected by JWT. They must not be
+connected to WhatsApp, Telegram, Baileys, or automatic group audio replies.
+
+Current decision: keep them Web feature-gated. The static contract is coherent,
+but recent production logs do not confirm Web TTS/STT usage, and endpoint tests
+with mocked providers are still missing. See `docs/web_tts_stt_status.md`.
+
 ## Verification After Each Promotion
 
 Use non-mutating checks only:
