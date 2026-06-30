@@ -95,7 +95,7 @@ _VERIFICATION_RE = re.compile(
 )
 _REOPEN_RE = re.compile(
     r"\b(di\s+nuovo|riapert\w*|tornat[oa]|ricompars\w*|again|reopened|back\s+again|"
-    r"regression|regressione|si\s+ripresenta)\b",
+    r"regression|regressione|si\s+ripresenta|ripresent\w*)\b",
     re.IGNORECASE,
 )
 _BLOCKED_RE = re.compile(
@@ -1053,12 +1053,19 @@ def apply_resolution_links(
     items are skipped."""
     project_id = state.project_id or ""
     closures: list[tuple[str, str, str, set[str]]] = []  # (event_id, ts, text, tokens)
+    reopens: list[tuple[str, str, str, set[str]]] = []   # later regression events
     for event in sorted(events, key=lambda e: _parse_ts(e.timestamp)):
         text = _event_text(event)
-        if not text or not detect_resolution_signal(text):
+        if not text:
             continue
         tokens = _object_tokens(text)
         if not tokens:
+            continue
+        # A reopen signal (e.g. "si è fermata di nuovo") on a resolved issue is a
+        # regression — collected separately; resolution wins if both present.
+        if not detect_resolution_signal(text):
+            if detect_reopen_signal(text):
+                reopens.append((event.event_id, event.timestamp, text, tokens))
             continue
         closures.append((event.event_id, event.timestamp, text, tokens))
         if _is_transcribed_audio_event(event):
@@ -1081,8 +1088,14 @@ def apply_resolution_links(
                 text_preview=_short(text, 60),
             )
 
-    if not closures:
+    if not closures and not reopens:
         return []
+
+    def _add_evidence(lc: LifecycleState, eid: str) -> list[str]:
+        ev = list(lc.evidence_event_ids or [])
+        if eid not in ev:
+            ev.append(eid)
+        return ev
 
     transitions: list[LifecycleTransitionRecord] = []
     applied = 0
@@ -1123,7 +1136,7 @@ def apply_resolution_links(
                 item.lifecycle.status_changed_at = utc_now_iso()
                 item.lifecycle.status_reason = reason
                 item.lifecycle.confidence = "high"  # type: ignore[assignment]
-                item.lifecycle.evidence_event_ids = [event_id]
+                item.lifecycle.evidence_event_ids = _add_evidence(item.lifecycle, event_id)
                 item.lifecycle.last_evidence_at = ts
                 item.lifecycle.lifecycle_history.append(
                     LifecycleHistoryEntry(
@@ -1157,6 +1170,66 @@ def apply_resolution_links(
                     reason="object_overlap",
                 )
                 break  # item closed; stop scanning closures for it
+
+    # Reopen pass: a later regression event on the same object reopens a
+    # resolved/mitigated issue (the closure pass above never reopens). Evidence
+    # is appended, not replaced, so the issue keeps initial + resolved + reopen.
+    for item in getattr(state, "issues"):
+        lc = item.lifecycle
+        status = lc.current_status if lc else initial_status("issue", item.text)
+        if status not in {"resolved", "mitigated"}:
+            continue
+        item_tokens = _object_tokens(item.text)
+        if not item_tokens:
+            continue
+        item_ts = _parse_ts(item.source_timestamp)
+        closed_ts = _parse_ts(lc.last_evidence_at) if (lc and lc.last_evidence_at) else item_ts
+        for event_id, ts, text, ev_tokens in reopens:
+            if _parse_ts(ts) < closed_ts:
+                continue  # the regression must come after the closure
+            # Require a shared IDENTIFIER token (digit-bearing, e.g. px10/dn32):
+            # a generic shared noun ("pompa") must NOT reopen a different object
+            # (so "Pompa PX8 di nuovo" never reopens the resolved PX10 issue).
+            shared = {t for t in (item_tokens & ev_tokens) if any(c.isdigit() for c in t)}
+            if not shared:
+                continue
+            previous = status
+            if lc is None:
+                item.lifecycle = lc = LifecycleState(
+                    category="issue", current_status=previous,
+                    status_changed_at=item.source_timestamp or utc_now_iso(),
+                )
+            reason = f"riapertura/regressione da evidenza collegata (oggetto: {', '.join(sorted(shared)[:3])}): '{_short(text)}'"
+            lc.previous_status = previous
+            lc.current_status = "reopened"
+            lc.status_changed_at = utc_now_iso()
+            lc.status_reason = reason
+            lc.confidence = "high"  # type: ignore[assignment]
+            lc.reopened_by = event_id
+            lc.evidence_event_ids = _add_evidence(lc, event_id)
+            lc.last_evidence_at = ts
+            lc.lifecycle_history.append(
+                LifecycleHistoryEntry(
+                    status="reopened",
+                    changed_at=lc.status_changed_at,
+                    reason=reason,
+                    evidence_event_ids=[event_id],
+                )
+            )
+            transitions.append(
+                LifecycleTransitionRecord(
+                    item_id=item.id, category="issue", text=item.text,
+                    previous_status=previous, new_status="reopened",
+                    reason=reason, confidence="high",
+                    evidence_event_ids=[event_id],
+                    transition_kind="reopen_link", related_text=_short(text),
+                )
+            )
+            applied += 1
+            log("OPERATIONAL_REOPEN_APPLIED", project_id=project_id,
+                item_id=item.id, old_status=previous, new_status="reopened",
+                reason="object_overlap")
+            break
 
     if applied == 0:
         log("OPERATIONAL_RESOLUTION_SKIPPED", project_id=project_id, reason="no_open_item_matched")
