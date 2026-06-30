@@ -185,6 +185,17 @@ def detect_blocked_signal(text: str) -> bool:
     return bool(text) and bool(_BLOCKED_RE.search(text))
 
 
+# Person named as the responsible in an answer ("lo porta Mario", "Mario porta",
+# "se ne occupa Luca"). Capitalised name only; never grabs the object code.
+_PERSON_ANSWER_RE = re.compile(
+    r"\b(?:lo|la|li|ne)\s+(?:porta|portano|fa|fanno|consegna|consegnano)\s+([A-ZÀ-Ý][a-zà-ÿ]{2,})"
+    r"|\bse\s+ne\s+occupa\s+([A-ZÀ-Ý][a-zà-ÿ]{2,})"
+    r"|\bci\s+pensa\s+([A-ZÀ-Ý][a-zà-ÿ]{2,})"
+    r"|\b([A-ZÀ-Ý][a-zà-ÿ]{2,})\s+(?:lo|la|li|ne)\s+(?:porta|fa|consegna)"
+    r"|\b([A-ZÀ-Ý][a-zà-ÿ]{2,})\s+(?:porta|consegna|se\s+ne\s+occupa)\b",
+)
+
+
 def _is_question_text(text: str) -> bool:
     return bool(text) and bool(_QUESTION_RE.search(text.strip()))
 
@@ -1088,7 +1099,20 @@ def apply_resolution_links(
                 text_preview=_short(text, 60),
             )
 
-    if not closures and not reopens:
+    # Answer-binding candidates: substantive non-question events with a strong
+    # (digit-bearing) object — collected before the early return so a pure
+    # question+answer exchange (no closure/reopen) is still processed.
+    answers: list[tuple[str, str, str, set[str]]] = []
+    for event in sorted(events, key=lambda e: _parse_ts(e.timestamp)):
+        text = _event_text(event)
+        if not text or _is_question_text(text):
+            continue
+        a_ids = {t for t in _object_tokens(text) if any(c.isdigit() for c in t)}
+        if not a_ids:
+            continue
+        answers.append((event.event_id, event.timestamp, text, a_ids))
+
+    if not closures and not reopens and not answers:
         return []
 
     def _add_evidence(lc: LifecycleState, eid: str) -> list[str]:
@@ -1230,6 +1254,58 @@ def apply_resolution_links(
                 item_id=item.id, old_status=previous, new_status="reopened",
                 reason="object_overlap")
             break
+
+    # Answer-binding (G4b): a later substantive non-question event sharing a
+    # question's strong (digit-bearing) object answers it → mark answered, link
+    # evidence, and (if a person is named) set the owner of a co-object open task.
+    if answers:
+        open_qs = []
+        for q in state.open_questions:
+            st = q.lifecycle.current_status if q.lifecycle else initial_status("question", q.text)
+            if st not in {"open", "partially_answered"}:
+                continue
+            q_ids = {t for t in _object_tokens(q.text) if any(c.isdigit() for c in t)}
+            if not q_ids:
+                continue
+            open_qs.append([q, q_ids, _parse_ts(q.source_timestamp), st])
+        for event_id, ts, text, a_ids in answers:
+            ev_ts = _parse_ts(ts)
+            cands = [row for row in open_qs if (row[1] & a_ids) and ev_ts >= row[2]]
+            if len(cands) != 1:
+                continue  # ambiguous or none → fail-safe, do not close
+            q, q_ids, q_ts, st = cands[0]
+            now = utc_now_iso()
+            reason = f"risposta collegata (oggetto: {', '.join(sorted(q_ids & a_ids)[:3])}): '{_short(text)}'"
+            if q.lifecycle is None:
+                q.lifecycle = LifecycleState(category="question", current_status=st,
+                                             status_changed_at=q.source_timestamp or now)
+            q.lifecycle.previous_status = st
+            q.lifecycle.current_status = "answered"
+            q.lifecycle.status_changed_at = now
+            q.lifecycle.status_reason = reason
+            q.lifecycle.confidence = "high"  # type: ignore[assignment]
+            q.lifecycle.evidence_event_ids = _add_evidence(q.lifecycle, event_id)
+            q.lifecycle.last_evidence_at = ts
+            q.lifecycle.lifecycle_history.append(LifecycleHistoryEntry(
+                status="answered", changed_at=now, reason=reason, evidence_event_ids=[event_id]))
+            transitions.append(LifecycleTransitionRecord(
+                item_id=q.id, category="question", text=q.text,
+                previous_status=st, new_status="answered", reason=reason,
+                confidence="high", evidence_event_ids=[event_id],
+                transition_kind="answer_link", related_text=_short(text)))
+            # Owner → co-object open task (so "cosa manca?" shows the responsible).
+            m = _PERSON_ANSWER_RE.search(text)
+            owner = next((g for g in m.groups() if g), None) if m else None
+            if owner:
+                for task in state.tasks:
+                    t_ids = {t for t in _object_tokens(task.text) if any(c.isdigit() for c in t)}
+                    if (t_ids & a_ids) and not getattr(task, "owner", None):
+                        task.owner = owner
+                        break
+            open_qs = [row for row in open_qs if row[0] is not q]
+            applied += 1
+            log("OPERATIONAL_ANSWER_BINDING_APPLIED", project_id=project_id,
+                item_id=q.id, has_owner=bool(owner), reason="object_overlap")
 
     if applied == 0:
         log("OPERATIONAL_RESOLUTION_SKIPPED", project_id=project_id, reason="no_open_item_matched")
