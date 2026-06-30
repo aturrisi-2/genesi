@@ -58,10 +58,25 @@ def is_whatsapp_operational_enabled() -> bool:
     return env_flag("OPERATIONAL_MEMORY_WHATSAPP_ENABLED", False)
 
 
-def is_whatsapp_operational_reply_enabled() -> bool:
-    # Default OFF in this phase: ingest may run on mapped chats, but no live reply
-    # is sent unless explicitly enabled.
-    return env_flag("WHATSAPP_OPERATIONAL_REPLY_ENABLED", False)
+def is_whatsapp_operational_reply_enabled(group_jid: str | None = None) -> bool:
+    """Whether the operational handler may produce a live reply for a chat.
+
+    Two sources, both default OFF:
+    - global env ``WHATSAPP_OPERATIONAL_REPLY_ENABLED`` (all mapped chats), and
+    - per-group Admin control (``group_controls.whatsapp_reply_enabled_groups``),
+      the same toggle the Admin web / Baileys reply gate already use.
+
+    Per-group keeps activation scoped: enabling the canary never enables TAB.
+    """
+    if env_flag("WHATSAPP_OPERATIONAL_REPLY_ENABLED", False):
+        return True
+    if group_jid:
+        try:
+            from core.group_controls import is_group_reply_enabled
+            return is_group_reply_enabled("whatsapp", group_jid)
+        except Exception:
+            return False
+    return False
 
 
 def get_whatsapp_chat_project_map() -> dict[str, str]:
@@ -203,7 +218,7 @@ async def maybe_handle_whatsapp_operational(
         )
 
         decision = is_invoked(text, config)
-        reply_enabled = is_whatsapp_operational_reply_enabled()
+        reply_enabled = is_whatsapp_operational_reply_enabled(group_jid)
 
         def _set_action(action: str) -> None:
             if result is not None:

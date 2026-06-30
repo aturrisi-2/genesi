@@ -780,7 +780,7 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
             _op_project = resolve_whatsapp_project_id(request.group_id) if _op_enabled else None
             log("OPERATIONAL_BAILEYS_CHAT_PATH_CHECK", enabled=_op_enabled,
                 mapped=bool(_op_project), group_hash=group_int,
-                reply_enabled=is_whatsapp_operational_reply_enabled())
+                reply_enabled=is_whatsapp_operational_reply_enabled(request.group_id))
             if _op_project:
                 _op_reply: dict = {}
 
