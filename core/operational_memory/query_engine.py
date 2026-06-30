@@ -381,6 +381,21 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("cmd_stato", re.compile(r"^\s*stato\s*$", re.IGNORECASE)),
     ("cmd_aperti", re.compile(r"^\s*aperti\s*$", re.IGNORECASE)),
     ("cmd_report", re.compile(r"^\s*report\s*$", re.IGNORECASE)),
+    # Natural-language status/update invocations → same concise inline status as
+    # the bare 'stato' command (pure read-only, never ingested, no link/emoji
+    # fallback). Placed before briefing/digest so status phrasing resolves to the
+    # inline summary. Does NOT match the working query intents (problemi aperti /
+    # cosa manca / decisioni prese / fammi il report).
+    ("cmd_stato", re.compile(
+        r"(qual[e'\s]*\s*[eè]\s+(lo\s+)?stato"
+        r"|che\s+stato\b"
+        r"|\bstato\s+(attuale|lavori|attivit[aà])\b"
+        r"|a\s+che\s+punto\s+(siamo|stiamo|stanno)"
+        r"|come\s+(va|siamo\s+messi|procede|stiamo)\b"
+        r"|aggiorna(mi)?\s+(lo\s+|sullo\s+|su\s+)?stato\b"
+        r"|dammi\s+(lo\s+)?stato\b"
+        r"|qual[e'\s]*\s*[eè]\s+la\s+situazione)",
+        re.IGNORECASE)),
     # Specific "what is still open" → focused item list, NOT the aggregate briefing.
     # Must precede the briefing pattern so it wins on "cosa resta aperto?".
     ("remaining_open", re.compile(
