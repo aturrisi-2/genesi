@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import TypeVar
 
 from core.log import log
@@ -70,6 +71,71 @@ def _merge_items(existing: list[T], incoming: list[T]) -> list[T]:
     return merged
 
 
+# --- Issue dedup by technical object (G5) ---------------------------------
+# Several messages about the SAME technical object (e.g. "Pompa P1") must
+# evolve ONE issue, not spawn duplicates. Object identity is keyed on an
+# *identifier* token (one carrying a digit, e.g. p1, dn32, fg16) plus a shared
+# noun, so "Pompa P1" != "Pompa P2" and generic words ("quadro", "materiale")
+# without an identifier never merge. Fail-safe: when in doubt, do NOT merge.
+_OBJ_STOP = {
+    "non", "che", "del", "della", "dello", "dei", "delle", "lo", "la", "le",
+    "gli", "un", "una", "uno", "per", "con", "ma", "da", "si", "in", "al",
+    "alla", "allo", "the", "and", "ancora", "stato", "stata",
+}
+
+
+def _object_signature(text: str) -> tuple[frozenset[str], frozenset[str]]:
+    """(identifier-tokens with a digit, plain noun tokens) for a piece of text."""
+    toks = [
+        t for t in re.findall(r"[a-zà-ÿ0-9]+", (text or "").lower())
+        if (len(t) >= 3 or any(c.isdigit() for c in t)) and t not in _OBJ_STOP
+    ]
+    ids = frozenset(t for t in toks if any(c.isdigit() for c in t))
+    nouns = frozenset(t for t in toks if not any(c.isdigit() for c in t))
+    return ids, nouns
+
+
+def _same_strong_object(a_text: str, b_text: str) -> bool:
+    ai, an = _object_signature(a_text)
+    bi, bn = _object_signature(b_text)
+    if not ai or ai != bi:          # need a non-empty, identical identifier set
+        return False
+    return bool(an & bn)            # and at least one shared object noun
+
+
+def _fold_issue_evidence(target: OperationalItem, incoming: OperationalItem) -> None:
+    """Attach the incoming issue's evidence/event to the existing one — keep the
+    history, never lose events. Status transitions stay with the lifecycle engine."""
+    lc = getattr(target, "lifecycle", None)
+    src = getattr(incoming, "source_event_id", None)
+    if lc is not None and src:
+        ev = getattr(lc, "evidence_event_ids", None)
+        if isinstance(ev, list) and src not in ev:
+            ev.append(src)
+
+
+def _merge_issues(existing: list[T], incoming: list[T]) -> list[T]:
+    """Like _merge_items but folds incoming issues onto an existing issue that
+    refers to the same strong technical object (G5)."""
+    merged = list(existing)
+    seen = {_item_key(item): item for item in merged}
+    for item in incoming:
+        folded = False
+        for ex in merged:
+            if _same_strong_object(getattr(ex, "text", ""), getattr(item, "text", "")):
+                _fold_issue_evidence(ex, item)
+                folded = True
+                break
+        if folded:
+            continue
+        key = _item_key(item)
+        if key in seen:
+            continue
+        merged.append(item)
+        seen[key] = item
+    return merged
+
+
 def merge_state(existing: OperationalState, incoming: OperationalState) -> OperationalState:
     pid = existing.project_id or ""
     review = list(existing.review_queue)
@@ -85,7 +151,7 @@ def merge_state(existing: OperationalState, incoming: OperationalState) -> Opera
         updated_at=utc_now_iso(),
         decisions=_merge_items(existing.decisions, inc_decisions),
         tasks=_merge_items(existing.tasks, inc_tasks),
-        issues=_merge_items(existing.issues, inc_issues),
+        issues=_merge_issues(existing.issues, inc_issues),
         information=_merge_items(existing.information, inc_information),
         open_questions=_merge_items(existing.open_questions, inc_questions),
         review_queue=_dedup_review(review),
