@@ -434,6 +434,20 @@ def explain_lifecycle_transition(state: LifecycleState) -> str:
 # --------------------------------------------------------------------------- #
 
 
+def _is_transcribed_audio_event(event: OperationalEvent) -> bool:
+    """True when the event text comes from an audio transcription.
+
+    Log hygiene: never emit a textual preview of a voice-note transcription
+    (privacy/PII). Status ``transcribed`` is audio-specific (images →
+    text_extracted/vision_described, video → video_analyzed).
+    """
+    status = (event.extraction_status or "").lower()
+    att = (event.attachment_type or "").lower()
+    meta = event.attachment_metadata or {}
+    mime = str(meta.get("mime_type") or "").lower()
+    return status == "transcribed" or att == "audio" or mime.startswith("audio/")
+
+
 def _event_text(event: OperationalEvent) -> str:
     parts = [event.content or "", event.extracted_text or "", event.media_description or ""]
     meta = event.attachment_metadata or {}
@@ -1047,13 +1061,25 @@ def apply_resolution_links(
         if not tokens:
             continue
         closures.append((event.event_id, event.timestamp, text, tokens))
-        log(
-            "OPERATIONAL_RESOLUTION_CANDIDATE",
-            project_id=project_id,
-            event_id=event.event_id,
-            matched=True,
-            text_preview=_short(text, 60),
-        )
+        if _is_transcribed_audio_event(event):
+            # Log hygiene: do not expose the transcription text in logs.
+            log(
+                "OPERATIONAL_RESOLUTION_CANDIDATE",
+                project_id=project_id,
+                event_id=event.event_id,
+                matched=True,
+                media_type="audio",
+                transcribed=True,
+                text_len=len(text),
+            )
+        else:
+            log(
+                "OPERATIONAL_RESOLUTION_CANDIDATE",
+                project_id=project_id,
+                event_id=event.event_id,
+                matched=True,
+                text_preview=_short(text, 60),
+            )
 
     if not closures:
         return []
