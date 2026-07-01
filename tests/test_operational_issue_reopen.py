@@ -83,3 +83,67 @@ def test_generic_di_nuovo_without_object_does_not_reopen():
               _ev("e4", 3, "di nuovo problemi sul cantiere")]
     iss = _run("Pompa PX10 non parte", events)
     assert iss[0].lifecycle.current_status == "resolved"
+
+
+# ---------------------------------------------------------------------------
+# B4 — Idempotency: lifecycle_history must not grow on repeated rebuild calls
+# ---------------------------------------------------------------------------
+
+def _make_state_reopened():
+    """Return a fresh state with one PX11 issue already in 'reopened' state
+    (simulating what the DB holds after the first successful rebuild)."""
+    from core.operational_memory.models import LifecycleHistoryEntry
+    issue = _issue("Pompa PX11 non funziona", eid="e0")
+    issue.lifecycle.current_status = "reopened"
+    issue.lifecycle.previous_status = "resolved"
+    issue.lifecycle.evidence_event_ids = ["e0", "e_close", "e_reopen"]
+    issue.lifecycle.lifecycle_history = [
+        LifecycleHistoryEntry(status="open",     changed_at=T0, reason="init",          evidence_event_ids=["e0"]),
+        LifecycleHistoryEntry(status="resolved", changed_at=T0, reason="chiusura",      evidence_event_ids=["e_close"]),
+        LifecycleHistoryEntry(status="reopened", changed_at=T0, reason="regressione",   evidence_event_ids=["e_reopen"]),
+    ]
+    return OperationalState(project_id="p", issues=[issue])
+
+
+def _events_px11():
+    return [
+        _ev("e0",      0, "Pompa PX11 non funziona"),
+        _ev("e_close", 2, "Pompa PX11 collaudata e consegnata"),
+        _ev("e_reopen",3, "Pompa PX11 si è fermata di nuovo"),
+    ]
+
+
+def test_repeated_rebuild_does_not_grow_history():
+    """apply_resolution_links called 5 times on same state → history stays at 3."""
+    s = _make_state_reopened()
+    events = _events_px11()
+    for _ in range(5):
+        apply_resolution_links(s, events)
+    lc = s.issues[0].lifecycle
+    assert lc.current_status == "reopened"
+    assert len(lc.lifecycle_history) == 3, (
+        f"Expected 3 history entries, got {len(lc.lifecycle_history)}: "
+        + str([h.status for h in lc.lifecycle_history])
+    )
+
+
+def test_repeated_rebuild_status_stable():
+    """Final status must remain 'reopened' regardless of rebuild count."""
+    s = _make_state_reopened()
+    events = _events_px11()
+    for _ in range(10):
+        apply_resolution_links(s, events)
+    assert s.issues[0].lifecycle.current_status == "reopened"
+
+
+def test_first_rebuild_builds_correct_history():
+    """First time through: open→resolved→reopened in correct order."""
+    s = OperationalState(project_id="p", issues=[_issue("Pompa PX11 non funziona", eid="e0")])
+    events = _events_px11()
+    apply_resolution_links(s, events)
+    lc = s.issues[0].lifecycle
+    assert lc.current_status == "reopened"
+    statuses = [h.status for h in lc.lifecycle_history]
+    assert "resolved" in statuses
+    assert "reopened" in statuses
+    assert len(lc.lifecycle_history) == 2  # resolved + reopened appended (open was pre-existing)

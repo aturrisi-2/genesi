@@ -1121,6 +1121,14 @@ def apply_resolution_links(
             ev.append(eid)
         return ev
 
+    def _history_has(lc: LifecycleState, eid: str, status: str) -> bool:
+        """True if `eid` already produced a history entry with `status` — prevents
+        duplicate entries when apply_resolution_links runs on repeated rebuilds."""
+        return any(
+            h.status == status and eid in (h.evidence_event_ids or [])
+            for h in (lc.lifecycle_history or [])
+        )
+
     transitions: list[LifecycleTransitionRecord] = []
     applied = 0
     for category, field_name in (("task", "tasks"), ("issue", "issues"), ("question", "open_questions")):
@@ -1147,6 +1155,9 @@ def apply_resolution_links(
                     reason="object_overlap",
                 )
                 new_status = _RESOLUTION_CLOSE_STATUS[category]
+                # Idempotency: skip if this event already produced this closure.
+                if item.lifecycle is not None and _history_has(item.lifecycle, event_id, new_status):
+                    break
                 previous = status
                 reason = f"chiusura da aggiornamento collegato (oggetto: {', '.join(sorted(shared)[:3])}): '{_short(text)}'"
                 if item.lifecycle is None:
@@ -1217,6 +1228,9 @@ def apply_resolution_links(
             shared = {t for t in (item_tokens & ev_tokens) if any(c.isdigit() for c in t)}
             if not shared:
                 continue
+            # Idempotency: skip if this event already produced a reopen.
+            if lc is not None and _history_has(lc, event_id, "reopened"):
+                break
             previous = status
             if lc is None:
                 item.lifecycle = lc = LifecycleState(
