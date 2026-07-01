@@ -107,11 +107,14 @@ def _public_base_url() -> str:
 # --------------------------------------------------------------------------- #
 
 
+_REPORT_LINK_INTENTS = {"briefing", "digest", "cmd_report"}
+
+
 def render_whatsapp_reply(reply) -> str:
-    """Plain-text WhatsApp body. The report URL is appended as a text line because
-    the Baileys send path carries no inline keyboard."""
+    """Plain-text WhatsApp body. Report URL appended only for full-report
+    intents (briefing/digest/cmd_report); suppressed for focused queries."""
     body = reply.reply_markdown or ""
-    if reply.report_url:
+    if reply.report_url and getattr(reply, "intent", "") in _REPORT_LINK_INTENTS:
         body = f"{body}\n\n📄 Report: {reply.report_url}".strip()
     return body
 

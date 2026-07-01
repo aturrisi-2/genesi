@@ -227,10 +227,42 @@ def _render_briefing_card(briefing: OperationalBriefing) -> str:
     return "\n".join(parts).strip()
 
 
+def _fmt_due(due_iso: str) -> str:
+    try:
+        from datetime import datetime
+        d = datetime.fromisoformat(due_iso[:10])
+        return d.strftime("%-d/%-m")
+    except Exception:
+        return due_iso[:10]
+
+
+def _render_open_tasks_reply(result) -> tuple[str, list[str]]:
+    """Focused, filtered view for 'cosa manca?' — shows owner and due when
+    present; suppressed for low-value/media/meta tasks (already filtered by
+    open_tasks()). No status clutter, no report link."""
+    evidence: list[str] = []
+    if not result.items:
+        return "Non risultano mancanze operative.", evidence
+    lines = ["Mancanze operative:"]
+    for i, it in enumerate(result.items[:5], 1):
+        parts = [it.text]
+        if it.owner:
+            parts.append(f"→ {it.owner}")
+        if it.due:
+            parts.append(f"(entro {_fmt_due(it.due)})")
+        lines.append(f"{i}. {' '.join(parts)}")
+        evidence.extend(it.evidence_event_ids[:1])
+    if result.count > 5:
+        lines.append(f"… e altri {result.count - 5}.")
+    return "\n".join(lines).strip(), evidence
+
+
 def _render_focused_reply(result) -> tuple[str, list[str]]:
     """Specific list for a focused query — NEVER the general card."""
     evidence: list[str] = []
     intent = result.intent
+    if intent == "open_tasks":
+        return _render_open_tasks_reply(result)
     if intent == "remaining_open":
         if not result.items:
             return "Non risultano punti aperti rilevanti.", evidence
@@ -247,7 +279,7 @@ def _render_focused_reply(result) -> tuple[str, list[str]]:
             lines.append(f"- {it.text}")
             evidence.extend(it.evidence_event_ids[:1])
         return "\n".join(lines).strip(), evidence
-    # Generic focused list (open_tasks, open_issues, unanswered, resolved, …).
+    # Generic focused list (open_issues, unanswered, resolved, …).
     if not result.items:
         return (result.summary or "Nessun elemento."), evidence
     lines = [result.summary, ""] if result.summary else []

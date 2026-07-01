@@ -95,6 +95,40 @@ _TECHNICAL_CODE_RE = re.compile(r"\b[A-Z]{1,4}\d{1,4}\b|\b\d{1,3}[A-Z]\b")
 # Explicit, generic markers that a line is NOT operational (personal/domestic/
 # off-topic note). No domain object is hardcoded — only the speaker's own
 # "this is not operational" framing is honoured.
+_MEDIA_TRIGGER_PREFIXES = (
+    "analizza questa immagine",
+    "analizza l'immagine",
+    "analizza l immagine",
+    "analizza immagine",
+    "analizza questa foto",
+    "analizza foto",
+)
+
+_META_COMMAND_PATTERNS = (
+    "aggiorna lo stato",
+    "aggiorna stato",
+    "dammi lo stato",
+    "qual e lo stato",
+)
+
+_SEGNARE_RE = re.compile(r"^segnare\s+\w", re.IGNORECASE)
+
+
+def is_low_value_task(text: str) -> bool:
+    """True for tasks that are media triggers, meta-commands, or generic
+    bookkeeping phrases — should not surface in focused 'cosa manca?' views."""
+    normalized = normalize_quality_text(text)
+    if not normalized:
+        return True
+    if any(normalized.startswith(p) for p in _MEDIA_TRIGGER_PREFIXES):
+        return True
+    if any(p in normalized for p in _META_COMMAND_PATTERNS):
+        return True
+    if _SEGNARE_RE.match(text.strip()):
+        return True
+    return False
+
+
 _NON_OPERATIONAL_MARKERS = (
     "nota non operativa",
     "non operativa",

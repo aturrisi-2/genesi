@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from core.operational_memory.lifecycle_engine import initial_status, is_active_status
-from core.operational_memory.quality import is_non_operational_note
+from core.operational_memory.quality import is_low_value_task, is_non_operational_note
 from core.operational_memory.models import (
     BriefingRow,
     LifecycleCategory,
@@ -24,6 +24,7 @@ from core.operational_memory.models import (
     OperationalDigest,
     OperationalItem,
     OperationalState,
+    OperationalTask,
     QueryAnswerItem,
     QueryResult,
     utc_now_iso,
@@ -52,6 +53,8 @@ def _answer_item(item: OperationalItem, category: LifecycleCategory) -> QueryAns
         [item.source_event_id] if item.source_event_id else []
     )
     reason = lifecycle.status_reason if lifecycle and lifecycle.status_reason else "stato corrente"
+    owner = item.owner if isinstance(item, OperationalTask) else None
+    due = item.due if isinstance(item, OperationalTask) else None
     return QueryAnswerItem(
         item_id=item.id,
         category=category,
@@ -60,6 +63,8 @@ def _answer_item(item: OperationalItem, category: LifecycleCategory) -> QueryAns
         confidence=lifecycle.confidence if lifecycle else item.confidence,
         evidence_event_ids=evidence,
         reason=reason,
+        owner=owner,
+        due=due,
     )
 
 
@@ -102,7 +107,8 @@ def list_items(
 
 
 def open_tasks(state: OperationalState) -> list[QueryAnswerItem]:
-    return _operational_only(_collect(state, "task", lambda s: is_active_status("task", s)))
+    raw = _operational_only(_collect(state, "task", lambda s: is_active_status("task", s)))
+    return [it for it in raw if not is_low_value_task(it.text)]
 
 
 def open_issues(state: OperationalState) -> list[QueryAnswerItem]:

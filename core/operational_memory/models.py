@@ -424,6 +424,8 @@ class QueryAnswerItem(BaseModel):
     confidence: Confidence = "medium"
     evidence_event_ids: list[str] = Field(default_factory=list)
     reason: str = ""
+    owner: Optional[str] = None
+    due: Optional[str] = None
 
 
 class QueryResult(BaseModel):
