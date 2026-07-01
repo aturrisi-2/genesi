@@ -54,7 +54,9 @@ _MEDIA_TYPES = {"image", "document", "video", "audio", "voice"}
 # origin mismatch → bridge does not activate; never writes or messages TAB JID.
 _TAB_BRIDGE_ORIGIN_JID = os.environ.get("OPERATIONAL_TAB_BRIDGE_ORIGIN_JID", "").strip()
 _TAB_BRIDGE_PROJECT_ID = os.environ.get("OPERATIONAL_TAB_BRIDGE_PROJECT_ID", "").strip()
-_TAB_QUERY_RE = re.compile(r"\bTAB\b", re.IGNORECASE)
+# Matches bare "TAB" and "nel/del/di TAB" — strips the preposition too so the
+# stripped query doesn't end with dangling "nel ?" or "del ?".
+_TAB_QUERY_RE = re.compile(r"\b(?:nel|del|di|in)\s+TAB\b|\bTAB\b", re.IGNORECASE)
 
 
 # --------------------------------------------------------------------------- #
