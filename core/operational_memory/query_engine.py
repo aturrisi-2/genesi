@@ -422,7 +422,7 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("resolved_issues", re.compile(r"\b(risolt\w*|resolved|fixed|chius\w*\s+problem\w*|problem\w*\s+chius\w*)\b", re.IGNORECASE)),
     ("superseded", re.compile(r"\b(superat\w*|sostituit\w*|superseded|revocat\w*|obsolet\w*|annullat\w*)\b", re.IGNORECASE)),
     ("unanswered", re.compile(r"\b(domand\w*|question\w*|senza\s+risposta|unanswered|da\s+rispondere|open\s+question\w*|rispost\w*\s+manc\w*|quali\s+rispost\w*)\b", re.IGNORECASE)),
-    ("attention", re.compile(r"\b(attenzion\w*|attention|urgent\w*|critic\w*|prioritar\w*|richiede\w*|da\s+attenzionare|bloccant\w*|bloccar\w*|scoper\w*|rischi\w*\s+di\s+bloccar\w*|scadenz\w*|in\s+scadenza|cosa\s+scad\w*)\b", re.IGNORECASE)),
+    ("attention", re.compile(r"\b(attenzion\w*|attention|urgent\w*|critic\w*|prioritar\w*|richiede\w*|da\s+attenzionare|bloccant\w*|bloccar\w*|scoper\w*|rischi\w*\s+di\s+bloccar\w*|scadenz\w*|in\s+scadenza|cosa\s+scad\w*|devo\s+control\w*|da\s+control\w*|devo\s+verifica\w*|da\s+verifica\w*|attenzionar\w*|devo\s+guardar\w*|da\s+guardar\w*|cosa\s+guard\w*)\b", re.IGNORECASE)),
     ("active_decisions", re.compile(r"\b(decision\w*|decis\w*|deciso|decided)\b", re.IGNORECASE)),
     ("open_issues", re.compile(r"\b(problem\w*\s+apert\w*|issue\w*\s+apert\w*|open\s+issue\w*|problem\w*|guast\w*|anomal\w*|bug)\b", re.IGNORECASE)),
     ("open_tasks", re.compile(r"\b(da\s+fare|resta\w*|riman\w*|to\s*do|todo|task|attivit[aà]|pending|cosa\s+manca|cosa\s+resta|material\w*\s+manc\w*|manc\w*\s+come\s+material\w*|cosa\s+serv\w*|per\s+responsabile|chi\s+deve\s+fare|assegnat\w*\s+a\s+chi|dati\s+manc\w*)\b", re.IGNORECASE)),

@@ -247,16 +247,22 @@ async def maybe_handle_whatsapp_operational(
         # Invocation. B5 TAB bridge detection runs first — before ingestion — so a
         # "stato TAB" query is never stored as a canary item. Strip the "TAB" keyword,
         # re-evaluate purity on the remainder; if pure, override `pure=True`.
+        # B8.1: also detect TAB-targeted queries that don't match any known intent
+        # (_tab_targeted) — those get fail-closed reply, never ingested as canary.
         _tab_query = ""
+        _tab_targeted = False  # TAB keyword present but intent unknown → fail-closed
         if (_TAB_BRIDGE_ORIGIN_JID and _TAB_BRIDGE_PROJECT_ID
                 and group_jid == _TAB_BRIDGE_ORIGIN_JID
                 and _TAB_QUERY_RE.search(decision.query)):
             _q = _TAB_QUERY_RE.sub("", decision.query).strip()
             if _q and is_pure_operational_invocation(_q):
                 _tab_query = _q  # bridge will fire after reply_enabled check
+            elif _q:
+                # TAB keyword present, intent unknown — guard: no ingest, fail-closed reply.
+                _tab_targeted = True
 
         intent = classify_query_intent(decision.query)
-        pure = is_pure_operational_invocation(decision.query) or bool(_tab_query)
+        pure = is_pure_operational_invocation(decision.query) or bool(_tab_query) or _tab_targeted
         if pure:
             log("OPERATIONAL_WHATSAPP_INVOCATION_NOT_INGESTED",
                 project_id=project_id, intent=intent, reason="pure_invocation")
@@ -289,6 +295,20 @@ async def maybe_handle_whatsapp_operational(
             log("OPERATIONAL_TAB_BRIDGE_REPLY", origin_jid=group_jid,
                 tab_project=_TAB_BRIDGE_PROJECT_ID, tab_intent=tab_intent)
             _set_action("tab_bridge")
+            return True
+
+        # B8.1 TAB routing guard: TAB-targeted query with unknown intent → fail-closed.
+        # Never ingests into canary state; never produces a generic operational reply.
+        if _tab_targeted:
+            await send_message(group_jid,
+                "Query TAB non riconosciuta. Esempi supportati:\n"
+                "stato TAB / problemi aperti TAB / cosa manca nel TAB?\n"
+                "fammi il quadro TAB / dove siamo scoperti nel TAB?\n"
+                "cosa devo controllare nel TAB? / report TAB"
+            )
+            log("OPERATIONAL_TAB_BRIDGE_UNKNOWN", origin_jid=group_jid,
+                tab_project=_TAB_BRIDGE_PROJECT_ID, query=decision.query[:120])
+            _set_action("tab_unknown_fail_closed")
             return True
 
         # Reply enabled → rebuild before reply (deterministic ordering), send to GROUP JID.
