@@ -416,7 +416,7 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
         r"briefing|fammi\s+un?\s+report|"
         r"operational\s+briefing|how\s+are\s+(we|things)\s+doing|give\s+me\s+the\s+(picture|briefing))",
         re.IGNORECASE)),
-    ("digest", re.compile(r"\b(digest|riass\w*|sommario|panoramica|summary|overview|stato\s+(del\s+)?(progetto|chat|lavori)|status)\b", re.IGNORECASE)),
+    ("digest", re.compile(r"\b(digest|riass\w*|riepilog\w*|sommario|panoramica|summary|overview|stato\s+(del\s+)?(progetto|chat|lavori)|status)\b", re.IGNORECASE)),
     ("changed", re.compile(r"\b(cambiat\w*|cambia|da\s+ieri|novit[aà]|aggiornament\w*|changed|since\s+yesterday|what'?s\s+new|differenz\w*)\b", re.IGNORECASE)),
     ("resolved_issues", re.compile(r"\b(risolt\w*|resolved|fixed|chius\w*\s+problem\w*|problem\w*\s+chius\w*)\b", re.IGNORECASE)),
     ("superseded", re.compile(r"\b(superat\w*|sostituit\w*|superseded|revocat\w*|obsolet\w*|annullat\w*)\b", re.IGNORECASE)),

@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
@@ -47,6 +48,13 @@ Updater = Callable[[ChatMessage], Awaitable[None]]
 SendMessage = Callable[..., Awaitable[object]]
 
 _MEDIA_TYPES = {"image", "document", "video", "audio", "voice"}
+
+# TAB bridge (B5): read-only cross-project query from a designated origin group.
+# Disabled by default — both env vars must be set to enable. Fail-closed: any
+# origin mismatch → bridge does not activate; never writes or messages TAB JID.
+_TAB_BRIDGE_ORIGIN_JID = os.environ.get("OPERATIONAL_TAB_BRIDGE_ORIGIN_JID", "").strip()
+_TAB_BRIDGE_PROJECT_ID = os.environ.get("OPERATIONAL_TAB_BRIDGE_PROJECT_ID", "").strip()
+_TAB_QUERY_RE = re.compile(r"\bTAB\b", re.IGNORECASE)
 
 
 # --------------------------------------------------------------------------- #
@@ -234,10 +242,19 @@ async def maybe_handle_whatsapp_operational(
             _set_action("silent_ingest")
             return True  # operational-dominant: no parallel empathic reply
 
-        # Invocation. Pure queries are NEVER stored as items (even when reply is
-        # disabled); update-bearing invocations are ingested.
+        # Invocation. B5 TAB bridge detection runs first — before ingestion — so a
+        # "stato TAB" query is never stored as a canary item. Strip the "TAB" keyword,
+        # re-evaluate purity on the remainder; if pure, override `pure=True`.
+        _tab_query = ""
+        if (_TAB_BRIDGE_ORIGIN_JID and _TAB_BRIDGE_PROJECT_ID
+                and group_jid == _TAB_BRIDGE_ORIGIN_JID
+                and _TAB_QUERY_RE.search(decision.query)):
+            _q = _TAB_QUERY_RE.sub("", decision.query).strip()
+            if _q and is_pure_operational_invocation(_q):
+                _tab_query = _q  # bridge will fire after reply_enabled check
+
         intent = classify_query_intent(decision.query)
-        pure = is_pure_operational_invocation(decision.query)
+        pure = is_pure_operational_invocation(decision.query) or bool(_tab_query)
         if pure:
             log("OPERATIONAL_WHATSAPP_INVOCATION_NOT_INGESTED",
                 project_id=project_id, intent=intent, reason="pure_invocation")
@@ -256,6 +273,21 @@ async def maybe_handle_whatsapp_operational(
             # that was captured. Neither sent a reply (reply OFF).
             _set_action("claim_no_reply" if pure else "ingest_update")
             return True  # claimed, no live reply (reply flag OFF)
+
+        # B5 TAB bridge: canary-only read-only cross-project query.
+        # Never writes TAB state; never sends a message to the TAB JID.
+        if _tab_query:
+            tab_intent = classify_query_intent(_tab_query)
+            tab_reply = await build_operational_reply(
+                _TAB_BRIDGE_PROJECT_ID, _tab_query,
+                report_base_url=_public_base_url(), invoked_by=first_name or "",
+                save=(tab_intent == "cmd_report"),
+            )
+            await send_message(group_jid, f"Vista TAB reale:\n{render_whatsapp_reply(tab_reply)}")
+            log("OPERATIONAL_TAB_BRIDGE_REPLY", origin_jid=group_jid,
+                tab_project=_TAB_BRIDGE_PROJECT_ID, tab_intent=tab_intent)
+            _set_action("tab_bridge")
+            return True
 
         # Reply enabled → rebuild before reply (deterministic ordering), send to GROUP JID.
         log("OPERATIONAL_WHATSAPP_REBUILD_BEFORE_REPLY", project_id=project_id, mode=decision.mode)
