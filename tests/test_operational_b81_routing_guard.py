@@ -65,6 +65,11 @@ def _patch_resolve(monkeypatch):
         "core.operational_memory.whatsapp_operational.flush_project",
         AsyncMock(),
     )
+    # B8.1 tests assume console mode OFF — pin the B8.3 flag regardless of host env.
+    monkeypatch.setattr(
+        "core.operational_memory.whatsapp_operational._TAB_BRIDGE_DEFAULT_NO_TARGET",
+        False,
+    )
 
 
 def _enable_bridge(monkeypatch):
