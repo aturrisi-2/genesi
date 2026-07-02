@@ -325,6 +325,34 @@ def _non_operational_notes(state: OperationalState) -> list[str]:
     return notes
 
 
+def _render_team_brief(state: OperationalState, briefing: OperationalBriefing, result) -> str:
+    """Compact operational draft for 'message to the team' style requests.
+    Plain professional text: no emoji, no raw dump. Always labelled as a draft —
+    the operational layer NEVER sends messages on its own."""
+    by_key = {r.key: r for r in briefing.rows}
+    ot = (by_key.get("open_tasks") or _zero()).count
+    oi = (by_key.get("open_issues") or _zero()).count
+    ad = (by_key.get("active_decisions") or _zero()).count
+
+    lines = [
+        "Bozza messaggio operativo (non inviata):",
+        "",
+        f"Situazione: {ot} task aperti, {oi} problemi aperti, {ad} decisioni attive.",
+    ]
+    if result.items:
+        lines.append("Priorità:")
+        for it in result.items[:5]:
+            lines.append(f"- {it.text}")
+        if len(result.items) > 5:
+            lines.append(f"- … e altri {len(result.items) - 5}")
+    else:
+        lines.append("Priorità: nessun elemento critico aperto.")
+    action = briefing.recommended_action
+    if action:
+        lines.append(f"Prossima azione: {action}")
+    return "\n".join(lines).strip()
+
+
 def _render_unknown_reply(state: OperationalState) -> str:
     """Conservative textual fallback for off-focus queries — NEVER the card,
     no empathic/LLM dependency. Distinguishes operational context from side notes."""
@@ -370,6 +398,10 @@ def build_chat_reply(
     elif intent in {"briefing", "digest"}:
         reply_markdown = _render_briefing_card(briefing)
         synthesis = briefing.synthesis
+    elif intent == "team_brief":
+        reply_markdown = _render_team_brief(state, briefing, result)
+        synthesis = briefing.synthesis
+        evidence = [eid for it in result.items[:5] for eid in it.evidence_event_ids[:1]]
     elif intent == "unknown":
         reply_markdown = _render_unknown_reply(state)
         synthesis = result.summary

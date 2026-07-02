@@ -410,10 +410,19 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
         r"quali\s+punti\s+(sono\s+)?apert\w*|resta\s+qualcosa\s+(di\s+)?apert\w*|"
         r"what'?s\s+still\s+open|what\s+(remains|is\s+still)\s+open|still\s+open|open\s+items)",
         re.IGNORECASE)),
+    # Team-oriented draft request → compact operational draft (no emoji, never
+    # auto-sent). Must precede briefing/digest so team phrasing wins.
+    ("team_brief", re.compile(
+        r"(capocantiere|cosa\s+diresti\s+al\s+(team|gruppo|squadra)|"
+        r"messaggio\s+operativ\w*|preparami\s+un\s+messaggi\w*|"
+        r"sintesi\s+da\s+(mandare|inviare|girare)|da\s+mandare\s+in\s+chat|"
+        r"spiegamel\w*|come\s+lo\s+diresti|da\s+girare\s+al\s+(team|gruppo))",
+        re.IGNORECASE)),
     ("briefing", re.compile(
         r"(fammi\s+il\s+punto|punto\s+della\s+situazione|riassumi\s+la\s+situazione|"
         r"cosa\s+c'?[eè]\s+da\s+sapere|fammi\s+il\s+report|com'?[eè]\s+messa|quadro\s+operativo|"
         r"quadro\s+della\s+situazione|fammi\s+(il\s+)?quadro|"
+        r"fammi\s+capire|cosa\s+sta\s+succedendo|che\s+sta\s+succedendo|"
         r"briefing|fammi\s+un?\s+report|"
         r"operational\s+briefing|how\s+are\s+(we|things)\s+doing|give\s+me\s+the\s+(picture|briefing))",
         re.IGNORECASE)),
@@ -422,10 +431,10 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("resolved_issues", re.compile(r"\b(risolt\w*|resolved|fixed|chius\w*\s+problem\w*|problem\w*\s+chius\w*)\b", re.IGNORECASE)),
     ("superseded", re.compile(r"\b(superat\w*|sostituit\w*|superseded|revocat\w*|obsolet\w*|annullat\w*)\b", re.IGNORECASE)),
     ("unanswered", re.compile(r"\b(domand\w*|question\w*|senza\s+risposta|unanswered|da\s+rispondere|open\s+question\w*|rispost\w*\s+manc\w*|quali\s+rispost\w*)\b", re.IGNORECASE)),
-    ("attention", re.compile(r"\b(attenzion\w*|attention|urgent\w*|critic\w*|prioritar\w*|richiede\w*|da\s+attenzionare|bloccant\w*|bloccar\w*|scoper\w*|rischi\w*\s+di\s+bloccar\w*|scadenz\w*|in\s+scadenza|cosa\s+scad\w*|devo\s+control\w*|da\s+control\w*|devo\s+verifica\w*|da\s+verifica\w*|attenzionar\w*|devo\s+guardar\w*|da\s+guardar\w*|cosa\s+guard\w*)\b", re.IGNORECASE)),
+    ("attention", re.compile(r"\b(attenzion\w*|attention|urgent\w*|critic\w*|priorit\w*|richiede\w*|da\s+attenzionare|bloccant\w*|bloccar\w*|scoper\w*|rischi\w*\s+di\s+bloccar\w*|scadenz\w*|in\s+scadenza|cosa\s+scad\w*|devo\s+control\w*|da\s+control\w*|devo\s+verifica\w*|da\s+verifica\w*|attenzionar\w*|devo\s+guardar\w*|da\s+guardar\w*|cosa\s+guard\w*)\b", re.IGNORECASE)),
     ("active_decisions", re.compile(r"\b(decision\w*|decis\w*|deciso|decided)\b", re.IGNORECASE)),
     ("open_issues", re.compile(r"\b(problem\w*\s+apert\w*|issue\w*\s+apert\w*|open\s+issue\w*|problem\w*|guast\w*|anomal\w*|bug)\b", re.IGNORECASE)),
-    ("open_tasks", re.compile(r"\b(da\s+fare|resta\w*|riman\w*|to\s*do|todo|task|attivit[aà]|pending|cosa\s+manca|cosa\s+resta|material\w*\s+manc\w*|manc\w*\s+come\s+material\w*|cosa\s+serv\w*|per\s+responsabile|chi\s+deve\s+fare|assegnat\w*\s+a\s+chi|dati\s+manc\w*)\b", re.IGNORECASE)),
+    ("open_tasks", re.compile(r"\b(da\s+fare|resta\w*|riman\w*|to\s*do|todo|task|attivit[aà]|pending|cosa\s+manca|cosa\s+resta|material\w*\s+manc\w*|manc\w*\s+come\s+material\w*|cosa\s+serv\w*|per\s+responsabile|chi\s+deve\s+fare|assegnat\w*\s+a\s+chi|dati\s+manc\w*|chi\s+(si\s+)?deve\s+muover\w*|chi\s+deve\s+intervenir\w*)\b", re.IGNORECASE)),
 ]
 
 _INTENT_DISPATCH: dict[str, Callable[[OperationalState], list[QueryAnswerItem]]] = {
@@ -438,6 +447,8 @@ _INTENT_DISPATCH: dict[str, Callable[[OperationalState], list[QueryAnswerItem]]]
     "superseded": superseded_items,
     "attention": attention_items,
     "changed": changed_since,
+    # Draft composer: same priority items as attention, rendered as a draft.
+    "team_brief": attention_items,
 }
 
 _INTENT_SUMMARY = {
@@ -450,6 +461,7 @@ _INTENT_SUMMARY = {
     "superseded": "elementi superati o sostituiti",
     "attention": "elementi che richiedono attenzione",
     "changed": "cambiamenti dallo snapshot precedente",
+    "team_brief": "elementi per la bozza operativa",
 }
 
 
@@ -467,7 +479,7 @@ def classify_query_intent(text: str) -> str:
 _PURE_QUERY_INTENTS = {
     "briefing", "digest", "remaining_open", "active_decisions",
     "open_tasks", "open_issues", "resolved_issues", "unanswered",
-    "superseded", "attention", "changed",
+    "superseded", "attention", "changed", "team_brief",
     # Technical command shortcuts: read-only, never stored as project items.
     "cmd_stato", "cmd_aperti", "cmd_report",
 }
