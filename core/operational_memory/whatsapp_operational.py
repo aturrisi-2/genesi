@@ -130,9 +130,13 @@ _REPORT_LINK_INTENTS = {"briefing", "digest", "cmd_report"}
 
 def render_whatsapp_reply(reply) -> str:
     """Plain-text WhatsApp body. Report URL appended only for full-report
-    intents (briefing/digest/cmd_report); suppressed for focused queries."""
+    intents (briefing/digest/cmd_report); suppressed for focused queries.
+    B9.2: never appended when the body already contains the URL (cmd_report
+    embeds it) — one link per reply."""
     body = reply.reply_markdown or ""
-    if reply.report_url and getattr(reply, "intent", "") in _REPORT_LINK_INTENTS:
+    if (reply.report_url
+            and getattr(reply, "intent", "") in _REPORT_LINK_INTENTS
+            and reply.report_url not in body):
         body = f"{body}\n\nReport: {reply.report_url}".strip()
     return body
 
