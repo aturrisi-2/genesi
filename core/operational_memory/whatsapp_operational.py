@@ -39,6 +39,7 @@ from core.operational_memory.models import (
     InvocationConfig,
 )
 from core.operational_memory.query_engine import (
+    _STRONG_UPDATE_RE,
     classify_query_intent,
     is_pure_operational_invocation,
 )
@@ -57,6 +58,13 @@ _TAB_BRIDGE_PROJECT_ID = os.environ.get("OPERATIONAL_TAB_BRIDGE_PROJECT_ID", "")
 # Matches bare "TAB" and "nel/del/di TAB" — strips the preposition too so the
 # stripped query doesn't end with dangling "nel ?" or "del ?".
 _TAB_QUERY_RE = re.compile(r"\b(?:nel|del|di|in)\s+TAB\b|\bTAB\b", re.IGNORECASE)
+# B8.3 canary console mode: with the flag ON, pure operational queries from the
+# bridge origin WITHOUT an explicit target default to the TAB bridge (the origin
+# group acts as a read-only console for the TAB project). OFF → B8.2 behaviour.
+_TAB_BRIDGE_DEFAULT_NO_TARGET = env_flag("OPERATIONAL_TAB_BRIDGE_DEFAULT_NO_TARGET", False)
+# Escape hatch: "canary" keyword pins the query to the origin group's own project
+# even in console mode ("stato canary", "nel canary cosa manca?").
+_CANARY_KEEP_RE = re.compile(r"\b(?:nel|del|di|in)\s+canary\b|\bprogetto\s+canary\b|\bcanary\b", re.IGNORECASE)
 
 
 # --------------------------------------------------------------------------- #
@@ -251,18 +259,36 @@ async def maybe_handle_whatsapp_operational(
         # (_tab_targeted) — those get fail-closed reply, never ingested as canary.
         _tab_query = ""
         _tab_targeted = False  # TAB keyword present but intent unknown → fail-closed
-        if (_TAB_BRIDGE_ORIGIN_JID and _TAB_BRIDGE_PROJECT_ID
-                and group_jid == _TAB_BRIDGE_ORIGIN_JID
-                and _TAB_QUERY_RE.search(decision.query)):
+        _own_query = ""  # console escape hatch: "canary" keyword pins own project
+        _bridge_origin = (_TAB_BRIDGE_ORIGIN_JID and _TAB_BRIDGE_PROJECT_ID
+                          and group_jid == _TAB_BRIDGE_ORIGIN_JID)
+        if _bridge_origin and _TAB_QUERY_RE.search(decision.query):
             _q = _TAB_QUERY_RE.sub("", decision.query).strip()
             if _q and is_pure_operational_invocation(_q):
                 _tab_query = _q  # bridge will fire after reply_enabled check
             elif _q:
                 # TAB keyword present, intent unknown — guard: no ingest, fail-closed reply.
                 _tab_targeted = True
+        elif _bridge_origin and _TAB_BRIDGE_DEFAULT_NO_TARGET:
+            # B8.3 console mode: no explicit target in the query.
+            if _CANARY_KEEP_RE.search(decision.query):
+                _q = re.sub(r"\s{2,}", " ", _CANARY_KEEP_RE.sub("", decision.query)).strip()
+                if _q and is_pure_operational_invocation(_q):
+                    _own_query = _q  # explicit own-project query, keyword stripped
+            elif is_pure_operational_invocation(decision.query):
+                _tab_query = decision.query.strip()  # console default → TAB bridge
+                log("OPERATIONAL_TAB_BRIDGE_DEFAULT", origin_jid=group_jid,
+                    query=decision.query[:120])
+            elif (classify_query_intent(decision.query) == "unknown"
+                    and not _STRONG_UPDATE_RE.search(decision.query)):
+                # Ambiguous console query (no intent, no update payload) →
+                # fail-closed, never ingested as a canary item.
+                _tab_targeted = True
+            # else: recognised update payload → normal own-project ingest flow
 
-        intent = classify_query_intent(decision.query)
-        pure = is_pure_operational_invocation(decision.query) or bool(_tab_query) or _tab_targeted
+        intent = classify_query_intent(_own_query or decision.query)
+        pure = (is_pure_operational_invocation(decision.query) or bool(_tab_query)
+                or _tab_targeted or bool(_own_query))
         if pure:
             log("OPERATIONAL_WHATSAPP_INVOCATION_NOT_INGESTED",
                 project_id=project_id, intent=intent, reason="pure_invocation")
@@ -316,7 +342,7 @@ async def maybe_handle_whatsapp_operational(
         if pure:
             await flush_project(project_id)
         reply = await build_operational_reply(
-            project_id, decision.query,
+            project_id, _own_query or decision.query,
             report_base_url=_public_base_url(), invoked_by=first_name or "",
         )
         log("OPERATIONAL_WHATSAPP_REPLY_AFTER_REBUILD", project_id=project_id)
