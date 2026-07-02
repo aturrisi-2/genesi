@@ -146,17 +146,20 @@ def superseded_items(state: OperationalState) -> list[QueryAnswerItem]:
 
 
 def _attention_rank(it: QueryAnswerItem) -> tuple:
-    """Deterministic priority order for attention/team_brief lists:
+    """Deterministic priority order for attention/team_brief lists (B9 contract):
     reopened > items with a due date (earliest first) > high-confidence open
-    issues > everything else. No LLM, no domain vocabulary."""
+    issues > tasks without an owner > everything else. No LLM, no domain
+    vocabulary."""
     if it.status == "reopened":
         rank = 0
     elif it.due:
         rank = 1
     elif it.category == "issue" and it.confidence == "high":
         rank = 2
-    else:
+    elif it.category == "task" and not it.owner:
         rank = 3
+    else:
+        rank = 4
     return (rank, it.due or "9999-12-31", it.text)
 
 
@@ -406,7 +409,7 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
     # still falls through to digest/briefing and is unaffected.
     ("cmd_stato", re.compile(r"^\s*stato\s*$", re.IGNORECASE)),
     ("cmd_aperti", re.compile(r"^\s*aperti\s*$", re.IGNORECASE)),
-    ("cmd_report", re.compile(r"^\s*report\s*$", re.IGNORECASE)),
+    ("cmd_report", re.compile(r"^\s*report(\s+operativ\w*)?\s*[?!.]?\s*$", re.IGNORECASE)),
     # Natural-language status/update invocations → same concise inline status as
     # the bare 'stato' command (pure read-only, never ingested, no link/emoji
     # fallback). Placed before briefing/digest so status phrasing resolves to the

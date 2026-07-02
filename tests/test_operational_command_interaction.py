@@ -143,7 +143,7 @@ def test_cmd_aperti_reply_lists_open_items_no_card():
 def test_cmd_report_reply_short_with_link():
     reply = build_chat_reply(_state(), "report", report_id="r1", report_url="https://x/view")
     assert reply.intent == "cmd_report"
-    assert reply.reply_markdown == "📄 Report operativo: https://x/view"
+    assert reply.reply_markdown == "Report operativo: https://x/view"
 
 
 def test_cmd_report_reply_without_link():
@@ -224,7 +224,7 @@ async def test_command_pure_reply_off_claim_no_reply(enabled):
 @pytest.mark.parametrize("command,expect", [
     ("@genesi stato", "Task 1 aperti"),
     ("@genesi aperti", "Problemi aperti:"),
-    ("@genesi report", "📄 Report operativo:"),
+    ("@genesi report", "Report operativo:"),
 ])
 async def test_command_reply_on_sends_short_technical_reply(enabled, monkeypatch, command, expect):
     monkeypatch.setenv("WHATSAPP_OPERATIONAL_REPLY_ENABLED", "true")

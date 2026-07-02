@@ -133,7 +133,7 @@ def render_whatsapp_reply(reply) -> str:
     intents (briefing/digest/cmd_report); suppressed for focused queries."""
     body = reply.reply_markdown or ""
     if reply.report_url and getattr(reply, "intent", "") in _REPORT_LINK_INTENTS:
-        body = f"{body}\n\n📄 Report: {reply.report_url}".strip()
+        body = f"{body}\n\nReport: {reply.report_url}".strip()
     return body
 
 

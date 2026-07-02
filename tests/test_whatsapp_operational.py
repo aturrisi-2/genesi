@@ -178,7 +178,7 @@ async def test_whatsapp_invocation_reply_enabled_uses_group_jid(enabled, monkeyp
     to, body = sent[0]
     assert to == GROUP_JID            # reply goes to the GROUP jid, not the sender
     assert to != SENDER_JID
-    assert "BODY" in body and "📄 Report: u" in body
+    assert "BODY" in body and "Report: u" in body
 
 
 @pytest.mark.asyncio

@@ -212,7 +212,10 @@ def _zero() -> _ZeroRow:
 
 
 def _render_briefing_card(briefing: OperationalBriefing) -> str:
-    """The general '📌 Quadro operativo' card — only for briefing/digest."""
+    """The general '📌 Quadro operativo' card — only for briefing/digest.
+    NOTE (B9 contract): kept in the legacy shared format because the Telegram
+    renderer derives bold headings and focus links from the 📌/🧭/• markers —
+    restyling it is a dedicated step (B9.1), not a rendering-only patch."""
     parts = [
         "📌 Quadro operativo",
         "",
@@ -265,6 +268,21 @@ def _render_focused_reply(result) -> tuple[str, list[str]]:
         return _render_open_tasks_reply(result)
     if intent == "attention":
         return _render_attention_reply(result)
+    if intent == "open_issues":
+        if not result.items:
+            return "Nessun problema aperto.", evidence
+        items = sorted(result.items, key=lambda it: (it.status != "reopened", it.text))
+        lines = ["Problemi aperti:"]
+        for i, it in enumerate(items[:5], 1):
+            flag = " [riaperto]" if it.status == "reopened" else ""
+            lines.append(f"{i}. {it.text}{flag}")
+            evidence.extend(it.evidence_event_ids[:1])
+        if result.count > 5:
+            lines.append(f"Altri {result.count - 5} in coda.")
+        reopened = [it for it in items if it.status == "reopened"]
+        if reopened:
+            lines.append(f"Azione consigliata: ripartire da {reopened[0].text}.")
+        return "\n".join(lines).strip(), evidence
     if intent == "remaining_open":
         if not result.items:
             return "Non risultano punti aperti rilevanti.", evidence
@@ -310,7 +328,7 @@ def _render_command_report(report_url: str) -> str:
     """Short technical report pointer for the '@genesi report' command — the
     link if available, never an inline-generated long report."""
     if report_url:
-        return f"📄 Report operativo: {report_url}"
+        return f"Report operativo: {report_url}"
     return "Report operativo disponibile (nessun link configurato)."
 
 
@@ -362,6 +380,8 @@ def _render_team_brief(state: OperationalState, briefing: OperationalBriefing, r
     action = briefing.recommended_action
     if action:
         lines.append(f"Prossima azione: {action}")
+    lines.append("Richiesta operativa: aggiornare lo stato dei punti sopra o segnalare eventuali blocchi.")
+    lines.append("Prossimo aggiornamento: al prossimo cambiamento rilevante.")
     return "\n".join(lines).strip()
 
 
