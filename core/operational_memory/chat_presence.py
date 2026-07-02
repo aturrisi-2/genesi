@@ -263,6 +263,8 @@ def _render_focused_reply(result) -> tuple[str, list[str]]:
     intent = result.intent
     if intent == "open_tasks":
         return _render_open_tasks_reply(result)
+    if intent == "attention":
+        return _render_attention_reply(result)
     if intent == "remaining_open":
         if not result.items:
             return "Non risultano punti aperti rilevanti.", evidence
@@ -325,6 +327,11 @@ def _non_operational_notes(state: OperationalState) -> list[str]:
     return notes
 
 
+def _n(count: int, singular: str, plural: str) -> str:
+    """'1 task aperto' / '3 task aperti' — correct singular/plural phrasing."""
+    return f"{count} {singular if count == 1 else plural}"
+
+
 def _render_team_brief(state: OperationalState, briefing: OperationalBriefing, result) -> str:
     """Compact operational draft for 'message to the team' style requests.
     Plain professional text: no emoji, no raw dump. Always labelled as a draft —
@@ -337,12 +344,17 @@ def _render_team_brief(state: OperationalState, briefing: OperationalBriefing, r
     lines = [
         "Bozza messaggio operativo (non inviata):",
         "",
-        f"Situazione: {ot} task aperti, {oi} problemi aperti, {ad} decisioni attive.",
+        "Situazione: "
+        f"{_n(ot, 'task aperto', 'task aperti')}, "
+        f"{_n(oi, 'problema aperto', 'problemi aperti')}, "
+        f"{_n(ad, 'decisione attiva', 'decisioni attive')}.",
     ]
     if result.items:
         lines.append("Priorità:")
         for it in result.items[:5]:
-            lines.append(f"- {it.text}")
+            flag = " [riaperto]" if it.status == "reopened" else ""
+            due = f" (entro {_fmt_due(it.due)})" if it.due else ""
+            lines.append(f"- {it.text}{flag}{due}")
         if len(result.items) > 5:
             lines.append(f"- … e altri {len(result.items) - 5}")
     else:
@@ -351,6 +363,28 @@ def _render_team_brief(state: OperationalState, briefing: OperationalBriefing, r
     if action:
         lines.append(f"Prossima azione: {action}")
     return "\n".join(lines).strip()
+
+
+def _render_attention_reply(result) -> tuple[str, list[str]]:
+    """Site-manager style priority list: numbered priorities (max 5, already
+    priority-sorted), main risk when something reopened, next check pointer.
+    No emoji, no report link, never a long dump."""
+    evidence: list[str] = []
+    if not result.items:
+        return "Nessuna priorità aperta al momento.", evidence
+    lines = ["Priorità operative:"]
+    for i, it in enumerate(result.items[:5], 1):
+        flag = " [riaperto]" if it.status == "reopened" else ""
+        due = f" (entro {_fmt_due(it.due)})" if it.due else ""
+        lines.append(f"{i}. {it.text}{flag}{due}")
+        evidence.extend(it.evidence_event_ids[:1])
+    if result.count > 5:
+        lines.append(f"Altri {result.count - 5} elementi in coda.")
+    reopened = [it for it in result.items if it.status == "reopened"]
+    if reopened:
+        lines.append(f"Rischio principale: {reopened[0].text} (riaperto).")
+    lines.append("Prossima verifica: partire dal punto 1.")
+    return "\n".join(lines).strip(), evidence
 
 
 def _render_unknown_reply(state: OperationalState) -> str:

@@ -145,9 +145,25 @@ def superseded_items(state: OperationalState) -> list[QueryAnswerItem]:
     return out
 
 
+def _attention_rank(it: QueryAnswerItem) -> tuple:
+    """Deterministic priority order for attention/team_brief lists:
+    reopened > items with a due date (earliest first) > high-confidence open
+    issues > everything else. No LLM, no domain vocabulary."""
+    if it.status == "reopened":
+        rank = 0
+    elif it.due:
+        rank = 1
+    elif it.category == "issue" and it.confidence == "high":
+        rank = 2
+    else:
+        rank = 3
+    return (rank, it.due or "9999-12-31", it.text)
+
+
 def attention_items(state: OperationalState) -> list[QueryAnswerItem]:
     """Active items that warrant attention: reopened, mitigated-but-open, or
-    high-confidence active issues; plus aging items flagged by the snapshot."""
+    high-confidence active issues; plus aging items flagged by the snapshot.
+    Sorted by operational priority (reopened > due > critical > rest)."""
     out: list[QueryAnswerItem] = []
     aging_texts: set[str] = set()
     snapshot = state.lifecycle_snapshot
@@ -166,7 +182,7 @@ def attention_items(state: OperationalState) -> list[QueryAnswerItem]:
             )
             if flag:
                 out.append(_answer_item(item, category))
-    return _operational_only(out)
+    return sorted(_operational_only(out), key=_attention_rank)
 
 
 def changed_since(state: OperationalState) -> list[QueryAnswerItem]:
@@ -307,13 +323,17 @@ def build_briefing(state: OperationalState) -> OperationalBriefing:
     )
 
     if repi:
-        recommended = f"Affrontare prima i {len(repi)} problemi riaperti."
+        recommended = ("Affrontare prima il problema riaperto." if len(repi) == 1
+                       else f"Affrontare prima i {len(repi)} problemi riaperti.")
     elif att:
-        recommended = f"Verificare i {len(att)} elementi che richiedono attenzione."
+        recommended = ("Verificare l'elemento che richiede attenzione." if len(att) == 1
+                       else f"Verificare i {len(att)} elementi che richiedono attenzione.")
     elif oi:
-        recommended = f"Pianificare la risoluzione dei {len(oi)} problemi aperti."
+        recommended = ("Pianificare la risoluzione del problema aperto." if len(oi) == 1
+                       else f"Pianificare la risoluzione dei {len(oi)} problemi aperti.")
     elif ot:
-        recommended = f"Avanzare sui {len(ot)} task aperti."
+        recommended = ("Avanzare sul task aperto." if len(ot) == 1
+                       else f"Avanzare sui {len(ot)} task aperti.")
     else:
         recommended = "Monitorare il prossimo aggiornamento operativo."
 
