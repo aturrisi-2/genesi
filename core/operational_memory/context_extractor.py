@@ -41,13 +41,16 @@ def normalize_context_token(value: str) -> str:
         return f"T{m.group(1)}"
     m = re.match(r"^(?:PIANO|LIVELLO)\s*(\d+)$", v)
     if m:
-        return f"L{m.group(1)}"
+        return f"L{int(m.group(1))}"
+    m = re.match(r"^L(\d+)$", v)
+    if m:
+        return f"L{int(m.group(1))}"
     m = re.match(r"^SC(?:ALA)?\s*(\d+)$", v)
     if m:
         return f"SCALA {m.group(1)}"
     m = _LEVEL_RANGE_RE.match(v)
     if m:
-        return f"L{m.group(1)}-L{m.group(2)}"
+        return f"L{int(m.group(1))}-L{int(m.group(2))}"
     return v
 
 

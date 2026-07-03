@@ -363,6 +363,87 @@ def _evidence_suffix(item: QueryAnswerItem) -> str:
     return f" [evidenza: {', '.join(item.evidence_event_ids)}]" if item.evidence_event_ids else ""
 
 
+def _primary_context_parts(it: QueryAnswerItem) -> list[str]:
+    """Primary spatial context of an item as ordered, normalised, deduped parts
+    [location, system, level]. Stored fields win; when ALL are empty the item
+    text is re-scanned (legacy items). Empty result → undetermined context —
+    never invented."""
+    loc, sys_, lvl = it.context_location, it.context_system, it.context_level
+    if not (loc and sys_ and lvl):
+        # Fill the MISSING fields from a fresh text scan — stored values (from
+        # ingest-time nearby context) always win; the text only completes gaps
+        # (legacy items extracted before the extractor learned scala/ranges).
+        fresh = extract_context(it.text or "")
+        loc = loc or fresh.context_location
+        sys_ = sys_ or fresh.context_system
+        lvl = fresh.context_level or lvl  # fresh level may carry the full range
+    parts: list[str] = []
+    seen: set[str] = set()
+    for v in (loc, sys_, lvl):
+        if not v:
+            continue
+        canon = normalize_context_token(v)
+        if canon and canon not in seen:
+            seen.add(canon)
+            parts.append(canon)
+    return parts
+
+
+_UNDETERMINED_CTX = "Contesto non determinato"
+
+
+def group_items_by_context(
+    items: list[QueryAnswerItem], max_groups: int = 5,
+) -> tuple[list[tuple[str, list[QueryAnswerItem]]], list[QueryAnswerItem]]:
+    """Group items by their primary context header ("SCALA 2 / T2 / L3-L7").
+    Each item lands in exactly ONE group (its primary context). Returns the
+    top `max_groups` groups (largest first, undetermined always last) plus the
+    overflow items collapsed by the caller."""
+    buckets: dict[str, list[QueryAnswerItem]] = {}
+    for it in items:
+        parts = _primary_context_parts(it)
+        header = " / ".join(parts) if parts else _UNDETERMINED_CTX
+        buckets.setdefault(header, []).append(it)
+    ordered = sorted(
+        buckets.items(),
+        key=lambda kv: (
+            kv[0] == _UNDETERMINED_CTX,                                # undetermined last
+            not any(it.status == "reopened" for it in kv[1]),          # reopened groups first
+            -len(kv[1]),
+            kv[0],
+        ),
+    )
+    return ordered[:max_groups], [it for _, grp in ordered[max_groups:] for it in grp]
+
+
+def _render_context_criticalities(briefing: OperationalBriefing) -> list[str]:
+    """'## Criticità per contesto' section: ACTIVE issues grouped by primary
+    spatial context. Skipped entirely when there are no active issues."""
+    by_key = {r.key: r for r in briefing.rows}
+    row = by_key.get("open_issues")
+    items = list(row.items) if row and row.items else []
+    if not items:
+        return []
+    groups, overflow = group_items_by_context(items)
+    lines = ["## Criticità per contesto", ""]
+    for header, grp in groups:
+        lines.append(f"### {header}")
+        for it in grp[:10]:
+            flag = " [riaperto]" if it.status == "reopened" else ""
+            extra_tags = [
+                normalize_context_token(t) for t in (it.context_tags or [])
+            ]
+            primary = set(_primary_context_parts(it))
+            detail = [t for t in dict.fromkeys(extra_tags) if t and t not in primary][:2]
+            suffix = f" (anche: {', '.join(detail)})" if detail else ""
+            lines.append(f"- {it.text}{flag}{suffix}")
+        lines.append("")
+    if overflow:
+        lines.append(f"Altri contesti: {len(overflow)} elementi.")
+        lines.append("")
+    return lines
+
+
 def render_briefing_markdown(briefing: OperationalBriefing) -> str:
     """Pure renderer: turn briefing DATA into an exportable Markdown report."""
     lines = [
@@ -385,6 +466,9 @@ def render_briefing_markdown(briefing: OperationalBriefing) -> str:
         "",
         f"**Azione consigliata:** {briefing.recommended_action}",
         "",
+    ])
+    lines.extend(_render_context_criticalities(briefing))
+    lines.extend([
         "## Dettaglio",
         "",
     ])
