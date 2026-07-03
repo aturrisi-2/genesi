@@ -118,7 +118,7 @@ def test_command_status_line_counts():
     line = command_status_line(_state())
     assert line == (
         "Task 1 aperti · Problemi 1 aperti (1 risolti) · Decisioni attive 1 · "
-        "Info 1 · Domande aperte 1 · agg. 2026-06-21T10:00:00+00:00"
+        "Info 1 · Domande aperte 1 · agg. 21/6 10:00"
     )
 
 

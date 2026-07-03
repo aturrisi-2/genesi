@@ -440,7 +440,10 @@ def build_chat_reply(
     intent = result.intent
 
     evidence: list[str] = []
-    if intent == "cmd_stato":
+    if intent == "decision_guard":
+        reply_markdown = result.summary
+        synthesis = result.summary
+    elif intent == "cmd_stato":
         reply_markdown = command_status_line(state)
         synthesis = result.summary
     elif intent == "cmd_aperti":

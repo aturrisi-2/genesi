@@ -402,6 +402,14 @@ def render_briefing_markdown(briefing: OperationalBriefing) -> str:
 
 # Ordered: more specific intents first. Patterns are generic IT + EN.
 _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
+    # B10.1 decision guard — MUST be first: opinion/decision requests ("secondo
+    # te", "conviene", "possiamo decidere/chiudere", "che ne dici") would
+    # otherwise be captured by lexical task/issue patterns (e.g. "attività").
+    # Genesi never decides for the team; the reply states the limit and offers
+    # the relevant read-only views.
+    ("decision_guard", re.compile(
+        r"secondo\s+te|conviene\b|possiamo\s+decid\w*|possiamo\s+chiuder\w*|che\s+ne\s+dici",
+        re.IGNORECASE)),
     # Technical command shortcuts — exact-anchored single tokens (the invocation
     # router has already stripped the "@genesi"/name prefix). Highest precedence
     # so the bare command words win over the natural-language patterns; the exact
@@ -409,7 +417,10 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
     # still falls through to digest/briefing and is unaffected.
     ("cmd_stato", re.compile(r"^\s*stato\s*$", re.IGNORECASE)),
     ("cmd_aperti", re.compile(r"^\s*aperti\s*$", re.IGNORECASE)),
-    ("cmd_report", re.compile(r"^\s*report(\s+operativ\w*)?\s*[?!.]?\s*$", re.IGNORECASE)),
+    ("cmd_report", re.compile(
+        r"^\s*report(\s+operativ\w*)?\s*[?!.]?\s*$"
+        r"|\b(manda\w*|invia\w*)\s+(il\s+|un\s+)?report\b",
+        re.IGNORECASE)),
     # Natural-language status/update invocations → same concise inline status as
     # the bare 'stato' command (pure read-only, never ingested, no link/emoji
     # fallback). Placed before briefing/digest so status phrasing resolves to the
@@ -454,10 +465,10 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("resolved_issues", re.compile(r"\b(risolt\w*|resolved|fixed|chius\w*\s+problem\w*|problem\w*\s+chius\w*)\b", re.IGNORECASE)),
     ("superseded", re.compile(r"\b(superat\w*|sostituit\w*|superseded|revocat\w*|obsolet\w*|annullat\w*)\b", re.IGNORECASE)),
     ("unanswered", re.compile(r"\b(domand\w*|question\w*|senza\s+risposta|unanswered|da\s+rispondere|open\s+question\w*|rispost\w*\s+manc\w*|quali\s+rispost\w*)\b", re.IGNORECASE)),
-    ("attention", re.compile(r"\b(attenzion\w*|attention|urgent\w*|critic\w*|priorit\w*|richiede\w*|da\s+attenzionare|bloccant\w*|bloccar\w*|scoper\w*|rischi\w*\s+di\s+bloccar\w*|scadenz\w*|in\s+scadenza|cosa\s+scad\w*|devo\s+control\w*|da\s+control\w*|devo\s+verifica\w*|da\s+verifica\w*|attenzionar\w*|devo\s+guardar\w*|da\s+guardar\w*|cosa\s+guard\w*)\b", re.IGNORECASE)),
+    ("attention", re.compile(r"\b(attenzion\w*|attention|urgent\w*|critic\w*|priorit\w*|richiede\w*|da\s+attenzionare|bloccant\w*|bloccar\w*|scoper\w*|rischi\w*\s+di\s+bloccar\w*|scadenz\w*|in\s+scadenza|cosa\s+scad\w*|devo\s+control\w*|da\s+control\w*|devo\s+verifica\w*|da\s+verifica\w*|attenzionar\w*|devo\s+guardar\w*|da\s+guardar\w*|cosa\s+guard\w*|(mi|ci)\s+(devo|dobbiamo)\s+concentr\w*|su\s+cosa\s+concentr\w*|cosa\s+concentr\w*)\b", re.IGNORECASE)),
     ("active_decisions", re.compile(r"\b(decision\w*|decis\w*|deciso|decided)\b", re.IGNORECASE)),
     ("open_issues", re.compile(r"\b(problem\w*\s+apert\w*|issue\w*\s+apert\w*|open\s+issue\w*|problem\w*|guast\w*|anomal\w*|bug)\b", re.IGNORECASE)),
-    ("open_tasks", re.compile(r"\b(da\s+fare|resta\w*|riman\w*|to\s*do|todo|task|attivit[aà]|pending|cosa\s+manca|cosa\s+resta|material\w*\s+manc\w*|manc\w*\s+come\s+material\w*|cosa\s+serv\w*|per\s+responsabile|chi\s+deve\s+fare|assegnat\w*\s+a\s+chi|dati\s+manc\w*|chi\s+(si\s+)?deve\s+muover\w*|chi\s+deve\s+intervenir\w*)\b", re.IGNORECASE)),
+    ("open_tasks", re.compile(r"\b(da\s+fare|resta\w*|riman\w*|to\s*do|todo|task|attivit[aà]|pending|cosa\s+manca|cosa\s+resta|material\w*\s+manc\w*|manc\w*\s+come\s+material\w*|cosa\s+serv\w*|per\s+responsabile|chi\s+deve\s+fare|assegnat\w*\s+a\s+chi|dati\s+manc\w*|chi\s+(si\s+)?deve\s+muover\w*|chi\s+deve\s+intervenir\w*|cosa\s+ci\s+manca|manca\s+per\s+chiuder\w*)\b", re.IGNORECASE)),
 ]
 
 _INTENT_DISPATCH: dict[str, Callable[[OperationalState], list[QueryAnswerItem]]] = {
@@ -502,7 +513,7 @@ def classify_query_intent(text: str) -> str:
 _PURE_QUERY_INTENTS = {
     "briefing", "digest", "remaining_open", "active_decisions",
     "open_tasks", "open_issues", "resolved_issues", "unanswered",
-    "superseded", "attention", "changed", "team_brief",
+    "superseded", "attention", "changed", "team_brief", "decision_guard",
     # Technical command shortcuts: read-only, never stored as project items.
     "cmd_stato", "cmd_aperti", "cmd_report",
 }
@@ -556,12 +567,32 @@ def command_status_line(state: OperationalState) -> str:
     if review:
         line += f" · dubbi {review}"
     if state.updated_at:
-        line += f" · agg. {state.updated_at}"
+        line += f" · agg. {_fmt_updated_at(state.updated_at)}"
     return line
+
+
+def _fmt_updated_at(iso_ts: str) -> str:
+    """Human-readable D/M HH:MM from an ISO timestamp — never the raw ISO string
+    in a chat reply. Falls back to the original value if unparsable."""
+    try:
+        from datetime import datetime
+        d = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
+        return d.strftime("%-d/%-m %H:%M")
+    except Exception:
+        return iso_ts
+
+
+_DECISION_GUARD_REPLY = (
+    "Non posso decidere al posto del team. Posso però mostrarti stato, "
+    "priorità e punti aperti utili per decidere."
+)
 
 
 def answer_query(state: OperationalState, text: str) -> QueryResult:
     intent = classify_query_intent(text)
+    if intent == "decision_guard":
+        return QueryResult(query=text, intent="decision_guard",
+                           summary=_DECISION_GUARD_REPLY, count=0, items=[])
     if intent == "cmd_stato":
         return QueryResult(query=text, intent="cmd_stato", summary=command_status_line(state), count=0, items=[])
     if intent == "cmd_aperti":
