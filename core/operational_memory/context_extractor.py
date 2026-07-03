@@ -9,9 +9,17 @@ _SYSTEM_RE = re.compile(
     re.IGNORECASE,
 )
 _AREA_RE = re.compile(r"\b(?:STF|STM|STA)\b", re.IGNORECASE)
-_LEVEL_RE = re.compile(r"\b(?:L\d{1,2}|piano\s+\d{1,2})\b", re.IGNORECASE)
+# B11: level ranges ("L3-7", "L3-L7", "DA L3 A L7") + piano/livello phrasing.
+_LEVEL_RE = re.compile(
+    r"\b(?:L\d{1,2}(?:\s*[-–]\s*L?\d{1,2})?|(?:piano|livello)\s+\d{1,2})\b",
+    re.IGNORECASE,
+)
+# B11: scala (stairwell) — "SCALA 2" / "SC03".
+_SCALA_RE = re.compile(r"\b(?:scala\s*\d{1,2}|SC\d{1,2})\b", re.IGNORECASE)
+# B11: technical rooms/locations without digits (CED, centrale <x>, locale tecnico, …).
 _LOCATION_RE = re.compile(
-    r"\b(?:B\d+\s+V\d+|Torre\s+\d+|porta\s+\d{1,4}|COPERTURA\s+T\d+|Mandata|Ripresa)\b",
+    r"\b(?:B\d+\s+V\d+|Torre\s+\d+|porta\s+\d{1,4}|COPERTURA\s+T\d+|Mandata|Ripresa|"
+    r"CED|centrale\s+[A-Za-z]\w*|locale\s+tecnico|garage|copertura|cavedio)\b",
     re.IGNORECASE,
 )
 _COMPONENT_RE = re.compile(
@@ -19,6 +27,40 @@ _COMPONENT_RE = re.compile(
     re.IGNORECASE,
 )
 _TECH_CODE_RE = re.compile(r"\b[A-Z]{1,4}\d{1,4}\b|\b[A-Z]{1,4}-\d{1,4}\b|\b\d{1,3}[A-Z]\b")
+
+_LEVEL_RANGE_RE = re.compile(r"^L?(\d{1,2})\s*[-–]\s*L?(\d{1,2})$", re.IGNORECASE)
+
+
+def normalize_context_token(value: str) -> str:
+    """Canonical spatial key for grouping/matching — generic, no site vocabulary:
+    'Torre 2'→'T2', 'piano 5'/'livello 5'→'L5', 'SC3'→'SCALA 3',
+    'L3-7'→'L3-L7', everything uppercased with collapsed spaces."""
+    v = re.sub(r"\s+", " ", (value or "").strip()).upper()
+    m = re.match(r"^TORRE\s*(\d+)$", v)
+    if m:
+        return f"T{m.group(1)}"
+    m = re.match(r"^(?:PIANO|LIVELLO)\s*(\d+)$", v)
+    if m:
+        return f"L{m.group(1)}"
+    m = re.match(r"^SC(?:ALA)?\s*(\d+)$", v)
+    if m:
+        return f"SCALA {m.group(1)}"
+    m = _LEVEL_RANGE_RE.match(v)
+    if m:
+        return f"L{m.group(1)}-L{m.group(2)}"
+    return v
+
+
+def expand_level_range(value: str) -> list[str]:
+    """'L3-7' / 'L3-L7' → ['L3','L4','L5','L6','L7'] so every level in the range
+    is individually matchable. Non-range values pass through unchanged."""
+    m = _LEVEL_RANGE_RE.match(re.sub(r"\s+", "", value or ""))
+    if not m:
+        return [value] if value else []
+    lo, hi = int(m.group(1)), int(m.group(2))
+    if lo > hi or hi - lo > 30:
+        return [value]
+    return [f"L{n}" for n in range(lo, hi + 1)]
 
 
 @dataclass
@@ -69,20 +111,38 @@ def extract_context(text: str, nearby_texts: list[str] | None = None) -> Extract
     primary_systems = _unique_matches(_SYSTEM_RE, primary)
     primary_levels = _unique_matches(_LEVEL_RE, primary)
     primary_locations = _unique_matches(_LOCATION_RE, primary)
+    primary_scala = _unique_matches(_SCALA_RE, primary)
 
     areas = primary_areas or _unique_matches(_AREA_RE, combined)
     systems = primary_systems or _unique_matches(_SYSTEM_RE, combined)
     levels = primary_levels or _unique_matches(_LEVEL_RE, combined)
     locations = primary_locations or _unique_matches(_LOCATION_RE, combined)
+    scala = primary_scala or _unique_matches(_SCALA_RE, combined)
     components = _unique_matches(_COMPONENT_RE, combined)
     codes = _unique_matches(_TECH_CODE_RE, combined)
+
+    # B11: canonical aliases in tags so both raw and normalised forms match
+    # ("Torre 2"→T2, "piano 5"→L5, "SC3"→SCALA 3, "L3-7"→L3…L7 expanded).
+    norm_tags: list[str] = []
+    for group in (areas, systems, levels, locations, scala):
+        for value in group:
+            canon = normalize_context_token(value)
+            if canon and canon != value.upper():
+                norm_tags.append(canon)
+    for value in levels:
+        for lv in expand_level_range(normalize_context_token(value)):
+            norm_tags.append(lv)
+
+    # scala counts as a location when no other location was found.
+    location = _first(locations) or (_first(scala))
 
     return ExtractedContext(
         context_area=_first(areas),
         context_system=_first(systems),
         context_level=_first(levels),
-        context_location=_first(locations),
-        context_tags=_merge_tags(areas, systems, levels, locations, components, codes),
+        context_location=location,
+        context_tags=_merge_tags(areas, systems, levels, locations, scala,
+                                 components, codes, norm_tags),
     )
 
 

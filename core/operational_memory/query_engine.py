@@ -15,6 +15,7 @@ import re
 from datetime import datetime, timezone
 from typing import Callable
 
+from core.operational_memory.context_extractor import expand_level_range, extract_context, normalize_context_token
 from core.operational_memory.lifecycle_engine import initial_status, is_active_status
 from core.operational_memory.quality import is_low_value_task, is_non_operational_note
 from core.operational_memory.models import (
@@ -65,6 +66,11 @@ def _answer_item(item: OperationalItem, category: LifecycleCategory) -> QueryAns
         reason=reason,
         owner=owner,
         due=due,
+        context_area=item.context_area,
+        context_system=item.context_system,
+        context_level=item.context_level,
+        context_location=item.context_location,
+        context_tags=list(item.context_tags or []),
     )
 
 
@@ -582,6 +588,76 @@ def _fmt_updated_at(iso_ts: str) -> str:
         return iso_ts
 
 
+
+# --------------------------------------------------------------------------- #
+# B11 — spatial/context query filter
+# --------------------------------------------------------------------------- #
+
+# Spatial references inside a natural query. Word-based forms (torre/piano/
+# livello/scala N, CED, centrale X, …) match anywhere; bare codes (T2, L5)
+# only after a preposition so ordinary words are never misread as context.
+_QUERY_CONTEXT_RE = re.compile(
+    r"\b(?:(?:in|nel|nella|della|del|dello|di|alla|al|su|sulla)\s+)?"
+    r"(torre\s*\d{1,3}|piano\s*\d{1,2}|livello\s*\d{1,2}|scala\s*\d{1,2}|"
+    r"CED|centrale\s+[A-Za-z]\w*|locale\s+tecnico|copertura|garage|cavedio)\b"
+    r"|\b(?:in|nel|nella|su|sulla|alla|al)\s+(T\d{1,3}|L\d{1,2}|SC\d{1,2})\b",
+    re.IGNORECASE,
+)
+
+
+def extract_query_context(text: str) -> list[str]:
+    """Normalised spatial tokens referenced by the query ('in torre 2'→['T2']).
+    Empty list → no context filter. Never invents: only explicit references."""
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for m in _QUERY_CONTEXT_RE.finditer(text or ""):
+        raw = (m.group(1) or m.group(2) or "").strip()
+        if not raw:
+            continue
+        canon = normalize_context_token(raw)
+        if canon and canon not in seen:
+            seen.add(canon)
+            tokens.append(canon)
+    return tokens
+
+
+def _item_context_keys(it: QueryAnswerItem) -> set[str]:
+    keys: set[str] = set()
+    for v in (it.context_area, it.context_system, it.context_level, it.context_location):
+        if v:
+            canon = normalize_context_token(v)
+            keys.add(canon)
+            keys.update(expand_level_range(canon))
+    for t in it.context_tags or []:
+        canon = normalize_context_token(t)
+        keys.add(canon)
+        keys.update(expand_level_range(canon))
+    # Fallback: re-scan the item text at query time so items stored before the
+    # extractor learned a token (e.g. "SCALA 2") remain matchable without a
+    # state re-extraction pass.
+    fresh = extract_context(it.text or "")
+    for v in (fresh.context_area, fresh.context_system, fresh.context_level,
+              fresh.context_location, *(fresh.context_tags or [])):
+        if v:
+            canon = normalize_context_token(v)
+            keys.add(canon)
+            keys.update(expand_level_range(canon))
+    return keys
+
+
+def filter_items_by_context(items: list[QueryAnswerItem], tokens: list[str]) -> list[QueryAnswerItem]:
+    """Keep items whose normalised context matches ALL query tokens. Items with
+    no context never match a context-scoped query (excluded, never invented)."""
+    if not tokens:
+        return items
+    out: list[QueryAnswerItem] = []
+    for it in items:
+        keys = _item_context_keys(it)
+        if all(tok in keys for tok in tokens):
+            out.append(it)
+    return out
+
+
 _DECISION_GUARD_REPLY = (
     "Non posso decidere al posto del team. Posso però mostrarti stato, "
     "priorità e punti aperti utili per decidere."
@@ -595,12 +671,24 @@ def answer_query(state: OperationalState, text: str) -> QueryResult:
                            summary=_DECISION_GUARD_REPLY, count=0, items=[])
     if intent == "cmd_stato":
         return QueryResult(query=text, intent="cmd_stato", summary=command_status_line(state), count=0, items=[])
+    ctx_tokens = extract_query_context(text)
+    ctx_label = " / ".join(ctx_tokens)
     if intent == "cmd_aperti":
-        items = remaining_open(state)
+        items = filter_items_by_context(remaining_open(state), ctx_tokens)
         summary = f"{len(items)} elementi aperti" if items else "Nessun elemento aperto."
+        if ctx_tokens:
+            summary += f" ({ctx_label})" if items else f" in {ctx_label}."
         return QueryResult(query=text, intent="cmd_aperti", summary=summary, count=len(items), items=items)
     if intent == "cmd_report":
         return QueryResult(query=text, intent="cmd_report", summary="Report operativo disponibile.", count=0, items=[])
+    if intent in {"briefing", "digest"} and ctx_tokens:
+        # Context-scoped "fammi il punto del piano 5" → focused open view for
+        # that context, never the global card.
+        items = filter_items_by_context(remaining_open(state), ctx_tokens)
+        summary = (f"Punto {ctx_label}: {len(items)} elementi aperti" if items
+                   else f"Nessun elemento aperto in {ctx_label}.")
+        return QueryResult(query=text, intent="remaining_open", summary=summary,
+                           count=len(items), items=items)
     if intent == "briefing":
         briefing = build_briefing(state)
         return QueryResult(
@@ -611,11 +699,13 @@ def answer_query(state: OperationalState, text: str) -> QueryResult:
             items=briefing.rows and [item for row in briefing.rows if row.active for item in row.items] or [],
         )
     if intent == "remaining_open":
-        items = remaining_open(state)
+        items = filter_items_by_context(remaining_open(state), ctx_tokens)
         summary = (
             f"{len(items)} punti ancora aperti" if items
             else "Non risultano punti aperti rilevanti."
         )
+        if ctx_tokens:
+            summary += f" ({ctx_label})" if items else f" Contesto: {ctx_label}."
         return QueryResult(query=text, intent="remaining_open", summary=summary, count=len(items), items=items)
     if intent == "digest":
         digest = build_digest(state)
@@ -630,11 +720,14 @@ def answer_query(state: OperationalState, text: str) -> QueryResult:
             count=0,
             items=[],
         )
-    items = _INTENT_DISPATCH[intent](state)
+    items = filter_items_by_context(_INTENT_DISPATCH[intent](state), ctx_tokens)
+    summary = f"{len(items)} {_INTENT_SUMMARY.get(intent, intent)}"
+    if ctx_tokens:
+        summary += f" ({ctx_label})" if items else f" in {ctx_label}"
     return QueryResult(
         query=text,
         intent=intent,
-        summary=f"{len(items)} {_INTENT_SUMMARY.get(intent, intent)}",
+        summary=summary,
         count=len(items),
         items=items,
     )

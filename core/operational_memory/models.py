@@ -426,6 +426,11 @@ class QueryAnswerItem(BaseModel):
     reason: str = ""
     owner: Optional[str] = None
     due: Optional[str] = None
+    context_area: Optional[str] = None
+    context_system: Optional[str] = None
+    context_level: Optional[str] = None
+    context_location: Optional[str] = None
+    context_tags: list[str] = Field(default_factory=list)
 
 
 class QueryResult(BaseModel):
