@@ -380,3 +380,23 @@ async def test_shared_recent_window_retains_captions_and_thread(monkeypatch):
     assert "foto del pranzo" in texts
     assert "messaggio numero 3" in texts
     assert len([m for m in window]) >= 7
+
+
+# --------------------------------------------------------------------------- #
+# 7. EMPATHIC ENGAGEMENT LOOSENING — the group intervention filter is allowed to
+#    engage a bit more (occasional warm conversation starters on shared positive
+#    moments) WITHOUT becoming spam: the loosening carries its own anti-spam limit,
+#    and it is applied symmetrically on both platforms.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("path", ["core/whatsapp_bot.py", "core/telegram_bot.py"])
+def test_group_filter_allows_measured_engagement(path):
+    src = open(path, "r", encoding="utf-8").read()
+    # The measured warm-engagement case exists…
+    assert "AGGANCIO CALOROSO OCCASIONALE" in src
+    # …and it is bounded (anti-spam self-limit + no rapid-fire).
+    assert "già intervenuta" in src
+    assert "una persona di famiglia" in src.lower() or "persona di famiglia" in src
+    # The old hard "never when in doubt" veto is gone (loosened).
+    assert "Nel dubbio, non intervenire" not in src
