@@ -1715,8 +1715,8 @@ async def handle_update(update: dict):
                     f"zero intro elaborati, {domande_rule}zero 'che bello!'. "
                     f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. "
                     f"Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente. "
-                    f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
-                    f"a meno che {first_name} non li citi in questo messaggio. "
+                    f"COERENZA: hai seguito la discussione recente ed entri nel discorso già informata, collegandoti al tema in corso. "
+                    f"Non riesumare di tua iniziativa vecchie questioni chiuse da giorni (malattie superate, problemi risolti) se {first_name} non le cita ora; se una situazione è ancora in corso e vuoi aggiornamenti, chiedilo con delicatezza. "
                     f"{photo_rules}"
                 )
             else:
@@ -1801,8 +1801,9 @@ async def handle_update(update: dict):
                 f"{_sistema_sep}"
                 f"\n[{group_type_label}: REGOLE ASSOLUTE: risposta misurata (3-4 righe max), "
                 f"tono {role_label}, {extra_rules}"
-                f"Rispondi SOLO al messaggio attuale di {first_name} sopra, "
-                f"tenendo conto del filo della conversazione nello storico.]\n"
+                f"Rispondi al messaggio attuale di {first_name} sopra restando nel filo "
+                f"della conversazione in corso: tieni conto degli ultimi messaggi e del "
+                f"tema di cui si sta parlando, entrando nel discorso già informata.]\n"
                 f"{pragmatic_block}"
                 f"{group_ctx}"
             )

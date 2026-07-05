@@ -661,12 +661,20 @@ async def build_group_context(chat_id: int, from_id: int, first_name: str,
             f"NON SEI NEL GRUPPO DELLA FAMIGLIA. NON nominare Alfio, Rita, Ennio o altri membri della famiglia Turrisi a meno che non siano esplicitamente presenti o menzionati in questo gruppo. Mantieni un profilo educato, distaccato ma utile.]"
         )
 
-    # Regola anti-staleness: non tirare fuori vecchie discussioni senza motivo
+    # Coerenza conversazionale + guardia anti-staleness MORBIDA. Genesi segue
+    # sempre il filo recente (entra "già informata"), ma non riesuma di sua
+    # iniziativa vecchie questioni chiuse che nessuno ha appena citato.
     lines.append(
-        "[REGOLA FONDAMENTALE: Rispondi SOLO a ciò che viene detto ADESSO. "
-        "Non tirare in mezzo argomenti passati (malattie, problemi, eventi) "
-        "a meno che il messaggio attuale non li citi esplicitamente. "
-        "Se vuoi chiedere di un argomento passato, fallo con una domanda — non darlo per scontato ancora attuale.]"
+        "[COERENZA CONVERSAZIONALE: Sei sempre presente nel gruppo e hai seguito la "
+        "discussione. Quando rispondi entra nel discorso GIÀ INFORMATA: tieni conto "
+        "degli ultimi messaggi qui sopra, del tema in corso e di cosa si sono detti i "
+        "membri, e collega la tua risposta a ciò di cui si sta parlando adesso. Non "
+        "ripartire da zero e non comportarti come se avessi letto solo l'ultimo "
+        "messaggio. "
+        "GUARDIA: non riesumare di tua iniziativa vecchie questioni ormai chiuse da "
+        "giorni (malattie superate, problemi già risolti) se nessuno le ha appena "
+        "citate; se invece una situazione è ancora in corso e vuoi un aggiornamento, "
+        "chiedilo con delicatezza, senza darla per scontata come attuale.]"
     )
 
     # Guard anti-leak: il contenuto tra parentesi quadre è solo contesto interno.

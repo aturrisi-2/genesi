@@ -1455,10 +1455,10 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                         f"REGOLE ASSOLUTE: risposta misurata ma loquace e di compagnia (3-4 righe max), tono naturale da familiare (non da assistente), "
                         f"zero intro elaborati, {domande_rule}zero 'che bello!'. "
                         f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente ai festeggiamenti rivolti a quel familiare. "
-                        f"NON menzionare eventi passati (malattie, problemi, notizie di giorni fa) "
-                        f"a meno che {first_name} non li citi in questo messaggio. "
+                        f"COERENZA: hai seguito la discussione recente del gruppo (vedi contesto sotto); entra nel discorso già informata e collega la risposta al tema di cui si sta parlando adesso — non ripartire da zero come se avessi letto solo l'ultimo messaggio. "
+                        f"Non riesumare di tua iniziativa vecchie questioni chiuse da giorni (malattie superate, problemi risolti) se {first_name} non le cita ora; se una situazione è ancora in corso e vuoi un aggiornamento, chiedilo con delicatezza. "
                         f"{photo_rules}"
-                        f"Rispondi SOLO a quello che viene detto adesso.]{late_prompt}\n"
+                        f"Rispondi a {first_name} restando nel filo della conversazione in corso.]{late_prompt}\n"
                         f"{_pragmatic_block}"
                         f"{group_ctx}"
                     )
