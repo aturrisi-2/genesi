@@ -1525,6 +1525,26 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     await send_message(wa_id,
                         "Sessione scaduta. Inserisci la tua email:")
                 return False
+            # Anti-leak: rimuove marker di contesto interno che l'LLM ha ricopiato
+            # nell'output (context leak). WhatsApp ne era sprovvisto → il prompt
+            # grezzo veniva inviato in chat. Stessa logica di Telegram (fn condivisa).
+            if is_group and chat_id:
+                try:
+                    from core.group_pragmatics import strip_leaked_context_markers
+                    _reply_pre_scrub = reply
+                    reply, _leak_changed = strip_leaked_context_markers(reply)
+                    if _leak_changed:
+                        log("GROUP_RESPONSE_SANITIZED", platform="whatsapp",
+                            chat_id=chat_id,
+                            chars_removed=len(_reply_pre_scrub) - len(reply),
+                            preview_before=_reply_pre_scrub[:80])
+                    if not reply:
+                        logger.warning("GROUP_RESPONSE_SANITIZED_EMPTY chat_id=%s from=%s",
+                                       chat_id, first_name)
+                        return False
+                except Exception as _lke:
+                    logger.debug("WA_GROUP_LEAK_SCRUB_ERR %s", _lke)
+
             # Traccia con chi Genesi stava conversando
             if is_group and chat_id:
                 try:

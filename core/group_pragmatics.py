@@ -244,6 +244,58 @@ def group_pragmatic_prompt(role: GroupMessageRole, sender_name: str = "") -> str
     return base + "[POSTURA: silent. Se non c'e' una ragione forte per intervenire, resta silenziosa.]\n"
 
 
+# --------------------------------------------------------------------------- #
+# Anti-leak: rimuove dal testo di risposta i marker di contesto interno che il
+# LLM ha erroneamente ricopiato nell'output (context leak). Platform-independent:
+# usato sia da Telegram sia da WhatsApp per evitare divergenze (WA prima ne era
+# sprovvisto → prompt grezzo inviato in chat). Fonte unica di verità.
+# --------------------------------------------------------------------------- #
+
+# Marker con parentesi quadra dei blocchi iniettati in build_group_context() e
+# nei wrapper di gruppo (telegram_bot / whatsapp_bot). Il match è per RIGA: una
+# riga che contiene uno di questi token è interamente scartata.
+LEAKED_CONTEXT_MARKERS: tuple[str, ...] = (
+    '[INFO GRUPPO', '[CONTEGGIO MEMBRI', '[LISTA DETTAGLIATA MEMBRI',
+    '[⚠️', '[MEMORIA EPISODICA', '[DINAMICHE DELLA FAMIGLIA',
+    '[RIEPILOGO DISCUSSIONI', '[COSA SO DI ', '[IDENTITÀ ASSOLUTA',
+    '[MESSAGGIO ATTUALE', '[FINE MESSAGGIO', '[GRUPPO FAMILIARE',
+    '[GRUPPO ESTERNO', '[ISTRUZIONE PRIORITARIA',
+    '[DISCUSSIONE IN CORSO', '[FINE DISCUSSIONE', '[RISPOSTE RECENTI',
+    '[FINE RISPOSTE', '[CONTESTO FAMIGLIA', '[CONTESTO SPECIFICO',
+    '[COERENZA CONVERSAZIONALE', '[ATTENZIONE ASSOLUTA', '[POSTURA',
+    '[REGOLE ASSOLUTE', '[NON copiare', '[📅', '[CONTESTO TEMPORALE',
+    'COERENZA:', 'GUARDIA:', 'REGOLE ASSOLUTE:',
+)
+
+# Frasi parafrasate del contesto interno (l'LLM ripete il senso SENZA le
+# parentesi, quindi i marker sopra non bastano). Match a livello di FRASE.
+LEAKED_CONTEXT_PHRASES: tuple[str, ...] = (
+    'account secondari', 'albero genealogico', 'non allucinare',
+    'non confonderli', 'membri del gruppo', 'assistente AI del gruppo',
+    'entra nel discorso già informata',
+)
+
+
+def strip_leaked_context_markers(reply: str) -> tuple[str, bool]:
+    """Rimuove prefisso 'Genesi:' + righe con marker interni + frasi parafrasate
+    di contesto. Ritorna (testo_pulito, changed). Non solleva mai. Generico."""
+    import re as _re
+
+    original = reply or ""
+    out = _re.sub(r'^\s*Genesi\s*:\s*', '', original, flags=_re.IGNORECASE)
+    out = '\n'.join(
+        line for line in out.split('\n')
+        if not any(m in line for m in LEAKED_CONTEXT_MARKERS)
+    ).strip()
+    if any(p.lower() in out.lower() for p in LEAKED_CONTEXT_PHRASES):
+        kept = [
+            s for s in _re.split(r'(?<=[.!?])\s+', out)
+            if not any(p.lower() in s.lower() for p in LEAKED_CONTEXT_PHRASES)
+        ]
+        out = ' '.join(kept).strip()
+    return out, (out != original)
+
+
 def sanitize_group_observer_response(response: str, role: GroupMessageRole) -> tuple[str, bool]:
     """
     Fallback difensivo anti-impersonificazione.

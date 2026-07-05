@@ -1942,35 +1942,13 @@ async def handle_update(update: dict):
                     return
 
             # Sanifica risposte di gruppo: rimuove marker di contesto che il LLM
-            # ha erroneamente incluso nell'output (context leak).
+            # ha erroneamente incluso nell'output (context leak). Fn condivisa con
+            # WhatsApp (core.group_pragmatics) — unica fonte di marker/frasi.
             if is_group:
-                import re as _re
+                from core.group_pragmatics import strip_leaked_context_markers
                 _reply_before_sanitize = reply
-                reply = _re.sub(r'^\s*Genesi\s*:\s*', '', reply, flags=_re.IGNORECASE)
-                _LEAKED_MARKERS = (
-                    '[INFO GRUPPO', '[CONTEGGIO MEMBRI', '[LISTA DETTAGLIATA MEMBRI',
-                    '[⚠️', '[MEMORIA EPISODICA', '[DINAMICHE DELLA FAMIGLIA',
-                    '[RIEPILOGO DISCUSSIONI', '[COSA SO DI ', '[IDENTITÀ ASSOLUTA',
-                    '[MESSAGGIO ATTUALE', '[FINE MESSAGGIO', '[GRUPPO FAMILIARE',
-                    '[GRUPPO ESTERNO', '[ISTRUZIONE PRIORITARIA',
-                )
-                _clean_lines = [l for l in reply.split('\n')
-                                if not any(m in l for m in _LEAKED_MARKERS)]
-                reply = '\n'.join(_clean_lines).strip()
-                # Scrub frasi parafrasate (l'LLM ripete il contesto SENZA bracket,
-                # quindi i marker sopra non bastano). Rimuove la frase incriminata.
-                _LEAKED_PHRASES = (
-                    'account secondari', "albero genealogico", 'non allucinare',
-                    'non confonderli', 'membri del gruppo', 'assistente AI del gruppo',
-                )
-                if any(p.lower() in reply.lower() for p in _LEAKED_PHRASES):
-                    _kept = []
-                    for _sent in _re.split(r'(?<=[.!?])\s+', reply):
-                        if any(p.lower() in _sent.lower() for p in _LEAKED_PHRASES):
-                            continue
-                        _kept.append(_sent)
-                    reply = ' '.join(_kept).strip()
-                if reply != _reply_before_sanitize:
+                reply, _leak_changed = strip_leaked_context_markers(reply)
+                if _leak_changed:
                     _removed = len(_reply_before_sanitize) - len(reply)
                     log("GROUP_RESPONSE_SANITIZED", chat_id=chat_id, chars_removed=_removed,
                         preview_before=_reply_before_sanitize[:80])

@@ -295,3 +295,49 @@ def test_telegram_inline_block_preserves_conversation_thread():
     src = open("core/telegram_bot.py", "r", encoding="utf-8").read()
     assert "entrando nel discorso già informata" in src
     assert "Rispondi SOLO al messaggio attuale" not in src
+
+
+# --------------------------------------------------------------------------- #
+# 5. OUTPUT LEAK SCRUB — when the LLM copies internal bracketed context into its
+#    reply, it must be stripped BEFORE sending, on both platforms. WhatsApp had
+#    no such scrub (only Telegram did), so a raw prompt was sent to a family group.
+#    The scrub is now shared (core.group_pragmatics.strip_leaked_context_markers)
+#    and wired into both bots.
+# --------------------------------------------------------------------------- #
+
+
+def test_shared_scrub_strips_leaked_markers_and_prefix():
+    from core.group_pragmatics import strip_leaked_context_markers
+
+    # Leading "Genesi:" persona prefix is removed.
+    clean, changed = strip_leaked_context_markers("Genesi: Buongiorno a tutti!")
+    assert changed and clean == "Buongiorno a tutti!"
+
+    # A leaked bracketed context line is dropped, the natural reply survives.
+    leaked = "[IDENTITÀ ASSOLUTA: TU sei Genesi]\nCiao ragazzi, come va?"
+    clean, changed = strip_leaked_context_markers(leaked)
+    assert changed and clean == "Ciao ragazzi, come va?"
+    assert "IDENTITÀ ASSOLUTA" not in clean
+
+    # The new continuity wording, if echoed, must not leak either.
+    clean, changed = strip_leaked_context_markers(
+        "Va bene!\n[COERENZA CONVERSAZIONALE: entra già informata]")
+    assert changed and "COERENZA" not in clean and clean == "Va bene!"
+
+    # A clean, natural reply is left untouched.
+    clean, changed = strip_leaked_context_markers("Tutto bene, ci vediamo dopo!")
+    assert not changed and clean == "Tutto bene, ci vediamo dopo!"
+
+
+def test_whatsapp_bot_wires_output_leak_scrub():
+    """Regression: the WhatsApp group reply path must call the shared scrub before
+    sending (previously absent → raw prompt leaked to the family group)."""
+    src = open("core/whatsapp_bot.py", "r", encoding="utf-8").read()
+    assert "strip_leaked_context_markers" in src
+    assert "GROUP_RESPONSE_SANITIZED" in src
+
+
+def test_both_bots_use_the_same_shared_scrub():
+    for path in ("core/whatsapp_bot.py", "core/telegram_bot.py"):
+        src = open(path, "r", encoding="utf-8").read()
+        assert "strip_leaked_context_markers" in src, path
