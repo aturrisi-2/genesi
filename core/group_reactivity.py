@@ -490,6 +490,20 @@ def _question_handled(group_id, question_text: str) -> bool:
     return bool(ts and time.time() - ts < _HANDLED_TTL)
 
 
+def addresses_genesi_directly(message: str, bot_mentioned: bool = False,
+                              reply_to_genesi: bool = False) -> bool:
+    """True se il messaggio corrente interpella DIRETTAMENTE Genesi (menzione,
+    reply a un suo messaggio, o il nome 'genesi' nel testo).
+
+    Quando l'utente invoca esplicitamente Genesi con una propria richiesta, quella
+    richiesta è prioritaria e NON deve essere scavalcata dall'istruzione "rispondi
+    prima a una domanda inevasa altrui" (che serve invece alle sole intervenzioni
+    spontanee). Generico e platform-independent: nessun nome/chat hardcoded."""
+    if bot_mentioned or reply_to_genesi:
+        return True
+    return bool(re.search(r'\bgenesi\b', message or "", re.IGNORECASE))
+
+
 def find_unanswered_question(raw_msgs: list, current_sender: str = "",
                              group_id=None, lookback: int = 12) -> dict | None:
     """

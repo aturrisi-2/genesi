@@ -1830,11 +1830,22 @@ async def handle_update(update: dict):
                     )
                 enriched = _group_msg(msg_with_quote, group_ctx)
 
-                # DOMANDA INEVASA: istruzione PRIORITARIA a rispondere alla persona giusta
+                # DOMANDA INEVASA: istruzione PRIORITARIA a rispondere alla persona giusta.
+                # NON scavalcare una invocazione diretta: se l'utente sta interpellando
+                # Genesi con la propria richiesta, quella è prioritaria (l'override della
+                # domanda inevasa serve solo alle intervenzioni spontanee, altrimenti
+                # inietta un'istruzione contraddittoria → risposte fuori tema o rifiuti).
                 try:
-                    from core.group_reactivity import find_unanswered_question, mark_question_handled
-                    _uq = find_unanswered_question(await get_raw_messages(chat_id, limit=12),
-                                                   current_sender=first_name, group_id=chat_id)
+                    from core.group_reactivity import (
+                        find_unanswered_question, mark_question_handled,
+                        addresses_genesi_directly,
+                    )
+                    _direct_invocation = addresses_genesi_directly(
+                        message, _bot_mentioned, _reply_to_genesi)
+                    _uq = (None if _direct_invocation
+                           else find_unanswered_question(
+                               await get_raw_messages(chat_id, limit=12),
+                               current_sender=first_name, group_id=chat_id))
                     if _uq:
                         enriched = (
                             f"[ISTRUZIONE PRIORITARIA: nel gruppo {_uq['name']} aveva chiesto "

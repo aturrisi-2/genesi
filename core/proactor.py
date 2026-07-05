@@ -607,8 +607,12 @@ class Proactor:
             # Load the profile from persistent storage
             # (profile già caricato sopra per non-identity)
 
-            # Use the profile in the context assembly
-            context = await self.context_assembler.build(user_id, message)
+            # Use the profile in the context assembly. Pass the platform so
+            # platform-gated context logic (predictive-hint suppression for group
+            # chats, widget history exclusion) applies consistently here too — the
+            # relational path already passes it; this path must match.
+            context = await self.context_assembler.build(
+                user_id, message, platform=getattr(self, '_current_platform', '') or "")
             context['profile'] = profile
 
             # STEP 3.5: ELLIPTICAL TOOL FOLLOW-UP (e.g. "e domani?" after weather)

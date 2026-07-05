@@ -341,3 +341,42 @@ def test_both_bots_use_the_same_shared_scrub():
     for path in ("core/whatsapp_bot.py", "core/telegram_bot.py"):
         src = open(path, "r", encoding="utf-8").read()
         assert "strip_leaked_context_markers" in src, path
+
+
+# --------------------------------------------------------------------------- #
+# 6. CORE RECENT-WINDOW CONTRACT (platform-agnostic) — the shared group buffer
+#    (used by BOTH the Telegram and WhatsApp adapters) must retain the recent
+#    conversation window, including media captions ingested as (text or caption),
+#    so an invocation sees the whole thread and not just the last message.
+# --------------------------------------------------------------------------- #
+
+
+class _FakeStorage:
+    def __init__(self):
+        self._d = {}
+
+    async def load(self, key, default=None):
+        return self._d.get(key, default)
+
+    async def save(self, key, value):
+        self._d[key] = value
+
+
+@pytest.mark.asyncio
+async def test_shared_recent_window_retains_captions_and_thread(monkeypatch):
+    monkeypatch.setattr("core.storage.storage", _FakeStorage(), raising=False)
+    from core.telegram_group_memory import append_raw_message, get_raw_messages
+
+    chat = -100999001
+    # A media caption + several messages + a later invocation.
+    await append_raw_message(chat, 1, "A", "[caption] una foto del pranzo di gruppo")
+    for i in range(2, 8):
+        await append_raw_message(chat, i, f"U{i}", f"messaggio numero {i}")
+    await append_raw_message(chat, 9, "A", "Genesi che ne pensi?")
+
+    window = await get_raw_messages(chat, limit=20)
+    texts = " | ".join(m.get("text", "") for m in window)
+    # Caption from the first message survives, plus the full recent thread.
+    assert "foto del pranzo" in texts
+    assert "messaggio numero 3" in texts
+    assert len([m for m in window]) >= 7
