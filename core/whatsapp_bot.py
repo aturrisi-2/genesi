@@ -850,6 +850,19 @@ async def _transcribe(token: str, audio_data: bytes,
 
 # ── Risposta con immagini ────────────────────────────────────────────────────
 
+def _should_suppress_group_reply(reply: str) -> bool:
+    """True for internal/sentinel/fallback replies that must not be sent visibly in WhatsApp groups."""
+    if not isinstance(reply, str):
+        return False
+    normalized = reply.strip().lower()
+    if re.fullmatch(r"\[\s*silenzio\s*\][.!?]*", normalized):
+        return True
+    if "non posso rispondere a questo messaggio" in normalized:
+        return True
+    return False
+
+
+
 async def _send_response(wa_id: str, reply: str):
     """Invia la risposta: se contiene URL immagini le manda come immagini WhatsApp."""
     md_urls  = _IMG_MD_RE.findall(reply)
@@ -1573,6 +1586,9 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                             return False
                 except Exception as _gife:
                     logger.debug("WA_GROUP_PRAGMATIC_FALLBACK_ERR %s", _gife)
+            if is_group and chat_id and _should_suppress_group_reply(reply):
+                logger.info("WA_GROUP_REPLY_SUPPRESSED chat_id=%s reason=bad_fallback", chat_id)
+                return False
             await _send_response(wa_id, reply)
             if is_group and chat_id:
                 _GROUP_CONV_STATE[chat_id] = {
