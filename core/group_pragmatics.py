@@ -330,6 +330,27 @@ def _draft_fallback(role: GroupMessageRole) -> str:
     return "Puoi rispondere così: «Grazie per avermelo detto. Ti rispondo con calma appena posso.»"
 
 
+# Rifiuto "secco" generato dal modello relazionale quando non sa cosa dire
+# (nessun dato, istruzioni percepite come contraddittorie). Non è mai una
+# risposta legittima in un gruppo: su invocazione diretta deve diventare una
+# richiesta di chiarimento onesta; su intervento spontaneo, silenzio. Match
+# sull'INTERA risposta: rifiuti argomentati o risposte più lunghe non toccati.
+_FLAT_REFUSAL_RE = re.compile(
+    r"(?:mi dispiace[,.]?\s*)?(?:ma\s+)?non posso rispondere a questo messaggio[.!\s]*",
+    re.IGNORECASE,
+)
+
+_REFUSAL_CLARIFICATION = (
+    "Non sono sicura di aver capito a cosa ti riferisci: mi dai qualche "
+    "dettaglio in più, così ti rispondo a tono?"
+)
+
+
+def is_flat_group_refusal(response: str) -> bool:
+    """True se la risposta è SOLO il rifiuto secco (piattaforma-indipendente)."""
+    return bool(_FLAT_REFUSAL_RE.fullmatch((response or "").strip()))
+
+
 def enforce_group_pragmatic_response(response: str, role: GroupMessageRole) -> tuple[str, bool, str]:
     """
     Rende vincolante la postura pragmatica dopo la generazione.
@@ -339,6 +360,10 @@ def enforce_group_pragmatic_response(response: str, role: GroupMessageRole) -> t
     per i soli casi observer/neutral_support.
     """
     text = (response or "").strip()
+    if is_flat_group_refusal(text):
+        if role.recommended_response_posture in (POSTURE_DIRECT_ASSISTANT, POSTURE_DRAFT_HELPER):
+            return _REFUSAL_CLARIFICATION, True, "flat_refusal_to_clarification"
+        return "", True, "flat_refusal_suppressed"
     if role.recommended_response_posture == POSTURE_DRAFT_HELPER:
         if not text:
             return _draft_fallback(role), True, "empty_output"
