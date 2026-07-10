@@ -27,6 +27,43 @@ EMOTIONAL_KEYWORDS = [
     "mi sento sopraffatto", "sono a pezzi", "sono distrutto", "sono distrutta",
 ]
 
+# ── Estrazione del testo utente dai wrapper di gruppo ────────────────────────
+# I path di gruppo inviano al classificatore un prompt decorato: blocchi
+# [ISTRUZIONE PRIORITARIA]/[IDENTITÀ ASSOLUTA] in testa e il testo reale dentro
+# [MESSAGGIO ATTUALE]…[FINE MESSAGGIO ATTUALE] (Telegram) oppure come prefisso
+# prima dei blocchi [GRUPPO …] (WhatsApp). Classificare sul blob intero rompe il
+# routing dei tool (es. domanda meteo nel gruppo → chat_free → risposta
+# relazionale senza dati → rifiuto). I marker inline (es. "[Contenuto immagine:")
+# fanno parte del turno utente e vanno preservati per le route foto.
+_GROUP_PREAMBLE_RE = re.compile(
+    r"^\s*(?:\[(?:ISTRUZIONE PRIORITARIA|IDENTITÀ ASSOLUTA)\b[^\]]*\]\s*)+",
+    re.IGNORECASE,
+)
+
+
+def extract_group_user_text(message: str) -> str:
+    """Isola il testo scritto dall'utente da un prompt di gruppo decorato.
+
+    Se il messaggio non contiene wrapper di gruppo viene restituito invariato
+    (al netto dei soli blocchi-preambolo). Non tronca i marker inline del turno.
+    """
+    msg = message or ""
+    if "[MESSAGGIO ATTUALE" in msg:
+        seg = msg.split("[MESSAGGIO ATTUALE", 1)[1]
+        if "]" in seg:
+            seg = seg.split("]", 1)[1]
+        _end = seg.find("[FINE MESSAGGIO ATTUALE]")
+        if _end != -1:
+            seg = seg[:_end]
+        seg = seg.strip()
+        # Variante emoji: "[MESSAGGIO ATTUALE — Nome]: <testo>" → resta ": <testo>".
+        seg = re.sub(r"^\s*:\s*", "", seg)
+        # Variante standard: "<Nome>: <testo>" → rimuove il prefisso del mittente.
+        seg = re.sub(r"^[^\n:]{1,40}:\s*", "", seg, count=1)
+        return seg.strip()
+    return _GROUP_PREAMBLE_RE.sub("", msg).strip()
+
+
 def _is_emotional(message: str) -> bool:
     msg_lower = message.lower()
     return any(kw in msg_lower for kw in EMOTIONAL_KEYWORDS)
@@ -522,6 +559,7 @@ class IntentClassifier:
         """
         # Usa solo il testo dell'utente, senza contesto pagina (widget) né annotazioni gruppo (Telegram)
         _user_part = message.split("[CONTESTO PAGINA]")[0].split("[PAGE CONTEXT]")[0]
+        _user_part = extract_group_user_text(_user_part)
         _user_part = _user_part.split("[GRUPPO:")[0].split("[GRUPPO ")[0].split("[DISCUSSIONE IN CORSO")[0]
         message_lower = _user_part.lower().strip()
 
@@ -667,7 +705,8 @@ class IntentClassifier:
         """
         # Per la classificazione intent usa solo il testo utente, senza contesto pagina né annotazioni gruppo
         _classify_msg = (message or "").split("[CONTESTO PAGINA]")[0].split("[PAGE CONTEXT]")[0]
-        _classify_msg = _classify_msg.split("[GRUPPO:")[0].split("[DISCUSSIONE IN CORSO")[0].strip()
+        _classify_msg = extract_group_user_text(_classify_msg)
+        _classify_msg = _classify_msg.split("[GRUPPO:")[0].split("[GRUPPO ")[0].split("[DISCUSSIONE IN CORSO")[0].strip()
         
         # Rimuovi i prefissi iniettati (es. reply di telegram, descrizioni visuali silenti)
         import re
