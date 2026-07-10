@@ -1676,25 +1676,23 @@ async def handle_update(update: dict):
             if not is_group or not first_name:
                 return message
 
-            # Estrai blocchi [SISTEMA: ...] dal corpo del messaggio.
-            # Devono apparire DOPO [FINE MESSAGGIO ATTUALE], non dentro la riga
-            # "{first_name}: {message}" — altrimenti il LLM li legge come parole
-            # di Mariella invece che come direttive di sistema.
-            _sistema_block = ""
-            _clean_message = message
-            _SISTEMA_MARKER = "\n[SISTEMA:"
-            if _SISTEMA_MARKER in message:
-                idx = message.index(_SISTEMA_MARKER)
-                _clean_message = message[:idx]
-                _sistema_block = message[idx:].strip()
-            # Caso anche senza newline iniziale (text = sistema_msg dopo BUG#1 fix)
-            elif message.lstrip().startswith("[SISTEMA:"):
-                _clean_message = ""
-                _sistema_block = message.strip()
+            from core.group_prompt_composer import (
+                compose_group_prompt, family_extra_rules, family_rules_block,
+                photo_style_override, split_sistema_block,
+            )
+
+            _clean_message, _sistema_block = split_sistema_block(message)
 
             is_family_group = _is_tg_family_group(chat_id)
             group_type_label = "GRUPPO FAMILIARE" if is_family_group else "GRUPPO ESTERNO"
             role_label = "naturale da familiare (non da assistente)" if is_family_group else "da assistente AI educata, utile e mai invadente"
+
+            # FOTO: stile caldo/breve UNIFORME su tutte le piattaforme, anche nei
+            # gruppi esterni. Sovrascrive il tono 'AI esterna'/'fornisci il dato'
+            # per i soli turni-foto.
+            photo_override = None
+            if "[Contenuto immagine:" in message or "[ANALISI IMMAGINE" in message:
+                photo_override = photo_style_override(first_name)
 
             if is_family_group:
                 photo_rules = ""
@@ -1712,14 +1710,13 @@ async def handle_update(update: dict):
                         photo_rules += 'Ci sono persone sconosciute in foto. Fai un commento colloquiale, curioso e intelligente. Includi con molta naturalezza una domanda per chiedere chi sono (se non lo sai dal contesto), ma non essere ripetitivo se l\'hai già chiesto di recente. '
                     domande_rule = ""
 
-                extra_rules = (
-                    f"zero intro elaborati, {domande_rule}zero 'che bello!'. "
-                    f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. "
-                    f"Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente. "
-                    f"COERENZA: hai seguito la discussione recente ed entri nel discorso già informata, collegandoti al tema in corso. "
-                    f"Non riesumare di tua iniziativa vecchie questioni chiuse da giorni (malattie superate, problemi risolti) se {first_name} non le cita ora; se una situazione è ancora in corso e vuoi aggiornamenti, chiedilo con delicatezza. "
-                    f"{photo_rules}"
+                rules_block = family_rules_block(
+                    first_name, extra_rules=photo_override,
+                    photo_rules=photo_rules, domande_rule=domande_rule,
                 )
+                _directive_extra = photo_override if photo_override is not None else \
+                    family_extra_rules(first_name, photo_rules=photo_rules,
+                                       domande_rule=domande_rule)
             else:
                 extra_rules = (
                     f"Rispondi in modo estremamente conciso, al punto, senza chiacchiere. Non fare la finta amica, sei un'AI esterna. "
@@ -1733,28 +1730,22 @@ async def handle_update(update: dict):
                         f"Tieni a mente questo contesto se fanno domande di programmazione, Apple o app. "
                         f"RISOLUZIONE DOMANDE: Quando viene fatta una domanda di cui conosci la risposta o che puoi cercare, usa le tue skill di ricerca web sui siti specializzati per fornire risposte coerenti e verificate, accompagnate possibilmente da link utili (inserendo un bottone al link esterno se supportato). "
                     )
-
-            # FOTO: stile caldo/breve UNIFORME su tutte le piattaforme (come WhatsApp),
-            # anche nei gruppi esterni. Sovrascrive il tono 'AI esterna'/'fornisci il dato'
-            # per i soli turni-foto, allineando TG al comportamento globale richiesto.
-            if "[Contenuto immagine:" in message or "[ANALISI IMMAGINE" in message:
-                extra_rules = (
-                    "Stai commentando una FOTO. Reagisci come un amico affettuoso: 1-2 frasi calde e "
-                    "naturali (max ~25 parole), italiano colloquiale. Se la persona ritratta è chi ti "
-                    f"scrive ({first_name}), rivolgiti a lui in SECONDA persona ('ti vedo', 'sei'), mai in terza. "
-                    "VIETATO esordire con 'Nell'immagine'/'L'immagine mostra'/'Nella foto vedo' o fare "
-                    "descrizioni cliniche/elenchi. Niente domande di ritorno forzate. "
+                if photo_override is not None:
+                    extra_rules = photo_override
+                rules_block = (
+                    f"\n[{group_type_label}: REGOLE ASSOLUTE: risposta misurata (3-4 righe max), "
+                    f"tono {role_label}, {extra_rules}"
+                    f"Rispondi al messaggio attuale di {first_name} sopra restando nel filo "
+                    f"della conversazione in corso: tieni conto degli ultimi messaggi e del "
+                    f"tema di cui si sta parlando, entrando nel discorso già informata.]\n"
                 )
+                _directive_extra = extra_rules
 
-            # Blocco identità: PRIMA di tutto — evita che l'LLM si identifichi con
-            # i messaggi degli altri utenti che legge nel contesto storico.
-            identity_block = (
-                f"[IDENTITÀ ASSOLUTA: TU sei Genesi, l'AI del gruppo. "
-                f"Quando leggi i messaggi dello storico NON sei nessuno di quei parlanti: "
-                f"non impersonare nessun membro. Rispondi SEMPRE in prima persona come Genesi. "
-                f"Il messaggio a cui DEVI rispondere è quello di {first_name} qui sotto, "
-                f"non quelli nello storico.]\n"
+            directive_rules_block = (
+                f"\n[{group_type_label}: tono {role_label}, risposta misurata (3-4 righe max), "
+                f"{_directive_extra}]\n"
             )
+
             try:
                 from core.group_pragmatics import classify_group_message_role, group_pragmatic_prompt
                 _prag_role = classify_group_message_role(
@@ -1767,46 +1758,14 @@ async def handle_update(update: dict):
             except Exception:
                 pragmatic_block = ""
 
-            # Messaggio = SOLO direttiva di sistema (es. volti memorizzati): NON c'è
-            # testo utente. Evita lo slot "Alfio: " vuoto che faceva dire al LLM
-            # "non vedo un messaggio a cui rispondere". Prompt directive-only.
-            if not _clean_message.strip() and _sistema_block:
-                return (
-                    f"{identity_block}"
-                    f"[NESSUN NUOVO MESSAGGIO TESTUALE DA {first_name} — esegui l'azione "
-                    f"di sistema qui sotto e rispondi in modo naturale, in prima persona come Genesi]\n"
-                    f"{_sistema_block}\n"
-                    f"{pragmatic_block}"
-                    f"\n[{group_type_label}: tono {role_label}, risposta misurata (3-4 righe max), "
-                    f"{extra_rules}]\n"
-                    f"{group_ctx}"
-                )
-
-            only_emoji = all(
-                ord(c) > 127 or c in (' ', '\n') for c in _clean_message.strip()
-            )
-            if only_emoji:
-                return (
-                    f"{identity_block}"
-                    f"[MESSAGGIO ATTUALE — {first_name}]: {_clean_message}\n\n"
-                    f"[{group_type_label}: Reazione emoji — 1 riga max, naturale.]\n"
-                    f"{pragmatic_block}"
-                    f"{group_ctx}"
-                )
-            _sistema_sep = f"\n{_sistema_block}\n" if _sistema_block else ""
-            return (
-                f"{identity_block}"
-                f"[MESSAGGIO ATTUALE — a cui devi rispondere]\n"
-                f"{first_name}: {_clean_message}\n"
-                f"[FINE MESSAGGIO ATTUALE]\n"
-                f"{_sistema_sep}"
-                f"\n[{group_type_label}: REGOLE ASSOLUTE: risposta misurata (3-4 righe max), "
-                f"tono {role_label}, {extra_rules}"
-                f"Rispondi al messaggio attuale di {first_name} sopra restando nel filo "
-                f"della conversazione in corso: tieni conto degli ultimi messaggi e del "
-                f"tema di cui si sta parlando, entrando nel discorso già informata.]\n"
-                f"{pragmatic_block}"
-                f"{group_ctx}"
+            return compose_group_prompt(
+                sender_name=first_name,
+                message=message,
+                rules_block=rules_block,
+                pragmatic_block=pragmatic_block,
+                group_ctx=group_ctx,
+                emoji_rules_block=f"[{group_type_label}: Reazione emoji — 1 riga max, naturale.]\n",
+                directive_rules_block=directive_rules_block,
             )
 
         async def _do_chat(message: str) -> str:
