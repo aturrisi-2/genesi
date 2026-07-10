@@ -1100,11 +1100,24 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
 
         # DOMANDA INEVASA: se nei commenti accumulati c'è una domanda di un'altra persona
         # a cui nessuno ha risposto, istruzione PRIORITARIA → rispondi a QUELLA persona.
+        # NON scavalcare una invocazione diretta: se l'utente sta interpellando Genesi
+        # con la propria richiesta, quella è prioritaria (stessa guardia del path Telegram:
+        # l'override serve alle sole intervenzioni spontanee, altrimenti inietta
+        # un'istruzione contraddittoria → risposte fuori tema o rifiuti).
         _uq_prefix = ""
         try:
-            from core.group_reactivity import find_unanswered_question, mark_question_handled
-            _uq = find_unanswered_question(request.recent_messages or [],
-                                           current_sender=eff_sender, group_id=group_int)
+            from core.group_reactivity import (
+                addresses_genesi_directly, find_unanswered_question, mark_question_handled,
+            )
+            _direct_invocation = addresses_genesi_directly(
+                processed_text,
+                bot_mentioned=("genesi" in (processed_text or "").lower()),
+                reply_to_genesi=(processed_text or "").lstrip().startswith(
+                    "[Stai rispondendo a questo tuo messaggio precedente"),
+            )
+            _uq = (None if _direct_invocation
+                   else find_unanswered_question(request.recent_messages or [],
+                                                 current_sender=eff_sender, group_id=group_int))
             if _uq:
                 _uq_prefix = (
                     f"[ISTRUZIONE PRIORITARIA: nel gruppo {_uq['name']} aveva chiesto "
@@ -1116,39 +1129,18 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
         except Exception:
             pass
 
-        # 5. Costruisci messaggio arricchito.
-        # Il blocco identità va PRIMA di tutto per impedire che l'LLM si identifichi
-        # con i messaggi degli altri utenti presenti nello storico del contesto.
-        _identity_block = (
-            f"[IDENTITÀ ASSOLUTA: TU sei Genesi, l'AI del gruppo. "
-            f"Quando leggi i messaggi dello storico NON sei nessuno di quei parlanti: "
-            f"non impersonare nessun membro. Rispondi SEMPRE in prima persona come Genesi. "
-            f"Il messaggio a cui DEVI rispondere è quello di {eff_sender} qui sotto, "
-            f"non quelli nello storico.]\n"
+        # 5. Costruisci messaggio arricchito con il composer condiviso (stessa
+        # struttura di Telegram/WhatsApp: identità + messaggio attuale delimitato
+        # + regole canoniche di continuità). L'istruzione prioritaria, se presente,
+        # va PRIMA di tutto — come sul path Telegram.
+        from core.group_prompt_composer import compose_group_prompt, family_rules_block
+        enriched = _uq_prefix + compose_group_prompt(
+            sender_name=eff_sender,
+            message=processed_text,
+            rules_block=family_rules_block(eff_sender),
+            pragmatic_block=_pragmatic_prompt,
+            group_ctx=group_ctx,
         )
-        only_emoji = all(ord(c) > 127 or c in (' ', '\n') for c in request.text.strip())
-        if only_emoji:
-            enriched = (
-                f"{_identity_block}"
-                f"[MESSAGGIO ATTUALE — {eff_sender}]: {processed_text}\n\n"
-                f"[GRUPPO FAMILIARE: Reazione/emoji — risposta brevissima, calore familiare, zero domande.]\n"
-                f"{_pragmatic_prompt}"
-                f"{_uq_prefix}"
-                f"{group_ctx}"
-            )
-        else:
-            enriched = (
-                f"{_identity_block}"
-                f"[MESSAGGIO ATTUALE — a cui devi rispondere]\n"
-                f"{eff_sender}: {processed_text}\n"
-                f"[FINE MESSAGGIO ATTUALE]\n\n"
-                f"[GRUPPO FAMILIARE: Sei un membro della famiglia — rispondi con calore e concretezza, "
-                f"senza domande superflue. Usa il nome {eff_sender}. "
-                f"Rispondi SOLO al messaggio attuale, tenendo conto del filo nello storico.]\n"
-                f"{_pragmatic_prompt}"
-                f"{_uq_prefix}"
-                f"{group_ctx}"
-            )
 
         log("GROUP_CHAT_WA", sender=request.sender_name, group=request.group_id[:20], msg=request.text[:60])
 

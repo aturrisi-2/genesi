@@ -1463,18 +1463,22 @@ async def _process_message(msg: dict, name_map: dict, is_group: bool = False, ch
                     except Exception:
                         _pragmatic_block = ""
 
-                    message = (
-                        f"{msg_with_quote}\n\n"
-                        f"[GRUPPO FAMILIARE: scrive {first_name}. "
-                        f"REGOLE ASSOLUTE: risposta misurata ma loquace e di compagnia (3-4 righe max), tono naturale da familiare (non da assistente), "
-                        f"zero intro elaborati, {domande_rule}zero 'che bello!'. "
-                        f"IMPORTANTE: Sei Genesi (un'AI). Non sei la mamma o altri parenti. Non impersonare altri. Se gli utenti festeggiano qualcuno o fanno auguri ad altri nel gruppo, non ringraziare come se fossi tu la festeggiata, ma unisciti cordialmente ai festeggiamenti rivolti a quel familiare. "
-                        f"COERENZA: hai seguito la discussione recente del gruppo (vedi contesto sotto); entra nel discorso già informata e collega la risposta al tema di cui si sta parlando adesso — non ripartire da zero come se avessi letto solo l'ultimo messaggio. "
-                        f"Non riesumare di tua iniziativa vecchie questioni chiuse da giorni (malattie superate, problemi risolti) se {first_name} non le cita ora; se una situazione è ancora in corso e vuoi un aggiornamento, chiedilo con delicatezza. "
-                        f"{photo_rules}"
-                        f"Rispondi a {first_name} restando nel filo della conversazione in corso.]{late_prompt}\n"
-                        f"{_pragmatic_block}"
-                        f"{group_ctx}"
+                    # Composer condiviso (stessa struttura di Telegram/api-chat:
+                    # identità + messaggio attuale delimitato + regole canoniche
+                    # di continuità). late_prompt è un blocco [SISTEMA: …]: il
+                    # composer lo colloca dopo [FINE MESSAGGIO ATTUALE].
+                    from core.group_prompt_composer import (
+                        compose_group_prompt, family_rules_block,
+                    )
+                    message = compose_group_prompt(
+                        sender_name=first_name,
+                        message=f"{msg_with_quote}{late_prompt}",
+                        rules_block=family_rules_block(
+                            first_name, loquace=True,
+                            photo_rules=photo_rules, domande_rule=domande_rule,
+                        ),
+                        pragmatic_block=_pragmatic_block,
+                        group_ctx=group_ctx,
                     )
                 except Exception:
                     pass

@@ -285,10 +285,18 @@ def test_shared_assembler_uses_context_instead_of_vetoing_it():
 
 
 def test_whatsapp_inline_block_preserves_conversation_thread():
+    # The wording now lives in the shared composer; WhatsApp must route
+    # through it (no inline duplicated wrapper anymore).
     src = open("core/whatsapp_bot.py", "r", encoding="utf-8").read()
-    assert "COERENZA:" in src
-    assert "restando nel filo della conversazione in corso" in src
+    assert "compose_group_prompt" in src
+    assert "family_rules_block" in src
     assert "Rispondi SOLO a quello che viene detto adesso" not in src
+
+    from core.group_prompt_composer import family_rules_block
+    rules = family_rules_block("Utente", loquace=True)
+    assert "COERENZA:" in rules
+    assert "restando nel filo della conversazione in corso" in rules
+    assert "Rispondi SOLO a quello che viene detto adesso" not in rules
 
 
 def test_telegram_inline_block_preserves_conversation_thread():
