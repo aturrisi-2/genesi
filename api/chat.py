@@ -273,7 +273,7 @@ async def chat_endpoint(request: ChatRequest, user: AuthUser = Depends(require_a
         except Exception as _e:
             log("CHAT_1TO1_LINK_EXPLORE_FAIL", error=str(_e))
 
-        _handler_result = await simple_chat_handler(user_id, _chat_message, request.conversation_id, platform=request.platform)
+        _handler_result = await simple_chat_handler(user_id, _chat_message, request.conversation_id, platform=request.platform or "web")
         if isinstance(_handler_result, tuple):
             response, classified_intent = _handler_result[0], _handler_result[1]
         else:
@@ -496,7 +496,7 @@ async def chat_stream_endpoint(request: ChatRequest, user: AuthUser = Depends(re
             except Exception as _e:
                 log("CHAT_STREAM_1TO1_LINK_EXPLORE_FAIL", error=str(_e))
 
-            resp = await _sch(user_id, _stream_chat_message, request.conversation_id, platform=request.platform)
+            resp = await _sch(user_id, _stream_chat_message, request.conversation_id, platform=request.platform or "web")
             if isinstance(resp, tuple):
                 resp = resp[0]
             if not isinstance(resp, str):
