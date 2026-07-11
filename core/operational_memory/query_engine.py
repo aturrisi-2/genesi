@@ -117,6 +117,17 @@ def open_tasks(state: OperationalState) -> list[QueryAnswerItem]:
     return [it for it in raw if not is_low_value_task(it.text)]
 
 
+def agenda_tasks(state: OperationalState) -> list[QueryAnswerItem]:
+    """Vista agenda: task attivi ordinati per scadenza ("due" ISO) crescente;
+    i task senza scadenza in coda, in ordine stabile. Serve alle domande di
+    pianificazione ("impegni di oggi", "cosa dobbiamo fare domani") dove
+    l'ordine temporale conta più dello stato."""
+    return sorted(
+        open_tasks(state),
+        key=lambda it: (it.due is None, it.due or "", (it.text or "").lower()),
+    )
+
+
 def open_issues(state: OperationalState) -> list[QueryAnswerItem]:
     return _operational_only(_collect(state, "issue", lambda s: is_active_status("issue", s)))
 
@@ -542,6 +553,16 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
         r"sintesi\s+da\s+(mandare|inviare|girare)|da\s+mandare\s+in\s+chat|"
         r"spiegamel\w*|come\s+lo\s+diresti|da\s+girare\s+al\s+(team|gruppo))",
         re.IGNORECASE)),
+    # Agenda/pianificazione → task attivi ordinati per scadenza. Prima di
+    # briefing e open_tasks così "impegni di oggi" / "cosa dobbiamo fare
+    # domani" ricevono la vista temporale e non la lista generica.
+    ("agenda", re.compile(
+        r"(\bagenda\b|\bimpegni\b|in\s+programma|"
+        r"programm\w*\s+(di\s+|della\s+|per\s+)?(oggi|domani|dopodomani|settiman\w*)|"
+        r"(cosa|che)\s+(dobbiamo|devo|si\s+deve|c'?[eè]\s+da)\s+fare\s+(oggi|domani|dopodomani|questa\s+settimana)|"
+        r"da\s+fare\s+(oggi|domani|dopodomani)|"
+        r"pianific\w*\s+(di\s+|per\s+)?(oggi|domani|settiman\w*))",
+        re.IGNORECASE)),
     ("briefing", re.compile(
         r"(fammi\s+il\s+punto|punto\s+della\s+situazione|riassumi\s+la\s+situazione|"
         r"cosa\s+c'?[eè]\s+da\s+sapere|fammi\s+il\s+report|com'?[eè]\s+messa|quadro\s+operativo|"
@@ -563,6 +584,7 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
 
 _INTENT_DISPATCH: dict[str, Callable[[OperationalState], list[QueryAnswerItem]]] = {
     "remaining_open": remaining_open,
+    "agenda": agenda_tasks,
     "open_tasks": open_tasks,
     "open_issues": open_issues,
     "resolved_issues": resolved_issues,
@@ -577,6 +599,7 @@ _INTENT_DISPATCH: dict[str, Callable[[OperationalState], list[QueryAnswerItem]]]
 
 _INTENT_SUMMARY = {
     "remaining_open": "punti ancora aperti",
+    "agenda": "impegni in agenda (ordinati per scadenza)",
     "open_tasks": "task ancora aperti",
     "open_issues": "problemi ancora aperti",
     "resolved_issues": "problemi risolti",
@@ -601,6 +624,7 @@ def classify_query_intent(text: str) -> str:
 
 # Recognised read-only query intents: asking about the state, not adding to it.
 _PURE_QUERY_INTENTS = {
+    "agenda",
     "briefing", "digest", "remaining_open", "active_decisions",
     "open_tasks", "open_issues", "resolved_issues", "unanswered",
     "superseded", "attention", "changed", "team_brief", "decision_guard",
