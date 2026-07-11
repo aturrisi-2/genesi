@@ -41,6 +41,86 @@ def _stable_id(prefix: str, text: str, source: str) -> str:
     return f"{prefix}_{digest}"
 
 
+# ── Normalizzazione scadenze ("due") ─────────────────────────────────────────
+# Il contratto del campo "due" è ISO (YYYY-MM-DD o YYYY-MM-DDTHH:MM): è ciò che
+# rende ordinabile la vista agenda. L'LLM è istruito a normalizzare, ma se
+# restituisce una data relativa italiana la risolviamo qui in modo
+# deterministico rispetto al timestamp del messaggio sorgente; se il valore non
+# è risolvibile con certezza, il campo torna null (mai testo libero in "due").
+
+_DUE_ISO_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2})(?::\d{2})?)?")
+
+_DUE_TIME_RE = re.compile(r"\balle?\s+(\d{1,2})(?:[:.](\d{2}))?\b", re.IGNORECASE)
+
+_DUE_DMY_RE = re.compile(r"\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b")
+
+_WEEKDAYS_IT = {
+    "lunedi": 0, "lunedì": 0, "martedi": 1, "martedì": 1,
+    "mercoledi": 2, "mercoledì": 2, "giovedi": 3, "giovedì": 3,
+    "venerdi": 4, "venerdì": 4, "sabato": 5, "domenica": 6,
+}
+
+
+def _normalize_due(value: Any, reference_ts: Any = None) -> str | None:
+    """Porta "due" al contratto ISO o a None. Deterministico, nessun LLM."""
+    from datetime import datetime, timedelta
+
+    raw = str(value or "").strip()
+    if not raw or raw.lower() in {"null", "none", "n/a", "-"}:
+        return None
+
+    m = _DUE_ISO_RE.match(raw)
+    if m:
+        return f"{m.group(1)}T{m.group(2)}" if m.group(2) else m.group(1)
+
+    try:
+        ref = datetime.fromisoformat(str(reference_ts)) if reference_ts else datetime.now()
+    except (TypeError, ValueError):
+        ref = datetime.now()
+
+    low = raw.lower()
+    # Prefissi di scadenza ("entro venerdì", "per domani") non cambiano il giorno.
+    low = re.sub(r"^\s*(entro|per|entro\s+il|entro\s+la)\s+", "", low)
+
+    tm = _DUE_TIME_RE.search(low)
+    time_part = ""
+    if tm:
+        hh = int(tm.group(1))
+        if 0 <= hh <= 23:
+            time_part = f"T{hh:02d}:{int(tm.group(2) or 0):02d}"
+
+    day = None
+    if re.search(r"\bdopodomani\b", low):
+        day = ref.date() + timedelta(days=2)
+    elif re.search(r"\bdomani\b", low):
+        day = ref.date() + timedelta(days=1)
+    elif re.search(r"\b(oggi|stasera|stamattina|stanotte|(nel\s+)?pomeriggio)\b", low):
+        day = ref.date()
+    else:
+        for name, wd in _WEEKDAYS_IT.items():
+            if re.search(rf"\b{name}\b", low):
+                ahead = (wd - ref.weekday()) % 7 or 7  # prossima occorrenza
+                day = ref.date() + timedelta(days=ahead)
+                break
+    if day is None:
+        dm = _DUE_DMY_RE.search(low)
+        if dm:
+            d, mo = int(dm.group(1)), int(dm.group(2))
+            yr = dm.group(3)
+            year = int(yr) + (2000 if yr and len(yr) == 2 else 0) if yr else ref.year
+            try:
+                from datetime import date as _date
+                day = _date(year, mo, d)
+                if not yr and day < ref.date():
+                    day = _date(year + 1, mo, d)
+            except ValueError:
+                day = None
+
+    if day is None:
+        return None
+    return f"{day.isoformat()}{time_part}"
+
+
 def _as_list(payload: dict[str, Any], key: str) -> list[dict[str, Any]]:
     value = payload.get(key, [])
     if not isinstance(value, list):
@@ -117,6 +197,11 @@ def _normalize_items(
                     data[key] = value
         if not data.get("intent"):
             data["intent"] = _intent_for(prefix, text)
+        if prefix == "task":
+            data["due"] = _normalize_due(
+                data.get("due"), (source_meta or {}).get("source_timestamp"))
+            owner = str(data.get("owner") or "").strip()
+            data["owner"] = owner or None
 
         key = (text.lower(), source.lower())
         if key in seen:
@@ -169,7 +254,17 @@ Regole:
   decisions: decisioni gia' prese, INCLUSE le decisioni condizionali
     (es. "se X non e' pronto entro Y, si rimanda a Z", "si procede solo se ...",
     "altrimenti si sposta a ..."). Una decisione condizionale resta una decisione.
-  tasks: cose da fare, con owner/due solo se esplicitati.
+  tasks: cose da fare, con owner/due solo se supportati dal testo.
+- Campo "due" dei task: se il messaggio esprime una scadenza o un momento previsto,
+  anche in forma relativa ("domani", "entro venerdi'", "stasera", "alle 14",
+  "la prossima settimana"), convertilo in data assoluta ISO (YYYY-MM-DD oppure
+  YYYY-MM-DDTHH:MM) usando come riferimento il timestamp del messaggio quando
+  presente nel testo (prefisso "[...]"). Se il momento non e' calcolabile con
+  certezza, lascia null: MAI testo libero in "due".
+- Campo "owner" dei task: valorizzalo con il nome quando il compito e' chiaramente
+  assegnato a una persona ("Marco deve...", "ci pensa Luca", "lo fa il tecnico X")
+  oppure auto-assegnato dall'autore ("lo faccio io", "ci penso io" -> owner = nome
+  del mittente se ricavabile dal prefisso del messaggio). Altrimenti null.
   issues: problemi, blocchi, rischi aperti.
   information: fatti rilevanti o aggiornamenti.
   open_questions: domande o punti da chiarire.
