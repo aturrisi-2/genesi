@@ -51,6 +51,18 @@ async def _save_domain_stats(project_id: str) -> None:
     await save_state(project_id, state)
 
 
+def _log_media_ingested(event: OperationalEvent, created: bool) -> None:
+    """Marker esplicito per l'ingest dei media: rende osservabile il path
+    media (image/document/audio/video) senza dover dedurre da type=…"""
+    if created and (event.type or "") not in ("", "text"):
+        log(
+            "OPERATIONAL_MEDIA_INGESTED",
+            project_id=event.project_id,
+            event_id=event.event_id,
+            media_type=event.type,
+        )
+
+
 async def ingest_event(event: OperationalEvent) -> tuple[OperationalEvent, bool]:
     normalized = normalize_event(event)
     stored, created = await append_event(normalized)
@@ -61,6 +73,7 @@ async def ingest_event(event: OperationalEvent) -> tuple[OperationalEvent, bool]
         created=created,
         type=stored.type,
     )
+    _log_media_ingested(stored, created)
     return stored, created
 
 
@@ -91,6 +104,7 @@ async def ingest_events_batch(project_id: str, events: list[OperationalEvent]) -
                 created=True,
                 type=normalized.type,
             )
+            _log_media_ingested(normalized, True)
         except Exception as exc:
             failed += 1
             log(
