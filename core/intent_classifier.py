@@ -64,6 +64,31 @@ def extract_group_user_text(message: str) -> str:
     return _GROUP_PREAMBLE_RE.sub("", msg).strip()
 
 
+# ── Lamentela sul comportamento vs follow-up conversazionale ─────────────────
+# La route "spiegazione" ha un prompt pensato per correzioni/frustrazione
+# ("se hai sbagliato ammettilo, accenna a limiti tecnici"). I follow-up
+# conversazionali sul ragionamento dell'ultima risposta ("come arrivi a questa
+# conclusione?", "cosa ti fa dire questo?") NON sono lamentele: devono restare
+# nel filo relazionale, dove c'è la finestra di conversazione. Match solo su
+# segnali espliciti di correzione/malfunzionamento rivolti a Genesi.
+_BEHAVIOR_COMPLAINT_RE = re.compile(
+    r"(?:\bhai sbagliato\b|\bti sbagli\b|\bhai confuso\b|"
+    r"\bnon (?:hai|mi hai) capito\b|\bnon capisci\b|"
+    r"\bnon (?:è|e') (?:quello|ciò|cio') che (?:ho chiesto|ho detto|intendevo)\b|"
+    r"\bnon intendevo\b|\bti (?:ho|avevo) (?:chiesto|detto)\b|"
+    r"\b(?:mi )?avevi (?:detto|promesso)\b|"
+    r"\bnon funzion\w+\b|\bperch[eé] non (?:rispondi|funzioni|mi ascolti)\b|"
+    r"\bnon mi rispondi\b|\b(?:hai|ti sei) dimenticat\w+\b|\bnon ricordi\b|"
+    r"\bdi nuovo\s*[?!]|\bancora sbagli\b|\bsempre la stessa\b)",
+    re.IGNORECASE,
+)
+
+
+def is_behavior_complaint(message: str) -> bool:
+    """True se il messaggio corregge Genesi o lamenta un suo malfunzionamento."""
+    return bool(_BEHAVIOR_COMPLAINT_RE.search(message or ""))
+
+
 def _is_emotional(message: str) -> bool:
     msg_lower = message.lower()
     return any(kw in msg_lower for kw in EMOTIONAL_KEYWORDS)

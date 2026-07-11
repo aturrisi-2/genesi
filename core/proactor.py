@@ -719,6 +719,21 @@ class Proactor:
                     log("WIDGET_INTENT_BLOCKED", original=intents, replaced=new_intents, user_id=user_id)
                     intents = new_intents
 
+            # STEP 4.0: SPIEGAZIONE FOLLOW-UP DOWNGRADE
+            # Meta-domande sul ragionamento dell'ultima risposta ("come arrivi a
+            # questa conclusione?") sono conversazione nel filo, non lamentele:
+            # la route explanation (tono apologetico) + relational forzata +
+            # sintesi diluivano la risposta contestuale in un testo generico.
+            # La route explanation resta per correzioni/frustrazione esplicite.
+            if intents and "spiegazione" in intents:
+                from core.intent_classifier import is_behavior_complaint
+                if not is_behavior_complaint(message or ""):
+                    _seen = set()
+                    intents = [i for i in
+                               ("chat_free" if x == "spiegazione" else x for x in intents)
+                               if not (i in _seen or _seen.add(i))]
+                    log("SPIEGAZIONE_DOWNGRADED_TO_CHAT", user_id=user_id, intents=intents)
+
             # STEP 4.1: CONVERSATIONAL INTEGRATION FORCE
             # Ensures tool/technical responses are wrapped in Genesi's voice via Relational synthesis
             if intents and not any(i in ["chat_free", "relational", "emotional"] for i in intents):
@@ -3806,9 +3821,15 @@ Messaggio: "{message}" """
         try:
             from core.calendar_awareness import get_calendar_context, is_first_message_of_day as _is_first
             _cal = get_calendar_context(user_tz)
-            # Usa relational history.last_ts per la logica "prima interazione del giorno"
-            _last_ts = (brain_state.get("relational", {})
-                        .get("history", {}).get("last_ts")
+            # "Prima interazione del giorno": usa il timestamp dell'ultima risposta
+            # relazionale (scritto a fine _handle_relational). Fallback sulle chiavi
+            # legacy (history.last_ts / relationship_history.last_interaction) e
+            # infine su profile.updated_at — che cambia solo quando viene estratto
+            # un fatto di profilo, quindi da solo teneva primo_oggi=True per
+            # l'intera sessione (ogni turno inquadrato come apertura di giornata).
+            _rel_state = brain_state.get("relational", {}) or {}
+            _last_ts = (_rel_state.get("history", {}).get("last_ts")
+                        or _rel_state.get("relationship_history", {}).get("last_interaction")
                         or _rel_profile.get("updated_at"))
             _primo_oggi = _is_first(str(_last_ts) if _last_ts else None, user_tz)
             _gps_city = _rel_profile.get("gps_city")
@@ -3887,6 +3908,20 @@ Messaggio: "{message}" """
             is_group=_is_group_platform if '_is_group_platform' in dir() else False,
             primo_oggi=_primo_oggi, response_len=len(gpt_response),
             response_preview=gpt_response[:100])
+
+        # Persisti il timestamp dell'interazione: è la fonte di "primo_oggi" al
+        # turno successivo. Senza questo writer nessun percorso attivo aggiornava
+        # history.last_ts (fermo alla data dell'ultimo path legacy) e ogni turno
+        # veniva trattato come prima interazione della giornata.
+        try:
+            _rel_persist = brain_state.get("relational")
+            if isinstance(_rel_persist, dict):
+                _now_iso = datetime.now().isoformat()
+                _rel_persist.setdefault("history", {})["last_ts"] = _now_iso
+                _rel_persist.setdefault("relationship_history", {})["last_interaction"] = _now_iso
+                asyncio.create_task(storage.save(f"relational_state:{user_id}", _rel_persist))
+        except Exception as _rts_err:
+            logger.debug("RELATIONAL_LAST_TS_SAVE_ERR user=%s err=%s", user_id, _rts_err)
 
         # 4. Curiosity Engine — skip nei gruppi Telegram (aggiunge domande fuori contesto)
         _is_group_platform = (_platform in ("telegram_group", "whatsapp_group"))
