@@ -182,6 +182,53 @@ async def test_whatsapp_invocation_reply_enabled_uses_group_jid(enabled, monkeyp
 
 
 @pytest.mark.asyncio
+async def test_read_only_bridge_target_never_replies_even_with_global_flag(enabled, monkeypatch):
+    monkeypatch.setenv("WHATSAPP_OPERATIONAL_REPLY_ENABLED", "true")
+    import core.operational_memory.whatsapp_operational as mod
+
+    monkeypatch.setattr(mod, "_TAB_BRIDGE_PROJECT_ID", PROJECT)
+    called = []
+
+    async def fake_reply(*args, **kwargs):
+        called.append((args, kwargs))
+        return ChatReply(project_id=PROJECT, intent="briefing", reply_markdown="MUST NOT SEND")
+
+    monkeypatch.setattr(mod, "build_operational_reply", fake_reply)
+    sent, ingested, send, updater = _spies()
+    meta: dict = {}
+
+    handled = await mod.maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "Genesi, fammi il punto", send,
+        message_id="m7-read-only", updater=updater, result=meta,
+    )
+
+    assert handled is True
+    assert meta["action"] == "claim_no_reply"
+    assert sent == [] and ingested == [] and called == []
+
+
+@pytest.mark.asyncio
+async def test_mapped_operational_handler_error_is_claimed_fail_closed(enabled, monkeypatch):
+    import core.operational_memory.whatsapp_operational as mod
+
+    async def explode(*args, **kwargs):
+        raise RuntimeError("synthetic media failure")
+
+    monkeypatch.setattr(mod, "_build_attachments", explode)
+    sent, ingested, send, updater = _spies()
+    meta: dict = {}
+
+    handled = await mod.maybe_handle_whatsapp_operational(
+        GROUP_JID, SENDER_JID, "Ann", "Genesi, fammi il punto", send,
+        message_id="m7-error", updater=updater, result=meta,
+    )
+
+    assert handled is True
+    assert meta["action"] == "error_claimed"
+    assert sent == [] and ingested == []
+
+
+@pytest.mark.asyncio
 async def test_whatsapp_pure_invocation_not_ingested(enabled, monkeypatch):
     monkeypatch.setenv("WHATSAPP_OPERATIONAL_REPLY_ENABLED", "true")
     import core.operational_memory.whatsapp_operational as mod
@@ -712,6 +759,7 @@ async def test_api_chat_group_mapped_claims_and_suppresses_legacy(enabled, monke
     request = apichat.GroupChatRequest(text="ciao a tutti", sender_name="Ann", sender_id="3939", group_id=GROUP_JID)
     resp = await apichat.group_chat_endpoint(request, req=None, user=None)
     assert resp.status == "operational" and resp.response == ""     # legacy suppressed, silent
+    assert resp.reply_allowed is False
     assert captured["group_jid"] == GROUP_JID                       # full JID mapping key, not truncated
 
 
@@ -729,6 +777,28 @@ async def test_api_chat_group_reply_enabled_returns_text(enabled, monkeypatch):
     request = apichat.GroupChatRequest(text="Genesi, fammi il punto", sender_name="Ann", sender_id="3939", group_id=GROUP_JID)
     resp = await apichat.group_chat_endpoint(request, req=None, user=None)
     assert resp.status == "operational" and resp.response == "OP REPLY BODY"
+    assert resp.reply_allowed is True
+
+
+@pytest.mark.asyncio
+async def test_api_chat_group_mapped_bridge_failure_is_fail_closed(enabled, monkeypatch):
+    import api.chat as apichat
+
+    async def failed_bridge(**kw):
+        return False
+
+    monkeypatch.setattr(
+        "core.operational_memory.whatsapp_operational.maybe_handle_whatsapp_operational",
+        failed_bridge,
+    )
+    request = apichat.GroupChatRequest(
+        text="Genesi, fammi il punto", sender_name="Ann", sender_id="3939", group_id=GROUP_JID,
+    )
+
+    resp = await apichat.group_chat_endpoint(request, req=None, user=None)
+
+    assert resp.status == "operational_error"
+    assert resp.response == "" and resp.reply_allowed is False
 
 
 @pytest.mark.asyncio
@@ -803,6 +873,24 @@ async def test_should_respond_disabled_uses_legacy(monkeypatch):
     req = apichat.ShouldRespondRequest(text="ciao", group_id=GROUP_JID, sender_name="Ann")
     resp = await apichat.group_should_respond(req, user=None)
     assert resp.motivo != "operational_ingest"
+
+
+@pytest.mark.asyncio
+async def test_operational_probe_unmapped_never_calls_llm(enabled, monkeypatch):
+    import api.chat as apichat
+
+    async def forbidden_llm(*args, **kwargs):
+        raise AssertionError("operational probe must not call the LLM")
+
+    monkeypatch.setattr("core.llm_service.llm_service._call_model", forbidden_llm)
+    req = apichat.ShouldRespondRequest(
+        text="Analizza questa immagine.", group_id="000000@g.us",
+        sender_name="Ann", operational_probe=True,
+    )
+
+    resp = await apichat.group_should_respond(req, user=None)
+
+    assert resp.intervieni is False and resp.motivo == "not_operational"
 
 
 # =========================================================================== #
@@ -881,6 +969,36 @@ def test_should_respond_override_wired_and_no_hardcoding():
     low = src.lower()
     for token in ["120363428502905378", "genesi canary"]:
         assert token not in low
+
+
+def test_baileys_uncaptioned_media_checks_operational_override_before_silence():
+    """Uncaptioned media stay silent in ordinary groups, but a mapped
+    operational group must reach /group for ingest.  The backend override is
+    the discriminator; no JID/project token is duplicated in JavaScript."""
+    src = open("baileys-service/index.js", "r", encoding="utf-8").read()
+    branch = src.split("} else if (genericMediaWithoutCaption) {", 1)[1].split(
+        "} else if (_engaged", 1
+    )[0]
+
+    assert "shouldRespondDecision(" in branch
+    assert "senderName, true" in branch
+    assert 'decision.motivo !== "operational_ingest"' in branch
+    assert "reason=generic_media_without_caption" in branch
+
+
+def test_baileys_ingest_only_path_has_no_presence_or_send():
+    src = open("baileys-service/index.js", "r", encoding="utf-8").read()
+
+    assert 'const operationalIngestOnly = interventionReason === "operational_ingest"' in src
+    send_gate = "if (reply && replyAllowed && backendReplyAllowed && !operationalIngestOnly) {"
+    after_backend = src.split("const backendResult = await askGenesiGroup", 1)[1]
+    before_send, allowed_branch = after_backend.split(send_gate, 1)
+    allowed_branch = allowed_branch.split("} else if", 1)[0]
+
+    assert "sendPresenceUpdate" not in before_send
+    assert 'await sock.sendPresenceUpdate("composing", groupId);' in allowed_branch
+    assert 'await sock.sendPresenceUpdate("paused", groupId);' in allowed_branch
+    assert "operational_probe: operationalProbe" in src
 
 
 # =========================================================================== #

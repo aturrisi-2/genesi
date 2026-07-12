@@ -76,16 +76,37 @@ def is_whatsapp_operational_enabled() -> bool:
     return env_flag("OPERATIONAL_MEMORY_WHATSAPP_ENABLED", False)
 
 
+def _is_read_only_bridge_target(group_jid: str | None) -> bool:
+    """True for the source group mapped to the project exposed read-only via TAB.
+
+    The bridge project is configured at runtime and the JID is resolved through
+    the existing chat→project map: no group or project identifier is hardcoded.
+    This is a hard reply deny, independent from global/Admin reply switches.
+    """
+    if not group_jid or not _TAB_BRIDGE_PROJECT_ID:
+        return False
+    return get_whatsapp_chat_project_map().get(str(group_jid)) == _TAB_BRIDGE_PROJECT_ID
+
+
 def is_whatsapp_operational_reply_enabled(group_jid: str | None = None) -> bool:
     """Whether the operational handler may produce a live reply for a chat.
 
-    Two sources, both default OFF:
+    The read-only bridge target is denied first.  Otherwise two sources, both
+    default OFF, may enable replies:
     - global env ``WHATSAPP_OPERATIONAL_REPLY_ENABLED`` (all mapped chats), and
     - per-group Admin control (``group_controls.whatsapp_reply_enabled_groups``),
       the same toggle the Admin web / Baileys reply gate already use.
 
-    Per-group keeps activation scoped: enabling the canary never enables TAB.
+    The hard deny guarantees that neither a global switch nor an Admin mistake
+    can make the TAB source group speak.
     """
+    if _is_read_only_bridge_target(group_jid):
+        log(
+            "OPERATIONAL_WHATSAPP_REPLY_DENIED",
+            project_id=_TAB_BRIDGE_PROJECT_ID,
+            reason="read_only_bridge_target",
+        )
+        return False
     if env_flag("WHATSAPP_OPERATIONAL_REPLY_ENABLED", False):
         return True
     if group_jid:
@@ -357,4 +378,17 @@ async def maybe_handle_whatsapp_operational(
         return True
     except Exception as exc:  # never break the existing WhatsApp bot
         log("OPERATIONAL_WHATSAPP_ERROR", chat_id=group_jid, error=str(exc))
+        # Mapped operational groups are dominant.  If their handler fails, claim
+        # the message anyway so the host cannot fall through to the legacy chat
+        # pipeline and accidentally produce a visible reply.  Unmapped/OFF keeps
+        # the historical fallback behaviour.
+        try:
+            mapped = is_whatsapp_operational_enabled() and bool(resolve_whatsapp_project_id(group_jid))
+        except Exception:
+            mapped = False
+        if mapped:
+            if result is not None:
+                result["action"] = "error_claimed"
+            log("OPERATIONAL_WHATSAPP_FAIL_CLOSED", chat_id=group_jid, reason="handler_error")
+            return True
         return False

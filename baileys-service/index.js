@@ -158,9 +158,9 @@ function isDelicateSupportCandidate(text) {
     return /\b(lutto|perdita|morto|morta|mancare|venut[oa] a mancare|malattia|malato|malata|ospedale|dolore|triste|gi[uù]|a pezzi|supporto|ti siamo vicini|vi siamo vicini|condoglianze)\b/i.test(s);
 }
 
-async function shouldRespondDecision(text, recentMessages, token, groupId = "", senderName = "") {
+async function shouldRespondDecision(text, recentMessages, token, groupId = "", senderName = "", operationalProbe = false) {
     // Fast-path: menzione diretta → sempre sì senza chiamare LLM
-    if (GENESI_RE.test(text)) return { intervieni: true, motivo: "direct_mention" };
+    if (!operationalProbe && GENESI_RE.test(text)) return { intervieni: true, motivo: "direct_mention" };
 
     // LLM decide per tutto il resto (saluti, buone notizie, ecc.)
     try {
@@ -169,6 +169,7 @@ async function shouldRespondDecision(text, recentMessages, token, groupId = "", 
             recent_messages: recentMessages,
             group_id: groupId,
             sender_name: senderName,
+            operational_probe: operationalProbe,
         }, {
             headers: { Authorization: `Bearer ${token}` },
             timeout: 8000,
@@ -221,11 +222,15 @@ async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "
             headers: { Authorization: `Bearer ${token}` },
             timeout: 35000,
         });
-        return res.data.response || null;
+        return {
+            reply: res.data.response || null,
+            replyAllowed: res.data.reply_allowed !== false,
+            status: res.data.status || "",
+        };
     } catch (e) {
         if (e.response?.status === 401) tokens.group = null;
         console.error("[Genesi] Group API error:", e.message, e.response?.data);
-        return null;
+        return { reply: null, replyAllowed: false, status: "error" };
     }
 }
 
@@ -699,8 +704,20 @@ async function startBaileys() {
                     console.log(`WHATSAPP_GROUP_SILENT group=${maskJid(groupId)} name="${groupName}" reason=emoji_only`);
                     continue;
                 } else if (genericMediaWithoutCaption) {
-                    console.log(`WHATSAPP_GROUP_SILENT group=${maskJid(groupId)} name="${groupName}" reason=generic_media_without_caption media=${mediaType}`);
-                    continue;
+                    // Ordinary groups keep the existing silent behaviour. Mapped
+                    // operational groups are different: the backend returns the
+                    // deterministic "operational_ingest" override so the media
+                    // reaches /group for silent ingest even without a caption.
+                    const decision = await shouldRespondDecision(
+                        text, getRecentMessages(groupId), token, groupId, senderName, true
+                    );
+                    if (!decision.intervieni || decision.motivo !== "operational_ingest") {
+                        console.log(`WHATSAPP_GROUP_SILENT group=${maskJid(groupId)} name="${groupName}" reason=generic_media_without_caption media=${mediaType}`);
+                        continue;
+                    }
+                    shouldIntervene = true;
+                    interventionReason = decision.motivo;
+                    console.log(`OPERATIONAL_MEDIA_INGEST_FORWARD group=${maskJid(groupId)} media=${mediaType}`);
                 } else if (_engaged && !isDelicateSupportCandidate(text) && isClearlyDirectedFollowup(text)) {
                     console.log(`ENGAGED_FOLLOWUP_ALLOWED group=${maskJid(groupId)} name="${groupName}" sender="${senderName}"`);
                     shouldIntervene = true;
@@ -725,14 +742,26 @@ async function startBaileys() {
 
                 console.log(`[Baileys] Intervengo in ${groupName} motivo=${interventionReason} per: "${textToSend.slice(0, 50)}"`);
 
-                await sock.sendPresenceUpdate("composing", groupId);
-                const reply = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, participants, token, mediaId, mediaType, mediaMime, getRecentMessages(groupId), replyToId);
-                await sock.sendPresenceUpdate("paused", groupId);
+                // The operational override exists only to carry data to the
+                // backend. It must not emit typing presence or a visible reply.
+                const operationalIngestOnly = interventionReason === "operational_ingest";
+                const backendResult = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, participants, token, mediaId, mediaType, mediaMime, getRecentMessages(groupId), replyToId);
+                const reply = backendResult.reply;
+                const backendReplyAllowed = backendResult.replyAllowed === true;
 
-                if (reply && replyAllowed) {
+                if (reply && replyAllowed && backendReplyAllowed && !operationalIngestOnly) {
+                    // Presence is emitted only after every reply gate has passed.
+                    // Read-only/ingest-only groups never see a typing indicator.
+                    await sock.sendPresenceUpdate("composing", groupId);
                     await sock.sendMessage(groupId, { text: reply });
+                    await sock.sendPresenceUpdate("paused", groupId);
                     lastGenesiReply[groupId] = { text: reply, ts: Date.now(), to: senderName };
                     console.log(`[Genesi → ${senderName} in ${groupName}] ${reply.slice(0, 80)}`);
+                } else if (reply && (!backendReplyAllowed || operationalIngestOnly)) {
+                    // Defence in depth: even an unexpected backend body cannot
+                    // escape from an ingest-only request.
+                    const suppressReason = operationalIngestOnly ? "operational_ingest_only" : "backend_reply_denied";
+                    console.log(`GROUP_REPLY_SUPPRESSED group=${maskJid(groupId)} name="${groupName}" reason=${suppressReason}`);
                 } else if (reply && !replyAllowed) {
                     // Gruppo non whitelistato: ingest gia' avvenuto via askGenesiGroup,
                     // la reply backend viene SCARTATA. Nessun sendMessage, nessun

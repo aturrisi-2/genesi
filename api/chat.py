@@ -728,6 +728,7 @@ class GroupChatRequest(BaseModel):
 class GroupChatResponse(BaseModel):
     response: str
     status: str
+    reply_allowed: bool = True
 
 @router.post("/group", response_model=GroupChatResponse)
 async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: AuthUser = Depends(require_auth)):
@@ -755,6 +756,7 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
         # Normalizza group_id e sender_id a interi (come fa whatsapp_bot.py)
         clean_sender = request.sender_id.split("@")[0].replace("+", "")
         clean_group  = request.group_id.split("@")[0].replace("-", "")
+        _op_project = None
         try:
             sender_int = stable_hash(clean_sender)
             group_int  = stable_hash(clean_group)
@@ -807,9 +809,27 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                     _op_text = _op_reply.get("text", "") or ""
                     _op_action = _op_meta.get("action") or ("reply" if _op_text else "silent_ingest")
                     log("OPERATIONAL_BAILEYS_HANDLED", project_id=_op_project, action=_op_action)
-                    return GroupChatResponse(response=_op_text, status="operational")
+                    return GroupChatResponse(
+                        response=_op_text,
+                        status="operational",
+                        reply_allowed=bool(_op_text),
+                    )
+                # A mapped operational group must never fall through to the
+                # legacy conversational pipeline.  Handler failure is silent and
+                # fail-closed; the event can be retried from transport/storage.
+                log("OPERATIONAL_BAILEYS_FAIL_CLOSED", project_id=_op_project,
+                    action="handler_not_claimed")
+                return GroupChatResponse(
+                    response="", status="operational_error", reply_allowed=False,
+                )
         except Exception as _oe:
             log("OPERATIONAL_BAILEYS_CHAT_ERR", error=str(_oe))
+            if _op_project:
+                log("OPERATIONAL_BAILEYS_FAIL_CLOSED", project_id=_op_project,
+                    action="handler_exception")
+                return GroupChatResponse(
+                    response="", status="operational_error", reply_allowed=False,
+                )
 
         # Reattività GLOBALE: segna l'arrivo (per scartare risposte stantie)
         from core.group_reactivity import mark_arrival, is_superseded
@@ -1300,6 +1320,7 @@ class ShouldRespondRequest(BaseModel):
     recent_messages: Optional[list] = None  # [{name, text}]
     group_id: Optional[str] = None
     sender_name: Optional[str] = ""
+    operational_probe: bool = False
 
 class ShouldRespondResponse(BaseModel):
     intervieni: bool
@@ -1445,6 +1466,12 @@ async def group_should_respond(request: ShouldRespondRequest, user: AuthUser = D
                 return ShouldRespondResponse(intervieni=True, motivo="operational_ingest")
         except Exception as _ooe:
             log("OPERATIONAL_BAILEYS_SHOULD_RESPOND_ERR", error=str(_ooe))
+
+        # Deterministic probe used by Baileys for media without a caption.  An
+        # unmapped group keeps the old immediate-silence behaviour without paying
+        # for the autonomous/LLM decision path below.
+        if request.operational_probe:
+            return ShouldRespondResponse(intervieni=False, motivo="not_operational")
 
         # Trigger autonomi sociali/delicati consentiti anche con default silent.
         # Questo endpoint e' il pre-gate live di Baileys: se qui diciamo NO,
