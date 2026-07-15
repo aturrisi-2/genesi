@@ -504,20 +504,11 @@ class Proactor:
             msg_lower = message.lower().strip()
 
             # STEP 0.1: WIDGET INTENT GUARD
-            # Per il widget aziendale i servizi personali (calendario, email, ecc.) non hanno senso.
-            # Blocca tutti gli intent personali: risposta generica chat_free.
-            _WIDGET_BLOCKED_INTENTS = {
-                "reminder_create", "reminder_list", "reminder_update", "reminder_delete",
-                "icloud_sync", "icloud_setup", "google_sync", "google_setup",
-                "gmail_setup", "gmail_read", "gmail_send",
-                "whatsapp_send", "whatsapp_setup",
-                "telegram_send", "telegram_setup",
-                "social_read", "social_setup",
-                "moltbook_activity",
-            }
+            # Un assistente di sito risolve i riferimenti rispetto al contesto
+            # pagina, mai tramite servizi o memoria della chat personale.
             if self._current_platform == "widget":
                 _intent_str = (intent[0] if isinstance(intent, list) and intent else intent) or ""
-                if _intent_str in _WIDGET_BLOCKED_INTENTS:
+                if _intent_str and _intent_str != "chat_free":
                     log("WIDGET_INTENT_BLOCKED", original_intent=_intent_str, user_id=user_id)
                     intent = "chat_free"
 
@@ -706,15 +697,11 @@ class Proactor:
             # STEP 4.05: WIDGET INTENT GUARD (post-classificazione)
             # Rimappa intents personali/servizi a chat_free per platform=widget
             if self._current_platform == "widget":
-                _WIDGET_BLOCKED = {
-                    "reminder_create", "reminder_list", "reminder_update", "reminder_delete",
-                    "icloud_sync", "icloud_setup", "google_sync", "google_setup",
-                    "gmail_setup", "gmail_read", "gmail_send",
-                    "whatsapp_send", "whatsapp_setup",
-                    "telegram_send", "telegram_setup",
-                    "social_read", "social_setup", "moltbook_activity",
-                }
-                new_intents = ["chat_free" if i in _WIDGET_BLOCKED else i for i in intents]
+                # Fail closed: il widget è un assistente contestuale del sito,
+                # non la chat personale Genesi. Qualunque intent deterministico
+                # (dove_sono, time, weather, memory, tool...) viene ricondotto al
+                # prompt contestuale della pagina.
+                new_intents = ["chat_free"]
                 if new_intents != intents:
                     log("WIDGET_INTENT_BLOCKED", original=intents, replaced=new_intents, user_id=user_id)
                     intents = new_intents

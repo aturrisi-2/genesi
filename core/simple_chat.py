@@ -47,9 +47,17 @@ async def simple_chat_handler(user_id: str, message: str, conversation_id: str =
 
         log("CHAT_INPUT", message=message[:100], user_id=user_id)
 
-        # Classifica intent qui per passarlo al proactor (evita doppia classificazione)
-        # e per poterlo ritornare al chiamante senza modificare proactor.handle()
-        intents = await intent_classifier.classify_async(message, user_id)
+        # Il widget di sito riceve già un contratto e il contesto DOM della pagina.
+        # Non deve passare dagli intent deterministici personali (es. "dove mi
+        # trovo" → posizione GPS) né dai tool della chat 1:1: quei riferimenti
+        # vanno risolti dal modello rispetto alla pagina corrente.
+        if platform == "widget":
+            intents = ["chat_free"]
+            log("WIDGET_CONTEXT_ROUTE", intent="chat_free", user_id=user_id)
+        else:
+            # Classifica intent qui per passarlo al proactor (evita doppia classificazione)
+            # e per poterlo ritornare al chiamante senza modificare proactor.handle()
+            intents = await intent_classifier.classify_async(message, user_id)
         primary_intent = intents[0] if intents else "chat_free"
 
         # 2. Proactor orchestration (brain update + evolution engine)
@@ -94,4 +102,3 @@ async def simple_chat_handler(user_id: str, message: str, conversation_id: str =
             reason=str(e)
         ))
         return msg_error, "chat_free"
-
