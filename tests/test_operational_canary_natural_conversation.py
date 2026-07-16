@@ -95,6 +95,32 @@ async def test_weather_keeps_explicit_city(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_weather_work_advice_uses_forecast_context_naturally(monkeypatch):
+    state = OperationalState(project_id="p")
+    monkeypatch.setattr("core.operational_memory.chat_presence.load_state", lambda _p: asyncio.sleep(0, result=state))
+    weather = AsyncMock(return_value=(
+        "Previsioni per Sant'Agata Bolognese:\n"
+        "  giovedì 16 luglio: cielo sereno, 26°C / 31°C\n"
+        "  venerdì 17 luglio: cielo sereno, 23°C / 36°C"
+    ))
+    monkeypatch.setattr("core.tool_services.tool_service.get_weather", weather)
+
+    reply = await build_operational_reply(
+        "p",
+        "meteo domani a Sant'Agata Bolognese. che ne pensi, si potrà lavorare al sole?",
+        save=False,
+    )
+
+    weather.assert_awaited_once()
+    assert reply.intent == "weather"
+    assert "Si può valutare, ma con prudenza" in reply.reply_markdown
+    assert "Sant'Agata Bolognese" in reply.reply_markdown
+    assert "fino a 36 °C" in reply.reply_markdown
+    assert "ombra, acqua e pause" in reply.reply_markdown
+    assert "procedure di sicurezza dell'attività" in reply.reply_markdown
+
+
+@pytest.mark.asyncio
 async def test_assistant_identity_is_natural_and_not_user_identity(monkeypatch):
     state = OperationalState(project_id="p")
     monkeypatch.setattr("core.operational_memory.chat_presence.load_state", lambda _p: asyncio.sleep(0, result=state))
@@ -157,6 +183,8 @@ def test_baileys_forwards_only_gated_directed_followup_flag():
     assert 'interventionReason = "engaged_weather_city"' in src
     assert "weatherCityFollowupQuery(" in src
     assert 'isWeatherCityPrompt(quotedText) ? quotedText : (_last?.text || "")' in src
+    assert "isWeatherResultReply(_last?.text)" in src
+    assert "weatherContextFollowupQuery(text, _last.text)" in src
 
 
 @pytest.mark.asyncio

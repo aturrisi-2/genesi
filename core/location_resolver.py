@@ -55,20 +55,21 @@ _CITY_CONNECTORS = r"(?:del|di|dei|delle|della|dello|d'|l'|sul|sulla|in|al|alla|
 
 # Capitalized word pattern for city names
 _CAP_WORD = r"[A-ZÀ-Ú][a-zà-ú']+"
+_CAP_CITY = rf"{_CAP_WORD}(?:\s+(?:{_CITY_CONNECTORS}\s+)?{_CAP_WORD})*"
 
 # ── Case-sensitive patterns (preferred — match proper nouns) ──
 
 # Prepositions that precede city names in Italian
 _PREP_PATTERN = re.compile(
     r"(?:^|[\s,])(?:a|ad|di|da|in|su|per|nel|nella|nello|nell'|dello|della|del)"
-    rf"\s+({_CAP_WORD}(?:\s+{_CITY_CONNECTORS}\s+)?(?:{_CAP_WORD}(?:\s+{_CAP_WORD})*)?)",
+    rf"\s+({_CAP_CITY})",
     re.UNICODE
 )
 
 # Direct patterns: "meteo Tokyo", "notizie Bangkok", "tempo a Milano"
 _DIRECT_PATTERN = re.compile(
     r"(?:meteo|tempo|previsioni|notizie|news|clima)\s+(?:a|di|per|in|da|su)?\s*"
-    rf"({_CAP_WORD}(?:\s+{_CITY_CONNECTORS}\s+)?(?:{_CAP_WORD}(?:\s+{_CAP_WORD})*)?)",
+    rf"({_CAP_CITY})",
     re.UNICODE
 )
 
@@ -76,7 +77,7 @@ _DIRECT_PATTERN = re.compile(
 _TRAILING_PATTERN = re.compile(
     r"(?:che\s+(?:tempo|meteo)\s+fa|com'è\s+il\s+(?:tempo|meteo)|piove|nevica|fa\s+(?:caldo|freddo))"
     rf"\s+(?:a|ad|in|di|da|su|per)\s+"
-    rf"({_CAP_WORD}(?:\s+{_CITY_CONNECTORS}\s+)?(?:{_CAP_WORD}(?:\s+{_CAP_WORD})*)?)",
+    rf"({_CAP_CITY})",
     re.UNICODE
 )
 

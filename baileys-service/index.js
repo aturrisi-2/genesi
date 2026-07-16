@@ -181,6 +181,17 @@ function weatherCityFollowupQuery(cityAnswer, previousReply) {
     return `meteo ${period ? `${period} ` : ""}a ${city}`;
 }
 
+function isWeatherResultReply(text) {
+    return /^Per (?:oggi|domani|dopodomani|stasera) a .+?, le previsioni indicano|^(?:Si può valutare|Direi che il meteo|Io eviterei).*\ba\b/i.test(text || "");
+}
+
+function weatherContextFollowupQuery(followup, previousReply) {
+    const previous = (previousReply || "").trim();
+    const match = previous.match(/^Per (oggi|domani|dopodomani|stasera) a (.+?), le previsioni indicano/i);
+    if (!match) return followup;
+    return `meteo ${match[1]} a ${match[2]}. ${followup}`;
+}
+
 function isDelicateSupportCandidate(text) {
     const s = (text || "").toLowerCase();
     return /\b(lutto|perdita|morto|morta|mancare|venut[oa] a mancare|malattia|malato|malata|ospedale|dolore|triste|gi[uù]|a pezzi|supporto|ti siamo vicini|vi siamo vicini|condoglianze)\b/i.test(s);
@@ -778,6 +789,8 @@ async function startBaileys() {
                         text,
                         isWeatherCityPrompt(quotedText) ? quotedText : (_last?.text || "")
                     )
+                    : (_engaged && isWeatherResultReply(_last?.text) && isClearlyDirectedFollowup(text))
+                        ? weatherContextFollowupQuery(text, _last.text)
                     : text;
                 const textToSend = (isReplyToGenesi && quotedText)
                     ? `[Stai rispondendo a questo tuo messaggio precedente: "${quotedText}"]\n${routedText}`

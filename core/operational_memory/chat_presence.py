@@ -82,6 +82,30 @@ def _naturalize_weather_reply(raw: str, query: str) -> str:
         description = detail.group(2).strip().lower()
         low, high = int(detail.group(3)), int(detail.group(4))
         when = period or detail.group(1).strip()
+        asks_outdoor_work = bool(re.search(
+            r"\b(lavor\w*|attivit[aà]|oper\w*)\b.*\b(sole|aperto|esterno|fuori)\b"
+            r"|\b(sole|aperto|esterno|fuori)\b.*\b(lavor\w*|attivit[aà]|oper\w*)\b",
+            query,
+            re.IGNORECASE,
+        ))
+        if asks_outdoor_work:
+            if any(word in description for word in ("temporale", "pioggia", "neve", "grandine")):
+                return (
+                    f"Io eviterei di programmare lavoro esposto per {when}: a {city} sono previste "
+                    f"{description}, con temperature tra {low} e {high} °C. "
+                    "Meglio valutare attività riparate e confermare sul posto secondo le procedure di sicurezza."
+                )
+            if high >= 32:
+                return (
+                    f"Si può valutare, ma con prudenza: per {when} a {city} sono previsti {description} "
+                    f"e fino a {high} °C. Eviterei le ore più calde e organizzerei ombra, acqua e pause; "
+                    "restano comunque valide le procedure di sicurezza dell'attività."
+                )
+            return (
+                f"Direi che il meteo lo permette: per {when} a {city} sono previsti {description}, "
+                f"con temperature tra {low} e {high} °C. Per lavorare al sole terrei comunque "
+                "acqua, pause e procedure di sicurezza come riferimento."
+            )
         temperatures = (
             f"temperature intorno ai {low} °C"
             if low == high

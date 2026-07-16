@@ -45,6 +45,12 @@ class TestCityExtraction:
         assert result is not None
         assert "San" in result or "san" in result.lower()
 
+    def test_compound_city_without_connector_keeps_full_name(self):
+        assert (
+            extract_city_from_message("meteo domani a Sant'agata Bolognese")
+            == "Sant'agata Bolognese"
+        )
+
     def test_no_city(self):
         assert extract_city_from_message("che tempo fa?") is None
 
