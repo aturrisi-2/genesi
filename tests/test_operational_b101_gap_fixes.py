@@ -112,10 +112,10 @@ def test_cosa_manca_still_open_tasks():
     assert classify_query_intent("cosa manca") == "open_tasks"
 
 
-def test_meteo_still_unknown():
+def test_meteo_is_safe_read_only_intent():
     q = "che tempo fa domani?"
-    assert classify_query_intent(q) == "unknown"
-    assert is_pure_operational_invocation(q) is False
+    assert classify_query_intent(q) == "weather"
+    assert is_pure_operational_invocation(q) is True
 
 
 def test_report_variants_unchanged():

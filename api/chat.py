@@ -724,6 +724,9 @@ class GroupChatRequest(BaseModel):
     reply_to_id: Optional[str] = None       # id del messaggio quotato/replied (operational binding); backward-compatible
     parent_text: Optional[str] = None       # snapshot leggero del parent (fallback se evento non in store)
     parent_media_type: Optional[str] = None
+    # Same-sender continuation inside Baileys' short engaged window, or an
+    # explicit reply to Genesi. Unrelated group chatter keeps the default False.
+    directed_followup: bool = False
 
 class GroupChatResponse(BaseModel):
     response: str
@@ -803,6 +806,7 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                     reply_to_id=request.reply_to_id,
                     parent_text=(request.parent_text or ""),
                     parent_media_type=(request.parent_media_type or ""),
+                    directed_followup=request.directed_followup,
                     result=_op_meta,
                 )
                 if _handled:

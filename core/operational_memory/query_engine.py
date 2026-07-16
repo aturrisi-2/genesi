@@ -12,6 +12,7 @@ dispatches to the structured queries; it never invents content."""
 from __future__ import annotations
 
 import re
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Callable
 
@@ -522,6 +523,24 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
         r"^\s*report(\s+operativ\w*)?\s*[?!.]?\s*$"
         r"|\b(manda\w*|invia\w*)\s+(il\s+|un\s+)?report\b",
         re.IGNORECASE)),
+    # Conversational read-only questions that need structured data beyond the
+    # generic issue list. Keep these before open_issues so the nouns "problemi"
+    # and "foto" do not collapse to the old list intent.
+    ("issue_media", re.compile(
+        r"\b(foto|immagin\w*|media|allegat\w*)\b.*\b(problem\w*|critic\w*|guast\w*|anomal\w*)\b"
+        r"|\b(problem\w*|critic\w*|guast\w*|anomal\w*)\b.*\b(foto|immagin\w*|media|allegat\w*)\b",
+        re.IGNORECASE)),
+    ("reporter_stats", re.compile(
+        r"\b(chi|quale\s+(utente|persona|collega)|quali\s+(utenti|persone|colleghi))\b"
+        r".*\b(segnalat\w*|riportat\w*|apert\w*|inserit\w*)\b.*\b(problem\w*|critic\w*|guast\w*|anomal\w*)\b"
+        r"|\b(problem\w*|critic\w*|guast\w*|anomal\w*)\b.*\b(segnalat\w*|riportat\w*)\b.*\b(chi|utente|persona)\b",
+        re.IGNORECASE)),
+    ("weather", re.compile(
+        r"\b(meteo|temperatura|piov\w*|nevic\w*|prevision\w*)\b"
+        r"|\b(che|com'?[eè]|come\s+[eè])\s+(il\s+)?tempo\b"
+        r"|\btempo\s+(oggi|domani|fuori|a\b|in\b)"
+        r"|\b(c'?[eè]|ci\s+sar[aà])\s+(il\s+)?sole\b",
+        re.IGNORECASE)),
     # Natural-language status/update invocations → same concise inline status as
     # the bare 'stato' command (pure read-only, never ingested, no link/emoji
     # fallback). Placed before briefing/digest so status phrasing resolves to the
@@ -630,6 +649,7 @@ _PURE_QUERY_INTENTS = {
     "superseded", "attention", "changed", "team_brief", "decision_guard",
     # Technical command shortcuts: read-only, never stored as project items.
     "cmd_stato", "cmd_aperti", "cmd_report",
+    "issue_media", "reporter_stats", "weather",
 }
 
 # Explicit declarative operational-update signals (generic verbs/markers, never
@@ -772,6 +792,32 @@ _DECISION_GUARD_REPLY = (
 )
 
 
+def _reporter_stats_summary(state: OperationalState) -> str:
+    """Natural, explainable count of active issues by their recorded sender."""
+    counts = Counter(
+        (item.source_sender or "").strip()
+        for item in state.issues
+        if is_active_status("issue", _status_of(item, "issue"))
+        and (item.source_sender or "").strip()
+    )
+    if not counts:
+        return (
+            "Non ho abbastanza dati affidabili per attribuire le segnalazioni "
+            "dei problemi ancora aperti."
+        )
+    ranked = counts.most_common(3)
+    leader, leader_count = ranked[0]
+    known_total = sum(counts.values())
+    answer = (
+        f"Al momento è {leader}: gli sono attribuite {leader_count} delle "
+        f"{known_total} segnalazioni aperte con autore identificato."
+    )
+    if len(ranked) > 1:
+        others = ", ".join(f"{name} {count}" for name, count in ranked[1:])
+        answer += f" Seguono {others}."
+    return answer + " È un conteggio delle fonti registrate, non delle responsabilità."
+
+
 def answer_query(state: OperationalState, text: str) -> QueryResult:
     intent = classify_query_intent(text)
     if intent == "decision_guard":
@@ -779,6 +825,15 @@ def answer_query(state: OperationalState, text: str) -> QueryResult:
                            summary=_DECISION_GUARD_REPLY, count=0, items=[])
     if intent == "cmd_stato":
         return QueryResult(query=text, intent="cmd_stato", summary=command_status_line(state), count=0, items=[])
+    if intent == "reporter_stats":
+        return QueryResult(query=text, intent=intent,
+                           summary=_reporter_stats_summary(state), count=0, items=[])
+    if intent == "issue_media":
+        return QueryResult(query=text, intent=intent,
+                           summary="Cerco le immagini collegate ai problemi ancora aperti.", count=0, items=[])
+    if intent == "weather":
+        return QueryResult(query=text, intent=intent,
+                           summary="Controllo il meteo senza confonderlo con lo stato operativo.", count=0, items=[])
     ctx_tokens = extract_query_context(text)
     ctx_label = " / ".join(ctx_tokens)
     if intent == "cmd_aperti":
@@ -822,9 +877,7 @@ def answer_query(state: OperationalState, text: str) -> QueryResult:
         return QueryResult(
             query=text,
             intent="unknown",
-            summary="Domanda non riconosciuta. Prova: cosa resta da fare, quali problemi aperti, "
-                    "cosa risolto, decisioni attive, cosa cambiato, domande aperte, cosa superato, "
-                    "cosa richiede attenzione, digest.",
+            summary="Domanda non riconosciuta: non ho ancora una lettura affidabile per questa richiesta.",
             count=0,
             items=[],
         )

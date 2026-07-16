@@ -228,6 +228,7 @@ async def maybe_handle_whatsapp_operational(
     parent_text: str = "",
     parent_media_type: str = "",
     parent_attachment_summary: str = "",
+    directed_followup: bool = False,
     config: Optional[InvocationConfig] = None,
     updater: Optional[Updater] = None,
     result: Optional[dict] = None,
@@ -265,6 +266,14 @@ async def maybe_handle_whatsapp_operational(
 
         decision = is_invoked(text, config)
         reply_enabled = is_whatsapp_operational_reply_enabled(group_jid)
+        # Baileys only sets this for a same-sender continuation after a visible
+        # Genesi reply. TAB can never enter this path because its reply gate is
+        # hard-denied. Preserve the original message and promote only routing.
+        if directed_followup and reply_enabled and not decision.respond:
+            decision = is_invoked(f"Genesi, {text}", config)
+            if decision.respond:
+                log("OPERATIONAL_WHATSAPP_DIRECTED_FOLLOWUP",
+                    chat_id=group_jid, query=decision.query[:120])
 
         def _set_action(action: str) -> None:
             if result is not None:
@@ -352,10 +361,9 @@ async def maybe_handle_whatsapp_operational(
         # Never ingests into canary state; never produces a generic operational reply.
         if _tab_targeted:
             await send_message(group_jid,
-                "Query TAB non riconosciuta. Esempi supportati:\n"
-                "stato TAB / problemi aperti TAB / cosa manca nel TAB?\n"
-                "fammi il quadro TAB / dove siamo scoperti nel TAB?\n"
-                "cosa devo controllare nel TAB? / report TAB"
+                "Query TAB non riconosciuta: non ho ancora una lettura affidabile per questa richiesta. "
+                "Dimmi cosa vuoi verificare — problemi, priorità, persone, foto, "
+                "attività, scadenze o un'area precisa — e ci ragioniamo insieme."
             )
             log("OPERATIONAL_TAB_BRIDGE_UNKNOWN", origin_jid=group_jid,
                 tab_project=_TAB_BRIDGE_PROJECT_ID, query=decision.query[:120])

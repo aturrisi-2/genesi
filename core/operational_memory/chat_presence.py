@@ -27,7 +27,13 @@ from core.operational_memory.models import (
     normalize_event_type,
 )
 from core.operational_memory.quality import is_non_operational_note
-from core.operational_memory.query_engine import answer_query, build_briefing, command_status_line
+from core.operational_memory.query_engine import (
+    answer_query,
+    build_briefing,
+    classify_query_intent,
+    command_status_line,
+    open_issues,
+)
 from core.operational_memory.report_store import save_report
 from core.operational_memory.state_store import load_state
 from core.operational_memory.watcher_engine import ingest_event, process_pending_events
@@ -246,7 +252,7 @@ def _render_open_tasks_reply(result) -> tuple[str, list[str]]:
     evidence: list[str] = []
     if not result.items:
         return "Non risultano mancanze operative.", evidence
-    lines = ["Mancanze operative:"]
+    lines = ["Da quello che vedo, restano da seguire questi punti:"]
     for i, it in enumerate(result.items[:5], 1):
         parts = [it.text]
         if it.owner:
@@ -272,7 +278,7 @@ def _render_focused_reply(result) -> tuple[str, list[str]]:
         if not result.items:
             return "Nessun problema aperto.", evidence
         items = sorted(result.items, key=lambda it: (it.status != "reopened", it.text))
-        lines = ["Problemi aperti:"]
+        lines = ["Problemi aperti:", "Da quello che vedo, questi sono i punti da tenere d'occhio:"]
         for i, it in enumerate(items[:5], 1):
             flag = " [riaperto]" if it.status == "reopened" else ""
             lines.append(f"{i}. {it.text}{flag}")
@@ -282,6 +288,7 @@ def _render_focused_reply(result) -> tuple[str, list[str]]:
         reopened = [it for it in items if it.status == "reopened"]
         if reopened:
             lines.append(f"Azione consigliata: ripartire da {reopened[0].text}.")
+            lines.append("Te lo segnalo per primo perché risulta riaperto.")
         return "\n".join(lines).strip(), evidence
     if intent == "remaining_open":
         if not result.items:
@@ -392,7 +399,7 @@ def _render_attention_reply(result) -> tuple[str, list[str]]:
     evidence: list[str] = []
     if not result.items:
         return "Nessuna priorità aperta al momento.", evidence
-    lines = ["Priorità operative:"]
+    lines = ["Priorità operative:", "Guardando il quadro, io partirei da questi punti:"]
     for i, it in enumerate(result.items[:5], 1):
         flag = " [riaperto]" if it.status == "reopened" else ""
         due = f" (entro {_fmt_due(it.due)})" if it.due else ""
@@ -404,13 +411,17 @@ def _render_attention_reply(result) -> tuple[str, list[str]]:
     if reopened:
         lines.append(f"Rischio principale: {reopened[0].text} (riaperto).")
     lines.append("Prossima verifica: partire dal punto 1.")
+    lines.append("Poi aggiornerei gli altri punti in ordine, così vediamo subito cosa si sblocca.")
     return "\n".join(lines).strip(), evidence
 
 
 def _render_unknown_reply(state: OperationalState) -> str:
     """Conservative textual fallback for off-focus queries — NEVER the card,
     no empathic/LLM dependency. Distinguishes operational context from side notes."""
-    lines = ["Questa richiesta non rientra nel quadro operativo del progetto."]
+    lines = [
+        "Su questo non ho ancora una risposta affidabile nei dati disponibili. "
+        "Se mi dai un riferimento in più, provo a ricostruirla con te."
+    ]
     notes = _non_operational_notes(state)
     if notes:
         lines.append("")
@@ -451,6 +462,9 @@ def build_chat_reply(
         synthesis = result.summary
     elif intent == "cmd_report":
         reply_markdown = _render_command_report(report_url)
+        synthesis = result.summary
+    elif intent in {"reporter_stats", "weather", "issue_media"}:
+        reply_markdown = result.summary
         synthesis = result.summary
     elif intent in {"briefing", "digest"}:
         reply_markdown = _render_briefing_card(briefing)
@@ -499,6 +513,80 @@ async def build_operational_reply(
     Transport bridges (e.g. Telegram) call this instead of re-implementing the
     operational orchestration. No empathic logic, no LLM."""
     state = await load_state(project_id)
+    intent = classify_query_intent(query)
+
+    if intent == "issue_media":
+        from pathlib import Path
+        from core.operational_memory.event_store import list_events
+
+        events = await list_events(project_id)
+        event_by_id = {event.event_id: event for event in events}
+        found: list[tuple[str, str, str]] = []
+        seen_media: set[str] = set()
+        for item in open_issues(state):
+            for event_id in item.evidence_event_ids:
+                event = event_by_id.get(event_id)
+                media_path = getattr(event, "attachment_path", None) if event else None
+                media_type = str(
+                    getattr(event, "attachment_type", None)
+                    or getattr(event, "type", "")
+                    or ""
+                ).lower() if event else ""
+                if not media_path or "image" not in media_type:
+                    continue
+                media_id = Path(media_path).name
+                if not media_id or media_id in seen_media:
+                    continue
+                seen_media.add(media_id)
+                base = (report_base_url or "").rstrip("/")
+                path = f"/operational-report/{project_id}/media/{media_id}/thumbnail"
+                found.append((item.text, f"{base}{path}" if base else path, event_id))
+                break
+            if len(found) >= 5:
+                break
+
+        if found:
+            lines = ["Sì, per alcuni problemi aperti ho immagini collegate:"]
+            evidence: list[str] = []
+            for text, url, event_id in found:
+                lines.extend((f"- {text}", url))
+                evidence.append(event_id)
+            lines.append(
+                "Non tutti i problemi hanno una foto associata; qui ho mostrato solo i collegamenti verificabili."
+            )
+        else:
+            lines = [
+                "Non trovo immagini collegate in modo affidabile ai problemi ancora aperti. "
+                "Preferisco dirtelo invece di mostrarti foto fuori contesto."
+            ]
+            evidence = []
+        body = "\n".join(lines)
+        return ChatReply(
+            project_id=project_id,
+            invoked_by=invoked_by,
+            intent=intent,
+            synthesis=body,
+            reply_markdown=body,
+            evidence_event_ids=evidence,
+        )
+
+    if intent == "weather":
+        # Operational memory must never improvise live weather. The general tool
+        # currently has no configured provider in this runtime, so answer like a
+        # transparent colleague and keep the query out of project memory.
+        body = (
+            "Qui non ho dati meteo in tempo reale affidabili, quindi non ti direi di lavorare al sole alla cieca. "
+            "Se mi indichi località e condizioni che vedi sul posto, posso aiutarti a valutare organizzazione, "
+            "pause e attività più adatte; per l'esposizione diretta seguite comunque le procedure di sicurezza."
+        )
+        return ChatReply(
+            project_id=project_id,
+            invoked_by=invoked_by,
+            intent=intent,
+            synthesis=body,
+            reply_markdown=body,
+        )
+
     report_id = ""
     report_url = ""
     if save:

@@ -150,6 +150,11 @@ function isClearlyDirectedFollowup(text) {
     return (
         /\b(cosa ne pensi|che ne pensi|secondo te|che dici)\b/i.test(s)
         || /\b(puoi|potresti|riesci|continua|spiega|spiegami|dimmi|aiutami|mi aiuti|rispondi|fammi capire)\b/i.test(s)
+        // A question/request from the same person immediately after Genesi's
+        // reply is conversationally directed even when the name is omitted.
+        || /^(chi|quale|quali|quanto|quanti|dove|quando|come|perch[eé]|cosa|che cosa)\b/i.test(s)
+        || /\b(fammi|mostrami|mandami|inviami|elencami|confronta|cerca)\b/i.test(s)
+        || /\?\s*$/.test(s)
     );
 }
 
@@ -203,7 +208,7 @@ async function getToken(type = "group") {
 }
 
 // ── Chiamata a Genesi — gruppo ────────────────────────────────────────────────
-async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "WhatsApp Group", participants = null, token = null, mediaId = null, mediaType = null, mediaMime = null, recentMessages = null, replyToId = null) {
+async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "WhatsApp Group", participants = null, token = null, mediaId = null, mediaType = null, mediaMime = null, recentMessages = null, replyToId = null, directedFollowup = false) {
     try {
         if (!token) token = await getToken("group");
         const res = await axios.post(`${GENESI_URL}/api/chat/group`, {
@@ -218,6 +223,7 @@ async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "
             media_mime:  mediaMime,
             recent_messages: recentMessages,
             reply_to_id: replyToId,   // operational binding (T-A3.3); null se non e' una reply
+            directed_followup: directedFollowup,
         }, {
             headers: { Authorization: `Bearer ${token}` },
             timeout: 35000,
@@ -745,7 +751,9 @@ async function startBaileys() {
                 // The operational override exists only to carry data to the
                 // backend. It must not emit typing presence or a visible reply.
                 const operationalIngestOnly = interventionReason === "operational_ingest";
-                const backendResult = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, participants, token, mediaId, mediaType, mediaMime, getRecentMessages(groupId), replyToId);
+                const directedFollowup = interventionReason === "engaged_direct_followup"
+                    || interventionReason === "reply_to_genesi";
+                const backendResult = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, participants, token, mediaId, mediaType, mediaMime, getRecentMessages(groupId), replyToId, directedFollowup);
                 const reply = backendResult.reply;
                 const backendReplyAllowed = backendResult.replyAllowed === true;
 
