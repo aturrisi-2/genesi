@@ -346,15 +346,24 @@ async def maybe_handle_whatsapp_operational(
         # Never writes TAB state; never sends a message to the TAB JID.
         if _tab_query:
             tab_intent = classify_query_intent(_tab_query)
+            auxiliary_intents = {"weather", "assistant_identity"}
+            reply_project = project_id if tab_intent in auxiliary_intents else _TAB_BRIDGE_PROJECT_ID
             tab_reply = await build_operational_reply(
-                _TAB_BRIDGE_PROJECT_ID, _tab_query,
+                reply_project, _tab_query,
                 report_base_url=_public_base_url(), invoked_by=first_name or "",
                 save=(tab_intent == "cmd_report"),
             )
-            await send_message(group_jid, f"Vista TAB reale:\n{render_whatsapp_reply(tab_reply)}")
-            log("OPERATIONAL_TAB_BRIDGE_REPLY", origin_jid=group_jid,
-                tab_project=_TAB_BRIDGE_PROJECT_ID, tab_intent=tab_intent)
-            _set_action("tab_bridge")
+            rendered = render_whatsapp_reply(tab_reply)
+            if tab_intent in auxiliary_intents:
+                await send_message(group_jid, rendered)
+                log("OPERATIONAL_CANARY_AUX_REPLY", origin_jid=group_jid,
+                    project_id=project_id, intent=tab_intent)
+                _set_action("auxiliary_reply")
+            else:
+                await send_message(group_jid, f"Vista TAB reale:\n{rendered}")
+                log("OPERATIONAL_TAB_BRIDGE_REPLY", origin_jid=group_jid,
+                    tab_project=_TAB_BRIDGE_PROJECT_ID, tab_intent=tab_intent)
+                _set_action("tab_bridge")
             return True
 
         # B8.1 TAB routing guard: TAB-targeted query with unknown intent → fail-closed.

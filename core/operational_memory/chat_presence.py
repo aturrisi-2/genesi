@@ -12,6 +12,7 @@ speak."""
 
 from __future__ import annotations
 
+import re
 from typing import Awaitable, Callable, Optional
 
 from core.log import log
@@ -40,6 +41,57 @@ from core.operational_memory.watcher_engine import ingest_event, process_pending
 
 
 Updater = Callable[[ChatMessage], Awaitable[None]]
+
+
+def _weather_period_label(query: str) -> str:
+    lowered = (query or "").lower()
+    if "dopodomani" in lowered:
+        return "dopodomani"
+    if "domani" in lowered:
+        return "domani"
+    if "stasera" in lowered:
+        return "stasera"
+    if "oggi" in lowered:
+        return "oggi"
+    return ""
+
+
+def _naturalize_weather_reply(raw: str, query: str) -> str:
+    """Turn the provider's compact forecast table into a colleague-like reply."""
+    text = (raw or "").strip()
+    if not text.startswith("Previsioni per"):
+        return text
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    city_match = re.match(r"Previsioni per\s+(.+?):$", lines[0]) if lines else None
+    city = city_match.group(1) if city_match else "la città indicata"
+    forecast_lines = lines[1:]
+    period = _weather_period_label(query)
+
+    if period in {"oggi", "stasera"} and forecast_lines:
+        selected = forecast_lines[0]
+    elif period == "domani" and forecast_lines:
+        selected = forecast_lines[min(1, len(forecast_lines) - 1)]
+    elif period == "dopodomani" and forecast_lines:
+        selected = forecast_lines[min(2, len(forecast_lines) - 1)]
+    else:
+        selected = ""
+
+    detail = re.match(r"^(.+?):\s*(.+?),\s*(-?\d+)°C\s*/\s*(-?\d+)°C$", selected)
+    if detail:
+        description = detail.group(2).strip().lower()
+        low, high = int(detail.group(3)), int(detail.group(4))
+        when = period or detail.group(1).strip()
+        temperatures = (
+            f"temperature intorno ai {low} °C"
+            if low == high
+            else f"temperature tra {low} e {high} °C"
+        )
+        return f"Per {when} a {city}, le previsioni indicano {description}, con {temperatures}."
+
+    # Multi-day requests remain scan-friendly but get a conversational lead-in.
+    bullets = "\n".join(f"• {line}" for line in forecast_lines)
+    return f"Certo, per {city} la situazione prevista è questa:\n{bullets}" if bullets else text
 
 
 def _event_from_message(message: ChatMessage) -> OperationalEvent:
@@ -463,7 +515,7 @@ def build_chat_reply(
     elif intent == "cmd_report":
         reply_markdown = _render_command_report(report_url)
         synthesis = result.summary
-    elif intent in {"reporter_stats", "weather", "issue_media"}:
+    elif intent in {"reporter_stats", "weather", "issue_media", "assistant_identity"}:
         reply_markdown = result.summary
         synthesis = result.summary
     elif intent in {"briefing", "digest"}:
@@ -571,13 +623,42 @@ async def build_operational_reply(
         )
 
     if intent == "weather":
-        # Operational memory must never improvise live weather. The general tool
-        # currently has no configured provider in this runtime, so answer like a
-        # transparent colleague and keep the query out of project memory.
+        # Reuse the same real provider as the web app and the ordinary group
+        # pipeline. Never assume a city: ask naturally, then let the transport
+        # carry the short city answer back as a pure weather follow-up.
+        from core.location_resolver import extract_city_from_message
+        from core.tool_services import tool_service
+
+        city = extract_city_from_message(query)
+        if not city:
+            period = _weather_period_label(query)
+            period_suffix = f" per {period}" if period else ""
+            body = f"Volentieri. Di quale città vuoi sapere il meteo{period_suffix}?"
+            return ChatReply(
+                project_id=project_id,
+                invoked_by=invoked_by,
+                intent=intent,
+                synthesis=body,
+                reply_markdown=body,
+            )
+
+        try:
+            body = _naturalize_weather_reply(await tool_service.get_weather(query), query)
+        except Exception as exc:
+            log("OPERATIONAL_WEATHER_TOOL_ERROR", error=str(exc)[:160])
+            body = "In questo momento il servizio meteo non risponde. Riproviamo tra poco."
+        return ChatReply(
+            project_id=project_id,
+            invoked_by=invoked_by,
+            intent=intent,
+            synthesis=body,
+            reply_markdown=body,
+        )
+
+    if intent == "assistant_identity":
         body = (
-            "Qui non ho dati meteo in tempo reale affidabili, quindi non ti direi di lavorare al sole alla cieca. "
-            "Se mi indichi località e condizioni che vedi sul posto, posso aiutarti a valutare organizzazione, "
-            "pause e attività più adatte; per l'esposizione diretta seguite comunque le procedure di sicurezza."
+            "Sono Genesi, piacere. Nel Canary sono il vostro collega digitale: "
+            "seguo il filo della conversazione, consulto TAB in sola lettura e, quando serve, uso strumenti come il meteo."
         )
         return ChatReply(
             project_id=project_id,

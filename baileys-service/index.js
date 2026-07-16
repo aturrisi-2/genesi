@@ -152,10 +152,33 @@ function isClearlyDirectedFollowup(text) {
         || /\b(puoi|potresti|riesci|continua|spiega|spiegami|dimmi|aiutami|mi aiuti|rispondi|fammi capire)\b/i.test(s)
         // A question/request from the same person immediately after Genesi's
         // reply is conversationally directed even when the name is omitted.
-        || /^(chi|quale|quali|quanto|quanti|dove|quando|come|perch[eé]|cosa|che cosa)\b/i.test(s)
+        || /^(chi|quale|quali|quanto|quanti|dove|quando|come|perch[eé]|cosa|che(?: cosa)?)\b/i.test(s)
         || /\b(fammi|mostrami|mandami|inviami|elencami|confronta|cerca)\b/i.test(s)
         || /\?\s*$/.test(s)
     );
+}
+
+function isWeatherCityPrompt(text) {
+    return /(?:di|per) quale citt[aà].*(?:meteo|previsioni)|(?:meteo|previsioni).*quale citt[aà]/i.test(text || "");
+}
+
+function isShortCityAnswer(text) {
+    const s = (text || "").trim().replace(/^a\s+/i, "");
+    if (!s || s.length > 60) return false;
+    if (!/^[\p{L}][\p{L}'’ .-]*$/u.test(s)) return false;
+    if (/^(non lo so|boh|nessuna|qui|da me)$/i.test(s)) return false;
+    return s.split(/\s+/).length <= 5;
+}
+
+function weatherCityFollowupQuery(cityAnswer, previousReply) {
+    const city = (cityAnswer || "").trim().replace(/^a\s+/i, "");
+    const previous = (previousReply || "").toLowerCase();
+    const period = previous.includes("dopodomani") ? "dopodomani"
+        : previous.includes("domani") ? "domani"
+        : previous.includes("stasera") ? "stasera"
+        : previous.includes("oggi") ? "oggi"
+        : "";
+    return `meteo ${period ? `${period} ` : ""}a ${city}`;
 }
 
 function isDelicateSupportCandidate(text) {
@@ -692,6 +715,8 @@ async function startBaileys() {
                 const _last = lastGenesiReply[groupId];
                 const _engaged = replyAllowed && _last && _last.to === senderName
                     && (Date.now() - _last.ts < ENGAGED_WINDOW);
+                const _weatherCityAnswer = _engaged && isWeatherCityPrompt(_last.text)
+                    && isShortCityAnswer(text);
 
                 let shouldIntervene = false;
                 let interventionReason = "";
@@ -705,7 +730,9 @@ async function startBaileys() {
                     ).trim().slice(0, 300);
                     console.log(`[Baileys] Reply diretta a Genesi da ${senderName} in ${groupName} → intervengo`);
                     shouldIntervene = true;
-                    interventionReason = "reply_to_genesi";
+                    interventionReason = isWeatherCityPrompt(quotedText) && isShortCityAnswer(text)
+                        ? "engaged_weather_city"
+                        : "reply_to_genesi";
                 } else if (isEmojiOnlyMessage(originalText || text)) {
                     console.log(`WHATSAPP_GROUP_SILENT group=${maskJid(groupId)} name="${groupName}" reason=emoji_only`);
                     continue;
@@ -724,6 +751,10 @@ async function startBaileys() {
                     shouldIntervene = true;
                     interventionReason = decision.motivo;
                     console.log(`OPERATIONAL_MEDIA_INGEST_FORWARD group=${maskJid(groupId)} media=${mediaType}`);
+                } else if (_weatherCityAnswer) {
+                    console.log(`ENGAGED_WEATHER_CITY_ALLOWED group=${maskJid(groupId)} name="${groupName}" sender="${senderName}"`);
+                    shouldIntervene = true;
+                    interventionReason = "engaged_weather_city";
                 } else if (_engaged && !isDelicateSupportCandidate(text) && isClearlyDirectedFollowup(text)) {
                     console.log(`ENGAGED_FOLLOWUP_ALLOWED group=${maskJid(groupId)} name="${groupName}" sender="${senderName}"`);
                     shouldIntervene = true;
@@ -742,9 +773,15 @@ async function startBaileys() {
                 if (!shouldIntervene) continue;
 
                 // Se c'è un messaggio quotato di Genesi, anteponi al testo per dare contesto
-                const textToSend = (isReplyToGenesi && quotedText)
-                    ? `[Stai rispondendo a questo tuo messaggio precedente: "${quotedText}"]\n${text}`
+                const routedText = interventionReason === "engaged_weather_city"
+                    ? weatherCityFollowupQuery(
+                        text,
+                        isWeatherCityPrompt(quotedText) ? quotedText : (_last?.text || "")
+                    )
                     : text;
+                const textToSend = (isReplyToGenesi && quotedText)
+                    ? `[Stai rispondendo a questo tuo messaggio precedente: "${quotedText}"]\n${routedText}`
+                    : routedText;
 
                 console.log(`[Baileys] Intervengo in ${groupName} motivo=${interventionReason} per: "${textToSend.slice(0, 50)}"`);
 
@@ -752,6 +789,7 @@ async function startBaileys() {
                 // backend. It must not emit typing presence or a visible reply.
                 const operationalIngestOnly = interventionReason === "operational_ingest";
                 const directedFollowup = interventionReason === "engaged_direct_followup"
+                    || interventionReason === "engaged_weather_city"
                     || interventionReason === "reply_to_genesi";
                 const backendResult = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, participants, token, mediaId, mediaType, mediaMime, getRecentMessages(groupId), replyToId, directedFollowup);
                 const reply = backendResult.reply;

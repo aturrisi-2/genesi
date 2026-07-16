@@ -535,6 +535,10 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
         r".*\b(segnalat\w*|riportat\w*|apert\w*|inserit\w*)\b.*\b(problem\w*|critic\w*|guast\w*|anomal\w*)\b"
         r"|\b(problem\w*|critic\w*|guast\w*|anomal\w*)\b.*\b(segnalat\w*|riportat\w*)\b.*\b(chi|utente|persona)\b",
         re.IGNORECASE)),
+    ("assistant_identity", re.compile(
+        r"^\s*(chi\s+sei|tu\s+chi\s+sei|come\s+ti\s+chiami|"
+        r"qual[e']?\s+[eè]\s+il\s+tuo\s+nome|cosa\s+sei)\s*[?!.]*\s*$",
+        re.IGNORECASE)),
     ("weather", re.compile(
         r"\b(meteo|temperatura|piov\w*|nevic\w*|prevision\w*)\b"
         r"|\b(che|com'?[eè]|come\s+[eè])\s+(il\s+)?tempo\b"
@@ -649,7 +653,7 @@ _PURE_QUERY_INTENTS = {
     "superseded", "attention", "changed", "team_brief", "decision_guard",
     # Technical command shortcuts: read-only, never stored as project items.
     "cmd_stato", "cmd_aperti", "cmd_report",
-    "issue_media", "reporter_stats", "weather",
+    "issue_media", "reporter_stats", "weather", "assistant_identity",
 }
 
 # Explicit declarative operational-update signals (generic verbs/markers, never
@@ -834,6 +838,9 @@ def answer_query(state: OperationalState, text: str) -> QueryResult:
     if intent == "weather":
         return QueryResult(query=text, intent=intent,
                            summary="Controllo il meteo senza confonderlo con lo stato operativo.", count=0, items=[])
+    if intent == "assistant_identity":
+        return QueryResult(query=text, intent=intent,
+                           summary="Sono Genesi, il collega digitale del gruppo.", count=0, items=[])
     ctx_tokens = extract_query_context(text)
     ctx_label = " / ".join(ctx_tokens)
     if intent == "cmd_aperti":
