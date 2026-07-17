@@ -185,7 +185,21 @@ function isWeatherResultReply(text) {
     return /^Per (?:oggi|domani|dopodomani|stasera) a .+?, le previsioni indicano|^(?:Si può valutare|Direi che il meteo|Io eviterei).*\ba\b/i.test(text || "");
 }
 
+// Il carry del contesto meteo si applica SOLO se il follow-up parla ancora di
+// meteo/condizioni (o è un puro cambio di periodo: "e dopodomani?"). Senza
+// questo gate qualunque domanda successiva ("impegni di oggi?") veniva
+// concatenata al meteo precedente e collassava per sempre sulla stessa
+// risposta meteo (loop osservato live il 17/07).
+function isWeatherTopicFollowup(text) {
+    const s = (text || "").trim();
+    if (/^(e\s+)?(oggi|domani|dopodomani|stasera|stamattina|nel pomeriggio|questa settimana)\s*[?!.]*$/i.test(s)) {
+        return true;
+    }
+    return /\b(meteo|piov\w*|pioggia|sole|soleggiat\w*|caldo|freddo|vento|ventos\w*|nuvol\w*|sereno|grad[io]|temperatur\w*|umidit\w*|ombrello|neve|nevic\w*|temporale|grandine|afa|all'aperto|al sole|si potr[aà] lavorare|che tempo)\b/i.test(s);
+}
+
 function weatherContextFollowupQuery(followup, previousReply) {
+    if (!isWeatherTopicFollowup(followup)) return followup;
     const previous = (previousReply || "").trim();
     const match = previous.match(/^Per (oggi|domani|dopodomani|stasera) a (.+?), le previsioni indicano/i);
     if (!match) return followup;

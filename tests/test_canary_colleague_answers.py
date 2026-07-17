@@ -199,3 +199,37 @@ def test_tab_unknown_reply_addresses_by_name_and_varies():
 def test_tab_unknown_reply_without_name_still_natural():
     v = _tab_unknown_reply("", "query strana")
     assert v and not v.startswith(", ")
+
+
+# --------------------------------------------------------------------------- #
+# Weather carry gate (loop live 17/07: ogni follow-up diventava meteo)
+# --------------------------------------------------------------------------- #
+
+def test_weather_context_carry_is_topic_gated():
+    with open("baileys-service/index.js", encoding="utf-8") as fh:
+        src = fh.read()
+    assert "function isWeatherTopicFollowup" in src
+    # il carry passa dal gate: prima riga della funzione di concatenazione
+    assert "if (!isWeatherTopicFollowup(followup)) return followup;" in src
+
+
+@pytest.mark.skipif(__import__("shutil").which("node") is None,
+                    reason="node non disponibile")
+def test_weather_carry_behaviour_in_node():
+    import subprocess
+    script = r'''
+const src = require("fs").readFileSync("baileys-service/index.js","utf8");
+const fnSrc = src.match(/function isWeatherTopicFollowup[\s\S]*?\n}/)[0] + "\n" +
+              src.match(/function weatherContextFollowupQuery[\s\S]*?\n}/)[0];
+eval(fnSrc);
+const prev = "Per domani a Bologna, le previsioni indicano cielo sereno.";
+const same = (i) => weatherContextFollowupQuery(i, prev) === i;
+const carried = (i) => weatherContextFollowupQuery(i, prev).startsWith("meteo domani a Bologna. ");
+if (!same("impegni di oggi?")) process.exit(1);
+if (!same("cosa è successo domenica?")) process.exit(2);
+if (!carried("che ne pensi, si potrà lavorare al sole?")) process.exit(3);
+if (!carried("e dopodomani?")) process.exit(4);
+process.exit(0);
+'''
+    proc = subprocess.run(["node", "-e", script], capture_output=True)
+    assert proc.returncode == 0, proc.stderr.decode()
