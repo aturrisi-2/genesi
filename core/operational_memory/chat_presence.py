@@ -12,6 +12,7 @@ speak."""
 
 from __future__ import annotations
 
+import asyncio
 import re
 from typing import Awaitable, Callable, Optional
 
@@ -41,6 +42,15 @@ from core.operational_memory.watcher_engine import ingest_event, process_pending
 
 
 Updater = Callable[[ChatMessage], Awaitable[None]]
+_PROJECT_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+def _project_lock(project_id: str) -> asyncio.Lock:
+    lock = _PROJECT_LOCKS.get(project_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _PROJECT_LOCKS[project_id] = lock
+    return lock
 
 
 def _weather_period_label(query: str) -> str:
@@ -151,7 +161,7 @@ def _event_from_message(message: ChatMessage) -> OperationalEvent:
     return event
 
 
-async def silent_update(message: ChatMessage, rebuild: bool = True) -> None:
+async def _silent_update_unlocked(message: ChatMessage, rebuild: bool = True) -> None:
     """Listen + store + update memory. Never returns anything to the chat."""
     event = _event_from_message(message)
     if event.parent_event_id:
@@ -189,7 +199,13 @@ async def silent_update(message: ChatMessage, rebuild: bool = True) -> None:
         )
 
 
-async def flush_project(project_id: str, rebuild: bool = True) -> None:
+async def silent_update(message: ChatMessage, rebuild: bool = True) -> None:
+    """Serialize a project's read-modify-write pipeline and ACK only on finish."""
+    async with _project_lock(message.project_id):
+        await _silent_update_unlocked(message, rebuild=rebuild)
+
+
+async def _flush_project_unlocked(project_id: str, rebuild: bool = True) -> None:
     """Update operational memory from already-ingested events WITHOUT adding a new
     event. Used on pure invocations so the query text itself is never stored as a
     project item, while the reply still reflects the latest rebuilt state."""
@@ -200,6 +216,11 @@ async def flush_project(project_id: str, rebuild: bool = True) -> None:
             relation_window_days=21,
             relation_max_candidates_per_thread=40,
         )
+
+
+async def flush_project(project_id: str, rebuild: bool = True) -> None:
+    async with _project_lock(project_id):
+        await _flush_project_unlocked(project_id, rebuild=rebuild)
 
 
 def _compact_table(state: OperationalState) -> str:
