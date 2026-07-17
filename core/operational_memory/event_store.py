@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -41,10 +43,23 @@ async def list_events(project_id: str) -> list[OperationalEvent]:
 async def save_events(project_id: str, events: list[OperationalEvent]) -> list[OperationalEvent]:
     path = _events_path(project_id)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps([_dump_model(event) for event in events], ensure_ascii=False, indent=2, sort_keys=True),
-        encoding="utf-8",
+    payload = json.dumps(
+        [_dump_model(event) for event in events], ensure_ascii=False, indent=2, sort_keys=True
     )
+    tmp_name = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+        ) as tmp:
+            tmp.write(payload)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+            tmp_name = tmp.name
+        os.replace(tmp_name, path)
+    finally:
+        if tmp_name and os.path.exists(tmp_name):
+            os.unlink(tmp_name)
     return events
 
 

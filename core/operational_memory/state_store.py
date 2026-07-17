@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -43,8 +45,19 @@ async def save_state(project_id: str, state: OperationalState) -> OperationalSta
     path = _state_path(project_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     state.project_id = project_id
-    path.write_text(
-        json.dumps(_dump_model(state), ensure_ascii=False, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
+    payload = json.dumps(_dump_model(state), ensure_ascii=False, indent=2, sort_keys=True)
+    tmp_name = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+        ) as tmp:
+            tmp.write(payload)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+            tmp_name = tmp.name
+        os.replace(tmp_name, path)
+    finally:
+        if tmp_name and os.path.exists(tmp_name):
+            os.unlink(tmp_name)
     return state
