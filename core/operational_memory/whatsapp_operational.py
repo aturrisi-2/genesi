@@ -169,6 +169,27 @@ def render_whatsapp_reply(reply) -> str:
     return body
 
 
+def _tab_unknown_reply(first_name: str, query: str) -> str:
+    """Fail-closed umano: ammette il limite senza inventare, indica cosa sa
+    fare, si rivolge per nome e varia (deterministicamente sulla query)."""
+    import zlib
+
+    name = (first_name or "").strip()
+    prefix = f"{name}, " if name else ""
+    variants = (
+        f"{prefix}su questa non ho una lettura affidabile nel registro e non "
+        "voglio inventare. Se mi chiedi problemi, priorità, foto, persone o "
+        "scadenze, invece, vado a colpo sicuro.",
+        f"{prefix}qui esco dal mio campo: dai dati che tengo non riesco a "
+        "risponderti con serietà. Riportami su stato, attività, problemi "
+        "aperti o chi ha fatto cosa, e ci sono.",
+        f"{prefix}te lo dico dritto: questa non so leggerla bene con quello "
+        "che ho registrato. Su quadro operativo, foto dei problemi, scadenze "
+        "o persone del gruppo ti rispondo subito.",
+    )
+    return variants[zlib.crc32((query or "").encode("utf-8")) % len(variants)]
+
+
 def _safe_tab_bridge_body(reply, project_id: str) -> Optional[str]:
     """Bind a canary response to TAB and block high-confidence prompt leaks."""
     if getattr(reply, "project_id", "") != project_id:
@@ -415,12 +436,12 @@ async def maybe_handle_whatsapp_operational(
 
         # B8.1 TAB routing guard: TAB-targeted query with unknown intent → fail-closed.
         # Never ingests into canary state; never produces a generic operational reply.
+        # Il fail-closed resta assoluto (mai inventare), ma la forma è da collega:
+        # si rivolge a chi chiede e varia in modo deterministico sulla query, così
+        # due domande diverse non ricevono mai la stessa fotocopia.
         if _tab_targeted:
             await send_message(group_jid,
-                "Query TAB non riconosciuta: non ho ancora una lettura affidabile per questa richiesta. "
-                "Dimmi cosa vuoi verificare — problemi, priorità, persone, foto, "
-                "attività, scadenze o un'area precisa — e ci ragioniamo insieme."
-            )
+                               _tab_unknown_reply(first_name, decision.query))
             log("OPERATIONAL_TAB_BRIDGE_UNKNOWN", origin_jid=group_jid,
                 tab_project=_TAB_BRIDGE_PROJECT_ID, query=decision.query[:120])
             _set_action("tab_unknown_fail_closed")

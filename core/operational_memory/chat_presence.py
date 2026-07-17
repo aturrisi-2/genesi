@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import re
+from datetime import date, datetime, timedelta
 from typing import Awaitable, Callable, Optional
+from zoneinfo import ZoneInfo
 
 from core.log import log
 from core.operational_memory.incremental_rebuild import incremental_rebuild
@@ -51,6 +53,46 @@ def _project_lock(project_id: str) -> asyncio.Lock:
         lock = asyncio.Lock()
         _PROJECT_LOCKS[project_id] = lock
     return lock
+
+
+_ROME_TZ = ZoneInfo("Europe/Rome")
+
+_WEEKDAY_IT = ["lunedì", "martedì", "mercoledì", "giovedì",
+               "venerdì", "sabato", "domenica"]
+
+_WEEKDAY_LOOKUP = {
+    "lunedi": 0, "lunedì": 0, "martedi": 1, "martedì": 1,
+    "mercoledi": 2, "mercoledì": 2, "giovedi": 3, "giovedì": 3,
+    "venerdi": 4, "venerdì": 4, "sabato": 5, "domenica": 6,
+}
+
+
+def _rome_dt(ts: str) -> Optional[datetime]:
+    """Timestamp evento (ISO, tipicamente UTC) → datetime in ora italiana."""
+    try:
+        dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+    return dt.astimezone(_ROME_TZ)
+
+
+def _referenced_day(query: str) -> Optional[date]:
+    """Giorno citato nella query ("ieri", "lunedì scorso", …) in ora italiana."""
+    low = (query or "").lower()
+    today = datetime.now(_ROME_TZ).date()
+    if re.search(r"\bieri\b", low):
+        return today - timedelta(days=1)
+    if re.search(r"\boggi\b", low):
+        return today
+    for name, wd in _WEEKDAY_LOOKUP.items():
+        if re.search(rf"\b{name}\b", low):
+            delta = (today.weekday() - wd) % 7
+            if delta == 0 and re.search(r"\bscors", low):
+                delta = 7
+            return today - timedelta(days=delta)
+    return None
 
 
 def _weather_period_label(query: str) -> str:
@@ -673,6 +715,85 @@ async def build_operational_reply(
             evidence_event_ids=evidence,
             media=media_out,
         )
+
+    if intent in {"group_members", "person_activity"}:
+        from core.operational_memory.event_store import list_events
+        events = await list_events(project_id)
+
+        def _reply(body: str) -> ChatReply:
+            return ChatReply(project_id=project_id, invoked_by=invoked_by,
+                             intent=intent, synthesis=body, reply_markdown=body)
+
+        if intent == "group_members":
+            counts: dict[str, int] = {}
+            for event in events:
+                name = (event.sender or "").strip()
+                if name:
+                    counts[name] = counts.get(name, 0) + 1
+            if not counts:
+                return _reply(
+                    "Non ho ancora messaggi registrati in questo gruppo, quindi "
+                    "niente nomi da darti — appena qualcuno scrive, lo conosco.")
+            top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0].lower()))
+            listing = ", ".join(
+                f"{n} ({c} messaggi)" if c > 1 else f"{n} (1 messaggio)"
+                for n, c in top[:8])
+            extra = f" e altri {len(top) - 8}" if len(top) > 8 else ""
+            return _reply(
+                f"Qui hanno scritto finora: {listing}{extra}. "
+                "Ti sto dando chi è attivo in chat dal mio registro — la lista "
+                "formale dei partecipanti la tiene WhatsApp, non io.")
+
+        # person_activity — orari dei messaggi in chat, MAI presenze fisiche.
+        sender_names = {}
+        for event in events:
+            name = (event.sender or "").strip()
+            if name:
+                sender_names.setdefault(name, None)
+        q_tokens = {t for t in re.findall(r"[a-zà-ÿ']+", (query or "").lower())
+                    if len(t) >= 3}
+        person = next(
+            (n for n in sender_names
+             if any(tok in q_tokens for tok in n.lower().split())), None)
+        if person is None:
+            known = ", ".join(sorted(sender_names)[:6])
+            hint = f" Qui in chat vedo scrivere: {known}." if known else ""
+            return _reply(
+                "Non riesco a capire di chi parli tra le persone che scrivono "
+                f"qui.{hint} Dimmi il nome e ti dico subito quando ha scritto.")
+
+        day = _referenced_day(query)
+        person_events = [e for e in events
+                         if (e.sender or "").strip() == person and e.timestamp]
+        if day is not None:
+            day_events = [e for e in person_events
+                          if (_rome_dt(e.timestamp) or datetime.min).date() == day]
+            label = f"{_WEEKDAY_IT[day.weekday()]} {day.strftime('%d/%m')}"
+            if day_events:
+                times = sorted(_rome_dt(e.timestamp) for e in day_events)
+                span = (f"alle {times[0]:%H:%M}" if len(times) == 1
+                        else f"tra le {times[0]:%H:%M} e le {times[-1]:%H:%M}")
+                body = (f"{label} {person} ha scritto qui {span} "
+                        f"({len(times)} messaggi). Se invece intendi l'orario di "
+                        "arrivo sul posto, quello non lo traccio: io vedo la chat, "
+                        "non le presenze.")
+            else:
+                body = (f"{label} {person} non ha scritto nulla qui nel gruppo. "
+                        "Gli arrivi e le presenze fisiche però non li registro — "
+                        "posso dirti solo cosa passa in chat.")
+            return _reply(body)
+        if person_events:
+            last = max((_rome_dt(e.timestamp) for e in person_events
+                        if _rome_dt(e.timestamp)), default=None)
+            if last:
+                body = (f"L'ultima volta che {person} ha scritto qui è stata "
+                        f"{_WEEKDAY_IT[last.weekday()]} {last:%d/%m} alle {last:%H:%M}. "
+                        "Per orari di arrivo o presenze vere non sono la fonte "
+                        "giusta: registro solo la chat.")
+                return _reply(body)
+        return _reply(
+            f"Di {person} non ho ancora messaggi registrati qui, quindi non ho "
+            "orari da darti. E comunque: io vedo la chat, non le presenze.")
 
     if intent == "weather":
         # Reuse the same real provider as the web app and the ordinary group

@@ -576,6 +576,22 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
         r"sintesi\s+da\s+(mandare|inviare|girare)|da\s+mandare\s+in\s+chat|"
         r"spiegamel\w*|come\s+lo\s+diresti|da\s+girare\s+al\s+(team|gruppo))",
         re.IGNORECASE)),
+    # Persone del gruppo → chi scrive qui, dai mittenti reali degli eventi.
+    ("group_members", re.compile(
+        r"(chi\s+sono\s+i\s+(componenti|membri|partecipanti)|"
+        r"(componenti|membri|partecipanti)\s+del\s+gruppo|"
+        r"chi\s+(c'?[eè]|fa\s+parte)\s+(nel|del)\s+gruppo|"
+        r"chi\s+scrive\s+(qui|nel\s+gruppo)|"
+        r"dimmi\s+i\s+nomi\s+(dei|del|delle)\s+(componenti|membri|partecipanti|gruppo))",
+        re.IGNORECASE)),
+    # Attività di una persona → orari dei suoi messaggi in chat (mai presenze
+    # fisiche: quelle non sono tracciate e la risposta lo dichiara).
+    ("person_activity", re.compile(
+        r"(a\s+che\s+ora\s+(è\s+|e'\s+)?arrivat\w+|"
+        r"quando\s+(ha\s+scritto|è\s+arrivat\w+|e'\s+arrivat\w+|si\s+è\s+fatt\w+\s+viv\w+)|"
+        r"(l'?ultima|prima)\s+volta\s+che\s+ha\s+scritto|"
+        r"a\s+che\s+ora\s+ha\s+scritto)",
+        re.IGNORECASE)),
     # Agenda/pianificazione → task attivi ordinati per scadenza. Prima di
     # briefing e open_tasks così "impegni di oggi" / "cosa dobbiamo fare
     # domani" ricevono la vista temporale e non la lista generica.
@@ -654,6 +670,7 @@ _PURE_QUERY_INTENTS = {
     # Technical command shortcuts: read-only, never stored as project items.
     "cmd_stato", "cmd_aperti", "cmd_report",
     "issue_media", "reporter_stats", "weather", "assistant_identity",
+    "group_members", "person_activity",
 }
 
 # Explicit declarative operational-update signals (generic verbs/markers, never
@@ -838,6 +855,12 @@ def answer_query(state: OperationalState, text: str) -> QueryResult:
     if intent == "issue_media":
         return QueryResult(query=text, intent=intent,
                            summary="Cerco le immagini collegate ai problemi ancora aperti.", count=0, items=[])
+    if intent == "group_members":
+        return QueryResult(query=text, intent=intent,
+                           summary="Guardo chi ha scritto finora nel gruppo.", count=0, items=[])
+    if intent == "person_activity":
+        return QueryResult(query=text, intent=intent,
+                           summary="Controllo l'attività in chat della persona indicata.", count=0, items=[])
     if intent == "weather":
         return QueryResult(query=text, intent=intent,
                            summary="Controllo il meteo senza confonderlo con lo stato operativo.", count=0, items=[])
