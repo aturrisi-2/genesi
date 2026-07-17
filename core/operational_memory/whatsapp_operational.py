@@ -389,7 +389,8 @@ async def maybe_handle_whatsapp_operational(
                 save=(tab_intent == "cmd_report"),
             )
             if tab_intent in auxiliary_intents:
-                await send_message(group_jid, render_whatsapp_reply(tab_reply))
+                await send_message(group_jid, render_whatsapp_reply(tab_reply),
+                                   media=list(getattr(tab_reply, "media", []) or []))
                 log("OPERATIONAL_CANARY_AUX_REPLY", origin_jid=group_jid,
                     project_id=project_id, intent=tab_intent)
                 _set_action("auxiliary_reply")
@@ -405,6 +406,7 @@ async def maybe_handle_whatsapp_operational(
                 await send_message(
                     group_jid,
                     f"Vista TAB reale — memoria operativa, sola lettura:\n{tab_body}",
+                    media=list(getattr(tab_reply, "media", []) or []),
                 )
                 log("OPERATIONAL_TAB_BRIDGE_REPLY", origin_jid=group_jid,
                     tab_project=_TAB_BRIDGE_PROJECT_ID, tab_intent=tab_intent)

@@ -274,6 +274,7 @@ async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "
             reply: res.data.response || null,
             replyAllowed: res.data.reply_allowed !== false,
             status: res.data.status || "",
+            media: Array.isArray(res.data.media) ? res.data.media : [],
         };
       } catch (e) {
         if (e.response?.status === 401) {
@@ -838,9 +839,34 @@ async function startBaileys() {
                     // Read-only/ingest-only groups never see a typing indicator.
                     await sock.sendPresenceUpdate("composing", groupId);
                     await sock.sendMessage(groupId, { text: reply });
+                    // Foto operative allegate alla risposta (es. "fammi vedere le
+                    // foto dei problemi"): inviate come immagini reali con
+                    // didascalia, lette dalla media-cache locale. Stessi gate
+                    // della reply testuale; l'URL resta il fallback.
+                    const mediaItems = Array.isArray(backendResult.media) ? backendResult.media.slice(0, 5) : [];
+                    for (const m of mediaItems) {
+                        const caption = String(m.caption || "").slice(0, 900);
+                        const fallback = `${caption}${m.url ? `\n${m.url}` : ""}`.trim();
+                        try {
+                            const safeId = String(m.media_id || "").replace(/[^A-Za-z0-9._-]/g, "");
+                            const mediaPath = safeId ? `./media-cache/${safeId}` : "";
+                            if (mediaPath && fs.existsSync(mediaPath)) {
+                                await sock.sendMessage(groupId, { image: fs.readFileSync(mediaPath), caption });
+                                continue;
+                            }
+                            if (fallback) {
+                                await sock.sendMessage(groupId, { text: fallback });
+                            }
+                        } catch (mediaErr) {
+                            console.error(`[Baileys] Invio foto fallito (${m.media_id}):`, mediaErr.message);
+                            if (fallback) {
+                                try { await sock.sendMessage(groupId, { text: fallback }); } catch (_) {}
+                            }
+                        }
+                    }
                     await sock.sendPresenceUpdate("paused", groupId);
                     lastGenesiReply[groupId] = { text: reply, ts: Date.now(), to: senderName };
-                    console.log(`[Genesi → ${senderName} in ${groupName}] ${reply.slice(0, 80)}`);
+                    console.log(`[Genesi → ${senderName} in ${groupName}] ${reply.slice(0, 80)}${mediaItems.length ? ` (+${mediaItems.length} foto)` : ""}`);
                 } else if (reply && (!backendReplyAllowed || operationalIngestOnly)) {
                     // Defence in depth: even an unexpected backend body cannot
                     // escape from an ingest-only request.

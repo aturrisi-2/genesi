@@ -529,6 +529,10 @@ class ChatReply(BaseModel):
     report_id: str = ""
     report_url: str = ""
     reply_markdown: str = ""
+    # Allegati da inviare in chat insieme al testo (es. foto dei problemi):
+    # [{"media_id": str, "caption": str, "url": str}] — il transport che sa
+    # inviare immagini le manda come tali; url resta il fallback testuale.
+    media: list[dict] = Field(default_factory=list)
 
 
 class StoredReport(BaseModel):

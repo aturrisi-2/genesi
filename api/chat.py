@@ -735,6 +735,10 @@ class GroupChatResponse(BaseModel):
     response: str
     status: str
     reply_allowed: bool = True
+    # Allegati immagine da inviare in chat dopo il testo (path operational):
+    # [{"media_id": str, "caption": str, "url": str}]. Baileys li legge dalla
+    # propria media-cache locale e li manda come foto; url = fallback testuale.
+    media: list[dict] = []
 
 @router.post("/group", response_model=GroupChatResponse)
 async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: AuthUser = Depends(require_auth)):
@@ -795,6 +799,8 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                 async def _op_send(_to, _text, *a, **k):
                     _op_reply["to"] = _to
                     _op_reply["text"] = _text
+                    if k.get("media"):
+                        _op_reply["media"] = list(k["media"])
 
                 from core.operational_memory.models import normalize_media_category
                 _op_media_type = normalize_media_category(request.media_type, request.media_mime)
@@ -823,6 +829,7 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                         status=("operational_error" if _op_action in {"ingest_error", "error_claimed"}
                                 else "operational"),
                         reply_allowed=bool(_op_text),
+                        media=list(_op_reply.get("media") or []),
                     )
                 # A mapped operational group must never fall through to the
                 # legacy conversational pipeline.  Handler failure is silent and

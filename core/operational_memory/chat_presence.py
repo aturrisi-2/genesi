@@ -618,7 +618,7 @@ async def build_operational_reply(
 
         events = await list_events(project_id)
         event_by_id = {event.event_id: event for event in events}
-        found: list[tuple[str, str, str]] = []
+        found: list[tuple[str, str, str, str]] = []
         seen_media: set[str] = set()
         for item in open_issues(state):
             for event_id in item.evidence_event_ids:
@@ -637,27 +637,33 @@ async def build_operational_reply(
                 seen_media.add(media_id)
                 base = (report_base_url or "").rstrip("/")
                 path = f"/operational-report/{project_id}/media/{media_id}/thumbnail"
-                found.append((item.text, f"{base}{path}" if base else path, event_id))
+                found.append((item.text, f"{base}{path}" if base else path, event_id, media_id))
                 break
             if len(found) >= 5:
                 break
 
+        media_out: list[dict] = []
         if found:
-            lines = ["Sì, per alcuni problemi aperti ho immagini collegate:"]
-            evidence: list[str] = []
-            for text, url, event_id in found:
-                lines.extend((f"- {text}", url))
-                evidence.append(event_id)
-            lines.append(
-                "Non tutti i problemi hanno una foto associata; qui ho mostrato solo i collegamenti verificabili."
-            )
-        else:
-            lines = [
-                "Non trovo immagini collegate in modo affidabile ai problemi ancora aperti. "
-                "Preferisco dirtelo invece di mostrarti foto fuori contesto."
+            evidence = [event_id for _t, _u, event_id, _m in found]
+            media_out = [
+                {"media_id": media_id, "caption": text, "url": url}
+                for text, url, _e, media_id in found
             ]
+            n = len(found)
+            if n == 1:
+                body = ("Sì, ce l'ho: per uno dei problemi aperti c'è la foto — "
+                        "te la mando qui sotto con il suo contesto.")
+            else:
+                body = (f"Sì, le ho: per {n} dei problemi aperti c'è una foto — "
+                        "te le mando qui sotto, ognuna con il suo problema.")
+            body += ("\nPer gli altri punti aperti non ho immagini collegate in modo "
+                     "affidabile, quindi preferisco non mostrarti foto fuori contesto.")
+        else:
+            body = (
+                "Ho controllato: al momento non ho foto collegate in modo affidabile "
+                "ai problemi ancora aperti. Appena ne arriva una la aggancio e te la faccio vedere."
+            )
             evidence = []
-        body = "\n".join(lines)
         return ChatReply(
             project_id=project_id,
             invoked_by=invoked_by,
@@ -665,6 +671,7 @@ async def build_operational_reply(
             synthesis=body,
             reply_markdown=body,
             evidence_event_ids=evidence,
+            media=media_out,
         )
 
     if intent == "weather":
