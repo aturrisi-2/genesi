@@ -55,9 +55,17 @@ async def test_issue_media_returns_only_verified_open_issue_images(monkeypatch):
     )
 
     assert reply.intent == "issue_media"
-    assert "Sensore guasto" in reply.reply_markdown
-    assert "https://example.test/operational-report/p/media/img1/thumbnail" in reply.reply_markdown
     assert reply.evidence_event_ids == ["img1"]
+    # La foto viaggia come allegato reale (inviata in chat dal transport),
+    # con il testo del problema come didascalia e l'URL solo come fallback.
+    assert reply.media == [{
+        "media_id": "img1",
+        "caption": "Sensore guasto",
+        "url": "https://example.test/operational-report/p/media/img1/thumbnail",
+    }]
+    # Il corpo è da collega, non un elenco di link: annuncia le foto in arrivo.
+    assert "te la mando qui sotto" in reply.reply_markdown or "te le mando qui sotto" in reply.reply_markdown
+    assert "https://" not in reply.reply_markdown
 
 
 @pytest.mark.asyncio
@@ -156,7 +164,7 @@ async def test_same_sender_followup_routes_to_tab_without_ingesting_canary(monke
     async def update(message):
         ingested.append(message)
 
-    async def send(to, text):
+    async def send(to, text, *a, **k):
         sent.append((to, text))
 
     monkeypatch.setattr(mod, "build_operational_reply", fake_reply)
@@ -211,7 +219,7 @@ async def test_weather_followup_is_auxiliary_not_tab_and_not_ingested(monkeypatc
     result = {}
     handled = await mod.maybe_handle_whatsapp_operational(
         canary, "sender", "Alfio", "che tempo fa domani",
-        lambda to, text: asyncio.sleep(0, result=sent.append((to, text))),
+        lambda to, text, *a, **k: asyncio.sleep(0, result=sent.append((to, text))),
         message_id="weather-followup",
         updater=lambda message: asyncio.sleep(0, result=ingested.append(message)),
         result=result, directed_followup=True,
