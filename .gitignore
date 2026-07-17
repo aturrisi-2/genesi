@@ -111,3 +111,4 @@ genesi_gold_faro/
 # Local scratch files
 _t.pdf
 who_iris*.png
+.aider*

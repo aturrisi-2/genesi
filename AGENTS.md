@@ -152,3 +152,5 @@ Verificare che il miglioramento ArcFace funzioni: inviare a Genesi una foto con 
 
 **3. Feature branch `Codex/genesis-activation-check-53nbre`**
 Branch creato per il task di questa sessione. È allineato con `gold-faro-stable`. Non ci sono modifiche pendenti specifiche su questo branch — tutto è stato pushato direttamente su `gold-faro-stable`.
+
+## Imported Claude Cowork project instructions
