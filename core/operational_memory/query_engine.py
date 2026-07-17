@@ -682,8 +682,11 @@ def is_pure_operational_invocation(query: str) -> bool:
     q = (query or "").strip()
     if not q:
         return True  # bare invocation (e.g. "Genesi") → defaults to a briefing query
-    if classify_query_intent(q) not in _PURE_QUERY_INTENTS:
+    intent = classify_query_intent(q)
+    if intent not in _PURE_QUERY_INTENTS:
         return False  # unknown or content-bearing → ingest, never lose data
+    if intent == "decision_guard":
+        return True  # a yes/no decision request is always read-only, never an update
     return not _STRONG_UPDATE_RE.search(q)  # recognised query → pure unless explicit update
 
 
