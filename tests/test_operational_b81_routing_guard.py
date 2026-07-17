@@ -257,7 +257,7 @@ def test_tab_unknown_query_fail_closed_no_ingest(monkeypatch):
     assert result is True
     assert len(sent) == 1
     assert sent[0][0] == CANARY_JID
-    assert "TAB non riconosciuta" in sent[0][1] or "non riconosciuta" in sent[0][1].lower()
+    assert (_t := sent[0][1]) and ("non voglio inventare" in _t or "esco dal mio campo" in _t or "non so leggerla" in _t)
     # _safe_update must NOT be called → no canary ingest
     update_mock.assert_not_called()
 

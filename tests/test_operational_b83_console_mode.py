@@ -179,7 +179,7 @@ def test_flag_on_non_operational_fail_closed(monkeypatch, _update_mock):
     _, mb = _run(_invoke("Genesi, fai una magia", sent=sent))
     # No project reply built (fail-closed hint only)
     mb.assert_not_called()
-    assert sent and "non riconosciuta" in sent[0][1]
+    assert sent and (_t := sent[0][1]) and ("non voglio inventare" in _t or "esco dal mio campo" in _t or "non so leggerla" in _t)
     _update_mock.assert_not_called()
 
 
@@ -189,7 +189,7 @@ def test_flag_on_borderline_unknown_fail_closed_no_ingest(monkeypatch, _update_m
     _, mb = _run(_invoke("Genesi, sistemare la faccenda di ieri", sent=sent))
     mb.assert_not_called()
     _update_mock.assert_not_called()
-    assert sent and "non riconosciuta" in sent[0][1]
+    assert sent and (_t := sent[0][1]) and ("non voglio inventare" in _t or "esco dal mio campo" in _t or "non so leggerla" in _t)
 
 
 # ---------------------------------------------------------------------------

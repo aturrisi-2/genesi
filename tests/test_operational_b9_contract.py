@@ -191,7 +191,7 @@ def test_ambiguous_query_fail_closed_no_ingest(_console):
         first_name="Alfio", text="Genesi, sistemare quella cosa di ieri",
         send_message=send,
     ))
-    assert sent and "non riconosciuta" in sent[0][1]
+    assert sent and (_t := sent[0][1]) and ("non voglio inventare" in _t or "esco dal mio campo" in _t or "non so leggerla" in _t)
     _console.assert_not_called()
 
 
