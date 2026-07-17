@@ -170,7 +170,7 @@ async def test_same_sender_followup_routes_to_tab_without_ingesting_canary(monke
     assert handled is True
     assert captured == [(tab_project, "quale utente ha segnalato più problemi")]
     assert ingested == []
-    assert sent == [(canary, "Vista TAB reale:\nMarco è il primo.")]
+    assert sent == [(canary, "Vista TAB reale — memoria operativa, sola lettura:\nMarco è il primo.")]
     assert result["action"] == "tab_bridge"
 
 

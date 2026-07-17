@@ -258,7 +258,7 @@ def test_g1_natural_tab_queries_bridge(_wa_env):
                 first_name="Alfio", text=q, send_message=send,
             ))
         assert sent and sent[0][0] == CANARY_JID, q
-        assert "Vista TAB reale:" in sent[0][1], q
+        assert "Vista TAB reale" in sent[0][1], q
         assert mock_build.call_args[0][0] == TAB_PROJECT, q
 
 

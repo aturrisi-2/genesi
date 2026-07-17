@@ -108,7 +108,7 @@ def test_stato_tab_from_canary_uses_tab_project(monkeypatch):
     assert len(sent) == 1, "must reply exactly once"
     jid, text = sent[0]
     assert jid == CANARY_JID, "reply must go to CANARY, not TAB"
-    assert "Vista TAB reale:" in text
+    assert "Vista TAB reale" in text
     # build_operational_reply called with TAB project, not canary
     args, kwargs = mock_build.call_args
     assert args[0] == TAB_PROJECT
@@ -137,7 +137,7 @@ def test_problemi_tab_from_canary(monkeypatch):
 
     assert len(sent) == 1
     assert sent[0][0] == CANARY_JID
-    assert "Vista TAB reale:" in sent[0][1]
+    assert "Vista TAB reale" in sent[0][1]
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +163,7 @@ def test_cosa_manca_tab_from_canary(monkeypatch):
 
     assert mock_build.call_args[0][0] == TAB_PROJECT
     assert sent[0][0] == CANARY_JID
-    assert "Vista TAB reale:" in sent[0][1]
+    assert "Vista TAB reale" in sent[0][1]
 
 
 # ---------------------------------------------------------------------------
@@ -356,6 +356,6 @@ def test_riepiloga_tab(monkeypatch):
         ))
 
     assert sent[0][0] == CANARY_JID
-    assert "Vista TAB reale:" in sent[0][1]
+    assert "Vista TAB reale" in sent[0][1]
     _, kwargs = mock_build.call_args
     assert kwargs.get("save") is False

@@ -109,7 +109,7 @@ def test_flag_on_priorita_bridges_tab(monkeypatch, _update_mock):
     _, mb = _run(_invoke("Genesi, dammi solo le priorità", sent=sent))
     assert mb.call_args[0][0] == TAB_PROJECT
     assert sent[0][0] == CANARY_JID
-    assert "Vista TAB reale:" in sent[0][1]
+    assert "Vista TAB reale" in sent[0][1]
 
 
 def test_flag_on_messaggio_operativo_bridges_tab(monkeypatch, _update_mock):
@@ -214,7 +214,7 @@ def test_flag_on_explicit_tab_unchanged(monkeypatch, _update_mock):
     assert mb.call_args[0][0] == TAB_PROJECT
     # query passed is the stripped one, without "TAB"
     assert "tab" not in mb.call_args[0][1].lower()
-    assert "Vista TAB reale:" in sent[0][1]
+    assert "Vista TAB reale" in sent[0][1]
 
 
 # ---------------------------------------------------------------------------

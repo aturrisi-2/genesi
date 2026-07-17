@@ -149,7 +149,7 @@ def test_cosa_devo_controllare_tab_bridge_fires(monkeypatch):
     assert result is True
     assert len(sent) == 1
     assert sent[0][0] == CANARY_JID
-    assert "Vista TAB reale:" in sent[0][1]
+    assert "Vista TAB reale" in sent[0][1]
     assert mock_build.call_args[0][0] == TAB_PROJECT
 
 
@@ -173,7 +173,7 @@ def test_cosa_devo_verificare_tab_bridge_fires(monkeypatch):
 
     assert result is True
     assert sent[0][0] == CANARY_JID
-    assert "Vista TAB reale:" in sent[0][1]
+    assert "Vista TAB reale" in sent[0][1]
     assert mock_build.call_args[0][0] == TAB_PROJECT
 
 
@@ -196,7 +196,7 @@ def test_cosa_va_attenzionato_tab_bridge_fires(monkeypatch):
         ))
 
     assert sent[0][0] == CANARY_JID
-    assert "Vista TAB reale:" in sent[0][1]
+    assert "Vista TAB reale" in sent[0][1]
     assert mock_build.call_args[0][0] == TAB_PROJECT
 
 
@@ -219,7 +219,7 @@ def test_cosa_devo_guardare_tab_bridge_fires(monkeypatch):
         ))
 
     assert sent[0][0] == CANARY_JID
-    assert "Vista TAB reale:" in sent[0][1]
+    assert "Vista TAB reale" in sent[0][1]
     assert mock_build.call_args[0][0] == TAB_PROJECT
 
 
@@ -367,7 +367,7 @@ def test_stato_tab_still_fires(monkeypatch):
         ))
 
     assert mock_build.call_args[0][0] == TAB_PROJECT
-    assert "Vista TAB reale:" in sent[0][1]
+    assert "Vista TAB reale" in sent[0][1]
 
 
 def test_existing_attention_patterns_unchanged():
