@@ -242,8 +242,10 @@ async function getToken(type = "group") {
 }
 
 // ── Chiamata a Genesi — gruppo ────────────────────────────────────────────────
-async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "WhatsApp Group", participants = null, token = null, mediaId = null, mediaType = null, mediaMime = null, recentMessages = null, replyToId = null, directedFollowup = false) {
-    try {
+async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "WhatsApp Group", participants = null, token = null, mediaId = null, mediaType = null, mediaMime = null, recentMessages = null, replyToId = null, directedFollowup = false, messageId = null, messageTimestamp = null, mediaFilename = null) {
+    const maxAttempts = 2;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
         if (!token) token = await getToken("group");
         const res = await axios.post(`${GENESI_URL}/api/chat/group`, {
             text,
@@ -252,25 +254,36 @@ async function askGenesiGroup(text, senderName, senderId, groupId, groupName = "
             group_id:    groupId,
             group_name:  groupName,
             participants: participants,
+            message_id:   messageId,
+            message_timestamp: messageTimestamp,
             media_id:    mediaId,
             media_type:  mediaType,
             media_mime:  mediaMime,
+            media_filename: mediaFilename,
             recent_messages: recentMessages,
             reply_to_id: replyToId,   // operational binding (T-A3.3); null se non e' una reply
             directed_followup: directedFollowup,
         }, {
             headers: { Authorization: `Bearer ${token}` },
-            timeout: 35000,
+            timeout: mediaId ? 120000 : 35000,
         });
+        if (res.data.status === "operational_error") {
+            throw new Error("operational_error");
+        }
         return {
             reply: res.data.response || null,
             replyAllowed: res.data.reply_allowed !== false,
             status: res.data.status || "",
         };
-    } catch (e) {
-        if (e.response?.status === 401) tokens.group = null;
-        console.error("[Genesi] Group API error:", e.message, e.response?.data);
+      } catch (e) {
+        if (e.response?.status === 401) {
+            tokens.group = null;
+            token = null;
+        }
+        console.error(`[Genesi] Group API error attempt=${attempt}/${maxAttempts}:`, e.message, e.response?.data);
+        if (attempt < maxAttempts) continue;
         return { reply: null, replyAllowed: false, status: "error" };
+      }
     }
 }
 
@@ -584,15 +597,21 @@ async function startBaileys() {
                     msg.message?.conversation
                     || msg.message?.extendedTextMessage?.text
                     || msg.message?.imageMessage?.caption
+                    || msg.message?.documentMessage?.caption
                     || msg.message?.videoMessage?.caption
                     || ""
                 ).trim();
                 const originalText = text;
+                const messageId = msg.key.id || null;
+                const messageTimestamp = msg.messageTimestamp
+                    ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
+                    : null;
 
                 const mType = Object.keys(msg.message || {})[0];
                 let mediaId = null;
                 let mediaMime = null;
                 let mediaType = null;
+                let mediaFilename = null;
 
                 if (mType === "imageMessage") {
                     mediaId = msg.key.id;
@@ -602,6 +621,7 @@ async function startBaileys() {
                     mediaId = msg.key.id;
                     mediaMime = msg.message.documentMessage.mimetype || "application/octet-stream";
                     mediaType = "document";
+                    mediaFilename = msg.message.documentMessage.fileName || null;
                 } else if (mType === "audioMessage") {
                     mediaId = msg.key.id;
                     mediaMime = msg.message.audioMessage.mimetype || "audio/ogg";
@@ -804,7 +824,12 @@ async function startBaileys() {
                 const directedFollowup = interventionReason === "engaged_direct_followup"
                     || interventionReason === "engaged_weather_city"
                     || interventionReason === "reply_to_genesi";
-                const backendResult = await askGenesiGroup(textToSend, senderName, senderJid, groupId, groupName, participants, token, mediaId, mediaType, mediaMime, getRecentMessages(groupId), replyToId, directedFollowup);
+                const backendResult = await askGenesiGroup(
+                    textToSend, senderName, senderJid, groupId, groupName,
+                    participants, token, mediaId, mediaType, mediaMime,
+                    getRecentMessages(groupId), replyToId, directedFollowup,
+                    messageId, messageTimestamp, mediaFilename
+                );
                 const reply = backendResult.reply;
                 const backendReplyAllowed = backendResult.replyAllowed === true;
 

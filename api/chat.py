@@ -717,9 +717,12 @@ class GroupChatRequest(BaseModel):
     group_id: str    # JID gruppo WhatsApp
     group_name: str = "WhatsApp Group"
     participants: Optional[list[GroupParticipant]] = None
+    message_id: Optional[str] = None  # ID WhatsApp reale per retry/dedup idempotente
+    message_timestamp: Optional[str] = None
     media_id: Optional[str] = None
     media_type: Optional[str] = None
     media_mime: Optional[str] = None
+    media_filename: Optional[str] = None
     recent_messages: Optional[list] = None  # thread recente [{name, text}] per seguire il contesto
     reply_to_id: Optional[str] = None       # id del messaggio quotato/replied (operational binding); backward-compatible
     parent_text: Optional[str] = None       # snapshot leggero del parent (fallback se evento non in store)
@@ -799,9 +802,11 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                 _handled = await maybe_handle_whatsapp_operational(
                     group_jid=request.group_id, sender_jid=request.sender_id,
                     first_name=request.sender_name, text=request.text,
-                    send_message=_op_send, message_id=request.media_id,
+                    send_message=_op_send, message_id=(request.message_id or request.media_id),
+                    message_timestamp=request.message_timestamp,
                     media_type=_op_media_type, media_id=(request.media_id or ""),
                     media_dir="/opt/genesi-baileys/media-cache" if request.media_id else "",
+                    filename=request.media_filename,
                     mime_type=request.media_mime,
                     reply_to_id=request.reply_to_id,
                     parent_text=(request.parent_text or ""),
@@ -815,7 +820,8 @@ async def group_chat_endpoint(request: GroupChatRequest, req: Request, user: Aut
                     log("OPERATIONAL_BAILEYS_HANDLED", project_id=_op_project, action=_op_action)
                     return GroupChatResponse(
                         response=_op_text,
-                        status="operational",
+                        status=("operational_error" if _op_action in {"ingest_error", "error_claimed"}
+                                else "operational"),
                         reply_allowed=bool(_op_text),
                     )
                 # A mapped operational group must never fall through to the

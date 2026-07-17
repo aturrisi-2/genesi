@@ -17,7 +17,6 @@ never ingested nor answered. No chat/JID/profession token is hardcoded.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import re
@@ -147,6 +146,11 @@ def _public_base_url() -> str:
 
 
 _REPORT_LINK_INTENTS = {"briefing", "digest", "cmd_report"}
+_BRIDGE_LEAK_RE = re.compile(
+    r"(?im)^\s*(?:(?:[-*•]|\d+[.)])\s*)?"
+    r"(?:\[\s*)?(?:ISTRUZIONI|SYSTEM\s+PROMPT|PROMPT\s+INTERNO|"
+    r"SYSTEM\s+MESSAGE|DEVELOPER\s+MESSAGE)(?:\s*\])?\s*[:\]]"
+)
 
 
 def render_whatsapp_reply(reply) -> str:
@@ -155,10 +159,27 @@ def render_whatsapp_reply(reply) -> str:
     B9.2: never appended when the body already contains the URL (cmd_report
     embeds it) — one link per reply."""
     body = reply.reply_markdown or ""
+    if reply.report_url and reply.report_url in body:
+        first = body.index(reply.report_url) + len(reply.report_url)
+        body = body[:first] + body[first:].replace(reply.report_url, "")
     if (reply.report_url
             and getattr(reply, "intent", "") in _REPORT_LINK_INTENTS
             and reply.report_url not in body):
         body = f"{body}\n\nReport: {reply.report_url}".strip()
+    return body
+
+
+def _safe_tab_bridge_body(reply, project_id: str) -> Optional[str]:
+    """Bind a canary response to TAB and block high-confidence prompt leaks."""
+    if getattr(reply, "project_id", "") != project_id:
+        return None
+    report_url = getattr(reply, "report_url", "") or ""
+    expected_report_path = f"/api/operational/projects/{project_id}/reports/"
+    if report_url and expected_report_path not in report_url:
+        return None
+    body = render_whatsapp_reply(reply)
+    if _BRIDGE_LEAK_RE.search(body):
+        return None
     return body
 
 
@@ -200,11 +221,13 @@ def _fallback_message_id(group_jid: str, sender_jid: str, text: str) -> str:
     return f"wa_{group_jid}_{sender_jid}_{abs(hash(text)) % 10_000_000}"
 
 
-async def _safe_update(update: Updater, message: ChatMessage) -> None:
+async def _safe_update(update: Updater, message: ChatMessage) -> bool:
     try:
         await update(message)
+        return True
     except Exception as exc:  # never break the host bot
         log("OPERATIONAL_WHATSAPP_INGEST_ERROR", chat_id=message.chat_id, error=str(exc))
+        return False
 
 
 # --------------------------------------------------------------------------- #
@@ -219,6 +242,7 @@ async def maybe_handle_whatsapp_operational(
     text: str,
     send_message: SendMessage,
     message_id: Optional[str] = None,
+    message_timestamp: Optional[str] = None,
     media_type: str = "",
     media_id: str = "",
     media_dir: str = "",
@@ -257,6 +281,7 @@ async def maybe_handle_whatsapp_operational(
             chat_id=group_jid,
             source="whatsapp",
             text=text or "",
+            timestamp=message_timestamp,
             attachments=attachments,
             reply_to_id=(str(reply_to_id) if reply_to_id else None),
             parent_text=parent_text or "",
@@ -281,7 +306,12 @@ async def maybe_handle_whatsapp_operational(
 
         # Normal (non-invocation) message → silent ingest, claim (suppress empathic).
         if not decision.respond:
-            asyncio.create_task(_safe_update(update, message))
+            persisted = await _safe_update(update, message)
+            if persisted is False:
+                _set_action("ingest_error")
+                log("OPERATIONAL_WHATSAPP_FAIL_CLOSED", chat_id=group_jid,
+                    project_id=project_id, reason="ingest_error")
+                return True
             log("OPERATIONAL_WHATSAPP_SILENT", chat_id=group_jid, project_id=project_id)
             _set_action("silent_ingest")
             return True  # operational-dominant: no parallel empathic reply
@@ -332,7 +362,12 @@ async def maybe_handle_whatsapp_operational(
                 project_id=project_id, intent=intent, reason="contains_operational_update")
         else:
             # No live reply, but still capture the update silently.
-            asyncio.create_task(_safe_update(update, message))
+            persisted = await _safe_update(update, message)
+            if persisted is False:
+                _set_action("ingest_error")
+                log("OPERATIONAL_WHATSAPP_FAIL_CLOSED", chat_id=group_jid,
+                    project_id=project_id, reason="ingest_error")
+                return True
             log("OPERATIONAL_WHATSAPP_INVOCATION_INGESTED",
                 project_id=project_id, intent=intent, reason="contains_operational_update")
 
@@ -353,14 +388,24 @@ async def maybe_handle_whatsapp_operational(
                 report_base_url=_public_base_url(), invoked_by=first_name or "",
                 save=(tab_intent == "cmd_report"),
             )
-            rendered = render_whatsapp_reply(tab_reply)
             if tab_intent in auxiliary_intents:
-                await send_message(group_jid, rendered)
+                await send_message(group_jid, render_whatsapp_reply(tab_reply))
                 log("OPERATIONAL_CANARY_AUX_REPLY", origin_jid=group_jid,
                     project_id=project_id, intent=tab_intent)
                 _set_action("auxiliary_reply")
             else:
-                await send_message(group_jid, f"Vista TAB reale:\n{rendered}")
+                tab_body = _safe_tab_bridge_body(tab_reply, _TAB_BRIDGE_PROJECT_ID)
+                if tab_body is None:
+                    log("OPERATIONAL_TAB_BRIDGE_FAIL_CLOSED", origin_jid=group_jid,
+                        tab_project=_TAB_BRIDGE_PROJECT_ID, reason="unsafe_or_mismatched_reply")
+                    await send_message(group_jid,
+                        "Vista TAB non disponibile: verifica della fonte non superata.")
+                    _set_action("tab_bridge_reply_blocked")
+                    return True
+                await send_message(
+                    group_jid,
+                    f"Vista TAB reale — memoria operativa, sola lettura:\n{tab_body}",
+                )
                 log("OPERATIONAL_TAB_BRIDGE_REPLY", origin_jid=group_jid,
                     tab_project=_TAB_BRIDGE_PROJECT_ID, tab_intent=tab_intent)
                 _set_action("tab_bridge")
