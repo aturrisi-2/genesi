@@ -233,3 +233,71 @@ process.exit(0);
 '''
     proc = subprocess.run(["node", "-e", script], capture_output=True)
     assert proc.returncode == 0, proc.stderr.decode()
+
+
+# --------------------------------------------------------------------------- #
+# media_recap — risponde con ciò che ha visto/sentito (foto, audio, video)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("q,expected", [
+    ("cosa ti ho appena mandato?", "media_recap"),
+    ("hai visto la foto?", "media_recap"),
+    ("cosa dice l'audio?", "media_recap"),
+    ("descrivi il video", "media_recap"),
+    ("cosa vedi di aperto?", "unknown"),   # non hijackato da media_recap
+])
+def test_media_recap_classification(q, expected):
+    assert classify_query_intent(q) == expected
+
+
+def _media_events():
+    return [
+        OperationalEvent(
+            event_id="ph1", project_id="p", sender="Alfio", type="image",
+            attachment_type="image",
+            extracted_text="Un gatto rilassato su un sacchetto di carta. [TOTAL_PETS:1]",
+            timestamp="2026-07-17T15:20:00+00:00"),
+        OperationalEvent(
+            event_id="au1", project_id="p", sender="Marco", type="audio",
+            attachment_type="audio",
+            extracted_text="Arrivo tardi, sono in coda a Orte.",
+            timestamp="2026-07-17T14:00:00+00:00"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_media_recap_answers_with_vision_description(monkeypatch):
+    _patch(monkeypatch, _media_events())
+    reply = await build_operational_reply(
+        "p", "cosa ti ho appena mandato?", invoked_by="Alfio", save=False)
+    assert reply.intent == "media_recap"
+    body = reply.reply_markdown
+    assert body.startswith("Mi hai mandato una foto")
+    assert "gatto rilassato" in body
+    assert "[TOTAL_PETS" not in body           # marker interni mai in chat
+    assert "17:20" in body                     # ora italiana (UTC+2)
+
+
+@pytest.mark.asyncio
+async def test_media_recap_audio_filter_and_third_person(monkeypatch):
+    _patch(monkeypatch, _media_events())
+    reply = await build_operational_reply(
+        "p", "cosa dice l'audio?", invoked_by="Alfio", save=False)
+    body = reply.reply_markdown
+    assert "Marco ha mandato un vocale" in body
+    assert "l'ho ascoltato e dice" in body
+    assert "coda a Orte" in body
+
+
+@pytest.mark.asyncio
+async def test_media_recap_no_media_is_honest(monkeypatch):
+    _patch(monkeypatch, [])
+    reply = await build_operational_reply(
+        "p", "hai visto la foto?", invoked_by="Alfio", save=False)
+    assert "non ho ancora ricevuto" in reply.reply_markdown
+
+
+def test_media_recap_is_auxiliary_origin_project():
+    with open("core/operational_memory/whatsapp_operational.py", encoding="utf-8") as fh:
+        src = fh.read()
+    assert '"media_recap"' in src.split("auxiliary_intents = ")[1].split("\n")[0]

@@ -402,7 +402,7 @@ async def maybe_handle_whatsapp_operational(
         # Never writes TAB state; never sends a message to the TAB JID.
         if _tab_query:
             tab_intent = classify_query_intent(_tab_query)
-            auxiliary_intents = {"weather", "assistant_identity"}
+            auxiliary_intents = {"weather", "assistant_identity", "media_recap"}
             reply_project = project_id if tab_intent in auxiliary_intents else _TAB_BRIDGE_PROJECT_ID
             tab_reply = await build_operational_reply(
                 reply_project, _tab_query,

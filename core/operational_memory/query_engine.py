@@ -592,6 +592,17 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
         r"(l'?ultima|prima)\s+volta\s+che\s+ha\s+scritto|"
         r"a\s+che\s+ora\s+ha\s+scritto)",
         re.IGNORECASE)),
+    # Recap dell'ultimo media ricevuto → risponde con ciò che ha visto/sentito
+    # (descrizione vision, trascrizione audio, testo estratto), dal registro.
+    ("media_recap", re.compile(
+        r"(cosa\s+ti\s+ho\s+(appena\s+)?(mandato|inviato|girato)|"
+        r"(hai\s+)?(visto|sentito|ricevuto|ascoltato)\s+"
+        r"(la\s+foto|l'immagine|il\s+video|l'audio|il\s+vocale|il\s+messaggio\s+vocale)|"
+        r"cosa\s+vedi\b(?!.*apert)|"
+        r"cosa\s+(c'?[eè]|si\s+vede)\s+(nella|nell'|nel)\s+(foto|immagine|video)|"
+        r"cosa\s+(dice|si\s+sente|ho\s+detto)\s+(nell'|nel|l')\s*(audio|vocale)|"
+        r"descriv\w+\s+(la\s+foto|l'immagine|il\s+video|l'audio|il\s+vocale))",
+        re.IGNORECASE)),
     # Agenda/pianificazione → task attivi ordinati per scadenza. Prima di
     # briefing e open_tasks così "impegni di oggi" / "cosa dobbiamo fare
     # domani" ricevono la vista temporale e non la lista generica.
@@ -670,7 +681,7 @@ _PURE_QUERY_INTENTS = {
     # Technical command shortcuts: read-only, never stored as project items.
     "cmd_stato", "cmd_aperti", "cmd_report",
     "issue_media", "reporter_stats", "weather", "assistant_identity",
-    "group_members", "person_activity",
+    "group_members", "person_activity", "media_recap",
 }
 
 # Explicit declarative operational-update signals (generic verbs/markers, never
@@ -861,6 +872,9 @@ def answer_query(state: OperationalState, text: str) -> QueryResult:
     if intent == "person_activity":
         return QueryResult(query=text, intent=intent,
                            summary="Controllo l'attività in chat della persona indicata.", count=0, items=[])
+    if intent == "media_recap":
+        return QueryResult(query=text, intent=intent,
+                           summary="Ripesco l'ultimo contenuto che ho visto o ascoltato.", count=0, items=[])
     if intent == "weather":
         return QueryResult(query=text, intent=intent,
                            summary="Controllo il meteo senza confonderlo con lo stato operativo.", count=0, items=[])

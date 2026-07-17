@@ -716,13 +716,55 @@ async def build_operational_reply(
             media=media_out,
         )
 
-    if intent in {"group_members", "person_activity"}:
+    if intent in {"group_members", "person_activity", "media_recap"}:
         from core.operational_memory.event_store import list_events
         events = await list_events(project_id)
 
         def _reply(body: str) -> ChatReply:
             return ChatReply(project_id=project_id, invoked_by=invoked_by,
                              intent=intent, synthesis=body, reply_markdown=body)
+
+        if intent == "media_recap":
+            low_q = (query or "").lower()
+            if re.search(r"\b(audio|vocale)\b", low_q):
+                kinds = {"audio"}
+            elif re.search(r"\bvideo\b", low_q):
+                kinds = {"video"}
+            elif re.search(r"\b(foto|immagine)\b", low_q):
+                kinds = {"image"}
+            else:
+                kinds = {"image", "audio", "video", "document"}
+            candidates = [
+                e for e in events
+                if str(getattr(e, "attachment_type", "") or e.type or "").lower() in kinds
+            ]
+            # "cosa TI HO mandato" → privilegia i media di chi sta chiedendo.
+            mine = [e for e in candidates
+                    if invoked_by and (e.sender or "").strip().lower() == invoked_by.strip().lower()]
+            pool = mine or candidates
+            if not pool:
+                return _reply(
+                    "Qui non ho ancora ricevuto foto, audio o video da riguardare. "
+                    "Appena ne mandi uno lo guardo (o lo ascolto) e te lo racconto.")
+            latest = max(pool, key=lambda e: e.timestamp or "")
+            kind = str(getattr(latest, "attachment_type", "") or latest.type or "").lower()
+            desc = re.sub(r"\s*\[[A-Z_]+:[^\]]*\]", "",
+                          (latest.extracted_text or "")).strip()[:500]
+            when = _rome_dt(latest.timestamp)
+            when_label = f" ({_WEEKDAY_IT[when.weekday()]} alle {when:%H:%M})" if when else ""
+            who = "Mi hai" if mine else f"{(latest.sender or 'Qualcuno').strip()} ha"
+            kind_label = {"image": "una foto", "audio": "un vocale",
+                          "video": "un video", "document": "un documento"}.get(kind, "un contenuto")
+            if not desc:
+                return _reply(
+                    f"{who} mandato {kind_label}{when_label}: l'ho salvat"
+                    f"{'a' if kind_label.endswith('a')else 'o'} nel registro, ma non sono "
+                    "riuscita a leggerci dentro qualcosa di affidabile. Se mi dici cosa "
+                    "cercare, riguardo con occhi diversi.")
+            verb = {"audio": "l'ho ascoltato e dice", "image": "l'ho guardata e vedo",
+                    "video": "l'ho visto e mostra", "document": "l'ho letto e riporta"}.get(
+                        kind, "l'ho analizzato e contiene")
+            return _reply(f"{who} mandato {kind_label}{when_label} — {verb}: {desc}")
 
         if intent == "group_members":
             counts: dict[str, int] = {}
